@@ -12,7 +12,7 @@ from functools import partial
 import lineax as lx
 from interpax_fft import rfft_interp2d
 
-from desc.backend import fixed_point, jit, jnp
+from desc.backend import fixed_point, jit, jnp, vmap
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -201,6 +201,130 @@ def _lsmr_compute_potential(
     return lx.linear_solve(
         D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
     ).value
+
+
+def _compute_single_layer_matrix(eval_data, source_data, interpolator, chunk_size=None):
+    """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
+
+    Parameters
+    ----------
+    eval_data : dict
+        Data at evaluation points (R, phi, Z and any eval_keys needed by the kernel).
+    source_data : dict
+        Data at source points (must include |e_theta x e_zeta| and geometry).
+        Does not need to include B0*n.
+    interpolator : _BIESTInterpolator
+    chunk_size : int or None
+
+    Returns
+    -------
+    M_S : jnp.ndarray, shape (N_eval, N_source)
+        Matrix satisfying S[B0*n] = M_S @ B_n.
+    """
+    source_grid = interpolator.source_grid
+    N_source = source_grid.num_nodes
+
+    eval_data_p, source_data_p = _prune_data(
+        eval_data, interpolator.eval_grid, source_data, source_grid, _kernel_monopole
+    )
+    # B0*n is not in source_data_p (no specific B_n to prune); supply it per-column.
+    source_no_Bn = {k: v for k, v in source_data_p.items() if k != "B0*n"}
+
+    def col(b_n):
+        return singular_integral(
+            eval_data_p,
+            {**source_no_Bn, "B0*n": b_n},
+            interpolator,
+            _kernel_monopole,
+            chunk_size=chunk_size,
+            _prune_data=False,
+        ).squeeze(-1)
+
+    # vmap col over rows of identity matrix: result shape (N_source, N_eval) → (N_eval, N_source)
+    return vmap(col)(jnp.eye(N_source)).T
+
+
+def _lsmr_compute_phi_matrix(
+    potential_data,
+    source_data,
+    interpolator,
+    basis,
+    problem,
+    chunk_size=None,
+    _midpoint_quad=False,
+    _D_quad=False,
+):
+    """Compute matrix A where Phi (periodic) = A @ B_n.
+
+    Constructs the double-layer operator D and single-layer matrix M_S, then
+    solves D @ A_mn = M_S in one batch, returning E @ A_mn where E is the
+    Vandermonde matrix (so the output maps directly to nodal potential values).
+
+    Parameters
+    ----------
+    potential_data : dict
+        Data at potential grid points (geometry, not B0*n).
+    source_data : dict
+        Data at source grid points (geometry including |e_theta x e_zeta|).
+    interpolator : _BIESTInterpolator
+    basis : DoubleFourierSeries
+        Spectral basis for the periodic part of the potential.
+    problem : str
+        One of {"interior Neumann", "exterior Neumann", "interior Dirichlet"}.
+    chunk_size : int or None
+    _midpoint_quad : bool
+    _D_quad : bool
+
+    Returns
+    -------
+    A : jnp.ndarray, shape (N_potential, N_source)
+        Matrix satisfying Phi (periodic) = A @ B_n.
+    """
+    assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
+
+    potential_grid = interpolator.eval_grid
+    source_grid = interpolator.source_grid
+
+    assert basis.M <= potential_grid.M
+    assert basis.N <= potential_grid.N
+
+    # Build double-layer operator D: shape (N_potential, N_modes).
+    # Prune into a separate copy so original dicts are available for M_S below.
+    potential_data_d, source_data_d = _prune_data(
+        potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half
+    )
+    Phi = basis.evaluate(potential_grid)
+    potential_data_d["Phi(x) (periodic)"] = Phi
+    source_data_d["Phi (periodic)"] = (
+        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
+    )
+    D = _D_plus_half(
+        potential_data_d,
+        source_data_d,
+        interpolator,
+        basis,
+        chunk_size,
+        prune_data=False,
+        _midpoint_quad=_midpoint_quad,
+        _D_quad=_D_quad,
+    )
+    assert D.shape == (potential_grid.num_nodes, basis.num_modes)
+    if problem == "exterior Neumann" or problem == "interior Dirichlet":
+        D -= Phi
+
+    # Build single-layer matrix M_S: shape (N_potential, N_source).
+    # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
+    M_S = _compute_single_layer_matrix(potential_data, source_data, interpolator, chunk_size)
+
+    # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
+    # A_mn has shape (N_modes, N_source).
+    if potential_grid.num_nodes == basis.num_modes:
+        A_mn = jnp.linalg.solve(D, M_S)
+    else:
+        A_mn = jnp.linalg.lstsq(D, M_S)[0]
+
+    # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
+    return Phi @ A_mn
 
 
 def _iteration_operator(
@@ -416,6 +540,48 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             transforms["Phi"].basis,
             **kwargs,
         )
+    return data
+
+
+@register_compute_fun(
+    name="phi_matrix",
+    label="A",
+    units="T m^2",
+    units_long="Tesla meter squared",
+    description="Matrix A mapping B·n on the boundary to the periodic scalar potential, "
+    "Phi (periodic) = A @ B_n. More efficient than solving per unit vector when "
+    "the geometry is fixed and B_n varies.",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    data=list(
+        (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
+        | (set(_kernel_monopole.keys) - {"B0*n"})
+    )
+    + ["interpolator"],
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    public=False,
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    chunk_size=_doc["chunk_size"],
+    _midpoint_quad=_doc["_midpoint_quad"],
+    _D_quad=_doc["_D_quad"],
+)
+def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    data["phi_matrix"] = _lsmr_compute_phi_matrix(
+        data.get("potential data", data),
+        data,
+        data["interpolator"],
+        transforms["Phi"].basis,
+        problem=kwargs["problem"],
+        chunk_size=kwargs.get("chunk_size", None),
+        _midpoint_quad=kwargs.get("_midpoint_quad", False),
+        _D_quad=kwargs.get("_D_quad", False),
+    )
     return data
 
 

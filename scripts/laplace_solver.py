@@ -8,7 +8,7 @@ from desc.coils import FourierRZCoil, CoilSet
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 1000
+chunk_size = 100
 
 # Define surface parameters
 R0 = 2

@@ -88,7 +88,7 @@ def phi_func(B_n):
     return data_cp["Phi"]
 
 
-phi_matrix = vmap_chunked(phi_func, chunk_size=500)(jnp.eye(grid.num_nodes))
+phi_matrix = vmap_chunked(phi_func, chunk_size=100)(jnp.eye(grid.num_nodes))
 
 
 np.save(save_path + fname, phi_matrix)

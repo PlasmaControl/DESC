@@ -36,6 +36,7 @@ from . import (
     _fast_ion,
     _field,
     _geometry,
+    _laplace,
     _metric,
     _neoclassical,
     _old,

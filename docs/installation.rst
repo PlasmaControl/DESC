@@ -39,7 +39,7 @@ On Your Local Machine
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda create --name desc-env 'python>=3.10, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 
@@ -99,7 +99,7 @@ On Your Local Machine
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda create --name desc-env 'python>=3.10, <=3.14'
             conda activate desc-env
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             pip install --editable .
@@ -165,7 +165,7 @@ On Most Linux Computing Clusters
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda create --name desc-env 'python>=3.10, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 

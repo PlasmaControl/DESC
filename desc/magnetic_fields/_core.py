@@ -40,6 +40,7 @@ from desc.utils import (
     dot,
     errorif,
     flatten_list,
+    get_ess_scale,
     rpz2xyz,
     rpz2xyz_vec,
     safediv,
@@ -356,7 +357,7 @@ class _MagneticField(IOAble, ABC):
             if None defaults to a LinearGrid with twice
             the surface poloidal and toroidal resolutions
             points are in surface angular coordinates i.e theta and zeta
-        source_grid : Grid, int or None
+        source_grid : Grid or int or None
             Grid used to discretize MagneticField object if calculating B from
             Biot-Savart. Should NOT include endpoint at 2pi.
         vc_source_grid : LinearGrid
@@ -567,6 +568,7 @@ class _MagneticField(IOAble, ABC):
         nR=101,
         nZ=101,
         nphi=90,
+        NFP=None,
         save_vector_potential=True,
         chunk_size=None,
         source_grid=None,
@@ -591,6 +593,9 @@ class _MagneticField(IOAble, ABC):
             Number of grid points in the Z coordinate (default = 101).
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
+        NFP : int, optional
+            Number of toroidal field periods. If not provided, will default to 1 or
+            the field's NFP, if it has that attribute.
         save_vector_potential : bool, optional
             Whether to save the magnetic vector potential to the mgrid
             file, in addition to the magnetic field. Defaults to True.
@@ -612,7 +617,9 @@ class _MagneticField(IOAble, ABC):
         """
         path = os.path.expanduser(path)
         # cylindrical coordinates grid
-        NFP = self.NFP if hasattr(self, "_NFP") else 1
+        NFP = getattr(self, "_NFP", 1) if NFP is None else NFP
+        if hasattr(self, "_NFP"):
+            warnif(NFP != self.NFP, UserWarning, "NFP input is not equal to field.NFP.")
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
@@ -831,6 +838,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
+        elif isinstance(params, dict):
+            params = params["params"]
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -2202,7 +2211,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.  If not provided, will default to 1 or
+            Number of toroidal field periods. If not provided, will default to 1 or
             the provided field's NFP, if it has that attribute.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
@@ -2210,7 +2219,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             then supply ``None``. Default is ``None``.
         source_grid : Grid, optional
             Grid used to discretize field. Defaults to the default grid for given field.
-
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2220,7 +2228,11 @@ class SplineMagneticField(_MagneticField, Optimizable):
         BR, BP, BZ = field.compute_magnetic_field(
             coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
-        NFP = getattr(field, "_NFP", 1)
+        NFP = getattr(field, "_NFP", 1) if NFP is None else NFP
+        if hasattr(field, "_NFP"):
+            warnif(
+                NFP != field.NFP, UserWarning, "NFP input is not equal to field.NFP."
+            )
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords,
@@ -3052,7 +3064,7 @@ class OmnigenousField(Optimizable, IOAble):
 
         Returns
         -------
-        data : dict of ndarray
+        data : dict[str, jnp.ndarray]
             Computed quantity and intermediate variables.
 
         """
@@ -3093,6 +3105,37 @@ class OmnigenousField(Optimizable, IOAble):
             **kwargs,
         )
         return data
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"B_lm": self.B_basis.modes, "x_lmn": self.x_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+        # B_lm has spectral radial scaling repeated for each spline knot
+        scales["B_lm"] = np.repeat(scales["B_lm"], self.M_B).flatten()
+
+        return scales
 
     @property
     def NFP(self):

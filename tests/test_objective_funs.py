@@ -36,8 +36,10 @@ from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
+    FreeSurfaceOuterField,
     OmnigenousField,
     PoloidalMagneticField,
+    SourceFreeField,
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
@@ -95,7 +97,7 @@ from desc.objectives import (
     Volume,
     get_NAE_constraints,
 )
-from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives._free_boundary import BoundaryErrorNESTOR, FreeSurfaceError
 from desc.objectives.nae_utils import (
     _calc_1st_order_NAE_coeffs,
     _calc_2nd_order_NAE_coeffs,
@@ -709,6 +711,29 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
             np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_sum_iota(self):
+        """Test calculation of iota profile sum."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            sum_iota = jnp.sum(
+                eq.compute("iota", grid=grid)["iota"][grid.unique_rho_idx]
+            )
+            obj = RotationalTransform(
+                target=sum_iota, weight=1, eq=eq, loss_function="sum", grid=grid
+            )
+            obj.build()
+            sum_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            sum_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            sum_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(sum_iota, sum_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(sum_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(sum_iota_scaled, sum_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -3162,6 +3187,7 @@ class TestComputeScalarResolution:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3177,6 +3203,7 @@ class TestComputeScalarResolution:
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
+        FreeSurfaceError,
         FusionPower,
         GenericObjective,
         HeatingPowerISS04,
@@ -3342,6 +3369,37 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(VacuumBoundaryError(eq, ext_field), use_jit=False)
             with pytest.warns(UserWarning):
                 obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_compute_scalar_resolution_free_surface_error(self, flag):
+        """FreeSurfaceError."""
+        pres = PowerSeriesProfile([1.25e-1, 0, -1.25e-1])
+        iota = PowerSeriesProfile([-4.9e-1, 0, 3.0e-1])
+        surf = FourierRZToroidalSurface(
+            R_lmn=[4.0, 1.0],
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=[-1.0],
+            modes_Z=[[-1, 0]],
+            NFP=1,
+        )
+        eq = Equilibrium(M=6, N=0, Psi=1.0, surface=surf, pressure=pres, iota=iota)
+
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res), M_grid=int(eq.M * res), N_grid=int(eq.N * res)
+            )
+            B = ToroidalMagneticField(5, 1)
+            field = (
+                FreeSurfaceOuterField(eq.surface, eq.M, eq.N, B_coil=B)
+                if flag
+                else SourceFreeField(eq.surface, eq.M, eq.N, B0=B)
+            )
+            obj = ObjectiveFunction(FreeSurfaceError(eq, field))
+            obj.build()
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
 
@@ -3618,7 +3676,7 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
-    @pytest.mark.unit
+    @pytest.mark.regression
     def test_compute_scalar_resolution_linking_current(self):
         """LinkingCurrentConsistency."""
         coil = FourierPlanarCoil(center=[10, 1, 0])
@@ -3648,6 +3706,7 @@ class TestObjectiveNaNGrad:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3666,6 +3725,7 @@ class TestObjectiveNaNGrad:
         CoilTorsion,
         EffectiveRipple,
         ForceBalanceAnisotropic,
+        FreeSurfaceError,
         FusionPower,
         GammaC,
         HeatingPowerISS04,
@@ -3776,6 +3836,29 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "boundary error"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_objective_no_nangrad_free_surface_error(self, flag):
+        """FreeSurfaceError."""
+        eq = get("W7-X")
+        B = ToroidalMagneticField(5, 1)
+        field = (
+            FreeSurfaceOuterField(eq.surface, 3, 3, B_coil=B)
+            if flag
+            else SourceFreeField(eq.surface, 3, 3, B0=B)
+        )
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
+                grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
+            )
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "free surface error"
 
     @pytest.mark.unit
     def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):
@@ -4172,3 +4255,76 @@ def test_nae_coefficients_asym():
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_input(DummyMixedCoilSet):
+    """Tests broadcasting for inputs to _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
+
+    obj = CoilLength(coilset, bounds=bounds, weight=weight)
+    obj.build()
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, target=target)
+    obj.build()
+    np.testing.assert_allclose(obj._target, target_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, bounds=(1, 2), weight=1)
+    obj.build()
+    assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
+    assert np.size(obj._weight) == 1
+
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
+    obj.build()
+
+
+@pytest.mark.unit
+def test_coil_objective_indices(DummyMixedCoilSet):
+    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
+
+    weight = [0, [1, 0, 0], 1, 1]
+    objA = CoilLength(coilsetA, weight=weight, normalize=False)
+    objB = CoilLength(coilsetB, normalize=False)
+    objA.build()
+    objB.build()
+    compA = objA.compute_scaled_error(None)
+    compB = objB.compute_scaled_error(None)
+    np.testing.assert_allclose(compA, compB, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    obj = CoilLength(coilset)
+
+    weight = [1.0, 1.0, 0.0, 0.0]
+    weight_expanded = [1.0, 1.0, 1.0, 1.0]
+    obj.weight = weight
+    obj.build()
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0]
+
+    obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    obj.bounds = None
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)

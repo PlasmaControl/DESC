@@ -1,3 +1,5 @@
+"""Functions to run the TERPSICHORE stability solver on a DESC equilibrium."""
+
 import datetime
 import functools
 import multiprocessing as mp

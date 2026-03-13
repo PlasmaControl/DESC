@@ -8,7 +8,7 @@ import numpy as np
 import skimage.measure
 from scipy.constants import mu_0
 
-from desc.backend import cho_factor, cho_solve, fori_loop, jnp
+from desc.backend import cho_factor, cho_solve, jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
@@ -22,6 +22,7 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    get_ess_scale,
     rpz2xyz,
     rpz2xyz_vec,
     safediv,
@@ -30,6 +31,7 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
+from ..integrals.quad_utils import nfp_loop
 from ._core import (
     _MagneticField,
     biot_savart_general,
@@ -44,7 +46,8 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     where:
 
         - n is the winding surface unit normal.
-        - Phi is the current potential function, which is a function of theta and zeta.
+        - Φ is the current potential function, which is a function of theta and zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     This function then uses biot-savart to find the B field from this current
     density K on the surface.
@@ -412,9 +415,10 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
     where:
 
         - n is the winding surface unit normal.
-        - Phi is the current potential function, which is a function of theta and zeta,
+        - Φ is the current potential function, which is a function of theta and zeta,
           and is given as a secular linear term in theta/zeta and a double Fourier
           series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     This class then uses biot-savart to find the B field from this current
     density K on the surface.
@@ -851,6 +855,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         npts=128,
         stell_sym=False,
         plot_kwargs={"figsize": (8, 6)},
+        check_intersection=True,
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -860,10 +865,13 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
         Φ(θ,ζ) = Φₛᵥ(θ,ζ) + Gζ/2π + Iθ/2π
 
-        where n is the winding surface unit normal, Φ is the current potential
-        function, which is a function of theta and zeta, and is given as a
-        secular linear term in theta (I)  and zeta (G) and a double Fourier
-        series in theta/zeta.
+        where:
+
+        - n is the winding surface unit normal.
+        - Φ is the current potential function, which is a function of theta and zeta,
+          and is given as a secular linear term in theta (I)  and zeta (G) and a double
+          Fourier series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
         NOTE: The function is not jit/AD compatible
 
@@ -894,6 +902,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             dict of kwargs to use when plotting the contour plots if ``show_plots=True``
             ``figsize`` is used for the figure size, and the rest are passed to
             ``plt.contourf``
+        check_intersection : bool
+            whether or not to check the resulting coilset for self-intersections.
+            Defaults to True.
 
         Returns
         -------
@@ -1012,13 +1023,45 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         # symmetry plane, in which case we will check
         if coil_type == "modular":
             final_coilset = CoilSet(
-                *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
+                *coils,
+                NFP=nfp,
+                sym=stell_sym,
+                check_intersection=check_intersection,
             )
         else:
             # TODO: once winding surface curve is implemented, enforce sym for
             # helical as well
-            final_coilset = CoilSet(*coils, check_intersection=False)
+            final_coilset = CoilSet(*coils, check_intersection=check_intersection)
         return final_coilset
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following, the R,Z scales are already in the base class:
+        modes = {"Phi_mn": self.Phi_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 def _compute_A_or_B_from_CurrentPotentialField(
@@ -1092,30 +1135,23 @@ def _compute_A_or_B_from_CurrentPotentialField(
             profiles={},
         )
 
-    _rs = data["x"]
-    _K = data["K"]
-
+    R = data["x"][:, 0]
+    Z = data["x"][:, 2]
     # surface element, must divide by NFP to remove the NFP multiple on the
     # surface grid weights, as we account for that when doing the for loop
     # over NFP
-    _dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
+    dV = source_grid.weights * data["|e_theta x e_zeta|"] / source_grid.NFP
 
-    def nfp_loop(j, f):
-        # calculate (by rotating) rs, rs_t, rz_t
-        phi = (source_grid.nodes[:, 2] + j * 2 * jnp.pi / source_grid.NFP) % (
-            2 * jnp.pi
-        )
-        # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
-        rs = jnp.vstack((_rs[:, 0], phi, _rs[:, 2])).T
-        rs = rpz2xyz(rs)
-        K = rpz2xyz_vec(_K, phi=phi)
-        fj = op(coords, rs, K, _dV, chunk_size=chunk_size)
-        f += fj
-        return f
+    def func(zeta_j):
+        rs = rpz2xyz(jnp.column_stack([R, zeta_j, Z]))
+        K = rpz2xyz_vec(data["K"], phi=zeta_j)
+        return op(coords, rs, K, dV, chunk_size=chunk_size)
 
-    B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+    B = nfp_loop(source_grid, func, jnp.zeros_like(coords))
     if basis == "rpz":
         B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+    else:
+        assert basis == "xyz"
     return B
 
 
@@ -1674,6 +1710,7 @@ def _find_current_potential_contours(
         - Φ is the current potential function, which is a function of theta and zeta,
           and is given as a secular linear term in theta (I)  and zeta (G) and a double
           Fourier series in theta/zeta.
+        - ∇Φ dot n is assumed to be zero.
 
     Parameters
     ----------

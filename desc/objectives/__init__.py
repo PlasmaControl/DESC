@@ -27,7 +27,7 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._fast_ion import GammaC
-from ._free_boundary import BoundaryError, VacuumBoundaryError
+from ._free_boundary import BoundaryError, FreeSurfaceError, VacuumBoundaryError
 from ._generic import (
     ExternalObjective,
     GenericObjective,
@@ -106,5 +106,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

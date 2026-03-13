@@ -279,7 +279,7 @@ threads that are available.
         set_device("gpu")
 
         from desc.examples import get
-        from desc.external import TERPSICHORE
+        from desc.external.terpsichore import TERPSICHORE
         from desc.objectives import (
             ForceBalance,
             FixBoundaryR,

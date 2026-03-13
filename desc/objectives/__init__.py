@@ -17,6 +17,7 @@ from ._coils import (
     QuadraticFlux,
     SurfaceCurrentRegularization,
     SurfaceQuadraticFlux,
+    SurfaceMatch,
     ToroidalFlux,
 )
 from ._equilibrium import (

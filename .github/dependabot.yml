@@ -38,6 +38,7 @@ updates:
           - "jax"
           - "diffrax"
           - "interpax"
+          - "interpax_fft"
           - "orthax"
           - "quadax"
   - package-ecosystem: "github-actions"

@@ -808,7 +808,7 @@ class FourierRZToroidalSurface(Surface):
         )
         return axis
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -823,6 +823,9 @@ class FourierRZToroidalSurface(Surface):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -830,7 +833,7 @@ class FourierRZToroidalSurface(Surface):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))
@@ -1148,7 +1151,7 @@ class ZernikeRZToroidalSection(Surface):
         axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
         return axis
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1163,6 +1166,9 @@ class ZernikeRZToroidalSection(Surface):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
+        default : float, optional
+            Default scale for variables that don't have an ess rule defined. 0 means
+            use automatic jacobian scaling.
 
         Returns
         -------
@@ -1170,7 +1176,7 @@ class ZernikeRZToroidalSection(Surface):
             Array of scale values for each parameter
         """
         # this is the base class scale:
-        scales = super()._get_ess_scale(alpha, order, min_value)
+        scales = super()._get_ess_scale(alpha, order, min_value, default)
         # we use ESS for the following:
         modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
         scales.update(get_ess_scale(modes, alpha, order, min_value))

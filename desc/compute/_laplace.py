@@ -13,7 +13,6 @@ import lineax as lx
 from interpax_fft import rfft_interp2d
 
 from desc.backend import fixed_point, jit, jnp
-from desc.batching import vmap_chunked
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -209,7 +208,6 @@ def _compute_single_layer_matrix(
     source_data,
     interpolator,
     chunk_size=None,
-    source_chunk_size=1,
 ):
     """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
 
@@ -222,11 +220,8 @@ def _compute_single_layer_matrix(
         Does not need to include B0*n.
     interpolator : _BIESTInterpolator
     chunk_size : int or None
-        Chunk size for eval-point batching *inside* each ``singular_integral`` call.
-    source_chunk_size : int or None
-        Number of B_n columns processed simultaneously when building M_S.
-        With ``1`` (default) only one ``singular_integral`` trace is live at a time,
-        minimising memory. Increase to trade memory for GPU parallelism.
+        Chunk size for eval-point batching inside ``singular_integral``.
+        Memory cost is O(chunk_size × N_source²), so reduce this if OOM.
 
     Returns
     -------
@@ -239,23 +234,20 @@ def _compute_single_layer_matrix(
     eval_data_p, source_data_p = _prune_data(
         eval_data, interpolator.eval_grid, source_data, source_grid, _kernel_monopole
     )
-    # B0*n is not in source_data_p (no specific B_n to prune); supply it per-column.
-    source_no_Bn = {k: v for k, v in source_data_p.items() if k != "B0*n"}
-
-    def col(b_n):
-        return singular_integral(
-            eval_data_p,
-            {**source_no_Bn, "B0*n": b_n},
-            interpolator,
-            _kernel_monopole,
-            chunk_size=chunk_size,
-            _prune_data=False,
-        ).squeeze(-1)
-
-    # source_chunk_size controls outer parallelism (columns of M_S processed at once).
-    # chunk_size controls inner parallelism (eval points per singular_integral call).
-    # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
-    return vmap_chunked(col, chunk_size=source_chunk_size)(jnp.eye(N_source)).T
+    # Pass B0*n = identity so the kernel simultaneously evaluates all N_source columns.
+    # This mirrors how _D_plus_half builds D in a single call using ndim=basis.num_modes.
+    # Geometric computations (distances, Green's function) are shared across all columns
+    # instead of being repeated N_source times.
+    source_data_p["B0*n"] = jnp.eye(N_source)
+    return singular_integral(
+        eval_data_p,
+        source_data_p,
+        interpolator,
+        _kernel_monopole,
+        ndim=N_source,
+        chunk_size=chunk_size,
+        _prune_data=False,
+    )
 
 
 def _lsmr_compute_phi_matrix(
@@ -265,7 +257,6 @@ def _lsmr_compute_phi_matrix(
     basis,
     problem,
     chunk_size=None,
-    source_chunk_size=1,
     _midpoint_quad=False,
     _D_quad=False,
 ):
@@ -330,7 +321,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_source).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, source_chunk_size
+        potential_data, source_data, interpolator, chunk_size
     )
 
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
@@ -584,11 +575,6 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     chunk_size=_doc["chunk_size"],
-    source_chunk_size="""int or None :
-        Number of B_n columns processed simultaneously when building the
-        single-layer matrix M_S. Default is ``1`` (one column at a time,
-        minimum memory). Increase to trade memory for GPU parallelism.
-        """,
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -601,7 +587,6 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"].basis,
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
-        source_chunk_size=kwargs.get("source_chunk_size", 1),
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
     )

@@ -4,11 +4,16 @@ from desc.utils import rpz2xyz
 from desc.grid import LinearGrid
 from desc.magnetic_fields import SourceFreeField
 from desc.coils import FourierRZCoil, CoilSet
+from desc.equilibrium import Equilibrium
+from desc.profiles import PowerSeriesProfile
+
+from desc import set_device
+set_device("gpu")
 
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 100
+chunk_size = 30
 
 # Define surface parameters
 R0 = 2
@@ -66,18 +71,42 @@ elif field_type == "coil":
 
 # Precompute interpolator and surface values
 field = SourceFreeField(surface, grid.M, grid.N)
-data, RpZ_data = field.compute(["interpolator", "x", "n_rho", "potential data"], grid)
+#data, RpZ_data = field.compute(["interpolator", "x", "n_rho", "potential data"], grid)
+
+
+# What if I made an equilibrium instead?
+# Equilibrium
+I_mult = 1
+I_coeffs = np.array([-3.15111573e-08,  7.16194786e+03,  7.95861633e+02,  7.95781352e+02,
+-1.19289606e-02, -3.19292792e-03, -4.34680863e-03])
+I_coeffs = I_coeffs * I_mult
+I_profile = PowerSeriesProfile(I_coeffs, sym=True)
+iota_coeffs = None
+iota_profile = None
+p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
+p_profile = PowerSeriesProfile(p_coeffs)
+
+eq = Equilibrium(
+        L=12,
+        M=12,
+        N=0,
+        surface=surface,
+        NFP=surface.NFP,
+        iota = iota_profile,
+        current=I_profile,
+        pressure=p_profile,
+        Psi=1,
+    )
+
 
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
-# The old convention was phi_func(B_n) with B0*n = -B_n, so phi_matrix = -A.
-data, _ = field.compute(
+data, _ = eq.compute(
     ["phi_matrix"],
     grid,
-    data=data,
+    #data=data,
     problem="exterior Neumann",
     chunk_size=chunk_size,
 )
-phi_matrix = -data["phi_matrix"]
-
+phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
 
 np.save(save_path + fname, phi_matrix)

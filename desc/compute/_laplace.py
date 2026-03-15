@@ -209,7 +209,6 @@ def _compute_single_layer_matrix(
     source_data,
     interpolator,
     chunk_size=None,
-    source_chunk_size=1,
 ):
     """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
 
@@ -223,10 +222,6 @@ def _compute_single_layer_matrix(
     interpolator : _BIESTInterpolator
     chunk_size : int or None
         Chunk size for eval-point batching *inside* each ``singular_integral`` call.
-    source_chunk_size : int or None
-        Number of B_n columns processed simultaneously when building M_S.
-        With ``1`` (default) only one ``singular_integral`` trace is live at a time,
-        minimising memory. Increase to trade memory for GPU parallelism.
 
     Returns
     -------
@@ -252,10 +247,9 @@ def _compute_single_layer_matrix(
             _prune_data=False,
         ).squeeze(-1)
 
-    # source_chunk_size controls outer parallelism (columns of M_S processed at once).
     # chunk_size controls inner parallelism (eval points per singular_integral call).
     # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
-    return vmap_chunked(col, chunk_size=source_chunk_size)(jnp.eye(N_source)).T
+    return vmap_chunked(col, chunk_size=chunk_size)(jnp.eye(N_source)).T
 
 
 def _lsmr_compute_phi_matrix(
@@ -265,7 +259,6 @@ def _lsmr_compute_phi_matrix(
     basis,
     problem,
     chunk_size=None,
-    source_chunk_size=1,
     _midpoint_quad=False,
     _D_quad=False,
 ):
@@ -330,7 +323,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_source).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, source_chunk_size
+        potential_data, source_data, interpolator, chunk_size
     )
 
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
@@ -341,7 +334,7 @@ def _lsmr_compute_phi_matrix(
         A_mn = jnp.linalg.lstsq(D, M_S)[0]
 
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
-    return Phi @ A_mn
+    return - Phi @ A_mn # sign convention that makes B dot n the outward normal
 
 
 def _iteration_operator(
@@ -583,12 +576,10 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
-    chunk_size=_doc["chunk_size"],
-    source_chunk_size="""int or None :
-        Number of B_n columns processed simultaneously when building the
-        single-layer matrix M_S. Default is ``1`` (one column at a time,
-        minimum memory). Increase to trade memory for GPU parallelism.
-        """,
+    chunk_size=(_doc["chunk_size"] +
+    "Note that when computing the phi matrix, the chunk size is used twice," +
+    "so that the overall memory usage scales as " +
+    "chunk_size squared."),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -601,7 +592,6 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"].basis,
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
-        source_chunk_size=kwargs.get("source_chunk_size", 1),
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
     )

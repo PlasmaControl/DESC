@@ -131,7 +131,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         "x_scale must be the same size as the full state vector. "
         + f"Got size {x_scale.size} for state vector of size {xp.size}.",
     )
-    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+    D = np.where(np.abs(x_scale) < 2e1, 1, np.abs(x_scale))# TME 1-7-2026
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

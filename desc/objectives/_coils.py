@@ -2459,8 +2459,8 @@ class FieldNormalError(_Objective):
         """
         import numpy as np
 
-        from desc.compute.geom_utils import rpz2xyz
-
+        from desc.compute import rpz2xyz
+        
         # Sample curve positions (DESC curves return rpz by default)
         c_start_rpz = np.array(self._curve_start.compute("x", grid=self._nquad)["x"])
         c_end_rpz = np.array(self._curve_end.compute("x", grid=self._nquad)["x"])

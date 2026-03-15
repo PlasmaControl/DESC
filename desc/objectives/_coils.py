@@ -2350,6 +2350,10 @@ class FieldNormalError(_Objective):
         "_bs_chunk_size",
         "_field_fixed",
         "_eq_fixed",
+        "_curves_fixed",
+        "_n_radial",
+        "_extent",
+        "_min_extent",
     ]
 
     _scalar = False
@@ -2384,6 +2388,7 @@ class FieldNormalError(_Objective):
         eq_kwargs=None,
         field_fixed=False,
         eq_fixed=True,
+        curves_fixed=True,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -2407,9 +2412,11 @@ class FieldNormalError(_Objective):
         self._curve_start = curve_start
         self._curve_end = curve_end
         self._nquad = nquad
+        self._nquad_input = nquad
         self._n_radial = n_radial
         self._extent = extent
         self._min_extent = min_extent
+        self._curves_fixed = curves_fixed
 
         if using_points:
             self._points = jnp.asarray(points)
@@ -2433,6 +2440,8 @@ class FieldNormalError(_Objective):
         things = []
         if not field_fixed:
             things += self._field
+        if not curves_fixed and curve_start is not None:
+            things += [self._curve_start, self._curve_end]
         if not eq_fixed and eq is not None:
             things += [self._eq]
 
@@ -2571,6 +2580,21 @@ class FieldNormalError(_Objective):
             "quad_weights": jnp.ones(self._points.shape[0]),
         }
 
+        # Precompute curve transforms for differentiable surface generation
+        if not self._curves_fixed and self._curve_start is not None:
+            from desc.grid import LinearGrid as _LG
+
+            curve_grid = _LG(N=self._nquad_input)
+            curve_data_keys = ["x", "x_s"]
+            if verbose > 0:
+                print("Precomputing curve transforms (curves_fixed=False)...")
+            self._constants["curve_start_transforms"] = get_transforms(
+                curve_data_keys, obj=self._curve_start, grid=curve_grid
+            )
+            self._constants["curve_end_transforms"] = get_transforms(
+                curve_data_keys, obj=self._curve_end, grid=curve_grid
+            )
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -2583,12 +2607,97 @@ class FieldNormalError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
+    def _compute_surface_jax(self, cs_params, ce_params, constants):
+        """Compute ruled surface from curve params (JAX-differentiable).
+
+        Called during optimization when curves_fixed=False. Regenerates the
+        ruled-surface evaluation points and unit normals from the current
+        curve Fourier coefficients so that JAX can differentiate through
+        the surface geometry.
+
+        Parameters
+        ----------
+        cs_params : dict
+            Optimizable parameters for curve_start.
+        ce_params : dict
+            Optimizable parameters for curve_end.
+        constants : dict
+            Precomputed constants including curve transforms.
+
+        Returns
+        -------
+        points : jnp.ndarray, shape(N, 3)
+            Surface points in ``self._basis`` coordinates.
+        normals : jnp.ndarray, shape(N, 3)
+            Unit normal vectors in ``self._basis`` coordinates.
+        """
+        from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+
+        # Evaluate curve positions and tangents from current params
+        cs_data = self._curve_start.compute(
+            ["x", "x_s"],
+            params=cs_params,
+            transforms=constants["curve_start_transforms"],
+        )
+        ce_data = self._curve_end.compute(
+            ["x", "x_s"],
+            params=ce_params,
+            transforms=constants["curve_end_transforms"],
+        )
+
+        # Curve positions and tangents in rpz (DESC default)
+        c_start_rpz = cs_data["x"]
+        c_end_rpz = ce_data["x"]
+        dc_start_rpz = cs_data["x_s"]
+        dc_end_rpz = ce_data["x_s"]
+
+        # Convert to Cartesian for geometrically correct cross products
+        c_start = rpz2xyz(c_start_rpz)
+        c_end = rpz2xyz(c_end_rpz)
+        dc_start = rpz2xyz_vec(dc_start_rpz, phi=c_start_rpz[:, 1])
+        dc_end = rpz2xyz_vec(dc_end_rpz, phi=c_end_rpz[:, 1])
+
+        # Ruled surface: P(u,v) = c_start(u) + v * [c_end(u) - c_start(u)]
+        n_radial = self._n_radial
+        extent = self._extent
+        min_extent = self._min_extent
+        v = jnp.linspace(min_extent, extent, n_radial)
+
+        R_vec = c_end - c_start
+        dR_vec = dc_end - dc_start
+
+        # Surface points  (nquad, n_radial, 3)
+        pts = c_start[:, None, :] + v[None, :, None] * R_vec[:, None, :]
+
+        # Tangent vectors (analytical, not finite-difference)
+        Tu = dc_start[:, None, :] + v[None, :, None] * dR_vec[:, None, :]
+        Tv = jnp.broadcast_to(R_vec[:, None, :], Tu.shape)
+
+        # Unit normals = Tu x Tv, normalised
+        normals = jnp.cross(Tu, Tv)
+        mag = jnp.linalg.norm(normals, axis=-1, keepdims=True)
+        normals = normals / jnp.maximum(mag, 1e-12)
+
+        # Flatten to (N_pts, 3)
+        pts_flat = pts.reshape(-1, 3)
+        nrm_flat = normals.reshape(-1, 3)
+
+        # Convert to requested coordinate basis
+        if self._basis == "rpz":
+            pts_rpz = xyz2rpz(pts_flat)
+            nrm_flat = xyz2rpz_vec(
+                nrm_flat, x=pts_flat[:, 0], y=pts_flat[:, 1]
+            )
+            pts_flat = pts_rpz
+
+        return pts_flat, nrm_flat
+
     def compute(self, *params, constants=None):
         """TODO: docstring."""
         if constants is None:
             constants = self.constants
 
-        # Split params: field params come first, eq params come last (if not fixed).
+        # Split params: field first, then curves (if free), then eq (if free).
         end_index = len(params)
         if not self._eq_fixed and self._eq is not None:
             eq_params = params[end_index - 1]
@@ -2596,10 +2705,25 @@ class FieldNormalError(_Objective):
         else:
             eq_params = None
 
+        if not self._curves_fixed and self._curve_start is not None:
+            ce_params = params[end_index - 1]
+            end_index -= 1
+            cs_params = params[end_index - 1]
+            end_index -= 1
+        else:
+            cs_params = None
+            ce_params = None
+
         field_params = params[:end_index] if not self._field_fixed else None
 
-        points = constants["points"]
-        normals = constants["normals"]
+        # Get surface points/normals — static when curves fixed, dynamic otherwise
+        if cs_params is not None:
+            points, normals = self._compute_surface_jax(
+                cs_params, ce_params, constants
+            )
+        else:
+            points = constants["points"]
+            normals = constants["normals"]
 
         # Compute coil field
         B_total = constants["field"].compute_magnetic_field(

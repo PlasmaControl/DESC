@@ -2792,7 +2792,7 @@ def _field_line_integrate(
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
         out = vmap_chunked(
-            _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
+            _intfun_wrapper, in_axes=(0,) + 15 * (None,), chunk_size=chunk_size
         )(
             x0,
             field,

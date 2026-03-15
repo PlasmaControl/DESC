@@ -856,6 +856,7 @@ def _resonance_physics(
         f_q_abs = jnp.broadcast_to(
             f_q_abs[..., None], (*f_q_abs.shape, n_res)
         )
+        f_q_abs_sq = jnp.broadcast_to(f_q_abs_sq[..., None], (*f_q_abs_sq.shape, n_res))
     else:
         phase = q_arr[None, :] * eta_vals[:, None]
         cos_phase = jnp.cos(phase)
@@ -866,6 +867,7 @@ def _resonance_physics(
         f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
         f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
         f_q_abs = 0.5 * jnp.sqrt(jnp.maximum(f_q_c**2 + f_q_s**2, 1e-30))
+        f_q_abs_sq = 0.5**2 * (f_q_c**2 + f_q_s**2)
 
     # Filter FT results to valid points. 
     f_q_abs = jnp.where(valid_prime[..., None], f_q_abs, 0.0)
@@ -876,12 +878,13 @@ def _resonance_physics(
     Delta_s_profile = 4 * jnp.sqrt(
         jnp.maximum(safediv(f_q_abs, denom, fill=0.0), 1e-30)
     )
-    Delta_s_sum = Delta_s_profile.sum(axis=-1)
+    Delta_s_4_profile = 4**4 * safediv(f_q_abs_sq, denom**2, fill=0.0)
+    Delta_s_4_sum = (Delta_s_4_profile * res_weight).sum(axis=-1)
 
     if stab_sacrifice:
-        f_res = Delta_s_sum**4 * Omega_prime_s**2 
+        f_res = Delta_s_4_sum * Omega_prime_s**2 
     else:
-        f_res = Delta_s_sum**4
+        f_res = Delta_s_4_sum
 
     # Sum over radius to get weighted island width and resonance location. 
     Delta_s = (Delta_s_profile * res_weight).sum(axis=0)

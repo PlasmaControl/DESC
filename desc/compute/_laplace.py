@@ -414,7 +414,10 @@ def _fixed_point_potential(
     transforms={"grid": []},
     profiles=[],
     data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
-    parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
+    parameterization=[
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.equilibrium.equilibrium.Equilibrium",
+    ],
     q="int : Order of quadrature in polar domain.",
     potential_grid="""LinearGrid :
         Grid to evaluate potential on boundary.
@@ -466,7 +469,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     data=["interpolator"],
-    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     public=False,
 )
 def _potential_grid_position(params, transforms, profiles, data, **kwargs):
@@ -573,7 +576,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     + ["interpolator"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     chunk_size=(_doc["chunk_size"] +

@@ -621,7 +621,7 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     + "using the most compact representation of diffmatrices",
     dim=1,
     params=["Psi"],
-    transforms={"grid": [], "diffmat": []},
+    transforms={"grid": [], "diffmat": [], "phi_matrix": []},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -1219,10 +1219,48 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     A2 = A2[pinv][:, pinv]
     A2u = A2u[pinv][:, pinv]
 
-    # store indices needed to apply dirichlet BC to ξ^ρ
-    keep_1 = jnp.arange(n_theta_max * n_zeta_max, n_total - n_theta_max * n_zeta_max)
+    # either include vacuum energy or add dirichlet BC to ξ^ρ
     keep_2 = jnp.arange(n_total, 3 * n_total)
+
+    # change to free-boundary when phi_matrix is provided)
+    phi_matrix = transforms.get("phi_matrix", None)
+    n_surf = n_theta_max * n_zeta_max
+    if phi_matrix is not None:
+        # only remove ρ=0
+        keep_1 = jnp.arange(n_surf, n_total)
+    else:
+        # remove ρ=0 and ρ=1
+        keep_1 = jnp.arange(n_surf, n_total - n_surf)
+
     keep = jnp.concatenate([keep_1, keep_2])
+    # add vacuum energy contribution
+    if phi_matrix is not None:
+        print("success!")
+        b_idx = slice(n_total - n_surf, n_total)
+
+        # surface quantities
+        psi_r_s = psi_r[b_idx, :]
+        sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
+        iota_s = iota[b_idx, :]
+
+        # add vacuum energy 1/2μ0 \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
+        A = A.at[b_idx, b_idx](
+            1
+            / (2 * mu_0)
+            * _cT(
+                W[b_idx, b_idx]
+                * psi_r_s
+                * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx])
+            )
+            @ (
+                phi_matrix
+                @ (
+                    psi_r
+                    / sqrtg_grad_rho
+                    * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
+                )
+            )
+        )
 
     if incompressible:  # Only enforce incompressibility here
         # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
@@ -1308,7 +1346,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     print("Has NaN:", np.any(np.isnan(A3)))
     print("Has Inf:", np.any(np.isinf(A3)))
     print("Condition number:", np.linalg.cond(A3))
-    #w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
+    # w, v = eigsh(np.asarray(A3), k=4, sigma=-1e-3, which="LM", return_eigenvectors=True)
     w, v = jnp.linalg.eigh(A3)
 
     data["finite-n lambda"] = w
@@ -1325,7 +1363,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     description="Finite-n eigenfunction",
     dim=5,
     params=["Psi"],
-    transforms={"grid": [], "diffmat": []},
+    transforms={"grid": [], "diffmat": [], "phi_matrix": []},
     profiles=[],
     coordinates="rtz",
     data=["finite-n lambda"],

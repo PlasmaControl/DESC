@@ -527,7 +527,7 @@ def _combine_constraints(constraints):
 
     """
     if len(constraints):
-        objective = ObjectiveFunction(constraints, jac_chunk_size=1)
+        objective = ObjectiveFunction(constraints)
     else:
         objective = None
     return objective

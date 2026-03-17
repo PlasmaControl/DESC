@@ -117,7 +117,8 @@ eq = Equilibrium(
 eq.save(save_path + eq_save_name)
 
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
-data, _ = eq.surface.compute(
+print(eq.surface)
+data = eq.surface.compute(
     ["phi_matrix"],
     grid,
     data=data,

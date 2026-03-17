@@ -1223,7 +1223,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     keep_2 = jnp.arange(n_total, 3 * n_total)
 
     # change to free-boundary when phi_matrix is provided)
-    phi_matrix = transforms.get("phi_matrix", None)
+    # normalize by a_N since Phi = phi_matrix @ B
+    # and B = grad(Phi), so phi_matrix has units length
+    phi_matrix = transforms.get("phi_matrix", None) / a_N
     n_surf = n_theta_max * n_zeta_max
     if phi_matrix is not None:
         # only remove ρ=0
@@ -1243,19 +1245,18 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
         iota_s = iota[b_idx, :]
 
-        # add vacuum energy 1/2μ0 \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
+        # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
+        # NOTE: FIGURE OUT WHAT TO DO WITH THE EXTRA FACTORS OF dpsi/dr!!
         A = A.at[b_idx, b_idx](
-            1
-            / (2 * mu_0)
-            * _cT(
-                W[b_idx, b_idx]
-                * psi_r_s
+            _cT(
+                W[b_idx, :]
+                * psi_r3[b_idx, :] # psi_r is constant on the surface
                 * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx])
             )
             @ (
                 phi_matrix
                 @ (
-                    psi_r
+                    psi_r_s
                     / sqrtg_grad_rho
                     * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
                 )

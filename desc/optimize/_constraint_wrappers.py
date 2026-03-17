@@ -713,7 +713,7 @@ class ProximalProjection(ObjectiveFunction):
         # to avoid OOM during perturb(). The "auto" heuristic assumes the
         # full GPU is free, but the outer objective's transforms are already
         # resident, so the batched JVP allocation exceeds remaining memory.
-        self._constraint._jac_chunk_size = 1
+        self._constraint._jac_chunk_size = 16
 
         for constraint in self._eq_linear_constraints:
             constraint.build(use_jit=use_jit, verbose=verbose)

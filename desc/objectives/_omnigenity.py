@@ -40,6 +40,7 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
+    _static_attrs = _Objective._static_attrs + ["_helicity"]
 
     def __init__(
         self,
@@ -547,6 +548,14 @@ class Omnigenity(_Objective):
         target_default="``target=0``.", bounds_default="``target=0``."
     )
 
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_data_keys",
+        "_eq_fixed",
+        "_field_data_keys",
+        "_field_fixed",
+        "_helicity",
+    ]
+
     _coordinates = "rtz"
     _units = "(T)"
     _print_value_fmt = "Omnigenity error: "
@@ -669,7 +678,7 @@ class Omnigenity(_Objective):
         )
         errorif(
             jnp.any(field.B_lm[: field.M_B] < 0),
-            "|B| on axis must be positive! Check B_lm input.",
+            msg="|B| on axis must be positive! Check B_lm input.",
         )
 
         timer = Timer()

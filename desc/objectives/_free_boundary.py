@@ -4,7 +4,7 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
@@ -62,6 +62,12 @@ class VacuumBoundaryError(_Objective):
     __doc__ = __doc__.rstrip() + collect_docs(
         target_default="``target=0``.", bounds_default="``target=0``."
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+    ]
 
     _scalar = False
     _linear = False
@@ -359,7 +365,7 @@ class BoundaryError(_Objective):
     Computes the residual of the following:
 
     𝐁ₒᵤₜ ⋅ 𝐧 = 0
-    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - p = 0
+    𝐁ₒᵤₜ² - 𝐁ᵢₙ² - 2μ₀p = 0
     μ₀∇Φ − 𝐧 × [𝐁ₒᵤₜ − 𝐁ᵢₙ]
 
     Where 𝐁ᵢₙ is the total field inside the LCFS (from fixed boundary calculation)
@@ -436,6 +442,17 @@ class BoundaryError(_Objective):
         objective = BoundaryError(eq, field)
 
     """
+
+    _static_attrs = _Objective._static_attrs + [
+        "_B_plasma_chunk_size",
+        "_bs_chunk_size",
+        "_eq_data_keys",
+        "_field_fixed",
+        "_q",
+        "_sheet_current",
+        "_sheet_data_keys",
+        "_use_same_grid",
+    ]
 
     _scalar = False
     _linear = False
@@ -756,7 +773,11 @@ class BoundaryError(_Objective):
 
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * g
-        Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * g
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
             Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
@@ -988,11 +1009,6 @@ class BoundaryErrorNESTOR(_Objective):
         )
         grid = LinearGrid(rho=1, theta=self._ntheta, zeta=self._nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=False,
-        )
 
         timer = Timer()
         if verbose > 0:

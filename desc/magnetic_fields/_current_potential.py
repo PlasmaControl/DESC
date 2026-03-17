@@ -10,7 +10,6 @@ from scipy.constants import mu_0
 
 from desc.backend import cho_factor, cho_solve, fori_loop, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
 from desc.derivatives import Derivative
 from desc.geometry import FourierRZToroidalSurface
@@ -23,9 +22,13 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    get_ess_scale,
+    rpz2xyz,
+    rpz2xyz_vec,
     safediv,
     setdefault,
     warnif,
+    xyz2rpz_vec,
 )
 
 from ._core import (
@@ -90,6 +93,12 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + [
             "_params",
         ]
+    )
+
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + ["_potential", "_potential_dtheta", "_potential_dzeta"]
     )
 
     def __init__(
@@ -466,6 +475,17 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         + ["_Phi_mn", "_I", "_G", "_Phi_basis", "_M_Phi", "_N_Phi", "_sym_Phi"]
     )
 
+    _static_attrs = (
+        _MagneticField._static_attrs
+        + FourierRZToroidalSurface._static_attrs
+        + [
+            "_M_Phi",
+            "_N_Phi",
+            "_sym_Phi",
+            "_Phi_basis",
+        ]
+    )
+
     def __init__(
         self,
         Phi_mn=np.array([0.0]),
@@ -503,8 +523,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        self._I = float(np.squeeze(I))
-        self._G = float(np.squeeze(G))
+        self._I = jnp.float64(float(np.squeeze(I)))
+        self._G = jnp.float64(float(np.squeeze(G)))
 
         super().__init__(
             R_lmn=R_lmn,
@@ -527,7 +547,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @I.setter
     def I(self, new):  # noqa: E743
-        self._I = float(np.squeeze(new))
+        self._I = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -537,7 +557,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @G.setter
     def G(self, new):
-        self._G = float(np.squeeze(new))
+        self._G = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -832,6 +852,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         npts=128,
         stell_sym=False,
         plot_kwargs={"figsize": (8, 6)},
+        check_intersection=True,
     ):
         """Find helical or modular coils from this surface current potential.
 
@@ -875,6 +896,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             dict of kwargs to use when plotting the contour plots if ``show_plots=True``
             ``figsize`` is used for the figure size, and the rest are passed to
             ``plt.contourf``
+        check_intersection : bool
+            whether or not to check the resulting coilset for self-intersections.
+            Defaults to True.
 
         Returns
         -------
@@ -993,13 +1017,45 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         # symmetry plane, in which case we will check
         if coil_type == "modular":
             final_coilset = CoilSet(
-                *coils, NFP=nfp, sym=stell_sym, check_intersection=stell_sym
+                *coils,
+                NFP=nfp,
+                sym=stell_sym,
+                check_intersection=check_intersection,
             )
         else:
             # TODO: once winding surface curve is implemented, enforce sym for
             # helical as well
-            final_coilset = CoilSet(*coils, check_intersection=False)
+            final_coilset = CoilSet(*coils, check_intersection=check_intersection)
         return final_coilset
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following, the R,Z scales are already in the base class:
+        modes = {"Phi_mn": self.Phi_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 def _compute_A_or_B_from_CurrentPotentialField(
@@ -1471,8 +1527,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     if verbose > 1:
         timer.disp("Jacobian Calculation")
 
-    current_potential_field.I = float(I)
-    current_potential_field.G = float(G)
+    current_potential_field.I = jnp.float64(float(I))
+    current_potential_field.G = jnp.float64(float(G))
 
     # find the normal field from the secular part of the current potential
     # also mutliply by necessary weights and normal vector magnitude

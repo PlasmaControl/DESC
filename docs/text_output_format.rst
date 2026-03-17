@@ -1,9 +1,9 @@
 
-The text output are ASCII files with the naming convention
-``output.FILE_NAME``. All of the necessary variables to fully define an
+Limited support for ASCII output files exists with the function :func:`desc.io.write_ascii`.
+All of the necessary variables to fully define an
 equilibrium solution are output in the following order: grid parameters,
 fixed-boundary shape, pressure and rotational transform profiles, flux
-surface shapes, and the boundary function :math:`\lambda`. An example
+surface shapes, and the poloidal stream function :math:`\lambda`. An example
 output file is included for reference at the end of this document. All
 integers are printed with a total width of 3 characters, and all
 floating point numbers are printed in exponential notation with a total
@@ -18,17 +18,16 @@ next four lines contain the following information in order:
 #. ``NFP`` (integer): number of field periods
 
 #. ``Psi`` (float): total toroidal magnetic flux through the last closed
-   flux surface, :math:`\psi_a`, in Webers
+   flux surface, :math:`\Psi`, in Webers
 
 Fixed-Boundary Shape
 --------------------
 
 The target shape of the plasma boundary is output for reference in the
 section of the output file with the heading ``Nbdry``. This gives the number
-of boundary terms, followed by the coefficients. This is the fixed-boundary
-input that was used to compute the equilibrium, but the
-last closed flux surface generally does not match this desired shape
-exactly. The shape of the boundary surface is given as a double Fourier
+of boundary terms, followed by the coefficients. This is the fixed-boundary surface
+input that was used to compute the equilibrium, and is the last closed flux surface of the equilibrium.
+The shape of the boundary surface is given as a double Fourier
 series of the form:
 
 .. math::
@@ -89,6 +88,11 @@ profiles given in the example are:
    p &= 3.4\times10^3 (1-\rho^2)^2 \\
    \iota &= 0.5 + 1.5 \rho^2.\end{aligned}
 
+If the equilibrium was solved with a fixed-current profile, then the iota
+computed from the equilibrium will be fit with a power series, and the coefficients of
+that power series will be saved. Likewise, if the equilibrium does not have a pressure profile
+but rather kinetic profiles, the pressure will be computed, fit with a power series, and saved.
+
 Flux Surface Shapes
 -------------------
 
@@ -100,8 +104,8 @@ Fourier-Zernike basis set with “fringe” indexing of the form:
 .. math::
 
    \begin{aligned}
-   R(\rho,\vartheta,\zeta) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} \sum_{l\in L} R_{lmn} \mathcal{Z}^{m}_{l}(\rho,\vartheta) \mathcal{F}^{n}(\zeta) \\
-   Z(\rho,\vartheta,\zeta) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} \sum_{l\in L} Z_{lmn} \mathcal{Z}^{m}_{l}(\rho,\vartheta) \mathcal{F}^{n}(\zeta)\end{aligned}
+   R(\rho,\theta,\zeta) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} \sum_{l\in L} R_{lmn} \mathcal{Z}^{m}_{l}(\rho,\theta) \mathcal{F}^{n}(\zeta) \\
+   Z(\rho,\theta,\zeta) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} \sum_{l\in L} Z_{lmn} \mathcal{Z}^{m}_{l}(\rho,\theta) \mathcal{F}^{n}(\zeta)\end{aligned}
 
 where :math:`L = |m|, |m|+2, |m|+4, \ldots, 2 M`.
 :math:`\mathcal{F}^{n}(\zeta)` is the toroidal Fourier series defined as
@@ -114,87 +118,39 @@ where :math:`L = |m|, |m|+2, |m|+4, \ldots, 2 M`.
    \end{cases}
 
 
-:math:`\mathcal{Z}^{m}_{l}(\rho,\vartheta)` are the Zernike polynomials
+:math:`\mathcal{Z}^{m}_{l}(\rho,\theta)` are the Zernike polynomials
 defined on the unit disc :math:`0\leq\rho\leq1`,
-:math:`\vartheta\in[0,2\pi)` as
+:math:`\theta\in[0,2\pi)` as
 
 .. math::
 
-   \mathcal{Z}^{m}_{l}(\rho,\vartheta) = \begin{cases}
-   \mathcal{R}^{|m|}_{l}(\rho) \cos(|m|\vartheta) &\text{for }m\ge0 \\
-   \mathcal{R}^{|m|}_{l}(\rho) \sin(|m|\vartheta) &\text{for }m<0 \\
+   \mathcal{Z}^{m}_{l}(\rho,\theta) = \begin{cases}
+   \mathcal{R}^{|m|}_{l}(\rho) \cos(|m|\theta) &\text{for }m\ge0 \\
+   \mathcal{R}^{|m|}_{l}(\rho) \sin(|m|\theta) &\text{for }m<0 \\
    \end{cases}
 
 with the radial function
 
 .. math:: \mathcal{R}^{|m|}_{l}(\rho) = \sum^{(l-|m|)/2}_{s=0} \frac{(-1)^s(l-s)!}{s![\frac{1}{2}(l+|m|)-s]![\frac{1}{2}(l-|m|)-s]!} \rho^{l-2s}.
 
-The Fourier-Zernike coefficients :math:`R_{mn}` and :math:`Z_{mn}` are
-given by the variables ``cR`` and ``cZ``, respectively, in the section
+The Fourier-Zernike coefficients :math:`R_{lmn}`,  :math:`Z_{lmn}` and :math:`\lambda_lmn` are
+given by the variables ``cR``, ``cZ``, and ``cL`` , respectively, in the section
 of the output file with the heading ``NRZ`` (which gives the total number
 of values). The indices :math:`l`, :math:`m`, and :math:`n` that identify
 each coefficient are given by the variables ``l``, ``m``, and ``n`` on
-the same line of the output file as ``cR`` and ``cZ``.
+the same line of the output file as ``cR``, ``cZ`` and ``cL``.
 When stellarator symmetry is enforced,
-only the :math:`R_{mn}` with :math:`mn > 0` and the :math:`Z_{mn}` with
-:math:`mn < 0` are nonzero. Coefficients with :math:`mn = 0` are nonzero
-for :math:`R_{mn}` if one of the mode numbers is positive, and nonzero
-for :math:`Z_{mn}` if one of the mode numbers is negative. Lines 45-46
+only the :math:`R_{lmn}` with :math:`m,n > 0` and the :math:`Z_{lmn}` and :math:`\lambda_{lmn}` with
+:math:`m,n < 0` are nonzero. Coefficients with :math:`m,n = 0` are nonzero
+for :math:`R_{lmn}` if one of the mode numbers is positive, and nonzero
+for :math:`Z_{lmn}` and :math:`\lambda_{lmn}` if one of the mode numbers is negative. Lines 45-46
 of the example output file give the terms
 
 .. math::
 
    \begin{aligned}
-   R_{3,1,1} \mathcal{Z}^{1}_{3}(\rho,\vartheta) \mathcal{F}^{1}(\zeta) &= 5.26674681 \times 10^{-2} (3\rho^3-2\rho) \cos(\vartheta) \cos(3\zeta) \\
-   Z_{2,2,-1} \mathcal{Z}^{2}_{2}(\rho,\vartheta) \mathcal{F}^{-1}(\zeta) &= 5.01543691 \times 10^{-2} \rho^2 \cos(2\vartheta) \sin(3\zeta).\end{aligned}
-
-The magnetic field is computed in the straight field-line coordinate
-system :math:`(\rho,\vartheta,\zeta)` by
-
-.. math:: \mathbf{B} = B^\vartheta {\mathbf e}_{\vartheta}+ B^\zeta {\mathbf e}_{\zeta}= \frac{2\psi_a \rho}{2\pi \sqrt{g}} \left( \iota {\mathbf e}_{\vartheta}+ {\mathbf e}_{\zeta}\right).
-
-The covariant basis vectors are defined as
-
-.. math:: {\mathbf e}_{\rho}= \begin{bmatrix} \partial_\rho R \\ 0 \\ \partial_\rho Z \end{bmatrix} \hspace{5mm} {\mathbf e}_{\vartheta}= \begin{bmatrix} \partial_\vartheta R \\ 0 \\ \partial_\vartheta Z \end{bmatrix} \hspace{5mm} {\mathbf e}_{\zeta}= \begin{bmatrix} \partial_\zeta R \\ R \\ \partial_\zeta Z \end{bmatrix}
-
-and the Jacobian of the coordinate system is
-:math:`\sqrt{g} = {\mathbf e}_{\rho}\cdot{\mathbf e}_{\vartheta}\times{\mathbf e}_{\zeta}`.
-The partial derivatives of :math:`R(\rho,\vartheta,\zeta)` and
-:math:`Z(\rho,\vartheta,\zeta)` are known analytically from
-the basis functions. The components of the magnetic field
-in the toroidal coordinate system :math:`(R,\phi,Z)` can be easily
-computed as :math:`B_i = \mathbf{B} \cdot \mathbf{e}_i` with
-:math:`{\mathbf e}_{R}= [1, 0, 0]^T`,
-:math:`{\mathbf e}_{\phi}= [0, 1, 0]^T`, and
-:math:`{\mathbf e}_{Z}= [0, 0, 1]^T`.
-
-Boundary Function :math:`\lambda`
----------------------------------
-
-The straight field-line angle :math:`\zeta` is equivalent to the
-toroidal angle by definition: :math:`\zeta = \phi`. The function
-:math:`\lambda(\theta,\phi)` relates the straight field-line angle
-:math:`\vartheta` to the poloidal angle used to define the boundary
-surface :math:`\theta` through the equation
-:math:`\vartheta = \theta + \lambda(\theta,\phi)`. It is used internally
-to enforce the boundary condition at the last closed flux surface, and
-is output for reference. The function is given as a doubles Fourier
-series of the form:
-
-.. math::
-
-   \begin{aligned}
-   \lambda(\theta,\phi) &= \sum_{n=-N}^{N} \sum_{m=-M}^{M} \lambda_{mn} \mathcal{G}^{m}_{n}(\theta,\phi)\end{aligned}
-
-where :math:`\mathcal{G}^{m}_{n}(\theta,\phi)` was defined above for the
-boundary shape. The Fourier coefficients :math:`\lambda_{mn}` are
-given by the variable ``cL`` in the section of the output file with the
-heading ``NL`` (which gives the number of :math:`\lambda` coefficients).
-Their output format follows the same convention as
-the boundary coefficients ``bR`` and ``bZ``. When stellarator symmetry
-is enforced, only the coefficients with :math:`mn < 0` are nonzero.
-Coefficients with :math:`mn = 0` are nonzero if one of the mode numbers
-is negative.
+   R_{3,1,1} \mathcal{Z}^{1}_{3}(\rho,\theta) \mathcal{F}^{1}(\zeta) &= 5.26674681 \times 10^{-2} (3\rho^3-2\rho) \cos(\theta) \cos(3\zeta) \\
+   Z_{2,2,-1} \mathcal{Z}^{2}_{2}(\rho,\theta) \mathcal{F}^{-1}(\zeta) &= 5.01543691 \times 10^{-2} \rho^2 \cos(2\theta) \sin(3\zeta).\end{aligned}
 
 
 Example Output File
@@ -202,60 +158,75 @@ Example Output File
 
 ::
 
-   NFP =   3
+   NFP =  19
    Psi =   1.00000000E+00
-   Nbdry =  7
+   Nbdry =  24
+   m:  -2 n:  -2 bR =   1.75911802E-17 bZ =   0.00000000E+00
+   m:  -1 n:  -2 bR =   8.80914265E-19 bZ =   0.00000000E+00
+   m:  -2 n:  -1 bR =   5.42101086E-19 bZ =   0.00000000E+00
+   m:  -1 n:  -1 bR =   3.00000000E-01 bZ =   0.00000000E+00
    m:   0 n:   0 bR =   1.00000000E+01 bZ =   0.00000000E+00
    m:   1 n:   0 bR =  -1.00000000E+00 bZ =   0.00000000E+00
-   m:  -1 n:   0 bR =   0.00000000E+00 bZ =   1.00000000E+00
+   m:   2 n:   0 bR =  -1.02999206E-18 bZ =   0.00000000E+00
+   m:   0 n:   1 bR =   1.68051337E-18 bZ =   0.00000000E+00
    m:   1 n:   1 bR =  -3.00000000E-01 bZ =   0.00000000E+00
-   m:  -1 n:  -1 bR =  -3.00000000E-01 bZ =   0.00000000E+00
+   m:   2 n:   1 bR =   2.13791116E-18 bZ =   0.00000000E+00
+   m:   0 n:   2 bR =  -3.52365706E-19 bZ =   0.00000000E+00
+   m:   1 n:   2 bR =  -1.08420217E-19 bZ =   0.00000000E+00
+   m:   2 n:   2 bR =   1.35525272E-19 bZ =   0.00000000E+00
+   m:   0 n:  -2 bR =   0.00000000E+00 bZ =   5.42101086E-20
+   m:   1 n:  -2 bR =   0.00000000E+00 bZ =  -8.13151629E-20
+   m:   2 n:  -2 bR =   0.00000000E+00 bZ =   2.50721752E-19
+   m:   0 n:  -1 bR =   0.00000000E+00 bZ =   9.35124374E-18
+   m:   1 n:  -1 bR =   0.00000000E+00 bZ =  -3.00000000E-01
+   m:   2 n:  -1 bR =   0.00000000E+00 bZ =  -6.09863722E-18
+   m:  -1 n:   0 bR =   0.00000000E+00 bZ =   1.00000000E+00
+   m:  -2 n:   1 bR =   0.00000000E+00 bZ =   1.83636743E-18
    m:  -1 n:   1 bR =   0.00000000E+00 bZ =  -3.00000000E-01
-   m:   1 n:  -1 bR =   0.00000000E+00 bZ =   3.00000000E-01
-   Nprof =   5
-   l:   0 cP =   3.40000000E+03 cI =   5.00000000E-01
-   l:   1 cP =   0.00000000E+00 cI =   0.00000000E+00
-   l:   2 cP =  -6.80000000E+03 cI =   1.50000000E+00
-   l:   3 cP =   0.00000000E+00 cI =   0.00000000E+00
-   l:   4 cP =   3.40000000E+03 cI =   0.00000000E+00
-   NRZ =   27
-   l:   0 m:   0 n:  -1 cR =   0.00000000E+00 cZ =  -2.90511418E-03
-   l:   0 m:   0 n:   0 cR =   9.98274712E+00 cZ =   0.00000000E+00
-   l:   0 m:   0 n:   1 cR =  -2.90180674E-03 cZ =   0.00000000E+00
-   l:   1 m:  -1 n:  -1 cR =   2.28896490E-01 cZ =   0.00000000E+00
-   l:   1 m:  -1 n:   0 cR =   0.00000000E+00 cZ =   9.48092222E-01
-   l:   1 m:  -1 n:   1 cR =   0.00000000E+00 cZ =  -2.27403979E-01
-   l:   2 m:   0 n:  -1 cR =   0.00000000E+00 cZ =  -2.41707137E-02
-   l:   2 m:   0 n:   0 cR =  -1.36531448E-01 cZ =   0.00000000E+00
-   l:   2 m:   0 n:   1 cR =  -2.41387024E-02 cZ =   0.00000000E+00
-   l:   1 m:   1 n:  -1 cR =   0.00000000E+00 cZ =   2.24346193E-01
-   l:   1 m:   1 n:   0 cR =   9.25944834E-01 cZ =   0.00000000E+00
-   l:   1 m:   1 n:   1 cR =   2.25843613E-01 cZ =   0.00000000E+00
-   l:   2 m:  -2 n:  -1 cR =   3.34519544E-02 cZ =   0.00000000E+00
-   l:   2 m:  -2 n:   0 cR =   0.00000000E+00 cZ =   1.58172393E-01
-   l:   2 m:  -2 n:   1 cR =   0.00000000E+00 cZ =  -5.03483447E-02
-   l:   3 m:  -1 n:  -1 cR =   4.81316537E-02 cZ =   0.00000000E+00
-   l:   3 m:  -1 n:   0 cR =   0.00000000E+00 cZ =   3.38024112E-02
-   l:   3 m:  -1 n:   1 cR =   0.00000000E+00 cZ =  -4.74860303E-02
-   l:   4 m:   0 n:  -1 cR =   0.00000000E+00 cZ =   2.08609498E-02
-   l:   4 m:   0 n:   0 cR =   1.33345992E-01 cZ =   0.00000000E+00
-   l:   4 m:   0 n:   1 cR =   2.07783052E-02 cZ =   0.00000000E+00
-   l:   3 m:   1 n:  -1 cR =   0.00000000E+00 cZ =   5.20291455E-02
-   l:   3 m:   1 n:   0 cR =   7.29416666E-02 cZ =   0.00000000E+00
-   l:   3 m:   1 n:   1 cR =   5.26674681E-02 cZ =   0.00000000E+00
-   l:   2 m:   2 n:  -1 cR =   0.00000000E+00 cZ =   5.01543691E-02
-   l:   2 m:   2 n:   0 cR =   1.56388795E-01 cZ =   0.00000000E+00
-   l:   2 m:   2 n:   1 cR =   3.32590868E-02 cZ =   0.00000000E+00
-   NL =  12
-   m:  -2 n:  -1 cL =  -0.00000000E+00
-   m:  -2 n:   0 cL =   9.55435813E-03
-   m:  -2 n:   1 cL =   2.53333116E-02
-   m:  -1 n:  -1 cL =  -0.00000000E+00
-   m:  -1 n:   0 cL =   9.91996517E-02
-   m:  -1 n:   1 cL =  -1.17417875E-02
-   m:   0 n:  -1 cL =   1.75103748E-04
-   m:   0 n:   0 cL =  -0.00000000E+00
-   m:   0 n:   1 cL =  -0.00000000E+00
-   m:   1 n:  -1 cL =   1.16506641E-02
-   m:   1 n:   0 cL =  -0.00000000E+00
-   m:   1 n:   1 cL =  -0.00000000E+00
+   m:  -2 n:   2 bR =   0.00000000E+00 bZ =   1.89735380E-19
+   m:  -1 n:   2 bR =   0.00000000E+00 bZ =   2.84603070E-19
+   Nprof =   3
+   l:   0 cP =   1.80000000E+04 cI =   1.00000000E+00
+   l:   2 cP =  -3.60000000E+04 cI =   1.50000000E+00
+   l:   4 cP =   1.80000000E+04 cI =   0.00000000E+00
+   NRZ =    40
+   l:   1 m:  -1 n:  -2 cR =  -2.05652967E-03 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:  -2 n:  -2 cR =  -6.91124500E-04 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   3 m:  -1 n:  -2 cR =   8.88430363E-04 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   1 m:  -1 n:  -1 cR =   2.29131774E-01 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:  -2 n:  -1 cR =  -5.22612182E-03 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   3 m:  -1 n:  -1 cR =   3.73498631E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   0 m:   0 n:   0 cR =   1.01304079E+01 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   1 m:   1 n:   0 cR =  -9.71393329E-01 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   0 n:   0 cR =  -1.78433121E-01 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   2 n:   0 cR =   1.61065486E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   3 m:   1 n:   0 cR =  -3.13199707E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   0 m:   0 n:   1 cR =   3.98162495E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   1 m:   1 n:   1 cR =  -2.51860081E-01 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   0 n:   1 cR =  -4.79783330E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   2 n:   1 cR =   9.54103619E-03 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   3 m:   1 n:   1 cR =  -2.68561658E-02 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   0 m:   0 n:   2 cR =   8.29727328E-05 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   1 m:   1 n:   2 cR =   9.35653958E-04 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   0 n:   2 cR =  -7.00132972E-04 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   2 m:   2 n:   2 cR =   1.08982466E-03 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   3 m:   1 n:   2 cR =  -3.83056775E-04 cZ =   0.00000000E+00 cL =   0.00000000E+00
+   l:   0 m:   0 n:  -2 cR =   0.00000000E+00 cZ =   7.85251369E-05 cL =  -2.99837951E-04
+   l:   1 m:   1 n:  -2 cR =   0.00000000E+00 cZ =   8.86922440E-04 cL =  -4.43171034E-04
+   l:   2 m:   0 n:  -2 cR =   0.00000000E+00 cZ =  -7.47840516E-04 cL =  -1.92494857E-04
+   l:   2 m:   2 n:  -2 cR =   0.00000000E+00 cZ =   1.14169192E-03 cL =  -5.62839907E-05
+   l:   3 m:   1 n:  -2 cR =   0.00000000E+00 cZ =  -2.20111383E-04 cL =   1.04591491E-04
+   l:   0 m:   0 n:  -1 cR =   0.00000000E+00 cZ =   4.06168259E-02 cL =  -1.94375807E-02
+   l:   1 m:   1 n:  -1 cR =   0.00000000E+00 cZ =  -2.64784931E-01 cL =   3.17712917E-03
+   l:   2 m:   0 n:  -1 cR =   0.00000000E+00 cZ =  -4.54725804E-02 cL =   1.15712124E-02
+   l:   2 m:   2 n:  -1 cR =   0.00000000E+00 cZ =   6.02610577E-03 cL =  -4.35783380E-02
+   l:   3 m:   1 n:  -1 cR =   0.00000000E+00 cZ =  -1.62018350E-02 cL =  -2.14132868E-02
+   l:   1 m:  -1 n:   0 cR =   0.00000000E+00 cZ =   9.69654126E-01 cL =   6.33862049E-01
+   l:   2 m:  -2 n:   0 cR =   0.00000000E+00 cZ =  -1.52205137E-02 cL =   6.72394132E-03
+   l:   3 m:  -1 n:   0 cR =   0.00000000E+00 cZ =  -9.78453786E-03 cL =  -4.25692127E-01
+   l:   1 m:  -1 n:   1 cR =   0.00000000E+00 cZ =  -2.46867402E-01 cL =   1.19756872E-02
+   l:   2 m:  -2 n:   1 cR =   0.00000000E+00 cZ =   4.38597594E-03 cL =  -5.03481139E-02
+   l:   3 m:  -1 n:   1 cR =   0.00000000E+00 cZ =  -2.63354652E-02 cL =  -4.56728374E-02
+   l:   1 m:  -1 n:   2 cR =   0.00000000E+00 cZ =   1.81476307E-03 cL =  -3.97405295E-04
+   l:   2 m:  -2 n:   2 cR =   0.00000000E+00 cZ =   7.27589399E-04 cL =  -2.60842517E-04
+   l:   3 m:  -1 n:   2 cR =   0.00000000E+00 cZ =  -6.41618803E-04 cL =  -6.99577466E-06

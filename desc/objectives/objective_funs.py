@@ -11,6 +11,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_leaves,
     tree_map,
     tree_unflatten,
     use_jax,
@@ -58,7 +59,7 @@ doc_normalize_target = """
         this should also be set to ``True``.
 """
 doc_loss_function = """
-    loss_function : {None, 'mean', 'min', 'max'}, optional
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
@@ -92,6 +93,31 @@ doc_jac_chunk_size = """
         accurately estimate the available device memory, so the ``auto`` chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
+"""
+doc_target_coil = """
+    target : float, list, optional
+        Target values for the coil objective.
+        If a float, target is applied to all coils.
+        If a list, must have the same structure as coil.
+"""
+doc_weight_coil = """
+    weight : float, list, optional
+        Weight values for the coil objective.
+        If a float, weight is applied to all coils.
+        If a list, must have the same structure as coil.
+        Set weights to zero to exclude coils from the objective.
+"""
+doc_bounds_coil = """
+    bounds : tuple of {float, list}, optional
+        Lower and upper bounds on the objective. Overrides ``target``.
+        Bounds given as floats are applied to all coils.
+        Bounds given as lists must have the same structure as coil.
+"""
+doc_loss_function_coil = """
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individual coil.
 """
 docs = {
     "target": doc_target,
@@ -139,8 +165,8 @@ def collect_docs(
     loss_detail : str, optional
         Additional information about the ``loss`` function.
     coil : bool, optional
-        Whether the objective is a coil objective. If ``True``, adds extra docs
-        to ``target`` and ``loss_function``.
+        Whether the objective is a coil objective. If ``True``, updates docs
+        of ``target``, ``weight``, ``bounds``, and ``loss_function``.
 
     Returns
     -------
@@ -149,43 +175,48 @@ def collect_docs(
 
     """
     doc_params = ""
-    for key in docs.keys():
+
+    # Copy to allow for objective-specific updates to docs
+    docs_obj = docs.copy()
+    if coil:
+        docs_obj["target"] = doc_target_coil
+        docs_obj["bounds"] = doc_bounds_coil
+        docs_obj["weight"] = doc_weight_coil
+        docs_obj["loss_function"] = doc_loss_function_coil
+
+    for key in docs_obj.keys():
         if overwrite is not None and key in overwrite.keys():
             doc_params += overwrite[key].rstrip()
         else:
             if key == "target":
                 target = ""
-                if coil:
-                    target += (
-                        "If array, it has to be flattened according to the "
-                        + "number of inputs."
-                    )
                 if target_default != "":
-                    target = target + " Defaults to " + target_default
-                doc_params += docs[key].rstrip() + target
+                    target += " Defaults to " + target_default
+                doc_params += docs_obj[key].rstrip() + target
             elif key == "bounds" and bounds_default != "":
                 doc_params = (
-                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                    doc_params
+                    + docs_obj[key].rstrip()
+                    + " Defaults to "
+                    + bounds_default
                 )
             elif key == "loss_function":
                 loss = ""
-                if coil:
-                    loss = " Operates over all coils, not each individual coil."
                 if loss_detail is not None:
                     loss += loss_detail
-                doc_params += docs[key].rstrip() + loss
+                doc_params += docs_obj[key].rstrip() + loss
             elif key == "normalize":
                 norm = ""
                 if normalize_detail is not None:
                     norm += normalize_detail
-                doc_params += docs[key].rstrip() + norm
+                doc_params += docs_obj[key].rstrip() + norm
             elif key == "normalize_target":
                 norm_target = ""
                 if normalize_target_detail is not None:
                     norm_target = normalize_target_detail
-                doc_params += docs[key].rstrip() + norm_target
+                doc_params += docs_obj[key].rstrip() + norm_target
             else:
-                doc_params += docs[key].rstrip()
+                doc_params += docs_obj[key].rstrip()
 
     return doc_params
 
@@ -231,7 +262,24 @@ class ObjectiveFunction(IOAble):
 
     """
 
-    _io_attrs_ = ["_objectives"]
+    _io_attrs_ = [
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_objectives",
+        "_use_jit",
+    ]
+    _static_attrs = [
+        "_built",
+        "_compile_mode",
+        "_compiled",
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_things_per_objective_idx",
+        "_use_jit",
+        "_static_attrs",
+    ]
 
     def __init__(
         self,
@@ -292,6 +340,8 @@ class ObjectiveFunction(IOAble):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -328,16 +378,10 @@ class ObjectiveFunction(IOAble):
         self._set_things()
 
         # setting derivative mode and chunking.
-        errorif(
-            isposint(self._jac_chunk_size) and self._deriv_mode in ["auto", "blocked"],
-            ValueError,
-            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
-            "ObjectiveFunction is not using 'batched' deriv_mode",
-        )
         sub_obj_jac_chunk_sizes_are_ints = [
             isposint(obj._jac_chunk_size) for obj in self.objectives
         ]
-        sub_obj_chunk_sizes = [
+        sub_obj_chunk_sizes_names = [
             (obj.__class__.__name__, obj._jac_chunk_size) for obj in self.objectives
         ]
         errorif(
@@ -351,7 +395,7 @@ class ObjectiveFunction(IOAble):
             "ObjectiveFunction if each sub-objective is desired to have a \n"
             "different 'jac_chunk_size' for its Jacobian computation. \n"
             "`jac_chunk_size` of sub-objective(s): \n"
-            f"{sub_obj_chunk_sizes}\n"
+            f"{sub_obj_chunk_sizes_names}\n"
             f"Note: If you didn't specify 'jac_chunk_size' for the sub-objectives, \n"
             "it might be that sub-objective has an internal logic to determine the \n"
             "chunk size based on the available memory.",
@@ -365,6 +409,13 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        errorif(
+            isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
+            ValueError,
+            "'jac_chunk_size' was passed into ObjectiveFunction, but the "
+            "ObjectiveFunction is not using 'batched' deriv_mode",
+        )
+
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
@@ -375,10 +426,15 @@ class ObjectiveFunction(IOAble):
                 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-            if self._deriv_mode == "blocked":
-                for obj in self.objectives:
-                    if obj._jac_chunk_size is None:
-                        obj._jac_chunk_size = self._jac_chunk_size
+        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
+            # blocked mode should never use this chunk size if there
+            # are multiple sub-objectives
+            self._jac_chunk_size = None
+        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
+            # if there is only one objective i.e. wrapped ForceBalance in
+            # ProximalProjection, we can use the chunk size of
+            # that objective as if this is batched mode
+            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
         if not self.use_jit:
             self._unjit()
@@ -417,7 +473,7 @@ class ObjectiveFunction(IOAble):
         flat_, treedef_ = tree_flatten(
             things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
-        unique_, inds_ = unique_list(flat_)
+        unique_, inds_, _ = unique_list(flat_)
 
         # this is needed to know which "thing" goes with which sub-objective,
         # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
@@ -1053,14 +1109,32 @@ class _Objective(IOAble, ABC):
     _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [
-        "_target",
         "_bounds",
-        "_weight",
+        "_deriv_mode",
         "_name",
         "_normalize",
         "_normalize_target",
         "_normalization",
+        "_target",
+        "_weight",
+    ]
+    _static_attrs = [
+        "_built",
+        "_coordinates",
+        "_data_keys",
         "_deriv_mode",
+        "_dim_f",
+        "_equilibrium",
+        "_jac_chunk_size",
+        "_linear",
+        "_loss_function",
+        "_name",
+        "_normalize",
+        "_normalize_target",
+        "_print_value_fmt",
+        "_scalar",
+        "_units",
+        "_static_attrs",
     ]
 
     def __init__(
@@ -1078,12 +1152,12 @@ class _Objective(IOAble, ABC):
     ):
         if self._scalar:
             assert self._coordinates == ""
-        assert np.all(np.asarray(weight) > 0)
+        assert np.all(np.asarray(tree_leaves(weight)) >= 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
-        assert loss_function in [None, "mean", "min", "max"]
+        assert loss_function in [None, "mean", "min", "max", "sum"]
         assert deriv_mode in {"auto", "fwd", "rev"}
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
@@ -1103,6 +1177,7 @@ class _Objective(IOAble, ABC):
             "mean": jnp.mean,
             "max": jnp.max,
             "min": jnp.min,
+            "sum": jnp.sum,
             None: None,
         }[loss_function]
 
@@ -1142,6 +1217,8 @@ class _Objective(IOAble, ABC):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -1695,5 +1772,5 @@ class _ThingFlattener(IOAble):
         )
         assert treedef == self.treedef
         assert len(flat) == self.length
-        unique, _ = unique_list(flat)
+        unique, _, _ = unique_list(flat)
         return unique

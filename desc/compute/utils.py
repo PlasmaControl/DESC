@@ -120,10 +120,14 @@ def compute(  # noqa: C901
     # Always remove `diffmat` from kwargs so it never reaches the bad-kwarg check,
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
+    pm_kw = kwargs.pop("phi_matrix", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
         transforms["diffmat"] = dm_kw
+    
+    if "phi_matrix" not in transforms and pm_kw is not None:
+        transforms["phi_matrix"] = pm_kw
 
     bad_kwargs = kwargs.keys() - allowed_kwargs
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
@@ -837,7 +841,12 @@ def get_transforms(  # noqa: C901
                 "Compute requested 'diffmat' but none was provided. "
                 "Call eq.compute(..., diffmat=DiffMat(...)) or set eq.diffmat first.",
             )
-
+        elif c == "phi_matrix":
+            errorif("phi_matrix" not in transforms,
+                    ValueError,
+                    "Compute requested 'phi_matrix' but none was provided. "
+                    "Call eq.compute(..., phi_matrix=phi_matrix).",
+                    )
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

@@ -1,6 +1,5 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import numpy as np
 import optax
 from scipy.optimize import OptimizeResult
 
@@ -175,13 +174,11 @@ def sgd(  # noqa: C901
     # Scaled state xs = x / x_scale
     # Scaled gradient df/dxs = df/dx * dx/dxs = df/dx * x_scale
     gs = grad(x, *args) * x_scale
-
     ngev += 1
     # scaled and unscaled norms
     g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
     gs_norm = jnp.linalg.norm(gs, ord=2)
     x_norm = jnp.linalg.norm(x, ord=2)
-
     xs_norm = jnp.linalg.norm(x / x_scale, ord=2)
     maxiter = setdefault(maxiter, N * 100)
 
@@ -253,15 +250,6 @@ def sgd(  # noqa: C901
     # necessary for linesearch
     optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
 
-    v = beta * v + (1 - beta) * g
-    print("x old is " + str(x))
-    x = x - alpha * v
-    print("x new is " + str(x))
-    fun._objective._update_equilibrium(fun.recover(x), store=True)
-    fx = fun.compute_scaled_error(x, *args)
-
-    iteration += 1
-
     while True:
         success, message = check_termination(
             df_norm,
@@ -289,7 +277,6 @@ def sgd(  # noqa: C901
         gs = grad(x, *args) * x_scale
         g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
         step_norm = jnp.linalg.norm(dx, ord=2)
-
         fnew = fun(x, *args)
         df = f - fnew
         df_norm = jnp.abs(df)

@@ -171,12 +171,31 @@ class SourceFreeField(FourierRZToroidalSurface):
             (R, ϕ, Z) coordinates in ``RpZ_data``.
 
         """
-        errorif(
-            self.M_Phi > grid.M, msg=f"Got M_Phi = {self.M_Phi} > {grid.M} = grid.M."
+        from desc.compute import data_index
+
+        surface_keys = data_index.get(
+            "desc.geometry.surface.FourierRZToroidalSurface", {}
         )
-        errorif(
-            self.N_Phi > grid.N, msg=f"Got N_Phi = {self.N_Phi} > {grid.N} = grid.N."
-        )
+        names_list = [names] if isinstance(names, str) else names
+        if any(n not in surface_keys for n in names_list):
+            errorif(
+                self.M_Phi > grid.M,
+                msg=f"Got M_Phi = {self.M_Phi} > {grid.M} = grid.M.",
+            )
+            errorif(
+                self.N_Phi > grid.N,
+                msg=f"Got N_Phi = {self.N_Phi} > {grid.N} = grid.N.",
+            )
+        else:
+            return super().compute(
+                names,
+                grid,
+                params,
+                transforms,
+                data,
+                override_grid,
+                **kwargs,
+            )
 
         kwargs.setdefault("B0", self._B0)
 

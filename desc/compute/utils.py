@@ -718,7 +718,10 @@ def get_transforms(  # noqa: C901
     if "diffmat" in kwargs and kwargs["diffmat"] is not None:
         dm = kwargs["diffmat"]
         transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
-
+    if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
+        pm = kwargs["phi_matrix"]
+        transforms["phi_matrix"] = pm
+    
     for c in derivs.keys():
         if c in transforms:
             continue

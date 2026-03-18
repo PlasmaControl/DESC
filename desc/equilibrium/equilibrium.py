@@ -69,6 +69,13 @@ from .utils import (
     parse_surface,
 )
 
+_kinetic_profile_names = [
+    "_electron_temperature",
+    "_electron_density",
+    "_ion_temperature",
+    "_atomic_number",
+]
+
 
 class Equilibrium(IOAble, Optimizable):
     """Equilibrium is an object that represents a plasma equilibrium.
@@ -1731,6 +1738,18 @@ class Equilibrium(IOAble, Optimizable):
         self._pressure = ensure_consistent_profile_eq_resolution(
             self._pressure, self, name="pressure"
         )
+        has_kinetic = any(
+            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
+        )  # don't warn if pressure is being set to None
+        warnif(
+            has_kinetic and new is not None,
+            UserWarning,
+            "Pressure profile is being assigned to an "
+            "equilibrium which already has at least one kinetic profile assigned to"
+            " it. The default is to use the equilibrium's assigned pressure profile"
+            " for all computations. It is recommended to remove the unneeded "
+            "profile(s) to avoid unexpected behavior, by setting them to None",
+        )
 
     @optimizable_parameter
     @property
@@ -1783,6 +1802,16 @@ class Equilibrium(IOAble, Optimizable):
             self._electron_temperature, self, name="electron temperature"
         )
 
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron temperature profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
+
     @optimizable_parameter
     @property
     def Te_l(self):
@@ -1812,6 +1841,16 @@ class Equilibrium(IOAble, Optimizable):
         self._electron_density = parse_profile(new, "electron density")
         self._electron_density = ensure_consistent_profile_eq_resolution(
             self._electron_density, self, name="electron density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -1844,6 +1883,15 @@ class Equilibrium(IOAble, Optimizable):
         self._ion_temperature = ensure_consistent_profile_eq_resolution(
             self._ion_temperature, self, name="ion temperature"
         )
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1872,6 +1920,16 @@ class Equilibrium(IOAble, Optimizable):
         self._atomic_number = parse_profile(new, "atomic number")
         self._atomic_number = ensure_consistent_profile_eq_resolution(
             self._atomic_number, self, name="atomic number"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Atomic number profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter

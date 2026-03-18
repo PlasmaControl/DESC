@@ -1241,17 +1241,22 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         b_idx = slice(n_total - n_surf, n_total)
 
         # surface quantities
-        psi_r_s = psi_r[b_idx, :]
+        psi_r_s = 1 # psi_r[b_idx, :] = 1 on the boundary
         print(psi_r_s)
         sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
         iota_s = iota[b_idx, :]
 
         # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
-        # NOTE: FIGURE OUT WHAT TO DO WITH THE EXTRA FACTORS OF dpsi/dr!!
+        print(phi_matrix.shape)
+        print(sqrtg_grad_rho.shape)
+        print(iota_s.shape)
+        print(D_theta[b_idx, b_idx].shape)
+        print(W[b_idx, :].shape)
+        print(D_zeta[b_idx, b_idx].shape)
         A = A.at[b_idx, b_idx](
             _cT(
                 W[b_idx, :]
-                * psi_r3[b_idx, :] # psi_r is constant on the surface
+                * psi_r_s**3 # this is just for consistency; psi' = 1 here
                 * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
             )
             @ (
@@ -1263,6 +1268,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
                 )
             )
         )
+
 
     if incompressible:  # Only enforce incompressibility here
         # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ

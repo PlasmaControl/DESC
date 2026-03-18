@@ -7,14 +7,409 @@ import shutil
 import subprocess
 
 import numpy as np
-from scipy.interpolate import interp1d
+from interpax import interp1d
+from quadax import cumulative_trapezoid
+from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute.utils import get_transforms
-from desc.grid import Grid, QuadratureGrid
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import get_profiles, get_transforms
+from desc.grid import Grid, LinearGrid
 from desc.objectives import ExternalObjective
 from desc.objectives.objective_funs import collect_docs
 from desc.utils import cross, dot, errorif, warnif
+
+# Keys computed on the constant equilibrium grid
+_EQ_KEYS = ["iota", "iota_r", "a", "R0", "p_r"]
+# Keys computed on the field-line grid
+_FL_KEYS = [
+    "|B|",
+    "|grad(psi)|^2",
+    "grad(|B|)",
+    "grad(alpha)",
+    "grad(psi)",
+    "B",
+    "B^theta",
+    "B^zeta",
+    "lambda_t",
+    "lambda_z",
+    "iota_r",
+    "e^rho",
+]
+
+
+def compute_gx_geometry(
+    eq,
+    psi,
+    params=None,
+    alpha=0.0,
+    npol=1,
+    nzgrid=32,
+    sigma_Bxy=-1.0,
+    eq_transforms=None,
+    profiles=None,
+):
+    """Compute flux-tube geometry for the GX gyrokinetic turbulence code.
+
+    Computes all geometric coefficients needed by GX on a single flux tube,
+    interpolated onto a uniform arc-length parallel coordinate z in [-pi, pi].
+
+    Supply ``params``, ``eq_transforms`` and ``profiles`` for proper AD and JIT.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        DESC Equilibrium object.
+    psi : float
+        Normalized toroidal flux surface label (= rho^2), in (0, 1).
+    params : dict
+        Equilibrium parameter dictionary. If None, retrieved internally from
+        ``eq.params_dict``.
+    alpha : float, optional
+        Field line label, defined as alpha = theta_PEST - iota * zeta at the
+        tube center. Default = 0.
+    npol : int, optional
+        Number of poloidal turns (divided by 2*pi) that the flux tube travels.
+        Default = 1.
+    nzgrid : int, optional
+        Number of grid points along the field line in each direction from center.
+        Total points = 2 * nzgrid + 1. Default = 32.
+    sigma_Bxy : float, optional
+        Sign convention parameter: (1/|B|^2) B . (grad x cross grad y). Usually -1
+        for stellarators, +1 for tokamaks. This controls the orientation of the GX
+        (x, y, z) coordinate system and is written as ``kxfac`` in the geometry file.
+        Default = -1.
+    eq_transforms : dict, optional
+        Pre-computed transforms for the flux-surface equilibrium grid.
+        Built from ``get_transforms`` on a ``LinearGrid`` at ``rho = sqrt(psi)``.
+        If None, built internally.
+    profiles : dict, optional
+        Equilibrium profiles (iota, pressure, current, etc.). If None, retrieved
+        internally.
+
+    Returns
+    -------
+    geo : dict
+        Dictionary containing all GX geometric quantities on a uniform
+        arc-length grid. Keys include:
+
+        - ``"z"`` : ndarray, shape (2*nzgrid+1,) -- parallel coordinate, [-pi, pi]
+        - ``"bmag"`` : ndarray -- |B| / B_ref
+        - ``"gradpar"`` : ndarray -- constant parallel gradient (2*pi / L)
+        - ``"grho"`` : ndarray -- |grad(rho)| * L_ref
+        - ``"gds2"`` : ndarray -- |grad(alpha)|^2 * L_ref^2 * s
+        - ``"gds21"`` : ndarray -- sigma_Bxy * grad(alpha).grad(psi) * shat / B_ref
+        - ``"gds22"`` : ndarray -- |grad(psi)|^2 * shat^2 / (L_ref^2 * B_ref^2 * s)
+        - ``"gbdrift"`` : ndarray -- grad-B drift coefficient
+        - ``"gbdrift0"`` : ndarray -- grad-B drift (psi-component, shear-free)
+        - ``"cvdrift"`` : ndarray -- curvature drift coefficient
+        - ``"cvdrift0"`` : ndarray -- curvature drift (psi-component, shear-free)
+        - ``"L_ref"`` : float -- reference length (minor radius a)
+        - ``"B_ref"`` : float -- reference field (2 * |psi_edge| / a^2)
+        - ``"R0"`` : float -- major radius
+        - ``"shat"`` : float -- magnetic shear, -(rho/iota) * d(iota)/d(rho)
+        - ``"sigma_Bxy"`` : float -- sign convention (= kxfac)
+        - ``"iota"`` : float -- rotational transform at the surface
+        - ``"nzgrid"`` : int -- half-grid size
+        - ``"npol"`` : int -- number of poloidal turns
+
+    """
+    errorif(
+        psi <= 0 or psi >= 1,
+        ValueError,
+        f"psi must be in (0, 1), got {psi}.",
+    )
+    rho = jnp.sqrt(psi)
+
+    if params is None:
+        params = eq.params_dict
+    if eq_transforms is None:
+        grid_eq = LinearGrid(rho=float(rho), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        eq_transforms = get_transforms(_EQ_KEYS, obj=eq, grid=grid_eq)
+    if profiles is None:
+        profiles = get_profiles(_EQ_KEYS + _FL_KEYS, obj=eq, grid=eq_transforms["grid"])
+
+    data_eq = compute_fun(eq, _EQ_KEYS, params, eq_transforms, profiles)
+    grid_eq = eq_transforms["grid"]
+    iota_val = grid_eq.compress(data_eq["iota"])[0]
+    iota_r_val = grid_eq.compress(data_eq["iota_r"])[0]
+    p_r_val = grid_eq.compress(data_eq["p_r"])[0]
+    d_pressure_d_s = p_r_val / (2 * rho)  # dp/ds where s = rho^2
+
+    # Reference quantities for GX normalizations
+    L_ref = data_eq["a"]
+    R0 = data_eq["R0"]
+    edge_toroidal_flux_over_2pi = params["Psi"] / (2 * jnp.pi)
+    B_ref = 2 * jnp.abs(edge_toroidal_flux_over_2pi) / L_ref**2
+    sign_psi = jnp.sign(edge_toroidal_flux_over_2pi)
+    shat = -rho / iota_val * iota_r_val
+
+    # Construct field-line coordinates
+    # The field line is parameterized in theta_PEST, spanning npol poloidal turns.
+    nl = 2 * nzgrid + 1
+    theta_pest = jnp.linspace(alpha - jnp.pi * npol, alpha + jnp.pi * npol, nl)
+    zeta_center = -alpha / iota_val
+    zeta = zeta_center + (theta_pest - alpha) / iota_val
+
+    # Map from (rho, theta_PEST, zeta) to (rho, theta, zeta) coords
+    rhoa = rho * jnp.ones(nl)
+    nodes = jnp.vstack([rhoa, theta_pest, zeta]).T
+    coords = eq.map_coordinates(
+        nodes,
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        params=params,
+        tol=1e-10,
+        maxiter=50,
+    )
+    grid = Grid(
+        coords,
+        coordinates="rtz",
+        sort=False,
+        jitable=True,
+        # we compute surface integral quantities on proper grid before
+        spacing=jnp.zeros_like(coords).astype(float),
+        weights=jnp.zeros_like(coords[:, 0]).astype(float),
+    )
+    # Copy flux-surface quantities from the equilibrium grid to the field-line grid
+    # they cannot be computed directly on the field-line grid since they require
+    # surface integrals.
+    data = {
+        key: grid.copy_data_from_other(data_eq[key], grid_eq)
+        for key in ["iota", "iota_r", "p_r"]
+    }
+
+    # Compute field-line quantities
+    fl_transforms = get_transforms(_FL_KEYS, obj=eq, grid=grid, jitable=True)
+    data = compute_fun(eq, _FL_KEYS, params, fl_transforms, profiles, data=data)
+
+    modB = data["|B|"]
+    bmag = modB / B_ref
+
+    # gradpar in theta_PEST parameterization:
+    # gradpar = L_ref * B . grad(theta_PEST) / |B|
+    #         = L_ref * (B^theta * (1 + lambda_t) + B^zeta * lambda_z) / |B|
+    gradpar = (
+        L_ref
+        * (data["B^theta"] * (1 + data["lambda_t"]) + data["B^zeta"] * data["lambda_z"])
+        / modB
+    )
+
+    # DESC's grad(alpha) uses alpha = theta_PEST - iota * zeta (no zeta_center shift).
+    # For GX we want alpha' = theta_PEST - iota * (zeta - zeta_center), so we shift:
+    # grad(alpha') = grad(alpha) + zeta_center * d(iota)/d(rho) * e^rho
+    grad_alpha = (
+        data["grad(alpha)"]
+        + zeta_center * data["iota_r"][:, jnp.newaxis] * data["e^rho"]
+    )
+
+    grad_psi = data["grad(psi)"]
+    grad_psi_sq = data["|grad(psi)|^2"]
+
+    # Metric-related quantities
+    grad_alpha_dot_grad_alpha = dot(grad_alpha, grad_alpha)
+    grad_alpha_dot_grad_psi = dot(grad_alpha, grad_psi)
+
+    grho = jnp.sqrt(grad_psi_sq / (L_ref**2 * B_ref**2 * psi))
+    gds2 = grad_alpha_dot_grad_alpha * L_ref**2 * psi
+    gds21 = sigma_Bxy * grad_alpha_dot_grad_psi * shat / B_ref
+    gds22 = grad_psi_sq * shat**2 / (L_ref**2 * B_ref**2 * psi)
+
+    # Drift-related quantities
+    B_vec = data["B"]
+    grad_modB = data["grad(|B|)"]
+
+    B_cross_grad_B_dot_grad_alpha = dot(cross(B_vec, grad_modB), grad_alpha)
+    B_cross_grad_B_dot_grad_psi = dot(cross(B_vec, grad_modB), grad_psi)
+
+    gbdrift = (
+        2
+        * sigma_Bxy
+        * sign_psi
+        * B_ref
+        * L_ref**2
+        * jnp.sqrt(psi)
+        * B_cross_grad_B_dot_grad_alpha
+        / modB**3
+    )
+
+    # Pressure correction to curvature drift.
+    # Uses the Clebsch identity: (B x nabla_s) . nabla_alpha = |B|^2 / psi_edge,
+    # which simplifies the general expression to a 1/|B|^2 dependence.
+    cvdrift = gbdrift + (
+        2
+        * mu_0
+        * sigma_Bxy
+        * sign_psi
+        * B_ref
+        * L_ref**2
+        * jnp.sqrt(psi)
+        * d_pressure_d_s
+        / (edge_toroidal_flux_over_2pi * modB**2)
+    )
+
+    gbdrift0 = (
+        2 * sign_psi * shat * B_cross_grad_B_dot_grad_psi / (modB**3 * jnp.sqrt(psi))
+    )
+    cvdrift0 = gbdrift0
+
+    # --- Interpolate to uniform arc-length grid ---
+    geo_raw = {
+        "bmag": bmag,
+        "grho": grho,
+        "gds2": gds2,
+        "gds21": gds21,
+        "gds22": gds22,
+        "gbdrift": gbdrift,
+        "gbdrift0": gbdrift0,
+        "cvdrift": cvdrift,
+        "cvdrift0": cvdrift0,
+    }
+    geo = _interpolate_to_uniform_grid(theta_pest, gradpar, geo_raw, nzgrid)
+    geo.update(
+        {
+            "L_ref": L_ref,
+            "B_ref": B_ref,
+            "R0": R0,
+            "shat": shat,
+            "sigma_Bxy": sigma_Bxy,
+            "iota": iota_val,
+            "nzgrid": nzgrid,
+            "npol": npol,
+        }
+    )
+    return geo
+
+
+def _interpolate_to_uniform_grid(theta_pest, gradpar, geo_arrays, nzgrid):
+    """Interpolate geometric quantities to a uniform arc-length grid.
+
+    GX requires geometric coefficients on a uniformly-spaced parallel coordinate
+    z in [-pi, pi]. This function:
+    1. Integrates the physical arc-length along the field line using the trapezoidal
+       rule on 1/|gradpar|.
+    2. Rescales the arc-length to [-pi, pi].
+    3. Cubic-interpolates all quantities onto a uniform z grid .
+
+    Parameters
+    ----------
+    theta_pest : jnp.ndarray
+        PEST theta coordinates along the field line.
+    gradpar : jnp.ndarray
+        Parallel gradient dl/dtheta_pest (normalized by L_ref).
+    geo_arrays : dict of jnp.ndarray
+        Field-line-varying geometric quantities to interpolate.
+    nzgrid : int
+        Half-grid size. Total grid points = 2 * nzgrid + 1.
+
+    Returns
+    -------
+    result : dict
+        Interpolated quantities plus ``"z"`` (uniform grid) and ``"gradpar"``
+        (constant value).
+    """
+    nl = 2 * nzgrid + 1
+
+    # Integrate arc-length: dl = d(theta_pest) / |gradpar|
+    arc_length = cumulative_trapezoid(1.0 / jnp.abs(gradpar), x=theta_pest, initial=0.0)
+
+    # Shift so center (index nzgrid) is at 0, then rescale to [-pi, pi]
+    arc_length = arc_length - arc_length[nzgrid]
+    L_total = arc_length[-1] - arc_length[0]
+    gradpar_uniform_val = 2.0 * jnp.pi / L_total
+    arc_length_scaled = arc_length * (2.0 * jnp.pi / L_total)
+
+    uniform_z = jnp.linspace(-jnp.pi, jnp.pi, nl)
+
+    result = {
+        k: interp1d(uniform_z, arc_length_scaled, v, method="cubic")
+        for k, v in geo_arrays.items()
+    }
+    result["z"] = uniform_z
+    result["gradpar"] = jnp.full(nl, gradpar_uniform_val)
+    return result
+
+
+def write_gx_geometry(geo, path):
+    """Write GX geometry to an eik file in plain-text format.
+
+    Writes the geometry dictionary (as returned by ``compute_gx_geometry``)
+    to a file that GX can read via ``geo_option = "eik"`` and ``geo_file``.
+
+    Parameters
+    ----------
+    geo : dict
+        Geometry dictionary as returned by ``compute_gx_geometry``.
+    path : str
+        Output file path.
+
+    """
+    nzgrid = int(geo["nzgrid"])
+    nperiod = 1
+    ntheta = 2 * nzgrid
+    kxfac = float(geo["sigma_Bxy"])
+    drhodpsi = 1.0
+    rmaj = float(geo["R0"])
+    shat = float(geo["shat"])
+    q = float(1.0 / geo["iota"])
+    scale = 1.0
+    z = np.asarray(geo["z"])
+    nl = len(z)
+    # Convert jax arrays to numpy for file I/O.
+    _g = {
+        k: np.asarray(geo[k])
+        for k in [
+            "gbdrift",
+            "gradpar",
+            "grho",
+            "cvdrift",
+            "gds2",
+            "bmag",
+            "gds21",
+            "gds22",
+            "cvdrift0",
+            "gbdrift0",
+        ]
+    }
+
+    with open(path, "w") as f:
+        # header
+        f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale\n")
+        f.write(
+            f"{nzgrid} {nperiod} {ntheta} {drhodpsi} "
+            f"{rmaj} {shat} {kxfac} {q} {scale}\n"
+        )
+
+        # section 1: gbdrift gradpar grho tgrid
+        f.write("gbdrift gradpar grho tgrid\n")
+        for i in range(nl):
+            f.write(
+                f"{_g['gbdrift'][i]:23} {_g['gradpar'][i]:23} "
+                f"{_g['grho'][i]:23} {z[i]:23}\n"
+            )
+
+        # section 2: cvdrift gds2 bmag tgrid
+        f.write("cvdrift gds2 bmag tgrid\n")
+        for i in range(nl):
+            f.write(
+                f"{_g['cvdrift'][i]:23} {_g['gds2'][i]:23} "
+                f"{_g['bmag'][i]:23} {z[i]:23}\n"
+            )
+
+        # section 3: gds21 gds22 tgrid
+        f.write("gds21 gds22 tgrid\n")
+        for i in range(nl):
+            f.write(f"{_g['gds21'][i]:23} {_g['gds22'][i]:23} {z[i]:23}\n")
+
+        # section 4: cvdrift0 gbdrift0 tgrid
+        f.write("cvdrift0 gbdrift0 tgrid\n")
+        for i in range(nl):
+            f.write(f"{_g['cvdrift0'][i]:23} {_g['gbdrift0'][i]:23} {z[i]:23}\n")
+
+
+# ---------------------------------------------------------------------------
+# GX driver function and ExternalObjective wrapper
+# ---------------------------------------------------------------------------
 
 
 def gx(
@@ -34,8 +429,8 @@ def gx(
     timeout=600,
     tmp_dir="tmp_GX",
     save_tmp=False,
-    data_transforms=None,
-    eq_data_transforms=None,
+    eq_transforms=None,
+    profiles=None,
 ):
     """GX driver function.
 
@@ -88,10 +483,11 @@ def gx(
         Default = "tmp_GX".
     save_tmp : bool, optional
         If True, preserve temporary files. Default = False.
-    data_transforms : dict, optional
-        Pre-computed transforms for field-line data.
-    eq_data_transforms : dict, optional
-        Pre-computed transforms for global equilibrium data (iota, etc.).
+    eq_transforms : dict, optional
+        Pre-computed transforms for flux-surface quantities. Built in
+        ``GX.build()`` and reused across iterations.
+    profiles : dict, optional
+        Pre-computed profiles. Built in ``GX.build()`` and reused across iterations.
 
     Returns
     -------
@@ -144,26 +540,20 @@ def gx(
         idx_path = os.path.join(time_path, str(k))
         os.mkdir(idx_path)
 
-        # compute geometry
-        geo = _compute_gx_geometry(
+        geo = compute_gx_geometry(
             eq=eq[k],
+            psi=psi,
+            params=eq[k].params_dict,
+            alpha=alpha,
             npol=npol,
             nzgrid=nzgrid,
-            alpha=alpha,
-            psi=psi,
             sigma_Bxy=sigma_Bxy,
-            data_transforms=data_transforms,
-            eq_data_transforms=eq_data_transforms,
+            eq_transforms=eq_transforms,
+            profiles=profiles,
         )
-
-        # interpolate to uniform grid
-        geo_uniform = _interpolate_to_uniform_grid(geo, nzgrid)
-
-        # write geometry file
         geo_path = os.path.join(idx_path, "gx_geo.out")
-        _write_gx_geometry(path=geo_path, geo=geo_uniform, npol=npol)
+        write_gx_geometry(geo=geo, path=geo_path)
 
-        # write input file
         if gx_input_file is not None:
             input_path = os.path.join(idx_path, "gx.in")
             _write_gx_input(
@@ -174,17 +564,12 @@ def gx(
         else:
             input_path = None
 
-        # copy executable
-        exec_src = os.path.join(path, exec)
-        exec_dst = os.path.join(idx_path, exec)
-        if os.path.exists(exec_src) and exec_src != exec_dst:
-            shutil.copy(exec_src, exec_dst)
-
         # run GX
+        exec_path = os.path.join(path, exec)
         try:
             output_nc = _run_gx(
                 dir=idx_path,
-                exec=exec,
+                exec_path=exec_path,
                 input_path=input_path,
                 launch_cmd=launch_cmd,
                 gx_gpu=gx_gpu,
@@ -208,293 +593,9 @@ def gx(
     return jnp.atleast_1d(jnp.array(results, dtype=float))
 
 
-def _compute_gx_geometry(
-    eq,
-    npol,
-    nzgrid,
-    alpha,
-    psi,
-    sigma_Bxy=-1.0,
-    data_transforms=None,
-    eq_data_transforms=None,
-):
-    """Compute flux-tube geometric quantities needed by GX.
-
-    Returns a dict with all geometric quantities on the field-line grid.
-
-    The sign convention parameter ``sigma_Bxy`` controls the orientation of the
-    (x, y, z) coordinate system used by GX:
-    sigma_Bxy = (1/|B|^2) B . (grad x cross grad y), usually -1.
-    """
-    mu_0 = 4 * np.pi * 1e-7
-    rho = np.sqrt(psi)
-
-    # compute iota, shear, pressure gradient, and reference quantities
-    grid_eq = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data_eq = eq.compute(
-        ["iota", "iota_r", "a", "R0", "psi", "rho", "p_r"],
-        grid=grid_eq,
-        transforms=eq_data_transforms,
-    )
-    fi = interp1d(data_eq["rho"], data_eq["iota"], kind="cubic")
-    fs = interp1d(data_eq["rho"], data_eq["iota_r"], kind="cubic")
-    fp = interp1d(data_eq["rho"], data_eq["p_r"], kind="cubic")
-    iota_val = float(fi(rho))
-    iota_r_val = float(fs(rho))
-    p_r_val = float(fp(rho))
-    # dp/ds where s = rho^2 is the normalized toroidal flux
-    d_pressure_d_s = p_r_val / (2 * rho)
-
-    # reference quantities for GX normalizations
-    Lref = float(data_eq["a"])
-    R0 = float(data_eq["R0"])
-    edge_toroidal_flux_over_2pi = float(eq.Psi / (2 * np.pi))
-    Bref = float(2 * np.abs(edge_toroidal_flux_over_2pi) / Lref**2)
-    sign_psi = float(np.sign(edge_toroidal_flux_over_2pi))
-
-    # construct field-line coordinates
-    zeta = np.linspace(
-        (-np.pi * npol - alpha) / np.abs(iota_val),
-        (np.pi * npol - alpha) / np.abs(iota_val),
-        2 * nzgrid + 1,
-    )
-    iota = iota_val * np.ones(len(zeta))
-    shear_val = iota_r_val * np.ones(len(zeta))
-    theta_sfl = iota_val / np.abs(iota_val) * alpha * np.ones(len(zeta)) + iota * zeta
-    zeta_center = zeta[nzgrid]
-
-    # map from field-line (rho, alpha, zeta) to DESC (rho, theta, zeta) coords
-    rhoa = rho * np.ones(len(zeta))
-    nodes = np.vstack([rhoa, theta_sfl, zeta]).T
-    coords = eq.map_coordinates(
-        nodes,
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        tol=1e-10,
-        maxiter=50,
-    )
-    grid = Grid(coords, sort=False)
-
-    # compute all needed quantities on the field-line grid
-    field_line_keys = [
-        "|B|",
-        "|grad(psi)|^2",
-        "grad(|B|)",
-        "grad(psi)",
-        "B",
-        "B^zeta",
-        "lambda_t",
-        "lambda_z",
-        "lambda_r",
-        "e^rho",
-        "e^theta",
-        "e^zeta",
-    ]
-    data = eq.compute(field_line_keys, grid=grid, transforms=data_transforms)
-
-    modB = np.array(data["|B|"])
-    bmag = modB / Bref
-
-    # shat = -rho/iota * d(iota)/d(rho) (GX convention)
-    shat = float(-rho / iota_val * iota_r_val)
-
-    # gradpar = Lref * B^zeta / |B|
-    gradpar = Lref * np.array(data["B^zeta"]) / modB
-
-    # grad_alpha components in DESC coordinates
-    # alpha = theta_PEST - iota * zeta, shifted so grad_alpha uses (zeta - zeta_center)
-    lmbda_r = np.array(data["lambda_r"])
-    lmbda_t = np.array(data["lambda_t"])
-    lmbda_z = np.array(data["lambda_z"])
-    grad_alpha_r = lmbda_r - (zeta - zeta_center) * shear_val
-    grad_alpha_t = 1 + lmbda_t
-    grad_alpha_z = -iota + lmbda_z
-
-    # reconstruct grad_alpha vector
-    grad_alpha = (
-        grad_alpha_r * np.array(data["e^rho"]).T
-        + grad_alpha_t * np.array(data["e^theta"]).T
-        + grad_alpha_z * np.array(data["e^zeta"]).T
-    ).T
-
-    grad_psi = np.array(data["grad(psi)"])
-    grad_psi_sq = np.array(data["|grad(psi)|^2"])
-
-    # grho
-    grho = np.sqrt(grad_psi_sq / (Lref**2 * Bref**2 * psi))
-
-    # gds2 = |grad(alpha)|^2 * Lref^2 * psi
-    gds2 = np.array(dot(grad_alpha, grad_alpha)) * Lref**2 * psi
-
-    # gds21 = sigma_Bxy * grad(psi) . grad(alpha) * shat / Bref # noqa: E800
-    gds21 = sigma_Bxy * np.array(dot(grad_psi, grad_alpha)) * shat / Bref
-
-    # gds22 = |grad(psi)|^2 / psi * (shat / (Lref * Bref))^2 # noqa: E800
-    gds22 = grad_psi_sq / psi * (shat / (Lref * Bref)) ** 2
-
-    # magnetic field vectors for drift computations
-    B_vec = np.array(data["B"])
-    grad_modB = np.array(data["grad(|B|)"])
-
-    B_cross_grad_B_dot_grad_alpha = np.array(dot(cross(B_vec, grad_modB), grad_alpha))
-    B_cross_grad_B_dot_grad_psi = np.array(dot(cross(B_vec, grad_modB), grad_psi))
-
-    # gbdrift = 2 * sigma_Bxy * sign_psi * Bref * Lref^2 * sqrt(s)  # noqa: E800
-    #           * (B x grad|B|) . grad_alpha / |B|^3
-    gbdrift = (
-        2
-        * sigma_Bxy
-        * sign_psi
-        * Bref
-        * Lref**2
-        * np.sqrt(psi)
-        * B_cross_grad_B_dot_grad_alpha
-        / modB**3
-    )
-
-    # cvdrift = gbdrift + pressure gradient correction
-    cvdrift = gbdrift + (
-        2
-        * mu_0
-        * sigma_Bxy
-        * sign_psi
-        * Bref
-        * Lref**2
-        * np.sqrt(psi)
-        * d_pressure_d_s
-        / (edge_toroidal_flux_over_2pi * modB**2)
-    )
-
-    # gbdrift0 = 2 * sign_psi * shat * (B x grad|B|) . grad_psi / (|B|^3 * sqrt(s))
-    gbdrift0 = (
-        2 * sign_psi * shat * B_cross_grad_B_dot_grad_psi / (modB**3 * np.sqrt(psi))
-    )
-    cvdrift0 = gbdrift0.copy()
-
-    return {
-        "zeta": zeta,
-        "bmag": bmag,
-        "grho": grho,
-        "gradpar": gradpar,
-        "gds2": gds2,
-        "gds21": gds21,
-        "gds22": gds22,
-        "gbdrift": gbdrift,
-        "gbdrift0": gbdrift0,
-        "cvdrift": cvdrift,
-        "cvdrift0": cvdrift0,
-        "Lref": Lref,
-        "Bref": Bref,
-        "R0": R0,
-        "shat": shat,
-        "sigma_Bxy": sigma_Bxy,
-        "iota": iota_val,
-        "nzgrid": nzgrid,
-    }
-
-
-def _interpolate_to_uniform_grid(geo, nzgrid):
-    """Interpolate geometric quantities from field-line grid to uniform grid.
-
-    GX requires geometric coefficients on a uniformly-spaced parallel coordinate grid.
-    This is constructed by reparametrizing the field line in terms of the parallel arc
-    length and then interpolating to a uniform grid.
-
-    Uses the trapezoidal rule for arc-length integration: at half-grid points,
-    average 1/|gradpar| (not |gradpar|) to correctly integrate dl = dz/|gradpar|.
-    """
-    zeta = geo["zeta"]
-    gradpar = geo["gradpar"]
-    dzeta = zeta[1] - zeta[0]
-    nl = 2 * nzgrid + 1
-
-    # integrate to get arc-length using trapezoidal rule on 1/|gradpar|
-    inv_gradpar_half = 0.5 * (1.0 / np.abs(gradpar[1:]) + 1.0 / np.abs(gradpar[:-1]))
-    arc_length = np.zeros(nl)
-    arc_length[1:] = dzeta * np.cumsum(inv_gradpar_half)
-
-    # shift so center is at 0
-    arc_length -= arc_length[nzgrid]
-
-    # rescale to [-pi, pi]
-    L_total = arc_length[-1] - arc_length[0]
-    gradpar_uniform_val = 2.0 * np.pi / L_total
-    arc_length_scaled = arc_length * (2.0 * np.pi / L_total)
-    gradpar_uniform = np.full(nl, gradpar_uniform_val)
-
-    # uniform grid in rescaled coordinate
-    uniform_zgrid = np.linspace(-np.pi, np.pi, nl)
-
-    # interpolate all quantities to uniform grid
-    def interp_to_uniform(arr):
-        f = interp1d(arc_length_scaled, arr, kind="cubic", fill_value="extrapolate")
-        return f(uniform_zgrid)
-
-    geo_keys = [
-        "bmag",
-        "grho",
-        "gds2",
-        "gds21",
-        "gds22",
-        "gbdrift",
-        "gbdrift0",
-        "cvdrift",
-        "cvdrift0",
-    ]
-    result = {k: interp_to_uniform(geo[k]) for k in geo_keys}
-    result["zgrid"] = uniform_zgrid
-    result["gradpar"] = gradpar_uniform
-    # pass through scalar quantities
-    for k in ["Lref", "Bref", "R0", "shat", "sigma_Bxy", "iota", "nzgrid"]:
-        result[k] = geo[k]
-    return result
-
-
-def _write_gx_geometry(path, geo, npol):
-    """Write GX geometry file in GS2/GX format."""
-    nzgrid = geo["nzgrid"]
-    nperiod = 1
-    kxfac = geo["sigma_Bxy"]
-    drhodpsi = 1.0
-    rmaj = geo["R0"]
-    shat = geo["shat"]
-    q = 1.0 / geo["iota"]
-    scale = 1.0
-    zgrid = geo["zgrid"]
-
-    with open(path, "w") as f:
-        # header
-        f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale\n")
-        f.write(
-            f"{nzgrid} {nperiod} {2 * nzgrid} {drhodpsi} "
-            f"{rmaj} {shat} {kxfac} {q} {scale}\n"
-        )
-
-        # section 1: gbdrift gradpar grho tgrid
-        f.write("gbdrift gradpar grho tgrid\n")
-        for i in range(len(zgrid)):
-            f.write(
-                f"{geo['gbdrift'][i]} {geo['gradpar'][i]} "
-                f"{geo['grho'][i]} {zgrid[i]}\n"
-            )
-
-        # section 2: cvdrift gds2 bmag tgrid
-        f.write("cvdrift gds2 bmag tgrid\n")
-        for i in range(len(zgrid)):
-            f.write(
-                f"{geo['cvdrift'][i]} {geo['gds2'][i]} "
-                f"{geo['bmag'][i]} {zgrid[i]}\n"
-            )
-
-        # section 3: gds21 gds22 tgrid
-        f.write("gds21 gds22 tgrid\n")
-        for i in range(len(zgrid)):
-            f.write(f"{geo['gds21'][i]} {geo['gds22'][i]} {zgrid[i]}\n")
-
-        # section 4: cvdrift0 gbdrift0 tgrid
-        f.write("cvdrift0 gbdrift0 tgrid\n")
-        for i in range(len(zgrid)):
-            f.write(f"{geo['cvdrift0'][i]} {geo['gbdrift0'][i]} {zgrid[i]}\n")
+# ---------------------------------------------------------------------------
+# Internal helpers for GX I/O and execution
+# ---------------------------------------------------------------------------
 
 
 def _write_gx_input(template_path, output_path, geo_path):
@@ -519,15 +620,17 @@ def _write_gx_input(template_path, output_path, geo_path):
         f.write(data)
 
 
-def _run_gx(dir, exec, input_path=None, launch_cmd=None, gx_gpu=None, timeout=300):
+def _run_gx(dir, exec_path, input_path=None, launch_cmd=None, gx_gpu=None, timeout=300):
     """Run the GX executable.
 
     Parameters
     ----------
     dir : str
-        Working directory for GX execution.
-    exec : str
-        Name of the GX executable (must be in ``dir``).
+        Working directory for GX execution (output files written here).
+    exec_path : str
+        Full path to the GX executable. Called in-place so that GX can find
+        any internal dependencies (shared libraries, etc.) relative to its
+        install location.
     input_path : str, optional
         Path to the GX input file.
     launch_cmd : list of str, optional
@@ -545,7 +648,6 @@ def _run_gx(dir, exec, input_path=None, launch_cmd=None, gx_gpu=None, timeout=30
     stdout_path = os.path.join(dir, "stdout.gx")
     stderr_path = os.path.join(dir, "stderr.gx")
 
-    exec_path = os.path.join(dir, exec)
     errorif(
         not os.path.exists(exec_path),
         OSError,
@@ -620,6 +722,11 @@ def _weighted_birkhoff_average(data):
         return np.mean(data)
     weights = weights.reshape((N, 1)) if data.ndim > 1 else weights
     return float(np.sum(weights * data / norm))
+
+
+# ---------------------------------------------------------------------------
+# GX ExternalObjective wrapper
+# ---------------------------------------------------------------------------
 
 
 class GX(ExternalObjective):
@@ -759,9 +866,6 @@ class GX(ExternalObjective):
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
-        Pre-computes transform matrices and grids that remain constant across
-        optimization iterations.
-
         Parameters
         ----------
         use_jit : bool, optional
@@ -776,18 +880,17 @@ class GX(ExternalObjective):
             ValueError,
             f"psi must be in (0, 1), got {psi}.",
         )
+        eq = self._eq
 
-        # pre-compute transforms for equilibrium-level data (iota, etc.)
-        grid_eq = QuadratureGrid(
-            L=self._eq.L_grid,
-            M=self._eq.M_grid,
-            N=self._eq.N_grid,
-            NFP=self._eq.NFP,
+        # Pre-compute transforms for flux-surface quantities (constant grid).
+        rho = np.sqrt(psi)
+        grid_eq = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        self._fun_kwargs["eq_transforms"] = get_transforms(
+            _EQ_KEYS, obj=eq, grid=grid_eq
         )
-        self._fun_kwargs["eq_data_transforms"] = get_transforms(
-            keys=["iota", "iota_r", "a", "R0", "psi", "rho", "p_r"],
-            obj=self._eq,
-            grid=grid_eq,
+        # Pre-compute profiles for all keys (profiles don't depend on grid).
+        self._fun_kwargs["profiles"] = get_profiles(
+            _EQ_KEYS + _FL_KEYS, obj=eq, grid=grid_eq
         )
 
         super().build(use_jit=use_jit, verbose=verbose)

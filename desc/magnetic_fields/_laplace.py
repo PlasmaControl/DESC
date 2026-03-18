@@ -80,14 +80,23 @@ class SourceFreeField(FourierRZToroidalSurface):
         self.Y = Y
         self._B0 = B0
 
+    def __new__(cls, *args, **kwargs):
+        obj = object.__new__(cls)
+        # Pre-initialize _surface so __setattr__ never encounters a missing attribute,
+        # e.g. when attributes are set in arbitrary order during deserialization.
+        object.__setattr__(obj, "_surface", None)
+        return obj
+
     def __getattr__(self, attr):
         return getattr(self._surface, attr)
 
     def __setattr__(self, name, value):
         if name in SourceFreeField._immediate_attributes_:
             object.__setattr__(self, name, value)
-        else:
+        elif object.__getattribute__(self, "_surface") is not None:
             setattr(object.__getattribute__(self, "_surface"), name, value)
+        else:
+            object.__setattr__(self, name, value)
 
     def __hasattr__(self, attr):
         return hasattr(self, attr) or hasattr(self._surface, attr)

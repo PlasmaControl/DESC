@@ -464,8 +464,9 @@ def gx(
         Sign convention parameter: (1/|B|^2) B . (grad x cross grad y). Usually -1
         for stellarators. This controls the orientation of the GX coordinate system
         and is written as ``kxfac`` in the geometry file. Default = -1.
-    gx_input_file : str, optional
-        Path to a template GX input file. If provided, the geometry file path in this
+    gx_input_file : str
+        Path to a template GX TOML input file that specifies physics parameters
+        (species, domain, time stepping, etc.). The ``geo_file`` path in this
         template will be replaced with the generated geometry file.
     launch_cmd : list of str, optional
         Command prefix for launching GX, e.g.
@@ -554,15 +555,14 @@ def gx(
         geo_path = os.path.join(idx_path, "gx_geo.out")
         write_gx_geometry(geo=geo, path=geo_path)
 
-        if gx_input_file is not None:
-            input_path = os.path.join(idx_path, "gx.in")
-            _write_gx_input(
-                template_path=gx_input_file,
-                output_path=input_path,
-                geo_path=geo_path,
-            )
-        else:
-            input_path = None
+        input_path = os.path.join(idx_path, "gx.in")
+        _write_gx_input(
+            template_path=gx_input_file,
+            # new input file path (GX will read this)
+            # geo_file path in this input file will be replaced with geo_path
+            output_path=input_path,
+            geo_path=geo_path,
+        )
 
         # run GX
         exec_path = os.path.join(path, exec)
@@ -770,7 +770,7 @@ class GX(ExternalObjective):
     sigma_Bxy : float, optional
         Sign convention parameter: (1/|B|^2) B . (grad x cross grad y). Usually -1
         for stellarators. Default = -1.
-    gx_input_file : str, optional
+    gx_input_file : str
         Path to a template GX input file. The geometry file path in this template
         will be replaced with the generated geometry file.
     launch_cmd : list of str, optional
@@ -821,7 +821,7 @@ class GX(ExternalObjective):
         alpha=0.0,
         psi=0.5,
         sigma_Bxy=-1.0,
-        gx_input_file=None,
+        gx_input_file,
         launch_cmd=None,
         gx_gpu=None,
         timeout=600,

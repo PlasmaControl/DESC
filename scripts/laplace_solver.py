@@ -45,7 +45,7 @@ a = 1  # Minor radius
 aspect_ratio = 2  # Aspect ratio of the tokamak
 R0 = aspect_ratio * a  # Major radius
 NFP = 1  # Number of field periods
-axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
+axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
 
 fixed_iota = True
@@ -67,16 +67,22 @@ else:
 p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
 p_profile = PowerSeriesProfile(p_coeffs)
 
-# Define poloidal and toroidal resolution
-grid = LinearGrid(M=32, N=32)
-
+# Define resolution
+M = 7
+N = 5
+n_rho = 14
+n_theta = 2 * M
+if axisym:
+    n_zeta = 1
+else:
+    n_zeta = 2 * N
 
 # Save path
 save_path = "phi_matrix/"
 profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
 save_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
-phi_save_name = f"{save_tag}_M_{grid.M}_N_{grid.N}_phi_matrix.npy"
+phi_save_name = f"{save_tag}_M_{M}_N_{N}_phi_matrix.npy"
 os.makedirs(save_path, exist_ok=True)
 
 
@@ -95,19 +101,15 @@ surface = FourierRZToroidalSurface.from_shape_parameters(
 )
 assert surface.NFP == 1
 
-# Compute on-surface data
-data_keys = ["x", "n_rho", "a"]
-data = surface.compute(data_keys, grid=grid, basis="xyz")
-
 # Precompute interpolator and surface values
-field = SourceFreeField(surface, grid.M, grid.N)
+field = SourceFreeField(surface, M, N)
 
 # NOTE: equilibrium LCFS must be ForceFreeField object 
 if os.path.exists(save_path + eq_save_name):
     eq = load(save_path + eq_save_name)
 else:
     eq = Equilibrium(
-            L=12,
+            L=12, 
             M=12,
             N=0,
             surface=field,
@@ -119,33 +121,9 @@ else:
         )
     eq.save(save_path + eq_save_name)
 
-# Compute the matrix A such that Phi_periodic = A @ B0*n.
-print(eq.surface)
-if os.path.exists(save_path + phi_save_name):
-    phi_matrix = np.load(save_path + phi_save_name)
-else:
-    data = eq.surface.compute(
-        ["phi_matrix"],
-        grid,
-        data=data,
-        problem="exterior Neumann",
-        chunk_size=chunk_size,
-        basis="xyz"
-    )
-    phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
-
-    np.save(save_path + phi_save_name, phi_matrix)
-
-
 # Evaluate stability using Rahul's method
 # The rest of the script is basically unchanged from what Rahul sent me
 # resolution for low-res solve
-n_rho = 14
-n_theta = 14
-if axisym:
-    n_zeta = 1
-else:
-    n_zeta = 9
 
 # This will probably OOM with the matrix-full method
 print("making input grid and diffmats")
@@ -198,6 +176,25 @@ print("coordinates mapped")
 
 print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
+
+print("computing phi matrix")
+# Compute the matrix A such that Phi_periodic = A @ B0*n.
+print(eq.surface)
+if os.path.exists(save_path + phi_save_name):
+    phi_matrix = np.load(save_path + phi_save_name)
+else:
+    data = eq.surface.compute(
+        ["phi_matrix"],
+        grid,
+        problem="exterior Neumann",
+        chunk_size=chunk_size,
+        basis="xyz"
+    )
+    phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
+
+    np.save(save_path + phi_save_name, phi_matrix)
+
+
 
 print("computing eigenmode at low res")
 tic = time.time()

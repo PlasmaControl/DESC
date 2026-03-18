@@ -1242,6 +1242,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         # surface quantities
         psi_r_s = psi_r[b_idx, :]
+        print(psi_r_s)
         sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
         iota_s = iota[b_idx, :]
 
@@ -1251,7 +1252,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
             _cT(
                 W[b_idx, :]
                 * psi_r3[b_idx, :] # psi_r is constant on the surface
-                * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx])
+                * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
             )
             @ (
                 phi_matrix

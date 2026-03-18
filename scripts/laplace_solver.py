@@ -103,32 +103,38 @@ data = surface.compute(data_keys, grid=grid, basis="xyz")
 field = SourceFreeField(surface, grid.M, grid.N)
 
 # NOTE: equilibrium LCFS must be ForceFreeField object 
-eq = Equilibrium(
-        L=12,
-        M=12,
-        N=0,
-        surface=field,
-        NFP=field.NFP,
-        iota = iota_profile,
-        current=I_profile,
-        pressure=p_profile,
-        Psi=1,
-    )
-eq.save(save_path + eq_save_name)
+if os.path.exists(save_path + eq_save_name):
+    eq = load(save_path + eq_save_name)
+else:
+    eq = Equilibrium(
+            L=12,
+            M=12,
+            N=0,
+            surface=field,
+            NFP=field.NFP,
+            iota = iota_profile,
+            current=I_profile,
+            pressure=p_profile,
+            Psi=1,
+        )
+    eq.save(save_path + eq_save_name)
 
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
 print(eq.surface)
-data = eq.surface.compute(
-    ["phi_matrix"],
-    grid,
-    data=data,
-    problem="exterior Neumann",
-    chunk_size=chunk_size,
-    basis="xyz"
-)
-phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
+if os.path.exists(save_path + phi_save_name):
+    phi_matrix = np.load(save_path + phi_save_name)
+else:
+    data = eq.surface.compute(
+        ["phi_matrix"],
+        grid,
+        data=data,
+        problem="exterior Neumann",
+        chunk_size=chunk_size,
+        basis="xyz"
+    )
+    phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
 
-np.save(save_path + phi_save_name, phi_matrix)
+    np.save(save_path + phi_save_name, phi_matrix)
 
 
 # Evaluate stability using Rahul's method

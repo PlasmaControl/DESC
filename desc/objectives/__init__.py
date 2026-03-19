@@ -101,7 +101,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
-    ShareFamilyCoilParameters,
     ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

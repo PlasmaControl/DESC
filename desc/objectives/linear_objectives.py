@@ -333,6 +333,7 @@ class ShareParameters(_Objective):
         name="shared parameters",
     ):
         self._params = params
+        # Allow a single OptimizableCollection
         assert len(things) >= 1, "must have at least 1 thing"
         assert np.all(
             [isinstance(things[0], type(t)) for t in things[1:]]
@@ -350,6 +351,9 @@ class ShareParameters(_Objective):
 
     def _expand_param_shortcuts(self, params, thing):
         """Expand shortcut syntax like {"current": [...]} into full pytree."""
+        # Add support for parameter-centric shorthand (e.g. {"current": [...]})
+        # and expand it to match the full pytree structure of thing.dimensions
+        # This is optional convenience, not required for core functionality
         if not isinstance(params, dict):
             return params
 
@@ -412,7 +416,10 @@ class ShareParameters(_Objective):
 
         # default params
         default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+
+        # Expand shorthand params into full pytree before broadcasting
         self._params = self._expand_param_shortcuts(self._params, thing)
+
         self._params = setdefault(self._params, default_params)
         self._params = broadcast_tree(self._params, default_params)
         self._indices = tree_leaves(self._params)
@@ -440,8 +447,12 @@ class ShareParameters(_Objective):
         for t2 in self.things[1:]:
             tree_map_with_path(look, thing.dimensions, t2.dimensions, self._params)
 
+        # When operating on a single object, enforce global sharing:
+        # all selected DOFs (across all leaves) are grouped together
+        # number of constraints = (total selected DOFs - 1)
         if len(self.things) == 1:
-            self._dim_f = sum(max(idx.size - 1, 0) for idx in self._indices)
+            n_selected = sum(idx.size for idx in self._indices)
+            self._dim_f = max(n_selected - 1, 0)
         else:
             self._dim_f = sum(idx.size for idx in self._indices) * (
                 len(self.things) - 1
@@ -478,6 +489,8 @@ class ShareParameters(_Objective):
         #  [ 1 0  -1  0]
         #  [ 1 0   0 -1]
 
+        # Handle single OptimizableCollection
+        # Enforce equality between all selected DOFs by subtracting from a reference
         if len(params) == 1:
             params_1 = params[0]
 
@@ -486,15 +499,18 @@ class ShareParameters(_Objective):
 
             group_vals = []
 
+            # collect all selected DOFs across the object
             for param, idx in zip(leaf_params, leaf_indices):
                 if idx.size > 0:
                     group_vals.append(jnp.atleast_1d(param[idx]))
 
+            # nothing to constrain if <=1 value
             if len(group_vals) <= 1:
                 return jnp.array([])
 
             vals = jnp.concatenate(group_vals)
 
+            # enforce all equal: x_i - x_0 = 0
             ref = vals[0]
             return vals[1:] - ref
 

@@ -333,7 +333,7 @@ class ShareParameters(_Objective):
         name="shared parameters",
     ):
         self._params = params
-        assert len(things) > 1, "only makes sense for >1 thing"
+        assert len(things) >= 1, "must have at least 1 thing"
         assert np.all(
             [isinstance(things[0], type(t)) for t in things[1:]]
         ), f"expected same type for all things, got types {[type(t) for t in things]}"
@@ -347,6 +347,55 @@ class ShareParameters(_Objective):
             normalize_target=False,
             name=name,
         )
+
+    def _expand_param_shortcuts(self, params, thing):
+        """Expand shortcut syntax like {"current": [...]} into full pytree."""
+        if not isinstance(params, dict):
+            return params
+
+        dims = thing.dimensions
+
+        def expand_node(mask, dim_node):
+            if isinstance(dim_node, dict):
+                out = {}
+                for pname, dim in dim_node.items():
+                    if pname not in params:
+                        continue
+
+                    if isinstance(mask, dict):
+                        val = mask.get(pname, False)
+                    else:
+                        val = mask
+
+                    if val is True:
+                        out[pname] = np.arange(dim)
+                    elif val is False:
+                        out[pname] = np.array([], dtype=int)
+                    else:
+                        out[pname] = np.atleast_1d(np.asarray(val, dtype=int))
+
+                return out
+
+            if isinstance(dim_node, list):
+                if isinstance(mask, dict):
+                    mask = [
+                        {
+                            pname: (
+                                mask[pname][i]
+                                if isinstance(mask[pname], list)
+                                else mask[pname]
+                            )
+                            for pname in mask
+                        }
+                        for i in range(len(dim_node))
+                    ]
+
+                if not isinstance(mask, list):
+                    mask = [mask] * len(dim_node)
+
+                return [expand_node(m, d) for m, d in zip(mask, dim_node)]
+
+        return expand_node(params, dims)
 
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -363,6 +412,7 @@ class ShareParameters(_Objective):
 
         # default params
         default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+        self._params = self._expand_param_shortcuts(self._params, thing)
         self._params = setdefault(self._params, default_params)
         self._params = broadcast_tree(self._params, default_params)
         self._indices = tree_leaves(self._params)
@@ -390,7 +440,12 @@ class ShareParameters(_Objective):
         for t2 in self.things[1:]:
             tree_map_with_path(look, thing.dimensions, t2.dimensions, self._params)
 
-        self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
+        if len(self.things) == 1:
+            self._dim_f = sum(max(idx.size - 1, 0) for idx in self._indices)
+        else:
+            self._dim_f = sum(idx.size for idx in self._indices) * (
+                len(self.things) - 1
+            )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -422,6 +477,27 @@ class ShareParameters(_Objective):
         #  [ 1 -1  0  0]
         #  [ 1 0  -1  0]
         #  [ 1 0   0 -1]
+
+        if len(params) == 1:
+            params_1 = params[0]
+
+            leaf_params = tree_leaves(params_1)
+            leaf_indices = self._indices
+
+            group_vals = []
+
+            for param, idx in zip(leaf_params, leaf_indices):
+                if idx.size > 0:
+                    group_vals.append(jnp.atleast_1d(param[idx]))
+
+            if len(group_vals) <= 1:
+                return jnp.array([])
+
+            vals = jnp.concatenate(group_vals)
+
+            ref = vals[0]
+            return vals[1:] - ref
+
         params_1 = params[0]
         reference_params_array = jnp.concatenate(
             [
@@ -3763,253 +3839,3 @@ class FixNearAxisLambda(_FixedObjective):
         """
         f = jnp.dot(self._A, params["L_lmn"]).squeeze()
         return f
-
-
-class ShareFamilyCoilParameters(_Objective):
-    """
-    Objective enforcing shared parameter values across groups of coils.
-
-    This objective penalizes differences in specified parameters between
-    coils belonging to the same group (e.g., same family).
-
-    Parameters
-    ----------
-    thing : CoilSet or Coil
-        Coil container object.
-    groups : list of dict
-        Each dict specifies:
-            - "param": parameter name
-            - "family" / "families" / "coils": selection
-            - "indices": optional indices
-    name : str
-        Name of the objective.
-    """
-
-    _scalar = False
-    _linear = True
-    _fixed = False
-    _units = "(~)"
-    _print_value_fmt = "Shared family coil parameters error: "
-    _static_attrs = _Objective._static_attrs + [
-        "_groups",
-        "_family_map",
-        "_compiled_groups",
-        "_group_params",
-    ]
-
-    def __init__(self, thing, groups, name="shared family coil parameters"):
-        errorif(
-            groups is None or len(groups) == 0,
-            ValueError,
-            "groups must be nonempty",
-        )
-        self._groups = groups
-        self._family_map = None
-        self._compiled_groups = None
-        self._group_params = None
-        super().__init__(
-            things=thing,
-            target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            name=name,
-        )
-
-    def _flatten_leaf_coils(self, obj):
-        """Recursively flatten nested coil containers into leaf coils."""
-        if hasattr(obj, "coils"):
-            out = []
-            for child in obj.coils:
-                out.extend(self._flatten_leaf_coils(child))
-            return out
-        return [obj]
-
-    def _build_family_map(self, thing):
-        """Map family names to flattened coil indices."""
-        family_map = {}
-        start = 0
-
-        if hasattr(thing, "coils"):
-            for i, child in enumerate(thing.coils):
-                leaves = self._flatten_leaf_coils(child)
-                n = len(leaves)
-                name = getattr(child, "name", "") or f"family_{i}"
-
-                errorif(
-                    name in family_map,
-                    ValueError,
-                    (f"Duplicate family name '{name}' " "in top-level coil container"),
-                )
-
-                family_map[name] = list(range(start, start + n))
-                start += n
-        else:
-            family_map["all"] = [0]
-            return family_map
-
-        family_map["all"] = list(range(start))
-        return family_map
-
-    def build(self, use_jit=False, verbose=1):
-        """Build the objective by compiling coil groups and indices.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-        """
-        thing = self.things[0]
-
-        leaf_dims = tree_leaves(thing.dimensions, is_leaf=lambda x: isinstance(x, dict))
-        self._family_map = self._build_family_map(thing)
-
-        compiled_groups = []
-        group_params = []
-        self._dim_f = 0
-
-        for group in self._groups:
-            errorif(
-                "param" not in group,
-                ValueError,
-                "Each group must define 'param'",
-            )
-
-            param = group["param"]
-            indices_spec = group.get("indices", True)
-            coil_ids = []
-
-            if "family" in group:
-                fam = group["family"]
-                errorif(
-                    fam not in self._family_map,
-                    ValueError,
-                    (
-                        f"Unknown family '{fam}'. "
-                        f"Available: {list(self._family_map.keys())}"
-                    ),
-                )
-                coil_ids.extend(self._family_map[fam])
-
-            if "families" in group:
-                for fam in group["families"]:
-                    errorif(
-                        fam not in self._family_map,
-                        ValueError,
-                        (
-                            f"Unknown family '{fam}'. "
-                            f"Available: {list(self._family_map.keys())}"
-                        ),
-                    )
-                    coil_ids.extend(self._family_map[fam])
-
-            if "coils" in group:
-                coil_ids.extend(group["coils"])
-
-            coil_ids = list(dict.fromkeys(coil_ids))
-
-            errorif(
-                len(coil_ids) < 2,
-                ValueError,
-                f"group '{param}' must select at least 2 coils",
-            )
-
-            idxs = []
-            sizes = []
-
-            for coil_idx in coil_ids:
-                errorif(
-                    coil_idx < 0 or coil_idx >= len(leaf_dims),
-                    IndexError,
-                    (f"coil index {coil_idx} out of range " f"(n={len(leaf_dims)})"),
-                )
-
-                dim_dict = leaf_dims[coil_idx]
-
-                errorif(
-                    param not in dim_dict,
-                    ValueError,
-                    (f"Parameter '{param}' not found " f"on coil {coil_idx}"),
-                )
-
-                dim = dim_dict[param]
-
-                if isinstance(indices_spec, bool):
-                    idx = (
-                        np.arange(dim, dtype=int)
-                        if indices_spec
-                        else np.array([], dtype=int)
-                    )
-                else:
-                    idx = np.asarray(indices_spec, dtype=int)
-
-                errorif(
-                    idx.size == 0,
-                    ValueError,
-                    f"group '{param}' selected no indices",
-                )
-
-                errorif(
-                    np.any(idx < 0) or np.any(idx >= dim),
-                    IndexError,
-                    (
-                        f"indices {idx} out of range for "
-                        f"'{param}' on coil {coil_idx}"
-                    ),
-                )
-
-                idxs.append(idx)
-                sizes.append(idx.size)
-
-            ref_size = sizes[0]
-
-            errorif(
-                not np.all(np.asarray(sizes) == ref_size),
-                ValueError,
-                f"All blocks in group '{param}' must match size",
-            )
-
-            compiled_groups.append((tuple(coil_ids), tuple(idxs)))
-            group_params.append(param)
-            self._dim_f += ref_size * (len(coil_ids) - 1)
-
-        self._compiled_groups = tuple(compiled_groups)
-        self._group_params = tuple(group_params)
-
-        super().build(use_jit=use_jit, verbose=verbose)
-
-    def compute(self, params, constants=None):
-        """Compute residuals enforcing shared parameters across coils.
-
-        Parameters
-        ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-        constants : dict
-            Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
-
-        Returns
-        -------
-        f : ndarray
-            Shared coils parameters errors.
-        """
-        leaf_params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
-
-        errors = []
-
-        for param, (coils, idxs) in zip(self._group_params, self._compiled_groups):
-            selected = [
-                jnp.atleast_1d(leaf_params[c][param][idx])
-                for c, idx in zip(coils, idxs)
-            ]
-
-            ref = selected[0]
-
-            diffs = jnp.stack([arr for arr in selected[1:]]) - ref
-            errors.append(diffs.ravel())
-
-        return jnp.concatenate(errors)

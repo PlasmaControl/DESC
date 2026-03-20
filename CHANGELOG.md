@@ -3,6 +3,9 @@ Changelog
 
 New Features
 
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an
+alternative to fourier continuation methods.
+
 - Multiple plotting related changes:
     - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
     - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.

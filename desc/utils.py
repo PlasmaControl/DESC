@@ -1168,3 +1168,71 @@ def copy_rpz_periods(rpz, NFP):
     z = jnp.tile(z, NFP)
     p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
     return jnp.array([r, p.flatten(), z]).T
+
+
+def identity(y):
+    """Returns the input."""
+    return y
+
+
+def apply(d, fun=identity, subset=None, exclude=None):
+    """Applies ``fun`` to ``d``.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary to map.
+    fun : callable
+        Function to apply to values in dictionary.
+        Default is the identity.
+    subset : list or set or tuple
+        Subset of keys in ``d`` to consider.
+        Default is all keys in ``d``.
+    exclude : collection
+        Stuff in subset to exclude.
+
+    Returns
+    -------
+    d : dict
+        New dictionary with ``fun`` mapped over values with keys in ``subset``
+        and keys not in ``exclude``.
+
+    """
+    if subset is None:
+        subset = d.keys()
+    exclude = () if (exclude is None) else exclude
+    return {k: fun(d[k]) for k in subset if k not in exclude}
+
+
+def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
+    """Create x_scale using exponential spectral scaling.
+
+    Parameters
+    ----------
+    modes : dict of ndarray
+        Dictionary mapping parameter names to mode number arrays, each mode number array
+        should be (N,k) where N is the dimension of the given variable and the 2nd axis
+        is the number of indices (usually 3)
+    alpha : float, optional
+        Decay rate of the scaling. Default is 1.2
+    order : int, optional
+        Order of norm to use for multi-index mode numbers. Options are:
+        - 1: Diamond pattern using |l| + |m| + |n|
+        - 2: Circular pattern using sqrt(l² + m² + n²)
+        - np.inf : Square pattern using max(|l|,|m|,|n|)
+        Default is 'np.inf'
+    min_value : float, optional
+        Minimum allowed scale value. Default is 1e-7
+
+    Returns
+    -------
+    dict of ndarray
+        Array of scale values for each parameter
+    """
+    scales = {}
+    for name, md in modes.items():
+        mode_level = jnp.linalg.norm(md, axis=1, ord=order)
+        scales[name] = jnp.maximum(
+            jnp.exp(-alpha * mode_level) / jnp.exp(-alpha), min_value
+        )
+    return scales

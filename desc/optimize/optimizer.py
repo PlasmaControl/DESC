@@ -673,12 +673,11 @@ def get_combined_constraint_objectives(  # noqa: C901
             )
             nonlinear_constraint.build(verbose=verbose)
 
-    if linear_constraint is not None and not isinstance(x_scale, str):
-        # need to project x_scale down to correct size
-        Z = objective._Z
-        x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = np.abs(np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z))
-        x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+    if isinstance(x_scale, (list, tuple)):
+        # sort by things to make x_scale match with objective.x
+        x_scale = [x_scale[things.index(t)] for t in objective.things]
+        x_scale = jnp.concatenate(x_scale)
+    x_scale = _project_x_scale(x_scale, objective)
 
     if objective.scalar and (not optimizers[method]["scalar"]):
         warnings.warn(

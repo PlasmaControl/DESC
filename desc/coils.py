@@ -1754,11 +1754,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     ):
         """Compute magnetic field at a set of points.
 
-        Uses vectorized evaluation across coils and field periods for better
-        GPU utilization. Coil geometries are pre-computed, then the Biot-Savart
-        integral is vmapped across all coils and field period rotations are
-        vmapped across NFP, eliminating sequential kernel launches.
-
         Parameters
         ----------
         coords : array-like shape(n,3)
@@ -1808,15 +1803,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             for par, coil in zip(params, self):
                 par["current"] = coil.current
 
-        # Work in xyz throughout to avoid redundant rpz<->xyz conversions
-        # inside the coil loop (previously done per-coil per-field-period).
+        # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
             coords_xyz = rpz2xyz(coords)
         else:
             coords_xyz = coords
 
-        # if stellarator symmetric, add reflected nodes from the other half
-        # field period
+        # if stellarator symmetric, add reflected nodes from the other half field period
         if self.sym:
             normal = jnp.array(
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
@@ -1826,180 +1819,43 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 @ reflection_matrix(normal).T
                 @ reflection_matrix([0, 0, 1]).T
             )
-            coords_full = jnp.vstack((coords_xyz, coords_sym))
-        else:
-            coords_full = coords_xyz
+            coords_xyz = jnp.vstack((coords_xyz, coords_sym))
 
-        # Pre-compute all coil source geometries using scan.
-        # This is cheap (spectral -> real-space transforms) and produces
-        # stacked arrays suitable for vmapped Biot-Savart.
-        #
-        # Extract currents before stacking/scan to avoid shape issues —
-        # current is always a scalar per coil but tree_stack can produce
-        # unexpected shapes if the params dict structure varies.
-        all_currents = jnp.array(
-            [p.pop("current", self[i].current) for i, p in enumerate(params)]
-        ).ravel()
-        stacked = tree_stack(params)
-        if source_grid is None:
-            sg = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
-        else:
-            sg = source_grid
-        coil_ref = self[0]
+        # field period rotation is easiest in [R,phi,Z] coordinates
+        coords_rpz = xyz2rpz(coords_xyz)
+        op = {
+            "B": self[0].compute_magnetic_field,
+            "A": self[0].compute_magnetic_vector_potential,
+        }[compute_A_or_B]
 
-        # SplineXYZCoil uses Hanson-Hirshman (exact for straight segments)
-        # while other coil types use numerical quadrature. We must dispatch
-        # to the correct kernel to maintain numerical accuracy.
-        use_hh = isinstance(coil_ref, SplineXYZCoil)
+        # sum the magnetic fields from each field period
+        def nfp_loop(k, AB):
+            coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
 
-        if use_hh:
-            op_fn = {
-                "B": biot_savart_hh,
-                "A": biot_savart_vector_potential_hh,
-            }[compute_A_or_B]
-
-            def _extract_geom(_, x):
-                data = coil_ref.compute(["x"], grid=sg, params=x, basis="xyz")
-                coil_pts_start = data["x"]
-                coil_pts_end = jnp.concatenate(
-                    [data["x"][1:], data["x"][:1]]
+            def body(AB, x):
+                AB += op(
+                    coords_nfp,
+                    params=x,
+                    basis="rpz",
+                    source_grid=source_grid,
+                    chunk_size=chunk_size,
                 )
-                return None, (coil_pts_start, coil_pts_end)
+                return AB, None
 
-            _, (all_starts, all_ends) = scan(
-                _extract_geom, None, stacked
-            )
-        else:
-            op_fn = {
-                "B": biot_savart_general,
-                "A": biot_savart_general_vector_potential,
-            }[compute_A_or_B]
+            AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
+            return AB
 
-            def _extract_geom(_, x):
-                data = coil_ref.compute(
-                    ["x", "x_s", "ds"], grid=sg, params=x, basis="xyz"
-                )
-                tangents = data["x_s"] * data["ds"][:, None]
-                return None, (data["x"], tangents)
+        AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
 
-            _, (all_coil_pts, all_tangents) = scan(
-                _extract_geom, None, stacked
-            )
-            # Apply currents after scan to get JdV = current * tangents
-            all_JdV = all_currents[:, None, None] * all_tangents
-
-        # Build NFP rotation matrices around Z axis in xyz.
-        # R_k rotates by 2*pi*k/NFP.
-        angles = 2 * jnp.pi * jnp.arange(self.NFP) / self.NFP
-        cos_a, sin_a = jnp.cos(angles), jnp.sin(angles)
-        zeros_nfp = jnp.zeros(self.NFP)
-        ones_nfp = jnp.ones(self.NFP)
-        rot_mats = jnp.stack(
-            [
-                jnp.stack([cos_a, -sin_a, zeros_nfp], axis=-1),
-                jnp.stack([sin_a, cos_a, zeros_nfp], axis=-1),
-                jnp.stack([zeros_nfp, zeros_nfp, ones_nfp], axis=-1),
-            ],
-            axis=-2,
-        )  # (NFP, 3, 3)
-
-        # Chunked vmap Biot-Savart: vmap within coil chunks, scan across
-        # chunks, vmap over field periods. Pure vmap over all coils at once
-        # causes memory pressure for large coilsets (>~16 coils), so we
-        # limit the vmap width and accumulate via scan.
-        _COIL_VMAP_CHUNK = 16
-        n_coils = len(self)
-        n_chunks = max(1, (n_coils + _COIL_VMAP_CHUNK - 1) // _COIL_VMAP_CHUNK)
-        pad_n = n_chunks * _COIL_VMAP_CHUNK - n_coils
-
-        def _pad_first_axis(arr, n):
-            """Pad with zeros along axis 0 only, for any ndim."""
-            pw = [(0, n)] + [(0, 0)] * (arr.ndim - 1)
-            return jnp.pad(arr, pw)
-
-        if use_hh:
-            if pad_n > 0:
-                all_starts = _pad_first_axis(all_starts, pad_n)
-                all_ends = _pad_first_axis(all_ends, pad_n)
-                all_currents = _pad_first_axis(all_currents, pad_n)
-            n_src = all_starts.shape[1]
-            starts_ch = all_starts.reshape(n_chunks, _COIL_VMAP_CHUNK, n_src, 3)
-            ends_ch = all_ends.reshape(n_chunks, _COIL_VMAP_CHUNK, n_src, 3)
-            currents_ch = all_currents.reshape(n_chunks, _COIL_VMAP_CHUNK)
-
-            def _bs_one_coil(starts, ends, current, eval_pts):
-                return op_fn(eval_pts, starts, ends, current)
-
-            def _one_period(rot_mat):
-                rotated = coords_full @ rot_mat.T
-
-                def _chunk_sum(B_acc, chunk):
-                    s, e, c = chunk
-                    B_chunk = vmap(_bs_one_coil, in_axes=(0, 0, 0, None))(
-                        s, e, c, rotated
-                    )
-                    return B_acc + B_chunk.sum(axis=0), None
-
-                B_sum, _ = scan(
-                    _chunk_sum,
-                    jnp.zeros(rotated.shape),
-                    (starts_ch, ends_ch, currents_ch),
-                )
-                return B_sum @ rot_mat
-
-        else:
-            if pad_n > 0:
-                all_coil_pts = _pad_first_axis(all_coil_pts, pad_n)
-                all_JdV = _pad_first_axis(all_JdV, pad_n)
-            # Use actual shapes for reshape — don't assume 3D
-            per_coil_shape = all_coil_pts.shape[1:]
-            pts_ch = all_coil_pts.reshape(
-                n_chunks, _COIL_VMAP_CHUNK, *per_coil_shape
-            )
-            JdV_ch = all_JdV.reshape(
-                n_chunks, _COIL_VMAP_CHUNK, *per_coil_shape
-            )
-
-            def _bs_one_coil(coil_pts, JdV, eval_pts):
-                return op_fn(eval_pts, coil_pts, JdV, chunk_size=chunk_size)
-
-            def _one_period(rot_mat):
-                rotated = coords_full @ rot_mat.T
-
-                def _chunk_sum(B_acc, chunk):
-                    cp, jdv = chunk
-                    B_chunk = vmap(_bs_one_coil, in_axes=(0, 0, None))(
-                        cp, jdv, rotated
-                    )
-                    return B_acc + B_chunk.sum(axis=0), None
-
-                B_sum, _ = scan(
-                    _chunk_sum,
-                    jnp.zeros(rotated.shape),
-                    (pts_ch, JdV_ch),
-                )
-                return B_sum @ rot_mat
-
-        # vmap over field periods and sum
-        AB_xyz = vmap(_one_period)(rot_mats).sum(axis=0)  # (n_pts, 3)
-
-        # Handle stellarator symmetry: combine original + reflected in rpz
+        # sum the magnetic field/potential from both halves of
+        # the symmetric field period
         if self.sym:
-            n_orig = coords.shape[0]
-            AB_rpz = xyz2rpz_vec(
-                AB_xyz, x=coords_full[:, 0], y=coords_full[:, 1]
+            AB = AB[: coords.shape[0], :] + AB[coords.shape[0] :, :] * jnp.array(
+                [-1, 1, 1]
             )
-            AB = AB_rpz[:n_orig] + AB_rpz[n_orig:] * jnp.array([-1, 1, 1])
-            if basis.lower() == "xyz":
-                AB = rpz2xyz_vec(AB, x=coords_xyz[:, 0], y=coords_xyz[:, 1])
-        else:
-            if basis.lower() == "rpz":
-                AB = xyz2rpz_vec(
-                    AB_xyz, x=coords_xyz[:, 0], y=coords_xyz[:, 1]
-                )
-            else:
-                AB = AB_xyz
 
+        if basis.lower() == "xyz":
+            AB = rpz2xyz_vec(AB, x=coords[:, 0], y=coords[:, 1])
         return AB
 
     def compute_magnetic_field(

@@ -1119,28 +1119,21 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         ]
         from desc.equilibrium import Equilibrium
 
-        # Compute each field independently then sum, making the independence
-        # explicit so XLA can parallelize within the JIT trace.
-        results = []
+        AB = 0
         for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
             if isinstance(field, Equilibrium) and compute_A_or_B == "B":
                 kwargs = {"method": method}
             else:
                 kwargs = {}
-            results.append(
-                getattr(field, op)(
-                    coords,
-                    params[i % len(params)],
-                    basis,
-                    source_grid=g,
-                    transforms=tr,
-                    chunk_size=chunk_size,
-                    **kwargs,
-                )
+            AB += getattr(field, op)(
+                coords,
+                params[i % len(params)],
+                basis,
+                source_grid=g,
+                transforms=tr,
+                chunk_size=chunk_size,
+                **kwargs,
             )
-        AB = results[0]
-        for r in results[1:]:
-            AB = AB + r
         return AB
 
     def compute_magnetic_field(

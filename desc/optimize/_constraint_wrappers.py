@@ -390,10 +390,25 @@ class LinearConstraintProjection(ObjectiveFunction):
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
-        # Differentiate through recover so that fixed parameters are constants
-        # in the AD tape.  This avoids NaN in Jacobian columns for fixed params
-        # leaking into the result via 0*NaN when projecting with
-        # _feasible_tangents (both rev-mode matmul and fwd-mode JVP).
+        # ProximalProjection.compute_* has non-JAX ops (np.asarray, eq solve)
+        # that can't be traced through, so use the original _feasible_tangents
+        # approach with nan_to_num to handle NaN in fixed-param columns.
+        if isinstance(self._objective, ProximalProjection):
+            x = self.recover(x_reduced)
+            if self._ad_mode == "rev":
+                fun = lambda x: getattr(self._objective, "compute_" + op)(
+                    x, constants
+                )
+                J_full = jacrev_chunked(fun, chunk_size=None)(x)
+                return jnp.nan_to_num(J_full, nan=0.0) @ self._feasible_tangents
+            else:
+                v = self._feasible_tangents
+                df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+                return jnp.nan_to_num(df.T, nan=0.0)
+
+        # For non-proximal objectives, differentiate through recover so that
+        # fixed parameters are constants in the AD tape.  This avoids NaN in
+        # Jacobian columns for fixed params leaking into the result via 0*NaN.
         fun = lambda x_r: getattr(self._objective, "compute_" + op)(
             self.recover(x_r), constants
         )

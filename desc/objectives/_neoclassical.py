@@ -595,7 +595,7 @@ class TrappedResonance(_Objective):
             rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparameters.pop("num_quad")),
+            leggauss(self._hyperparameters["num_quad"]),
             (automorphism_sin, grad_automorphism_sin),
         )
         rho_res = 1.0 / self._num_rho

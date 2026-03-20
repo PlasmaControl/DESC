@@ -5,7 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, put
-from desc.batching import batched_vectorize, jacrev_chunked
+from desc.batching import batched_vectorize, jacfwd_chunked, jacrev_chunked
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -390,15 +390,19 @@ class LinearConstraintProjection(ObjectiveFunction):
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
-        x = self.recover(x_reduced)
+        # Differentiate through recover so that fixed parameters are constants
+        # in the AD tape.  This avoids NaN in Jacobian columns for fixed params
+        # leaking into the result via 0*NaN when projecting with
+        # _feasible_tangents (both rev-mode matmul and fwd-mode JVP).
+        fun = lambda x_r: getattr(self._objective, "compute_" + op)(
+            self.recover(x_r), constants
+        )
         if self._ad_mode == "rev":
-            fun = lambda x: getattr(self._objective, "compute_" + op)(x, constants)
-            J_full = jacrev_chunked(fun, chunk_size=None)(x)
-            return J_full @ self._feasible_tangents
+            return jacrev_chunked(fun, chunk_size=None)(x_reduced)
         else:
-            v = self._feasible_tangents
-            df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
-            return df.T
+            return jacfwd_chunked(
+                fun, chunk_size=self._objective._jac_chunk_size
+            )(x_reduced)
 
     def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_scaled.

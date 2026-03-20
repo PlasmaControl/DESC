@@ -1063,16 +1063,13 @@ class ProximalProjection(ObjectiveFunction):
         # where ∇G is the Jacobian of G with respect to full state vector
         # and ∇F is the Jacobian of F with respect to full state vector. Then,
         # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
-        # We get the part in [] using the _get_tangent method.
+        # We get the part in [] using the _compute_tangents method.
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
+        tangents = self._compute_tangents(
+            v, xf, constants, op="scaled_error", _v_is_identity=True
+        )
         g = self._objective.compute_scaled_error(xg, constants[0])
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
         return tangents @ g_vjp
@@ -1116,7 +1113,7 @@ class ProximalProjection(ObjectiveFunction):
 
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_scaled(v, x, constants).T
+        return self._jvp(v, x, constants, "scaled", _v_is_identity=True).T
 
     def jac_scaled_error(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled_error.
@@ -1135,7 +1132,7 @@ class ProximalProjection(ObjectiveFunction):
 
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_scaled_error(v, x, constants).T
+        return self._jvp(v, x, constants, "scaled_error", _v_is_identity=True).T
 
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian of self.compute_unscaled.
@@ -1153,7 +1150,7 @@ class ProximalProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_unscaled(v, x, constants).T
+        return self._jvp(v, x, constants, "unscaled", _v_is_identity=True).T
 
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
@@ -1206,7 +1203,7 @@ class ProximalProjection(ObjectiveFunction):
         op = "unscaled"
         return self._jvp(v, x, constants, op)
 
-    def _jvp(self, v, x, constants=None, op="scaled_error"):
+    def _jvp(self, v, x, constants=None, op="scaled_error", _v_is_identity=False):
         # The goal is to compute the Jacobian of the objective function with respect to
         # the optimization variables (c). Before taking the Jacobian, we update the
         # equilibrium such that
@@ -1226,14 +1223,9 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, self.constants)
         xg, xf = self._update_equilibrium(x, store=True)
 
-        # we don't need to divide this part into blocked and batched because
-        # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
+        tangents = self._compute_tangents(
+            v, xf, constants, op, _v_is_identity=_v_is_identity
+        )
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
@@ -1245,6 +1237,79 @@ class ProximalProjection(ObjectiveFunction):
                 jnp.split(xg, np.cumsum(self._dimx_per_thing)),
                 op,
             )
+
+    def _compute_tangents(self, v, xf, constants, op, _v_is_identity=False):
+        """Compute tangent directions for the proximal Jacobian.
+
+        Applies two memory optimizations:
+        1. Fxh (ForceBalance Jacobian) and its SVD are precomputed once, outside
+           the vmap loop, instead of being redundantly recomputed for each DOF
+           direction inside vmap.
+        2. When v is the identity matrix (_v_is_identity=True), non-equilibrium
+           DOF columns (coils, curves, etc.) skip the SVD entirely because their
+           tangent is trivially the identity with a zero eq block.
+        """
+        # --- Fix 1: Precompute Fxh + SVD once (invariant to dc) ---
+        uf, sfi, vtf = _precompute_fxh_svd(
+            self._constraint,
+            xf,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents,
+            op,
+        )
+
+        if not _v_is_identity:
+            # General case: all columns go through the cached tangent computation
+            jvpfun = lambda u: self._get_tangent_with_cache(
+                u, xf, constants, uf, sfi, vtf, op=op
+            )
+            return batched_vectorize(
+                jvpfun,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(v)
+
+        # --- Fix 2: Split eq vs non-eq columns (identity input only) ---
+        n_before = int(np.sum(self._dimc_per_thing[: self._eq_idx]))
+        n_eq_c = int(self._dimc_per_thing[self._eq_idx])
+        n_eq_x = int(self._dimx_per_thing[self._eq_idx])
+        n_after = int(np.sum(self._dimc_per_thing[self._eq_idx + 1 :]))
+        tangent_dim = int(np.sum(self._dimx_per_thing))
+
+        # Eq columns: need full tangent computation (with cached SVD)
+        v_eq = v[n_before : n_before + n_eq_c]
+        jvpfun = lambda u: self._get_tangent_with_cache(
+            u, xf, constants, uf, sfi, vtf, op=op
+        )
+        tangents_eq = batched_vectorize(
+            jvpfun,
+            signature="(n)->(k)",
+            chunk_size=self._constraint._jac_chunk_size,
+        )(v_eq)
+
+        # Non-eq columns: tangent = dxdcv (identity with zero eq block).
+        # For non-eq DOFs, vs[eq_idx] = 0, so dfdc = 0 and tangent = dxdcv,
+        # which is just the identity mapped through the dimx layout with the
+        # eq block filled with zeros.
+        if n_before > 0:
+            tangents_before = jnp.zeros((n_before, tangent_dim))
+            tangents_before = tangents_before.at[:, :n_before].set(
+                jnp.eye(n_before)
+            )
+        else:
+            tangents_before = jnp.zeros((0, tangent_dim))
+
+        if n_after > 0:
+            tangents_after = jnp.zeros((n_after, tangent_dim))
+            tangents_after = tangents_after.at[:, n_before + n_eq_x :].set(
+                jnp.eye(n_after)
+            )
+        else:
+            tangents_after = jnp.zeros((0, tangent_dim))
+
+        return jnp.concatenate(
+            [tangents_before, tangents_eq, tangents_after], axis=0
+        )
 
     def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
@@ -1293,6 +1358,36 @@ class ProximalProjection(ObjectiveFunction):
         tangent = dxdcv - self._feasible_tangents @ dfdc
         return tangent
 
+    def _get_tangent_with_cache(self, v, xf, constants, uf, sfi, vtf, op):
+        """Like _get_tangent but uses precomputed SVD factors (uf, sfi, vtf).
+
+        This avoids recomputing the ForceBalance Jacobian and its SVD inside
+        vmap for every DOF direction.
+        """
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        dfdc = _proximal_jvp_f_fast(
+            self._constraint,
+            xf,
+            constants[1],
+            vs[self._eq_idx],
+            self._dxdc,
+            uf,
+            sfi,
+            vtf,
+            op,
+        )
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs[self._eq_idx] = dfdc
+        dfdc = jnp.concatenate(dfdcs)
+        dxdcv = jnp.concatenate(
+            [
+                *vs[: self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],
+                *vs[self._eq_idx + 1 :],
+            ]
+        )
+        return dxdcv - self._feasible_tangents @ dfdc
+
     @property
     def constants(self):
         """list: constant parameters for each sub-objective."""
@@ -1330,6 +1425,33 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    return vtf.T @ (sfi * (uf.T @ Fc))
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _precompute_fxh_svd(constraint, xf, constants, eq_feasible_tangents, op):
+    """Precompute the ForceBalance Jacobian (Fxh) and its SVD.
+
+    These quantities are independent of the perturbation direction dc, so they
+    can be computed once and reused across all DOF directions, rather than being
+    redundantly recomputed inside vmap for each direction.
+    """
+    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants).T
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf = sf + sf[-1]  # regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    return uf, sfi, vtf
+
+
+@functools.partial(jit, static_argnames=["op"])
+def _proximal_jvp_f_fast(constraint, xf, constants, dc, dxdc, uf, sfi, vtf, op):
+    """Compute (dF/dx)^-1 @ dF/dc using precomputed SVD factors.
+
+    Only the dc-dependent part (Fc) is computed here; the SVD of Fxh is
+    passed in from _precompute_fxh_svd.
+    """
+    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     return vtf.T @ (sfi * (uf.T @ Fc))
 
 

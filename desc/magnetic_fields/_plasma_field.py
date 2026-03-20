@@ -252,6 +252,7 @@ class PlasmaField(_MagneticField):
         params=None,
         basis="rpz",
         source_grid=None,
+        transforms=None,
         chunk_size=None,
     ):
         """Compute magnetic vector potential at a set of points.

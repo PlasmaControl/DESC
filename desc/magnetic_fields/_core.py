@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import functools
 import os
 import warnings
 from abc import ABC, abstractmethod
@@ -2791,8 +2792,11 @@ def _field_line_integrate(
     # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
+        # method is a Python string — bind it via partial so it never enters
+        # the JAX-traced arg list (strings are not valid JAX types).
+        wrapper = functools.partial(_intfun_wrapper, method=method)
         out = vmap_chunked(
-            _intfun_wrapper, in_axes=(0,) + 15 * (None,), chunk_size=chunk_size
+            wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
         )(
             x0,
             field,
@@ -2808,7 +2812,6 @@ def _field_line_integrate(
             event,
             adjoint,
             bs_chunk_size,
-            method,
             options,
         )
 
@@ -2838,12 +2841,22 @@ def _intfun_wrapper(
     event,
     adjoint,
     bs_chunk_size,
-    method,
     options,
+    method="virtual casing",
 ):
     """Wrapper for field line integration."""
+    # method is a Python string that cannot be traced by JAX, so we bind it
+    # into _odefun via partial instead of passing it through diffrax args.
+    # Only Equilibrium.compute_magnetic_field accepts method=, so check here
+    # (at Python level, before JIT tracing).
+    import inspect
+
+    if "method" in inspect.signature(field.compute_magnetic_field).parameters:
+        odefun = _make_odefun_with_method(method)
+    else:
+        odefun = _odefun
     return diffeqsolve(
-        terms=ODETerm(_odefun),
+        terms=ODETerm(odefun),
         solver=solver,
         y0=x,
         t0=phis[0],
@@ -2852,7 +2865,7 @@ def _intfun_wrapper(
         max_steps=max_steps,
         dt0=min_step_size,
         stepsize_controller=stepsize_controller,
-        args=[field, params, scale, source_grid, bs_chunk_size, method],
+        args=[field, params, scale, source_grid, bs_chunk_size],
         event=event,
         adjoint=adjoint,
         **options,
@@ -2861,22 +2874,42 @@ def _intfun_wrapper(
 
 @jit
 def _odefun(s, rpz, args):
-    field, params, scale, source_grid, bs_chunk_size, method = args
+    field, params, scale, source_grid, bs_chunk_size = args
     r = rpz[0]
     br, bp, bz = (
         scale
         * field.compute_magnetic_field(
-            rpz,
-            params,
-            basis="rpz",
-            source_grid=source_grid,
-            chunk_size=bs_chunk_size,
-            method=method,
+            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=bs_chunk_size
         ).squeeze()
     )
     return jnp.array(
         [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
     ).squeeze()
+
+
+def _make_odefun_with_method(method):
+    """Create an odefun that captures method in a closure (not a JAX-traced arg)."""
+
+    @jit
+    def _odefun_m(s, rpz, args):
+        field, params, scale, source_grid, bs_chunk_size = args
+        r = rpz[0]
+        br, bp, bz = (
+            scale
+            * field.compute_magnetic_field(
+                rpz,
+                params,
+                basis="rpz",
+                source_grid=source_grid,
+                chunk_size=bs_chunk_size,
+                method=method,
+            ).squeeze()
+        )
+        return jnp.array(
+            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+        ).squeeze()
+
+    return _odefun_m
 
 
 class OmnigenousField(Optimizable, IOAble):

@@ -7,6 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc.backend import jnp
 from desc.io import IOAble
 from desc.optimizable import OptimizableCollection
 from desc.objectives import (

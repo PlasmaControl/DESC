@@ -105,20 +105,19 @@ class QuadcoilProxy(_Objective):
         warnings.
     plasma_N_phi : int, optional, default=eq.N_grid
         The plasma toroidal quadrature resolution.
-    metric_name : str or tuple of str, default=None
+    metric_name : str or tuple of str, default="f_obj"
         The coil property(ies) to measure as the value of the proxy.
-        Uses the normalized objective by default.
+        Uses the normalized QUADCOIL objective by default.
         We strongly advise using the default value to ensure accurate adjoint
         differentiation.
-    metric_target : scalar or ndarray, default=None
+    metric_target : scalar or ndarray, default=0.0
         In addition to target, bounds and weight,
         The QUADCOIL proxy objective allows the user to set weights and
         targets for each objective terms individually besides using ``target``
         and ``bounds`` that comes with other DESC objectives.
         Targets of each property. 0 by default.
-    metric_weight : scalar or ndarray, default=None
-        Weights of each property. Reproduces the normalized objective function
-        in the subproblem by default.
+    metric_weight : scalar or ndarray, default=1.0
+        Weights of each property. 1 by default.
     vacuum : bool, optional, default=False
         Whether to enable Bnormal contributions from plasma current.
     verbose : int, optional, default=0

@@ -1,0 +1,20 @@
+{
+  "case": "case_3_free_boundary",
+  "wall_time_s": 176.2439156299224,
+  "dofs": 4418,
+  "dim_f": 867,
+  "call_log": [],
+  "objective_breakdown": [
+    {
+      "name": "Boundary error",
+      "dim_f": 867,
+      "dim_x": 4418,
+      "median_ms": 939.600310055539,
+      "times_ms": [
+        942.3153079114854,
+        936.9798739207909,
+        939.600310055539
+      ]
+    }
+  ]
+}

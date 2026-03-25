@@ -1,0 +1,53 @@
+{
+  "case": "case_1_coil_auglag",
+  "wall_time_s": 96.8389635059284,
+  "dofs": 3561,
+  "dim_f": 770,
+  "call_log": [],
+  "objective_breakdown": [
+    {
+      "name": "QuadraticFlux",
+      "dim_f": 81,
+      "dim_x": 3561,
+      "median_ms": 68.8363709487021,
+      "times_ms": [
+        71.33402803447098,
+        68.79924901295453,
+        68.8363709487021
+      ]
+    },
+    {
+      "name": "CoilSetMinDistance",
+      "dim_f": 212,
+      "dim_x": 1272,
+      "median_ms": 317.6636719144881,
+      "times_ms": [
+        318.142095929943,
+        317.6636719144881,
+        317.32861406635493
+      ]
+    },
+    {
+      "name": "FixCoilCurrent",
+      "dim_f": 53,
+      "dim_x": 1272,
+      "median_ms": 2.5067650713026524,
+      "times_ms": [
+        3.4359509591013193,
+        2.5067650713026524,
+        1.8670890713110566
+      ]
+    },
+    {
+      "name": "PlasmaCoilSetDistanceBound",
+      "dim_f": 424,
+      "dim_x": 1272,
+      "median_ms": 77.81625201459974,
+      "times_ms": [
+        83.94808310549706,
+        77.81625201459974,
+        74.52078303322196
+      ]
+    }
+  ]
+}

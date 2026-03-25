@@ -100,19 +100,19 @@ def time_per_objective_jac(obj_fn, x, constants, n_warmup=1, n_trials=3):
     for k, obj in enumerate(obj_fn.objectives):
         thing_idx = obj_fn._things_per_objective_idx[k]
         xi = [xs[i] for i in thing_idx]
-        vi = [jnp.eye(xii.shape[0]) for xii in xi]
         const_k = constants[k]
 
+        # Use jac_scaled directly (avoids tangent vector shape issues with jvp)
         # Warmup to trigger JIT compilation
         for _ in range(n_warmup):
-            out = obj.jvp_scaled(vi, xi, constants=const_k)
+            out = obj.jac_scaled(*xi, constants=const_k)
             jax.block_until_ready(out)
 
         # Timed trials
         times = []
         for _ in range(n_trials):
             t0 = time.perf_counter()
-            out = obj.jvp_scaled(vi, xi, constants=const_k)
+            out = obj.jac_scaled(*xi, constants=const_k)
             jax.block_until_ready(out)
             times.append(time.perf_counter() - t0)
 

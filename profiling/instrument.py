@@ -87,8 +87,8 @@ def time_per_objective_jac(obj_fn, x, constants, n_warmup=1, n_trials=3):
     results : list of dict
         One dict per objective with keys:
         - "name": str
-        - "median_s": float (median wall time in seconds)
-        - "times_s": list of float (all trial times)
+        - "median_ms": float (median wall time in milliseconds)
+        - "times_ms": list of float (all trial times in milliseconds)
     """
     import jax
     import jax.numpy as jnp
@@ -116,11 +116,14 @@ def time_per_objective_jac(obj_fn, x, constants, n_warmup=1, n_trials=3):
             jax.block_until_ready(out)
             times.append(time.perf_counter() - t0)
 
+        total_dim_x = sum(xii.shape[0] for xii in xi)
         results.append(
             {
-                "name": type(obj).__name__,
-                "median_s": float(np.median(times)),
-                "times_s": [float(t) for t in times],
+                "name": getattr(obj, "name", type(obj).__name__),
+                "dim_f": obj.dim_f,
+                "dim_x": total_dim_x,
+                "median_ms": float(np.median(times)) * 1000,
+                "times_ms": [float(t) * 1000 for t in times],
             }
         )
 
@@ -191,7 +194,7 @@ def print_objective_breakdown(results, label=""):
         print("  (no results)")
         return
 
-    total_median = sum(r["median_s"] for r in results)
+    total_median = sum(r["median_ms"] for r in results)
     name_width = max(len(r["name"]) for r in results)
     name_width = max(name_width, 20)
 
@@ -200,8 +203,8 @@ def print_objective_breakdown(results, label=""):
     print("  " + "-" * (name_width + 22))
 
     for r in results:
-        share = 100.0 * r["median_s"] / total_median if total_median > 0 else 0.0
-        print(f"  {r['name']:<{name_width}}  {r['median_s']:>10.4f}  {share:>6.1f}%")
+        share = 100.0 * r["median_ms"] / total_median if total_median > 0 else 0.0
+        print(f"  {r['name']:<{name_width}}  {r['median_ms']:>10.4f}  {share:>6.1f}%")
 
     print("  " + "-" * (name_width + 22))
     print(f"  {'TOTAL':<{name_width}}  {total_median:>10.4f}  {'100.0%':>7}")

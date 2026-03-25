@@ -676,9 +676,9 @@ class QuadcoilProxy(_Objective):
 
         """
         # We prohibit the user from providing constants
-        return self.compute_full(*all_params, full_mode=False)
+        return self.solve_quadcoil(*all_params, full_mode=False)
 
-    def compute_full(self, *all_params, full_mode=True):
+    def solve_quadcoil(self, *all_params, full_mode=True):
         """Calls QUADCOIL.
 
         Takes the same parameters as compute, but can either output the
@@ -849,7 +849,7 @@ class QuadcoilProxy(_Objective):
             plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
         return plasma_dofs
 
-    def compute_surface_current_field(self, *all_params):
+    def solve_quadcoil_surface_current_field(self, *all_params):
         """Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
 
         Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
@@ -868,7 +868,7 @@ class QuadcoilProxy(_Objective):
         # Prevents circular import
         from desc.magnetic_fields import FourierCurrentPotentialField
 
-        _, quadcoil_qp, quadcoil_dofs, _ = self.compute_full(
+        _, quadcoil_qp, quadcoil_dofs, _ = self.solve_quadcoil(
             *all_params, full_mode=True
         )
         quadcoil_kwargs_temp = {

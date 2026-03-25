@@ -551,7 +551,7 @@ class TestObjectiveFunction:
                 vacuum=vacuum,
             )
             objective_nescoil.build()
-            scf_nescoil = objective_nescoil.compute_surface_current_field(
+            scf_nescoil = objective_nescoil.solve_quadcoil_surface_current_field(
                 # Like Objective.compute(), the xs of the equilibrium
                 # must be passed in as the *arg.
                 *objective_nescoil.xs(quadcoil_test_eq)
@@ -638,7 +638,7 @@ class TestObjectiveFunction:
                 vacuum=vacuum,
             )
             objective_regcoil.build()
-            scf_regcoil = objective_regcoil.compute_surface_current_field(
+            scf_regcoil = objective_regcoil.solve_quadcoil_surface_current_field(
                 # Like Objective.compute(), the xs of the equilibrium
                 # must be passed in as the *arg.
                 *objective_regcoil.xs(quadcoil_test_eq)

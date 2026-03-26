@@ -20,6 +20,7 @@ from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.io import load
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
+from desc.transform import Transform
 
 
 # Make or load an ultra high aspect-ratio tokamak (essentially a screw pinch)
@@ -177,20 +178,42 @@ print("coordinates mapped")
 print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
 
+n_surf = n_theta * n_zeta
+
+# Surface nodes (rho=1) are the last n_surf entries of rtz_nodes, in AGNI C order
+# (flat index = theta_i * n_zeta + zeta_k).
+# FFT/BIEST requires DESC Fortran order (flat index = theta_i + n_theta * zeta_k),
+# so we permute before building the surface grid.
+surface_nodes_agni = np.array(rtz_nodes[-n_surf:])
+desc_flat = np.arange(n_surf)
+perm_to_desc = (desc_flat % n_theta) * n_zeta + (desc_flat // n_theta)
+rtz_surface_grid = Grid(surface_nodes_agni[perm_to_desc], NFP=NFP)
+
+# PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
+pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
+
 print("computing phi matrix")
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
 print(eq.surface)
 if os.path.exists(save_path + phi_save_name):
     phi_matrix = np.load(save_path + phi_save_name)
 else:
-    data = eq.surface.compute(
-        ["phi_matrix"],
-        grid,
+    # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
+    phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
+    data_phi = eq.compute(
+        ["phi_matrix_pest"],
+        rtz_surface_grid,
+        pest_grid=pest_grid,
         problem="exterior Neumann",
         chunk_size=chunk_size,
-        basis="xyz"
+        transforms={"Phi": phi_transform},
     )
-    phi_matrix = data["phi_matrix"] # Sign convention now fixed in compute funcion
+    # phi_matrix_pest is in DESC Fortran order (theta fastest).
+    # Reorder to AGNI C order (zeta fastest) expected by the stability solver.
+    phi_matrix_desc = np.array(data_phi["phi_matrix_pest"])
+    phi_matrix = phi_matrix_desc.reshape(
+        n_theta, n_zeta, n_theta, n_zeta, order="F"
+    ).reshape(n_surf, n_surf, order="C")
 
     np.save(save_path + phi_save_name, phi_matrix)
 

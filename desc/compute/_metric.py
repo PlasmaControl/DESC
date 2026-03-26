@@ -104,6 +104,26 @@ def _e_theta_x_e_zeta_norm(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|e_theta_PEST x e_phi|r,v|",
+    label="|\\mathbf{e}_{\\vartheta} \\times \\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant rho surface in PEST coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_PEST x e_phi|r,v"],
+)
+def _e_theta_PEST_x_e_phi_rv_norm(params, transforms, profiles, data, **kwargs):
+    data["|e_theta_PEST x e_phi|r,v|"] = safenorm(
+        data["e_theta_PEST x e_phi|r,v"], axis=-1
+    )
+    return data
+
+
+@register_compute_fun(
     name="|e_theta x e_zeta|_r",
     label="\\partial_{\\rho} |\\mathbf{e}_{\\theta} \\times \\mathbf{e}_{\\zeta}|",
     units="m^{2}",

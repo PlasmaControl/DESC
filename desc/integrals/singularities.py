@@ -613,7 +613,7 @@ def singular_integral(
         in ``kernel.eval_keys``.
         Vector data should be in rpz basis.
     source_data : dict
-        Dictionary of data at source points (``interpolatr.source_grid``). Keys
+        Dictionary of data at source points (``interpolator.source_grid``). Keys
         should be those required by kernel as ``kernel.keys``.
         Vector data should be in rpz basis.
     interpolator : _BIESTInterpolator

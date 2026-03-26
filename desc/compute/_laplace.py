@@ -71,8 +71,9 @@ def _D_plus_half(
     basis=None,
     chunk_size=None,
     prune_data=True,
+    pest_coords=False,
     _midpoint_quad=False,
-    _D_quad=False,
+    _D_quad=False,  
 ):
     """Compute (D[Φ] + Φ/2)(x).
 
@@ -92,7 +93,9 @@ def _D_plus_half(
     _D_quad : bool
         Set to ``True`` to perform double layer potential quadrature without removing
         singularities. Default is ``False``. This is intended for developer use.
-
+    pest_coords : bool
+        Set to True to do the entire computation in PEST coordinates. Interpolator 
+        grid must be in PEST coordinates, and fft2able.
     """
     if basis is None:
         ndim = 1
@@ -151,6 +154,7 @@ def _lsmr_compute_potential(
     basis,
     problem,
     chunk_size=None,
+    pest_coords=False,
     _midpoint_quad=False,
     _D_quad=False,
     **kwargs,
@@ -237,6 +241,7 @@ def _compute_single_layer_matrix(
     # B0*n is not in source_data_p (no specific B_n to prune); supply it per-column.
     source_no_Bn = {k: v for k, v in source_data_p.items() if k != "B0*n"}
 
+    @jit
     def col(b_n):
         return singular_integral(
             eval_data_p,
@@ -259,6 +264,7 @@ def _lsmr_compute_phi_matrix(
     basis,
     problem,
     chunk_size=None,
+    pest_coords=False,
     _midpoint_quad=False,
     _D_quad=False,
 ):
@@ -289,9 +295,15 @@ def _lsmr_compute_phi_matrix(
         Matrix satisfying Phi (periodic) = A @ B_n.
     """
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
-
+    
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
+
+    if pest_coords:
+        assert source_grid.can_fft2, f"pest_grid must have can_fft2=True, got {source_grid}"
+        assert potential_grid.can_fft2, (
+            f"potential pest_grid must have can_fft2=True, got {potential_grid}"
+        )
 
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
@@ -458,6 +470,71 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="interpolator_pest",
+    label="",
+    units="",
+    units_long="",
+    description="Interpolator for singular integrals in PEST coordinates.",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    data=["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    q="int : Order of quadrature in polar domain.",
+    pest_grid="""Grid :
+        Grid in PEST (rvp) coordinates with ``can_fft2=True`` to use as the
+        source grid for the singular integral interpolator.
+        Must have the same number of poloidal and toroidal nodes as the
+        main equilibrium grid, with nodes at the same physical surface points.
+        """,
+    potential_grid="""LinearGrid :
+        Grid to evaluate potential on boundary.
+        If not given, defaults to ``pest_grid``.
+        """,
+    warn_fft="""bool :
+        Whether to warn if the interpolation will be lossy. Default is ``True``.
+        """,
+)
+def _interpolator_pest(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    rtz_grid = transforms["grid"]
+    pest_grid = kwargs["pest_grid"]
+    potential_grid = kwargs.get("potential_grid", pest_grid)
+    # Relabel PEST basis vectors to standard names expected by get_interpolator
+    # (_best_ratio uses e_theta, e_zeta, |e_theta x e_zeta|).
+    source_data = dict(data)
+    source_data["e_theta"] = data["e_theta_PEST"]
+    source_data["e_zeta"] = data["e_phi|r,v"]
+    source_data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
+    data["interpolator_pest"] = get_interpolator(
+        potential_grid, pest_grid, source_data, **kwargs
+    )
+
+    if potential_grid == pest_grid:
+        data["potential data"] = apply(data, subset=("R", "phi", "Z"))
+    else:
+        dt = 2 * jnp.pi / pest_grid.num_theta
+        dz = 2 * jnp.pi / pest_grid.num_zeta / pest_grid.NFP
+
+        def fun(x):
+            return rfft_interp2d(
+                rtz_grid.meshgrid_reshape(x, "rtz")[0],
+                potential_grid.num_theta,
+                potential_grid.num_zeta,
+                dx=dt,
+                dy=dz,
+            ).ravel(order="F")
+
+        data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
+        zeta = potential_grid.nodes[:, 2]
+        data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
+
+    return data
+
+
+@register_compute_fun(
     name="potential data",
     label="potential data",
     units="~",
@@ -595,6 +672,66 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"].basis,
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
+        _midpoint_quad=kwargs.get("_midpoint_quad", False),
+        _D_quad=kwargs.get("_D_quad", False),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="phi_matrix_pest",
+    label="A_{PEST}",
+    units="T m^2",
+    units_long="Tesla meter squared",
+    description="Matrix A mapping B·n on the boundary to the periodic scalar potential "
+    "in PEST (straight field line) coordinates. "
+    "Phi (periodic) = A @ B_n.",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    data=list(
+        (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
+        | (set(_kernel_monopole.keys) - {"B0*n"})
+        - {"e_theta x e_zeta", "|e_theta x e_zeta|"}
+    )
+    + [
+        "e_theta_PEST x e_phi|r,v",
+        "|e_theta_PEST x e_phi|r,v|",
+        "interpolator_pest",
+    ],
+    resolution_requirement="tz",
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    public=False,
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    pest_grid="""Grid :
+        Grid in PEST (rvp) coordinates with ``can_fft2=True``.
+        Passed through to ``interpolator_pest``.
+        """,
+    chunk_size=(_doc["chunk_size"] +
+    "Note that when computing the phi matrix, the chunk size is used twice," +
+    "so that the overall memory usage scales as chunk_size squared."),
+    _midpoint_quad=_doc["_midpoint_quad"],
+    _D_quad=_doc["_D_quad"],
+)
+def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    # Relabel PEST basis vectors to the standard key names expected by the
+    # BIEST kernels (_kernel_monopole, _kernel_dipole_plus_half).
+    # The same relabeling was applied in _interpolator_pest, so the data
+    # passed here is consistent with what the interpolator was built with.
+    data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
+    data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
+
+    data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
+        data.get("potential data", data),
+        data,
+        data["interpolator_pest"],
+        transforms["Phi"].basis,
+        problem=kwargs["problem"],
+        chunk_size=kwargs.get("chunk_size", None),
+        pest_coords=True,
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
     )

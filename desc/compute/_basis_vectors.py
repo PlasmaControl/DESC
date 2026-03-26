@@ -2731,6 +2731,24 @@ def _e_sub_phi_rv(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST x e_phi|r,v",
+    label="\\mathbf{e}_{\\vartheta} \\times \\mathbf{e}_{\\phi} |_{\\rho, \\vartheta}",
+    units="m^{2}",
+    units_long="square meters",
+    description="ρ surface area vector in PEST (straight field line) coordinates",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_PEST", "e_phi|r,v"],
+)
+def _e_theta_PEST_x_e_phi_rv(params, transforms, profiles, data, **kwargs):
+    data["e_theta_PEST x e_phi|r,v"] = cross(data["e_theta_PEST"], data["e_phi|r,v"])
+    return data
+
+
+@register_compute_fun(
     name="e_rho|v,p",
     label="\\mathbf{e}_{\\rho} |_{\\vartheta, \\phi}",
     units="m",

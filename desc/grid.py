@@ -267,7 +267,7 @@ class _Grid(IOAble, ABC):
         return self.__dict__.setdefault(
             "_can_fft2", self.is_meshgrid and self.fft_poloidal and self.fft_toroidal
         )
-
+    
     @property
     def coordinates(self):
         """Coordinates specified by the nodes.

@@ -759,6 +759,8 @@ def get_transforms(  # noqa: C901
                             p == "desc.magnetic_fields._laplace.SourceFreeField"
                             or p
                             == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                            or p
+                            == "desc.equilibrium.equilibrium.Equilibrium"
                         ),
                         method=method,
                     )
@@ -772,6 +774,8 @@ def get_transforms(  # noqa: C901
                     and (
                         p == "desc.magnetic_fields._laplace.SourceFreeField"
                         or p == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                        or p
+                        == "desc.equilibrium.equilibrium.Equilibrium"
                     ),
                     method=method,
                 )

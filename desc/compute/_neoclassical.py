@@ -10,7 +10,7 @@ from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..utils import safediv
 from .data_index import register_compute_fun
-from desc.objectives.utils import softmax
+from desc.objectives.utils import softmax, softmin
 from desc.grid import Grid
 
 from ..integrals.quad_utils import chebgauss2
@@ -635,7 +635,7 @@ def _resonance_physics(
     alpha_drift_out, s_drift_out, vtau_out,
     iotas, rhos, rho_res, KE_frac, nfp, M, N,
     res_arr, q_arr, eta_vals, eta_res,
-    f_q_conservative, weight_method, Delta_Omega, wd_blur, fill_value, stab_sacrifice,
+    weight_method, Delta_Omega, wd_blur, fill_value, stab_sacrifice, cropping_DOmega,
 ):
     """Compute resonance frequencies, weights, island widths, and f_res.
 
@@ -672,8 +672,6 @@ def _resonance_physics(
         Uniform eta grid on [0, 2π).
     eta_res : float
         Grid spacing for eta.
-    f_q_conservative : bool
-        Whether to use conservative Fourier coefficient estimate.
     weight_method : str
         ``"linear"`` or ``"bump"`` resonance weighting.
     Delta_Omega : float or None
@@ -690,7 +688,7 @@ def _resonance_physics(
         Dictionary with keys: ``f_res``, ``Omega``, ``omega_bounce_avg``,
         ``eta_drift_avg``, ``omega_bounce``, ``eta_drift``,
         ``Omega_prime_s``, ``res_weight``, ``f_q_c``, ``f_q_s``,
-        ``f_q_abs``, ``Delta_s``, ``f_q_conservative``, ``s_res``,
+        ``f_q_abs``, ``Delta_s``, ``s_res``,
         ``f_res``.
     """
     m_alpha = 6.6446573450e-27
@@ -771,16 +769,16 @@ def _resonance_physics(
 
     # Resonance weights
     Omega_broad = Omega[..., None]
-    res_broad = res_arr[None, None, None, :]
+    res_broad = res_arr[None, None, None, :] # (rho, Bcrit, well, res)
 
     # Indices are valid if Omega_prime_s is valid and Omega is valid. 
     valid_prime = valid & _is_valid_value(Omega_prime_s, fill_value)
 
     if weight_method == "bump":
         if Delta_Omega is None:
-            Omega_safe_bump = jnp.where(valid, Omega, 0.0)
-            Omega_prev_b = Omega_safe_bump[:-1, :, :]
-            Omega_next_b = Omega_safe_bump[1:, :, :]
+            Omega_safe_bump = jnp.where(valid, Omega, 0.0) # (rho, pitch, well)
+            Omega_prev_b = Omega_safe_bump[:-1, :, :] # (rho-1, pitch, well)
+            Omega_next_b = Omega_safe_bump[1:, :, :] # (rho-1, pitch, well)
             valid_pair = jnp.logical_and(valid[:-1, :, :], valid[1:, :, :])
             domega_arr = jnp.where(
                 valid_pair,
@@ -789,20 +787,28 @@ def _resonance_physics(
             )  # (rho-1, pitch, well)
             Delta_Omega_val = (
                 wd_blur * softmax(domega_arr, alpha=50, axis=0) / 2.0
-            )[None, :, :, None]
+            )[None, :, :, None] # (1 (rho), pitch, well, 1 (res))
+            if cropping_DOmega:
+                # Delta_Omega_val needs to be cropped if resolution is too low or Omega_eta shear is too high
+                Omega_max = softmax(Omega_safe_bump, alpha=50, axis=0)[None, :, :, None] # (1 (rho), pitch, well, 1 (res))
+                # Omega_max = jnp.broadcast_to(Omega_max[None, :, :, None], Delta_Omega_val.shape) # (1 (rho), pitch, well, 1 (res))
+                Delta_Omega_val_max = 0.1 * Omega_max # DeltaOmega < 10% of maximum Omega
+                Delta_Omega_val_min = 0.01 * Omega_max # DeltaOmega > 1% of maximum Omega
+                Delta_Omega_val = jnp.where(Delta_Omega_val > Delta_Omega_val_max,Delta_Omega_val_max,Delta_Omega_val)
+                Delta_Omega_val = jnp.where(Delta_Omega_val < Delta_Omega_val_min,Delta_Omega_val_min,Delta_Omega_val)
         else:
             Delta_Omega_val = Delta_Omega
         a = res_broad + Delta_Omega_val
         b = res_broad - Delta_Omega_val
-        in_interval = (Omega_broad >= b) & (Omega_broad <= a)
+        in_interval = (Omega_broad >= b) & (Omega_broad <= a) # (rho, Bcrit, well, res) - array implicitly broadcasts
         denom = (Omega_broad - b) * (Omega_broad - a)
         exp_arg = safediv(
-            (2.0 * Delta_Omega_val) ** 2, denom, fill=-1e10
+            (2.0 * Delta_Omega_val) ** 2, denom, fill=-1e10 # Delta_Omega_val implicitly broadcasts to denom.shape
         )
         C_norm = safediv(71.12518788738504, Delta_Omega_val, fill=0.0)
-        w_raw = rho_res * C_norm * jnp.abs(dOmega_drho[..., None]) * jnp.exp(exp_arg)
+        w_raw = rho_res * C_norm * jnp.abs(dOmega_drho[..., None]) * jnp.exp(exp_arg) # everything is implicitly broadcast to exp_arg.shape
         # Weight is non-zero only if in interval and valid 
-        res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0)
+        res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0) # everything is implicitly broadcast to in_interval.shape which is (rho, Bcrit, well, res)
         # Normalize res_weight to sum to 1 
         # res_weight = safediv(res_weight, res_weight.sum(axis=0), fill=0.0)
     else:
@@ -847,27 +853,16 @@ def _resonance_physics(
     # Only perform FT if all eta points are valid. 
     ft_integrand = s_drift * tau_bounce
 
-    if f_q_conservative:
-        f_q_abs_sq = (eta_res / (4 * jnp.pi)) * jnp.sum(
-            ft_integrand**2, axis=1
-        )
-        f_q_abs = jnp.sqrt(jnp.maximum(f_q_abs_sq, 1e-30))
-        n_res = res_arr.shape[0]
-        f_q_abs = jnp.broadcast_to(
-            f_q_abs[..., None], (*f_q_abs.shape, n_res)
-        )
-        f_q_abs_sq = jnp.broadcast_to(f_q_abs_sq[..., None], (*f_q_abs_sq.shape, n_res))
-    else:
-        phase = q_arr[None, :] * eta_vals[:, None]
-        cos_phase = jnp.cos(phase)
-        sin_phase = jnp.sin(phase)
-        ft_cos = ft_integrand[..., None] * cos_phase[None, :, None, None, :]
-        ft_sin = ft_integrand[..., None] * sin_phase[None, :, None, None, :]
-        ft_prefactor = eta_res / jnp.pi
-        f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
-        f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
-        f_q_abs = 0.5 * jnp.sqrt(jnp.maximum(f_q_c**2 + f_q_s**2, 1e-30))
-        f_q_abs_sq = 0.5**2 * (f_q_c**2 + f_q_s**2)
+    phase = q_arr[None, :] * eta_vals[:, None]
+    cos_phase = jnp.cos(phase)
+    sin_phase = jnp.sin(phase)
+    ft_cos = ft_integrand[..., None] * cos_phase[None, :, None, None, :]
+    ft_sin = ft_integrand[..., None] * sin_phase[None, :, None, None, :]
+    ft_prefactor = eta_res / jnp.pi
+    f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
+    f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
+    f_q_abs = 0.5 * jnp.sqrt(jnp.maximum(f_q_c**2 + f_q_s**2, 1e-30))
+    f_q_abs_sq = 0.5**2 * (f_q_c**2 + f_q_s**2)
 
     # Filter FT results to valid points. 
     f_q_abs = jnp.where(valid_prime[..., None], f_q_abs, 0.0)
@@ -903,9 +898,9 @@ def _resonance_physics(
         'f_q_abs': f_q_abs,  # (rho, pitch, well, res)
         'Delta_s': Delta_s,  # (pitch, well, res), rho-weighted diagnostic
         'Delta_s_prof': Delta_s_profile,  # (rho, pitch, well, res)
-        'f_q_conservative': f_q_conservative,  # scalar bool
         's_res': s_res,  # (pitch, well, res), rho-weighted resonance location
         'valid_prime': valid_prime,  # (rho, pitch, well)
+        # 'Delta_Omega_val': Delta_Omega_val,  # (rho, pitch, well, res)
     }
 
 
@@ -958,7 +953,6 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     pitch_batch_size = kwargs.get("pitch_batch_size", 1)
     num_eta = kwargs.get("num_eta", None)
     DEBUG = kwargs.get("DEBUG", False)
-    f_q_conservative = kwargs.get("f_q_conservative", False)
     weight_method = kwargs.get("weight_method", "linear")
     Delta_Omega = kwargs.get("Delta_Omega", None)
     wd_blur = kwargs.get("wd_blur", 1.25)
@@ -966,6 +960,7 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
     eq = kwargs.get("eq", None)
     zeta = kwargs.get("zeta", None)
     stab_sacrifice = kwargs.get("stab_sacrifice", False)
+    cropping_DOmega = kwargs.get("cropping_DOmega",False)
 
     # --- 0. Build 3D grids and evaluate field data on them ---
     base_grid = transforms["grid"]
@@ -1076,8 +1071,8 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
         alpha_drift_out, s_drift_out, vtau_out,
         iotas, rhos, rho_res, KE_frac, nfp, M, N,
         res_arr, q_arr, eta_vals, eta_res,
-        f_q_conservative, weight_method, Delta_Omega, wd_blur, fill_value,
-        stab_sacrifice,
+        weight_method, Delta_Omega, wd_blur, fill_value,
+        stab_sacrifice, cropping_DOmega,
         )
 
     # --- 3. Phase-space average on the PSA grid (uniform in alpha) ---

@@ -512,12 +512,12 @@ class TrappedResonance(_Objective):
         verbose=False,
         pitch_batch_size=1,
         surf_batch_size=1,
-        f_q_conservative=False,
         weight_method="linear",
         Delta_Omega=None,
         fill_value=11,
         wd_blur=1.25,
         stab_sacrifice=False,
+        cropping_DOmega=False,
     ):
         if target is None and bounds is None:
             target = 1e-8
@@ -553,12 +553,12 @@ class TrappedResonance(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "num_transit": num_transit,
-            "f_q_conservative": f_q_conservative,
             "weight_method": weight_method,
             "Delta_Omega": Delta_Omega,
             "fill_value": fill_value,
             "wd_blur": wd_blur,
             "stab_sacrifice": stab_sacrifice,
+            "cropping_DOmega": cropping_DOmega,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "f_tr2"

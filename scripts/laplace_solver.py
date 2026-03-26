@@ -106,7 +106,8 @@ assert surface.NFP == 1
 field = SourceFreeField(surface, M, N)
 
 # NOTE: equilibrium LCFS must be ForceFreeField object 
-if os.path.exists(save_path + eq_save_name):
+override = True
+if os.path.exists(save_path + eq_save_name) and (not override):
     eq = load(save_path + eq_save_name)
 else:
     eq = Equilibrium(
@@ -125,6 +126,10 @@ else:
 # Evaluate stability using Rahul's method
 # The rest of the script is basically unchanged from what Rahul sent me
 # resolution for low-res solve
+
+
+# PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
+pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
 
 # This will probably OOM with the matrix-full method
 print("making input grid and diffmats")
@@ -147,10 +152,12 @@ D0, W0 = legendre_diffmat(n_rho)
 D0 = D0 * scale_vector
 W0 = W0 * scale_vector_inv
 
-theta = jnp.linspace(0.0, 2 * jnp.pi, n_theta, endpoint=False)
+theta = pest_grid.unique_theta
+print(theta)
 D1, W1 = fourier_diffmat(n_theta)
 
-zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
+zeta = pest_grid.unique_zeta
+print(zeta)
 D2, W2 = fourier_diffmat(n_zeta)
 
 grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
@@ -189,12 +196,10 @@ desc_flat = np.arange(n_surf)
 perm_to_desc = (desc_flat % n_theta) * n_zeta + (desc_flat // n_theta)
 rtz_surface_grid = Grid(surface_nodes_agni[perm_to_desc], NFP=NFP)
 
-# PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
-pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
-
 print("computing phi matrix")
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
 print(eq.surface)
+print(eq.surface.surface)
 if os.path.exists(save_path + phi_save_name):
     phi_matrix = np.load(save_path + phi_save_name)
 else:

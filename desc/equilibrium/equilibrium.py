@@ -1882,6 +1882,11 @@ class Equilibrium(IOAble, Optimizable):
     def iota(self):
         """Profile: Rotational transform (iota) profile."""
         return self._iota
+    
+    @property
+    def Phi_basis(self):
+        """DoubleFourierSeries: Basis for periodic part of surface potential."""
+        return getattr(self.surface, "Phi_basis", None)
 
     @iota.setter
     def iota(self, new):

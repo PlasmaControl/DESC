@@ -1,6 +1,7 @@
 import numbers
 import warnings
 
+import jax
 import numpy as np
 from scipy.constants import mu_0
 
@@ -889,7 +890,11 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
-    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+    _static_attrs = _Objective._static_attrs + [
+        "_dist_chunk_size",
+        "_use_softmin",
+        "_n_neighbors",
+    ]
 
     _scalar = False
     _units = "(m)"
@@ -911,6 +916,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        n_neighbors=None,
     ):
         from desc.coils import CoilSet
 
@@ -920,6 +926,7 @@ class CoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
+        self._n_neighbors = n_neighbors
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -984,18 +991,36 @@ class CoilSetMinDistance(_Objective):
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )
+        n_coils = pts.shape[0]
 
-        def body(k):
-            # pts shape (ncoils, num_nodes, 3)
-            # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
-            # dist[i,j,n] is the distance from the jth point on the kth coil
-            # to the nth point on the ith coil
-            coil_pts = pts[k]
-            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
-            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
-            if self._use_softmin:
-                return softmin(dist, self._softmin_alpha)
-            return jnp.min(dist)
+        if self._n_neighbors is not None and self._n_neighbors < n_coils - 1:
+            # Pruned: only compute distances to K nearest neighbors
+            K = self._n_neighbors
+            centroids = jnp.mean(pts, axis=1)  # (n_coils, 3)
+            centroid_dists = safenorm(centroids[:, None] - centroids[None, :], axis=-1)
+            centroid_dists = centroid_dists.at[jnp.diag_indices(n_coils)].set(jnp.inf)
+
+            def body(k):
+                # Select K nearest neighbors (not differentiated)
+                neighbor_idx = jax.lax.stop_gradient(jnp.argsort(centroid_dists[k])[:K])
+                coil_pts = pts[k]
+                neighbor_pts = pts[neighbor_idx]
+                dist = safenorm(
+                    coil_pts[None, :, None] - neighbor_pts[:, None], axis=-1
+                )
+                if self._use_softmin:
+                    return softmin(dist, self._softmin_alpha)
+                return jnp.min(dist)
+
+        else:
+            # Original: full pairwise distances
+            def body(k):
+                coil_pts = pts[k]
+                other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+                dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+                if self._use_softmin:
+                    return softmin(dist, self._softmin_alpha)
+                return jnp.min(dist)
 
         k = jnp.arange(self.dim_f)
         min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)
@@ -2710,7 +2735,9 @@ class SurfaceCurrentRegularization(_Objective):
         self._units = (
             "(A)"
             if self._regularization == "K"
-            else "(A*m)" if self._regularization == "Phi" else "(sqrt(A)*m)"
+            else "(A*m)"
+            if self._regularization == "Phi"
+            else "(sqrt(A)*m)"
         )
 
         super().__init__(

@@ -1253,7 +1253,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         print(D_theta[b_idx, b_idx].shape)
         print(W[b_idx, :].shape)
         print(D_zeta[b_idx, b_idx].shape)
-        A = A.at[b_idx, b_idx](
+        A = A.at[b_idx, b_idx].add(
             _cT(
                 W[b_idx, :]
                 * psi_r_s**3 # this is just for consistency; psi' = 1 here

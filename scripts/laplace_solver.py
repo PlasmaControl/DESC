@@ -199,14 +199,14 @@ if os.path.exists(save_path + phi_save_name):
     phi_matrix = np.load(save_path + phi_save_name)
 else:
     # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
-    phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
+    #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
     data_phi = eq.compute(
         ["phi_matrix_pest"],
         rtz_surface_grid,
         pest_grid=pest_grid,
         problem="exterior Neumann",
         chunk_size=chunk_size,
-        transforms={"Phi": phi_transform},
+        #transforms={"Phi": phi_transform},
     )
     # phi_matrix_pest is in DESC Fortran order (theta fastest).
     # Reorder to AGNI C order (zeta fastest) expected by the stability solver.

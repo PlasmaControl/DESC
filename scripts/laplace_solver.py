@@ -205,7 +205,7 @@ if os.path.exists(save_path + phi_save_name):
 else:
     # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
     #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
-    data_phi = eq.surface.compute(
+    data_phi = eq.compute(
         ["phi_matrix_pest"],
         rtz_surface_grid,
         pest_grid=pest_grid,

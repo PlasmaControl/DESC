@@ -702,7 +702,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         "interpolator_pest",
     ],
     resolution_requirement="tz",
-    parameterization="desc.magnetic_fields._laplace.SourceFreeField",
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     pest_grid="""Grid :

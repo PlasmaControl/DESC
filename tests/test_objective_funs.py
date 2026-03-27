@@ -3291,6 +3291,7 @@ class TestComputeScalarResolution:
         GenericObjective,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -3400,6 +3401,39 @@ class TestComputeScalarResolution:
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        eq = get("reactor_QA")
+        f = np.zeros(4, dtype=float)
+        for i, res in enumerate([0.75, 1.0, 1.25, 1.5]):
+            source_grid = QuadratureGrid(
+                L=max(2, int(round(eq.L_grid * res))),
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+            )
+            surface_grid = LinearGrid(
+                rho=1.0,
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+                sym=False,
+                endpoint=True,
+            )
+            obj = ObjectiveFunction(
+                NeutronWallLoading(
+                    eq=eq,
+                    offset=0.1,
+                    source_grid=source_grid,
+                    surface_grid=surface_grid,
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
@@ -3784,6 +3818,7 @@ class TestObjectiveNaNGrad:
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -3867,6 +3902,39 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), "heating power"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        # Using half the resolution to speed up testing.
+        eq = get("reactor_QA")
+        source_grid = QuadratureGrid(
+            L=max(2, eq.L_grid // 2),
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+        )
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+        obj = ObjectiveFunction(
+            NeutronWallLoading(
+                eq=eq,
+                offset=0.1,
+                source_grid=source_grid,
+                surface_grid=surface_grid,
+                deriv_mode="rev",
+            ),
+            use_jit=False,
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "neutron wall loading"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):

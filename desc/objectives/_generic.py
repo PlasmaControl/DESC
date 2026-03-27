@@ -924,7 +924,7 @@ class DeflationOperator(_Objective):
             else:
                 self._is_not_none_mask.append(1.0)
 
-        self._is_not_none_mask = np.array(self._is_not_none_mask)
+        self._is_not_none_mask = np.array(self._is_not_none_mask, dtype=bool)
 
         if (
             self._objective is None and self._bounds is not None

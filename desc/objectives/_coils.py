@@ -2735,9 +2735,7 @@ class SurfaceCurrentRegularization(_Objective):
         self._units = (
             "(A)"
             if self._regularization == "K"
-            else "(A*m)"
-            if self._regularization == "Phi"
-            else "(sqrt(A)*m)"
+            else "(A*m)" if self._regularization == "Phi" else "(sqrt(A)*m)"
         )
 
         super().__init__(

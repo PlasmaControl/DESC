@@ -831,17 +831,23 @@ class PlasmaVesselDistance(_Objective):
 
 
 class NeutronWallLoading(_Objective):
-    """Compute neutron wall loading (NWL) on a constant-offset surface.
+    """Compute neutron wall loading (NWL) on a wall surface.
 
-    Computes the neutron wall loading (MW/m²) on a surface obtained by offsetting the
-    equilibrium boundary surface by a constant distance in the surface-normal
-    direction.
+    Computes the neutron wall loading (MW/m²) on a wall surface. If ``surface`` is
+    ``None``, the wall is obtained by offsetting the equilibrium boundary surface by a
+    constant distance in the surface-normal direction. If ``surface`` is provided, it
+    is treated directly as the wall.
 
     Notes
     -----
-    - The offset surface is recomputed every evaluation using
+    - The conformal wall surface is recomputed every evaluation using
       :func:`desc.geometry.surface._constant_offset_surface` so that the objective
-      remains differentiable with respect to the equilibrium degrees of freedom.
+      remains differentiable with respect to the equilibrium degrees of freedom when
+      using the conformal-wall method.
+    - If ``surface`` is ``None``, the wall surface defaults to a constant-offset
+      surface of
+      ``eq.surface``. In that case the wall varies together with the equilibrium
+      boundary.
     - The volume integral is performed on ``source_grid``. By default this uses a
       :class:`~desc.grid.QuadratureGrid`, which is appropriate for volume integrals.
 
@@ -849,16 +855,24 @@ class NeutronWallLoading(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
+    surface : Surface, optional
+        Wall surface on which the loading is evaluated. If ``None``, a conformal wall
+        is constructed from ``eq.surface`` using ``offset``.
     offset : float, optional
-        Constant offset distance (m) from ``eq.surface`` to the evaluation surface.
+        Constant offset distance (m) used only when ``surface`` is ``None``.
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate source geometry at.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
     surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
+        Defaults to ``LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)``.
     fuel : str, optional
         Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
+    eq_fixed, surface_fixed : bool, optional
+        Whether the eq/surface is fixed or not. If True, the corresponding source
+        or wall-surface data are precomputed, which saves computation during
+        optimization. Both cannot be True. An explicit ``surface`` must be provided
+        unless using the free-eq conformal-wall method ``surface=None``.
 
     """
 
@@ -870,9 +884,14 @@ class NeutronWallLoading(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_data_keys",
         "_equil_data_keys",
+        "_eq",
+        "_eq_fixed",
         "_fuel",
         "_offset",
+        "_surface",
         "_surface_data_keys",
+        "_surface_fixed",
+        "_surface_from_eq",
     ]
 
     _coordinates = "rtz"
@@ -882,6 +901,7 @@ class NeutronWallLoading(_Objective):
     def __init__(
         self,
         eq,
+        surface=None,
         *,
         offset=0.1,
         source_grid=None,
@@ -895,6 +915,8 @@ class NeutronWallLoading(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="neutron wall loading",
+        eq_fixed=False,
+        surface_fixed=False,
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
@@ -904,12 +926,35 @@ class NeutronWallLoading(_Objective):
             ValueError,
             f"fuel must be one of ['DT'], got {fuel}.",
         )
+        errorif(
+            eq_fixed and surface_fixed, ValueError, "Cannot fix both eq and surface"
+        )
+        errorif(
+            surface is None and eq_fixed and not surface_fixed,
+            ValueError,
+            "An explicit surface must be provided when eq_fixed=True.",
+        )
+        errorif(
+            surface is None and surface_fixed,
+            ValueError,
+            "An explicit surface must be provided when surface_fixed=True.",
+        )
+        self._eq = eq
+        self._surface = eq.surface if surface is None else surface
+        self._surface_from_eq = surface is None
+        self._eq_fixed = eq_fixed
+        self._surface_fixed = surface_fixed
         self._offset = float(offset)
         self._source_grid = source_grid
         self._surface_grid = surface_grid
         self._fuel = fuel
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not surface_fixed and not self._surface_from_eq:
+            things.append(self._surface)
         super().__init__(
-            things=eq,
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -919,6 +964,35 @@ class NeutronWallLoading(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+        )
+
+    def _surface_params_from_eq(self, params, constants):
+        """Compute boundary-surface parameters from equilibrium parameters."""
+        surf_params = self._surface.params_dict.copy()
+        surf_params["R_lmn"] = jnp.dot(constants["A_Rlmn_to_Rb"], params["R_lmn"])
+        surf_params["Z_lmn"] = jnp.dot(constants["A_Zlmn_to_Zb"], params["Z_lmn"])
+        return surf_params
+
+    def _compute_surface_data(self, surface_params, constants):
+        """Compute data on the evaluation wall surface."""
+        if self._surface_from_eq:
+            R_lmn_offset, Z_lmn_offset, _, _ = _constant_offset_surface(
+                self._surface,
+                offset=self._offset,
+                grid=constants["surface_transforms"]["grid"],
+                transforms=constants["offset_fit_transforms"],
+                params=surface_params,
+            )
+            surface_params = surface_params.copy()
+            surface_params["R_lmn"] = R_lmn_offset
+            surface_params["Z_lmn"] = Z_lmn_offset
+
+        return compute_fun(
+            self._surface,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -932,7 +1006,16 @@ class NeutronWallLoading(_Objective):
             Level of output.
 
         """
-        eq = self.things[0]
+        if self._eq_fixed:
+            eq = self._eq
+        else:
+            eq = self.things[0]
+        if self._surface_from_eq or self._surface_fixed:
+            surface = self._surface
+        elif self._eq_fixed:
+            surface = self.things[0]
+        else:
+            surface = self.things[1]
         errorif(
             eq.electron_density is None,
             ValueError,
@@ -1004,22 +1087,10 @@ class NeutronWallLoading(_Objective):
         )
         surface_transforms = get_transforms(
             self._surface_data_keys,
-            obj=eq.surface,
+            obj=surface,
             grid=surface_grid,
             has_axis=surface_grid.axis.size,
         )
-
-        # Precompute the fitting transforms used by _constant_offset_surface.
-        # Recent DESC updates allow passing a pre-built transform (with pinv built),
-        # which avoids rebuilding this data every objective evaluation.
-        offset_fit_transforms = get_transforms(
-            keys=["R", "Z"],
-            obj=eq.surface,
-            grid=surface_grid,
-            jitable=True,
-        )
-        offset_fit_transforms["R"].build_pinv()
-        offset_fit_transforms["Z"].build_pinv()
 
         # compute returns points on the grid of the surface (dim_f = surface_grid.num_nodes)
         # so set quad_weights to the surface grid to avoid it being incorrectly inferred
@@ -1027,25 +1098,52 @@ class NeutronWallLoading(_Objective):
         w = surface_grid.weights
         w *= jnp.sqrt(surface_grid.num_nodes)
 
-        # These let us convert the Fourier-Zernike coefficients to the corresponding
-        # boundary (double-Fourier) surface coefficients, so AD can connect derivatives
-        # through the offset-surface recomputation.
-        from .linear_objectives import BoundaryRSelfConsistency, BoundaryZSelfConsistency
-
-        obj_bdryR = BoundaryRSelfConsistency(eq=eq)
-        obj_bdryZ = BoundaryZSelfConsistency(eq=eq)
-        obj_bdryR.build()
-        obj_bdryZ.build()
-
         self._constants = {
-            "A_Rlmn_to_Rb": jnp.asarray(obj_bdryR._A),
-            "A_Zlmn_to_Zb": jnp.asarray(obj_bdryZ._A),
             "equil_profiles": equil_profiles,
             "equil_transforms": equil_transforms,
-            "offset_fit_transforms": offset_fit_transforms,
             "quad_weights": w,
             "surface_transforms": surface_transforms,
         }
+        if self._surface_from_eq:
+            offset_fit_transforms = get_transforms(
+                keys=["R", "Z"],
+                obj=surface,
+                grid=surface_grid,
+                jitable=True,
+            )
+            offset_fit_transforms["R"].build_pinv()
+            offset_fit_transforms["Z"].build_pinv()
+            self._constants["offset_fit_transforms"] = offset_fit_transforms
+
+            # These let AD connect equilibrium boundary coefficients to the
+            # double-Fourier surface coefficients used by the offset-surface fit.
+            from .linear_objectives import (
+                BoundaryRSelfConsistency,
+                BoundaryZSelfConsistency,
+            )
+
+            obj_bdryR = BoundaryRSelfConsistency(eq=eq)
+            obj_bdryZ = BoundaryZSelfConsistency(eq=eq)
+            obj_bdryR.build()
+            obj_bdryZ.build()
+            self._constants["A_Rlmn_to_Rb"] = jnp.asarray(obj_bdryR._A)
+            self._constants["A_Zlmn_to_Zb"] = jnp.asarray(obj_bdryZ._A)
+        if self._eq_fixed:
+            data_eq = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=self._eq.params_dict,
+                transforms=equil_transforms,
+                profiles=equil_profiles,
+                fuel=self.fuel,
+            )
+            self._constants["data_equil"] = data_eq
+        if self._surface_fixed:
+            surface_data = self._compute_surface_data(
+                self._surface.params_dict,
+                self._constants,
+            )
+            self._constants["surface_data"] = surface_data
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -1053,13 +1151,17 @@ class NeutronWallLoading(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute neutron wall loading.
 
         Parameters
         ----------
-        params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict.
+        params_1 : dict
+            Dictionary of equilibrium degrees of freedom if ``eq_fixed=False``,
+            else the surface degrees of freedom.
+        params_2 : dict
+            Dictionary of surface degrees of freedom. Only needed if both the
+            equilibrium and the surface are varying independently.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants.
@@ -1073,42 +1175,31 @@ class NeutronWallLoading(_Objective):
         if constants is None:
             constants = self.constants
 
-        # Equilibrium data on source (volume) grid.
-        source_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._equil_data_keys,
-            params=params,
-            transforms=constants["equil_transforms"],
-            profiles=constants["equil_profiles"],
-            fuel=self.fuel,
-        )
+        if self._eq_fixed:
+            surface_params = params_1
+            source_data = constants["data_equil"]
+        elif self._surface_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_1
+            surface_params = params_2
 
-        # Recompute an offset surface tied to the equilibrium parameters so AD can
-        # propagate derivatives through the offset construction.
-        surf = self.things[0].surface
-        surf_params = surf.params_dict.copy()
-        surf_params["R_lmn"] = jnp.dot(constants["A_Rlmn_to_Rb"], params["R_lmn"])
-        surf_params["Z_lmn"] = jnp.dot(constants["A_Zlmn_to_Zb"], params["Z_lmn"])
+        if not self._eq_fixed:
+            source_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=eq_params,
+                transforms=constants["equil_transforms"],
+                profiles=constants["equil_profiles"],
+                fuel=self.fuel,
+            )
 
-        R_lmn_offset, Z_lmn_offset, _, _ = _constant_offset_surface(
-            surf,
-            offset=self._offset,
-            grid=constants["surface_transforms"]["grid"],
-            transforms=constants["offset_fit_transforms"],
-            params=surf_params,
-        )
-
-        offset_surf_params = surf_params.copy()
-        offset_surf_params["R_lmn"] = R_lmn_offset
-        offset_surf_params["Z_lmn"] = Z_lmn_offset
-
-        surface_data = compute_fun(
-            surf,
-            self._surface_data_keys,
-            params=offset_surf_params,
-            transforms=constants["surface_transforms"],
-            profiles={},
-        )
+        if self._surface_fixed:
+            surface_data = constants["surface_data"]
+        else:
+            if self._surface_from_eq:
+                surface_params = self._surface_params_from_eq(eq_params, constants)
+            surface_data = self._compute_surface_data(surface_params, constants)
 
         # Store source data in cylindrical coordinates for NFP rotation.
         r_source_rpz = jnp.vstack(

@@ -72,6 +72,7 @@ from desc.objectives import (
     MeanCurvature,
     MercierStability,
     MirrorRatio,
+    NeutronWallLoading,
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
@@ -2153,6 +2154,74 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(p0_out, p1_out)
         np.testing.assert_allclose(p0_in, p1_in)
         np.testing.assert_allclose(q0, q1)
+
+    @pytest.mark.unit
+    def test_neutron_wall_loading_reactor_QA(self):
+        """Test NeutronWallLoading on the reactor_QA example."""
+        eq = get("reactor_QA")
+        offset = 0.1
+
+        source_grid = QuadratureGrid(
+            L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+        )
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+
+        obj = NeutronWallLoading(
+            eq=eq,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj.build(use_jit=False, verbose=0)
+        nwl = np.asarray(obj.compute(*obj.xs(eq)))
+
+        # check that NWL has the right shape and is non-negative
+        assert nwl.shape == (surface_grid.num_nodes,)
+        assert np.all(nwl >= -1e-12)
+
+        # DT neutrons carry about 80% of the total fusion energy, so the
+        # surface-area-weighted mean NWL should approximately match 0.8 * P_fusion / S.
+        wall = eq.surface.constant_offset_surface(offset, grid=surface_grid)
+        wall_data = wall.compute(["S", "|e_theta x e_zeta|"], grid=surface_grid)
+        wall_area = float(wall_data["S"])
+        wall_weights = (
+            np.asarray(wall_data["|e_theta x e_zeta|"])
+            * np.asarray(surface_grid.weights)
+        )
+        fusion_power = float(
+            eq.compute("P_fusion", grid=source_grid, fuel="DT")["P_fusion"]
+        )
+        avg_nwl_from_power = 0.8 * fusion_power / wall_area * 1e-6
+        weighted_mean_nwl = float(np.sum(nwl * wall_weights) / np.sum(wall_weights))
+
+        np.testing.assert_allclose(weighted_mean_nwl, avg_nwl_from_power, rtol=0.12)
+
+        # For fixed temperature, geometry, and fuel mix, the DT fusion rate scales like
+        # n_D * n_T. Doubling the density doubles both species densities, so both the
+        # fusion power and the local neutron wall loading should increase by scale**2.
+        scale = 2.0
+        eq_scaled = eq.copy()
+        eq_scaled.electron_density.params = eq_scaled.electron_density.params * scale
+
+        obj_scaled = NeutronWallLoading(
+            eq=eq_scaled,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj_scaled.build(use_jit=False, verbose=0)
+        nwl_scaled = np.asarray(obj_scaled.compute(*obj_scaled.xs(eq_scaled)))
+
+        np.testing.assert_allclose(
+            nwl_scaled, nwl * scale**2, rtol=1e-5, atol=1e-12
+        )
 
     @pytest.mark.unit
     def test_things_per_objective_idx(self):

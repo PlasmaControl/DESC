@@ -1,5 +1,7 @@
 """Functions to create the O(rho) and O(rho^2) NAE constraints on a DESC equilibrium."""
 
+from math import comb
+
 import numpy as np
 
 from desc.basis import FourierSeries
@@ -70,17 +72,15 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
 
     Lconstraints = ()
     for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], L_0_n):
-        sum_weights = []
-        modes = []
         target = None if qsc is None else NAEcoeff
-        for l in range(int(desc_eq.L + 1)):
-            modes.append([l, 0, n])
-            if (l // 2) % 2 == 0:
-                sum_weights.append(1)
-            else:
-                sum_weights.append(-1)
-
-        modes = np.atleast_2d(modes)
+        L_vals, sum_weights = general_connection(0, 0, desc_eq.L)
+        modes = np.column_stack(
+            [
+                L_vals,
+                np.zeros(len(L_vals), dtype=int),
+                np.full(len(L_vals), n, dtype=int),
+            ]
+        )
         Lcon = FixSumModesLambda(
             eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
         )
@@ -322,95 +322,101 @@ def _make_RZ_cons_order_rho(  # noqa: C901
     Zbasis_sin = bases["Zbasis_sin"]
     Lbasis_sin = bases["Lbasis_sin"]
 
+    L_vals_1_pos, weights_1_pos = general_connection(1, 1, desc_eq.L)
+    L_vals_1_neg, weights_1_neg = general_connection(1, -1, desc_eq.L)
+
     # R_1_1_n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
-        sum_weights = []
-        modes = []
         target = None if qsc is None else NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, 1, n])
-            sum_weights.append((-1) ** k * k)
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_1_pos,
+                np.ones(len(L_vals_1_pos), dtype=int),
+                np.full(len(L_vals_1_pos), n, dtype=int),
+            ]
         )
-
-        Rconstraints += (Rcon,)
+        Rconstraints += (
+            FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=weights_1_pos, modes=modes
+            ),
+        )
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
-        sum_weights = []
-        modes = []
         target = None if qsc is None else NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, -1, n])
-            sum_weights.append((-1) ** k * k)
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_1_neg,
+                -np.ones(len(L_vals_1_neg), dtype=int),
+                np.full(len(L_vals_1_neg), n, dtype=int),
+            ]
         )
-
-        Zconstraints += (Zcon,)
+        Zconstraints += (
+            FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=weights_1_neg, modes=modes
+            ),
+        )
     if fix_lambda:
         # L_1_neg1_n
         for n, NAEcoeff in zip(Lbasis_cos.modes[:, 2], coeffs["L_1_neg1_n"]):
-            sum_weights = []
-            modes = []
             target = None if qsc is None else NAEcoeff * r
-            for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-                modes.append([2 * k - 1, -1, n])
-                sum_weights.append((-1) ** k * k)
-            modes = np.atleast_2d(modes)
-            sum_weights = -np.atleast_1d(sum_weights)
-            Lcon = FixSumModesLambda(
-                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            modes = np.column_stack(
+                [
+                    L_vals_1_neg,
+                    -np.ones(len(L_vals_1_neg), dtype=int),
+                    np.full(len(L_vals_1_neg), n, dtype=int),
+                ]
             )
-            Lconstraints += (Lcon,)
+            Lconstraints += (
+                FixSumModesLambda(
+                    eq=desc_eq, target=target, sum_weights=weights_1_neg, modes=modes
+                ),
+            )
     # R_1_neg1_n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
-        sum_weights = []
-        modes = []
         target = None if qsc is None else NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, -1, n])
-            sum_weights.append((-1) ** k * k)
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_1_neg,
+                -np.ones(len(L_vals_1_neg), dtype=int),
+                np.full(len(L_vals_1_neg), n, dtype=int),
+            ]
         )
-        Rconstraints += (Rcon,)
+        Rconstraints += (
+            FixSumModesR(
+                eq=desc_eq, target=target, sum_weights=weights_1_neg, modes=modes
+            ),
+        )
     # Z_1_1_n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
-        sum_weights = []
-        modes = []
         target = None if qsc is None else NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, 1, n])
-            sum_weights.append((-1) ** k * k)
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_1_pos,
+                np.ones(len(L_vals_1_pos), dtype=int),
+                np.full(len(L_vals_1_pos), n, dtype=int),
+            ]
         )
-
-        Zconstraints += (Zcon,)
+        Zconstraints += (
+            FixSumModesZ(
+                eq=desc_eq, target=target, sum_weights=weights_1_pos, modes=modes
+            ),
+        )
     if fix_lambda:
         # L_1_1_n
         for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], coeffs["L_1_1_n"]):
-            sum_weights = []
-            modes = []
             target = None if qsc is None else NAEcoeff * r
-            for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-                modes.append([2 * k - 1, 1, n])
-                sum_weights.append((-1) ** k * k)
-            modes = np.atleast_2d(modes)
-            sum_weights = -np.atleast_1d(sum_weights)
-            Lcon = FixSumModesLambda(
-                eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+            modes = np.column_stack(
+                [
+                    L_vals_1_pos,
+                    np.ones(len(L_vals_1_pos), dtype=int),
+                    np.full(len(L_vals_1_pos), n, dtype=int),
+                ]
             )
-            Lconstraints += (Lcon,)
+            Lconstraints += (
+                FixSumModesLambda(
+                    eq=desc_eq, target=target, sum_weights=weights_1_pos, modes=modes
+                ),
+            )
     return Rconstraints, Zconstraints, Lconstraints
 
 
@@ -769,90 +775,93 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     Zbasis_cos = bases["Zbasis_cos"]
     Zbasis_sin = bases["Zbasis_sin"]
 
+    L_vals_2_0, weights_2_0 = general_connection(2, 0, desc_eq.L)
+    L_vals_2_2, weights_2_2 = general_connection(2, 2, desc_eq.L)
+
     # R_20n i.e. L=2, M=0
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_0_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
-            modes.append([2 * k, 0, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_0,
+                np.zeros(len(L_vals_2_0), dtype=int),
+                np.full(len(L_vals_2_0), n, dtype=int),
+            ]
         )
-        Rconstraints += (Rcon,)
+        Rconstraints += (
+            FixSumModesR(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_0, modes=modes
+            ),
+        )
     # R_2_2n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_2_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
-            modes.append([2 * k, 2, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_2,
+                np.full(len(L_vals_2_2), 2, dtype=int),
+                np.full(len(L_vals_2_2), n, dtype=int),
+            ]
         )
-        Rconstraints += (Rcon,)
+        Rconstraints += (
+            FixSumModesR(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+            ),
+        )
     # R_2_neg2n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
-            modes.append([2 * k, -2, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights) / 2
-        Rcon = FixSumModesR(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_2,
+                np.full(len(L_vals_2_2), -2, dtype=int),
+                np.full(len(L_vals_2_2), n, dtype=int),
+            ]
         )
-        Rconstraints += (Rcon,)
+        Rconstraints += (
+            FixSumModesR(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+            ),
+        )
     # Z_2_0n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
-            modes.append([2 * k, 0, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_0,
+                np.zeros(len(L_vals_2_0), dtype=int),
+                np.full(len(L_vals_2_0), n, dtype=int),
+            ]
         )
-        Zconstraints += (Zcon,)
+        Zconstraints += (
+            FixSumModesZ(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_0, modes=modes
+            ),
+        )
     # Z_2_neg2n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.M / 2) + 1):
-            modes.append([2 * k, -2, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_2,
+                np.full(len(L_vals_2_2), -2, dtype=int),
+                np.full(len(L_vals_2_2), n, dtype=int),
+            ]
         )
-        Zconstraints += (Zcon,)
+        Zconstraints += (
+            FixSumModesZ(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+            ),
+        )
     # Z_2_2n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
-        sum_weights = []
-        modes = []
-        target = NAEcoeff * r
-        for k in range(1, int(desc_eq.M / 2) + 1):
-            modes.append([2 * k, 2, n])
-            sum_weights.append((-1) ** k * k * (k + 1))
-        modes = np.atleast_2d(modes)
-        sum_weights = -np.atleast_1d(sum_weights) / 2
-        Zcon = FixSumModesZ(
-            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        modes = np.column_stack(
+            [
+                L_vals_2_2,
+                np.full(len(L_vals_2_2), 2, dtype=int),
+                np.full(len(L_vals_2_2), n, dtype=int),
+            ]
         )
-        Zconstraints += (Zcon,)
+        Zconstraints += (
+            FixSumModesZ(
+                eq=desc_eq, target=NAEcoeff * r, sum_weights=weights_2_2, modes=modes
+            ),
+        )
 
     return Rconstraints, Zconstraints
 
@@ -883,3 +892,50 @@ def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
     )
 
     return Rconstraints + Zconstraints
+
+
+def general_connection(l, m, M):
+    """Return weights for general connection from Zernike to r^l*cos/sin(m*theta).
+
+    Given a Zernike expansion with coefficients c_{L,m}, computes
+    weights w_L such that:
+        sum_L  w_L * c_{L,m}  =  coefficient of rho^l * cos(|m|*theta)
+
+    Implements eq. (2.13) of the near-axis expansion theory.
+
+    Parameters
+    ----------
+    l : int
+        Radial order of the monomial rho^l. Must satisfy l >= |m| and (l - |m|) even.
+    m : int
+        Poloidal mode number. Uses |m| in the formula.
+    M : int
+        Maximum radial order of the Zernike basis (inclusive upper bound).
+
+    Returns
+    -------
+    L_values : ndarray of int
+        Radial orders of the modes: l, l+2, l+4, ..., up to M.
+    weights : ndarray of float
+        Weights from eq. (2.13) corresponding to each entry of L_values.
+        Satisfies: np.dot(weights, c[L_values, m]) = coeff of rho^l * cos(|m|*theta).
+    """
+    abs_m = abs(m)
+    L_values = np.arange(l, M + 1, 2, dtype=int)
+    weights = np.zeros(len(L_values))
+    second_binom = comb(l, (l - abs_m) // 2)
+
+    if abs_m % 2 == 0:  # |m| even (l must also be even)
+        prefactor = (-1) ** (l // 2)
+        for i, L in enumerate(L_values):
+            k = L // 2
+            weights[i] = prefactor * (-1) ** k * comb(k + l // 2, l) * second_binom
+    else:  # |m| odd (l must also be odd)
+        prefactor = (-1) ** ((l + 1) // 2)
+        for i, L in enumerate(L_values):
+            k = (L + 1) // 2
+            weights[i] = (
+                prefactor * (-1) ** k * comb(k + (l - 1) // 2, l) * second_binom
+            )
+
+    return L_values, weights

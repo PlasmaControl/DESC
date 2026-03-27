@@ -73,12 +73,12 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
     Lconstraints = ()
     for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], L_0_n):
         target = None if qsc is None else NAEcoeff
-        L_vals, sum_weights = general_connection(0, 0, desc_eq.L)
+        l_modes, sum_weights = general_connection_zernike_to_monomials(0, 0, desc_eq.L)
         modes = np.column_stack(
             [
-                L_vals,
-                np.zeros(len(L_vals), dtype=int),
-                np.full(len(L_vals), n, dtype=int),
+                l_modes,
+                np.zeros(len(l_modes), dtype=int),
+                np.full(len(l_modes), n, dtype=int),
             ]
         )
         Lcon = FixSumModesLambda(
@@ -322,17 +322,21 @@ def _make_RZ_cons_order_rho(  # noqa: C901
     Zbasis_sin = bases["Zbasis_sin"]
     Lbasis_sin = bases["Lbasis_sin"]
 
-    L_vals_1_pos, weights_1_pos = general_connection(1, 1, desc_eq.L)
-    L_vals_1_neg, weights_1_neg = general_connection(1, -1, desc_eq.L)
+    l_modes_1_pos, weights_1_pos = general_connection_zernike_to_monomials(
+        1, 1, desc_eq.L
+    )
+    l_modes_1_neg, weights_1_neg = general_connection_zernike_to_monomials(
+        1, -1, desc_eq.L
+    )
 
     # R_1_1_n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
         target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
-                L_vals_1_pos,
-                np.ones(len(L_vals_1_pos), dtype=int),
-                np.full(len(L_vals_1_pos), n, dtype=int),
+                l_modes_1_pos,
+                np.ones(len(l_modes_1_pos), dtype=int),
+                np.full(len(l_modes_1_pos), n, dtype=int),
             ]
         )
         Rconstraints += (
@@ -345,9 +349,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
         target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
-                L_vals_1_neg,
-                -np.ones(len(L_vals_1_neg), dtype=int),
-                np.full(len(L_vals_1_neg), n, dtype=int),
+                l_modes_1_neg,
+                -np.ones(len(l_modes_1_neg), dtype=int),
+                np.full(len(l_modes_1_neg), n, dtype=int),
             ]
         )
         Zconstraints += (
@@ -361,9 +365,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
             target = None if qsc is None else NAEcoeff * r
             modes = np.column_stack(
                 [
-                    L_vals_1_neg,
-                    -np.ones(len(L_vals_1_neg), dtype=int),
-                    np.full(len(L_vals_1_neg), n, dtype=int),
+                    l_modes_1_neg,
+                    -np.ones(len(l_modes_1_neg), dtype=int),
+                    np.full(len(l_modes_1_neg), n, dtype=int),
                 ]
             )
             Lconstraints += (
@@ -376,9 +380,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
         target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
-                L_vals_1_neg,
-                -np.ones(len(L_vals_1_neg), dtype=int),
-                np.full(len(L_vals_1_neg), n, dtype=int),
+                l_modes_1_neg,
+                -np.ones(len(l_modes_1_neg), dtype=int),
+                np.full(len(l_modes_1_neg), n, dtype=int),
             ]
         )
         Rconstraints += (
@@ -391,9 +395,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
         target = None if qsc is None else NAEcoeff * r
         modes = np.column_stack(
             [
-                L_vals_1_pos,
-                np.ones(len(L_vals_1_pos), dtype=int),
-                np.full(len(L_vals_1_pos), n, dtype=int),
+                l_modes_1_pos,
+                np.ones(len(l_modes_1_pos), dtype=int),
+                np.full(len(l_modes_1_pos), n, dtype=int),
             ]
         )
         Zconstraints += (
@@ -407,9 +411,9 @@ def _make_RZ_cons_order_rho(  # noqa: C901
             target = None if qsc is None else NAEcoeff * r
             modes = np.column_stack(
                 [
-                    L_vals_1_pos,
-                    np.ones(len(L_vals_1_pos), dtype=int),
-                    np.full(len(L_vals_1_pos), n, dtype=int),
+                    l_modes_1_pos,
+                    np.ones(len(l_modes_1_pos), dtype=int),
+                    np.full(len(l_modes_1_pos), n, dtype=int),
                 ]
             )
             Lconstraints += (
@@ -775,16 +779,16 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     Zbasis_cos = bases["Zbasis_cos"]
     Zbasis_sin = bases["Zbasis_sin"]
 
-    L_vals_2_0, weights_2_0 = general_connection(2, 0, desc_eq.L)
-    L_vals_2_2, weights_2_2 = general_connection(2, 2, desc_eq.L)
+    l_modes_2_0, weights_2_0 = general_connection_zernike_to_monomials(2, 0, desc_eq.L)
+    l_modes_2_2, weights_2_2 = general_connection_zernike_to_monomials(2, 2, desc_eq.L)
 
     # R_20n i.e. L=2, M=0
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_0_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_0,
-                np.zeros(len(L_vals_2_0), dtype=int),
-                np.full(len(L_vals_2_0), n, dtype=int),
+                l_modes_2_0,
+                np.zeros(len(l_modes_2_0), dtype=int),
+                np.full(len(l_modes_2_0), n, dtype=int),
             ]
         )
         Rconstraints += (
@@ -796,9 +800,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_2_2_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_2,
-                np.full(len(L_vals_2_2), 2, dtype=int),
-                np.full(len(L_vals_2_2), n, dtype=int),
+                l_modes_2_2,
+                np.full(len(l_modes_2_2), 2, dtype=int),
+                np.full(len(l_modes_2_2), n, dtype=int),
             ]
         )
         Rconstraints += (
@@ -810,9 +814,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_2_neg2_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_2,
-                np.full(len(L_vals_2_2), -2, dtype=int),
-                np.full(len(L_vals_2_2), n, dtype=int),
+                l_modes_2_2,
+                np.full(len(l_modes_2_2), -2, dtype=int),
+                np.full(len(l_modes_2_2), n, dtype=int),
             ]
         )
         Rconstraints += (
@@ -824,9 +828,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_0_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_0,
-                np.zeros(len(L_vals_2_0), dtype=int),
-                np.full(len(L_vals_2_0), n, dtype=int),
+                l_modes_2_0,
+                np.zeros(len(l_modes_2_0), dtype=int),
+                np.full(len(l_modes_2_0), n, dtype=int),
             ]
         )
         Zconstraints += (
@@ -838,9 +842,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_2_neg2_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_2,
-                np.full(len(L_vals_2_2), -2, dtype=int),
-                np.full(len(L_vals_2_2), n, dtype=int),
+                l_modes_2_2,
+                np.full(len(l_modes_2_2), -2, dtype=int),
+                np.full(len(l_modes_2_2), n, dtype=int),
             ]
         )
         Zconstraints += (
@@ -852,9 +856,9 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):  # noqa: C901
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_2_2_n"]):
         modes = np.column_stack(
             [
-                L_vals_2_2,
-                np.full(len(L_vals_2_2), 2, dtype=int),
-                np.full(len(L_vals_2_2), n, dtype=int),
+                l_modes_2_2,
+                np.full(len(l_modes_2_2), 2, dtype=int),
+                np.full(len(l_modes_2_2), n, dtype=int),
             ]
         )
         Zconstraints += (
@@ -894,14 +898,15 @@ def make_RZ_cons_2nd_order(qsc, desc_eq, N=None):
     return Rconstraints + Zconstraints
 
 
-def general_connection(l, m, M):
+def general_connection_zernike_to_monomials(l, m, M):
     """Return weights for general connection from Zernike to r^l*cos/sin(m*theta).
 
-    Given a Zernike expansion with coefficients c_{L,m}, computes
-    weights w_L such that:
-        sum_L  w_L * c_{L,m}  =  coefficient of rho^l * cos(|m|*theta)
+    Given a Zernike expansion with coefficients c_{l,m}, computes
+    weights w_l such that:
+        sum_l  w_l * c_{l,m}  =  coefficient of rho^l * cos(|m|*theta)
 
-    Implements eq. (2.13) of the near-axis expansion theory.
+    Implements the formula in Appendix C.3 of Panici et al. 2026
+    "Extending near-axis equilibria in DESC".
 
     Parameters
     ----------
@@ -914,28 +919,28 @@ def general_connection(l, m, M):
 
     Returns
     -------
-    L_values : ndarray of int
+    l_modes : ndarray of int
         Radial orders of the modes: l, l+2, l+4, ..., up to M.
     weights : ndarray of float
-        Weights from eq. (2.13) corresponding to each entry of L_values.
-        Satisfies: np.dot(weights, c[L_values, m]) = coeff of rho^l * cos(|m|*theta).
+        Weights from eq. (2.13) corresponding to each entry of l_modes.
+        Satisfies: np.dot(weights, c[l_modes, m]) = coeff of rho^l * cos(|m|*theta).
     """
     abs_m = abs(m)
-    L_values = np.arange(l, M + 1, 2, dtype=int)
-    weights = np.zeros(len(L_values))
+    l_modes = np.arange(l, M + 1, 2, dtype=int)
+    weights = np.zeros(len(l_modes))
     second_binom = comb(l, (l - abs_m) // 2)
 
     if abs_m % 2 == 0:  # |m| even (l must also be even)
         prefactor = (-1) ** (l // 2)
-        for i, L in enumerate(L_values):
+        for i, L in enumerate(l_modes):
             k = L // 2
             weights[i] = prefactor * (-1) ** k * comb(k + l // 2, l) * second_binom
     else:  # |m| odd (l must also be odd)
         prefactor = (-1) ** ((l + 1) // 2)
-        for i, L in enumerate(L_values):
+        for i, L in enumerate(l_modes):
             k = (L + 1) // 2
             weights[i] = (
                 prefactor * (-1) ** k * comb(k + (l - 1) // 2, l) * second_binom
             )
 
-    return L_values, weights
+    return l_modes, weights

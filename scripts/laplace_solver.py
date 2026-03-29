@@ -205,9 +205,8 @@ np.save(save_path + surf_save_name, surf_nodes)
 """"""
 print("computing phi matrix")
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
-print(eq.surface)
-print(eq.surface.surface)
-if os.path.exists(save_path + phi_save_name):
+override = True
+if os.path.exists(save_path + phi_save_name) and not override:
     phi_matrix = np.load(save_path + phi_save_name)
 else:
     # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface

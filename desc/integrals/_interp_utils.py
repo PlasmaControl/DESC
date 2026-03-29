@@ -112,6 +112,11 @@ def nufft2d2r(
         Real function value at query points.
 
     """
+    # TODO: Delete this line after
+    # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
+    # and then bump min version requirement.
+    mask = None
+
     # This is optimized away under JIT if the operation is an idenity.
     s0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     s1 = 2 * jnp.pi / (domain1[1] - domain1[0])

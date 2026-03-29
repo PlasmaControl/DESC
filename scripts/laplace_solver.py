@@ -69,8 +69,8 @@ p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
 p_profile = PowerSeriesProfile(p_coeffs)
 
 # Define resolution
-M = 7
-N = 5
+M = 24
+N = 15
 n_rho = 14
 n_theta = 2 * M
 if axisym:
@@ -84,6 +84,9 @@ profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I
 save_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
 phi_save_name = f"{save_tag}_M_{M}_N_{N}_phi_matrix.npy"
+rtz_save_name = f"{save_tag}_rtz.h5"
+pest_save_name = f"{save_tag}_rvp.h5"
+surf_save_name = f"{save_tag}_surf.h5"
 os.makedirs(save_path, exist_ok=True)
 
 
@@ -130,6 +133,7 @@ else:
 
 # PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
 pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
+np.save(save_path + pest_save_name, pest_grid.nodes)
 
 # This will probably OOM with the matrix-full method
 print("making input grid and diffmats")
@@ -184,6 +188,7 @@ print("coordinates mapped")
 
 print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
+np.save(save_path + rtz_save_name, rtz_nodes)
 
 n_surf = n_theta * n_zeta
 
@@ -194,8 +199,11 @@ n_surf = n_theta * n_zeta
 surface_nodes_agni = np.array(rtz_nodes[-n_surf:])
 desc_flat = np.arange(n_surf)
 perm_to_desc = (desc_flat % n_theta) * n_zeta + (desc_flat // n_theta)
-rtz_surface_grid = Grid(surface_nodes_agni[perm_to_desc], NFP=NFP)
+surf_nodes = surface_nodes_agni[perm_to_desc]
+rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
+np.save(save_path + surf_save_name, surf_nodes)
 
+""""""
 print("computing phi matrix")
 # Compute the matrix A such that Phi_periodic = A @ B0*n.
 print(eq.surface)
@@ -215,14 +223,14 @@ else:
     )
     # phi_matrix_pest is in DESC Fortran order (theta fastest).
     # Reorder to AGNI C order (zeta fastest) expected by the stability solver.
-    phi_matrix_desc = np.array(data_phi["phi_matrix_pest"])
-    phi_matrix = phi_matrix_desc.reshape(
-        n_theta, n_zeta, n_theta, n_zeta, order="F"
-    ).reshape(n_surf, n_surf, order="C")
+    phi_matrix = np.array(data_phi["phi_matrix_pest"])
+    phi_matrix = phi_matrix.reshape(n_theta, n_zeta, n_theta, n_zeta)
+    phi_matrix = phi_matrix.transpose(1,0,3,2)
+    phi_matrix = phi_matrix.reshape(n_surf, n_surf)
 
     np.save(save_path + phi_save_name, phi_matrix)
 
-
+"""
 
 print("computing eigenmode at low res")
 tic = time.time()
@@ -235,3 +243,4 @@ X = data["finite-n eigenfunction"]
 
 np.save(save_path + f"low_res_eigenfunction_all_{save_tag}.npy", X)
 np.save(save_path + f"low_res_eigenvalue_all_{save_tag}.npy", data["finite-n lambda"])
+"""

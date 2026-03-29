@@ -198,7 +198,7 @@ n_surf = n_theta * n_zeta
 # FFT/BIEST requires DESC Fortran order (flat index = theta_i + n_theta * zeta_k),
 # so we permute before building the surface grid.
 surface_nodes_agni = np.array(rtz_nodes[-n_surf:])
-surf_nodes = surface_nodes_agni.reshape(n_zeta, n_theta, 3).transpose(1,0,2).reshape(n_surf,3)
+surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 np.save(save_path + surf_save_name, surf_nodes)
 

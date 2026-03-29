@@ -81,12 +81,13 @@ else:
 # Save path
 save_path = "phi_matrix/"
 profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-save_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+save_tag = f"{eq_tag}_M_{M}_N_{N}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
-phi_save_name = f"{save_tag}_M_{M}_N_{N}_phi_matrix.npy"
-rtz_save_name = f"{save_tag}_rtz.h5"
-pest_save_name = f"{save_tag}_rvp.h5"
-surf_save_name = f"{save_tag}_surf.h5"
+phi_save_name = f"{save_tag}_phi_matrix.npy"
+rtz_save_name = f"{save_tag}_rtz"
+pest_save_name = f"{save_tag}_rvp"
+surf_save_name = f"{save_tag}_surf"
 os.makedirs(save_path, exist_ok=True)
 
 
@@ -133,7 +134,7 @@ else:
 
 # PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
 pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
-np.save(save_path + pest_save_name, pest_grid.nodes)
+pest_grid.save(save_path + pest_save_name)
 
 # This will probably OOM with the matrix-full method
 print("making input grid and diffmats")
@@ -197,9 +198,7 @@ n_surf = n_theta * n_zeta
 # FFT/BIEST requires DESC Fortran order (flat index = theta_i + n_theta * zeta_k),
 # so we permute before building the surface grid.
 surface_nodes_agni = np.array(rtz_nodes[-n_surf:])
-desc_flat = np.arange(n_surf)
-perm_to_desc = (desc_flat % n_theta) * n_zeta + (desc_flat // n_theta)
-surf_nodes = surface_nodes_agni[perm_to_desc]
+surf_nodes = surface_nodes_agni.reshape(n_zeta, n_theta, 3).transpose(1,0,2).reshape(n_surf,3)
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 np.save(save_path + surf_save_name, surf_nodes)
 

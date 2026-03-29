@@ -65,6 +65,7 @@ def nufft2d2r(
     rfft_axis=-1,
     vec=False,
     eps=1e-6,
+    mask=None,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -134,7 +135,7 @@ def nufft2d2r(
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
 
-    return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
+    return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
 
 
 # Warning: method must be specified as keyword argument.

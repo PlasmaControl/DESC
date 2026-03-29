@@ -129,7 +129,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
 
     Returns
     -------
-    z1, z2 : tuple[jnp.ndarray]
+    z1, z2, mask : tuple[jnp.ndarray]
         Shape (..., num pitch, num well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
@@ -168,7 +168,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-    return z1, z2
+    return z1, z2, mask
 
 
 def set_default_plot_kwargs(kwargs, l=None, m=None):

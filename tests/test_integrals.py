@@ -742,7 +742,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -758,7 +758,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -777,7 +777,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -802,7 +802,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -823,7 +823,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
+        z1, z2, _ = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
         check_bounce_points(
             z1,
             z2,
@@ -855,7 +855,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1646,7 +1646,9 @@ class TestBounce2D:
             grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
         )
         points = bounce.points(pitch_inv)
-        points = bounce._refine_points(points, pitch_inv[:, None])
+        points = bounce._refine_points(
+            pitch_inv[:, None], *points, mask=(points[0] != 0) | (points[1] != 0)
+        )
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
@@ -1667,7 +1669,7 @@ class TestBounce2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
         "nufft_eps, spline, Y_B",
-        [(0, False, 16), (0, True, 64), (1e-6, False, 16), (1e-8, True, 64)],
+        [(0, False, 16), (0, True, 64), (1e-7, False, 16), (1e-8, True, 64)],
     )
     def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""

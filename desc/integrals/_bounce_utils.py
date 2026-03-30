@@ -278,6 +278,8 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
     Supplementary information in DESC publications folder.
 
     """
+    # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
+
     o, p = primals
     do, dp = tangents
 
@@ -286,18 +288,17 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
     shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
 
     z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
-    t, dt_dz, dt_do = o._theta.eval1d(
+    t, dt_dz = o._theta.eval1d(
         z[None],
         jnp.stack(
             [
                 o._theta.cheb,
                 chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
-                do._theta.cheb,
             ]
         ),
     )
     dt_dz = dt_dz.reshape(shape)
-    dt_do = dt_do.reshape(shape)
+    dt_do = o._theta.eval1d(z, do._theta.cheb).reshape(shape)
     t = flatten_mat(t)
     z = flatten_mat(z)
 
@@ -307,11 +308,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
         z,
         t,
         jnp.concatenate(
-            [
-                o._c["|B|"] * (1j * o._modes_z)[:, None],
-                o._c["|B|"] * (1j * o._modes_t),
-                do._c["|B|"],
-            ],
+            [o._c["|B|"] * (1j * o._modes_z)[:, None], o._c["|B|"] * (1j * o._modes_t)],
             -3,
         ),
         (0, 2 * jnp.pi / o._NFP),
@@ -319,11 +316,20 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
         eps=nufft_eps,
         mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
     )
-    dB_dz, dB_dt, dB_do = (
-        dB_dz.reshape(3, *shape)
+    dB_do = nufft2d2r(
+        z,
+        t,
+        do._c["|B|"].squeeze(-3),
+        (0, 2 * jnp.pi / o._NFP),
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    ).reshape(shape)
+
+    dB_dz, dB_dt = (
+        dB_dz.reshape(2, *shape)
         if dB_dz.ndim == 2
         # reshape before swap to avoid memory copy
-        else dB_dz.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
+        else dB_dz.reshape(shape[0], 2, *shape[1:]).swapaxes(0, 1)
     )
 
     # chain rule to move from (∂/∂ζ)|ρ,θ to (∂/∂ζ)|ρ,a

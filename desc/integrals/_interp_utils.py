@@ -1,9 +1,41 @@
 """Interpolation utilities."""
 
+import warnings
 from functools import partial
 
 from interpax import interp1d
-from jax_finufft import nufft2, options
+
+try:
+    from jax_finufft import nufft2, options
+
+    can_use_nufft = True
+except (ImportError, ModuleNotFoundError):
+    warnings.warn(
+        "jax_finufft is not installed. NUFFT functions will not be available.",
+        UserWarning,
+    )
+    can_use_nufft = False
+except Exception as e:
+    error_str = str(e)
+    # This error will probably happen pretty often, we skip it to prevent breaking
+    # codes that doesn't use jax_finufft but still want to use desc
+    if "XLA FFI handler registration" in error_str:
+        warnings.warn(
+            "jax_finufft XLA FFI handler registration failed. "
+            "This is likely due to a mismatch between the JAX version and the "
+            "jax_finufft version. Change package versions to resolve this issue. "
+            "NUFFT functions will not be available.",
+            UserWarning,
+        )
+    # If we face any other specific error related to jax_finufft, we can catch it
+    # in an elif block and provide a more specific warning.
+    else:
+        warnings.warn(
+            "Unknown error occurred while importing jax_finufft. NUFFT functions "
+            f"will not be available: {e}",
+            UserWarning,
+        )
+    can_use_nufft = False
 
 from desc.backend import jax, jnp
 
@@ -346,6 +378,14 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
     Regularization used to smooth the discretized system so that it recognizes
     any non-differentiable sample it has observed actually has zero measure in
     the continuous system.
+
+    References
+    ----------
+    Spectrally accurate, reverse-mode differentiable bounce-averaging
+    algorithm and its applications.
+    Kaya E. Unalmis et al.
+    Supplementary information in DESC publications folder.
+
     """
     c, k, a_min, a_max = primals
     dc, dk, _, _ = tangents

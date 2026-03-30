@@ -38,6 +38,7 @@ from desc.integrals import (
 )
 from desc.integrals._bounce_utils import (
     PiecewiseChebyshevSeries,
+    _newton,
     bounce_points,
     check_bounce_points,
     get_mins,
@@ -1644,9 +1645,7 @@ class TestBounce2D:
 
         bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
         points = bounce.points(pitch_inv)
-        z1, z2 = bounce._refine_points(
-            pitch_inv[:, None], *points, points[0] < points[1]
-        )
+        z1, z2 = _newton(bounce, pitch_inv[:, None], *points, points[0] < points[1])
         # 1 point out of 10k converges slow, so just use loose tolerence
         np.testing.assert_allclose(points[0], z1, atol=2e-4)
         np.testing.assert_allclose(points[1], z2, atol=2e-4)

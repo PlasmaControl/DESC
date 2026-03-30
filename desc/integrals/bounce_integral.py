@@ -3,6 +3,7 @@
 import warnings
 from abc import ABC, abstractmethod
 
+from equinox import Module
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
@@ -20,7 +21,7 @@ from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from orthax.legendre import leggauss
 
-from desc.backend import jnp, rfft2
+from desc.backend import jax, jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
@@ -40,11 +41,12 @@ from desc.integrals._bounce_utils import (
     move,
     num_well_rule,
     plot_ppoly,
+    regular_points,
     set_default_plot_kwargs,
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
-    chebder,
+    can_use_nufft,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -60,19 +62,17 @@ from desc.integrals.quad_utils import (
     simpson2,
     uniform,
 )
-from desc.io import IOAble
 from desc.utils import (
     apply,
     atleast_nd,
     errorif,
     flatten_mat,
     parse_argname_change,
-    safediv,
     setdefault,
 )
 
 
-class Bounce(IOAble, ABC):
+class Bounce(Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
@@ -267,6 +267,14 @@ class Bounce2D(Bounce):
     """
 
     required_names = ["B^zeta", "|B|", "iota"]
+
+    _quad: tuple[jax.Array]
+    _NFP: int
+    _num_t: int
+    _modes_z: jax.Array
+    _modes_t: jax.Array
+    _c: dict[str, jax.Array]
+    _theta: PiecewiseChebyshevSeries
 
     def __init__(
         self,
@@ -792,82 +800,14 @@ class Bounce2D(Bounce):
             return z1, z2
 
         pitch_inv = broadcast_for_bounce(pitch_inv)
-        return self._refine_points(
-            pitch_inv,
-            *bounce_points(pitch_inv, self._c["knots"], self._c["B(z)"], num_well),
+        if can_use_nufft:
+            return regular_points(self, pitch_inv, num_well, 1e-10)
+
+        # Newton update has only been implemented for nuffts; contributions welcome.
+        z1, z2, _ = bounce_points(
+            pitch_inv, self._c["knots"], self._c["B(z)"], num_well
         )
-
-    def _refine_points(self, pitch_inv, z1, z2, mask, eps=1e-10):
-        """Find bounce points with maps used in the quadrature.
-
-        An error of ε in a bounce point manifests
-          * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
-          * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
-
-        Parameters
-        ----------
-        pitch_inv : jnp.ndarray
-            Shape broadcasts with (num ρ, num α, num pitch).
-        z1, z2 : tuple[jnp.ndarray]
-            Shape (num ρ, num α, num pitch, num well).
-        mask : jnp.ndarray
-            Shape (num ρ, num α, num pitch, num well).
-            Subset of points to refine.
-        eps : float
-            Desired error ε of the bounce points.
-
-        Returns
-        -------
-        z1, z2 : tuple[jnp.ndarray]
-            Shape (num ρ, num α, num pitch, num well).
-
-        """
-        shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
-        dy_dz = self._NFP / jnp.pi
-
-        z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
-        t, dt_dz = self._theta.eval1d(
-            z[None],
-            jnp.stack(
-                [
-                    self._theta.cheb,
-                    chebder(self._theta.cheb, scl=dy_dz, axis=-1, keepdims=True),
-                ]
-            ),
-        )
-        dt_dz = dt_dz.reshape(shape)
-        t = flatten_mat(t)
-        z = flatten_mat(z)
-
-        mask = mask[..., None, :, :]
-
-        B = nufft2d2r(
-            z,
-            t,
-            jnp.concatenate(
-                [
-                    self._c["|B|"],
-                    self._c["|B|"] * (1j * self._modes_z)[:, None],
-                    self._c["|B|"] * (1j * self._modes_t),
-                ],
-                -3,
-            ),
-            (0, 2 * jnp.pi / self._NFP),
-            vec=True,
-            eps=eps,
-            mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
-        )
-        B, dB_dz, dB_dt = (
-            B.reshape(3, *shape)
-            if B.ndim == 2
-            # reshape before swap to avoid memory copy
-            else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
-        )
-
-        dz = safediv(B - pitch_inv[..., None, :, None], dB_dz + dB_dt * dt_dz)
-        z = z.reshape(shape)
-        z = jnp.where(mask & (jnp.abs(dz) < 1e-1), z - dz, z)
-        return z[..., 0, :, :], z[..., 1, :, :]
+        return z1, z2
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1505,6 +1445,11 @@ class Bounce1D(Bounce):
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
 
+    _quad: tuple[jax.Array]
+    _data: dict[str, jax.Array]
+    _zeta: jax.Array
+    _B: jax.Array
+
     def __init__(
         self,
         grid,
@@ -1536,7 +1481,7 @@ class Bounce1D(Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        self._zeta = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,

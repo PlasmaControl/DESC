@@ -8,6 +8,7 @@ their API may change without warning.
 from functools import partial
 
 import numpy as np
+from equinox import Module
 from interpax import CubicSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
@@ -26,18 +27,20 @@ from desc.integrals._interp_utils import (
     _eps,
     _filter_distinct,
     _subtract_first,
+    chebder,
     nufft1d2r,
+    nufft2d2r,
     poly_val,
     polyroot_vec,
 )
 from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
-from desc.io import IOAble
 from desc.utils import (
     atleast_2d_end,
     atleast_3d_mid,
     atleast_nd,
     errorif,
     flatten_mat,
+    safediv,
     setdefault,
     take_mask,
     warnif,
@@ -169,6 +172,172 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
     return z1, z2, mask
+
+
+def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
+    """Newton step using maps used in the quadrature.
+
+    An error of ε in a bounce point manifests
+        * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+        * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+    mask : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well).
+        Subset of points to refine.
+    nufft_eps : float
+        Desired error ε of the bounce points.
+
+    Returns
+    -------
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+
+    """
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+            ]
+        ),
+    )
+    dt_dz = dt_dz.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    mask = mask[..., None, :, :]
+
+    B = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [
+                o._c["|B|"],
+                o._c["|B|"] * (1j * o._modes_z)[:, None],
+                o._c["|B|"] * (1j * o._modes_t),
+            ],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    )
+    B, dB_dz, dB_dt = (
+        B.reshape(3, *shape)
+        if B.ndim == 2
+        # reshape before swap to avoid memory copy
+        else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
+    )
+
+    dz = safediv(B - pitch_inv[..., None, :, None], dB_dz + dB_dt * dt_dz)
+    z = z.reshape(shape)
+    z = jnp.where(mask & (jnp.abs(dz) < 1e-1), z - dz, z)
+    return z[..., 0, :, :], z[..., 1, :, :]
+
+
+@partial(
+    jax.custom_jvp,
+    nondiff_argnames=("num_well", "nufft_eps"),
+)
+def regular_points(o, pitch_inv, num_well, nufft_eps):
+    """Bounce points then newton, with regularized jvp."""
+    return _newton(
+        o,
+        pitch_inv,
+        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well),
+        nufft_eps,
+    )
+
+
+@regular_points.defjvp
+def regular_points_jvp(num_well, nufft_eps, primals, tangents):
+    """Implicit function theorem with regularization.
+
+    Regularization used to smooth the discretized system so that it recognizes
+    any non-differentiable sample it has observed actually has zero measure in
+    the continuous system.
+
+    References
+    ----------
+    Spectrally accurate, reverse-mode differentiable bounce-averaging
+    algorithm and its applications.
+    Kaya E. Unalmis et al.
+    Supplementary information in DESC publications folder.
+
+    """
+    o, p = primals
+    do, dp = tangents
+
+    z1, z2 = regular_points(o, p, num_well, nufft_eps)
+
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz, dt_do = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+                do._theta.cheb,
+            ]
+        ),
+    )
+    dt_dz = dt_dz.reshape(shape)
+    dt_do = dt_do.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    mask = (z1 < z2)[..., None, :, :]
+
+    dB_dz = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [
+                o._c["|B|"] * (1j * o._modes_z)[:, None],
+                o._c["|B|"] * (1j * o._modes_t),
+                do._c["|B|"],
+            ],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    )
+    dB_dz, dB_dt, dB_do = (
+        dB_dz.reshape(3, *shape)
+        if dB_dz.ndim == 2
+        # reshape before swap to avoid memory copy
+        else dB_dz.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
+    )
+
+    # chain rule to move from (∂/∂ζ)|ρ,θ to (∂/∂ζ)|ρ,a
+    dB_dz += dB_dt * dt_dz
+    dB_do += dB_dt * dt_do
+
+    dB_dz = jnp.where(
+        jnp.abs(dB_dz) > _eps,
+        dB_dz,
+        dB_dz + jnp.copysign(_eps, dB_dz.real),
+    )
+    dz12 = jnp.where(mask, (dp[..., None, :, None] - dB_do) / dB_dz, 0.0)
+
+    return (z1, z2), (dz12[..., 0, :, :], dz12[..., 1, :, :])
 
 
 def set_default_plot_kwargs(kwargs, l=None, m=None):
@@ -1073,7 +1242,7 @@ def _loop(y, cheb, x_idx):
     return c0 + c1 * y
 
 
-class PiecewiseChebyshevSeries(IOAble):
+class PiecewiseChebyshevSeries(Module):
     """Chebyshev series.
 
     { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
@@ -1088,6 +1257,9 @@ class PiecewiseChebyshevSeries(IOAble):
         Domain for y coordinates. Default is [-1, 1].
 
     """
+
+    cheb: jax.Array
+    domain: tuple[float]
 
     def __init__(self, cheb, domain=(-1, 1)):
         """Make piecewise series from given Chebyshev coefficients."""

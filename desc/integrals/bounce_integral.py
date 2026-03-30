@@ -1,4 +1,69 @@
-"""Methods for computing bounce integrals (singular or otherwise)."""
+"""Methods for computing bounce integrals (singular or otherwise).
+
+Symbol Definitions
+------------------
+ρ (rho)
+    Flux surface label; the normalized toroidal flux coordinate identifying a
+    magnetic surface (ρ = 0 at the magnetic axis, ρ = 1 at the boundary).
+α (alpha)
+    Field-line label; the poloidal coordinate that identifies a particular
+    field line on a flux surface.  α changes discontinuously across branch
+    cuts of the toroidal angle, so spectral representations in (α, NFP ζ)
+    must be interpreted with care (see ``theta_on_fieldlines``).
+θ (theta)
+    DESC poloidal angle coordinate.
+ζ (zeta)
+    Field-line-following toroidal coordinate; the independent variable that
+    parameterizes position along a field line.
+δ (delta)
+    Stream-map angle, δ = θ − α.  Because δ varies smoothly along a field
+    line, it is used instead of θ to build the field-line parameterization
+    θ(ζ) via ``Bounce2D.angle``.
+ι (iota)
+    Rotational transform (normalized by 2π); relates toroidal and poloidal
+    winding of a field line.  Used in ``theta_on_fieldlines`` and in the
+    upper bound on the number of magnetic wells per toroidal transit.
+ℓ
+    Arc length along the field line, in meters.  The bounce integral
+    ∫ f(ρ,α,λ,ℓ) dℓ is an integral with respect to this coordinate.
+λ (pitch-angle)
+    Pitch-angle parameter, proportional to the magnetic moment over energy
+    (μ/E).  Bounce points satisfy λ|B|(ρ,α,ℓᵢ) = 1; ``pitch_inv`` refers
+    to 1/λ throughout the code.
+η (eta)
+    Exponent on the parallel velocity v_∥ appearing in a class of bounce
+    integrands.  Typically η ∈ {−1, 0, 1}; it controls the integrable
+    singularity at a bounce point where v_∥ → 0.
+|B| (or B)
+    Magnetic field strength (Euclidean norm of the magnetic field vector).
+B^zeta
+    Contravariant toroidal component of the magnetic field vector in
+    (ρ, θ, ζ) coordinates; used as the Jacobian-like factor when converting
+    the line-element dℓ to an integral over ζ.
+Bref
+    Reference magnetic field strength used for non-dimensionalization.
+Lref
+    Reference length scale used for non-dimensionalization.
+xₖ, wₖ
+    Quadrature nodes and weights for approximating ∫₋₁¹ g(x) dx ≈ ∑ₖ wₖ g(xₖ).
+NFP
+    Number of field periods; the discrete toroidal symmetry of the device.
+
+Logic flow overview
+------------------
+1. Start from equilibrium data sampled on an FFT-compatible grid in
+ ``(rho, theta, zeta)``.
+2. Transform required fields (for example ``|B|`` and ``B^zeta``) to spectral form.
+3. Build a field-line parameterization ``theta(zeta)`` from the precomputed
+stream map
+    ``angle`` (typically ``delta = theta - alpha`` from ``Bounce2D.angle``).
+4. Construct a 1D representation of ``B(zeta)`` along each followed field line
+    (piecewise Chebyshev or cubic spline, depending on configuration).
+5. Find bounce points ``(z1, z2)`` by solving ``B(zeta) = 1/lambda``.
+6. Map quadrature nodes to each bounce interval, interpolate required quantities,
+    apply geometry factors, and contract over quadrature weights.
+7. Return per-well bounce integrals, then reduce/average in callers as needed.
+"""
 
 import warnings
 from abc import ABC, abstractmethod
@@ -81,9 +146,10 @@ class Bounce(IOAble, ABC):
         Parameters
         ----------
         min_B : jnp.ndarray
-            Minimum B value.
+            Minimum B value. May be a 1-D array, in which case the inverse pitch (1/λ)
+            values and weights will be returned for each pair of min_B and max_B values.
         max_B : jnp.ndarray
-            Maximum B value.
+            Maximum B value. May be a 1-D array.
         num_pitch : int
             Number of values.
         simp : bool
@@ -110,8 +176,11 @@ class Bounce(IOAble, ABC):
         # Important to do an open quadrature since the bounce integrals at the
         # global maxima of |B| are not computable even ignoring precision issues.
         x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
+        # change simp x from [−1, 1] ∋ x ↦ y ∈ [a, b] where a is min_B and b is max_B
         x = bijection_from_disc(x, min_B[..., None], max_B[..., None])
+        # multiply simp w by 0.5 * (b - a)
         w = w * grad_bijection_from_disc(min_B, max_B)[..., None]
+        # [..., is to to broadcast over surfaces, potentially
         return x, w
 
     @abstractmethod
@@ -208,13 +277,20 @@ class Bounce2D(Bounce):
         Must include names in ``Bounce2D.required_names``.
     angle : jnp.ndarray
         Shape (num ρ, X, Y).
-        Angle returned by ``Bounce2D.angle``.
+        Stream-map angle returned by ``Bounce2D.angle``.
+        In the default pathway this is ``delta = theta - alpha`` in a
+        Fourier-Chebyshev representation used by ``theta_on_fieldlines`` to
+        reconstruct ``theta(zeta)`` on followed field lines.
+        This is required input to ``Bounce2D`` and is not computed inside
+        ``__init__`` so callers can precompute/reuse it across batched calls.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         A reference value is 100.
         If the option ``spline`` is ``True``, the bounce points are found with up to
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
+        8th order accuracy in this parameter, and Y_B is the number of spline knots per
+        toroidal transit used to interpolate |B|. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter, and
+        Y_B is the resolution of the Chebyshev series used to interpolate |B|.
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
@@ -268,7 +344,7 @@ class Bounce2D(Bounce):
         self,
         grid,
         data,
-        angle,
+        angle,  # TODO; why can't angle be created on the fly if it is not given?
         Y_B=None,
         alpha=jnp.array([0.0]),
         num_transit=20,
@@ -379,6 +455,7 @@ class Bounce2D(Bounce):
                 obj._hyperparam["num_transit"], eq.NFP, Y_B
             )
 
+        # this is vandermonde matrices for chebyshev along zeta
         obj._constants["_vander"] = get_vander(obj._grid, Y, Y_B, eq.NFP)
 
         num_quad = obj._hyperparam.pop("num_quad")
@@ -392,7 +469,7 @@ class Bounce2D(Bounce):
             )
 
         rho = obj._grid.compress(obj._grid.nodes[:, 0])
-        obj._constants["lambda"] = get_transforms(
+        obj._constants["lambda_transform"] = get_transforms(
             "lambda",
             eq,
             grid=LinearGrid(
@@ -411,6 +488,14 @@ class Bounce2D(Bounce):
     def _default_kwargs(eta, NFP, **kwargs):
         """Default kwargs for the registered compute functions.
 
+            Note: "angle" must be inside of the passed-in kwargs, which is the output
+            of "Bounce2D.angle".
+            TODO: with what arguments to Bounce2D.angle? just defaults?
+            and is it only required to be passed in if Y_B is not passed,
+            since that is the only path thru the fxn where angle.shape is
+            called and thus the path where angle must
+            exist as an array in kwargs.
+
         Parameters
         ----------
         eta : int
@@ -420,11 +505,51 @@ class Bounce2D(Bounce):
         NFP : int
             Number of field periods.
 
+
         Returns
         -------
-            angle, Y_B, alpha, num_transit, num_well, num_pitch
-            pitch_batch_size, surf_batch_size,
-            quad, nufft_eps, spline, vander
+        angle : jnp.ndarray
+            Shape (num rho, X, Y).
+            Angle returned by ``Bounce2D.angle``.
+        Y_B : int
+            Desired resolution for algorithm to compute bounce points.
+            If ``spline`` is ``True``, bounce points are found with up to
+            8th-order accuracy in this parameter. If ``spline`` is ``False``,
+            bounce points are found with spectral accuracy in this parameter.
+            Defaults kwargs.get("Y_B", Y_B_rule(angle.shape[-1], NFP, spline))
+        alpha : jnp.ndarray
+            Shape (num alpha, ).
+            Starting field line poloidal labels.
+            Defaults to jnp.array([0.0]).
+        num_transit : int
+            Number of toroidal transits to follow field line.
+            Defaults to 20
+        num_well : int
+            Maximum number of wells to detect for each pitch and field line.
+            If given ``-1``, all wells are detected at the cost of performance.
+            Defaults to a heuristic value given by num_well_rule(num_transit, NFP, Y_B)
+        num_pitch : int
+            Resolution for quadrature over velocity coordinate.
+            Defaults to 51
+        pitch_batch_size : int or None
+            Number of pitch values with which to compute simultaneously.
+            If ``None``, uses all pitch values.
+        surf_batch_size : int
+            Number of flux surfaces with which to compute simultaneously.
+        quad : tuple[jnp.ndarray]
+            Quadrature points and weights used to compute bounce integrals.
+            defaults to chebgauss2(kwargs.get("num_quad", 32)) if eta==1
+            else chebgauss1(kwargs.get("num_quad", 32)) if eta==-1
+        nufft_eps : float
+            Precision requested for interpolation with non-uniform fast Fourier
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+            Defaults to 1e-6
+        spline : bool
+            Whether to use cubic splines (instead of Chebyshev series)
+            to compute bounce points. True by default
+        vander : dict[str, jnp.ndarray] or None
+            Optional precomputed transform matrices used by interpolation helpers.
+            Defaults to None
 
         """
         if eta == 1:
@@ -467,6 +592,15 @@ class Bounce2D(Bounce):
         angle = parse_argname_change(
             kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
         )
+        errorif(
+            angle is None,
+            ValueError,
+            "Got None for angle. Must pass in angle "
+            "as a kwarg when computing bounce-averaged quantities, with angle being "
+            "the output of Bounce2D.angle, which is the stream-map angle used to "
+            "reconstruct theta(zeta) on field lines. ",
+        )
+
         alpha = kwargs.get("alpha", jnp.array([0.0]))
         num_transit = kwargs.get("num_transit", 20)
 
@@ -521,14 +655,21 @@ class Bounce2D(Bounce):
         fun_data : dict[str, jnp.ndarray]
             Data to reshape, interpolate, and pass to ``fun``.
             The structure of the data should match the structure
-            returned by the registered compute functions in ``desc.compute``.
-            Note this dictionary will be modified.
+            returned by the registered compute functions in ``desc.compute`` e.g.
+            pointwise quantities are 1-D arrays of length grid.num_nodes and
+            vector quantities are 2-D arrays of shape (grid.num_nodes, 3).
+            Note this dictionary will be modified, adding data from desc_data
+            as needed so that fun_data contains the required data for Bounce2D,
+            including "angle" given by the passed-in angle.
         desc_data : dict[str, jnp.ndarray]
             Data dictionary with the same structure as the data returned by the
-            functions in ``desc.compute``.
+            functions in ``desc.compute``. This dictionary should at a minimum contain
+            the data keys in ``Bounce2D.required_names``.
+            This dictionary is not modified by this method.
         angle : jnp.ndarray
             Shape (num rho, X, Y).
-            Angle returned by ``Bounce2D.angle``.
+            Stream-map angle delta used to find theta(zeta),
+            returned by ``Bounce2D.angle``.
         grid : Grid
             Grid on which ``fun_data`` and ``desc_data`` were computed.
         num_pitch : int
@@ -570,12 +711,17 @@ class Bounce2D(Bounce):
     def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 
+        Bounce2D.integrate requires that data be in the "rzt" shape
+        corresponding to shape (num ρ, num ζ, num θ). This method
+        is just a shortcut for ''grid.meshgrid_reshape(f, "rzt")''
+
         Parameters
         ----------
         grid : Grid
             Tensor-product grid in (ρ, θ, ζ).
         f : jnp.ndarray
-            Data evaluated on grid.
+            Data evaluated on the grid in the canonical shape e.g.
+            (grid.num_nodes,) if 1-D and (grid.num_nodes, 3) if 2-D.
 
         Returns
         -------
@@ -612,6 +758,9 @@ class Bounce2D(Bounce):
         # Likewise to perform partial summation in this application, the real transform
         # must be done in the poloidal angle and the complex transform in the toroidal.
         f = rfft2(f, norm="forward").at[..., i].divide(2) * 2
+        # Here we get the correct coefficients by multiplying all by 2 and dividing
+        # the first and (potentially also the last,, if num θ is even)
+        # coefficients by 2.
         return f[..., None, :, :]
 
     @staticmethod
@@ -633,6 +782,14 @@ class Bounce2D(Bounce):
             eq, X, Y, rho, iota, params, profiles, tol, maxiter, **kwargs
         )
 
+    # TODO: change to allow its use within Objective.compute methods to make them
+    # easier to read and to avoid code duplication.
+    # Might cause recompilation issues maybe?
+    # Currently is a bit complex to use as requires knowledge of Bounce internal
+    # workings to make an objective correctly. Since Bounce2D angle doc simply says
+    # "use output of Bounce2d.angle", would be nice to allow that to work in objectives
+    # too may also need to remove from Bounce2D staticmethod and place as standalone
+    # fxn in order to work under jit https://github.com/jax-ml/jax/issues/7702
     @staticmethod
     def angle(
         eq,
@@ -647,6 +804,15 @@ class Bounce2D(Bounce):
         **kwargs,
     ):
         """Return the angle for mapping boundary coordinates to field line coordinates.
+
+        Specifically, this angle by default is delta = theta - alpha,
+        where theta is the DESC poloidal angle and alpha is the field-line label.
+        This is returned on a grid in (rho,alpha,zeta). This is later used to
+        interpolate to any arbitrary (alpha,zeta) through Fourier-Chebyshev
+        interpolation, effectively obtaining the map delta(alpha,zeta) so that one may
+        compute theta on a given field line (given by alpha) at a given point along
+        that field line (given by zeta) by simply calculating
+        theta = alpha + delta(alpha,zeta).
 
         Parameters
         ----------
@@ -686,10 +852,20 @@ class Bounce2D(Bounce):
         from desc.compute.utils import get_transforms
 
         params = setdefault(params, eq.params_dict)
+        rho = jnp.atleast_1d(rho)
 
         name = kwargs.pop("name", "delta")
         if name == "lambda":
-            errorif(not kwargs.pop("ignore_lambda_guard", False))
+            # the lambda stuff is deprecated and only used in tests
+            # TODO: just make a different function for the test, or just remove the
+            # lambda part entirely, which would simplify this. Can do so in a later
+            # version of DESC, leave for now.
+            errorif(
+                not kwargs.pop("ignore_lambda_guard", False),
+                "The 'lambda' option for the 'name' kwarg in Bounce2D.angle "
+                "is deprecated and should not be used If you are using this,"
+                " please update the test to use 'delta' instead.",
+            )
 
             in_name = "vartheta"
             zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
@@ -715,6 +891,10 @@ class Bounce2D(Bounce):
             tol=tol,
             maxiter=maxiter,
         )
+
+        # [... is here if there is more than one flux surface,
+        # i.e. will either be [:,::-1] if only one flux surface or
+        # [:,:,::-1] if more than one flux surface.
         return angle if (name == "lambda") else angle[..., ::-1]
 
     @property
@@ -776,6 +956,14 @@ class Bounce2D(Bounce):
             If there were less than ``num_well`` wells detected along a field line,
             then the last axis, which enumerates bounce points for a particular field
             line and pitch, is padded with zero.
+
+        Notes
+        -----
+        Representation switch:
+        - If ``self._c["B(z)"]`` is a ``PiecewiseChebyshevSeries``, bounce points
+            are computed with ``intersect1d`` in that representation.
+        - Otherwise, bounce points are computed by ``bounce_points`` from the
+            cubic-spline coefficients ``self._c["B(z)"]`` and ``self._c["knots"]``.
 
         """
         if num_well is None:
@@ -926,6 +1114,17 @@ class Bounce2D(Bounce):
         -----
         Make sure to replace √(1−λB) with √|1−λB| in ``integrand`` to account
         for imperfect computation of bounce points.
+
+        Axis convention (common broadcasted layout during quadrature):
+        - ``rho``: flux surface index.
+        - ``alpha``: field-line label index.
+        - ``pitch``: ``1/lambda`` sample index.
+        - ``well``: bounce-well index on a given field line and pitch.
+        - ``quad``: quadrature index on the mapped interval.
+
+        Typical intermediate tensor layout is ``(..., pitch, well, quad)``.
+        The final dot-product with quadrature weights contracts ``quad`` and
+        returns ``(..., pitch, well)``.
 
         Parameters
         ----------
@@ -1328,7 +1527,7 @@ class Bounce2D(Bounce):
             Shape (num ρ, X, Y).
             Angle returned by ``Bounce2D.angle``.
         l : int
-            Index into first axis of ``angle``.
+            Index into first axis of ``angle``, which typically is the rho-axis.
         truncate : int
             Index at which to truncate any Chebyshev series.
             This will remove aliasing error at the shortest wavelengths where the signal

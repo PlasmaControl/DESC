@@ -293,7 +293,7 @@ class GammaC(_Objective):
             constants["x"],
             constants["y"],
             params["L_lmn"],
-            constants["lambda"],
+            constants["lambda_transform"],
             outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-8,

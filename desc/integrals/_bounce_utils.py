@@ -233,13 +233,16 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
             _z1 = z1[idx][mask[idx]]
             _z2 = z2[idx][mask[idx]]
             if plot:
+                this_title = (
+                    title
+                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$"
+                )
                 plot_ppoly(
                     ppoly=ppoly,
                     z1=_z1,
                     z2=_z2,
                     k=pitch_inv[idx],
-                    title=title
-                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$",
+                    title=this_title,
                     **kwargs,
                 )
 
@@ -253,13 +256,16 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                 "bounce points is in hypograph(|B|). Use more knots.\n"
             )
         if plot:
+            this_title = (
+                title + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$"
+            )
             plots.append(
                 plot_ppoly(
                     ppoly=ppoly,
                     z1=z1[lm],
                     z2=z2[lm],
                     k=pitch_inv[lm],
-                    title=title,
+                    title=this_title,
                     **kwargs,
                 )
             )
@@ -729,6 +735,8 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
         .swapaxes(0, -3)
     )
     alpha = alpha.swapaxes(0, -2)
+    # now the variable delta is actually referring to theta
+    # TODO: why not just rename? and why the axes?
     delta = delta.at[..., 0].add(alpha)
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
     return PiecewiseChebyshevSeries(delta, domain)
@@ -776,6 +784,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
+    # compute the toroidal part first
     f = ifft_mmt(
         cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
         f,
@@ -784,6 +793,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
+    # then compute the poloidal part of f
     f = irfft_mmt_pos(theta.evaluate(Y), f, num_t, modes=modes_t)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)

@@ -230,13 +230,15 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 nufft_eps=nufft_eps,
                 is_fourier=True,
             )
+            # sum over wells, average over pitch
+            # output here is then (num_rho, num_alpha)
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
         return jnp.sum(
             batch_map(fun, data["pitch_inv"], pitch_batch_size)
             * data["pitch_inv weight"]
             / data["pitch_inv"] ** 3,
-            axis=-1,
+            axis=-1,  # summed over alpha, so is only fxn of rho after
         )
 
     B0 = data["max_tz |B|"]

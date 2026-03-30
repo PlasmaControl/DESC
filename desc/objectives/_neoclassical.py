@@ -160,10 +160,11 @@ class EffectiveRipple(_Objective):
         deriv_mode="auto",
         jac_chunk_size=None,
         name="Effective ripple",
-        grid=None,
-        X=16,
-        Y=32,
-        Y_B=None,
+        grid=None,  # Determines the flux surfaces to compute on and resolution of FFTs.
+        X=16,  # Poloidal Fourier grid resolution to interpolate the angle.
+        Y=32,  # Toroidal Chebyshev grid resolution over a single field period
+        # to interpolate the angle.
+        Y_B=None,  #  Desired resolution for algorithm to compute bounce points.
         alpha=jnp.array([0.0]),
         num_transit=20,
         num_well=None,
@@ -270,13 +271,22 @@ class EffectiveRipple(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
+        # TODO: we could use Bounce2d.angle here, if we modify that function to
+        # allow one to pass in the lambda transform and the alpha points,
+        # or we could just pass in X,Y instead of x,y with X,Y being
+        # the resolutions for alpha, zeta instead of the actual alpha, zeta points.
         delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
+            iota=constants["transforms"]["grid"].compress(data["iota"]),
+            poloidal=constants["x"],  # this is alpha
+            zeta=constants["y"],  # this is zeta
+            L_lmn=params["L_lmn"],
+            # lmbda is the transform matrix for the L_lmn
+            # to some uniformly spaced grid in theta at the
+            # same rho points as iota and same zeta points
+            # as given above
+            lmbda=constants["lambda_transform"],
+            inbasis="alpha",
+            outbasis="delta",  # it will return theta - alpha
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-8,
         )[..., ::-1]

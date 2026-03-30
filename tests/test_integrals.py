@@ -1667,7 +1667,7 @@ class TestBounce2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
         "nufft_eps, spline, Y_B",
-        [(0, False, 16), (0, True, 64), (1e-6, False, 16), (1e-8, True, 64)],
+        [(0, False, 16), (0, True, 64), (1e-7, False, 16), (1e-8, True, 64)],
     )
     def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""

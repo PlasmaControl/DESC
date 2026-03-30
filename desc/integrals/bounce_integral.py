@@ -801,10 +801,9 @@ class Bounce2D(Bounce):
 
         Notes
         -----
-        It can be shown that bounce integrals with the weight
-           * v_∥⁰ᐧ⁵  will have error 𝒪(ε¹ᐧ⁵)
-           * v_∥⁻⁰ᐧ⁵ will have error 𝒪(ε⁰ᐧ⁵)
-        where ε is the error of the computed bounce point.
+        It can be shown that an error of ε in a bounce point yields
+           * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+           * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
 
         Parameters
         ----------
@@ -816,7 +815,8 @@ class Bounce2D(Bounce):
             Shape (num ρ, num α, num pitch, num well).
             Valid bounce points.
         eps : float
-            Expected error ε of the bounce points.
+            Desired error ε of the bounce points.
+            If very small, one additional Newton step may be needed.
 
         Returns
         -------
@@ -824,14 +824,10 @@ class Bounce2D(Bounce):
             Shape (num ρ, num α, num pitch, num well).
 
         """
-        shape = z1.shape
-        domain = (0, 2 * jnp.pi / self._NFP)
+        shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
         dy_dz = self._NFP / jnp.pi
 
-        # stack on last axis bad for memory, but need to for jax finufft compatibility
-        z = flatten_mat(jnp.stack((z1, z2), axis=-1), 3)
-        mask = flatten_mat(jnp.broadcast_to(mask[..., None], (*z1.shape, 2)), 3)
-
+        z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
         t, dt_dz = self._theta.eval1d(
             z[None],
             jnp.stack(
@@ -841,8 +837,11 @@ class Bounce2D(Bounce):
                 ]
             ),
         )
-        dt_dz = dt_dz.reshape(*shape, 2)
-        t, z, mask = map(flatten_mat, (t, z, mask))
+        dt_dz = dt_dz.reshape(shape)
+        t = flatten_mat(t)
+        z = flatten_mat(z)
+
+        mask = mask[..., None, :, :]
 
         B = nufft2d2r(
             z,
@@ -855,22 +854,22 @@ class Bounce2D(Bounce):
                 ],
                 -3,
             ),
-            domain,
+            (0, 2 * jnp.pi / self._NFP),
             vec=True,
             eps=eps,
-            mask=mask,
+            mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
         )
         B, dB_dz, dB_dt = (
-            B.reshape(3, *shape, 2)
+            B.reshape(3, *shape)
             if B.ndim == 2
             # reshape before swap to avoid memory copy
-            else B.reshape(shape[0], 3, *shape[1:], 2).swapaxes(0, 1)
+            else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
         )
 
-        dz = safediv(B - pitch_inv[..., None, None], dB_dz + dB_dt * dt_dz)
-        z = z.reshape(*shape, 2)
-        z = jnp.where(mask.reshape(*shape, 2) & (jnp.abs(dz) < 1e-2), z - dz, z)
-        return z[..., 0], z[..., 1]
+        dz = safediv(B - pitch_inv[..., None, :, None], dB_dz + dB_dt * dt_dz)
+        z = z.reshape(shape)
+        z = jnp.where(mask & (jnp.abs(dz) < 1e-2), z - dz, z)
+        return z[..., 0, :, :], z[..., 1, :, :]
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1033,10 +1032,8 @@ class Bounce2D(Bounce):
                 data,
                 nufft_eps,
                 low_ram,
-                mask=flatten_mat(
-                    jnp.broadcast_to(((z1 != 0.0) | (z2 != 0.0))[..., None], z.shape), 4
-                ),
-                sentinel=0.5 * jnp.max(pitch_inv),
+                mask=flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], z.shape), 4),
+                sentinel=0.5 * jnp.min(pitch_inv),
             )
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = z

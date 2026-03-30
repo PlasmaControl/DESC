@@ -1647,7 +1647,7 @@ class TestBounce2D:
         )
         points = bounce.points(pitch_inv)
         points = bounce._refine_points(
-            pitch_inv[:, None], *points, mask=(points[0] != 0) | (points[1] != 0)
+            pitch_inv[:, None], *points, mask=points[0] < points[1]
         )
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0

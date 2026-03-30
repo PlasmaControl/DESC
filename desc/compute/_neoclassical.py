@@ -180,7 +180,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
 
     """

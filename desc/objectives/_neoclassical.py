@@ -47,13 +47,12 @@ class EffectiveRipple(_Objective):
 
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
 
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 

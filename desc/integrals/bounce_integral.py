@@ -174,7 +174,7 @@ class Bounce2D(Bounce):
     ---------
     Spectrally accurate, reverse-mode differentiable bounce-averaging
     algorithm and its applications.
-    Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+    Kaya E. Unalmis et al.
     https://arxiv.org/abs/2412.01724.
 
     Examples
@@ -192,8 +192,7 @@ class Bounce2D(Bounce):
         ``Bounce1D`` uses lower order accurate, one-dimensional splines.
         ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
         moving grid interpolation problem and avoids recomputing 3D Fourier-Zernike
-        series on a time-dependent grid. Note that performance will improve
-        significantly by resolving GitHub issue ``1303``.
+        series on a time-dependent grid.
 
     Parameters
     ----------
@@ -216,6 +215,10 @@ class Bounce2D(Bounce):
         If the option ``spline`` is ``True``, the bounce points are found with up to
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
@@ -789,21 +792,17 @@ class Bounce2D(Bounce):
             return z1, z2
 
         pitch_inv = broadcast_for_bounce(pitch_inv)
-        z1, z2, mask = bounce_points(
-            pitch_inv, self._c["knots"], self._c["B(z)"], num_well
+        return self._refine_points(
+            pitch_inv,
+            *bounce_points(pitch_inv, self._c["knots"], self._c["B(z)"], num_well),
         )
-        if True:  # TODO: Enable in the next PR.
-            return z1, z2
-        return self._refine_points(pitch_inv, z1, z2, mask)
 
     def _refine_points(self, pitch_inv, z1, z2, mask, eps=1e-10):
         """Find bounce points with maps used in the quadrature.
 
-        Notes
-        -----
-        It can be shown that an error of ε in a bounce point yields
-           * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
-           * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+        An error of ε in a bounce point manifests
+          * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+          * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
 
         Parameters
         ----------
@@ -813,10 +812,9 @@ class Bounce2D(Bounce):
             Shape (num ρ, num α, num pitch, num well).
         mask : jnp.ndarray
             Shape (num ρ, num α, num pitch, num well).
-            Valid bounce points.
+            Subset of points to refine.
         eps : float
             Desired error ε of the bounce points.
-            If very small, one additional Newton step may be needed.
 
         Returns
         -------
@@ -868,7 +866,7 @@ class Bounce2D(Bounce):
 
         dz = safediv(B - pitch_inv[..., None, :, None], dB_dz + dB_dt * dt_dz)
         z = z.reshape(shape)
-        z = jnp.where(mask & (jnp.abs(dz) < 1e-2), z - dz, z)
+        z = jnp.where(mask & (jnp.abs(dz) < 1e-1), z - dz, z)
         return z[..., 0, :, :], z[..., 1, :, :]
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1283,9 +1281,7 @@ class Bounce2D(Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                z1, z2 = B.intersect1d(pitch_inv)
-                kwargs["z1"] = z1
-                kwargs["z2"] = z2
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv)
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 
@@ -1294,9 +1290,9 @@ class Bounce2D(Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            z1, z2, _ = bounce_points(pitch_inv, self._c["knots"], B)
-            kwargs["z1"] = z1
-            kwargs["z2"] = z2
+            kwargs["z1"], kwargs["z2"], _ = bounce_points(
+                pitch_inv, self._c["knots"], B
+            )
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1795,7 +1791,7 @@ class Bounce1D(Bounce):
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
 
-        pitch = jnp.atleast_1d(1 / broadcast_for_bounce(pitch_inv))[..., None, None]
+        pitch = broadcast_for_bounce(1 / pitch_inv)[..., None, None]
 
         shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
 
@@ -1904,9 +1900,7 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            z1, z2, _ = bounce_points(pitch_inv, self._zeta, B)
-            kwargs["z1"] = z1
-            kwargs["z2"] = z2
+            kwargs["z1"], kwargs["z2"], _ = bounce_points(pitch_inv, self._zeta, B)
             kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
             PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)

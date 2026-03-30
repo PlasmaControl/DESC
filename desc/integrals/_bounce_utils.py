@@ -971,7 +971,8 @@ def broadcast_for_bounce(pitch_inv):
         Shape broadcasts with (num ρ, num α, num pitch).
 
     """
-    if jnp.ndim(pitch_inv) == 2:
+    pitch_inv = jnp.atleast_1d(pitch_inv)
+    if pitch_inv.ndim == 2:
         pitch_inv = pitch_inv[:, None]
     return pitch_inv
 
@@ -1001,7 +1002,10 @@ def round_up_rule(Y, NFP, axisymmetric=False):
 
 def Y_B_rule(Y, NFP, spline=True):
     """Guess Y_B from resolution of Chebyshev spectrum of angle."""
-    return (2 * Y * int(np.sqrt(NFP))) if spline else Y
+    # Due to backwards compatibility reasons Y_B is expected to indicate
+    # resolution over full transit (a single field period) when spline is
+    # true (false).
+    return (Y * NFP) if spline else Y
 
 
 def num_well_rule(num_transit, NFP, Y_B=None):
@@ -1016,10 +1020,6 @@ def num_well_rule(num_transit, NFP, Y_B=None):
 
 def get_vander(grid, Y, Y_B, NFP):
     """Builds Vandermonde matrices for objectives."""
-    assert isinstance(Y, int)
-    assert isinstance(Y_B, int)
-    assert isinstance(NFP, int)
-
     Y_trunc = truncate_rule(Y)
     Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
     x = jnp.linspace(
@@ -1321,17 +1321,6 @@ class PiecewiseChebyshevSeries(IOAble):
         mask = flatten_mat(mask)
         df_dy = flatten_mat(df_dy)
 
-        # Note for bounce point applications:
-        # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersection because the subset of pitch values
-        # that generate this edge case has zero measure. By ignoring this, for those
-        # subset of pitch values the integrations will be done in the hypograph of
-        # |B|, which will yield zero. If in future decide to not ignore this, note
-        # the solution is to
-        # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
-        # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
-        #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
-        #    are not differentiable.
         z1 = (df_dy <= 0) & mask
         z2 = (df_dy >= 0) & _in_epigraph_and(mask, df_dy)
 

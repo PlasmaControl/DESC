@@ -1642,13 +1642,15 @@ class TestBounce2D:
             atol=1.87,  # 1/3376 integrals need this for reason discussed above
         )
 
-        bounce = Bounce2D(
-            grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
-        )
+        bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
         points = bounce.points(pitch_inv)
-        points = bounce._refine_points(
-            pitch_inv[:, None], *points, mask=points[0] < points[1]
+        z1, z2 = bounce._refine_points(
+            pitch_inv[:, None], *points, points[0] < points[1]
         )
+        # 1 point out of 10k converges slow, so just use loose tolerence
+        np.testing.assert_allclose(points[0], z1, atol=2e-4)
+        np.testing.assert_allclose(points[1], z2, atol=2e-4)
+
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)

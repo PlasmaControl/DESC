@@ -40,7 +40,6 @@ from desc.utils import (
     atleast_nd,
     errorif,
     flatten_mat,
-    safediv,
     setdefault,
     take_mask,
     warnif,
@@ -242,7 +241,7 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
     )
 
-    dz = safediv(B - pitch_inv[..., None, :, None], dB_dz + dB_dt * dt_dz)
+    dz = (B - pitch_inv[..., None, :, None]) / (dB_dz + dB_dt * dt_dz)
     z = z.reshape(shape)
     z = jnp.where(mask & (jnp.abs(dz) < 1e-1), z - dz, z)
     return z[..., 0, :, :], z[..., 1, :, :]
@@ -297,8 +296,8 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
             ]
         ),
     )
-    dt_dz = dt_dz.reshape(shape)
     dt_do = o._theta.eval1d(z, do._theta.cheb).reshape(shape)
+    dt_dz = dt_dz.reshape(shape)
     t = flatten_mat(t)
     z = flatten_mat(z)
 

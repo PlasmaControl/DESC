@@ -78,16 +78,22 @@ if axisym:
 else:
     n_zeta = 2 * N
 
+
+# 
+pest = False
 # Save path
 save_path = "phi_matrix/"
 profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
 eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 save_tag = f"{eq_tag}_M_{M}_N_{N}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
-phi_save_name = f"{save_tag}_phi_matrix.npy"
-rtz_save_name = f"{save_tag}_rtz"
-pest_save_name = f"{save_tag}_rvp"
-surf_save_name = f"{save_tag}_surf"
+if pest:
+    phi_save_name = f"{save_tag}_phi_matrix.npy"
+else:
+    phi_save_name = f"{save_tag}_phi_matrix_rtz.npy"
+rtz_save_name = f"{save_tag}_rtz.npy"
+pest_save_name = f"{save_tag}_rvp.h5"
+surf_save_name = f"{save_tag}_surf.npy"
 os.makedirs(save_path, exist_ok=True)
 
 
@@ -211,20 +217,31 @@ if os.path.exists(save_path + phi_save_name) and not override:
 else:
     # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
     #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
-    data_phi = eq.compute(
-        ["phi_matrix_pest"],
-        rtz_surface_grid,
-        pest_grid=pest_grid,
-        problem="exterior Neumann",
-        chunk_size=chunk_size,
-        #transforms={"Phi": phi_transform},
-    )
+    if pest:
+        data_phi = eq.compute(
+            ["phi_matrix_pest"],
+            rtz_surface_grid,
+            pest_grid=pest_grid,
+            problem="exterior Neumann",
+            chunk_size=chunk_size,
+            #transforms={"Phi": phi_transform},
+        )
+        phi_matrix = np.array(data_phi["phi_matrix_pest"])
+        phi_matrix = phi_matrix.reshape(n_theta, n_zeta, n_theta, n_zeta)
+        phi_matrix = phi_matrix.transpose(1,0,3,2)
+        phi_matrix = phi_matrix.reshape(n_surf, n_surf)
+    else:
+        data_phi = eq.compute(
+            ["phi_matrix"],
+            grid=pest_grid,
+            problem="exterior Neumann",
+            chunk_size=chunk_size,
+            #transforms={"Phi": phi_transform},
+        )
+        phi_matrix = np.array(data_phi["phi_matrix_pest"])
+
     # phi_matrix_pest is in DESC Fortran order (theta fastest).
     # Reorder to AGNI C order (zeta fastest) expected by the stability solver.
-    phi_matrix = np.array(data_phi["phi_matrix_pest"])
-    phi_matrix = phi_matrix.reshape(n_theta, n_zeta, n_theta, n_zeta)
-    phi_matrix = phi_matrix.transpose(1,0,3,2)
-    phi_matrix = phi_matrix.reshape(n_surf, n_surf)
 
     np.save(save_path + phi_save_name, phi_matrix)
 

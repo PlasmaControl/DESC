@@ -41,6 +41,7 @@ updates:
           - "interpax_fft"
           - "orthax"
           - "quadax"
+          - "jax-finufft"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -4062,8 +4062,9 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
+        # this needs 5e-11 for eps to pass when jax_finufft==1.3.0
         obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=1e-8)
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=5e-11)
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
@@ -4071,6 +4072,7 @@ class TestObjectiveNaNGrad:
         # these are generally sensitive to nufft_eps because
         # we are not using enough resolution in other parameters
         # in this test to nullify the singularities
+        # TODO: Do we want to keep this test then if it is so sensitive?
         np.testing.assert_allclose(g, g_0, atol=2e-6, rtol=3e-4)
 
         obj = ObjectiveFunction(

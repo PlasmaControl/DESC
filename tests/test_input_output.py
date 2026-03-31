@@ -238,8 +238,6 @@ def test_near_axis_input_files():
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
@@ -315,9 +313,6 @@ def test_from_input_file_equilibrium_desc_vmec():
     assert eq.iota is None
     assert eq_VMEC.iota is None
     assert eq.sym == eq_VMEC.sym
-
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit

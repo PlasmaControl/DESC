@@ -17,7 +17,11 @@ from desc.backend import (
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import get_transforms
-from desc.grid import CustomGridFlux, LinearGridFlux, LinearGridToroidalSurface
+from desc.grid import (
+    CustomGridToroidalSurface,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -453,7 +457,7 @@ class FourierRZToroidalSurface(Surface):
 
         Parameters
         ----------
-        coords : array-like shape(num_points,3) or CustomGridFlux
+        coords : array-like shape(num_points,3)
             cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalSurface
         theta : ndarray, shape(num_points,)
             Locations in poloidal angle theta where real space coordinates are given.
@@ -505,7 +509,7 @@ class FourierRZToroidalSurface(Surface):
             zeta = coords[:, 1]
         else:
             raise NotImplementedError("zeta != phi not yet implemented")
-        nodes = CustomGridFlux(
+        nodes = CustomGridToroidalSurface(
             np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
             sort=False,
             jitable=True,
@@ -1205,12 +1209,10 @@ def _constant_offset_surface(
     offset : float
         constant offset (in m) of the desired surface from the input surface
         offset will be in the normal direction to the surface.
-    grid : Grid, optional
+    grid : AbstractGridToroidalSurface
         Grid object of the points on the offset surface to evaluate the
         offset points at, from which the offset surface will be created by fitting
         offset points with the basis defined by the given M and N.
-        If None, defaults to a LinearGrid with M and N and NFP equal to twice the
-        base_surface.M and base_surface.N and NFP equal to base_surface.NFP
     transforms: dict, optional
         Transforms to use to fit the offset surface's R and Z, respectively. If None,
         new transforms will be created using the given surface's M and N.
@@ -1249,7 +1251,7 @@ def _constant_offset_surface(
     def n_and_r_jax(nodes):
         data = base_surface.compute(
             ["X", "Y", "Z", "n_rho"],
-            grid=CustomGridFlux(nodes, jitable=True, sort=False),
+            grid=CustomGridToroidalSurface(nodes, jitable=True, sort=False),
             method="jitable",
             params=params,
         )

@@ -243,15 +243,27 @@ def test_near_axis_input_files():
 
 
 @pytest.mark.unit
-def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
-    """Test that from_input_file works for DESC input files."""
-    vmec_path = ".//tests//inputs//input.DSHAPE"
+def test_from_input_file_equilibrium_desc_vmec_DSHAPE(tmp_path):
+    """Test that from_input_file works for DESC and VMEC input files."""
     desc_path = ".//tests//inputs//input.DSHAPE_desc"
     kwargs = {"spectral_indexing": "fringe"}
     with pytest.warns(UserWarning, match="Left handed"):
         eq = Equilibrium.from_input_file(desc_path, **kwargs)
-    with pytest.warns(UserWarning):
-        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    # load VMEC input from a read-only directory to ensure temp file handling works
+    # Related to issue #2139
+    vmec_src = ".//tests//inputs//input.DSHAPE"
+    locked_dir = tmp_path / "locked"
+    locked_dir.mkdir()
+    shutil.copy(vmec_src, locked_dir / "input.DSHAPE")
+    os.chmod(locked_dir, 0o555)
+    try:
+        with pytest.warns(UserWarning):
+            eq_VMEC = Equilibrium.from_input_file(
+                str(locked_dir / "input.DSHAPE"), **kwargs
+            )
+    finally:
+        os.chmod(locked_dir, 0o755)
 
     # make sure the loaded eqs are equivalent
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
@@ -814,7 +826,7 @@ def test_io_OmnigenousField(tmpdir_factory):
 
 @pytest.mark.unit
 def test_io_file_like_object(tmpdir_factory):
-    """Test loading an equilibrium from a file-like object (BytesIO)"""
+    """Test loading an equilibrium from a file-like object (BytesIO)."""
     file_path = "./tests/inputs/iotest_HELIOTRON.h5"
     with open(file_path, "rb") as f:
         file_like_obj = BytesIO(f.read())

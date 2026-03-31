@@ -177,8 +177,8 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     """Newton step using maps used in the quadrature.
 
     An error of ε in a bounce point manifests
-        * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
-        * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+      * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+      * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
 
     Parameters
     ----------
@@ -216,8 +216,6 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     t = flatten_mat(t)
     z = flatten_mat(z)
 
-    mask = mask[..., None, :, :]
-
     B = nufft2d2r(
         z,
         t,
@@ -232,7 +230,7 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         (0, 2 * jnp.pi / o._NFP),
         vec=True,
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+        mask=flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4),
     )
     B, dB_dz, dB_dt = (
         B.reshape(3, *shape)
@@ -240,10 +238,14 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         # reshape before swap to avoid memory copy
         else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
     )
+    z = z.reshape(shape)
 
     dz = (B - pitch_inv[..., None, :, None]) / (dB_dz + dB_dt * dt_dz)
-    z = z.reshape(shape)
-    z = jnp.where(mask & (jnp.abs(dz) < 1e-1), z - dz, z)
+    Z = z - dz
+    mask = mask & (Z[..., 0, :, :] < Z[..., 1, :, :])  # Deny interval inversion.
+    mask = mask[..., None, :, :] & (jnp.abs(dz) < 1e-1)  # Deny large updates.
+    z = jnp.where(mask, Z, z)
+
     return z[..., 0, :, :], z[..., 1, :, :]
 
 

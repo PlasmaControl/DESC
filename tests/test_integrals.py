@@ -955,10 +955,14 @@ class TestBounceQuadrature:
         pitch_inv = 2 - 1e-12
         k = pitch_inv * m  # m = k * pitch
         if is_strong:
-            integrand = lambda data, B, pitch: 1 / jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: 1 / jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipkm1(1 - m)
         else:
-            integrand = lambda data, B, pitch: jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipe(m)
         np.testing.assert_allclose(
             bounce.integrate(integrand, pitch_inv, check=True, plot=True).sum(),
@@ -1539,7 +1543,7 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        angle = Bounce2D.angle(eq, X=20, Y=16, rho=rho)
+        angle = Bounce2D.angle(eq, X=20, Y=20, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
@@ -1548,6 +1552,7 @@ class TestBounce2D:
             num_transit=2,
             check=True,
             spline=False,
+            quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1618,37 +1623,28 @@ class TestBounce2D:
         )
 
         # check for consistency with different options
-        with pytest.warns(UserWarning):
-            num_nufft = bounce.integrate(
-                TestBounce._example_numerator,
-                pitch_inv,
-                {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
-                points=points,
-                # ~1% of the integrals differ significantly at lower epsilon,
-                # since the newton step on bounce points is not active
-                nufft_eps=1e-12,
-                check=True,
-                low_ram=True,
-            )
+        num_nufft = bounce.integrate(
+            TestBounce._example_numerator,
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
+            points=points,
+            nufft_eps=1e-7,
+            check=True,
+            low_ram=True,
+        )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
         np.testing.assert_array_equal(near_zero_nufft, near_zero)
+        np.testing.assert_allclose(num_nufft[near_zero_nufft], num[near_zero])
         np.testing.assert_allclose(
-            num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
-        )
-        np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft],
-            num[~near_zero],
-            rtol=7e-4,
-            atol=1.87,  # 1/3376 integrals need this for reason discussed above
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=8e-3
         )
 
         bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
         points = bounce.points(pitch_inv)
         z1, z2 = _newton(bounce, pitch_inv[:, None], *points, points[0] < points[1])
-        # 1 point out of 10k converges slow, so just use loose tolerence
-        np.testing.assert_allclose(points[0], z1, atol=2e-4)
-        np.testing.assert_allclose(points[1], z2, atol=2e-4)
+        np.testing.assert_allclose(points[0], z1, rtol=5e-6)
+        np.testing.assert_allclose(points[1], z2, rtol=5e-6)
 
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0

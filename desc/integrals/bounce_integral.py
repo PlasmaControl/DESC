@@ -877,10 +877,11 @@ class Bounce2D(Bounce):
 
         Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
 
-        Notes
-        -----
-        Make sure to replace √(1−λB) with √|1−λB| in ``integrand`` to account
-        for imperfect computation of bounce points.
+        Warnings
+        --------
+        Make sure to replace √(1−λB) with √|1−λB| or clip the radicand
+        to some value near machine precision when defining ``integrand``
+        to account for imperfect computation of bounce points.
 
         Parameters
         ----------
@@ -917,7 +918,9 @@ class Bounce2D(Bounce):
             as returned by ``Bounce2D.fourier``. Default is false.
         low_ram : bool
             Whether to use a more memory efficient algorithm.
-            This is slower to differentiate.
+            However, this is slower to differentiate with JAX.
+            For best performance, one should only use this option if batching
+            is already being done via ``Bounce2D.batch``  with ``surf_batch_size=1``.
         quad : tuple[jnp.ndarray]
             Optional quadrature points and weights. If given this overrides
             the quadrature chosen when this object was made.
@@ -949,9 +952,6 @@ class Bounce2D(Bounce):
         if points is None:
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
-
-        if low_ram and z1.ndim > 3 and z1.shape[0] > 1:
-            warnings.warn("Use Bounce2D.batch with surf_batch_size=1 before low_ram.")
 
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
@@ -1003,25 +1003,27 @@ class Bounce2D(Bounce):
         z = flatten_mat(z, 3)
         t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
         z = flatten_mat(z)
-        c = nufft2d2r(
-            z,
-            t,
-            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
-            (0, 2 * jnp.pi / self._NFP),
-            vec=True,
-            eps=eps,
-            mask=mask,
+        c = jnp.where(
+            mask[:, None] if mask.ndim == 2 else mask,
+            nufft2d2r(
+                z,
+                t,
+                jnp.concatenate(
+                    [*data.values(), self._c["B^zeta"], self._c["|B|"]], -3
+                ),
+                (0, 2 * jnp.pi / self._NFP),
+                vec=True,
+                eps=eps,
+                mask=mask,
+            ),
+            sentinel,  # replace junk zeros to avoid nans
         )
-
-        # shift the unmasked dummy output from 0 to sentinel to avoid nan in adjoints
-        if c.ndim == 2:
-            c += (~mask) * sentinel
-            c = c.reshape(len(data) + 2, *shape)
-        else:
-            c += (~mask[:, None]) * sentinel
+        c = (
+            c.reshape(len(data) + 2, *shape)
+            if c.ndim == 2
             # reshape before swap to avoid memory copy
-            c = c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
-
+            else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
+        )
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _nummt(self, z, data, low_ram):
@@ -1678,6 +1680,12 @@ class Bounce1D(Bounce):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
         Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
+
+        Warnings
+        --------
+        Make sure to replace √(1−λB) with √|1−λB| or clip the radicand
+        to some value near machine precision when defining ``integrand``
+        to account for imperfect computation of bounce points.
 
         Parameters
         ----------

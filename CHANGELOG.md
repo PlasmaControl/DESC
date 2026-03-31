@@ -3,7 +3,7 @@ Changelog
 
 Bug Fixes
 
-- Fixes the possible permission error in `Equilibrium.from_input_file` method when used with a VMEC input file. Now the automaticallyt generated DESC input file is written to a temporary file under `./tmp/`.
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary file under `./tmp/`.
 
 v0.17.1
 -------

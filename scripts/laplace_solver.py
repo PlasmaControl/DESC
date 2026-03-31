@@ -231,14 +231,14 @@ else:
         phi_matrix = phi_matrix.transpose(1,0,3,2)
         phi_matrix = phi_matrix.reshape(n_surf, n_surf)
     else:
-        data_phi = eq.compute(
+        data_phi = eq.surface.compute(
             ["phi_matrix"],
             grid=pest_grid,
             problem="exterior Neumann",
             chunk_size=chunk_size,
             #transforms={"Phi": phi_transform},
         )
-        phi_matrix = np.array(data_phi["phi_matrix_pest"])
+        phi_matrix = np.array(data_phi["phi_matrix"])
 
     # phi_matrix_pest is in DESC Fortran order (theta fastest).
     # Reorder to AGNI C order (zeta fastest) expected by the stability solver.

@@ -213,6 +213,7 @@ def _compute_single_layer_matrix(
     source_data,
     interpolator,
     chunk_size=None,
+    outer_chunk_size=1,
 ):
     """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
 
@@ -226,6 +227,9 @@ def _compute_single_layer_matrix(
     interpolator : _BIESTInterpolator
     chunk_size : int or None
         Chunk size for eval-point batching *inside* each ``singular_integral`` call.
+    outer_chunk_size : int or None
+        Chunk size for the outer vmap over source columns. Defaults to 1 to avoid
+        OOM from materialising many columns simultaneously.
 
     Returns
     -------
@@ -253,8 +257,9 @@ def _compute_single_layer_matrix(
         ).squeeze(-1)
 
     # chunk_size controls inner parallelism (eval points per singular_integral call).
+    # outer_chunk_size controls how many columns are processed simultaneously.
     # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
-    return vmap_chunked(col, chunk_size=chunk_size)(jnp.eye(N_source)).T
+    return vmap_chunked(col, chunk_size=outer_chunk_size)(jnp.eye(N_source)).T
 
 
 def _lsmr_compute_phi_matrix(
@@ -264,6 +269,7 @@ def _lsmr_compute_phi_matrix(
     basis,
     problem,
     chunk_size=None,
+    outer_chunk_size=1,
     pest_coords=False,
     _midpoint_quad=False,
     _D_quad=False,
@@ -286,6 +292,10 @@ def _lsmr_compute_phi_matrix(
     problem : str
         One of {"interior Neumann", "exterior Neumann", "interior Dirichlet"}.
     chunk_size : int or None
+        Inner chunk size for eval-point batching inside each ``singular_integral`` call.
+    outer_chunk_size : int or None
+        Outer chunk size for the column loop in ``_compute_single_layer_matrix``.
+        Defaults to 1 to avoid OOM from materialising many columns simultaneously.
     _midpoint_quad : bool
     _D_quad : bool
 
@@ -335,7 +345,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_source).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size
+        potential_data, source_data, interpolator, chunk_size, outer_chunk_size
     )
 
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
@@ -656,10 +666,11 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
-    chunk_size=(_doc["chunk_size"] +
-    "Note that when computing the phi matrix, the chunk size is used twice," +
-    "so that the overall memory usage scales as " +
-    "chunk_size squared."),
+    chunk_size=_doc["chunk_size"],
+    outer_chunk_size=(
+        "int or None : Chunk size for the outer column loop when building the "
+        "single-layer matrix. Defaults to 1 to limit peak memory usage."
+    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -672,6 +683,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"].basis,
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
+        outer_chunk_size=kwargs.get("outer_chunk_size", 1),
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
     )
@@ -709,9 +721,11 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         Grid in PEST (rvp) coordinates with ``can_fft2=True``.
         Passed through to ``interpolator_pest``.
         """,
-    chunk_size=(_doc["chunk_size"] +
-    "Note that when computing the phi matrix, the chunk size is used twice," +
-    "so that the overall memory usage scales as chunk_size squared."),
+    chunk_size=_doc["chunk_size"],
+    outer_chunk_size=(
+        "int or None : Chunk size for the outer column loop when building the "
+        "single-layer matrix. Defaults to 1 to limit peak memory usage."
+    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -731,6 +745,7 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"].basis,
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
+        outer_chunk_size=kwargs.get("outer_chunk_size", 1),
         pest_coords=True,
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),

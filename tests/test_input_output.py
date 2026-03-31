@@ -45,8 +45,6 @@ def test_vmec_input(tmpdir_factory):
     with pytest.warns(UserWarning):
         ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
-    # ir makes a VMEC file automatically
-    path_converted_file = tmpdir.join("input.DSHAPE_desc")
     # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
@@ -60,6 +58,12 @@ def test_vmec_input(tmpdir_factory):
     correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
 
     # check DESC input file matches known correct one line-by-line
+    # above InputReader(cl_args=[str(tmp_path)]) generates a DESC input file
+    # inside unknown tmp folder, we re create the input file here at a specific
+    # location, so that we can compare
+    path_converted_file = tmpdir.join("input.DSHAPE_converted")
+    with pytest.warns(UserWarning):
+        InputReader.vmec_to_desc_input(input_path, str(path_converted_file))
     with open(correct_file_path) as f:
         lines_correct = f.readlines()
     with open(path) as f:

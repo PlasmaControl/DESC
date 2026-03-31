@@ -1011,7 +1011,7 @@ class TestBounceQuadrature:
             K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 12)
         )
         np.testing.assert_allclose(
-            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
+            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 12)
         )
 
         E0 = ellipe(k2)
@@ -1206,7 +1206,7 @@ class TestBounce:
         )
 
     @staticmethod
-    def get_drift_analytic_data():
+    def get_drift_analytical_data():
         """Get data to compute bounce averaged binormal drift analytically."""
         eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
         psi_boundary = eq.Psi / (2 * np.pi)
@@ -1251,7 +1251,7 @@ class TestBounce:
         return data, things
 
     @staticmethod
-    def drift_analytic(data):
+    def drift_analytical(data):
         """Compute analytic approximation for bounce-averaged binormal drift.
 
         Returns
@@ -1376,8 +1376,8 @@ class TestBounce:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(data)
 
         bounce = Bounce1D(
             things["grid"].source_grid,
@@ -1670,8 +1670,8 @@ class TestBounce2D:
     )
     def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytic, _, _, pitch_inv = TestBounce.drift_analytical(data)
 
         eq = things["eq"]
         grid = LinearGrid(

@@ -17,10 +17,14 @@ _bounce_doc = {
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        A reference value is 100.
-        If the option ``spline`` is ``True``, the bounce points are found with up to
+        If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline`` option is 100.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -76,7 +80,8 @@ _bounce_doc = {
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         """,
     "spline": """bool :
-        Whether to use cubic splines to compute bounce points.
+        Whether to use cubic splines to compute bounce points instead of
+        Chebyshev series. Default is ``True``.
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrix "dct spline".

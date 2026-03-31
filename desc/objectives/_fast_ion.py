@@ -77,8 +77,12 @@ class GammaC(_Objective):
         Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
+        The bounce points are found with 8th order accuracy in this parameter.
         A reference value is 100.
-        The bounce points are found with up to 8th order accuracy in this parameter.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.

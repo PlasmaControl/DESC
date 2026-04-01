@@ -554,11 +554,13 @@ def _effective_ripple(params, transforms, profiles, data, **kwargs):
 )
 
 def _s_drift_integrand(data, B, pitch):
+    """radial drift integrand for bounce integration in _trapped_EP_resonance objective"""
     return safediv(
         2 * data["cvdrift0"] * (2 - pitch * B), jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30))
     )
 
 def _alpha_drift_integrand(data, B, pitch):
+    """cross-field-line drift integrand for bounce integration in _trapped_EP_resonance objective"""
     return safediv(
         2 * (data["gbdrift (periodic)"] * pitch * B + 2 * (1 - pitch * B) * data["cvdrift (periodic)"]), jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30))
     )
@@ -579,7 +581,7 @@ def _phase_space_average(
     pitch_inv_weight,
     fl_length,
     num_alpha=None,
-    fill_value=jnp.nan,
+    fill_value=11.0,
 ):
     """Phase-space average of f_res.
 
@@ -599,6 +601,14 @@ def _phase_space_average(
         Quadrature weights for pitch integration.
     fl_length : jnp.ndarray, shape (rho,)
         Mean-alpha fieldline length, i.e. mean_α ∫ dl/B.
+    num_alpha : int or None, optional
+        If ``None``, number of field lines considered is consistent with bounce integration 
+        in _trapped_EP_resonance. If not ``None``, specifies number of total field lines to consider.
+        Defaults to ``None``.
+    fill_value : float, optional
+        Value to set bounce integration outputs to if no well is found. Cannot use jnp.nan to retain optimization abilities.
+        Cannot use 0 for confusion with other quantities and averages.
+        Defaults to 11.0.
 
     Returns
     -------
@@ -679,8 +689,17 @@ def _resonance_physics(
     wd_blur : float
         Multiplicative blur factor used to compute bump half-width from
         adjacent-surface Omega spacing when ``Delta_Omega`` is not provided.
+    fill_value : float
+        Value to set bounce integration outputs to if no well is found. Cannot use jnp.nan to retain optimization abilities.
+        Cannot use 0 for confusion with other quantities and averages.
+        Defaults to 11.0.
     stab_sacrifice : bool
         Whether to sacrifice accuracy for stability in island widths. 
+    cropping_DOmega : bool
+        If ``True``, Delta_Omega calculation is clipped by 0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta). 
+        This must be when using the ``bump`` weighting method and Delta_Omega = None case.
+        Otherwise this quantity is ignored.
+        Defaults to ``False``.
 
     Returns
     -------
@@ -877,9 +896,9 @@ def _resonance_physics(
     Delta_s_4_sum = (Delta_s_4_profile * res_weight).sum(axis=-1)
 
     if stab_sacrifice:
-        f_res = Delta_s_4_sum * Omega_prime_s**2 
+        f_res = Delta_s_4_sum 
     else:
-        f_res = Delta_s_4_sum
+        f_res = Delta_s_4_sum * Omega_prime_s**2
 
     # Sum over radius to get weighted island width and resonance location. 
     Delta_s = (Delta_s_profile * res_weight).sum(axis=0)
@@ -905,14 +924,13 @@ def _resonance_physics(
 
 
 @register_compute_fun(
-    name="f_tr2",
+    name="trapped EP resonance",
     label=(
-        "Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467"
+        "Trapped Energetic Particle Resonance Objective Function"
     ),
     units="s^-2",
     units_long="seconds squared",
-    description="Trapped Particle Resonance Minimizer"
-    "as defined by Eq. (50) in https://www.overleaf.com/project/68fabdc5d13eac7e69a15467",
+    description="Trapped Energetic Particle Resonance Minimizer",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -923,7 +941,7 @@ def _resonance_physics(
     public=False,
     **_bounce1D_doc,
 )
-def f_tr2(params, transforms, profiles, data, **kwargs):
+def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     """Trapped particle resonance penalty.
 
     Three stages:
@@ -1117,9 +1135,9 @@ def f_tr2(params, transforms, profiles, data, **kwargs):
             num_alpha=num_alpha_psa,
             fill_value=fill_value,
         )
-        data["f_tr2"] = base_grid.expand(f_res_avg)
+        data["trapped EP resonance"] = base_grid.expand(f_res_avg)
     else: # If DEBUG mode, don't phase-space average, just return the resonance physics results
-        data["f_tr2"] = {
+        data["trapped EP resonance"] = {
             **res,
             'pitch_inv': _data['pitch_inv'],
             'res_arr': res_arr,

@@ -1,6 +1,10 @@
-"""Scripts to generate plots for the article."""
+"""Scripts to generate plots for the article.
 
-import os
+May need to run
+  - tar -xf utils.tar.xz
+
+"""
+
 import pickle
 import warnings
 from fractions import Fraction
@@ -13,7 +17,6 @@ import pytest
 from matplotlib.ticker import AutoMinorLocator
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
-import plotting
 from desc.backend import jnp
 from desc.compat import flip_theta
 from desc.compute import data_index
@@ -24,13 +27,6 @@ from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
 from desc.integrals._bounce_utils import truncate_rule
 from desc.plotting import plot_boozer_surface
-from plotting import plot_2d, plot_3d, plot_comparison
-
-plotting._AXIS_LABELS_RPZ = [
-    r"$R ~(\mathrm{meters})$",
-    r"$\phi$",
-    r"$Z ~(\mathrm{meters})$",
-]
 
 
 def pi_formatter(ax, NFP=1):
@@ -206,6 +202,9 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
 
 def test_plot2d_alphas(name="NCSX"):
     """Plot alpha 2d plots."""
+    # plotting file in utils.tar.xz
+    from plotting import plot_2d
+
     plt.rcParams["figure.constrained_layout.use"] = True
     fig, axs = plt.subplots(1, 2, figsize=(7, 3), sharex=True)
 
@@ -722,6 +721,9 @@ def test_plot_bavg_drift():
 
 def test_plot_X_section():
     """Plots cross-sections of initial and optimized equilibrium."""
+    # plotting file in utils.tar.xz
+    from plotting import plot_comparison
+
     eq0 = Equilibrium.load("eq_initial.h5")
     eq1 = Equilibrium.load("eq_optimized.h5")
 
@@ -746,6 +748,11 @@ def test_plot_X_section():
 
 def test_plot_3d():
     """Plot initial and optimized boundary in 3D."""
+    # plotting file in utils.tar.xz
+    import os
+
+    from plotting import plot_3d
+
     eq0 = Equilibrium.load("eq_initial.h5")
     eq1 = Equilibrium.load("eq_optimized.h5")
     plt.rcParams["figure.constrained_layout.use"] = True

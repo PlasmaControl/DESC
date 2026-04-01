@@ -1,9 +1,21 @@
-"""Script to profile effective ripple objective.
+"""Profile bounce integral objective.
 
-pip install xprof tensorflow
+Dynamic shape support jax-finufft.
+  - cd DESC
+  - cd ../
+  - git clone git@github.com:unalmis/jax-finufft.git
+  - conda install -c conda-forge fftw cxx-compiler
+  - cd DESC
+  - pip install ../jax-finufft
+  - Set JF_BUG = False in desc/integrals/_interp_utils.py
+  - Build GPU stuff (or the open mp stuff for CPU)
 
-python effective_ripple_profile.py
-tensorboard --logdir=/tmp/profile-data
+Profiling requires python < 3.14.
+  - pip install xprof tensorboard tensorboard_plugin_profile
+  - cd DESC/publications/unalmis2025
+  - python effective_ripple_profile.py
+  - tensorboard --logdir=/tmp/profile-data
+
 """
 
 import numpy as np

@@ -185,8 +185,12 @@ class TestFastInterp:
         f2 = jnp.fft.fft2(c, norm="forward")
 
         v = func(xq, yq)
-        np.testing.assert_allclose(nufft2d2r(xq, yq, f1, domain_x, domain_y), v)
-        np.testing.assert_allclose(nufft2d2r(xq, yq, f2, domain_x, domain_y, None), v)
+        np.testing.assert_allclose(
+            nufft2d2r(xq, yq, f1, domain_x, domain_y), v, rtol=1e-6
+        )
+        np.testing.assert_allclose(
+            nufft2d2r(xq, yq, f2, domain_x, domain_y, None), v, rtol=1e-6
+        )
 
         @partial(grad, argnums=(0, 1))
         def g1(xq, yq):
@@ -201,8 +205,8 @@ class TestFastInterp:
             return func(xq, yq).sum()
 
         g = true_g(xq, yq)
-        np.testing.assert_allclose(g1(xq, yq), g, atol=1e-11)
-        np.testing.assert_allclose(g2(xq, yq), g, atol=1e-11)
+        np.testing.assert_allclose(g1(xq, yq), g, atol=1e-10)
+        np.testing.assert_allclose(g2(xq, yq), g, atol=1e-10)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)

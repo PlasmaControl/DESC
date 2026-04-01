@@ -188,10 +188,10 @@ class GammaC(_Objective):
     ):
         try:
             import jax_finufft  # noqa: F401
-        except ImportError:
+        except:  # noqa: E722
             warnif(
                 nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed.\n"
+                msg="\njax-finufft is not installed properly.\n"
                 "Setting parameter nufft_eps to zero.\n"
                 "Performance will deteriorate significantly.\n",
             )

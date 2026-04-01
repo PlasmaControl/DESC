@@ -15,14 +15,31 @@ from interpax import interp1d
 
 try:
     from jax_finufft import nufft2, options
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     warnings.warn(
-        "\njax-finufft is not installed.\n"
-        "If you want to use NUFFTs, follow the DESC installation instructions.\n"
-        "Otherwise you must set the parameter nufft_eps to zero\n"
-        "when computing effective ripple, Gamma_c, and any other\n"
-        "computations that involve bounce integrals.\n"
+        "jax_finufft is not installed. NUFFT functions will not be available.",
+        UserWarning,
     )
+except Exception as e:
+    error_str = str(e)
+    # This error will probably happen pretty often, we skip it to prevent breaking
+    # codes that doesn't use jax_finufft but still want to use desc
+    if "XLA FFI handler registration" in error_str:
+        warnings.warn(
+            "jax_finufft XLA FFI handler registration failed. "
+            "This is likely due to a mismatch between the JAX version and the "
+            "jax_finufft version. Change package versions to resolve this issue. "
+            "NUFFT functions will not be available.",
+            UserWarning,
+        )
+    # If we face any other specific error related to jax_finufft, we can catch it
+    # in an elif block and provide a more specific warning.
+    else:
+        warnings.warn(
+            "Unknown error occurred while importing jax_finufft. NUFFT functions "
+            f"will not be available: {e}",
+            UserWarning,
+        )
 
 from desc.backend import dct, jnp, rfft, rfft2, take
 from desc.integrals.quad_utils import bijection_from_disc

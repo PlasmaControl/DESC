@@ -4,9 +4,10 @@ Dynamic shape support jax-finufft.
   - cd DESC
   - cd ../
   - git clone git@github.com:unalmis/jax-finufft.git
+  - cd jax-finufft
   - git switch ku/dynamic
+  - cd ../DESC
   - conda install -c conda-forge fftw cxx-compiler
-  - cd DESC
   - pip install ../jax-finufft
   - Set JF_BUG = False in desc/integrals/_interp_utils.py
   - Build GPU stuff (or the open mp stuff for CPU)

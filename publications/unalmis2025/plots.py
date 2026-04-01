@@ -648,6 +648,7 @@ def plot_bavg_drift(
 
 
 def test_plot_bavg_drift():
+    # use desc/compute/_fast_ion.py file in utils.tar.xz
     eq0 = Equilibrium.load("eq_initial.h5")
     eq1 = Equilibrium.load("eq_optimized.h5")
     eq1 = flip_theta(eq1)

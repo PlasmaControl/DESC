@@ -244,7 +244,6 @@ def _poloidal_drift(data, B, pitch):
         "|grad(rho)|",
         "|e_alpha|r,p|",
         "kappa_g",
-        "cvdrift0",
         "iota_r",
     ]
     + Bounce2D.required_names,
@@ -295,19 +294,37 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         )
 
         points = bounce.points(data["pitch_inv"], num_well)
-        drift1, v_tau = bounce.integrate(
-            [_drift1, _v_tau],
+        drift1, drift2 = bounce.integrate(
+            [_drift1, _drift2],
             data["pitch_inv"],
             data,
-            ["|grad(psi)|*kappa_g"],
+            ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
             nufft_eps=nufft_eps,
             is_fourier=True,
             low_ram=True,
         )
-        return jnp.abs(safediv(drift1, v_tau)).sum(-1)
+        return (2 / jnp.pi) * jnp.arctan(
+            safediv(
+                drift1,
+                drift2
+                * bounce.interp_to_argmin(
+                    data["|grad(rho)|*|e_alpha|r,p|"],
+                    points,
+                    nufft_eps=nufft_eps,
+                    is_fourier=True,
+                ),
+            )
+        ).sum(-1)
 
-    fun_data = {"|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"]}
+    fun_data = {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
     data["gamma_c"] = Bounce2D.batch(
         gamma_c0, fun_data, data, angle, grid, num_pitch, 1
     )

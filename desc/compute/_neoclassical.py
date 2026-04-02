@@ -128,8 +128,8 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _dH_ripple(data, B, pitch):
-    """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
+def _dI_1(data, B, pitch):
+    """Integrand of Unalmis et al. eqaution 2.9 with |∂ψ/∂ρ| removed."""
     return (
         jnp.sqrt(jnp.abs(1 - pitch * B))
         * (4 / (pitch * B) - 1)
@@ -138,8 +138,8 @@ def _dH_ripple(data, B, pitch):
     )
 
 
-def _dI_ripple(data, B, pitch):
-    """Integrand of Nemov eq. 31."""
+def _dI_2(data, B, pitch):
+    """Integrand of Unalmis et al. equation 2.10."""
     return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
@@ -187,6 +187,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         algorithm and its applications.
         Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
+        Equation 2.12.
 
     """
     # noqa: unused dependency
@@ -227,7 +228,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             I_1, I_2 = bounce.integrate(
-                [_dH_ripple, _dI_ripple],
+                [_dI_1, _dI_2],
                 pitch_inv,
                 data,
                 ["|grad(rho)|*kappa_g"],

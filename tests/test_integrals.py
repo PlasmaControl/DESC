@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
@@ -717,14 +716,6 @@ class TestSingularities:
 
 class TestBouncePoints:
     """Test that bounce points are computed correctly."""
-
-    @staticmethod
-    def _cheb_intersect(cheb, k):
-        cheb = cheb.copy()
-        cheb[0] = cheb[0] - k
-        roots = chebroots(cheb)
-        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
-        return intersect
 
     @staticmethod
     def filter(z1, z2):

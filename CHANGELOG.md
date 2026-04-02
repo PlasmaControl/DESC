@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes incorrect units in the documentation of some curvature variables.
+- Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+
+v0.17.0
+-------
+
 New Features
 
 - Adds particle tracing capabilities in ``desc.particles`` module.

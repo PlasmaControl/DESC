@@ -17,10 +17,14 @@ _bounce_doc = {
         """,
     "Y_B": """int :
         Desired resolution for algorithm to compute bounce points.
-        A reference value is 100.
-        If the option ``spline`` is ``True``, the bounce points are found with up to
+        If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline`` option is 100.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
         """,
     "alpha": """jnp.ndarray :
         Shape (num alpha, ).
@@ -76,7 +80,8 @@ _bounce_doc = {
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         """,
     "spline": """bool :
-        Whether to use cubic splines to compute bounce points.
+        Whether to use cubic splines to compute bounce points instead of
+        Chebyshev series. Default is ``True``.
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrix "dct spline".
@@ -123,8 +128,8 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _dH_ripple(data, B, pitch):
-    """Integrand of Nemov eq. 30 with |∂ψ/∂ρ| (λB₀)¹ᐧ⁵ removed."""
+def _dI_1(data, B, pitch):
+    """Integrand of Unalmis et al. eqaution 2.9 with |∂ψ/∂ρ| removed."""
     return (
         jnp.sqrt(jnp.abs(1 - pitch * B))
         * (4 / (pitch * B) - 1)
@@ -133,8 +138,8 @@ def _dH_ripple(data, B, pitch):
     )
 
 
-def _dI_ripple(data, B, pitch):
-    """Integrand of Nemov eq. 31."""
+def _dI_2(data, B, pitch):
+    """Integrand of Unalmis et al. equation 2.10."""
     return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
@@ -180,8 +185,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
+        Equation 2.12.
 
     """
     # noqa: unused dependency
@@ -222,7 +228,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             I_1, I_2 = bounce.integrate(
-                [_dH_ripple, _dI_ripple],
+                [_dI_1, _dI_2],
                 pitch_inv,
                 data,
                 ["|grad(rho)|*kappa_g"],

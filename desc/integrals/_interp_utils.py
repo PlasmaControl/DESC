@@ -7,11 +7,14 @@ from interpax import interp1d
 
 try:
     from jax_finufft import nufft2, options
+
+    can_use_nufft = True
 except (ImportError, ModuleNotFoundError):
     warnings.warn(
         "jax_finufft is not installed. NUFFT functions will not be available.",
         UserWarning,
     )
+    can_use_nufft = False
 except Exception as e:
     error_str = str(e)
     # This error will probably happen pretty often, we skip it to prevent breaking
@@ -32,6 +35,7 @@ except Exception as e:
             f"will not be available: {e}",
             UserWarning,
         )
+    can_use_nufft = False
 
 from desc.backend import jax, jnp
 
@@ -93,6 +97,7 @@ def nufft2d2r(
     rfft_axis=-1,
     vec=False,
     eps=1e-6,
+    mask=None,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -156,13 +161,18 @@ def nufft2d2r(
         f = jnp.fft.ifftshift(f, rfft_axis)
 
     opts = options.Opts(modeord=1)
+
+    # TODO: Delete this if block after
+    # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
+    # and then bump min version requirement.
     JF_BUG = True
     if JF_BUG:
         # https://github.com/flatironinstitute/jax-finufft/pull/159
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
+        return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
-    return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
+    return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
 
 
 # Warning: method must be specified as keyword argument.
@@ -221,22 +231,6 @@ def poly_val(*, x, c, der=False):
     return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
-def _subtract_first(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.at[...,0].subtract(k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    return jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
-
-
 def _subtract_last(c, k):
     """Subtract ``k`` from last index of last axis of ``c``.
 
@@ -266,13 +260,8 @@ _root_companion = jnp.vectorize(
 )
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
-# TODO (#1388): Move to interpax.
 
-
-@partial(
-    jax.custom_jvp,
-    nondiff_argnames=("sort", "sentinel", "eps", "distinct"),
-)
+@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
 def polyroot_vec(
     c,
     k=0.0,
@@ -368,6 +357,14 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
     Regularization used to smooth the discretized system so that it recognizes
     any non-differentiable sample it has observed actually has zero measure in
     the continuous system.
+
+    References
+    ----------
+    Spectrally accurate, reverse-mode differentiable bounce-averaging
+    algorithm and its applications.
+    Kaya E. Unalmis et al.
+    Supplementary information in DESC publications folder.
+
     """
     c, k, a_min, a_max = primals
     dc, dk, _, _ = tangents

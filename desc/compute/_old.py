@@ -18,7 +18,7 @@ from ..integrals.quad_utils import (
 )
 from ..utils import cross, dot, safediv
 from ._fast_ion import _drift1, _drift2, _radial_drift, _v_tau
-from ._neoclassical import _bounce_doc, _dH_ripple, _dI_ripple
+from ._neoclassical import _bounce_doc, _dI_1, _dI_2
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
@@ -87,7 +87,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         I_1, I_2 = bounce.integrate(
-            [_dH_ripple, _dI_ripple],
+            [_dI_1, _dI_2],
             data["pitch_inv"],
             data,
             ["|grad(rho)|*kappa_g"],

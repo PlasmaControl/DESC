@@ -96,7 +96,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
@@ -371,15 +371,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
 
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
     """
     # noqa: unused dependency
     grid = transforms["grid"]

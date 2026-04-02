@@ -49,13 +49,12 @@ class GammaC(_Objective):
 
     [3] Spectrally accurate, reverse-mode differentiable bounce-averaging
         algorithm and its applications.
-        Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+        Kaya E. Unalmis et al.
         https://arxiv.org/abs/2412.01724.
 
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 
@@ -78,8 +77,12 @@ class GammaC(_Objective):
         Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
+        The bounce points are found with 8th order accuracy in this parameter.
         A reference value is 100.
-        The bounce points are found with up to 8th order accuracy in this parameter.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
@@ -135,9 +138,9 @@ class GammaC(_Objective):
         of the number of toroidal transits. Velasco's expression has a secular
         term that drives the result to zero as the number of toroidal transits
         increases if the secular term is not averaged out from the singular
-        integrals. Currently, an optimization using Velasco's metric may need
-        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-        transits.
+        integrals. At finite resolution, an optimization using Velasco's metric
+        may need to be evaluated by measuring decrease in Γ_c at a fixed number
+        of toroidal transits.
 
     """
 

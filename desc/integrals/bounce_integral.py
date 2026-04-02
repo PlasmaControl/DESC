@@ -68,9 +68,11 @@ stream map
 import warnings
 from abc import ABC, abstractmethod
 
+from equinox import Module
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -85,11 +87,10 @@ from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
 from orthax.legendre import leggauss
 
-from desc.backend import jnp, rfft2
+from desc.backend import jax, jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    PiecewiseChebyshevSeries,
     Y_B_rule,
     _sentinel,
     argmin,
@@ -105,11 +106,13 @@ from desc.integrals._bounce_utils import (
     move,
     num_well_rule,
     plot_ppoly,
+    regular_points,
     set_default_plot_kwargs,
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
-    chebder,
+    _eps,
+    can_use_nufft,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -125,7 +128,6 @@ from desc.integrals.quad_utils import (
     simpson2,
     uniform,
 )
-from desc.io import IOAble
 from desc.utils import (
     apply,
     atleast_nd,
@@ -136,7 +138,7 @@ from desc.utils import (
 )
 
 
-class Bounce(IOAble, ABC):
+class Bounce(Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
@@ -242,7 +244,7 @@ class Bounce2D(Bounce):
     ---------
     Spectrally accurate, reverse-mode differentiable bounce-averaging
     algorithm and its applications.
-    Kaya E. Unalmis, Rahul Gaur, Rory Conlin, Dario Panici, Egemen Kolemen.
+    Kaya E. Unalmis et al.
     https://arxiv.org/abs/2412.01724.
 
     Examples
@@ -260,8 +262,7 @@ class Bounce2D(Bounce):
         ``Bounce1D`` uses lower order accurate, one-dimensional splines.
         ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
         moving grid interpolation problem and avoids recomputing 3D Fourier-Zernike
-        series on a time-dependent grid. Note that performance will improve
-        significantly by resolving GitHub issue ``1303``.
+        series on a time-dependent grid.
 
     Parameters
     ----------
@@ -285,12 +286,14 @@ class Bounce2D(Bounce):
         ``__init__`` so callers can precompute/reuse it across batched calls.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        A reference value is 100.
-        If the option ``spline`` is ``True``, the bounce points are found with up to
-        8th order accuracy in this parameter, and Y_B is the number of spline knots per
-        toroidal transit used to interpolate |B|. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter, and
-        Y_B is the resolution of the Chebyshev series used to interpolate |B|.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline`` option is 100.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
@@ -339,6 +342,14 @@ class Bounce2D(Bounce):
     """
 
     required_names = ["B^zeta", "|B|", "iota"]
+
+    _quad: tuple[jax.Array]
+    _NFP: int
+    _num_t: int
+    _modes_z: jax.Array
+    _modes_t: jax.Array
+    _c: dict[str, jax.Array]
+    _theta: PiecewiseChebyshevSeries
 
     def __init__(
         self,
@@ -448,7 +459,7 @@ class Bounce2D(Bounce):
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(Y, eq.NFP)
+            Y_B = Y_B_rule(Y, eq.NFP, spline=True)
             obj._hyperparam["Y_B"] = Y_B
         if obj._hyperparam["num_well"] is None:
             obj._hyperparam["num_well"] = num_well_rule(
@@ -970,77 +981,22 @@ class Bounce2D(Bounce):
             num_well = num_well_rule(self._theta.X // self._NFP, self._NFP)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
-            z1, z2 = self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
+            z1, z2 = self._c["B(z)"].intersect1d(
+                self._swap_pitch(pitch_inv), _eps, num_well
+            )
             z1 = move(z1)
             z2 = move(z2)
             return z1, z2
 
-        return bounce_points(
-            broadcast_for_bounce(pitch_inv), self._c["knots"], self._c["B(z)"], num_well
+        pitch_inv = broadcast_for_bounce(pitch_inv)
+        if can_use_nufft:
+            return regular_points(self, pitch_inv, num_well, 1e-10)
+
+        # Newton update has only been implemented for nuffts; contributions welcome.
+        z1, z2, _ = bounce_points(
+            pitch_inv, self._c["knots"], self._c["B(z)"], num_well
         )
-
-    # TODO: Enable in the next PR.
-    #   Weakly singular integrals will have O(1) error without using Newton to ensure
-    #   points are computed to high precision.
-    def _refine_points(self, points, pitch_inv, nufft_eps=1e-6):
-        """One application of the Newton method to recover spectral accuracy.
-
-        Identifies points with the functions we actually use in the quadrature,
-        e.g. same nufft eps and computes (∂B/∂ζ)|α from (∂θ/∂ζ)|α.
-        Also allows using less resolution for the global root finding algorithm.
-
-        Parameters
-        ----------
-        pitch_inv : jnp.ndarray
-            Shape broadcasts with (num ρ, num α, num pitch).
-
-        """
-        shape = points[0].shape
-        domain = (0, 2 * jnp.pi / self._NFP)
-        dy_dz = self._NFP / jnp.pi
-
-        # stack on last axis bad for memory, but need to for jax finufft compatibility
-        z = flatten_mat(jnp.stack(points, axis=-1), 3)
-        t, dt_dz = self._theta.eval1d(
-            z[None],
-            jnp.stack(
-                [
-                    self._theta.cheb,
-                    chebder(self._theta.cheb, scl=dy_dz, axis=-1, keepdims=True),
-                ]
-            ),
-        )
-        dt_dz = dt_dz.reshape(*shape, 2)
-        t = flatten_mat(t)
-        z = flatten_mat(z)
-
-        B = nufft2d2r(
-            z,
-            t,
-            jnp.concatenate(
-                [
-                    self._c["|B|"],
-                    self._c["|B|"] * (1j * self._modes_z)[:, None],
-                    self._c["|B|"] * (1j * self._modes_t),
-                ],
-                -3,
-            ),
-            domain,
-            vec=True,
-            eps=nufft_eps,
-        )
-        B, dB_dz, dB_dt = (
-            B.reshape(3, *shape, 2)
-            if B.ndim == 2
-            # reshape before swap to avoid memory copy
-            else B.reshape(shape[0], 3, *shape[1:], 2).swapaxes(0, 1)
-        )
-
-        dz = (B - pitch_inv[..., None, None]) / (dB_dz + dB_dt * dt_dz)
-        z = z.reshape(*shape, 2)
-        # probably good idea to and this mask with the one in bounce_points()
-        z = jnp.where(jnp.abs(dz) < 1e-2, z - dz, z)
-        return z[..., 0], z[..., 1]
+        return z1, z2
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1078,6 +1034,7 @@ class Bounce2D(Bounce):
                 move(z1, False),
                 move(z2, False),
                 self._swap_pitch(pitch_inv),
+                eps=_eps,
                 plot=plot,
                 **kwargs,
             )
@@ -1110,10 +1067,11 @@ class Bounce2D(Bounce):
 
         Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
 
-        Notes
-        -----
-        Make sure to replace √(1−λB) with √|1−λB| in ``integrand`` to account
-        for imperfect computation of bounce points.
+        Warnings
+        --------
+        Make sure to replace √(1−λB) with √|1−λB| or clip the radicand
+        to some value near machine precision when defining ``integrand``
+        to account for imperfect computation of bounce points.
 
         Axis convention (common broadcasted layout during quadrature):
         - ``rho``: flux surface index.
@@ -1161,7 +1119,9 @@ class Bounce2D(Bounce):
             as returned by ``Bounce2D.fourier``. Default is false.
         low_ram : bool
             Whether to use a more memory efficient algorithm.
-            This is slower to differentiate.
+            However, this is slower to differentiate with JAX.
+            For best performance, one should only use this option if batching
+            is already being done via ``Bounce2D.batch``  with ``surf_batch_size=1``.
         quad : tuple[jnp.ndarray]
             Optional quadrature points and weights. If given this overrides
             the quadrature chosen when this object was made.
@@ -1194,9 +1154,6 @@ class Bounce2D(Bounce):
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
 
-        if low_ram and z1.ndim > 3 and z1.shape[0] > 1:
-            warnings.warn("Use Bounce2D.batch with surf_batch_size=1 before low_ram.")
-
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
         if jnp.ndim(pitch) == 1:
@@ -1209,7 +1166,14 @@ class Bounce2D(Bounce):
         if nufft_eps < 1e-14:
             data = self._nummt(z, data, low_ram)
         else:
-            data = self._nufft(z, data, nufft_eps, low_ram)
+            data = self._nufft(
+                z,
+                data,
+                nufft_eps,
+                low_ram,
+                mask=flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], z.shape), 4),
+                sentinel=0.5 * jnp.min(pitch_inv),
+            )
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = z
 
@@ -1235,18 +1199,25 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, z, data, eps, low_ram):
+    def _nufft(self, z, data, eps, low_ram, mask, sentinel):
         shape = z.shape
         z = flatten_mat(z, 3)
         t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
         z = flatten_mat(z)
-        c = nufft2d2r(
-            z,
-            t,
-            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
-            (0, 2 * jnp.pi / self._NFP),
-            vec=True,
-            eps=eps,
+        c = jnp.where(
+            mask[:, None] if mask.ndim == 2 else mask,
+            nufft2d2r(
+                z,
+                t,
+                jnp.concatenate(
+                    [*data.values(), self._c["B^zeta"], self._c["|B|"]], -3
+                ),
+                (0, 2 * jnp.pi / self._NFP),
+                vec=True,
+                eps=eps,
+                mask=mask,
+            ),
+            sentinel,  # replace junk zeros to avoid nans
         )
         c = (
             c.reshape(len(data) + 2, *shape)
@@ -1254,7 +1225,6 @@ class Bounce2D(Bounce):
             # reshape before swap to avoid memory copy
             else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
         )
-
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _nummt(self, z, data, low_ram):
@@ -1454,9 +1424,7 @@ class Bounce2D(Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                z1, z2 = B.intersect1d(pitch_inv)
-                kwargs["z1"] = z1
-                kwargs["z2"] = z2
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, _eps)
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 
@@ -1465,9 +1433,9 @@ class Bounce2D(Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            z1, z2 = bounce_points(pitch_inv, self._c["knots"], B)
-            kwargs["z1"] = z1
-            kwargs["z2"] = z2
+            kwargs["z1"], kwargs["z2"], _ = bounce_points(
+                pitch_inv, self._c["knots"], B
+            )
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1680,6 +1648,11 @@ class Bounce1D(Bounce):
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
 
+    _quad: tuple[jax.Array]
+    _data: dict[str, jax.Array]
+    _zeta: jax.Array
+    _B: jax.Array
+
     def __init__(
         self,
         grid,
@@ -1711,7 +1684,7 @@ class Bounce1D(Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        self._zeta = grid.compress(grid.nodes[:, 2], surface_label="zeta")
+        self._zeta = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
                 x=self._zeta,
@@ -1854,9 +1827,10 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(
+        z1, z2, _ = bounce_points(
             broadcast_for_bounce(pitch_inv), self._zeta, self._B, num_well
         )
+        return z1, z2
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1907,6 +1881,12 @@ class Bounce1D(Bounce):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
         Computes the bounce integral ∫ f(ρ,α,λ,ℓ) dℓ for every field line and pitch.
+
+        Warnings
+        --------
+        Make sure to replace √(1−λB) with √|1−λB| or clip the radicand
+        to some value near machine precision when defining ``integrand``
+        to account for imperfect computation of bounce points.
 
         Parameters
         ----------
@@ -1965,7 +1945,7 @@ class Bounce1D(Bounce):
             points = self.points(pitch_inv, num_well)
         z1, z2 = points
 
-        pitch = jnp.atleast_1d(1 / broadcast_for_bounce(pitch_inv))[..., None, None]
+        pitch = broadcast_for_bounce(1 / pitch_inv)[..., None, None]
 
         shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
 
@@ -2074,9 +2054,7 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            z1, z2 = bounce_points(pitch_inv, self._zeta, B)
-            kwargs["z1"] = z1
-            kwargs["z2"] = z2
+            kwargs["z1"], kwargs["z2"], _ = bounce_points(pitch_inv, self._zeta, B)
             kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
             PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)

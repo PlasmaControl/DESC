@@ -117,8 +117,8 @@ class TestFastInterp:
         """Test non-uniform real FFT 2D interpolation."""
         x = jnp.linspace(domain_x[0], domain_x[1], m, endpoint=False)
         y = jnp.linspace(domain_y[0], domain_y[1], n, endpoint=False)
-        x, y = map(jnp.ravel, tuple(jnp.meshgrid(x, y, indexing="ij")))
-        c = func(x, y).reshape(m, n)
+        x, y = jnp.meshgrid(x, y, indexing="ij")
+        c = func(x, y)
 
         xq = jnp.array([7.34, 1.10134, 2.28, 1e3 * np.e])
         yq = jnp.array([1.1, 3.78432, 8.542, 0])

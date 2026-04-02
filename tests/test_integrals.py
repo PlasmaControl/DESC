@@ -4,10 +4,9 @@ from functools import partial
 
 import numpy as np
 import pytest
-from interpax_fft import FourierChebyshevSeries, fourier_pts
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebinterpolate, chebroots
+from numpy.polynomial.chebyshev import chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
@@ -37,7 +36,7 @@ from desc.integrals import (
     virtual_casing_biot_savart,
 )
 from desc.integrals._bounce_utils import (
-    PiecewiseChebyshevSeries,
+    _newton,
     bounce_points,
     check_bounce_points,
     get_mins,
@@ -742,7 +741,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -758,7 +757,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -777,7 +776,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -802,7 +801,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -823,7 +822,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
+        z1, z2, _ = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
         check_bounce_points(
             z1,
             z2,
@@ -855,7 +854,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -887,30 +886,6 @@ class TestBouncePoints:
         assert mins.size == ext_scipy.size
         np.testing.assert_allclose(mins[idx], ext_scipy)
         np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
-
-    @pytest.mark.unit
-    def test_z1_first_chebyshev(self):
-        """Test that bounce points are computed correctly."""
-
-        def f(z):
-            return -2 * np.cos(1 / (0.1 + z**2)) + 2
-
-        X, Y = 1, 10
-        alpha, zeta = FourierChebyshevSeries.nodes(X, Y).T
-        cheb = FourierChebyshevSeries(f(zeta).reshape(X, Y)).compute_cheb(
-            fourier_pts(X)
-        )
-        cheb = PiecewiseChebyshevSeries(cheb)
-        pitch_inv = jnp.array([2, 3])
-        z1, z2 = cheb.intersect1d(pitch_inv)
-        cheb.check_intersect1d(z1, z2, pitch_inv)
-
-        bench = chebinterpolate(f, Y - 1)
-        for i in range(pitch_inv.size):
-            z1i, z2i = TestBouncePoints.filter(z1[i], z2[i])
-            r = self._cheb_intersect(bench, pitch_inv[i])
-            np.testing.assert_allclose(z1i, r[1])
-            np.testing.assert_allclose(z2i, r[2])
 
 
 auto_sin = (automorphism_sin, grad_automorphism_sin)
@@ -954,10 +929,14 @@ class TestBounceQuadrature:
         pitch_inv = 2 - 1e-12
         k = pitch_inv * m  # m = k * pitch
         if is_strong:
-            integrand = lambda data, B, pitch: 1 / jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: 1 / jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipkm1(1 - m)
         else:
-            integrand = lambda data, B, pitch: jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipe(m)
         np.testing.assert_allclose(
             bounce.integrate(integrand, pitch_inv, check=True, plot=True).sum(),
@@ -1006,7 +985,7 @@ class TestBounceQuadrature:
             K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 12)
         )
         np.testing.assert_allclose(
-            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
+            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 12)
         )
 
         E0 = ellipe(k2)
@@ -1201,7 +1180,7 @@ class TestBounce:
         )
 
     @staticmethod
-    def get_drift_analytic_data():
+    def get_drift_analytical_data():
         """Get data to compute bounce averaged binormal drift analytically."""
         eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
         psi_boundary = eq.Psi / (2 * np.pi)
@@ -1246,13 +1225,13 @@ class TestBounce:
         return data, things
 
     @staticmethod
-    def drift_analytic(data):
+    def drift_analytical(data):
         """Compute analytic approximation for bounce-averaged binormal drift.
 
         Returns
         -------
-        drift_analytic : jnp.ndarray
-            Analytic approximation for the true result that the numerical computation
+        drift_analytical : jnp.ndarray
+            Analytical approximation for the true result that the numerical computation
             should attempt to match.
         cvdrift, gbdrift : jnp.ndarray
             Numerically computed ``data["cvdrift"]` and ``data["gbdrift"]`` normalized
@@ -1305,7 +1284,7 @@ class TestBounce:
         np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
 
         fudge_1 = 0.19
-        gbdrift_analytic = fudge_1 * (
+        gbdrift_analytical = fudge_1 * (
             -data["shear"]
             + np.cos(data["theta_PEST"])
             - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
@@ -1316,12 +1295,12 @@ class TestBounce:
             - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
-        cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
+        cvdrift_analytical = gbdrift_analytical + fudge_2 * alpha_MHD / B**2
         cvdrift_analytic_low_order = (
             gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
         )
-        np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1e-2)
-        np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=2e-2)
+        np.testing.assert_allclose(gbdrift, gbdrift_analytical, atol=1e-2)
+        np.testing.assert_allclose(cvdrift, cvdrift_analytical, atol=2e-2)
         np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
         np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
 
@@ -1338,7 +1317,7 @@ class TestBounce:
         I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
         I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
 
-        drift_analytic_num = (
+        drift_analytical_num = (
             fudge_2 * alpha_MHD / B0**2 * I_1
             - 0.5
             * fudge_1
@@ -1348,9 +1327,9 @@ class TestBounce:
                 - (I_6 + I_7)
             )
         ) / G0
-        drift_analytic_den = I_0 / G0
-        drift_analytic = drift_analytic_num / drift_analytic_den
-        return drift_analytic, cvdrift, gbdrift, pitch_inv
+        drift_analytical_den = I_0 / G0
+        drift_analytical = drift_analytical_num / drift_analytical_den
+        return drift_analytical, cvdrift, gbdrift, pitch_inv
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):
@@ -1371,8 +1350,8 @@ class TestBounce:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(data)
 
         bounce = Bounce1D(
             things["grid"].source_grid,
@@ -1538,7 +1517,7 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        angle = Bounce2D.angle(eq, X=20, Y=16, rho=rho)
+        angle = Bounce2D.angle(eq, X=20, Y=20, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
@@ -1547,6 +1526,7 @@ class TestBounce2D:
             num_transit=2,
             check=True,
             spline=False,
+            quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
         pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
@@ -1617,36 +1597,29 @@ class TestBounce2D:
         )
 
         # check for consistency with different options
-        with pytest.warns(UserWarning):
-            num_nufft = bounce.integrate(
-                TestBounce._example_numerator,
-                pitch_inv,
-                {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
-                points=points,
-                # ~1% of the integrals differ significantly at lower epsilon,
-                # since the newton step on bounce points is not active
-                nufft_eps=1e-12,
-                check=True,
-                low_ram=True,
-            )
+        num_nufft = bounce.integrate(
+            TestBounce._example_numerator,
+            pitch_inv,
+            {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
+            points=points,
+            nufft_eps=1e-7,
+            check=True,
+            low_ram=True,
+        )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
         np.testing.assert_array_equal(near_zero_nufft, near_zero)
+        np.testing.assert_allclose(num_nufft[near_zero_nufft], num[near_zero])
         np.testing.assert_allclose(
-            num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
-        )
-        np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft],
-            num[~near_zero],
-            rtol=7e-4,
-            atol=1.87,  # 1/3376 integrals need this for reason discussed above
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=8e-3
         )
 
-        bounce = Bounce2D(
-            grid, data, angle, alpha=alpha, num_transit=2, check=True, spline=True
-        )
+        bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
         points = bounce.points(pitch_inv)
-        points = bounce._refine_points(points, pitch_inv[:, None])
+        z1, z2 = _newton(bounce, pitch_inv[:, None], *points, points[0] < points[1])
+        np.testing.assert_allclose(points[0], z1, rtol=5e-6)
+        np.testing.assert_allclose(points[1], z2, rtol=5e-6)
+
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
@@ -1671,8 +1644,8 @@ class TestBounce2D:
     )
     def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytical, _, _, pitch_inv = TestBounce.drift_analytical(data)
 
         eq = things["eq"]
         grid = LinearGrid(
@@ -1711,10 +1684,10 @@ class TestBounce2D:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
+        assert drift_numerical.size == drift_analytical.size, msg
 
         np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+            drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(
@@ -1722,6 +1695,6 @@ class TestBounce2D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_analytical)
         ax.plot(pitch_inv, drift_numerical)
         return fig

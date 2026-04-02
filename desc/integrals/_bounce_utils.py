@@ -249,10 +249,7 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     return z[..., 0, :, :], z[..., 1, :, :]
 
 
-@partial(
-    jax.custom_jvp,
-    nondiff_argnames=("num_well", "nufft_eps"),
-)
+@partial(jax.custom_jvp, nondiff_argnames=("num_well", "nufft_eps"))
 def regular_points(o, pitch_inv, num_well, nufft_eps):
     """Bounce points then newton, with regularized jvp."""
     return _newton(
@@ -1427,6 +1424,9 @@ class PiecewiseChebyshevSeries(Module):
             Sign of ∂f/∂y (x, yᵢ).
 
         """
+        # Could do custom_jvp here too (without newton step) since the jvp
+        # can be diagonalized across the pitch angles (JAX's brute force
+        # method is less effecient by factor of num pitch).
         c = _subtract_first(self.cheb, k)
         # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
         y = _chebroots_vec(c)

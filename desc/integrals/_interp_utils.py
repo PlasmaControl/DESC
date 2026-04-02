@@ -279,10 +279,7 @@ _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 # TODO (#1388): Move to interpax.
 
 
-@partial(
-    jax.custom_jvp,
-    nondiff_argnames=("sort", "sentinel", "eps", "distinct"),
-)
+@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
 def polyroot_vec(
     c,
     k=0.0,

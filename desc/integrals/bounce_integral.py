@@ -7,6 +7,7 @@ from equinox import Module
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
     cheb_from_dct,
     cheb_pts,
     fourier_pts,
@@ -25,7 +26,6 @@ from desc.backend import jax, jnp, rfft2
 from desc.batching import batch_map
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    PiecewiseChebyshevSeries,
     Y_B_rule,
     _sentinel,
     argmin,
@@ -46,6 +46,7 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
+    _eps,
     can_use_nufft,
     interp1d_Hermite_vec,
     interp1d_vec,
@@ -384,7 +385,7 @@ class Bounce2D(Bounce):
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(Y, eq.NFP)
+            Y_B = Y_B_rule(Y, eq.NFP, spline=True)
             obj._hyperparam["Y_B"] = Y_B
         if obj._hyperparam["num_well"] is None:
             obj._hyperparam["num_well"] = num_well_rule(
@@ -794,7 +795,9 @@ class Bounce2D(Bounce):
             num_well = num_well_rule(self._theta.X // self._NFP, self._NFP)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
-            z1, z2 = self._c["B(z)"].intersect1d(self._swap_pitch(pitch_inv), num_well)
+            z1, z2 = self._c["B(z)"].intersect1d(
+                self._swap_pitch(pitch_inv), _eps, num_well
+            )
             z1 = move(z1)
             z2 = move(z2)
             return z1, z2
@@ -845,6 +848,7 @@ class Bounce2D(Bounce):
                 move(z1, False),
                 move(z2, False),
                 self._swap_pitch(pitch_inv),
+                eps=_eps,
                 plot=plot,
                 **kwargs,
             )
@@ -1223,7 +1227,7 @@ class Bounce2D(Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv)
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, _eps)
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 

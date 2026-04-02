@@ -10,16 +10,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import (
-    flatnonzero,
-    fori_loop,
-    jax,
-    jit,
-    jnp,
-    pure_callback,
-    sign,
-    take,
-)
+from desc.backend import fori_loop, jax, jit, jnp, pure_callback, sign
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -714,47 +705,6 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-@functools.partial(
-    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
-)
-def take_mask(a, mask, /, *, size=-1, fill_value=None):
-    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        The source array.
-    mask : jnp.ndarray
-        Boolean mask to index into ``a``. Should have same shape as ``a``.
-    size : int
-        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
-        Size is clipped to be <= ``mask.size``.
-        A negative value will be interpreted as ``mask.size``.
-    fill_value : Any
-        When there are fewer nonzero elements in ``mask`` than ``size``, the remaining
-        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
-        the largest negative value for signed types, the largest positive value for
-        unsigned types, and True for booleans.
-
-    Returns
-    -------
-    result : jnp.ndarray
-        Shape (size, ).
-
-    """
-    assert a.shape == mask.shape
-    size = mask.size if (size is None or size < 0) else min(size, mask.size)
-    idx = flatnonzero(mask, size=size, fill_value=mask.size)
-    return take(
-        a,
-        idx,
-        mode="fill",
-        fill_value=fill_value,
-        unique_indices=True,
-        indices_are_sorted=True,
-    )
-
-
 def flatten_mat(y, axes=2):
     """Flatten matrix to vector.
 
@@ -865,18 +815,6 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
         return func
 
     return define_fd_jvp(wrap_pure_callback(func))
-
-
-def atleast_3d_mid(ary):
-    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
-    ary = jnp.atleast_2d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
-
-
-def atleast_2d_end(ary):
-    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
-    ary = jnp.atleast_1d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 def dot(a, b, axis=-1):

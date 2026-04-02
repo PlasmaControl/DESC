@@ -231,22 +231,6 @@ def poly_val(*, x, c, der=False):
     return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
-def _subtract_first(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.at[...,0].subtract(k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    return jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
-
-
 def _subtract_last(c, k):
     """Subtract ``k`` from last index of last axis of ``c``.
 
@@ -275,8 +259,6 @@ _root_companion = jnp.vectorize(
     partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
 )
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
-
-# TODO (#1388): Move to interpax.
 
 
 @partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))

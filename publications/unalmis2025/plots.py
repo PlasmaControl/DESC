@@ -806,7 +806,7 @@ def test_plot_binormal_drift():
     os.chdir(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
     data, things = TestBounce.get_drift_analytical_data()
-    drift_analytic, _, _, pitch_inv = TestBounce.drift_analytical(data)
+    drift_analytical, _, _, pitch_inv = TestBounce.drift_analytical(data)
 
     eq = things["eq"]
     grid = LinearGrid(rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -840,7 +840,7 @@ def test_plot_binormal_drift():
     drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
     assert np.isfinite(drift_numerical).all()
     msg = "There should be one bounce integral per pitch in this example."
-    assert drift_numerical.size == drift_analytic.size, msg
+    assert drift_numerical.size == drift_analytical.size, msg
 
     plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams.update({"font.size": 17})
@@ -875,7 +875,7 @@ def test_plot_binormal_drift():
     fig, ax = plt.subplots()
     ax.plot(
         pitch_inv,
-        drift_analytic,
+        drift_analytical,
         label="model",
         color="black",
         lw=4,

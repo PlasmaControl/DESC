@@ -743,7 +743,7 @@ class GX(ExternalObjective):
     psi : float, optional
         Normalized toroidal flux surface label on which to simulate. Default = 0.5.
     sigma_Bxy : float, optional
-        Sign convention parameter: (1/|B|^2) B . (grad x cross grad y). Usually -1
+        Sign convention parameter: `(1/|B|^2) B . (grad x cross grad y)`. Usually -1
         for stellarators. Default = -1.
     gx_input_file : str
         Path to a template GX input file. The geometry file path in this template

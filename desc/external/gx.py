@@ -501,31 +501,13 @@ def gx(
     will by default pre-allocate most of the GPU memory, leaving none for GX.
     Recommended strategies to handle this:
 
-    1. **DESC on CPU, GX on GPU (simplest).** Set ``JAX_PLATFORM_NAME=cpu`` before
-       importing JAX. GX inherits the GPU. No special ``launch_cmd`` needed. The
-       geometry computation in DESC is not the bottleneck, so this has minimal impact.
+    1. **No GPU memory pre-allocation.** Set ``XLA_PYTHON_CLIENT_ALLOCATOR="platform"``
+       before importing anything in DESC so it doesn't pre-allocate GPU memory.
+       This way GX and DESC will share the GPU resources.
 
-       .. code-block:: bash
-
-           #!/bin/bash
-           #SBATCH --gpus=1
-           export JAX_PLATFORM_NAME=cpu
-           python my_optimization.py
-
-    2. **Separate GPUs via SLURM.** Request 2+ GPUs. Pin JAX to one GPU
+    2. **Separate GPUs.** Request 2+ GPUs in your slurm. DESC will use first GPU
        (``CUDA_VISIBLE_DEVICES=0``) and set ``gx_gpu=1`` to pin GX to the other,
        or use ``launch_cmd`` with appropriate SLURM flags.
-
-       .. code-block:: bash
-
-           #!/bin/bash
-           #SBATCH --gpus=2
-           export CUDA_VISIBLE_DEVICES=0  # JAX gets GPU 0
-           python my_optimization.py      # GX uses gx_gpu=1
-
-    3. **Shared GPU with memory limits.** Set ``XLA_PYTHON_CLIENT_PREALLOCATE=false``
-       and ``XLA_PYTHON_CLIENT_MEM_FRACTION=0.1`` before importing JAX so it uses
-       minimal GPU memory. GX can then allocate the remainder on the same GPU.
 
     """
     # create a temporary directory to store I/O files

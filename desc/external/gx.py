@@ -2,12 +2,12 @@
 
 import datetime
 import os
-import re
 import shutil
 import subprocess
 
 import numpy as np
 from interpax import interp1d
+from netCDF4 import Dataset
 from quadax import cumulative_trapezoid
 from scipy.constants import mu_0
 
@@ -583,23 +583,18 @@ def gx(
 def _write_gx_input(template_path, output_path, geo_path):
     """Write GX input file by updating the geometry file path in a template."""
     with open(template_path) as f:
-        data = f.read()
-
-    # replace any existing geo_file reference with the new path
-    data = re.sub(
-        r"(geo_file\s*=\s*)(['\"])[^'\"]*\2",
-        rf"\1'{geo_path}'",
-        data,
-    )
-    # also try without quotes
-    data = re.sub(
-        r"(geo_file\s*=\s*)(\S+)",
-        rf"\1'{geo_path}'",
-        data,
-    )
+        lines = f.readlines()
 
     with open(output_path, "w") as f:
-        f.write(data)
+        for line in lines:
+            # Check if the line starts with geo_file
+            if (
+                line.lstrip().startswith("geo_file")
+                and line.split("=")[0].strip() == "geo_file"
+            ):
+                f.write(f"geo_file = '{geo_path}'\n")
+            else:
+                f.write(line)
 
 
 def _run_gx(dir, exec_path, input_path=None, launch_cmd=None, gx_gpu=None, timeout=300):
@@ -670,8 +665,6 @@ def _run_gx(dir, exec_path, input_path=None, launch_cmd=None, gx_gpu=None, timeo
 
 def _read_gx_output(path):
     """Read GX output file and return the time-averaged heat flux."""
-    from netCDF4 import Dataset
-
     errorif(
         not os.path.exists(path),
         OSError,
@@ -870,9 +863,14 @@ class GX(ExternalObjective):
         self._fun_kwargs["eq_transforms"] = get_transforms(
             _EQ_KEYS, obj=eq, grid=grid_eq
         )
-        # Pre-compute profiles for all keys (profiles don't depend on grid).
+        # Get profiles for all keys (profiles don't depend on grid).
         self._fun_kwargs["profiles"] = get_profiles(
             _EQ_KEYS + _FL_KEYS, obj=eq, grid=grid_eq
         )
 
         super().build(use_jit=use_jit, verbose=verbose)
+
+    # compute method is implemented by ExternalObjective and calls gx
+    # with the provided kwargs. Normally we pass params to compute functions,
+    # in ExternalObjective, fun_wrapped converts the params to list of equilibrium
+    # objects and passes the equilibria to gx.

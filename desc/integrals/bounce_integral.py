@@ -848,7 +848,6 @@ class Bounce2D(Bounce):
                 move(z1, False),
                 move(z2, False),
                 self._swap_pitch(pitch_inv),
-                eps=_eps,
                 plot=plot,
                 **kwargs,
             )

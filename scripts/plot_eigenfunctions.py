@@ -28,7 +28,7 @@ theta = np.linspace(0.0, 2 * np.pi, n_theta, endpoint=False)
 # Fixed parameters used when building the save_tag
 aspect_ratio = 200
 NFP          = 1
-axisym       = True
+axisym       = False
 p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
 
 # rho indices to use for the "vs theta" plots
@@ -126,3 +126,41 @@ for iota_0 in iota_on_axis_values:
     print(f"iota_0={iota_0:.4f}: plots saved")
 
 print("Done. Plots saved to", plot_path)
+
+# ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
+all_lambda_min = []
+for iota_0 in iota_on_axis_values:
+    save_tag = (
+        f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
+        f"_p_{'_'.join(p_coeffs.astype(str))}"
+        f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"
+    )
+    lam_path = save_path + f"lambda_{save_tag}.npy"
+    if os.path.exists(lam_path):
+        lam = np.load(lam_path)
+        all_lambda_min.append(float(np.min(lam)))
+    else:
+        print(f"Skipping iota_0={iota_0:.4f}: lambda file not found")
+        all_lambda_min.append(np.nan)
+
+all_lambda_min = np.array(all_lambda_min)
+valid = ~np.isnan(all_lambda_min)
+
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.axhline(0, color="gray", lw=0.8, ls="--")
+ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
+ax.plot(iota_on_axis_values[valid], all_lambda_min[valid], "o-",
+        color="steelblue", lw=2, ms=7)
+ax.set_xlabel(r"$\iota_0$", fontsize=14)
+ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+ax.set_title(
+    r"Stability eigenvalue vs $\iota_0$" + "\n"
+    r"$\iota(\rho) = \iota_0 - 0.05\,\rho^2$",
+    fontsize=12,
+)
+ax.tick_params(labelsize=12)
+ax.legend(fontsize=11)
+plt.tight_layout()
+fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
+plt.show()
+print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")

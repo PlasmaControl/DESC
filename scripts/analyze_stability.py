@@ -23,7 +23,8 @@ from desc.grid import LinearGrid, Grid
 from desc.diffmat_utils import DiffMat, legendre_diffmat, fourier_diffmat
 from desc.equilibrium.coords import map_coordinates
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
-
+from desc.compute._stability import term_by_term_stability
+from desc.compute.utils import get_params, get_transforms
 # ── Settings (must match run_newcomb.py) ─────────────────────────────────────
 save_path    = "./high_aspect_ratio_tokamak/"
 plot_path    = save_path + "eigenfunction_plots/"
@@ -196,43 +197,45 @@ for iota_0 in iota_on_axis_values:
 
         print("  running xi^T A_term xi for each delta_W group")
         tic = time.time()
-        energy_data = eq.compute(
-            "finite-n lambda matfree",
-            grid=grid,
-            diffmat=diffmat,
-            incompressible=False,
-            gamma=100,
-            axisym=axisym,
-            n_mode_axisym=n_mode_axisym,
-            xi_input=v,
-        )
+        params = get_params("finite-n lambda", eq)
+        data_keys = [
+            "g_rr|PEST",
+            "g_rv|PEST",
+            "g_rp|PEST",
+            "g_vv|PEST",
+            "g_vp|PEST",
+            "g_pp|PEST",
+            "g^rr",
+            "g^rv",
+            "g^rz",
+            "J^theta_PEST",
+            "J^zeta",
+            "|J|",
+            "sqrt(g)_PEST",
+            "(sqrt(g)_PEST_r)|PEST",
+            "(sqrt(g)_PEST_v)|PEST",
+            "(sqrt(g)_PEST_p)|PEST",
+            "finite-n instability drive",
+            "iota",
+            "psi_r",
+            "psi_rr",
+            "p",
+            "a",
+        ]
+        data = eq.compute(data_keys, grid=grid)
+        transforms = get_transforms("finite-n lambda", eq, grid)
+        energy_data = term_by_term_stability(v, params, transforms, data, diffmat=diffmat,
+            gamma=100, incompressible=False,
+            axisym=axisym)
         toc = time.time()
         print(f"  done in {toc-tic:.1f} s")
-
-        xi_norm2 = float(energy_data["finite-n ||xi||^2"])
-        for k in ENERGY_KEYS:
-            val = float(energy_data[k])
-            results_energy[k].append(val)
-            print(f"    {k}: {val:.4e}  (/ ||xi||^2 = {val/xi_norm2:.4e})")
-        results_xi_norm2.append(xi_norm2)
-
-        # Sanity check
-        energy_sum = sum(float(energy_data[k]) for k in ENERGY_KEYS)
-        expected   = lambda_min * xi_norm2
-        rel_err    = abs(energy_sum - expected) / (abs(expected) + 1e-30)
-        print(f"    energy sum        = {energy_sum:.6e}")
-        print(f"    lambda * ||xi||^2 = {expected:.6e}")
-        print(f"    relative error    = {rel_err:.3e}  "
-              f"{'✓' if rel_err < 1e-3 else '✗ WARNING: large residual'}")
-
+        print(energy_data)
         np.savez(
-            energy_npz,
-            **{k: float(energy_data[k]) for k in ENERGY_KEYS},
-            xi_norm2=xi_norm2,
-            lambda_min=lambda_min,
+            **energy_data,
             iota_0=iota_0,
         )
-
+        print(f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(energy_data[k] for k in energy_data.keys())}")
+        print(f"  sanity check: sum of energy terms = {np.sum(energy_data[k] for k in energy_data.keys()):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}")
 # ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0      = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
@@ -266,8 +269,8 @@ fig, ax = plt.subplots(figsize=(9, 6))
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls=":", alpha=0.6)
 
-for k in ENERGY_KEYS:
-    normalized = results_energy[k] / results_xi_norm2
+for k in energy_data.keys():
+    normalized= results_energy[k] / results_xi_norm2
     ax.plot(results_iota0, normalized, "o-", lw=2, ms=6,
             color=ENERGY_COLORS[k], label=ENERGY_LABELS[k])
 

@@ -94,7 +94,7 @@ else:
 save_path = "results/phi_matrix/"
 if from_scratch:
     profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-    eq_tag = "kaya_test"#f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+    eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 save_tag = f"{eq_tag}_M_{M}_N_{N}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
 if pest:
@@ -109,7 +109,6 @@ os.makedirs(save_path, exist_ok=True)
 
 # Make surface
 if from_scratch:
-    """
     surface = FourierRZToroidalSurface.from_shape_parameters(
         major_radius=R0,
         aspect_ratio=aspect_ratio,
@@ -122,17 +121,10 @@ if from_scratch:
         NFP=NFP,
         sym=True,
     )
-    """
-    R0 = 2
-    surface = FourierRZToroidalSurface(
-        R_lmn=[R0, 1, 0.2],
-        Z_lmn=[-2, -0.2],
-        modes_R=[[0, 0], [1, 0], [0, 1]],
-        modes_Z=[[-1, 0], [0, -1]],
-    )
+
 else:
     eq = get(eq_tag)
-    #eq.change_resolution(NFP=1)
+    eq.change_resolution(NFP=1)
     surface = eq.surface
     NFP = eq.NFP
 

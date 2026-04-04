@@ -356,7 +356,7 @@ def _lsmr_compute_phi_matrix(
         A_mn = jnp.linalg.lstsq(D, M_S)[0]
 
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
-    return - Phi @ A_mn # sign convention that makes B dot n the outward normal
+    return A_mn, - Phi @ A_mn # sign convention that makes B dot n the outward normal
 
 
 def _iteration_operator(
@@ -676,7 +676,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
 )
 def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    data["phi_matrix"] = _lsmr_compute_phi_matrix(
+    data["A_mn"], data["phi_matrix"] = _lsmr_compute_phi_matrix(
         data.get("potential data", data),
         data,
         data["interpolator"],
@@ -738,7 +738,7 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
 
-    data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
+    data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
         data.get("potential data", data),
         data,
         data["interpolator_pest"],
@@ -751,6 +751,68 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
         _D_quad=kwargs.get("_D_quad", False),
     )
     return data
+
+
+@register_compute_fun(
+    name="A_mn",
+    label="A_{mn}",
+    units="T m^2",
+    units_long="Tesla meter squared",
+    description="Spectral matrix mapping B·n on the boundary to the periodic scalar "
+    "potential coefficients. Phi (periodic) = Phi_E @ A_mn @ B_n, "
+    "shape (N_modes, N_source).",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    data=["phi_matrix"],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+    public=False,
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    chunk_size=_doc["chunk_size"],
+    outer_chunk_size=(
+        "int or None : Chunk size for the outer column loop when building the "
+        "single-layer matrix. Defaults to 1 to limit peak memory usage."
+    ),
+    _midpoint_quad=_doc["_midpoint_quad"],
+    _D_quad=_doc["_D_quad"],
+)
+def _A_mn_compute(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
+
+
+@register_compute_fun(
+    name="A_mn_pest",
+    label="A_{mn}",
+    units="T m^2",
+    units_long="Tesla meter squared",
+    description="Spectral matrix mapping B·n on the boundary to the periodic scalar "
+    "potential coefficients in PEST coordinates. Phi (periodic) = Phi_E @ A_mn @ B_n, "
+    "shape (N_modes, N_source).",
+    dim=1,
+    coordinates="tz",
+    params=[],
+    transforms={"Phi": [[0, 0, 0]]},
+    profiles=[],
+    data=["phi_matrix_pest"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    public=False,
+    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    pest_grid="""Grid :
+        Grid in PEST (rvp) coordinates with ``can_fft2=True``.
+        Passed through to ``interpolator_pest``.
+        """,
+    chunk_size=_doc["chunk_size"],
+    outer_chunk_size=(
+        "int or None : Chunk size for the outer column loop when building the "
+        "single-layer matrix. Defaults to 1 to limit peak memory usage."
+    ),
+    _midpoint_quad=_doc["_midpoint_quad"],
+    _D_quad=_doc["_D_quad"],
+)
+def _A_mn_pest_compute(params, transforms, profiles, data, **kwargs):
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(

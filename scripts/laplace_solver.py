@@ -39,38 +39,49 @@ set_device("gpu")
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 30
+chunk_size = 50
+
+
+
+# Misc inputs
+pest = False
+from_scratch = True
 
 # Equilibrium paremeteters
-a = 1  # Minor radius
-aspect_ratio = 2  # Aspect ratio of the tokamak
-R0 = aspect_ratio * a  # Major radius
-NFP = 1  # Number of field periods
-axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
-n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
+if from_scratch:
+    a = 1  # Minor radius
+    aspect_ratio = 2  # Aspect ratio of the tokamak
+    R0 = aspect_ratio * a  # Major radius
+    axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
+    n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
+    NFP = 1  # Number of field periods
 
-fixed_iota = True
-if fixed_iota:
-    iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
-    iota_profile = PowerSeriesProfile(iota_coeffs)
-    I_coeffs = None
-    I_profile = None
+    fixed_iota = True
+    if fixed_iota:
+        iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
+        iota_profile = PowerSeriesProfile(iota_coeffs)
+        I_coeffs = None
+        I_profile = None
+    else:
+        #I_coeffs = np.array([0, 0, I, 0, - I/2])
+        #I_profile = PowerSeriesProfile(I_coeffs)
+        # This is the current profile that corresponds to the iota profile above
+        I_coeffs = np.array([-3.15111573e-08,  7.16194786e+03,  7.95861633e+02,  7.95781352e+02,
+        -1.19289606e-02, -3.19292792e-03, -4.34680863e-03])
+        I_profile = PowerSeriesProfile(I_coeffs, sym=True)
+        iota_coeffs = None
+        iota_profile = None
+
+    p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
+    p_profile = PowerSeriesProfile(p_coeffs)
 else:
-    #I_coeffs = np.array([0, 0, I, 0, - I/2])
-    #I_profile = PowerSeriesProfile(I_coeffs)
-    # This is the current profile that corresponds to the iota profile above
-    I_coeffs = np.array([-3.15111573e-08,  7.16194786e+03,  7.95861633e+02,  7.95781352e+02,
-    -1.19289606e-02, -3.19292792e-03, -4.34680863e-03])
-    I_profile = PowerSeriesProfile(I_coeffs, sym=True)
-    iota_coeffs = None
-    iota_profile = None
-
-p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
-p_profile = PowerSeriesProfile(p_coeffs)
+    eq_tag = "HSX"
+    axisym = False
+    n_mode_axisym = 0
 
 # Define resolution
-M = 24
-N = 15
+M = 36
+N = 36
 n_rho = 14
 n_theta = 2 * M
 if axisym:
@@ -79,12 +90,11 @@ else:
     n_zeta = 2 * N
 
 
-# 
-pest = False
 # Save path
-save_path = "phi_matrix/"
-profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+save_path = "results/phi_matrix/"
+if from_scratch:
+    profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
+    eq_tag = "kaya_test"#f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
 save_tag = f"{eq_tag}_M_{M}_N_{N}"
 eq_save_name = f"equilibrium_{save_tag}.h5"
 if pest:
@@ -98,40 +108,62 @@ os.makedirs(save_path, exist_ok=True)
 
 
 # Make surface
-surface = FourierRZToroidalSurface.from_shape_parameters(
-    major_radius=R0,
-    aspect_ratio=aspect_ratio,
-    elongation=1,
-    triangularity=0,
-    squareness=0,
-    eccentricity=0,
-    torsion=0,
-    twist=0,
-    NFP=NFP,
-    sym=True,
-)
-assert surface.NFP == 1
+if from_scratch:
+    """
+    surface = FourierRZToroidalSurface.from_shape_parameters(
+        major_radius=R0,
+        aspect_ratio=aspect_ratio,
+        elongation=1,
+        triangularity=0,
+        squareness=0,
+        eccentricity=0,
+        torsion=0,
+        twist=0,
+        NFP=NFP,
+        sym=True,
+    )
+    """
+    R0 = 2
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, 1, 0.2],
+        Z_lmn=[-2, -0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        modes_Z=[[-1, 0], [0, -1]],
+    )
+else:
+    eq = get(eq_tag)
+    #eq.change_resolution(NFP=1)
+    surface = eq.surface
+    NFP = eq.NFP
+
+#assert surface.NFP == 1
+
 
 # Precompute interpolator and surface values
 field = SourceFreeField(surface, M, N)
 
 # NOTE: equilibrium LCFS must be ForceFreeField object 
-override = True
-if os.path.exists(save_path + eq_save_name) and (not override):
-    eq = load(save_path + eq_save_name)
+if from_scratch:
+    override = True
+    if os.path.exists(save_path + eq_save_name) and (not override):
+        eq = load(save_path + eq_save_name)
+    else:
+        eq = Equilibrium(
+                L=12, 
+                M=12,
+                N=0,
+                surface=field,
+                NFP=field.NFP,
+                iota = iota_profile,
+                current=I_profile,
+                pressure=p_profile,
+                Psi=1,
+            )
+        eq.save(save_path + eq_save_name)
 else:
-    eq = Equilibrium(
-            L=12, 
-            M=12,
-            N=0,
-            surface=field,
-            NFP=field.NFP,
-            iota = iota_profile,
-            current=I_profile,
-            pressure=p_profile,
-            Psi=1,
-        )
-    eq.save(save_path + eq_save_name)
+    eq.surface = field
+
+print(eq.surface.Phi_basis.M, eq.surface.Phi_basis.N)
 
 # Evaluate stability using Rahul's method
 # The rest of the script is basically unchanged from what Rahul sent me
@@ -164,14 +196,12 @@ D0 = D0 * scale_vector
 W0 = W0 * scale_vector_inv
 
 theta = pest_grid.unique_theta
-print(theta)
 D1, W1 = fourier_diffmat(n_theta)
 
 zeta = pest_grid.unique_zeta
-print(zeta)
 D2, W2 = fourier_diffmat(n_zeta)
 
-grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False)
 
 diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
 
@@ -194,7 +224,7 @@ rtz_nodes = map_coordinates(
 print("coordinates mapped")
 
 print("making grid of mapped coordinates")
-grid = Grid(rtz_nodes)
+grid = Grid(rtz_nodes, NFP=NFP)
 np.save(save_path + rtz_save_name, rtz_nodes)
 
 n_surf = n_theta * n_zeta
@@ -227,7 +257,9 @@ else:
             #transforms={"Phi": phi_transform},
         )
         phi_matrix = np.array(data_phi["phi_matrix_pest"])
-        phi_matrix = phi_matrix.reshape(n_theta, n_zeta, n_theta, n_zeta)
+
+        # Reshape to align with surface nodes for AGNI grid
+        phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
         phi_matrix = phi_matrix.transpose(1,0,3,2)
         phi_matrix = phi_matrix.reshape(n_surf, n_surf)
     else:
@@ -245,8 +277,8 @@ else:
 
     np.save(save_path + phi_save_name, phi_matrix)
 
-"""
 
+"""
 print("computing eigenmode at low res")
 tic = time.time()
 data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, gamma=100, incompressible=False, axisym=axisym, n_mode_axisym=n_mode_axisym, phi_matrix=phi_matrix)

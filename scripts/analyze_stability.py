@@ -150,92 +150,84 @@ for iota_0 in iota_on_axis_values:
 
     # ── 2. delta_W energy decomposition ──────────────────────────────────────
     energy_npz = save_path + f"energy_terms_{save_tag}.npz"
-    if os.path.exists(energy_npz):
-        print("  loading cached energy terms")
-        e = np.load(energy_npz)
-        xi_norm2 = float(e["xi_norm2"])
-        for k in ENERGY_KEYS:
-            results_energy[k].append(float(e[k]))
-        results_xi_norm2.append(xi_norm2)
-    else:
-        print("  computing energy term decomposition")
+    print("  computing energy term decomposition")
 
-        # Rebuild zeta grid with correct NFP
-        zeta_hi = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta_hi, endpoint=False)
-        D2, W2 = fourier_diffmat(n_zeta_hi)
+    # Rebuild zeta grid with correct NFP
+    zeta_hi = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta_hi, endpoint=False)
+    D2, W2 = fourier_diffmat(n_zeta_hi)
 
-        diffmat = DiffMat(
-            D_rho=D0, W_rho=W0,
-            D_theta=D1, W_theta=W1,
-            D_zeta=D2, W_zeta=W2,
-        )
+    diffmat = DiffMat(
+        D_rho=D0, W_rho=W0,
+        D_theta=D1, W_theta=W1,
+        D_zeta=D2, W_zeta=W2,
+    )
 
-        grid0 = LinearGrid(rho=rho_hi, theta=theta_hi, zeta=zeta_hi, NFP=1, sym=False)
-        reshaped_nodes = jnp.reshape(
-            grid0.meshgrid_reshape(grid0.nodes, order="rtz"),
-            (n_rho_hi * n_theta_hi * n_zeta_hi, 3),
-        )
+    grid0 = LinearGrid(rho=rho_hi, theta=theta_hi, zeta=zeta_hi, NFP=1, sym=False)
+    reshaped_nodes = jnp.reshape(
+        grid0.meshgrid_reshape(grid0.nodes, order="rtz"),
+        (n_rho_hi * n_theta_hi * n_zeta_hi, 3),
+    )
 
-        print("  mapping coordinates")
-        rtz_nodes = map_coordinates(
-            eq, reshaped_nodes,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-            tol=1e-12, maxiter=50,
-        )
-        grid = Grid(rtz_nodes)
+    print("  mapping coordinates")
+    rtz_nodes = map_coordinates(
+        eq, reshaped_nodes,
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+        tol=1e-12, maxiter=50,
+    )
+    grid = Grid(rtz_nodes)
 
-        # Load saved eigenfunction components and flatten to preconditioned vector
-        xi_rho   = np.load(xi_rho_path)    # (n_rho, n_theta, n_zeta)
-        xi_theta = np.load(xi_theta_path)
-        xi_zeta  = np.load(xi_zeta_path)
-        v = jnp.concatenate(
-            [xi_rho.flatten(), xi_theta.flatten(), xi_zeta.flatten()]
-        )
-        v = v / jnp.linalg.norm(v)
+    # Load saved eigenfunction components and flatten to preconditioned vector
+    xi_rho   = np.load(xi_rho_path)    # (n_rho, n_theta, n_zeta)
+    xi_theta = np.load(xi_theta_path)
+    xi_zeta  = np.load(xi_zeta_path)
+    v = jnp.concatenate(
+        [xi_rho.flatten(), xi_theta.flatten(), xi_zeta.flatten()]
+    )
+    v = v / jnp.linalg.norm(v)
 
-        print("  running xi^T A_term xi for each delta_W group")
-        tic = time.time()
-        params = get_params("finite-n lambda", eq)
-        data_keys = [
-            "g_rr|PEST",
-            "g_rv|PEST",
-            "g_rp|PEST",
-            "g_vv|PEST",
-            "g_vp|PEST",
-            "g_pp|PEST",
-            "g^rr",
-            "g^rv",
-            "g^rz",
-            "J^theta_PEST",
-            "J^zeta",
-            "|J|",
-            "sqrt(g)_PEST",
-            "(sqrt(g)_PEST_r)|PEST",
-            "(sqrt(g)_PEST_v)|PEST",
-            "(sqrt(g)_PEST_p)|PEST",
-            "finite-n instability drive",
-            "iota",
-            "psi_r",
-            "psi_rr",
-            "p",
-            "a",
-        ]
-        data = eq.compute(data_keys, grid=grid)
-        transforms = get_transforms("finite-n lambda", eq, grid)
-        energy_data = term_by_term_stability(v, params, transforms, data, diffmat=diffmat,
-            gamma=100, incompressible=False,
-            axisym=axisym)
-        toc = time.time()
-        print(f"  done in {toc-tic:.1f} s")
-        print(energy_data)
-        np.savez(
-            **energy_data,
-            iota_0=iota_0,
-        )
-        print(f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(energy_data[k] for k in energy_data.keys())}")
-        print(f"  sanity check: sum of energy terms = {np.sum(energy_data[k] for k in energy_data.keys()):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}")
+    print("  running xi^T A_term xi for each delta_W group")
+    tic = time.time()
+    params = get_params("finite-n lambda", eq)
+    data_keys = [
+        "g_rr|PEST",
+        "g_rv|PEST",
+        "g_rp|PEST",
+        "g_vv|PEST",
+        "g_vp|PEST",
+        "g_pp|PEST",
+        "g^rr",
+        "g^rv",
+        "g^rz",
+        "J^theta_PEST",
+        "J^zeta",
+        "|J|",
+        "sqrt(g)_PEST",
+        "(sqrt(g)_PEST_r)|PEST",
+        "(sqrt(g)_PEST_v)|PEST",
+        "(sqrt(g)_PEST_p)|PEST",
+        "finite-n instability drive",
+        "iota",
+        "psi_r",
+        "psi_rr",
+        "p",
+        "a",
+    ]
+    data = eq.compute(data_keys, grid=grid)
+    transforms = get_transforms("finite-n lambda", eq, grid)
+    energy_data = term_by_term_stability(v, params, transforms, data, diffmat=diffmat,
+        gamma=100, incompressible=False,
+        axisym=axisym)
+    toc = time.time()
+    print(f"  done in {toc-tic:.1f} s")
+    print(energy_data)
+    np.savez(
+        **energy_data,
+        iota_0=iota_0,
+    )
+    print(f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(energy_data[k] for k in energy_data.keys())}")
+    print(f"  sanity check: sum of energy terms = {np.sum(energy_data[k] for k in energy_data.keys()):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}")
 # ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0      = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)

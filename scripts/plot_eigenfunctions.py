@@ -1,7 +1,9 @@
 """
 Load saved eigenfunctions from the iota scan and plot:
-  - xi^rho, xi^theta, xi^zeta vs rho  at fixed theta=0  (one plot per equilibrium)
-  - xi^rho, xi^theta, xi^zeta vs theta at a few rho indices (one plot per equilibrium)
+  - xi vs rho at theta=0          (one plot per equilibrium)
+  - xi vs rho at theta=pi/2       (one plot per equilibrium)
+  - xi vs theta at a few rho      (one plot per equilibrium)
+  - xi vs theta at rho=1 (BC check, one plot per equilibrium)
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -62,40 +64,64 @@ for iota_0 in iota_on_axis_values:
 
     title_base = rf"$\iota_0 = {iota_0:.3f}$,  $\iota(\rho) = \iota_0 - 0.05\,\rho^2$"
 
-    # ── Plot 1: xi vs rho at fixed theta=0, zeta=0 ──────────────────────────
-    fig, ax = plt.subplots(figsize=(7, 5))
-    for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
-        ax.plot(rho, xi[:, 0, 0], color=color, lw=2, label=label)
-    ax.set_xlabel(r"$\rho$", fontsize=14)
-    ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
-    ax.set_title(title_base + r",  $\theta=0$", fontsize=12)
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=13)
-    ax.axhline(0, color="gray", lw=0.7, ls="--")
-    plt.tight_layout()
-    fig.savefig(plot_path + f"xi_vs_rho_{save_tag}.png", dpi=150)
-    plt.close(fig)
+    # nearest theta index to pi/2
+    i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
 
-    # ── Plot 2: xi vs theta at a few rho values, zeta=0 ─────────────────────
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=False)
-    for ax, xi, label in zip(axes, [xi_rho, xi_theta, xi_zeta], labels):
-        for i_rho, color in zip(rho_plot_indices, rho_colors):
-            ax.plot(
-                theta, xi[i_rho, :, 0],
-                color=color, lw=2,
-                label=rf"$\rho = {rho[i_rho]:.2f}$",
-            )
-        ax.set_xlabel(r"$\theta$", fontsize=14)
-        ax.set_ylabel(label, fontsize=14)
-        ax.set_xticks([0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi])
-        ax.set_xticklabels(["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
-        ax.tick_params(labelsize=11)
+    def _plot_vs_rho(i_theta, theta_label, fname_suffix):
+        fig, ax = plt.subplots(figsize=(7, 5))
+        for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
+            ax.plot(rho, xi[:, i_theta, 0], color=color, lw=2, label=label)
+        ax.set_xlabel(r"$\rho$", fontsize=14)
+        ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
+        ax.set_title(title_base + f",  {theta_label}", fontsize=12)
+        ax.tick_params(labelsize=12)
+        ax.legend(fontsize=13)
         ax.axhline(0, color="gray", lw=0.7, ls="--")
-        ax.legend(fontsize=10)
-    fig.suptitle(title_base, fontsize=13)
-    plt.tight_layout()
-    fig.savefig(plot_path + f"xi_vs_theta_{save_tag}.png", dpi=150)
-    plt.close(fig)
+        plt.tight_layout()
+        fig.savefig(plot_path + f"{fname_suffix}_{save_tag}.png", dpi=150)
+        plt.close(fig)
+
+    # ── Plot 1: xi vs rho at theta=0 ────────────────────────────────────────
+    _plot_vs_rho(0, r"$\theta=0$", "xi_vs_rho_theta0")
+
+    # ── Plot 2: xi vs rho at theta=pi/2 ─────────────────────────────────────
+    _plot_vs_rho(
+        i_theta_half_pi,
+        rf"$\theta \approx \pi/2$  ($\theta={theta[i_theta_half_pi]:.3f}$)",
+        "xi_vs_rho_theta_half_pi",
+    )
+
+    def _plot_vs_theta(rho_indices, suptitle_extra, fname_suffix):
+        fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=False)
+        for ax, xi, label in zip(axes, [xi_rho, xi_theta, xi_zeta], labels):
+            for i_rho, color in zip(rho_indices, rho_colors):
+                ax.plot(
+                    theta, xi[i_rho, :, 0],
+                    color=color, lw=2,
+                    label=rf"$\rho = {rho[i_rho]:.2f}$",
+                )
+            ax.set_xlabel(r"$\theta$", fontsize=14)
+            ax.set_ylabel(label, fontsize=14)
+            ax.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+            ax.set_xticklabels(["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+            ax.tick_params(labelsize=11)
+            ax.axhline(0, color="gray", lw=0.7, ls="--")
+            ax.legend(fontsize=10)
+        fig.suptitle(title_base + suptitle_extra, fontsize=13)
+        plt.tight_layout()
+        fig.savefig(plot_path + f"{fname_suffix}_{save_tag}.png", dpi=150)
+        plt.close(fig)
+
+    # ── Plot 3: xi vs theta at a few interior rho values ────────────────────
+    _plot_vs_theta(rho_plot_indices, "", "xi_vs_theta")
+
+    # ── Plot 4: xi vs theta at rho=1 (Dirichlet BC check) ───────────────────
+    # rho[-1] is the outermost grid point; xi^rho should be ~0 there
+    _plot_vs_theta(
+        [n_rho - 1],
+        rf"  —  $\rho = {rho[-1]:.3f}$ (boundary BC check)",
+        "xi_vs_theta_bc",
+    )
 
     print(f"iota_0={iota_0:.4f}: plots saved")
 

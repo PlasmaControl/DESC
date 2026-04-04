@@ -1225,7 +1225,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # change to free-boundary when phi_matrix is provided)
     # normalize by a_N since Phi = phi_matrix @ B
     # and B = grad(Phi), so phi_matrix has units length
-    phi_matrix = transforms.get("phi_matrix", None) / a_N
+    phi_matrix = transforms.get("phi_matrix", None)
+    if phi_matrix is not None:
+        phi_matrix = phi_matrix/a_N
     n_surf = n_theta_max * n_zeta_max
     if phi_matrix is not None:
         # only remove ρ=0

@@ -80,8 +80,8 @@ else:
     n_mode_axisym = 0
 
 # Define resolution
-M = 36
-N = 36
+M = 30
+N = 30
 n_rho = 14
 n_theta = 2 * M
 if axisym:

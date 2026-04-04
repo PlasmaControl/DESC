@@ -846,11 +846,7 @@ def get_transforms(  # noqa: C901
                 "Call eq.compute(..., diffmat=DiffMat(...)) or set eq.diffmat first.",
             )
         elif c == "phi_matrix":
-            errorif("phi_matrix" not in transforms,
-                    ValueError,
-                    "Compute requested 'phi_matrix' but none was provided. "
-                    "Call eq.compute(..., phi_matrix=phi_matrix).",
-                    )
+            transforms["phi_matrix"] = None
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

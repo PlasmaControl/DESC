@@ -14,6 +14,7 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "CylindricalGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
@@ -173,18 +174,34 @@ class _Grid(IOAble, ABC):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
-        nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
-        nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
-        # reduce weights for duplicated nodes
-        _, inverse, counts = np.unique(
-            nodes, axis=0, return_inverse=True, return_counts=True
-        )
-        duplicates = counts[inverse]
-        temp_spacing = self.spacing.copy()
-        temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
-        # scale weights sum to full volume
-        if temp_spacing.prod(axis=1).sum():
-            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        if self.coordinates == "rtz":
+            nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+            nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+            # reduce weights for duplicated nodes
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            # scale weights sum to full volume
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                    1 / 3
+                )
+
+        elif self.coordinates == "rpz":
+            nodes = self.nodes.copy().astype(float)
+            nodes = nodes % self._period
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (2 * np.pi / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -298,6 +315,12 @@ class _Grid(IOAble, ABC):
         return self.unique_rho_idx.size
 
     @property
+    def num_r(self):
+        """int: Number of unique radial coordinates in cylindrical coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self.unique_rho_idx.size
+
+    @property
     def num_poloidal(self):
         """int: Number of unique poloidal angle coordinates."""
         return self.unique_poloidal_idx.size
@@ -321,13 +344,36 @@ class _Grid(IOAble, ABC):
         return self.num_poloidal
 
     @property
+    def num_phi(self):
+        """ndarray: Number of unique toroidal angles in cylindrical coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self.num_poloidal
+
+    @property
     def num_zeta(self):
         """int: Number of unique zeta coordinates."""
         return self.unique_zeta_idx.size
 
     @property
+    def num_z(self):
+        """ndarray: Number of unique vertical coordinates in cylindrical coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self.unique_zeta_idx.size
+
+    @property
     def unique_rho_idx(self):
         """ndarray: Indices of unique rho coordinates."""
+        errorif(
+            not hasattr(self, "_unique_rho_idx"),
+            AttributeError,
+            "Grid does not have unique indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
+        )
+        return self._unique_rho_idx
+
+    @property
+    def unique_r_idx(self):
+        """ndarray: Indices of unique R coordinates in cylindrical coordinates."""
         errorif(
             not hasattr(self, "_unique_rho_idx"),
             AttributeError,
@@ -366,6 +412,12 @@ class _Grid(IOAble, ABC):
         return self.unique_poloidal_idx
 
     @property
+    def unique_phi_idx(self):
+        """ndarray: Indices of unique toroidal angles in RPZ coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self.unique_poloidal_idx
+
+    @property
     def unique_zeta_idx(self):
         """ndarray: Indices of unique zeta coordinates."""
         errorif(
@@ -377,8 +429,25 @@ class _Grid(IOAble, ABC):
         return self._unique_zeta_idx
 
     @property
+    def unique_z_idx(self):
+        """ndarray: Indices of unique vertical coordinates in RPZ coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self._unique_zeta_idx
+
+    @property
     def inverse_rho_idx(self):
         """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
+        errorif(
+            not hasattr(self, "_inverse_rho_idx"),
+            AttributeError,
+            "Grid does not have inverse indices assigned. "
+            "It is not possible to do this automatically on grids made under JIT.",
+        )
+        return self._inverse_rho_idx
+
+    @property
+    def inverse_r_idx(self):
+        """ndarray: Indices of unique_r_idx that recover the R coordinates."""
         errorif(
             not hasattr(self, "_inverse_rho_idx"),
             AttributeError,
@@ -417,6 +486,12 @@ class _Grid(IOAble, ABC):
         return self.inverse_poloidal_idx
 
     @property
+    def inverse_phi_idx(self):
+        """ndarray: Indices that recover unique toroidal angles in RPZ coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
+        return self.inverse_poloidal_idx
+
+    @property
     def inverse_zeta_idx(self):
         """ndarray: Indices of unique_zeta_idx that recover the zeta coordinates."""
         errorif(
@@ -425,6 +500,12 @@ class _Grid(IOAble, ABC):
             "Grid does not have inverse indices assigned. "
             "It is not possible to do this automatically on grids made under JIT.",
         )
+        return self._inverse_zeta_idx
+
+    @property
+    def inverse_z_idx(self):
+        """ndarray: Indices that recover unique Z coordinates in RPZ coordinates."""
+        errorif(self.coordinates != "rpz", AttributeError)
         return self._inverse_zeta_idx
 
     @property
@@ -455,6 +536,13 @@ class _Grid(IOAble, ABC):
         if not hasattr(self, "_fft_toroidal"):
             self._fft_toroidal = False
         return self._fft_toroidal
+
+    @property
+    def can_fft_dct(self):
+        """bool: whether this grid can DCT in R and Z, and FFT in phi."""
+        if not hasattr(self, "_can_fft_dct"):
+            self._can_fft_dct = False
+        return self._can_fft_dct
 
     @property
     def spacing(self):
@@ -1772,6 +1860,209 @@ class ConcentricGrid(_Grid):
             self._weights = self._scale_weights()
 
 
+class CylindricalGrid(_Grid):
+    """Exactly integrates a DoubleChebyshevFourierBasis of resolution (L,M,N).
+
+    Nodes are arranged linearly in the second (assumed phi) coordinate, and
+    at the Chebyshev-Gauss-Lobatto nodes in the first and third (respectively,
+    R and Z) coordinates. Used for computations in cylindrical coordinates.
+
+    For now, this grid is assumed to never be symmetric.
+
+    Parameters
+    ----------
+    L : int
+        radial grid resolution
+    M : int
+        toroidal grid resolution
+    N : int
+        vertical grid resolution
+    NFP : int
+        number of field periods (Default = 1)
+    R : np.ndarray
+        radial coordinates (Default None, in which case L
+        must be specified).
+    phi : np.ndarray
+        toroidal coordinates (Default None, in which case
+        M must be specified)
+    Z: np.ndarray
+        vertical coordinates (Default None, in which case
+        N must be specified)
+    """
+
+    _fft_poloidal = False
+    _fft_toroidal = False
+
+    def __init__(
+        self,
+        L=None,
+        M=None,
+        N=None,
+        NFP=1,
+        R=None,
+        phi=None,
+        Z=None,
+    ):
+        assert (L is None) or (R is None), "cannot specify both L and R"
+        assert (M is None) or (phi is None), "cannot specify both M and phi"
+        assert (N is None) or (Z is None), "cannot specify both N and Z"
+        self._L = check_nonnegint(L, "L")
+        self._M = check_nonnegint(M, "M")
+        self._N = check_nonnegint(N, "N")
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = False
+        self._coordinates = "rpz"
+        self._is_meshgrid = True
+        self._period = (np.inf, 2 * np.pi / self._NFP, np.inf)
+        self._nodes, self._spacing = self._create_nodes(
+            L=L,
+            M=M,
+            N=N,
+            NFP=NFP,
+            R=R,
+            phi=phi,
+            Z=Z,
+        )
+        self._sort_nodes()
+        # For compatibility, these indices are still hardcoded as RTZ
+        (
+            self._unique_rho_idx,
+            self._inverse_rho_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
+            self._unique_zeta_idx,
+            self._inverse_zeta_idx,
+        ) = self._find_unique_inverse_nodes()
+        self._weights = self._scale_weights()
+        self._node_pattern = "cheb1"
+
+    def _create_nodes(
+        self,
+        L=None,
+        M=None,
+        N=None,
+        NFP=1,
+        R=None,
+        phi=None,
+        Z=None,
+    ):
+        """Create grid nodes and weights.
+
+        Parameters
+        ----------
+        L : int
+            radial grid resolution
+        M : int
+            toroidal grid resolution
+        N : int
+            vertical grid resolution
+        NFP : int
+            number of field periods (Default = 1)
+        R : np.ndarray
+            radial coordinates (Default None, in which case L
+            must be specified).
+        phi : np.ndarray
+            toroidal coordinates (Default None, in which case
+            M must be specified)
+        Z: np.ndarray
+            vertical coordinates (Default None, in which case
+            N must be specified)
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes, 3)
+            node coordinates, in (R,phi,Z)
+        spacing : ndarray of float, size(num_nodes,3)
+            node spacing, based on local volume around the node
+
+        """
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi / self._NFP, np.inf)
+
+        if (L is None) and (R is None):
+            L = 0
+        if (M is None) and (phi is None):
+            M = 0
+        if (N is None) and (Z is None):
+            N = 0
+
+        # R (Chebyshev extrema nodes)
+        if None not in [L, M, N]:
+            if L * M * N > 0:
+                self._can_fft_dct = True
+            else:
+                self._can_fft_dct = False
+        else:
+            self._can_fft_dct = False
+        if L is not None:
+            self._L = check_nonnegint(L, "L", False)
+            R = lobatto(L)
+
+        dR = _midpoint_spacing(R, jnp=np)
+
+        # phi (linear spacing unless explicitly specified)
+        if phi is not None:
+            self._can_fft_dct = False
+            self._fft_poloidal = False
+        phi_grid = LinearGrid(rho=1, theta=0, N=M, zeta=phi, NFP=NFP)
+        self._M = phi_grid.N
+        phi = phi_grid.nodes[:, 2]
+        dphi = phi_grid.spacing[:, 2]
+        # Note that phi is actually the toroidal angle,
+        # but here "poloidal" just refers to the second dimension
+        self._fft_poloidal = phi_grid.fft_toroidal
+
+        # Z (Chebyshev extrema nodes)
+        if N is not None:
+            self._N = check_nonnegint(N, "N", False)
+            Z = lobatto(N)
+
+        dZ = _midpoint_spacing(Z, jnp=np)
+
+        R, phi, Z = map(np.ravel, np.meshgrid(R, phi, Z, indexing="ij"))
+        dR, dphi, dZ = map(np.ravel, np.meshgrid(dR, dphi, dZ, indexing="ij"))
+
+        nodes = np.column_stack([R, phi, Z])
+        spacing = np.column_stack([dR, dphi, dZ])
+
+        return nodes, spacing
+
+    def change_resolution(self, L, M, N, NFP=None):
+        """Change the resolution of the grid.
+
+        Parameters
+        ----------
+        L : int
+            new radial grid resolution
+        M : int
+            new toroidal grid resolution
+        N : int
+            new vertical grid resolution
+        NFP : int
+            Number of field periods.
+
+        """
+        if NFP is None:
+            NFP = self.NFP
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+            self._nodes, self._spacing = self._create_nodes(
+                L=L,
+                M=M,
+                N=N,
+                NFP=NFP,
+            )
+            self._sort_nodes()
+            (
+                self._unique_rho_idx,
+                self._inverse_rho_idx,
+                self._unique_poloidal_idx,
+                self._inverse_poloidal_idx,
+                self._unique_zeta_idx,
+                self._inverse_zeta_idx,
+            ) = self._find_unique_inverse_nodes()
+            self._weights = self._scale_weights()
+
+
 def _round(x, tol):
     # we do this to avoid some floating point issues with things
     # that are basically low order rationals to near machine precision
@@ -2135,3 +2426,11 @@ def _midpoint_spacing(x, jnp=jnp):
     else:
         dx = jnp.array([1.0])
     return dx
+
+
+def lobatto(res):
+    if res == 0:
+        return np.array([1])
+    x = (np.cos(np.arange(res, -1, -1) * np.pi / res) + 1) / 2
+    x = np.sort(x, axis=None)
+    return x

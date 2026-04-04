@@ -46,6 +46,16 @@ os.makedirs(save_path, exist_ok=True)
 
 results_iota0 = []
 results_lambda_min = []
+results_mercier = []   # list of (rho, D_Mercier) arrays, one per case
+
+ENERGY_KEYS = [
+    "finite-n |Q|^2",
+    "finite-n kink+J^2 drive",
+    "finite-n pressure term",
+    "finite-n F drive",
+]
+results_energy = {k: [] for k in ENERGY_KEYS}
+results_xi_norm2 = []
 
 for iota_0 in iota_on_axis_values:
     iota_coeffs = np.array([iota_0, -0.05])
@@ -95,6 +105,28 @@ for iota_0 in iota_on_axis_values:
 
     # Evaluate stability using Newcomb's procedure
     evaluate_stability(eq)
+
+    # ── Mercier criterion ────────────────────────────────────────────────────
+    n_rho_mercier = 200
+    mercier_grid = LinearGrid(rho=np.linspace(0.02, 1.0, n_rho_mercier), M=12, N=0)
+    mercier_data = eq.compute(
+        ["D_Mercier", "D_shear", "D_current", "D_well", "D_geodesic", "rho"],
+        grid=mercier_grid,
+    )
+    rho_m  = np.array(mercier_data["rho"])
+    D_M    = np.array(mercier_data["D_Mercier"])
+    D_sh   = np.array(mercier_data["D_shear"])
+    D_cu   = np.array(mercier_data["D_current"])
+    D_we   = np.array(mercier_data["D_well"])
+    D_ge   = np.array(mercier_data["D_geodesic"])
+    results_mercier.append((rho_m, D_M, D_sh, D_cu, D_we, D_ge))
+    np.savez(
+        save_path + f"mercier_{save_tag}.npz",
+        rho=rho_m, D_Mercier=D_M,
+        D_shear=D_sh, D_current=D_cu, D_well=D_we, D_geodesic=D_ge,
+    )
+    unstable_frac = np.mean(D_M < 0)
+    print(f"Mercier: {unstable_frac*100:.1f}% of radial domain is unstable (D_Mercier < 0)")
 
     # Low-res solve for eigenfunction guess
     n_rho = 14
@@ -281,6 +313,41 @@ for iota_0 in iota_on_axis_values:
     results_lambda_min.append(lambda_min)
 
     v = data["finite-n eigenfunction matfree"]
+
+    # ── Energy term decomposition ──────────────────────────────────────────
+    print("computing delta_W energy term decomposition")
+    energy_data = eq.compute(
+        "finite-n lambda matfree",
+        grid=grid,
+        diffmat=diffmat,
+        incompressible=False,
+        gamma=100,
+        axisym=axisym,
+        n_mode_axisym=n_mode_axisym,
+        xi_input=v,
+    )
+    xi_norm2 = float(energy_data["finite-n ||xi||^2"])
+    for k in ENERGY_KEYS:
+        val = float(energy_data[k])
+        results_energy[k].append(val)
+        print(f"  {k}: {val:.4e}  (/ ||xi||^2 = {val/xi_norm2:.4e})")
+    results_xi_norm2.append(xi_norm2)
+
+    # Sanity check: sum of terms should equal lambda * ||xi||^2
+    energy_sum = sum(float(energy_data[k]) for k in ENERGY_KEYS)
+    expected   = lambda_min * xi_norm2
+    rel_err    = abs(energy_sum - expected) / (abs(expected) + 1e-30)
+    print(f"  energy sum        = {energy_sum:.6e}")
+    print(f"  lambda * ||xi||^2 = {expected:.6e}")
+    print(f"  relative error    = {rel_err:.3e}  {'✓' if rel_err < 1e-3 else '✗ WARNING: large residual'}")
+    np.savez(
+        save_path + f"energy_terms_{save_tag}.npz",
+        **{k: float(energy_data[k]) for k in ENERGY_KEYS},
+        xi_norm2=xi_norm2,
+        lambda_min=lambda_min,
+        iota_0=iota_0,
+    )
+
     n_total = n_rho * n_theta * n_zeta
     xi_sup_rho_final   = np.reshape(v[:n_total],          (n_rho, n_theta, n_zeta))
     xi_sup_theta_final = np.reshape(v[n_total:2*n_total],  (n_rho, n_theta, n_zeta))
@@ -296,11 +363,17 @@ for iota_0 in iota_on_axis_values:
 # ── Save and plot summary ─────────────────────────────────────────────────────
 results_iota0      = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
+results_xi_norm2   = np.array(results_xi_norm2)
+for k in ENERGY_KEYS:
+    results_energy[k] = np.array(results_energy[k])
 
 np.savez(
     save_path + "iota_scan_results.npz",
     iota_on_axis=results_iota0,
     lambda_min=results_lambda_min,
+    xi_norm2=results_xi_norm2,
+    **{k.replace(" ", "_").replace("/", "").replace("^", "").replace("|", "").replace("+", "_"):
+       results_energy[k] for k in ENERGY_KEYS},
 )
 
 fig, ax = plt.subplots(figsize=(7, 5))
@@ -319,4 +392,67 @@ ax.legend(fontsize=11)
 plt.tight_layout()
 fig.savefig(save_path + "iota_scan_lambda_min.png", dpi=150)
 plt.show()
+
+# ── Mercier summary plot: D_Mercier vs rho for all cases ─────────────────────
+cmap_lines = plt.get_cmap("plasma")
+colors_scan = [cmap_lines(v) for v in np.linspace(0.1, 0.9, len(results_iota0))]
+
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.axhline(0, color="gray", lw=0.8, ls="--")
+for (rho_m, D_M, *_), iota_0, color in zip(results_mercier, results_iota0, colors_scan):
+    ax.plot(rho_m, D_M, color=color, lw=1.8, label=rf"$\iota_0={iota_0:.2f}$")
+ax.set_xlabel(r"$\rho$", fontsize=14)
+ax.set_ylabel(r"$D_{\mathrm{Mercier}}$  (Wb$^{-2}$)", fontsize=13)
+ax.set_title(
+    r"Mercier criterion vs $\rho$  (positive = stable)" + "\n"
+    r"$\iota(\rho)=\iota_0-0.05\,\rho^2$",
+    fontsize=12,
+)
+ax.tick_params(labelsize=12)
+ax.legend(fontsize=9, ncol=2, loc="upper right")
+plt.tight_layout()
+fig.savefig(save_path + "iota_scan_mercier.png", dpi=150)
+plt.show()
+
+# ── delta_W energy term decomposition plot ───────────────────────────────────
+# Normalize each term by ||xi||^2 so units match the eigenvalue lambda
+ENERGY_LABELS = {
+    "finite-n |Q|^2":           r"$|\mathbf{Q}|^2$ (magnetic)",
+    "finite-n kink+J^2 drive":  r"$\xi^\rho\,(\mathbf{J}\times\nabla\rho)\cdot\mathbf{Q} + |J|^2$ (kink)",
+    "finite-n pressure term":   r"$\gamma p_0\,|\nabla\cdot\xi|^2$ (pressure)",
+    "finite-n F drive":         r"$F$ drive (instability)",
+}
+ENERGY_COLORS = {
+    "finite-n |Q|^2":           "steelblue",
+    "finite-n kink+J^2 drive":  "darkorange",
+    "finite-n pressure term":   "seagreen",
+    "finite-n F drive":         "crimson",
+}
+
+fig, ax = plt.subplots(figsize=(9, 6))
+ax.axhline(0, color="gray", lw=0.8, ls="--")
+ax.axvline(1, color="gray", lw=0.8, ls=":", alpha=0.6)
+
+for k in ENERGY_KEYS:
+    normalized = results_energy[k] / results_xi_norm2
+    ax.plot(results_iota0, normalized, "o-", lw=2, ms=6,
+            color=ENERGY_COLORS[k], label=ENERGY_LABELS[k])
+
+# Also plot lambda for reference (= sum of all terms / ||xi||^2)
+ax.plot(results_iota0, results_lambda_min, "k^--", lw=1.5, ms=7,
+        label=r"$\lambda_{\min}$ (eigenvalue)")
+
+ax.set_xlabel(r"$\iota_0$", fontsize=14)
+ax.set_ylabel(r"$\xi^T A_{\mathrm{term}} \xi \;/\; \|\xi\|^2$", fontsize=13)
+ax.set_title(
+    r"$\delta W$ term contributions vs $\iota_0$" + "\n"
+    r"$\iota(\rho)=\iota_0 - 0.05\,\rho^2$,  stabilizing $>0$, destabilizing $<0$",
+    fontsize=12,
+)
+ax.tick_params(labelsize=12)
+ax.legend(fontsize=10, loc="best")
+plt.tight_layout()
+fig.savefig(save_path + "iota_scan_energy_terms.png", dpi=150)
+plt.show()
+
 print("Done. Results saved to", save_path)

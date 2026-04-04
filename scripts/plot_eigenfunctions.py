@@ -18,7 +18,7 @@ os.makedirs(plot_path, exist_ok=True)
 # These must match what run_newcomb.py used for the high-res solve
 n_rho   = 64
 n_theta = 64
-n_zeta  = 1
+n_zeta  = 64
 
 # rho grid (reproduced from run_newcomb.py)
 x, _ = leggauss_lob(n_rho)

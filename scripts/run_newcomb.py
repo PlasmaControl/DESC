@@ -34,7 +34,7 @@ a = 1  # Minor radius
 aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
-axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
+axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 0  # If axisym is True, the toroidal mode number to solve for
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
@@ -99,7 +99,7 @@ for iota_0 in iota_on_axis_values:
     # Low-res solve for eigenfunction guess
     n_rho = 14
     n_theta = 14
-    n_zeta = 1  # axisym
+    n_zeta = 14
 
     print("making input grid and diffmats")
     x, w = leggauss_lob(n_rho)
@@ -192,7 +192,7 @@ for iota_0 in iota_on_axis_values:
     print("making high-res grid and diffmats")
     n_rho   = 64
     n_theta = 64
-    n_zeta  = 1  # axisym
+    n_zeta = 12
 
     x, w = leggauss_lob(n_rho)
     rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)

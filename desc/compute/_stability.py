@@ -2247,16 +2247,18 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
 
     def _normalize(Ar, Av, Az, Au=False):
         As = jnp.stack([Ar, Av, Az], axis=-1).reshape((n_total, 3))
-        #ys = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As) 
+        ys_norm = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As) 
         ys = As
         if not Au:
             ys += 1e-12 * jnp.stack(
                 [xr, xv, xz], axis=-1
             ).reshape((n_total, 3))
-        print(ys.shape)
-        print(xr.shape)
+            ys_norm += 1e-12 * jnp.stack(
+                [xr, xv, xz], axis=-1
+            ).reshape((n_total, 3))
+        ys_norm = (jnp.stack([xr, xv, xz], axis=-1).reshape((n_total, 3)) * ys_norm).sum()
         ys = (jnp.stack([xr, xv, xz], axis=-1).reshape((n_total, 3)) * ys).sum()
-        return ys
+        return ys, ys_norm
 
     ####################
     ###-----Q²_ρρ----###
@@ -2439,7 +2441,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
 
-    Q_sq = _normalize(Ar, Av, Az)
+    Q_sq, Q_sq_norm = _normalize(Ar, Av, Az)
     ######################################
     ###----ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐-----###
     ######################################
@@ -2460,7 +2462,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     Ar += psi_r2 * sqrtg * j_sup_theta * W * (xz_v - xv_v)
     Ar += -psi_r * sqrtg * j_sup_theta * W * xr2_r
 
-    xi_rho_J_cross_grad_rho = _normalize(Ar, Av, Az)
+    xi_rho_J_cross_grad_rho, xi_rho_J_cross_grad_rho_norm = _normalize(Ar, Av, Az)
     # Mixed Q-J term 𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ
     Ar = jnp.zeros_like(Ar)
     Av = jnp.zeros_like(Av)
@@ -2493,7 +2495,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
 
     Ar += -psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * j_sup_theta * W * xr)
 
-    mixed_Q_J = _normalize(Ar, Av, Az)
+    mixed_Q_J, mixed_Q_J_norm = _normalize(Ar, Av, Az)
     # |J|² drive
     Ar = jnp.zeros_like(Ar)
     Av = jnp.zeros_like(Av)
@@ -2501,7 +2503,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
 
     Ar += (psi_r2 * W * sqrtg * J2) * xr
 
-    J_sq = _normalize(Ar, Av, Az)
+    J_sq, J_sq_norm = _normalize(Ar, Av, Az)
     # diagonal terms
     Ar = jnp.zeros_like(Ar)
     Av = jnp.zeros_like(Av)
@@ -2584,10 +2586,10 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
             (gamma * sqrtg * W * p0) * (partial_v_log_sqrtg * xv + xv_v),
         )
     )
-    compressibility = _normalize(Ar, Av, Az)
+    compressibility, compressibility_norm = _normalize(Ar, Av, Az)
     # instability drive
     Aur = (W * psi_r2 * sqrtg * F) * xr
-    instability_drive = _normalize(Aur, jnp.zeros_like(Av), jnp.zeros_like(Az), Au=True)
+    instability_drive, instability_drive_norm = _normalize(Aur, jnp.zeros_like(Av), jnp.zeros_like(Az), Au=True)
     
     return {
         "Q²": Q_sq,
@@ -2596,4 +2598,11 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
         "|J|² drive": J_sq,
         "compressibility": compressibility,
         "finite-n instability drive term": instability_drive,
+    }, {
+        "Q²": Q_sq_norm,
+        "ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐": xi_rho_J_cross_grad_rho_norm,
+        "𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ": mixed_Q_J_norm,
+        "|J|² drive": J_sq_norm,
+        "compressibility": compressibility_norm,
+        "finite-n instability drive term": instability_drive_norm,
     }

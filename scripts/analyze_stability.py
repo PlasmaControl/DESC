@@ -96,6 +96,8 @@ D2_placeholder, W2_placeholder = fourier_diffmat(n_zeta_hi)
 results_iota0 = []
 results_lambda_min = []
 results_mercier = []  # (rho, D_M, D_sh, D_cu, D_we, D_ge) per case
+all_data = {key: [] for key in ENERGY_KEYS}  # energy term values per case
+all_data_norm = {key: [] for key in ENERGY_KEYS}  # energy term values per case
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 for iota_0 in iota_on_axis_values:
@@ -240,7 +242,7 @@ for iota_0 in iota_on_axis_values:
     ]
     data = eq.compute(data_keys, grid=grid)
     transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
-    energy_data = term_by_term_stability(
+    energy_data, energy_data_norm = term_by_term_stability(
         v,
         params,
         transforms,
@@ -253,17 +255,22 @@ for iota_0 in iota_on_axis_values:
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")
     print(energy_data)
+    print(energy_data_norm)
     np.savez(
         energy_npz,
         **energy_data,
         iota_0=iota_0,
     )
     print(
-        f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum([energy_data[k] for k in energy_data.keys()])}"
+        f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum([energy_data_norm[k] for k in energy_data_norm.keys()])}"
     )
     print(
-        f"  sanity check: sum of energy terms = {np.sum([energy_data[k] for k in energy_data.keys()]):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}"
+        f"  sanity check: sum of energy terms = {np.sum([energy_data_norm[k] for k in energy_data_norm.keys()]):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}"
     )
+    for key in ENERGY_KEYS:
+        all_data[key].append(energy_data[key])
+    for key in ENERGY_KEYS:
+        all_data_norm[key].append(energy_data_norm[key])
 # ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0 = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
@@ -295,7 +302,7 @@ ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls=":", alpha=0.6)
 
 for k in energy_data.keys():
-    normalized = energy_data[k] / jnp.linalg.norm(v) ** 2
+    normalized = np.array(all_data_norm[k]) / jnp.linalg.norm(v) ** 2
     ax.plot(
         results_iota0,
         normalized,

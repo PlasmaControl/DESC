@@ -259,10 +259,10 @@ for iota_0 in iota_on_axis_values:
         iota_0=iota_0,
     )
     print(
-        f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(np.fromiter(energy_data[k] for k in energy_data.keys()))}"
+        f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum([energy_data[k] for k in energy_data.keys()])}"
     )
     print(
-        f"  sanity check: sum of energy terms = {np.sum(np.fromiter(energy_data[k] for k in energy_data.keys())):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}"
+        f"  sanity check: sum of energy terms = {np.sum([energy_data[k] for k in energy_data.keys()]):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}"
     )
 # ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0 = np.array(results_iota0)

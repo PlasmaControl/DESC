@@ -87,8 +87,6 @@ D2_placeholder, W2_placeholder = fourier_diffmat(n_zeta_hi)
 results_iota0      = []
 results_lambda_min = []
 results_mercier    = []   # (rho, D_M, D_sh, D_cu, D_we, D_ge) per case
-results_energy     = {k: [] for k in ENERGY_KEYS}
-results_xi_norm2   = []
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 for iota_0 in iota_on_axis_values:
@@ -232,9 +230,6 @@ for iota_0 in iota_on_axis_values:
 # ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0      = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
-results_xi_norm2   = np.array(results_xi_norm2)
-for k in ENERGY_KEYS:
-    results_energy[k] = np.array(results_energy[k])
 
 # ── Plot 1: Mercier D_Mercier vs rho ─────────────────────────────────────────
 cmap_lines  = plt.get_cmap("plasma")
@@ -263,7 +258,7 @@ ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls=":", alpha=0.6)
 
 for k in energy_data.keys():
-    normalized= results_energy[k] / results_xi_norm2
+    normalized= energy_data[k]/jnp.linalg.norm(v)**2
     ax.plot(results_iota0, normalized, "o-", lw=2, ms=6,
             color=ENERGY_COLORS[k], label=ENERGY_LABELS[k])
 

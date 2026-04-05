@@ -2247,11 +2247,14 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
 
     def _normalize(Ar, Av, Az, Au=False):
         As = jnp.stack([Ar, Av, Az], axis=-1).reshape((n_total, 3))
-        ys = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As) 
+        #ys = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As) 
+        ys = As
         if not Au:
             ys += 1e-12 * jnp.stack(
                 [xr, xv, xz], axis=-1
             ).reshape((n_total, 3))
+        print(ys.shape)
+        print(xr.shape)
         ys = (jnp.stack([xr, xv, xz], axis=-1).reshape((n_total, 3)) * ys).sum()
         return ys
 
@@ -2587,7 +2590,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     instability_drive = _normalize(Aur, jnp.zeros_like(Av), jnp.zeros_like(Az), Au=True)
     
     return {
-        "Q²_ρρ": Q_sq,
+        "Q²": Q_sq,
         "ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐": xi_rho_J_cross_grad_rho,
         "𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ": mixed_Q_J,
         "|J|² drive": J_sq,

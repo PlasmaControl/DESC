@@ -215,7 +215,7 @@ for iota_0 in iota_on_axis_values:
         "a",
     ]
     data = eq.compute(data_keys, grid=grid)
-    transforms = get_transforms("finite-n lambda", eq, grid)
+    transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
     energy_data = term_by_term_stability(v, params, transforms, data, diffmat=diffmat,
         gamma=100, incompressible=False,
         axisym=axisym)

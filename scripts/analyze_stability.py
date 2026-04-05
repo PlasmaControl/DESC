@@ -223,6 +223,7 @@ for iota_0 in iota_on_axis_values:
     print(f"  done in {toc-tic:.1f} s")
     print(energy_data)
     np.savez(
+        energy_npz,
         **energy_data,
         iota_0=iota_0,
     )

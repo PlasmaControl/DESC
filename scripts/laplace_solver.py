@@ -45,7 +45,7 @@ chunk_size = 50
 
 # Misc inputs
 pest = False
-from_scratch = True
+from_scratch = False
 
 # Equilibrium paremeteters
 if from_scratch:
@@ -80,8 +80,8 @@ else:
     n_mode_axisym = 0
 
 # Define resolution
-M = 30
-N = 30
+M = 24
+N = 24
 n_rho = 14
 n_theta = 2 * M
 if axisym:

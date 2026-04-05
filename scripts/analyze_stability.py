@@ -7,7 +7,9 @@ iota scan, then computes:
 
 Saves all results and produces summary plots. Run after run_newcomb.py.
 """
+
 from desc import set_device
+
 set_device("gpu")
 
 import time
@@ -25,40 +27,47 @@ from desc.equilibrium.coords import map_coordinates
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.compute._stability import term_by_term_stability
 from desc.compute.utils import get_params, get_transforms
+
 # ── Settings (must match run_newcomb.py) ─────────────────────────────────────
-save_path    = "./high_aspect_ratio_tokamak/"
-plot_path    = save_path + "eigenfunction_plots/"
+save_path = "./high_aspect_ratio_tokamak/"
+plot_path = save_path + "eigenfunction_plots/"
 os.makedirs(plot_path, exist_ok=True)
 
 aspect_ratio = 200
-NFP          = 1
-axisym       = False
+NFP = 1
+axisym = False
 n_mode_axisym = 0
-p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
+p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
 
-n_rho_hi   = 64
+n_rho_hi = 64
 n_theta_hi = 64
-n_zeta_hi  = 12
+n_zeta_hi = 12
 
 iota_on_axis_values = np.linspace(0.6, 1.5, 10)
 
 ENERGY_KEYS = [
-    "finite-n |Q|^2",
-    "finite-n kink+J^2 drive",
-    "finite-n pressure term",
-    "finite-n F drive",
+    "Q²",
+    "ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐",
+    "𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ",
+    "|J|² drive",
+    "compressibility",
+    "finite-n instability drive term",
 ]
 ENERGY_LABELS = {
-    "finite-n |Q|^2":           r"$|\mathbf{Q}|^2$ (magnetic)",
-    "finite-n kink+J^2 drive":  r"$\xi^\rho(\mathbf{J}\times\nabla\rho)\cdot\mathbf{Q}+|J|^2$ (kink)",
-    "finite-n pressure term":   r"$\gamma p_0\,|\nabla\cdot\xi|^2$ (pressure)",
-    "finite-n F drive":         r"$F$ drive (instability)",
+    "Q²": r"$|\mathbf{Q}|^2$",
+    "ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐": r"$\xi^\rho(\mathbf{J}\times\nabla\rho)/|\nabla\rho|^2\cdot\mathbf{Q}$",
+    "𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ": r"$\mathbf{Q}\cdot(\mathbf{J}\times\nabla\rho)/|\nabla\rho|^2\,\xi^\rho$",
+    "|J|² drive": r"$|J|^2$ drive",
+    "compressibility": r"$\gamma p_0\,|\nabla\cdot\xi|^2$ (compressibility)",
+    "finite-n instability drive term": r"instability drive",
 }
 ENERGY_COLORS = {
-    "finite-n |Q|^2":           "steelblue",
-    "finite-n kink+J^2 drive":  "darkorange",
-    "finite-n pressure term":   "seagreen",
-    "finite-n F drive":         "crimson",
+    "Q²": "steelblue",
+    "ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐": "darkorange",
+    "𝐐 ⋅(𝐉 × ∇ρ)/|∇ ρ|² ξ^ρ": "goldenrod",
+    "|J|² drive": "mediumpurple",
+    "compressibility": "seagreen",
+    "finite-n instability drive term": "crimson",
 }
 
 # ── Build the high-res diffmat (same as run_newcomb.py) ──────────────────────
@@ -69,7 +78,7 @@ dx_f = jax.vmap(
         x_val, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0
     )
 )
-scale_vector     = 1 / (dx_f(x_gl)[:, None])
+scale_vector = 1 / (dx_f(x_gl)[:, None])
 scale_vector_inv = dx_f(x_gl)[:, None]
 
 D0, W0 = legendre_diffmat(n_rho_hi)
@@ -84,9 +93,9 @@ D1, W1 = fourier_diffmat(n_theta_hi)
 D2_placeholder, W2_placeholder = fourier_diffmat(n_zeta_hi)
 
 # ── Accumulation containers ───────────────────────────────────────────────────
-results_iota0      = []
+results_iota0 = []
 results_lambda_min = []
-results_mercier    = []   # (rho, D_M, D_sh, D_cu, D_we, D_ge) per case
+results_mercier = []  # (rho, D_M, D_sh, D_cu, D_we, D_ge) per case
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 for iota_0 in iota_on_axis_values:
@@ -96,14 +105,17 @@ for iota_0 in iota_on_axis_values:
         f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"
     )
 
-    eq_path      = save_path + f"equilibrium_{save_tag}.h5"
-    xi_rho_path  = save_path + f"xi_rho_{save_tag}.npy"
+    eq_path = save_path + f"equilibrium_{save_tag}.h5"
+    xi_rho_path = save_path + f"xi_rho_{save_tag}.npy"
     xi_theta_path = save_path + f"xi_theta_{save_tag}.npy"
     xi_zeta_path = save_path + f"xi_zeta_{save_tag}.npy"
-    lam_path     = save_path + f"lambda_{save_tag}.npy"
+    lam_path = save_path + f"lambda_{save_tag}.npy"
 
-    missing = [p for p in [eq_path, xi_rho_path, xi_theta_path, xi_zeta_path, lam_path]
-               if not os.path.exists(p)]
+    missing = [
+        p
+        for p in [eq_path, xi_rho_path, xi_theta_path, xi_zeta_path, lam_path]
+        if not os.path.exists(p)
+    ]
     if missing:
         print(f"Skipping iota_0={iota_0:.4f}: missing files {missing}")
         continue
@@ -123,8 +135,12 @@ for iota_0 in iota_on_axis_values:
         print("  loading cached Mercier data")
         m = np.load(mercier_npz)
         rho_m, D_M, D_sh, D_cu, D_we, D_ge = (
-            m["rho"], m["D_Mercier"], m["D_shear"],
-            m["D_current"], m["D_well"], m["D_geodesic"],
+            m["rho"],
+            m["D_Mercier"],
+            m["D_shear"],
+            m["D_current"],
+            m["D_well"],
+            m["D_geodesic"],
         )
     else:
         print("  computing Mercier criterion")
@@ -134,13 +150,20 @@ for iota_0 in iota_on_axis_values:
             grid=mercier_grid,
         )
         rho_m = np.array(md["rho"])
-        D_M   = np.array(md["D_Mercier"])
-        D_sh  = np.array(md["D_shear"])
-        D_cu  = np.array(md["D_current"])
-        D_we  = np.array(md["D_well"])
-        D_ge  = np.array(md["D_geodesic"])
-        np.savez(mercier_npz, rho=rho_m, D_Mercier=D_M,
-                 D_shear=D_sh, D_current=D_cu, D_well=D_we, D_geodesic=D_ge)
+        D_M = np.array(md["D_Mercier"])
+        D_sh = np.array(md["D_shear"])
+        D_cu = np.array(md["D_current"])
+        D_we = np.array(md["D_well"])
+        D_ge = np.array(md["D_geodesic"])
+        np.savez(
+            mercier_npz,
+            rho=rho_m,
+            D_Mercier=D_M,
+            D_shear=D_sh,
+            D_current=D_cu,
+            D_well=D_we,
+            D_geodesic=D_ge,
+        )
 
     unstable_frac = np.mean(D_M < 0)
     print(f"  Mercier: {unstable_frac*100:.1f}% of domain unstable (D_Mercier < 0)")
@@ -155,9 +178,12 @@ for iota_0 in iota_on_axis_values:
     D2, W2 = fourier_diffmat(n_zeta_hi)
 
     diffmat = DiffMat(
-        D_rho=D0, W_rho=W0,
-        D_theta=D1, W_theta=W1,
-        D_zeta=D2, W_zeta=W2,
+        D_rho=D0,
+        W_rho=W0,
+        D_theta=D1,
+        W_theta=W1,
+        D_zeta=D2,
+        W_zeta=W2,
     )
 
     grid0 = LinearGrid(rho=rho_hi, theta=theta_hi, zeta=zeta_hi, NFP=1, sym=False)
@@ -168,21 +194,21 @@ for iota_0 in iota_on_axis_values:
 
     print("  mapping coordinates")
     rtz_nodes = map_coordinates(
-        eq, reshaped_nodes,
+        eq,
+        reshaped_nodes,
         inbasis=("rho", "theta_PEST", "zeta"),
         outbasis=("rho", "theta", "zeta"),
         period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-        tol=1e-12, maxiter=50,
+        tol=1e-12,
+        maxiter=50,
     )
     grid = Grid(rtz_nodes)
 
     # Load saved eigenfunction components and flatten to preconditioned vector
-    xi_rho   = np.load(xi_rho_path)    # (n_rho, n_theta, n_zeta)
+    xi_rho = np.load(xi_rho_path)  # (n_rho, n_theta, n_zeta)
     xi_theta = np.load(xi_theta_path)
-    xi_zeta  = np.load(xi_zeta_path)
-    v = jnp.concatenate(
-        [xi_rho.flatten(), xi_theta.flatten(), xi_zeta.flatten()]
-    )
+    xi_zeta = np.load(xi_zeta_path)
+    v = jnp.concatenate([xi_rho.flatten(), xi_theta.flatten(), xi_zeta.flatten()])
     v = v / jnp.linalg.norm(v)
 
     print("  running xi^T A_term xi for each delta_W group")
@@ -214,9 +240,16 @@ for iota_0 in iota_on_axis_values:
     ]
     data = eq.compute(data_keys, grid=grid)
     transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
-    energy_data = term_by_term_stability(v, params, transforms, data, diffmat=diffmat,
-        gamma=100, incompressible=False,
-        axisym=axisym)
+    energy_data = term_by_term_stability(
+        v,
+        params,
+        transforms,
+        data,
+        diffmat=diffmat,
+        gamma=100,
+        incompressible=False,
+        axisym=axisym,
+    )
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")
     print(energy_data)
@@ -225,14 +258,18 @@ for iota_0 in iota_on_axis_values:
         **energy_data,
         iota_0=iota_0,
     )
-    print(f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(energy_data[k] for k in energy_data.keys())}")
-    print(f"  sanity check: sum of energy terms = {np.sum(energy_data[k] for k in energy_data.keys()):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}")
+    print(
+        f"iota= {iota_0}, lambda = {lambda_min}, sum={np.sum(np.fromiter(energy_data[k] for k in energy_data.keys()))}"
+    )
+    print(
+        f"  sanity check: sum of energy terms = {np.sum(np.fromiter(energy_data[k] for k in energy_data.keys())):.6e} vs lambda*||xi||^2 = {lambda_min * jnp.linalg.norm(v)**2:.6e}"
+    )
 # ── Convert to arrays ─────────────────────────────────────────────────────────
-results_iota0      = np.array(results_iota0)
+results_iota0 = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
 
 # ── Plot 1: Mercier D_Mercier vs rho ─────────────────────────────────────────
-cmap_lines  = plt.get_cmap("plasma")
+cmap_lines = plt.get_cmap("plasma")
 colors_scan = [cmap_lines(v) for v in np.linspace(0.1, 0.9, len(results_iota0))]
 
 fig, ax = plt.subplots(figsize=(8, 5))
@@ -258,12 +295,25 @@ ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls=":", alpha=0.6)
 
 for k in energy_data.keys():
-    normalized= energy_data[k]/jnp.linalg.norm(v)**2
-    ax.plot(results_iota0, normalized, "o-", lw=2, ms=6,
-            color=ENERGY_COLORS[k], label=ENERGY_LABELS[k])
+    normalized = energy_data[k] / jnp.linalg.norm(v) ** 2
+    ax.plot(
+        results_iota0,
+        normalized,
+        "o-",
+        lw=2,
+        ms=6,
+        color=ENERGY_COLORS[k],
+        label=ENERGY_LABELS[k],
+    )
 
-ax.plot(results_iota0, results_lambda_min, "k^--", lw=1.5, ms=7,
-        label=r"$\lambda_{\min}$ (eigenvalue)")
+ax.plot(
+    results_iota0,
+    results_lambda_min,
+    "k^--",
+    lw=1.5,
+    ms=7,
+    label=r"$\lambda_{\min}$ (eigenvalue)",
+)
 
 ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\xi^T A_{\mathrm{term}} \xi \;/\; \|\xi\|^2$", fontsize=13)

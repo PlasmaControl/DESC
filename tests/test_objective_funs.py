@@ -1157,6 +1157,39 @@ class TestObjectiveFunction:
             )
         # TODO (#1400, 914): move this coil set to conftest?
 
+        # test n_neighbors pruning gives same result as full pairwise
+        # using angular coilset (4 coils), n_neighbors=2 should match full
+        obj_full = CoilSetMinDistance(coils_angular, grid=LinearGrid(zeta=4))
+        obj_full.build()
+        f_full = obj_full.compute(params=coils_angular.params_dict)
+
+        obj_pruned = CoilSetMinDistance(
+            coils_angular, grid=LinearGrid(zeta=4), n_neighbors=2
+        )
+        obj_pruned.build()
+        f_pruned = obj_pruned.compute(params=coils_angular.params_dict)
+        np.testing.assert_allclose(f_pruned, f_full)
+
+        # n_neighbors with use_softmin
+        obj_pruned_soft = CoilSetMinDistance(
+            coils_angular,
+            grid=LinearGrid(zeta=4),
+            n_neighbors=2,
+            use_softmin=True,
+            softmin_alpha=10,
+        )
+        obj_pruned_soft.build()
+        f_pruned_soft = obj_pruned_soft.compute(params=coils_angular.params_dict)
+        np.testing.assert_allclose(f_pruned_soft, f_full, rtol=5e-2, atol=1e-3)
+
+        # n_neighbors >= n_coils-1 should also match (no actual pruning)
+        obj_no_prune = CoilSetMinDistance(
+            coils_angular, grid=LinearGrid(zeta=4), n_neighbors=10
+        )
+        obj_no_prune.build()
+        f_no_prune = obj_no_prune.compute(params=coils_angular.params_dict)
+        np.testing.assert_allclose(f_no_prune, f_full)
+
     @pytest.mark.unit
     def test_plasma_coil_min_distance(self):
         """Tests minimum distance between plasma and a coilset."""

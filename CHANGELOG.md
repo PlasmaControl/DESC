@@ -1,6 +1,10 @@
 Changelog
 =========
 
+New Features
+
+- Adds optional ``n_neighbors`` parameter to ``CoilSetMinDistance`` that limits pairwise distance computation to K nearest neighbors per coil, reducing cost for large coilsets.
+
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.

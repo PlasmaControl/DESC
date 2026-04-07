@@ -94,10 +94,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         https://doi.org/10.1063/1.2912456.
         Equation 61.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis et al.
-        https://arxiv.org/abs/2412.01724.
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -125,7 +123,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs(-2, grid.NFP, **kwargs)
+    ) = Bounce2D._defaults(-2, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(
@@ -276,7 +274,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs(-2, grid.NFP, **kwargs)
+    ) = Bounce2D._defaults(-2, grid, **kwargs)
 
     def gamma_c0(data):
         bounce = Bounce2D(
@@ -369,10 +367,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
         https://doi.org/10.1088/1741-4326/ac2994.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis et al.
-        https://arxiv.org/abs/2412.01724.
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     """
     # noqa: unused dependency
@@ -390,7 +386,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs(-1, grid.NFP, **kwargs)
+    ) = Bounce2D._defaults(-1, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(

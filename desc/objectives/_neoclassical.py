@@ -45,10 +45,8 @@ class EffectiveRipple(_Objective):
         Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
         https://doi.org/10.1063/1.873749.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis et al.
-        https://arxiv.org/abs/2412.01724.
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     Notes
     -----
@@ -306,7 +304,7 @@ class EffectiveRipple(_Objective):
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
 
         Y_B = self._hyperparam.pop("Y_B")
-        Y_B = setdefault(Y_B, Y_B_rule(32, eq.NFP, spline=True))
+        Y_B = setdefault(Y_B, Y_B_rule(self._grid, spline=True))
 
         num_transit = self._hyperparam.pop("num_transit")
 

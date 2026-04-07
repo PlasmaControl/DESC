@@ -210,10 +210,8 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging
-    algorithm and its applications.
-    Kaya E. Unalmis et al.
-    Supplementary information in DESC publications folder.
+    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     """
     # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
@@ -1045,12 +1043,27 @@ def round_up_rule(Y, NFP, axisymmetric):
     return num_z * NFP, num_z
 
 
-def Y_B_rule(Y, NFP, spline):
-    """Guess Y_B from resolution of Chebyshev spectrum of angle."""
+def Y_B_rule(grid, spline):
+    """Guess Y_B from grid resolution.
+
+    Parameters
+    ----------
+    grid : Grid
+        Grid.
+    spline : bool
+        Whether |B| will be approximated with cubic spline or Chebyshev.
+
+    Returns
+    -------
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+
+    """
+    Y_B = (grid.num_theta + grid.num_zeta) // 2
     # Due to backwards compatibility reasons Y_B is expected to indicate
     # resolution over full transit (a single field period) when spline is
     # true (false).
-    return (Y * NFP) if spline else Y
+    return (Y_B * grid.NFP) if spline else Y_B
 
 
 def num_well_rule(num_transit, NFP, Y_B=None):

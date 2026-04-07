@@ -173,10 +173,8 @@ class Bounce2D(Bounce):
 
     Refrences
     ---------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging
-    algorithm and its applications.
-    Kaya E. Unalmis et al.
-    https://arxiv.org/abs/2412.01724.
+    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     Examples
     --------
@@ -324,7 +322,7 @@ class Bounce2D(Bounce):
         self._theta = theta_on_fieldlines(angle, iota, alpha, num_transit, grid.NFP)
 
         if Y_B is None:
-            Y_B = Y_B_rule(angle.shape[-1], grid.NFP, spline)
+            Y_B = Y_B_rule(grid, spline)
         if spline:
             self._c["B(z)"], self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -385,7 +383,7 @@ class Bounce2D(Bounce):
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(Y, eq.NFP, spline=True)
+            Y_B = Y_B_rule(obj._grid, spline=True)
             obj._hyperparam["Y_B"] = Y_B
         if obj._hyperparam["num_well"] is None:
             obj._hyperparam["num_well"] = num_well_rule(
@@ -421,8 +419,8 @@ class Bounce2D(Bounce):
         )
 
     @staticmethod
-    def _default_kwargs(eta, NFP, **kwargs):
-        """Default kwargs for the registered compute functions.
+    def _defaults(eta, grid, **kwargs):
+        """Defaults for the registered compute functions.
 
         Parameters
         ----------
@@ -430,8 +428,9 @@ class Bounce2D(Bounce):
             The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
             behavior of the integrand near the bounce points. If η ∉ {-1, 1},
             then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
-        NFP : int
-            Number of field periods.
+        grid : Grid
+            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
         Returns
         -------
@@ -483,8 +482,8 @@ class Bounce2D(Bounce):
         alpha = kwargs.get("alpha", jnp.array([0.0]))
         num_transit = kwargs.get("num_transit", 20)
 
-        Y_B = kwargs.get("Y_B", Y_B_rule(angle.shape[-1], NFP, spline))
-        num_well = kwargs.get("num_well", num_well_rule(num_transit, NFP, Y_B))
+        Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
+        num_well = kwargs.get("num_well", num_well_rule(num_transit, grid.NFP, Y_B))
 
         return (
             angle,

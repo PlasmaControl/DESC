@@ -183,10 +183,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
         https://doi.org/10.1063/1.873749.
 
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging
-        algorithm and its applications.
-        Kaya E. Unalmis et al.
-        https://arxiv.org/abs/2412.01724.
+    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
         Equation 2.12.
 
     """
@@ -205,7 +203,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         nufft_eps,
         spline,
         vander,
-    ) = Bounce2D._default_kwargs(1, grid.NFP, **kwargs)
+    ) = Bounce2D._defaults(1, grid, **kwargs)
 
     def eps_32(data):
         """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""

@@ -1508,7 +1508,7 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        angle = Bounce2D.angle(eq, X=20, Y=20, rho=rho)
+        angle = Bounce2D.angle(eq, X=16, Y=16, rho=rho)
         bounce = Bounce2D(
             grid,
             data,

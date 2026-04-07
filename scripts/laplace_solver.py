@@ -289,7 +289,7 @@ for i, res in enumerate(resolutions):
         compute_grid = pest_grid
 
     # Compute values at surface nodes
-    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=pest_grid, basis="xyz")
+    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
     
     # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()

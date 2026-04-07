@@ -322,10 +322,15 @@ for i, res in enumerate(resolutions):
 
 
     # Make differentiation matrices
+    
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))
-    D_theta = jax.lax.stop_gradient(jnp.kron(I_zeta0, D1))
-    D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
+    if pest:
+        D_theta = jax.lax.stop_gradient(jnp.kron(D1, I_zeta0))
+        D_zeta = jax.lax.stop_gradient(jnp.kron(I_theta0, D2))
+    else:
+        D_theta = jax.lax.stop_gradient(jnp.kron(I_zeta0, D1))
+        D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
 
 
     # Plot B dot e_theta vs D_theta @ phi, and B dot e_zeta vs D_zeta @ phi, and save

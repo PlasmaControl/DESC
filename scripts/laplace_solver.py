@@ -82,9 +82,9 @@ for res in resolutions:
         n_mode_axisym = 0
 
     # Define resolution
-    M = 28
-    N = 28
-    n_rho = 14
+    M = res
+    N = res
+    n_rho = 1#14
     n_theta = 2 * M
     if axisym:
         n_zeta = 1
@@ -171,6 +171,7 @@ for res in resolutions:
 
     # This will probably OOM with the matrix-full method
     print("making input grid and diffmats")
+    """
     x, w = leggauss_lob(n_rho)
 
     rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
@@ -188,8 +189,9 @@ for res in resolutions:
 
     # scaled D_rho
     D0 = D0 * scale_vector
-    W0 = W0 * scale_vector_inv
-
+    W0 = W0 * scale_vector_inv"""
+    rho = np.array([1.0])
+    
     theta = pest_grid.unique_theta
     D1, W1 = fourier_diffmat(n_theta)
 

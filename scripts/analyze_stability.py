@@ -271,8 +271,8 @@ for iota_0 in iota_on_axis_values:
     for key in ENERGY_KEYS:
         all_data[key].append(energy_data[key])
     for key in ENERGY_KEYS:
-        all_data_norm[key].append(energy_data_norm[key])
-# ── Convert to arrays ─────────────────────────────────────────────────────────
+        all_data_norm[key].append(energy_data_norm[key])"""
+"""# ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0 = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
 

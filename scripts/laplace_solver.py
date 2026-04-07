@@ -109,6 +109,7 @@ for i, res in enumerate(resolutions):
         phi_save_name = f"{save_tag}_phi_matrix.npy"
     else:
         phi_save_name = f"{save_tag}_phi_matrix_rtz.npy"
+    phi_save_name = phi_save_name.replace(f"_pest_{pest}", "")
     rtz_save_name = f"{save_tag}_rtz.npy"
     pest_save_name = f"{save_tag}_rvp.h5"
     surf_save_name = f"{save_tag}_surf.npy"

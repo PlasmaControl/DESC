@@ -2578,11 +2578,18 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
             return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
+        y, _ = cg(Ashift, b * bc_mask, tol=5e-4, maxiter=int(2 * n_total))
+        return y * bc_mask
+    def OPinv_sigma_0(b):
+        def Ashift(x):
+            # identity on BC DOFs so CG sees a non-singular operator everywhere
+            return Ax(x) + (1.0 - bc_mask) * x
 
         y, _ = cg(Ashift, b * bc_mask, tol=5e-4, maxiter=int(2 * n_total))
         return y * bc_mask
-    print(jnp.linalg.norm(x_flat))
-    return OPinv(x_flat), sigma + 1/(x_flat @ OPinv(x_flat))
+    energy = x_flat @ OPinv_sigma_0(x_flat)
+    eigenvalue = sigma + 1/(x_flat @ OPinv(x_flat))
+    return OPinv(x_flat), energy, eigenvalue
     """
     def OPinv(b):
         def Ashift(x):

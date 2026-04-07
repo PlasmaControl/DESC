@@ -242,7 +242,7 @@ for iota_0 in iota_on_axis_values:
     ]
     data = eq.compute(data_keys, grid=grid)
     transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
-    energy_data, energy_data_norm = term_by_term_stability(
+    eigenvalue, vec = term_by_term_stability(
         v,
         params,
         transforms,
@@ -254,7 +254,8 @@ for iota_0 in iota_on_axis_values:
     )
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")
-    print(energy_data)
+    print(f"  sanity check: eigenvalue from term_by_term_stability = {eigenvalue:.6e} vs lambda_min from eigensolver = {lambda_min:.6e}")
+    """print(energy_data)
     print(energy_data_norm)
     np.savez(
         energy_npz,
@@ -336,3 +337,4 @@ fig.savefig(plot_path + "iota_scan_energy_terms.png", dpi=150)
 plt.show()
 
 print("Done. Plots saved to", plot_path)
+"""

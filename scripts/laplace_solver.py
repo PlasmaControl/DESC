@@ -51,7 +51,7 @@ phi_errs = np.zeros_like(resolutions, dtype=float)
 
 for i, res in enumerate(resolutions):
     # Misc inputs
-    pest = True
+    pest = False
     from_scratch = False
 
     # Equilibrium paremeteters
@@ -103,7 +103,7 @@ for i, res in enumerate(resolutions):
     if from_scratch:
         profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
         eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
-    save_tag = f"{eq_tag}_M_{M}_N_{N}"
+    save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}"
     eq_save_name = f"equilibrium_{save_tag}.h5"
     if pest:
         phi_save_name = f"{save_tag}_phi_matrix.npy"
@@ -241,7 +241,7 @@ for i, res in enumerate(resolutions):
     """"""
     print("computing phi matrix")
     # Compute the matrix A such that Phi_periodic = A @ B0*n.
-    override = True
+    override = False
     if os.path.exists(save_path + phi_save_name) and not override:
         phi_matrix = np.load(save_path + phi_save_name)
     else:
@@ -279,16 +279,28 @@ for i, res in enumerate(resolutions):
 
     n_surf = n_theta * n_zeta
 
-    
+    if pest:
+        # rho, theta, zeta locations of surface nodes, ordered by (theta, zeta)
+        compute_grid = Grid(rtz_nodes[-n_surf:])
+    else:
+        # rho, theta, zeta locations of surface nodes, ordered by (zeta, theta)
+        compute_grid = pest_grid
+
+    # Compute values at surface nodes
     data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=pest_grid, basis="xyz")
-    phi_matrix = np.load(save_path + phi_save_name)
+    
+    # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
     B = _grad_G(data["x"] - x0)
 
+    # Compute B dot n
     B_dot_n = dot(B, data["n_rho"])
+
+    # Compute phi and compare to expected value
     phi = phi_matrix @ B_dot_n
     phi_true = _G(data["x"] - x0)
 
+    # Plot phi from matrix vs phi from Green's function, and save
     fig, ax = plt.subplots(1, 1, figsize=(10, 7))
     ax.plot(_G(data["x"] - x0), phi, linestyle="None", marker=".")
     ax.plot(_G(data["x"] - x0),_G(data["x"] - x0), linestyle="dashed")
@@ -298,7 +310,7 @@ for i, res in enumerate(resolutions):
     fig.suptitle("PEST grid: checking that $\\Phi$ from matrix matches $G(\\mathbf{x}-\\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=16)
     fig.savefig(plot_path + f"phi_plot_{save_tag}.png", dpi=150)
 
-    
+    # Compute B dot e_theta and B dot e_zeta, and compare to D_theta @ phi and D_zeta @ phi, respectively.
     if pest:
         e_theta = data["e_theta_PEST"]
         e_zeta = data["e_phi"]
@@ -307,14 +319,14 @@ for i, res in enumerate(resolutions):
         e_zeta = data["e_zeta"]
 
 
-    I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho))
+    # Make differentiation matrices
     I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))
-
-
     D_theta = jax.lax.stop_gradient(jnp.kron(I_zeta0, D1))
     D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
 
+
+    # Plot B dot e_theta vs D_theta @ phi, and B dot e_zeta vs D_zeta @ phi, and save
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
     ax[0].plot(dot(B, e_zeta), D_zeta @ phi, linestyle="None", marker=".")
     ax[0].plot(dot(B, e_zeta), dot(B, e_zeta), linestyle="dashed")

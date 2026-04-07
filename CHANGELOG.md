@@ -11,6 +11,7 @@ v0.17.0
 
 New Features
 
+- Adds convenient dict-based parameter specification for ``ShareParameters``, allowing shorthand like ``True``/``False`` and per-child lists instead of requiring full pytree structures. Support for sharing parameters within a single ``OptimizableCollection``.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:

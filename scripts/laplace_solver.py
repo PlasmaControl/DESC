@@ -15,7 +15,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.equilibrium import Equilibrium
 from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
-from desc.utils import dot
+from desc.utils import dot, safenorm
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.io import load
 import numpy as np
@@ -44,9 +44,14 @@ chunk_size = 50
 
 resolutions = 3 * np.logspace(1, 4, 4, base=2).astype(int)
 
-for res in resolutions:
+# Root mean square errors in B_t, B_z, and phi for each resolution, relative to the "true" values computed from the Green's function.
+B_t_errs = np.zeros_like(resolutions, dtype=float)
+B_z_errs = np.zeros_like(resolutions, dtype=float)
+phi_errs = np.zeros_like(resolutions, dtype=float)
+
+for i, res in enumerate(resolutions):
     # Misc inputs
-    pest = False
+    pest = True
     from_scratch = False
 
     # Equilibrium paremeteters
@@ -191,7 +196,7 @@ for res in resolutions:
     D0 = D0 * scale_vector
     W0 = W0 * scale_vector_inv"""
     rho = np.array([1.0])
-    
+
     theta = pest_grid.unique_theta
     D1, W1 = fourier_diffmat(n_theta)
 
@@ -323,6 +328,31 @@ for res in resolutions:
     ax[1].set_ylabel("$D_\\theta \\Phi$ from matrix", fontsize=12)
     fig.suptitle("PEST grid: checking that derivatives of $\\Phi$ from matrix match $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ and $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=16)
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
+
+    B_t_errs[i] = ((dot(B, e_theta) - D_theta @ phi)**2).mean()**0.5
+    B_z_errs = ((dot(B, e_zeta) - D_zeta @ phi)**2).mean()**0.5
+    phi_matrix = ((phi - phi_true)**2).mean()**0.5
+
+
+# Plot errors vs resolution
+fig, ax = plt.subplots(1, 3, figsize=(20, 5))
+ax[0].plot(resolutions, B_t_errs, marker="o")
+ax[0].set_xscale("log")
+ax[0].set_yscale("log")
+ax[0].set_xlabel("Resolution (M=N)", fontsize=12)
+ax[0].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
+ax[1].plot(resolutions, B_z_errs, marker="o")
+ax[1].set_xscale("log")
+ax[1].set_yscale("log")
+ax[1].set_xlabel("Resolution (M=N)", fontsize=12)
+ax[1].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$", fontsize=12)
+ax[2].plot(resolutions, phi_errs, marker="o")
+ax[2].set_xscale("log")
+ax[2].set_yscale("log")
+ax[2].set_xlabel("Resolution (M=N)", fontsize=12)
+ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
+fig.suptitle("Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium", fontsize=16)
+fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)
 
 """
 print("computing eigenmode at low res")

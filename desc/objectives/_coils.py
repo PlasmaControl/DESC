@@ -1,11 +1,10 @@
 import numbers
 import warnings
 
-import jax
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.backend import tree_broadcast as jax_tree_broadcast
 from desc.backend import tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
@@ -881,6 +880,11 @@ class CoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
+    n_neighbors : int, optional
+        If given, limit pairwise distance computation to the K nearest neighbors
+        per coil, selected by centroid distance. Neighbor indices are not
+        differentiated so AD only traces through the fine-grained distances to
+        nearby coils. Default is None (full pairwise).
 
     """
 
@@ -991,7 +995,7 @@ class CoilSetMinDistance(_Objective):
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )
-        n_coils = pts.shape[0]
+        n_coils = self.dim_f
 
         if self._n_neighbors is not None and self._n_neighbors < n_coils - 1:
             # Pruned: only compute distances to K nearest neighbors

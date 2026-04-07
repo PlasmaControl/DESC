@@ -51,7 +51,8 @@ phi_errs = np.zeros_like(resolutions, dtype=float)
 
 for i, res in enumerate(resolutions):
     # Misc inputs
-    pest = False
+    pest = True
+    coords = "rvp" if pest else "rtz" 
     from_scratch = False
 
     # Equilibrium paremeteters
@@ -308,7 +309,7 @@ for i, res in enumerate(resolutions):
     ax.set_title("$\\Phi$ from matrix vs $G(\mathbf{x}-\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
     ax.set_xlabel("$G(\\mathbf{x}-\\mathbf{x}_0)$", fontsize=12)
     ax.set_ylabel("$\\Phi$ from matrix", fontsize=12)
-    fig.suptitle("PEST grid: checking that $\\Phi$ from matrix matches $G(\\mathbf{x}-\\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=16)
+    fig.suptitle("PEST grid: checking that $\\Phi$ from matrix matches $G(\\mathbf{x}-\\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
     fig.savefig(plot_path + f"phi_plot_{save_tag}.png", dpi=150)
 
     # Compute B dot e_theta and B dot e_zeta, and compare to D_theta @ phi and D_zeta @ phi, respectively.
@@ -339,7 +340,7 @@ for i, res in enumerate(resolutions):
     ax[1].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ vs $D_\\theta \\Phi$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
     ax[1].set_xlabel("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
     ax[1].set_ylabel("$D_\\theta \\Phi$ from matrix", fontsize=12)
-    fig.suptitle("PEST grid: checking that derivatives of $\\Phi$ from matrix match $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ and $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=16)
+    fig.suptitle("Checking that derivatives of $\\Phi$ from matrix match $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ and $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
     B_t_errs[i] = ((dot(B, e_theta) - D_theta @ phi)**2).mean()**0.5
@@ -364,7 +365,7 @@ ax[2].set_xscale("log")
 ax[2].set_yscale("log")
 ax[2].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
-fig.suptitle("Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium", fontsize=16)
+fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium in {coords} coords", fontsize=16)
 fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)
 
 """

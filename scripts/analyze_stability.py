@@ -252,6 +252,8 @@ for iota_0 in iota_on_axis_values:
         incompressible=False,
         axisym=axisym,
     )
+    print(eigenvalue)
+    print(type(eigenvalue))
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")
     print(f"  sanity check: eigenvalue from term_by_term_stability = {eigenvalue:.6e} vs lambda_min from eigensolver = {lambda_min:.6e}")

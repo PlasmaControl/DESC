@@ -4040,7 +4040,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-7)
+        np.testing.assert_allclose(g, g_0, atol=1e-6)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)

@@ -2573,12 +2573,17 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
 
         return y.flatten() * bc_mask  # enforce BC on output
 
-    v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -2e-4)
-    num_matvecs = 10
+    def OPinv(b):
+        def Ashift(x):
+            # identity on BC DOFs so CG sees a non-singular operator everywhere
+            return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
 
+        # RG: conj-gradient will only work if Ashift is SPD
+        y, _ = cg(Ashift, b * bc_mask, tol=5e-4, maxiter=int(2 * n_total))
+        return y * bc_mask
 
-    return Ax(x_flat), x_flat @ Ax(x_flat)
+    return OPinv(x_flat), x_flat @ OPinv(x_flat)
     """def OPinv(b):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere

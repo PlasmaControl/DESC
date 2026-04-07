@@ -2579,12 +2579,12 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
             return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
 
-        # RG: conj-gradient will only work if Ashift is SPD
         y, _ = cg(Ashift, b * bc_mask, tol=5e-4, maxiter=int(2 * n_total))
         return y * bc_mask
-
-    return OPinv(x_flat), x_flat @ OPinv(x_flat)
-    """def OPinv(b):
+    print(jnp.linalg.norm(x_flat))
+    return OPinv(x_flat), sigma + 1/(x_flat @ OPinv(x_flat))
+    """
+    def OPinv(b):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
             return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
@@ -2622,4 +2622,5 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
         "|J|² drive": J_sq_norm,
         "compressibility": compressibility_norm,
         "finite-n instability drive term": instability_drive_norm,
-    }"""
+    }
+    """

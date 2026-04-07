@@ -255,7 +255,7 @@ for iota_0 in iota_on_axis_values:
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")
     print(f"  sanity check: eigenvalue from term_by_term_stability = {eigenvalue:.6e} vs lambda_min from eigensolver = {lambda_min:.6e}")
-    """print(energy_data)
+    r"""print(energy_data)
     print(energy_data_norm)
     np.savez(
         energy_npz,
@@ -272,7 +272,7 @@ for iota_0 in iota_on_axis_values:
         all_data[key].append(energy_data[key])
     for key in ENERGY_KEYS:
         all_data_norm[key].append(energy_data_norm[key])"""
-"""# ── Convert to arrays ─────────────────────────────────────────────────────────
+r"""# ── Convert to arrays ─────────────────────────────────────────────────────────
 results_iota0 = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
 

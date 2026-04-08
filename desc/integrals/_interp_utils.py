@@ -137,6 +137,14 @@ def nufft2d2r(
         of ``(x),(x),(b,f0,f1)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
+    mask : jnp.ndarray or None
+        Boolean array with the same shape as ``x0``. ``True`` marks query
+        points where the transform should be evaluated; ``False`` marks
+        points that can be skipped. Passed through to ``jax-finufft`` as
+        ``points_mask`` to avoid unnecessary computation at invalid points.
+        Currently has no effect, but will make computation more effiicent
+        in a future update.
+        See https://github.com/flatironinstitute/jax-finufft/pull/216
 
     Returns
     -------

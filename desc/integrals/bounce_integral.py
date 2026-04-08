@@ -49,8 +49,8 @@ xₖ, wₖ
 NFP
     Number of field periods; the discrete toroidal symmetry of the device.
 
-Logic flow overview
-------------------
+Logic flow overview for Bounce2D.integrate
+------------------------------------------
 1. Start from equilibrium data sampled on an FFT-compatible grid in
  ``(rho, theta, zeta)``.
 2. Transform required fields (for example ``|B|`` and ``B^zeta``) to spectral form.
@@ -63,6 +63,11 @@ stream map
 6. Map quadrature nodes to each bounce interval, interpolate required quantities,
     apply geometry factors, and contract over quadrature weights.
 7. Return per-well bounce integrals, then reduce/average in callers as needed.
+
+See "effective ripple 3/2" in ``desc/compute/_neoclassical.py`` for an example
+of how the Bounce2D method is used in a compute function, and
+``desc/objectives/_neoclassical.py::EffectiveRipple`` for how the
+compute function is used in an objective.
 """
 
 import warnings
@@ -182,7 +187,7 @@ class Bounce(Module, ABC):
         x = bijection_from_disc(x, min_B[..., None], max_B[..., None])
         # multiply simp w by 0.5 * (b - a)
         w = w * grad_bijection_from_disc(min_B, max_B)[..., None]
-        # [..., is to to broadcast over surfaces, potentially
+        # [..., is to broadcast over surfaces, potentially
         return x, w
 
     @abstractmethod
@@ -968,8 +973,11 @@ class Bounce2D(Bounce):
         Representation switch:
         - If ``self._c["B(z)"]`` is a ``PiecewiseChebyshevSeries``, bounce points
             are computed with ``intersect1d`` in that representation.
-        - Otherwise, bounce points are computed by ``bounce_points`` from the
-            cubic-spline coefficients ``self._c["B(z)"]`` and ``self._c["knots"]``.
+        - Otherwise, ``self._c["B(z)"]`` holds cubic-spline coefficients and
+            ``self._c["knots"]`` the corresponding knots. Bounce points are
+            computed from these splines, and if NUFFTs are available, the
+            bounce points are refined with Newton refinement to improve
+            accuracy.
 
         """
         if num_well is None:
@@ -996,10 +1004,11 @@ class Bounce2D(Bounce):
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
-            The checks are ensuring: that the bounce points are ordered
-            correctly (z1 < z2 always where (z1,z2) is a bounce point pair),
-            that for each sequenctual z1_i,z2_i, the z2_i+1 >= z1_i, and that
-            the straight-line path between two bounce points (z1,z2)
+            The checks ensure: that the bounce points are ordered
+            correctly (z1 < z2 always where (z1, z2) is a bounce point pair),
+            that for each sequential pair of wells, z1_{i+1} >= z2_i (the start
+            of the next well is >= the end of the current well), and that
+            the straight-line path between two bounce points (z1, z2)
             actually is in the epigraph of |B| (i.e. that |B(z)| <= 1/λ
             for all z between z1 and z2).
 

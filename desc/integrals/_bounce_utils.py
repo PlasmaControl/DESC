@@ -888,7 +888,7 @@ def fast_cubic_spline(
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_t : jnp.ndarray
-        Precomputed transform matrix for poloidal coordiante.
+        Precomputed transform matrix for poloidal coordinate.
     vander_z : jnp.ndarray
         Precomputed transform matrix for toroidal coordinate.
     check : bool

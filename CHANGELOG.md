@@ -3,7 +3,7 @@ Changelog
 
 New Features
 
-- Adds optional ``n_neighbors`` parameter to ``CoilSetMinDistance`` that limits pairwise distance computation to K nearest neighbors per coil, reducing cost for large coilsets.
+- Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
 
 Bug Fixes
 

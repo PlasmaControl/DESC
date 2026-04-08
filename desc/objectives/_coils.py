@@ -994,38 +994,35 @@ class CoilSetMinDistance(_Objective):
             constants = self.constants
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
-        )
+        )  # pts.shape = (num_coils, num_nodes, 3)
         num_coils = self.dim_f
 
         if self._num_neighbors is not None and self._num_neighbors < num_coils - 1:
-            # pruned: only compute distances to nearest neighbors
+            # only consider nearest neighbors
             centroids = jnp.mean(pts, axis=1)  # (num_coils, 3)
             centroid_dists = safenorm(centroids[:, None] - centroids[None, :], axis=-1)
             centroid_dists = centroid_dists.at[jnp.diag_indices(num_coils)].set(jnp.inf)
 
-            def body(k):
-                # select nearest neighbors
-                neighbor_idx = jax.lax.stop_gradient(
+            def get_other_pts(k):
+                neighbors_idx = jax.lax.stop_gradient(
                     jnp.argsort(centroid_dists[k])[: self._num_neighbors]
                 )
-                coil_pts = pts[k]
-                neighbor_pts = pts[neighbor_idx]
-                dist = safenorm(
-                    coil_pts[None, :, None] - neighbor_pts[:, None], axis=-1
-                )
-                if self._use_softmin:
-                    return softmin(dist, self._softmin_alpha)
-                return jnp.min(dist)
+                return pts[neighbors_idx]
 
-        else:
-            # original: full pairwise distances
-            def body(k):
-                coil_pts = pts[k]
-                other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
-                dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
-                if self._use_softmin:
-                    return softmin(dist, self._softmin_alpha)
-                return jnp.min(dist)
+        else:  # consider all other coils
+
+            def get_other_pts(k):
+                return jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+
+        def body(k):
+            # dist[i,j,n] is the distance from the jth point on the kth coil
+            # to the nth point on the ith coil
+            coil_pts = pts[k]
+            other_pts = get_other_pts(k)
+            dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
+            if self._use_softmin:
+                return softmin(dist, self._softmin_alpha)
+            return jnp.min(dist)
 
         k = jnp.arange(self.dim_f)
         min_dist_per_coil = vmap_chunked(body, chunk_size=self._dist_chunk_size)(k)

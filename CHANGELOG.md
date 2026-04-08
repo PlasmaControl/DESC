@@ -11,6 +11,11 @@ v0.17.0
 
 New Features
 
+- [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
+    - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
+- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
+- Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
+    - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.
     - Particles can be initialized in couple different ways:
@@ -39,6 +44,7 @@ Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
 - ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
+- Significantly improves convergence of inverse stream maps in bounce integrals.
 - Fixes some bugs that hampered robustness of ``desc.geometry.FourierRZToroidalSurface.constant_offset_surface``, particularly when the given grid had stellarator symmetry or when NFP=1.
 - Fixes possible bug in computing normalizations when both kinetic and pressure profiles are assigned. Also adds warnings whenever an pressure is added to a kinetic-constrained equilibrium and vice-versa to alert user to ambiguous equilibrium setups.
 - Adds error in ``MercierStability`` to guard against situation where if a grid with a point at ``rho=0`` were used, NaN would be computed, as``MercierStability`` is undefined on-axis.
@@ -46,6 +52,8 @@ Bug Fixes
 Performance Improvements
 
 - `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
+- Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
 
 Deprecations
 

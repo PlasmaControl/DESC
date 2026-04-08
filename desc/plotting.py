@@ -4732,11 +4732,12 @@ def plot_gammac(
     num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     kwargs.pop("pitch_batch_size", None)
     kwargs.pop("surf_batch_size", None)
     X = kwargs.pop("X", 32)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", Y_B_rule(Y, eq.NFP, spline=True))
+    Y_B = kwargs.pop("Y_B", Y_B_rule(grid, spline=True))
     num_quad = kwargs.pop("num_quad", 32)
     num_transit = kwargs.pop("num_transit", 2)
     num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B))
@@ -4750,7 +4751,6 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,

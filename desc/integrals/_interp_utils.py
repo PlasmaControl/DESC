@@ -360,10 +360,8 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging
-    algorithm and its applications.
-    Kaya E. Unalmis et al.
-    Supplementary information in DESC publications folder.
+    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     """
     c, k, a_min, a_max = primals

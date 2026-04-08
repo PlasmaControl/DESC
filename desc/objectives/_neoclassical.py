@@ -68,14 +68,16 @@ class EffectiveRipple(_Objective):
     X : int
         Poloidal Fourier grid resolution to interpolate the angle.
         Preferably rounded down to power of 2.
+        Default is 32.
     Y : int
         Toroidal Chebyshev grid resolution over a single field period
         to interpolate the angle.
         Preferably rounded down to power of 2.
+        Default is 32.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         The bounce points are found with 8th order accuracy in this parameter.
-        A reference value is 100.
+        A reference value is ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -162,11 +164,11 @@ class EffectiveRipple(_Objective):
         jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
-        X=16,
+        X=32,
         Y=32,
         Y_B=None,
         alpha=jnp.array([0.0]),
-        num_transit=20,
+        num_transit=15,
         num_well=None,
         num_quad=32,
         num_pitch=51,

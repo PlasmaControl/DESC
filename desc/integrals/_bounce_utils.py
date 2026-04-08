@@ -189,7 +189,7 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     return z[..., 0, :, :], z[..., 1, :, :]
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("num_well", "nufft_eps"))
+@partial(jax.custom_jvp, nondiff_argnums=(2, 3))
 def regular_points(o, pitch_inv, num_well, nufft_eps):
     """Bounce points then newton, with regularized jvp."""
     return _newton(

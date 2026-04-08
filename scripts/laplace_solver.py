@@ -245,6 +245,7 @@ for i, res in enumerate(resolutions):
     # Compute the matrix A such that Phi_periodic = A @ B0*n.
     override = False
     if os.path.exists(save_path + phi_save_name) and not override:
+        print("loading phi matrix")
         phi_matrix = np.load(save_path + phi_save_name)
     else:
         # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface

@@ -39,7 +39,7 @@ n_mode_axisym = 0  # If axisym is True, the toroidal mode number to solve for
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.linspace(0.6, 1.5, 10)
+iota_on_axis_values = np.ones(1)#np.linspace(0.6, 1.5, 10)
 
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)

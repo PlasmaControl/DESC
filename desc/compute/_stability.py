@@ -1997,6 +1997,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     v_all = vecs[sort_idxs]
     v = v_all[0, :]
 
+    np.testing.assert_all_close(OPinv(v), mu[sort_idxs][0] * v)
+
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))
 

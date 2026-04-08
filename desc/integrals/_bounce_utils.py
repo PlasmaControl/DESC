@@ -203,6 +203,9 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
         "Second to last axis does not enumerate polynomials of spline. "
         f"Spline shape {B.shape}. Knots shape {knots.shape}."
     )
+    # TODO: should eventually be a passable argument, we should not expect users to
+    # potentially modify source code to use the bounce integrals if this assert ever
+    # gets triggered
     assert knots[0] > _sentinel, "Reduce sentinel in desc/integrals/_bounce_utils.py."
 
     z1 = atleast_nd(4, z1)
@@ -253,7 +256,8 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
             assert not err_3, (
                 f"Detected |B| = {B_midpoint[mask[idx]]} > {pitch_inv[idx] + eps} "
                 "= 1/λ in well, implying the straight line path between "
-                "bounce points is in hypograph(|B|). Use more knots.\n"
+                "bounce points is in hypograph(|B|). Use more knots (Y argument to"
+                "Bounce2D).\n"
             )
         if plot:
             this_title = (
@@ -735,8 +739,8 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
         .swapaxes(0, -3)
     )
     alpha = alpha.swapaxes(0, -2)
-    # now the variable delta is actually referring to theta
-    # TODO: why not just rename? and why the axes?
+    # now the variable delta is actually referring to theta. Rename to
+    # avoid using more memory
     delta = delta.at[..., 0].add(alpha)
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
     return PiecewiseChebyshevSeries(delta, domain)
@@ -843,9 +847,9 @@ def fast_cubic_spline(
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_t : jnp.ndarray
-        Precomputed transform matrix.
+        Precomputed transform matrix for poloidal coordiante.
     vander_z : jnp.ndarray
-        Precomputed transform matrix.
+        Precomputed transform matrix for toroidal coordinate.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 

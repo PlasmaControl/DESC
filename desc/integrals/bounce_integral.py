@@ -711,10 +711,6 @@ class Bounce2D(Bounce):
     def reshape(grid, f):
         """Reshape arrays for acceptable input to ``integrate``.
 
-        Bounce2D.integrate requires that data be in the "rzt" shape
-        corresponding to shape (num ρ, num ζ, num θ). This method
-        is just a shortcut for ''grid.meshgrid_reshape(f, "rzt")''
-
         Parameters
         ----------
         grid : Grid
@@ -788,7 +784,7 @@ class Bounce2D(Bounce):
     # Currently is a bit complex to use as requires knowledge of Bounce internal
     # workings to make an objective correctly. Since Bounce2D angle doc simply says
     # "use output of Bounce2d.angle", would be nice to allow that to work in objectives
-    # too may also need to remove from Bounce2D staticmethod and place as standalone
+    # too, may also need to remove from Bounce2D staticmethod and place as standalone
     # fxn in order to work under jit https://github.com/jax-ml/jax/issues/7702
     @staticmethod
     def angle(
@@ -808,11 +804,11 @@ class Bounce2D(Bounce):
         Specifically, this angle by default is delta = theta - alpha,
         where theta is the DESC poloidal angle and alpha is the field-line label.
         This is returned on a grid in (rho,alpha,zeta). This is later used to
-        interpolate to any arbitrary (alpha,zeta) through Fourier-Chebyshev
-        interpolation, effectively obtaining the map delta(alpha,zeta) so that one may
+        interpolate to any arbitrary (rho,alpha,zeta) through Fourier-Chebyshev
+        interpolation, effectively obtaining the map delta(rho,alpha,zeta) so one may
         compute theta on a given field line (given by alpha) at a given point along
         that field line (given by zeta) by simply calculating
-        theta = alpha + delta(alpha,zeta).
+        theta = alpha + delta(rho,alpha,zeta).
 
         Parameters
         ----------
@@ -957,7 +953,7 @@ class Bounce2D(Bounce):
             then the last axis, which enumerates bounce points for a particular field
             line and pitch, is padded with zero.
 
-        Notes
+        Dev Notes
         -----
         Representation switch:
         - If ``self._c["B(z)"]`` is a ``PiecewiseChebyshevSeries``, bounce points
@@ -1045,6 +1041,13 @@ class Bounce2D(Bounce):
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
 
+            The checks are ensuring: that the bounce points are ordered
+            correctly (z1 < z2 always where (z1,z2) is a bounce point pair),
+            that for each sequenctual z1_i,z2_i, the z2_i+1 >= z1_i, and that
+            the straight-line path between two bounce points (z1,z2)
+            actually is in the epigraph of |B| (i.e. that |B(z)| <= 1/λ
+            for all z between z1 and z2).
+
         Parameters
         ----------
         points : tuple[jnp.ndarray]
@@ -1131,7 +1134,12 @@ class Bounce2D(Bounce):
         integrand : callable or list[callable]
             The composition operator on the set of functions in ``data``
             that determines ``f`` in ∫ f(ρ,α,λ,ℓ) dℓ. It should accept a dictionary
-            which stores the interpolated data and the arguments ``B`` and ``pitch``.
+            which stores the interpolated data and the arguments ``B`` and ``pitch``,
+            in that order, i.e. ``integrand_fxn(data, B, pitch)``, where ``B``
+            is the interpolated magnetic field magnitude, and pitch is the λ value.
+            ``data`` is interpolated to the quadrature points of each well's integral,
+            so the integrand function need only use the data dictionary, not perform
+            any further manipulations to ensure the data corresponds to the well.
         pitch_inv : jnp.ndarray
             Shape (num ρ, num pitch).
             1/λ values to compute the bounce integrals. 1/λ(ρ) is specified by
@@ -1142,7 +1150,7 @@ class Bounce2D(Bounce):
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
-            expected shape.
+            expected shape for this function.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]
@@ -1186,8 +1194,12 @@ class Bounce2D(Bounce):
         exclude = ("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta")
         data = setdefault(data, {})
         if is_fourier:
+            # remove the keys in exclude from the
+            # data dictionary
             data = apply(data, subset=names, exclude=exclude)
         else:
+            # remove the keys in exclude from the
+            # data dictionary and transform the rest to Fourier domain
             data = apply(data, Bounce2D.fourier, names, exclude)
 
         if points is None:
@@ -1195,7 +1207,10 @@ class Bounce2D(Bounce):
         z1, z2 = points
 
         if low_ram and z1.ndim > 3 and z1.shape[0] > 1:
-            warnings.warn("Use Bounce2D.batch with surf_batch_size=1 before low_ram.")
+            warnings.warn(
+                "Use Bounce2D.batch with surf_batch_size=1 "
+                "before trying to reduce memory with low_ram=True."
+            )
 
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
@@ -1210,6 +1225,10 @@ class Bounce2D(Bounce):
             data = self._nummt(z, data, low_ram)
         else:
             data = self._nufft(z, data, nufft_eps, low_ram)
+
+        # shapes of data are (num_rho, num_alpha, num_pitch, num_well, num_quad),
+        # same as shape of z
+
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
         data["zeta"] = z
 

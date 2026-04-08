@@ -1,21 +1,7 @@
-"""Utilities for quadratures.
+"""Utilities for quadratures."""
 
-Notes
------
-Bounce integrals with bounce points where the derivative of B does not vanish
-have 1/2 power law singularities. However, strongly singular integrals where the
-domain of the integral ends at the local extrema of B are not integrable.
-
-Everywhere except for the extrema, an implicit Chebyshev (``chebgauss1`` or
-``chebgauss2`` or modified Legendre quadrature (with ``automorphism_sin``)
-captures the integral because √(1−(ζ/ζᵢ)²) / √ (1−λB) ∼ k(λ, ζ) is smooth in ζ.
-The clustering of the nodes near the singularities is sufficient to estimate
-k(ζ, λ).
-"""
-
-import scipy
-from orthax.chebyshev import chebgauss, chebweight
 from orthax.legendre import legder, legval
+from scipy.special import roots_legendre
 
 from desc.backend import eigh_tridiagonal, fori_loop, jnp, put
 from desc.utils import errorif
@@ -221,7 +207,7 @@ def uniform(deg):
 
 
 def simpson2(deg):
-    """Open Simpson rule completed by midpoint at boundary.
+    """Simpson’s 1/3 in the interior completed by an open midpoint scheme.
 
     Parameters
     ----------
@@ -273,8 +259,10 @@ def chebgauss1(deg):
         Quadrature points and weights.
 
     """
-    x, w = chebgauss(deg)
-    return x, w / chebweight(x)
+    t = jnp.pi * jnp.arange(1, 2 * deg, 2) / (2 * deg)
+    x = jnp.cos(t)
+    w = jnp.pi * jnp.sin(t) / deg
+    return x, w
 
 
 def chebgauss2(deg):
@@ -476,7 +464,7 @@ def _get_polar_quadrature(q):
 
     """
     Nr = Nw = q
-    r, dr = scipy.special.roots_legendre(Nr)
+    r, dr = roots_legendre(Nr)
     # integrate separately over [-1,0] and [0,1]
     r1 = 1 / 2 * r - 1 / 2
     r2 = 1 / 2 * r + 1 / 2

@@ -11,90 +11,32 @@ import numpy as np
 from interpax import CubicSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
+    PiecewiseChebyshevSeries,
     cheb_from_dct,
     cheb_pts,
-    dct_from_cheb,
+    epigraph_and,
     idct_mmt,
     ifft_mmt,
     irfft_mmt_pos,
+    take_mask,
 )
+from interpax_fft._series import _add2legend, _plot_intersect
 from matplotlib import pyplot as plt
-from orthax.chebyshev import chebroots, chebvander
+from orthax.chebyshev import chebvander
 
-from desc.backend import dct, flatnonzero, fori_loop, idct, ifft, jax, jnp
+from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
     _eps,
-    _filter_distinct,
-    _subtract_first,
+    chebder,
     nufft1d2r,
+    nufft2d2r,
     poly_val,
     polyroot_vec,
 )
-from desc.integrals.quad_utils import bijection_from_disc, bijection_to_disc
-from desc.io import IOAble
-from desc.utils import (
-    atleast_2d_end,
-    atleast_3d_mid,
-    atleast_nd,
-    errorif,
-    flatten_mat,
-    setdefault,
-    take_mask,
-    warnif,
-)
+from desc.integrals.quad_utils import bijection_from_disc
+from desc.utils import atleast_nd, flatten_mat, setdefault
 
 _sentinel = -1e5
-_chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
-
-
-@partial(jnp.vectorize, signature="(m),(m)->(m)")
-def _in_epigraph_and(is_intersect, df_dy, /):
-    """Set and epigraph of function f with the given set of points.
-
-    Used to return only intersects where the straight line path between
-    adjacent intersects resides in the epigraph of a continuous map ``f``.
-
-    Parameters
-    ----------
-    is_intersect : jnp.ndarray
-        Boolean array indicating whether index corresponds to an intersect.
-    df_dy : jnp.ndarray
-        Shape ``is_intersect.shape``.
-        Sign of ∂f/∂y (yᵢ) for f(yᵢ) = 0.
-
-    Returns
-    -------
-    is_intersect : jnp.ndarray
-        Boolean array indicating whether element is an intersect
-        and satisfies the stated condition.
-
-    Examples
-    --------
-    See ``desc/integrals/_bounce_utils.py::bounce_points``.
-    This is used there to ensure the domains of integration are magnetic wells.
-
-    """
-    # The pairs y1 and y2 are boundaries of an integral only if y1 <= y2. For the
-    # to be over wells, it is required that the first intersect has a non-positive
-    # derivative. Now, by continuity, df_dy[...,k]<=0 implies df_dy[...,k+1]>=0, so
-    # there can be at most one inversion, and if it exists, it must be at the first
-    # pair. To correct the inversion, it suffices to disqualify the first intersect
-    # as a right boundary, except under an edge case of a series of inflection points.
-    idx = flatnonzero(is_intersect, size=2, fill_value=-1)
-    edge_case = (
-        (df_dy[idx[0]] == 0)
-        & (df_dy[idx[1]] < 0)
-        & is_intersect[idx[0]]
-        & is_intersect[idx[1]]
-        # In theory, we need to keep propagating this edge case, e.g.
-        # (df_dy[..., 1] < 0) | (
-        #     (df_dy[..., 1] == 0) & (df_dy[..., 2] < 0)...
-        # ).
-        # At each step, the likelihood that an intersection has already been lost
-        # due to floating point errors grows, so the real solution is to pick a less
-        # degenerate pitch value - one that does not ride the global extrema of f.
-    )
-    return is_intersect.at[idx[0]].set(edge_case)
 
 
 def bounce_points(pitch_inv, knots, B, num_well=-1):
@@ -129,7 +71,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
 
     Returns
     -------
-    z1, z2 : tuple[jnp.ndarray]
+    z1, z2, mask : tuple[jnp.ndarray]
         Shape (..., num pitch, num well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
@@ -156,7 +98,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
-    z2 = (dB_dz >= 0) & _in_epigraph_and(mask, dB_dz)
+    z2 = (dB_dz >= 0) & epigraph_and(mask, dB_dz)
 
     # Transform out of local power basis expansion.
     intersect = flatten_mat(intersect + knots[:-1, None])
@@ -168,7 +110,178 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-    return z1, z2
+    return z1, z2, mask
+
+
+def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
+    """Newton step using maps used in the quadrature.
+
+    An error of ε in a bounce point manifests
+      * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+      * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+    mask : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well).
+        Subset of points to refine.
+    nufft_eps : float
+        Desired error ε of the bounce points.
+
+    Returns
+    -------
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+
+    """
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+            ]
+        ),
+    )
+    dt_dz = dt_dz.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    B = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [
+                o._c["|B|"],
+                o._c["|B|"] * (1j * o._modes_z)[:, None],
+                o._c["|B|"] * (1j * o._modes_t),
+            ],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4),
+    )
+    B, dB_dz, dB_dt = (
+        B.reshape(3, *shape)
+        if B.ndim == 2
+        # reshape before swap to avoid memory copy
+        else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
+    )
+    z = z.reshape(shape)
+
+    dz = (B - pitch_inv[..., None, :, None]) / (dB_dz + dB_dt * dt_dz)
+    Z = z - dz
+    mask = mask & (Z[..., 0, :, :] < Z[..., 1, :, :])  # Deny interval inversion.
+    mask = mask[..., None, :, :] & (jnp.abs(dz) < 1e-1)  # Deny large updates.
+    z = jnp.where(mask, Z, z)
+
+    return z[..., 0, :, :], z[..., 1, :, :]
+
+
+@partial(jax.custom_jvp, nondiff_argnames=("num_well", "nufft_eps"))
+def regular_points(o, pitch_inv, num_well, nufft_eps):
+    """Bounce points then newton, with regularized jvp."""
+    return _newton(
+        o,
+        pitch_inv,
+        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well),
+        nufft_eps,
+    )
+
+
+@regular_points.defjvp
+def regular_points_jvp(num_well, nufft_eps, primals, tangents):
+    """Implicit function theorem with regularization.
+
+    Regularization used to smooth the discretized system so that it recognizes
+    any non-differentiable sample it has observed actually has zero measure in
+    the continuous system.
+
+    References
+    ----------
+    Spectrally accurate, reverse-mode differentiable bounce-averaging
+    algorithm and its applications.
+    Kaya E. Unalmis et al.
+    Supplementary information in DESC publications folder.
+
+    """
+    # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
+
+    o, p = primals
+    do, dp = tangents
+
+    z1, z2 = regular_points(o, p, num_well, nufft_eps)
+
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+            ]
+        ),
+    )
+    dt_do = o._theta.eval1d(z, do._theta.cheb).reshape(shape)
+    dt_dz = dt_dz.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    mask = (z1 < z2)[..., None, :, :]
+
+    dB_dz = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [o._c["|B|"] * (1j * o._modes_z)[:, None], o._c["|B|"] * (1j * o._modes_t)],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    )
+    dB_do = nufft2d2r(
+        z,
+        t,
+        do._c["|B|"].squeeze(-3),
+        (0, 2 * jnp.pi / o._NFP),
+        eps=nufft_eps,
+        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    ).reshape(shape)
+
+    dB_dz, dB_dt = (
+        dB_dz.reshape(2, *shape)
+        if dB_dz.ndim == 2
+        # reshape before swap to avoid memory copy
+        else dB_dz.reshape(shape[0], 2, *shape[1:]).swapaxes(0, 1)
+    )
+
+    # chain rule to move from (∂/∂ζ)|ρ,θ to (∂/∂ζ)|ρ,a
+    dB_dz += dB_dt * dt_dz
+    dB_do += dB_dt * dt_do
+
+    dB_dz = jnp.where(
+        jnp.abs(dB_dz) > _eps,
+        dB_dz,
+        dB_dz + jnp.copysign(_eps, dB_dz.real),
+    )
+    dz12 = jnp.where(mask, (dp[..., None, :, None] - dB_do) / dB_dz, 0.0)
+
+    return (z1, z2), (dz12[..., 0, :, :], dz12[..., 1, :, :])
 
 
 def set_default_plot_kwargs(kwargs, l=None, m=None):
@@ -464,76 +577,6 @@ def plot_ppoly(
         plt.show()
         plt.close()
     return (fig, ax, legend) if return_legend else (fig, ax)
-
-
-def _add2legend(legend, lines):
-    """Add lines to legend if it's not already in it."""
-    for line in setdefault(lines, [lines], hasattr(lines, "__iter__")):
-        label = line.get_label()
-        if label not in legend:
-            legend[label] = line
-
-
-def _plot_intersect(
-    ax,
-    legend,
-    z1,
-    z2,
-    k,
-    k_transparency,
-    klabel,
-    hlabel,
-    markersize=plt.rcParams["lines.markersize"] * 3,
-    **kwargs,
-):
-    """Plot intersects on ``ax``."""
-    if k is None:
-        return
-
-    k = jnp.atleast_1d(jnp.squeeze(k))
-    assert k.ndim == 1
-    z1, z2 = jnp.atleast_2d(z1, z2)
-    assert z1.ndim == z2.ndim >= 2
-    assert k.shape[0] == z1.shape[0] == z2.shape[0]
-    for p in k:
-        _add2legend(
-            legend,
-            ax.axhline(
-                p,
-                color="tab:purple",
-                alpha=k_transparency,
-                label=klabel,
-                linestyle="--",
-            ),
-        )
-    for i in range(k.size):
-        _z1, _z2 = z1[i], z2[i]
-        if _z1.size == _z2.size:
-            mask = (_z1 - _z2) != 0.0
-            _z1 = _z1[mask]
-            _z2 = _z2[mask]
-        _add2legend(
-            legend,
-            ax.scatter(
-                _z1,
-                jnp.full_like(_z1, k[i]),
-                marker="v",
-                color="tab:red",
-                label=hlabel + r"$_1(w)$",
-                s=markersize,
-            ),
-        )
-        _add2legend(
-            legend,
-            ax.scatter(
-                _z2,
-                jnp.full_like(_z2, k[i]),
-                marker="^",
-                color="tab:green",
-                label=hlabel + r"$_2(w)$",
-                s=markersize,
-            ),
-        )
 
 
 def get_mins(knots, B, num_mins=-1, fill_value=0.0):
@@ -985,7 +1028,8 @@ def broadcast_for_bounce(pitch_inv):
         Shape broadcasts with (num ρ, num α, num pitch).
 
     """
-    if jnp.ndim(pitch_inv) == 2:
+    pitch_inv = jnp.atleast_1d(pitch_inv)
+    if pitch_inv.ndim == 2:
         pitch_inv = pitch_inv[:, None]
     return pitch_inv
 
@@ -995,7 +1039,7 @@ def truncate_rule(Y):
     return max(1, 7 * Y // 8)
 
 
-def round_up_rule(Y, NFP, axisymmetric=False):
+def round_up_rule(Y, NFP, axisymmetric):
     """Round Y up to NFP multiple.
 
     Returns
@@ -1004,6 +1048,8 @@ def round_up_rule(Y, NFP, axisymmetric=False):
         Number of points per toroidal transit.
     num_z : int
         Number of points per field period.
+    axisymmetric : bool
+        Whether there toroidal smmetry.
 
     """
     if axisymmetric:
@@ -1013,9 +1059,12 @@ def round_up_rule(Y, NFP, axisymmetric=False):
     return num_z * NFP, num_z
 
 
-def Y_B_rule(Y, NFP, spline=True):
+def Y_B_rule(Y, NFP, spline):
     """Guess Y_B from resolution of Chebyshev spectrum of angle."""
-    return (2 * Y * int(np.sqrt(NFP))) if spline else Y
+    # Due to backwards compatibility reasons Y_B is expected to indicate
+    # resolution over full transit (a single field period) when spline is
+    # true (false).
+    return (Y * NFP) if spline else Y
 
 
 def num_well_rule(num_transit, NFP, Y_B=None):
@@ -1030,524 +1079,9 @@ def num_well_rule(num_transit, NFP, Y_B=None):
 
 def get_vander(grid, Y, Y_B, NFP):
     """Builds Vandermonde matrices for objectives."""
-    assert isinstance(Y, int)
-    assert isinstance(Y_B, int)
-    assert isinstance(NFP, int)
-
     Y_trunc = truncate_rule(Y)
     Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
     x = jnp.linspace(
         -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
     )
     return {"dct spline": chebvander(x, Y_trunc - 1)}
-
-
-@partial(jax.checkpoint, prevent_cse=False)
-def _gather_reduce(y, cheb, x_idx):
-    """Gather then reduce with checkpointing.
-
-    Checkpointing this makes it faster and reduces memory.
-    On many architectures, the cost of allocating contiguous blocks of memory
-    exceeds the cost of flops. By checkpointing, we avoid that in favor of
-    recomputing derivatives in the backward pass.
-
-    On JAX version 0.7.2, enabling CSE did not increase memory.
-    """
-    Y = cheb.shape[-1]
-    return jnp.einsum(
-        "...m, ...m",
-        jnp.cos(jnp.arange(Y) * y[..., None]),
-        jnp.take_along_axis(cheb, x_idx[..., None], axis=-2),
-    )
-
-
-@partial(jax.checkpoint, prevent_cse=False)
-def _loop(y, cheb, x_idx):
-    """Memory efficient Clenshaw recursion.
-
-    Checkpointing on a CPU observed a minor reduction in memory usage while not
-    affecting speed. With/without checkpointing, this uses signficantly less
-    memory than non-checkpointed _gather_reduce.
-
-    JAX/XLA is poor at differentiating iterative algorithms compared to Julia.
-    On JAX version 0.7.2, this is slower to differentiate than _gather_reduce.
-    On JAX version 0.7.2, enabling CSE did not increase memory.
-    """
-
-    def body(i, val):
-        c0, c1 = val
-        return jnp.take_along_axis(cheb[-i], x_idx, axis=-1) - c1, c0 + c1 * y2
-
-    num_coef = cheb.shape[-1]
-    cheb = jnp.moveaxis(cheb, -1, 0)  # to minimize cache misses
-    y2 = 2 * y
-    c0 = jnp.take_along_axis(cheb[-2], x_idx, axis=-1)
-    c1 = jnp.take_along_axis(cheb[-1], x_idx, axis=-1)
-    c0, c1 = fori_loop(3, num_coef + 1, body, (c0, c1))
-    return c0 + c1 * y
-
-
-class PiecewiseChebyshevSeries(IOAble):
-    """Chebyshev series.
-
-    { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
-    and Tₙ are Chebyshev polynomials on [−yₘᵢₙ, yₘₐₓ]
-
-    Parameters
-    ----------
-    cheb : jnp.ndarray
-        Shape (..., X, Y).
-        Chebyshev coefficients aₙ(x) for f(x, y) = ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y).
-    domain : tuple[float]
-        Domain for y coordinates. Default is [-1, 1].
-
-    """
-
-    def __init__(self, cheb, domain=(-1, 1)):
-        """Make piecewise series from given Chebyshev coefficients."""
-        errorif(domain[0] > domain[-1], msg="Got inverted domain.")
-        self.cheb = jnp.atleast_2d(cheb)
-        self.domain = domain
-
-    @property
-    def X(self):
-        """Number of cuts."""
-        return self.cheb.shape[-2]
-
-    @property
-    def Y(self):
-        """Chebyshev spectral resolution."""
-        return self.cheb.shape[-1]
-
-    def stitch(self):
-        """Enforce continuity of the piecewise series."""
-        # evaluate at left boundary
-        f_0 = self.cheb[..., ::2].sum(-1) - self.cheb[..., 1::2].sum(-1)
-        # evaluate at right boundary
-        f_1 = self.cheb.sum(-1)
-        dfx = f_1[..., :-1] - f_0[..., 1:]  # Δf = f(xᵢ, y₁) - f(xᵢ₊₁, y₀)
-        self.cheb = self.cheb.at[..., 1:, 0].add(dfx.cumsum(-1))
-
-    def evaluate(self, Y):
-        """Evaluate Chebyshev series at Y Chebyshev points.
-
-        Evaluate each function in this set
-        { fₓ | fₓ : y ↦ ∑ₙ₌₀ᴺ⁻¹ aₙ(x) Tₙ(y) }
-        at y points given by the Y Chebyshev points.
-
-        Parameters
-        ----------
-        Y : int
-            Grid resolution in y direction. Preferably power of 2.
-
-        Returns
-        -------
-        fq : jnp.ndarray
-            Shape (..., X, Y)
-            Chebyshev series evaluated at Y Chebyshev points.
-
-        """
-        warnif(
-            Y < self.Y,
-            msg="Frequency spectrum of DCT interpolation will be truncated because "
-            "the grid resolution is less than the Chebyshev resolution.\n"
-            f"Got Y = {Y} < {self.Y} = self.Y.",
-        )
-        return idct(dct_from_cheb(self.cheb), type=2, n=Y, axis=-1) * Y
-
-    def _isomorphism_to_C1(self, y):
-        """Return coordinates z ∈ ℂ isomorphic to (x, y) ∈ ℂ².
-
-        Maps row x of y to z = y + f(x) where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        y : jnp.ndarray
-            Shape (..., y.shape[-2], y.shape[-1]).
-            Second to last axis iterates the rows.
-
-        Returns
-        -------
-        z : jnp.ndarray
-            Shape y.shape.
-            Isomorphic coordinates.
-
-        """
-        assert y.ndim >= 2
-        z_shift = jnp.arange(y.shape[-2]) * (self.domain[-1] - self.domain[0])
-        return y + z_shift[:, None]
-
-    def _isomorphism_to_C2(self, z):
-        """Return coordinates (x, y) ∈ ℂ² isomorphic to z ∈ ℂ.
-
-        Returns index x and minimum value y such that
-        z = f(x) + y where f(x) = x * |domain|.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape z.shape.
-
-        Returns
-        -------
-        x_idx, y : tuple[jnp.ndarray]
-            Shape z.shape.
-            Isomorphic coordinates.
-
-        """
-        x_idx, y = jnp.divmod(z - self.domain[0], self.domain[-1] - self.domain[0])
-        x_idx = x_idx.astype(int)
-        y += self.domain[0]
-        return x_idx, y
-
-    def eval1d(self, z, cheb=None, loop=False):
-        """Evaluate piecewise Chebyshev series at coordinates z.
-
-        Parameters
-        ----------
-        z : jnp.ndarray
-            Shape should broadcast with (*cheb.shape[:-2], z.shape[-1])
-            and also have the same dimension as (*cheb.shape[:-2], z.shape[-1]).
-            Coordinates in [self.domain[0], ∞).
-            The coordinates z ∈ ℝ are assumed isomorphic to (x, y) ∈ ℝ² where
-            ``z//domain`` yields the index into the proper Chebyshev series
-            along the second to last axis of ``cheb`` and ``z%domain`` is
-            the coordinate value on the domain of that Chebyshev series.
-        cheb : jnp.ndarray
-            Shape (..., X, Y).
-            Chebyshev coefficients to use. If not given, uses ``self.cheb``.
-        loop : bool
-            If ``True``, then uses Clenshaw recursion which is memory efficient.
-            If ``False``, then gathers a large block of memory and computes
-            a product sum reduction while checkpointing the derivative
-            to reduce memory consumption of the Jacobian.
-
-        Returns
-        -------
-        f : jnp.ndarray
-            Chebyshev series evaluated at z.
-
-        """
-        cheb = setdefault(cheb, self.cheb)
-        x_idx, y = self._isomorphism_to_C2(z)
-        y = bijection_to_disc(y, *self.domain)
-
-        if loop and self.Y >= 3:
-            return _loop(y, cheb, x_idx)
-
-        y = jnp.arccos(y)
-        return _gather_reduce(y, cheb, x_idx)
-
-    def intersect2d(self, k=0.0, *, eps=_eps):
-        """Coordinates yᵢ such that f(x, yᵢ) = k(x).
-
-        Parameters
-        ----------
-        k : jnp.ndarray
-            Shape must broadcast with (..., *cheb.shape[:-1]).
-            Specify to find solutions yᵢ to f(x, yᵢ) = k(x). Default 0.
-        eps : float
-            Absolute tolerance with which to consider value as zero.
-
-        Returns
-        -------
-        y : jnp.ndarray
-            Shape (..., *cheb.shape[:-1], Y - 1).
-            Solutions yᵢ of f(x, yᵢ) = k(x), in ascending order.
-        mask : jnp.ndarray
-            Shape y.shape.
-            Boolean array into ``y`` indicating whether element is an intersect.
-        df_dy : jnp.ndarray
-            Shape y.shape.
-            Sign of ∂f/∂y (x, yᵢ).
-
-        """
-        c = _subtract_first(self.cheb, k)
-        # roots yᵢ of f(x, y) = ∑ₙ₌₀ᴺ⁻¹ αₙ(x) Tₙ(y) - k(x)
-        y = _chebroots_vec(c)
-        assert y.shape == (*c.shape[:-1], self.Y - 1)
-
-        # Intersects must satisfy y ∈ [-1, 1].
-        # Pick sentinel such that only distinct roots are considered intersects.
-        y = _filter_distinct(y, sentinel=-2.0, eps=eps)
-        mask = (jnp.abs(y.imag) <= eps) & (jnp.abs(y.real) < 1.0)
-        # Ensure y ∈ (-1, 1), i.e. where arccos is differentiable.
-        y = jnp.where(mask, y.real, 0.0)
-
-        n = jnp.arange(self.Y)
-        #      ∂f/∂y =      ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n Uₙ₋₁(y)
-        # sign ∂f/∂y = sign ∑ₙ₌₀ᴺ⁻¹ aₙ(x) n sin(n arcos y)
-        df_dy = jnp.sign(
-            jnp.einsum(
-                "...yn, ...n",
-                jnp.sin(n * jnp.arccos(y)[..., None]),
-                self.cheb * n,
-            )
-        )
-        y = bijection_from_disc(y, *self.domain)
-        return y, mask, df_dy
-
-    def intersect1d(self, k=0.0, num_intersect=-1):
-        """Coordinates z(x, yᵢ) such that fₓ(yᵢ) = k for every x.
-
-        Examples
-        --------
-        In ``Bounce2D.points``, the labels x, y, z, f, k are
-          * z = ζ = (ϑ−α)/ι̅-ω ∈ ℝ
-          * y = ζ mod (2π/NFP)
-          * x = α mod (2π)
-          * f = ‖B‖
-          * k = 1/λ
-
-        Parameters
-        ----------
-        k : jnp.ndarray
-            Shape must broadcast with (..., *cheb.shape[:-2]).
-            Specify to find solutions yᵢ to fₓ(yᵢ) = k. Default 0.
-        num_intersect : int or None
-            Specify to return the first ``num_intersect`` intersects.
-            This is useful if ``num_intersect`` tightly bounds the actual number.
-
-            If not specified, then all intersects are returned. If there were fewer
-            intersects detected than the size of the last axis of the returned arrays,
-            then that axis is padded with zero.
-
-        Returns
-        -------
-        z1, z2 : tuple[jnp.ndarray]
-            Shape broadcasts with (..., *self.cheb.shape[:-2], num intersect).
-            Tuple of length two (z1, z2) of coordinates of intersects.
-            The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of f.
-
-        """
-        errorif(
-            self.Y < 2,
-            NotImplementedError,
-            "This method requires a Chebyshev spectral resolution of Y > 1, "
-            f"but got Y = {self.Y}.",
-        )
-
-        # Add axis to use same k over all Chebyshev series of the piecewise spline.
-        y, mask, df_dy = self.intersect2d(jnp.atleast_1d(k)[..., None])
-        # Flatten so that last axis enumerates intersects along the piecewise spline.
-        y = flatten_mat(self._isomorphism_to_C1(y))
-        mask = flatten_mat(mask)
-        df_dy = flatten_mat(df_dy)
-
-        # Note for bounce point applications:
-        # We ignore the degenerate edge case where the boundary shared by adjacent
-        # polynomials is a left intersection because the subset of pitch values
-        # that generate this edge case has zero measure. By ignoring this, for those
-        # subset of pitch values the integrations will be done in the hypograph of
-        # |B|, which will yield zero. If in future decide to not ignore this, note
-        # the solution is to
-        # 1. disqualify intersects within ``_eps`` from ``domain[-1]``
-        # 2. Evaluate sign in ``intersect2d`` at boundary of Chebyshev polynomial
-        #    using Chebyshev identities rather than arccos(-1) or arccos(1) which
-        #    are not differentiable.
-        z1 = (df_dy <= 0) & mask
-        z2 = (df_dy >= 0) & _in_epigraph_and(mask, df_dy)
-
-        sentinel = self.domain[0] - 1.0
-        z1 = take_mask(y, z1, size=num_intersect, fill_value=sentinel)
-        z2 = take_mask(y, z2, size=num_intersect, fill_value=sentinel)
-
-        mask = (z1 > sentinel) & (z2 > sentinel)
-        # Set to zero so integration is over set of measure zero
-        # and basis functions are faster to evaluate in downstream routines.
-        z1 = jnp.where(mask, z1, 0.0)
-        z2 = jnp.where(mask, z2, 0.0)
-        return z1, z2
-
-    def _check_shape(self, z1, z2, k):
-        """Return shapes that broadcast with (k.shape[0], *self.cheb.shape[:-2], W)."""
-        assert z1.shape == z2.shape
-        # Ensure pitch batch dim exists and add back dim to broadcast with wells.
-        k = atleast_nd(self.cheb.ndim - 1, k)[..., None]
-        # Same but back dim already exists.
-        z1 = atleast_nd(self.cheb.ndim, z1)
-        z2 = atleast_nd(self.cheb.ndim, z2)
-        # Cheb has shape    (..., X, Y) and others
-        #     have shape (K, ..., W)
-        assert z1.ndim == z2.ndim == k.ndim == self.cheb.ndim
-        return z1, z2, k
-
-    def check_intersect1d(self, z1, z2, k, plot=True, **kwargs):
-        """Check that intersects are computed correctly.
-
-        Parameters
-        ----------
-        z1, z2 : jnp.ndarray
-            Shape must broadcast with (*self.cheb.shape[:-2], W).
-            Coordinates of intersects.
-            The points are ordered and grouped such that the straight line path
-            between ``z1`` and ``z2`` resides in the epigraph of f.
-        k : jnp.ndarray
-            Shape must broadcast with self.cheb.shape[:-2].
-            k such that fₓ(yᵢ) = k.
-        plot : bool
-            Whether to plot the piecewise spline and intersects for the given ``k``.
-            For the plotting labels of ρ(l), α(m), it is assumed that the axis that
-            enumerates the index l preceds the axis that enumerates the index m.
-        kwargs : dict
-            Keyword arguments into ``self.plot``.
-
-        Returns
-        -------
-        plots : list
-            Matplotlib (fig, ax) tuples for the 1D plot of each field line.
-
-        """
-        kwargs.setdefault("title", r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$")
-        title = kwargs.pop("title")
-        plots = []
-
-        z1, z2, k = self._check_shape(z1, z2, k)
-        mask = (z1 - z2) != 0.0
-        z1 = jnp.where(mask, z1, jnp.nan)
-        z2 = jnp.where(mask, z2, jnp.nan)
-
-        err_1 = jnp.any(z1 > z2, axis=-1)
-        err_2 = jnp.any(z1[..., 1:] < z2[..., :-1], axis=-1)
-        f_midpoint = self.eval1d((z1 + z2) / 2, self.cheb[None])
-        eps = kwargs.pop("eps", jnp.finfo(jnp.array(1.0).dtype).eps * 10)
-        err_3 = jnp.any(f_midpoint > k + eps, axis=-1)
-        if not (plot or jnp.any(err_1 | err_2 | err_3)):
-            return plots
-
-        cheb = atleast_nd(3, self.cheb)
-        mask, z1, z2, f_midpoint = map(atleast_3d_mid, (mask, z1, z2, f_midpoint))
-        err_1, err_2, err_3 = map(atleast_2d_end, (err_1, err_2, err_3))
-
-        for l in np.ndindex(cheb.shape[:-2]):
-            for p in range(k.shape[0]):
-                idx = (p, *l)
-                if not (err_1[idx] or err_2[idx] or err_3[idx]):
-                    continue
-                _z1 = z1[idx][mask[idx]]
-                _z2 = z2[idx][mask[idx]]
-                if plot:
-                    self.plot1d(
-                        cheb=cheb[l],
-                        z1=_z1,
-                        z2=_z2,
-                        k=k[idx],
-                        title=title
-                        + rf" on field line $\rho(l)$, $\alpha(m)$, $(l,m)=${l}",
-                        **kwargs,
-                    )
-                print("      z1    |    z2")
-                print(jnp.column_stack([_z1, _z2]))
-                assert not err_1[idx], "Intersects have an inversion.\n"
-                assert not err_2[idx], "Detected discontinuity.\n"
-                assert not err_3[idx], (
-                    f"Detected f = {f_midpoint[idx][mask[idx]]} > {k[idx] + _eps} = k"
-                    "in well, implying the straight line path between z1 and z2 is in"
-                    "hypograph(f). Increase spectral resolution.\n"
-                )
-            idx = (slice(None), *l)
-            if plot:
-                plots.append(
-                    self.plot1d(
-                        cheb=cheb[l],
-                        z1=z1[idx],
-                        z2=z2[idx],
-                        k=k[idx],
-                        title=title,
-                        **kwargs,
-                    )
-                )
-        return plots
-
-    def plot1d(
-        self,
-        cheb,
-        num=5000,
-        z1=None,
-        z2=None,
-        k=None,
-        *,
-        k_transparency=0.5,
-        klabel=r"$k$",
-        title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
-        hlabel=r"$z$",
-        vlabel=r"$f$",
-        show=True,
-        include_legend=True,
-        return_legend=False,
-        legend_kwargs=None,
-        **kwargs,
-    ):
-        """Plot the piecewise Chebyshev series ``cheb``.
-
-        Parameters
-        ----------
-        cheb : jnp.ndarray
-            Shape (X, Y).
-            Piecewise Chebyshev series f.
-        num : int
-            Number of points to evaluate ``cheb`` for plot.
-        z1 : jnp.ndarray
-            Shape (k.shape[0], W).
-            Optional, intersects with ∂f/∂y <= 0.
-        z2 : jnp.ndarray
-            Shape (k.shape[0], W).
-            Optional, intersects with ∂f/∂y >= 0.
-        k : jnp.ndarray
-            Shape (k.shape[0], ).
-            Optional, k such that fₓ(yᵢ) = k.
-        k_transparency : float
-            Transparency of pitch lines.
-        klabel : float
-            Label of intersect lines.
-        title : str
-            Plot title.
-        hlabel : str
-            Horizontal axis label.
-        vlabel : str
-            Vertical axis label.
-        show : bool
-            Whether to show the plot. Default is true.
-        include_legend : bool
-            Whether to plot the legend. Default is true.
-
-        Returns
-        -------
-        fig, ax
-            Matplotlib (fig, ax) tuple.
-
-        """
-        fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
-
-        legend = {}
-        z = jnp.linspace(
-            start=self.domain[0],
-            stop=self.domain[0] + (self.domain[-1] - self.domain[0]) * self.X,
-            num=num,
-        )
-        _add2legend(legend, ax.plot(z, self.eval1d(z, cheb), label=vlabel, **kwargs))
-        _plot_intersect(
-            ax=ax,
-            legend=legend,
-            z1=z1,
-            z2=z2,
-            k=k,
-            k_transparency=k_transparency,
-            klabel=klabel,
-            hlabel=hlabel,
-            **kwargs,
-        )
-        ax.set_xlabel(hlabel)
-        ax.set_ylabel(vlabel)
-        ax.set_title(title)
-
-        if include_legend:
-            if legend_kwargs is None:
-                legend_kwargs = dict(loc="lower right")
-            ax.legend(legend.values(), legend.keys(), **legend_kwargs)
-
-        if show:
-            plt.show()
-            plt.close()
-        return (fig, ax, legend) if return_legend else (fig, ax)

@@ -55,7 +55,7 @@ Papers extending DESC functionality
    [`JPP <https://doi.org/10.1017/S0022377824000655>`__]
    [`pdf <https://arxiv.org/abs/2403.11033>`__]
 
-#. K.E. Unalmis, R. Gaur, R. Conlin, D. Panici, and E. Kolemen. (2024).
+#. K.E. Unalmis et al. (2024).
    *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
    its applications*.
    [`pdf <https://arxiv.org/abs/2412.01724>`__]

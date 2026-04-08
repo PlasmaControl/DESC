@@ -108,7 +108,7 @@ from desc.profiles import (
     PowerSeriesProfile,
     ScaledProfile,
 )
-from desc.utils import PRINT_WIDTH, safenorm
+from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
 
@@ -531,7 +531,19 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MercierStability(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MercierStability(eq=eq, grid=grid_bad_tor_res).build()
+        grid_bad_axis = LinearGrid(rho=0.0, M=eq.M_grid, N=eq.N_grid)
+        with pytest.raises(ValueError, match="on-axis"):
+            MercierStability(eq=eq, grid=grid_bad_axis).build()
 
     @pytest.mark.unit
     def test_magnetic_well(self):
@@ -547,7 +559,16 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        eq = Equilibrium(current=PowerSeriesProfile(0))
+        test(eq)
+        # test warnings
+        eq.change_resolution(N=1, N_grid=2, M=2, M_grid=4)
+        grid_bad_pol_res = LinearGrid(rho=0.5, M=0, N=eq.N_grid)
+        with pytest.warns(ResolutionWarning, match="poloidal"):
+            MagneticWell(eq=eq, grid=grid_bad_pol_res).build()
+        grid_bad_tor_res = LinearGrid(rho=0.5, M=eq.M_grid, N=0)
+        with pytest.warns(ResolutionWarning, match="toroidal"):
+            MagneticWell(eq=eq, grid=grid_bad_tor_res).build()
 
     @pytest.mark.unit
     def test_boundary_error_biestsc(self):
@@ -708,6 +729,29 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
             np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
             np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_sum_iota(self):
+        """Test calculation of iota profile sum."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            sum_iota = jnp.sum(
+                eq.compute("iota", grid=grid)["iota"][grid.unique_rho_idx]
+            )
+            obj = RotationalTransform(
+                target=sum_iota, weight=1, eq=eq, loss_function="sum", grid=grid
+            )
+            obj.build()
+            sum_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
+            sum_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            sum_iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(sum_iota, sum_iota_unscaled, atol=1e-16)
+            np.testing.assert_allclose(sum_iota_scaled_error, 0, atol=5e-16)
+            np.testing.assert_allclose(sum_iota_scaled, sum_iota, atol=5e-16)
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -1990,65 +2034,78 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    def test_objective_compute_against_compute(self):
-        """To avoid issues such as #1424."""
+    @pytest.mark.parametrize("use_bounce1d", [False, True])
+    def test_objective_against_compute_bounce(self, use_bounce1d):
+        """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        obj_grid = LinearGrid(
+            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
+        )
         X = 16
         Y = 32
         num_transit = 4
-        num_well = 15 * num_transit
-        num_quad = 16
-        num_pitch = 10
-        data = eq.compute(
-            ["effective ripple", "Gamma_c"],
-            grid=grid,
-            theta=Bounce2D.compute_theta(eq, X=X, Y=Y, rho=rho),
+        opts = dict(
+            Y_B=64,
             num_transit=num_transit,
-            num_well=num_well,
-            num_quad=num_quad,
-            num_pitch=num_pitch,
+            num_well=15 * num_transit,
+            num_quad=16,
+            num_pitch=10,
         )
+        names = ["effective ripple", "Gamma_c"]
+        if use_bounce1d:
+            names = ["old " + n for n in names]
+            angle = None
+            alpha = np.array([0.0])
+            zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
+            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        else:
+            angle = Bounce2D.angle(eq, X, Y, rho)
+            grid = obj_grid
+
+        data = eq.compute(names, grid, angle=angle, **opts)
         obj = EffectiveRipple(
             eq,
-            grid=grid,
+            grid=obj_grid,
+            nufft_eps=1e-6,
+            use_bounce1d=use_bounce1d,
             X=X,
             Y=Y,
-            num_transit=num_transit,
-            num_quad=num_quad,
-            num_pitch=num_pitch,
-            jac_chunk_size=1,
+            **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["effective ripple"])
+            obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
         obj = GammaC(
             eq,
-            grid=grid,
+            grid=obj_grid,
+            nufft_eps=1e-7,
+            use_bounce1d=use_bounce1d,
             X=X,
             Y=Y,
-            num_transit=num_transit,
-            num_quad=num_quad,
-            num_pitch=num_pitch,
-            jac_chunk_size=1,
+            **opts,
         )
         obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data["Gamma_c"])
+            obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )
 
+    @pytest.mark.unit
+    def test_objective_against_compute_ballooning(self):
+        """To avoid issues such as #1424."""
+        eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
         obj.build()
-        data = eq.compute(
+        lam = eq.compute(
             ["ideal ballooning lambda"],
-            grid=Grid.create_meshgrid(
+            Grid.create_meshgrid(
                 [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
                 coordinates="raz",
             ),
-        )
-        lam = data["ideal ballooning lambda"]
+        )["ideal ballooning lambda"]
         lambda0, w0, w1 = (
             obj.constants["lambda0"],
             obj.constants["w0"],
@@ -3128,13 +3185,12 @@ def test_loss_function_asserts():
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
     if objective in {EffectiveRipple, GammaC}:
-        kwargs["X"] = 8
-        kwargs["Y"] = 16
+        kwargs["X"] = 16
+        kwargs["Y"] = 24
         kwargs["num_transit"] = 4
         kwargs["num_well"] = 15 * kwargs["num_transit"]
-        kwargs["num_pitch"] = 16
+        kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
-        kwargs["jac_chunk_size"] = 1
     return objective(eq=eq, **kwargs)
 
 
@@ -3147,6 +3203,7 @@ class TestComputeScalarResolution:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3212,11 +3269,11 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_bootstrap(self):
         """BootstrapRedlConsistency."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.atomic_number = 1.0
-
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             grid = LinearGrid(
@@ -3233,6 +3290,8 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_fusion_power(self):
         """FusionPower."""
         eq = self.eq.copy()
+        eq.pressure = None
+
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3255,6 +3314,7 @@ class TestComputeScalarResolution:
     def test_compute_scalar_resolution_heating_power(self):
         """HeatingPowerISS04."""
         eq = self.eq.copy()
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile([1e19, 0, -1e19])
         eq.electron_temperature = PowerSeriesProfile([1e3, 0, -1e3])
         eq.ion_temperature = PowerSeriesProfile([1e3, 0, -1e3])
@@ -3633,6 +3693,7 @@ class TestObjectiveNaNGrad:
         for obj in dir(desc.objectives)
         if obj[0].isupper()
         and (not obj.startswith("Fix"))
+        and (not obj.startswith("Share"))
         and (obj != "ObjectiveFunction")
         and ("SelfConsistency" not in obj)
     ]
@@ -3965,12 +4026,24 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, EffectiveRipple))
+
+        obj_0 = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=0)
+        )
+        obj_0.build(verbose=0)
+        g_0 = obj_0.grad(obj_0.x())
+        assert not np.any(np.isnan(g_0))
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=1e-6)
+
         obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, spline=True)
+            _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
         )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
@@ -3982,11 +4055,29 @@ class TestObjectiveNaNGrad:
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj_0 = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=0)
+        )
+        obj_0.build(verbose=0)
+        g_0 = obj_0.grad(obj_0.x())
+        assert not np.any(np.isnan(g_0))
+
+        # this needs 5e-11 for eps to pass when jax_finufft==1.3.0
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, nufft_eps=5e-11)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC, spline=True))
+        # these are generally sensitive to nufft_eps because
+        # we are not using enough resolution in other parameters
+        # in this test to nullify the singularities
+        # TODO: Do we want to keep this test then if it is so sensitive?
+        np.testing.assert_allclose(g, g_0, atol=2e-6, rtol=3e-4)
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)
+        )
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
@@ -4132,3 +4223,76 @@ def test_nae_coefficients_asym():
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
         np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_input(DummyMixedCoilSet):
+    """Tests broadcasting for inputs to _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+
+    weight = [1.0, 2.0, 3.0, 4.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
+    bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0, 8.0, 9.0]
+
+    obj = CoilLength(coilset, bounds=bounds, weight=weight)
+    obj.build()
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, target=target)
+    obj.build()
+    np.testing.assert_allclose(obj._target, target_expanded, atol=1e-13)
+
+    obj = CoilLength(coilset, bounds=(1, 2), weight=1)
+    obj.build()
+    assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
+    assert np.size(obj._weight) == 1
+
+    obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
+    obj.build()
+
+
+@pytest.mark.unit
+def test_coil_objective_indices(DummyMixedCoilSet):
+    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
+
+    weight = [0, [1, 0, 0], 1, 1]
+    objA = CoilLength(coilsetA, weight=weight, normalize=False)
+    objB = CoilLength(coilsetB, normalize=False)
+    objA.build()
+    objB.build()
+    compA = objA.compute_scaled_error(None)
+    compB = objB.compute_scaled_error(None)
+    np.testing.assert_allclose(compA, compB, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_coil_objective_setter(DummyMixedCoilSet):
+    """Tests setters for _CoilObjectives."""
+    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    obj = CoilLength(coilset)
+
+    weight = [1.0, 1.0, 0.0, 0.0]
+    weight_expanded = [1.0, 1.0, 1.0, 1.0]
+    obj.weight = weight
+    obj.build()
+    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+
+    bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
+    bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
+    target = [[4.0], 5.0, 8.0, 9.0]
+    target_expanded = [4.0, 5.0, 5.0, 5.0]
+
+    obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+
+    obj.bounds = None
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)

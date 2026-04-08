@@ -118,7 +118,7 @@ DESC ``CoilSet`` or ``MixedCoilSet`` objects can also be created from MAKEGRID-f
 the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-formatted text file with
 the `save_in_makegrid_format` method.
 
-There are also utility functions for getting an initial guess for coil optimization using modular or
+There are also utility functions for getting an initial guess for coil optimization using modular, helical, or
 saddle coils:
 
 .. autosummary::
@@ -127,4 +127,5 @@ saddle coils:
     :template: class.rst
 
     desc.coils.initialize_modular_coils
+    desc.coils.initialize_helical_coils
     desc.coils.initialize_saddle_coils

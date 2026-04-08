@@ -31,7 +31,10 @@ setup(
     long_description=long_description,
     long_description_content_type="text/x-rst",
     url="https://github.com/PlasmaControl/DESC/",
-    author="Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen",
+    author=(
+        "Daniel Dudt, Rory Conlin, Dario Panici, Kaya Unalmis, "
+        "Yigit Gunsur Elmacioglu, Rahul Gaur, Patrick Kim, Egemen Kolemen"
+    ),
     author_email="PlasmaControl@princeton.edu",
     license="MIT",
     classifiers=[
@@ -44,6 +47,7 @@ setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Topic :: Scientific/Engineering",
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Physics",

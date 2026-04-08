@@ -1,15 +1,14 @@
 """Objectives for fast ion confinement."""
 
-import warnings
-
-import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals._interp_utils import cheb_pts, fourier_pts
-from desc.utils import setdefault
+from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
+from desc.integrals.bounce_integral import Bounce2D
+from desc.utils import parse_argname_change, setdefault, warnif
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -37,23 +36,23 @@ class GammaC(_Objective):
 
     References
     ----------
-    Poloidal motion of trapped particle orbits in real-space coordinates.
-    V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-    Phys. Plasmas 1 May 2008; 15 (5): 052501.
-    https://doi.org/10.1063/1.2912456.
-    Equation 61.
+    [1] Poloidal motion of trapped particle orbits in real-space coordinates.
+        V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
+        Phys. Plasmas 1 May 2008; 15 (5): 052501.
+        https://doi.org/10.1063/1.2912456.
+        Equation 61.
 
-    A model for the fast evaluation of prompt losses of energetic ions in stellarators.
-    J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-    https://doi.org/10.1088/1741-4326/ac2994.
-    Equation 16.
+    [2] A model for the fast evaluation of prompt losses of energetic ions in
+        stellarators. Equation 16.
+        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
+        https://doi.org/10.1088/1741-4326/ac2994.
+
+    [3] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
+        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
     Notes
     -----
     Performance will improve significantly by resolving these GitHub issues.
-      * ``1154`` Improve coordinate mapping performance
-      * ``1294`` Nonuniform fast transforms
-      * ``1303`` Patch for differentiable code with dynamic shapes
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
 
@@ -68,17 +67,21 @@ class GammaC(_Objective):
         Determines the flux surfaces to compute on and resolution of FFTs.
         Default grid samples the boundary surface at ρ=1.
     X : int
-        Poloidal Fourier grid resolution to interpolate the poloidal coordinate.
+        Poloidal Fourier grid resolution to interpolate the angle.
         Preferably rounded down to power of 2.
     Y : int
-        Toroidal Chebyshev grid resolution to interpolate the poloidal coordinate.
+        Toroidal Chebyshev grid resolution over a single field period
+        to interpolate the angle.
         Preferably rounded down to power of 2.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        Default is double ``Y``. Something like 100 is usually sufficient.
-        Currently, this is the number of knots per toroidal transit over
-        to approximate B with cubic splines.
-    alpha : np.ndarray
+        The bounce points are found with 8th order accuracy in this parameter.
+        A reference value is 100.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+    alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
         Default is single field line. To compute a surface average
@@ -92,20 +95,22 @@ class GammaC(_Objective):
         irrational magnetic surface better, with diminishing returns.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
-        Giving ``None`` will detect all wells but due to current limitations in
+        Giving ``-1`` will detect all wells but due to current limitations in
         JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
     num_quad : int
         Resolution for quadrature of bounce integrals. Default is 32.
     num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 64.
+        Resolution for quadrature over velocity coordinate. Default is 65.
     pitch_batch_size : int
         Number of pitch values with which to compute simultaneously.
         If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
@@ -114,11 +119,15 @@ class GammaC(_Objective):
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
-    spline : bool
-        Set to ``True`` to replace pseudo-spectral methods with local splines.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    use_bounce1d : bool
+        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
+        basically replacing some pseudo-spectral methods with local splines.
         This can be efficient if ``num_transit`` and ``alpha.size`` are small,
         depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X`` and ``Y`` are ignored.
+        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
         Default is Nemov. Set to ``False`` to use Velascos's.
@@ -127,9 +136,9 @@ class GammaC(_Objective):
         of the number of toroidal transits. Velasco's expression has a secular
         term that drives the result to zero as the number of toroidal transits
         increases if the secular term is not averaged out from the singular
-        integrals. Currently, an optimization using Velasco's metric may need
-        to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-        transits.
+        integrals. At finite resolution, an optimization using Velasco's metric
+        may need to be evaluated by measuring decrease in Γ_c at a fixed number
+        of toroidal transits.
 
     """
 
@@ -145,7 +154,7 @@ class GammaC(_Objective):
         "_hyperparam",
         "_key",
         "_keys_1dr",
-        "_spline",
+        "_use_bounce1d",
     ]
 
     _coordinates = "r"
@@ -168,39 +177,56 @@ class GammaC(_Objective):
         grid=None,
         X=16,
         Y=32,
-        # Y_B is expensive to increase if one does not fix num well per transit.
         Y_B=None,
-        alpha=np.array([0.0]),
+        alpha=jnp.array([0.0]),
         num_transit=20,
         num_well=None,
         num_quad=32,
-        num_pitch=64,
+        num_pitch=65,
         pitch_batch_size=None,
         surf_batch_size=1,
-        spline=False,
+        nufft_eps=1e-7,
+        use_bounce1d=False,
         Nemov=True,
+        **kwargs,
     ):
+        try:
+            import jax_finufft  # noqa: F401
+        except:  # noqa: E722
+            warnif(
+                nufft_eps >= 1e-14,
+                msg="\njax-finufft is not installed properly.\n"
+                "Setting parameter nufft_eps to zero.\n"
+                "Performance will deteriorate significantly.\n",
+            )
+            nufft_eps = 0.0
+
         if target is None and bounds is None:
             target = 0.0
 
-        self._spline = spline
+        self._use_bounce1d = parse_argname_change(
+            use_bounce1d, kwargs, "spline", "use_bounce1d"
+        )
         self._grid = grid
-        self._constants = {
-            "quad_weights": 1.0,
-            "alpha": alpha,
-            "X": fourier_pts(X),
-            "Y": cheb_pts(Y, (0, 2 * np.pi))[::-1],
-        }
-        Y_B = setdefault(Y_B, 2 * Y)
+        self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
+            "X": X,
+            "Y": Y,
             "Y_B": Y_B,
             "num_transit": num_transit,
-            "num_well": setdefault(num_well, Y_B * num_transit),
+            "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
         }
+        if use_bounce1d:
+            self._hyperparam.pop("X")
+            self._hyperparam.pop("Y")
+            self._hyperparam.pop("pitch_batch_size")
+            self._hyperparam.pop("nufft_eps")
+
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 
         super().__init__(
@@ -227,36 +253,11 @@ class GammaC(_Objective):
             Level of output.
 
         """
-        if self._spline:
-            return self._build_spline(use_jit, verbose)
+        if self._use_bounce1d:
+            return self._build_bounce1d(use_jit, verbose)
 
-        eq = self.things[0]
-        if self._grid is None:
-            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert self._grid.can_fft2
-
-        rho = self._grid.compress(self._grid.nodes[:, 0])
-        self._constants["fieldline quad"] = leggauss(self._hyperparam["Y_B"] // 2)
-        self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparam.pop("num_quad")),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-        self._constants["profiles"] = get_profiles(self._key, eq, grid=self._grid)
-        self._constants["transforms"] = get_transforms(self._key, eq, grid=self._grid)
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", "Unequal number of field periods")
-            # TODO(#1243): Set grid.sym=eq.sym once basis is padded for partial sum
-            self._constants["lambda"] = get_transforms(
-                "lambda",
-                eq,
-                grid=LinearGrid(rho=rho, M=eq.L_basis.M, zeta=self._constants["Y"]),
-            )["L"]
-        assert self._constants["lambda"].basis.NFP == eq.NFP
-
-        self._dim_f = self._grid.num_rho
-        self._target, self._bounds = _parse_callable_target_bounds(
-            self._target, self._bounds, rho
+        Bounce2D._objective_build(
+            self, names=self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -278,8 +279,8 @@ class GammaC(_Objective):
             Γ_c as a function of the flux surface label.
 
         """
-        if self._spline:
-            return self._compute_spline(params, constants)
+        if self._use_bounce1d:
+            return self._compute_bounce1d(params, constants)
 
         if constants is None:
             constants = self.constants
@@ -288,14 +289,15 @@ class GammaC(_Objective):
         data = compute_fun(
             eq, "iota", params, constants["transforms"], constants["profiles"]
         )
-        theta = eq._map_clebsch_coordinates(
-            iota=constants["transforms"]["grid"].compress(data["iota"]),
-            alpha=constants["X"],
-            zeta=constants["Y"],
-            L_lmn=params["L_lmn"],
-            lmbda=constants["lambda"],
+        delta = eq._map_poloidal_coordinates(
+            constants["transforms"]["grid"].compress(data["iota"]),
+            constants["x"],
+            constants["y"],
+            params["L_lmn"],
+            constants["lambda"],
+            outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-7,
+            tol=1e-8,
         )[..., ::-1]
 
         data = compute_fun(
@@ -305,29 +307,36 @@ class GammaC(_Objective):
             constants["transforms"],
             constants["profiles"],
             data,
-            theta=theta,
+            angle=delta,
             alpha=constants["alpha"],
-            fieldline_quad=constants["fieldline quad"],
             quad=constants["quad"],
+            _vander=constants["_vander"],
             **self._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[self._key])
 
-    def _build_spline(self, use_jit=True, verbose=1):
-        Y_B = self._hyperparam.pop("Y_B")
-        num_transit = self._hyperparam.pop("num_transit")
-        num_quad = self._hyperparam.pop("num_quad")
-        del self._constants["X"]
-        self._constants["Y"] = np.linspace(
-            0, 2 * np.pi * num_transit, Y_B * num_transit
-        )
-        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
-        self._key = "old " + self._key
-
+    def _build_bounce1d(self, use_jit=True, verbose=1):
         eq = self.things[0]
         if self._grid is None:
             self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
+
+        Y_B = self._hyperparam.pop("Y_B")
+        Y_B = setdefault(Y_B, Y_B_rule(self._grid, spline=True))
+
+        num_transit = self._hyperparam.pop("num_transit")
+
+        if self._hyperparam["num_well"] is None:
+            self._hyperparam["num_well"] = num_well_rule(num_transit, eq.NFP, Y_B)
+
+        num_quad = self._hyperparam.pop("num_quad")
+
+        self._constants["zeta"] = jnp.linspace(
+            0, 2 * jnp.pi * num_transit, Y_B * num_transit
+        )
+
+        self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|"]
+        self._key = "old " + self._key
 
         rho = self._grid.compress(self._grid.nodes[:, 0])
         self._constants["rho"] = rho
@@ -347,7 +356,7 @@ class GammaC(_Objective):
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _compute_spline(self, params, constants=None):
+    def _compute_bounce1d(self, params, constants=None):
         if constants is None:
             constants = self.constants
         eq = self.things[0]
@@ -359,12 +368,10 @@ class GammaC(_Objective):
             constants["transforms_1dr"],
             constants["profiles"],
         )
-        # TODO(#1243): Upgrade this to use _map_clebsch_coordinates once
-        #  the note in _L_partial_sum method is resolved.
         grid = eq._get_rtz_grid(
             constants["rho"],
             constants["alpha"],
-            constants["Y"],
+            constants["zeta"],
             coordinates="raz",
             iota=self._grid.compress(data["iota"]),
             params=params,

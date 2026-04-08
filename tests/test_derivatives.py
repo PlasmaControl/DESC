@@ -5,7 +5,9 @@ import pytest
 from numpy.random import default_rng
 
 from desc.backend import jnp
-from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative
+from desc.derivatives import AutoDiffDerivative
+
+from .utils import FiniteDiffDerivative
 
 
 class TestDerivative:

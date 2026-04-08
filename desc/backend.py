@@ -12,6 +12,8 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+OMEGA_IS_0 = True
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
@@ -83,14 +85,16 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
-    from jax.scipy.fft import dct, idct
+    from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
+        tree_broadcast,
         tree_flatten,
         tree_leaves,
         tree_map,
+        tree_map_with_path,
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
@@ -373,8 +377,7 @@ if use_jax:  # noqa: C901
                 return state[0]
 
         def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
+            return y / g(1.0)
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
@@ -529,7 +532,7 @@ else:  # pragma: no cover
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
-    from scipy.fft import dct, idct  # noqa: F401
+    from scipy.fft import dct, dctn, idct, idctn  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
@@ -606,6 +609,10 @@ else:  # pragma: no cover
         """Map pytree for numpy backend."""
         raise NotImplementedError
 
+    def tree_map_with_path(*args, **kwargs):
+        """Map pytree with path for numpy backend."""
+        raise NotImplementedError
+
     def tree_structure(*args, **kwargs):
         """Get structure of pytree for numpy backend."""
         raise NotImplementedError
@@ -616,6 +623,10 @@ else:  # pragma: no cover
 
     def treedef_is_leaf(*args, **kwargs):
         """Check is leaf of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_broadcast(*args, **kwargs):
+        """Broadcast pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

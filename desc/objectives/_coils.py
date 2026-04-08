@@ -880,11 +880,11 @@ class CoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
-    n_neighbors : int, optional
-        If given, limit pairwise distance computation to the K nearest neighbors
-        per coil, selected by centroid distance. Neighbor indices are not
-        differentiated so AD only traces through the fine-grained distances to
-        nearby coils. Default is None (full pairwise).
+    num_neighbors : int, optional
+        Limit the pairwise distance computation to the num_neighbors nearest neighbors
+        per coil, determined by centroid distance. Which coils are the nearest neighbors
+        is assumed fixed during the derivative computation. Default value of None or
+        num_neighbors >= num_coils computes the full pairwise distances.
 
     """
 
@@ -895,9 +895,9 @@ class CoilSetMinDistance(_Objective):
     )
 
     _static_attrs = _Objective._static_attrs + [
-        "_dist_chunk_size",
         "_use_softmin",
-        "_n_neighbors",
+        "_dist_chunk_size",
+        "_num_neighbors",
     ]
 
     _scalar = False
@@ -920,7 +920,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
-        n_neighbors=None,
+        num_neighbors=None,
     ):
         from desc.coils import CoilSet
 
@@ -930,7 +930,7 @@ class CoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
-        self._n_neighbors = n_neighbors
+        self._num_neighbors = num_neighbors
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -995,18 +995,19 @@ class CoilSetMinDistance(_Objective):
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )
-        n_coils = self.dim_f
+        num_coils = self.dim_f
 
-        if self._n_neighbors is not None and self._n_neighbors < n_coils - 1:
-            # Pruned: only compute distances to K nearest neighbors
-            K = self._n_neighbors
-            centroids = jnp.mean(pts, axis=1)  # (n_coils, 3)
+        if self._num_neighbors is not None and self._num_neighbors < num_coils - 1:
+            # pruned: only compute distances to nearest neighbors
+            centroids = jnp.mean(pts, axis=1)  # (num_coils, 3)
             centroid_dists = safenorm(centroids[:, None] - centroids[None, :], axis=-1)
-            centroid_dists = centroid_dists.at[jnp.diag_indices(n_coils)].set(jnp.inf)
+            centroid_dists = centroid_dists.at[jnp.diag_indices(num_coils)].set(jnp.inf)
 
             def body(k):
-                # Select K nearest neighbors (not differentiated)
-                neighbor_idx = jax.lax.stop_gradient(jnp.argsort(centroid_dists[k])[:K])
+                # select nearest neighbors
+                neighbor_idx = jax.lax.stop_gradient(
+                    jnp.argsort(centroid_dists[k])[: self._num_neighbors]
+                )
                 coil_pts = pts[k]
                 neighbor_pts = pts[neighbor_idx]
                 dist = safenorm(
@@ -1017,7 +1018,7 @@ class CoilSetMinDistance(_Objective):
                 return jnp.min(dist)
 
         else:
-            # Original: full pairwise distances
+            # original: full pairwise distances
             def body(k):
                 coil_pts = pts[k]
                 other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)

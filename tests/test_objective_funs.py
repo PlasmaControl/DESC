@@ -1084,18 +1084,45 @@ class TestObjectiveFunction:
     def test_coil_min_distance(self):
         """Tests minimum distance between coils in a coilset."""
 
-        def test(coils, mindist, grid=None, expect_intersect=False, tol=None):
-            obj = CoilSetMinDistance(coils, grid=grid)
-            obj.build()
-            f = obj.compute(params=coils.params_dict)
+        def test(
+            coils,
+            mindist,
+            grid=None,
+            num_neighbors=None,
+            expect_intersect=False,
+            tol=None,
+        ):
+            # vanilla
+            obj1 = CoilSetMinDistance(coils, grid=grid)
+            obj1.build()
+            f = obj1.compute(params=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
+            # softmin
             obj2 = CoilSetMinDistance(
                 coils, grid=grid, use_softmin=True, softmin_alpha=10
             )
             obj2.build()
             f = obj2.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
+            # num_neighbors
+            obj3 = CoilSetMinDistance(coils, grid=grid, num_neighbors=num_neighbors)
+            obj3.build()
+            f = obj3.compute(params=coils.params_dict)
+            assert f.size == coils.num_coils
+            np.testing.assert_allclose(f, mindist)
+            # softmin & num_neighbors
+            obj4 = CoilSetMinDistance(
+                coils,
+                grid=grid,
+                use_softmin=True,
+                softmin_alpha=10,
+                num_neighbors=num_neighbors,
+            )
+            obj4.build()
+            f = obj4.compute(params=coils.params_dict)
             assert f.size == coils.num_coils
             np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
 
@@ -1106,7 +1133,7 @@ class TestObjectiveFunction:
         coils_linear = CoilSet.linspaced_linear(
             coil, n=n, displacement=[0, 0, disp], check_intersection=False
         )
-        test(coils_linear, disp / n)
+        test(coils_linear, disp / n, num_neighbors=1)
 
         # planar toroidal coils, without symmetry
         # min points are at the inboard midplane and are corners of a square inscribed
@@ -1116,7 +1143,11 @@ class TestObjectiveFunction:
         coil = FourierPlanarCoil(center=[center, 0, 0], normal=[0, 1, 0], r_n=r)
         coils_angular = CoilSet.linspaced_angular(coil, n=4, check_intersection=False)
         test(
-            coils_angular, np.sqrt(2) * (center - r), grid=LinearGrid(zeta=4), tol=1e-5
+            coils_angular,
+            np.sqrt(2) * (center - r),
+            grid=LinearGrid(zeta=4),
+            num_neighbors=2,
+            tol=1e-5,
         )
 
         # planar toroidal coils, with symmetry
@@ -1129,7 +1160,12 @@ class TestObjectiveFunction:
             coil, angle=np.pi / 2, n=5, endpoint=True, check_intersection=False
         )
         coils_sym = CoilSet(coils[1::2], NFP=2, sym=True)
-        test(coils_sym, 2 * (center - r) * np.sin(np.pi / 8), grid=LinearGrid(zeta=4))
+        test(
+            coils_sym,
+            2 * (center - r) * np.sin(np.pi / 8),
+            grid=LinearGrid(zeta=4),
+            num_neighbors=3,
+        )
 
         # mixture of toroidal field coilset, vertical field coilset, and extra coil
         # TF coils instersect with the middle VF coil
@@ -1153,42 +1189,10 @@ class TestObjectiveFunction:
                 coils_mixed,
                 [0, 0, 0, 0, 1, 0, 1, 2],
                 grid=LinearGrid(zeta=4),
+                num_neighbors=10,  # num_neighbors > num_coils
                 expect_intersect=True,
             )
         # TODO (#1400, 914): move this coil set to conftest?
-
-        # test n_neighbors pruning gives same result as full pairwise
-        # using angular coilset (4 coils), n_neighbors=2 should match full
-        obj_full = CoilSetMinDistance(coils_angular, grid=LinearGrid(zeta=4))
-        obj_full.build()
-        f_full = obj_full.compute(params=coils_angular.params_dict)
-
-        obj_pruned = CoilSetMinDistance(
-            coils_angular, grid=LinearGrid(zeta=4), n_neighbors=2
-        )
-        obj_pruned.build()
-        f_pruned = obj_pruned.compute(params=coils_angular.params_dict)
-        np.testing.assert_allclose(f_pruned, f_full)
-
-        # n_neighbors with use_softmin
-        obj_pruned_soft = CoilSetMinDistance(
-            coils_angular,
-            grid=LinearGrid(zeta=4),
-            n_neighbors=2,
-            use_softmin=True,
-            softmin_alpha=10,
-        )
-        obj_pruned_soft.build()
-        f_pruned_soft = obj_pruned_soft.compute(params=coils_angular.params_dict)
-        np.testing.assert_allclose(f_pruned_soft, f_full, rtol=5e-2, atol=1e-3)
-
-        # n_neighbors >= n_coils-1 should also match (no actual pruning)
-        obj_no_prune = CoilSetMinDistance(
-            coils_angular, grid=LinearGrid(zeta=4), n_neighbors=10
-        )
-        obj_no_prune.build()
-        f_no_prune = obj_no_prune.compute(params=coils_angular.params_dict)
-        np.testing.assert_allclose(f_no_prune, f_full)
 
     @pytest.mark.unit
     def test_plasma_coil_min_distance(self):

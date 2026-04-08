@@ -242,7 +242,7 @@ for iota_0 in iota_on_axis_values:
     ]
     data = eq.compute(data_keys, grid=grid)
     transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
-    vec, energy, time = term_by_term_stability(
+    vec, energy, gamma = term_by_term_stability(
         v,
         params,
         transforms,
@@ -253,7 +253,7 @@ for iota_0 in iota_on_axis_values:
         axisym=axisym,
         sigma=0,
     )
-    np.savez(energy_npz, vec=vec, iota_0=iota_0, time=time, energy=energy)
+    np.savez(energy_npz, vec=vec, iota_0=iota_0, time=gamma, energy=energy)
     print(np.allclose(v * lambda_min, vec, rtol=0.01, atol=1E-5))
     toc = time.time()
     print(f"  done in {toc-tic:.1f} s")

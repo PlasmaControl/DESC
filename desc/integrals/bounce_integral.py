@@ -1153,6 +1153,8 @@ class Bounce2D(Bounce):
             expected shape for this function.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
+            Names must correspond only to scalar-values quantities.
+            Vector-valued quantity interpolation is not currently supported
         points : tuple[jnp.ndarray]
             Shape (num ρ, num α, num pitch, num well).
             Optional, output of method ``self.points``.

@@ -269,7 +269,7 @@ for iota_0 in iota_on_axis_values:
         v_guess=v_guess,
         axisym=axisym,
         n_mode_axisym=n_mode_axisym,
-        sigma=data["finite-n lambda"],
+        sigma=data["finite-n lambda"].min(),
     )
     toc = time.time()
     print(f"matrix free took {toc-tic:.1f} s.")

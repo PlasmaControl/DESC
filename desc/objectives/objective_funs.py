@@ -360,10 +360,17 @@ class ObjectiveFunction(IOAble):
         if use_jit is not None:
             self._use_jit = use_jit
 
-        use_jit_wrapper = self._use_jit
         use_jits = [obj._use_jit for obj in self.objectives]
         if not all(use_jits):
-            use_jit_wrapper = False
+            if self._use_jit:
+                warnif(
+                    True,
+                    UserWarning,
+                    "At least 1 sub-objective has use_jit=False. Setting "
+                    "use_jit=False for the whole ObjectiveFunction. "
+                    f"Sub-objective use_jit values: {use_jits}",
+                )
+            self._use_jit = False
 
         timer = Timer()
         timer.start("Objective build")
@@ -443,7 +450,7 @@ class ObjectiveFunction(IOAble):
                 # use the chunk size of the first objective
                 self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not use_jit_wrapper:
+        if not self._use_jit:
             self._unjit()
 
         self._built = True

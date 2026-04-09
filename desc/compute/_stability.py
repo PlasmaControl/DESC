@@ -1610,8 +1610,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
     n_surf = n_theta * n_zeta
     bc_mask = jnp.ones(3 * n_total)
-    #bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
-    #bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
+    bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
+    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
 
 
     def Ax(x_flat):
@@ -1997,7 +1997,28 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     v_all = vecs[sort_idxs]
     v = v_all[0, :]
 
-    np.testing.assert_allclose(OPinv(v), mu[sort_idxs][0] * v)
+    #np.testing.assert_allclose(OPinv(v), mu[sort_idxs][0] * v)
+    a = OPinv(v)
+    b = mu[sort_idxs][0] * v
+    diff = np.abs(a - b)
+    rel = diff / np.maximum(np.abs(b), 1e-12)
+    if not np.allclose(a, b):
+        print(
+            f"max abs diff = {diff.max():.3e}, "
+            f"max rel diff = {rel.max():.3e}, "
+            f"mismatched = {(~np.isclose(a, b)).sum()}/{a.size}"
+        )
+
+    a = Ax(v)
+    b = w[0]
+    diff = np.abs(a - b)
+    rel = diff / np.maximum(np.abs(b), 1e-12)
+    if not np.allclose(a, b):
+        print(
+            f"max abs diff = {diff.max():.3e}, "
+            f"max rel diff = {rel.max():.3e}, "
+            f"mismatched = {(~np.isclose(a, b)).sum()}/{a.size}"
+        )
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))

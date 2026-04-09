@@ -630,7 +630,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def compute_theta(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,
@@ -649,7 +649,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def angle(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,

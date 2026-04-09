@@ -1979,6 +1979,9 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     sigma = kwargs.get("sigma", -2e-4)
     num_matvecs = 10
 
+
+    # get eigenvalues of (A − σI)⁻¹ instead of A, which are related to the eigenvalues of A by λ = σ + 1/μ
+    # 
     def OPinv(b):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
@@ -1997,7 +2000,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     v_all = vecs[sort_idxs]
     v = v_all[0, :]
 
-    np.testing.assert_all_close(OPinv(v), mu[sort_idxs][0] * v)
+    np.testing.assert_allclose(OPinv(v), mu[sort_idxs][0] * v)
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))

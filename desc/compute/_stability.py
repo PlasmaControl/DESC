@@ -1440,10 +1440,7 @@ def _AGNI_eigenfunction(params, transforms, profiles, data, **kwargs):
     + "and eigendecompose the stable part of the matrix",
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
-    xi_input="ndarray or None: if provided, skip the eigenvalue solve and instead "
-    "compute xi^T @ term @ xi for each delta_W term individually, storing "
-    "results in data. xi_input must be the flat preconditioned eigenvector "
-    "(shape 3*n_total,) as returned by this function.",
+    sigma="float: shift for the shift-invert eigenvalue solver",
 )
 def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     """
@@ -1981,7 +1978,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
 
     # get eigenvalues of (A − σI)⁻¹ instead of A, which are related to the eigenvalues of A by λ = σ + 1/μ
-    # 
+    # σ should be close to the target eigenvalue
     def OPinv(b):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
@@ -2034,6 +2031,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     + "and eigendecompose the stable part of the matrix",
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
+    sigma="float: shift for the shift-invert eigenvalue solver",
 )
 def _AGNI_eigenfunction_matfree(params, transforms, profiles, data, **kwargs):
     """Eigenfunctions of finite-n stability solver.

@@ -1610,8 +1610,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
     n_surf = n_theta * n_zeta
     bc_mask = jnp.ones(3 * n_total)
-    bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
-    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
+    #bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
+    #bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
 
 
     def Ax(x_flat):

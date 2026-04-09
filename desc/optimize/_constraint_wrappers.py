@@ -1325,6 +1325,8 @@ def jit_if_possible(func):
             # Run normally if not jittable
             return func(*args, **kwargs)
 
+    return wrapper
+
 
 @jit_if_possible
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):

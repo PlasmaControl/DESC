@@ -493,6 +493,20 @@ class ObjectiveFunction(IOAble):
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
         self._flatten = _ThingFlattener(len(flat_), treedef_)
 
+    def _compute_op(self, x, constants=None, op="compute_unscaled"):
+        """Helper function to compute various operations."""
+        if constants is None:
+            constants = self.constants
+        params = self.unpack_state(x)
+        assert len(params) == len(constants) == len(self.objectives)
+        f = jnp.concatenate(
+            [
+                getattr(obj, op)(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
+            ]
+        )
+        return f
+
     @jit
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -510,17 +524,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_unscaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled(self, x, constants=None):
@@ -539,17 +544,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled_error(self, x, constants=None):
@@ -568,17 +564,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled_error"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scalar(self, x, constants=None):

@@ -651,6 +651,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt] = [outi]
         return out
 
+    @functools.partial(jit, static_argnames="per_objective")
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
@@ -680,8 +681,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]

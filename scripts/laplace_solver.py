@@ -244,6 +244,8 @@ for i, res in enumerate(resolutions):
     print("computing phi matrix")
     # Compute the matrix A such that Phi_periodic = A @ B0*n.
     override = False
+    print(save_path + phi_save_name)
+    print(os.path.exists(save_path + phi_save_name))
     if os.path.exists(save_path + phi_save_name) and not override:
         print("loading phi matrix")
         phi_matrix = np.load(save_path + phi_save_name)

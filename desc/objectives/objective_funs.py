@@ -359,6 +359,12 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+
+        use_jit_wrapper = self._use_jit
+        use_jits = [obj._use_jit for obj in self.objectives]
+        if not all(use_jits):
+            use_jit_wrapper = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -420,23 +426,24 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            avail_mem = desc_config.get("avail_mem")
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = None
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = None
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not self.use_jit:
+        if not use_jit_wrapper:
             self._unjit()
 
         self._built = True

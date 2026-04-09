@@ -68,6 +68,7 @@ for iota_0 in iota_on_axis_values:
 
     print(f"\n=== iota_0 = {iota_0:.4f} ===")
     print("solving equilibrium")
+    """
     eq = Equilibrium(
         L=12,
         M=12,
@@ -94,7 +95,8 @@ for iota_0 in iota_on_axis_values:
     eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
     eq.save(save_path + save_name)
     print("equilibrium solved")
-
+    """
+    eq = get("HSX")
     # Evaluate stability using Newcomb's procedure
     stabilities.append(evaluate_stability(eq))
     

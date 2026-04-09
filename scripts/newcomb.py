@@ -139,15 +139,7 @@ def _odefun(rho, u, args):
         jitable=True,
     )
     transforms = get_transforms(data_keys, eq, grid, jitable=True)
-    profiles = {
-        # "current": eq.current,
-        "iota": eq.iota,  # iota right now is totally wrong so anything related to B_theta is wrong
-        "electron_density": eq.electron_density,
-        "pressure": eq.pressure,
-        "atomic_number": eq.atomic_number,
-        "electron_temperature": eq.electron_temperature,
-        "ion_temperature": eq.ion_temperature,
-    }
+    profiles = eq.get_profiles()
 
     data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",

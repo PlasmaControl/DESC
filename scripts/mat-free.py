@@ -97,8 +97,6 @@ for iota_0 in iota_on_axis_values:
     print("equilibrium solved")
     """
     eq = get("HSX")
-    # Evaluate stability using Newcomb's procedure
-    stabilities.append(evaluate_stability(eq))
     
     # Low-res solve for eigenfunction guess
     n_rho = 14

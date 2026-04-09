@@ -35,6 +35,8 @@ not_finite_limits = {
     "D_geodesic",
     "D_well",
     "J^theta",
+    "J^theta_t",
+    "J^theta_z",
     "curvature_H_rho",
     "curvature_H_zeta",
     "curvature_K_rho",
@@ -49,6 +51,7 @@ not_finite_limits = {
     "e^theta_r",
     "e^theta_t",
     "e^theta_z",
+    "e^vartheta",
     "g^rt",
     "g^rt_r",
     "g^rt_t",
@@ -63,6 +66,8 @@ not_finite_limits = {
     "g^tz_z",
     "g^aa",
     "g^ra",
+    "g^rv",
+    "(g^rv_p)|PEST",
     "gbdrift",
     "grad(alpha)",
     "grad(alpha) (periodic)",
@@ -71,6 +76,12 @@ not_finite_limits = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    "current Redl",
+    "J^theta_PEST",
+    "(J^theta_PEST_v)|PEST",
+    "(J^theta_PEST_p)|PEST",
+    "(e^vartheta_v)|PEST",
+    "(e^vartheta_p)|PEST",
 }
 not_implemented_limits = {
     # reliant limits will be added to this set automatically
@@ -95,9 +106,17 @@ not_implemented_limits = {
     "e^zeta_rz",
     "e^zeta_tz",
     "e^zeta_zz",
+    "(e^zeta_v)|PEST",
+    "(e^zeta_z)|PEST",
+    "(e^rho_v)|PEST",
+    "(e^rho_z)|PEST",
+    "J^zeta_t",
+    "J^zeta_z",
     "K_vc",  # only defined on surface
     "iota_num_rrr",
     "iota_den_rrr",
+    "gds2",
+    "(B*grad) grad(rho)",
 }
 
 
@@ -192,20 +211,22 @@ def assert_is_continuous(
         }
 
     """
+    p = "desc.equilibrium.equilibrium.Equilibrium"
     if kwargs is None:
         kwargs = {}
-    # TODO ( #671, #1206):currently skip Boozer quants because it need sym=False
-    #      grid (#1206) and Boozer axis limits are not yet implemented (#671)
-    names = [
-        name
-        for name in names
-        if not (
-            "Boozer" in name
-            or "_mn" in name
-            or name == "B modes"
-            or _skip_this(eq, name)
-        )
-    ]
+    names = set(names)
+    names -= _grow_seeds(
+        parameterization=p,
+        seeds={
+            name
+            for name in names
+            if _skip_this(eq, name)
+            # TODO (#671): Boozer axis limits are not yet implemented
+            or ("Boozer" in name or "_mn" in name or name == "B modes")
+        },
+        search_space=names,
+    )
+    names = list(names)
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
@@ -215,7 +236,6 @@ def assert_is_continuous(
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names=names, grid=grid)
 
-    p = "desc.equilibrium.equilibrium.Equilibrium"
     for name in names:
         if name in not_continuous_limits:
             continue

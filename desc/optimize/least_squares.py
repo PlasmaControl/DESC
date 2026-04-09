@@ -178,7 +178,9 @@ def lsqtr(  # noqa: C901
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
-    J = jac(x, *args).block_until_ready()  # FIXME: block is needed for jaxify util
+    # block is needed for jaxify util which uses jax functions inside
+    # jax.pure_callback and gets stuck due to async dispatch
+    J = jac(x, *args).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -200,7 +202,14 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    J_h = J * d
+    # TODO: place this function under JIT to use in-place operation (#1669)
+    J *= d
+
+    # we don't need unscaled J anymore, so we overwrite
+    # it with J_h = J * d to avoid carrying so many J-sized matrices
+    # in memory, which can be large
+    J_h = J
+    del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
     )
@@ -249,6 +258,22 @@ def lsqtr(  # noqa: C901
     actual_reduction = jnp.inf
     reduction_ratio = 0
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print("-" * 60, "\n")
+
     if verbose > 1:
         print_header_nonlinear()
         print_iteration_nonlinear(
@@ -260,7 +285,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = None  # "Levenberg-Marquardt" parameter
+    alpha = jnp.float64(0.0)  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
@@ -281,11 +306,15 @@ def lsqtr(  # noqa: C901
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
+            # We don't need the Q and R matrices anymore
+            # Trust region solver will solve the augmented system
+            # with a new Q and R
+            del Q, R
 
         actual_reduction = -1
 
         # theta controls step back step ratio from the bounds.
-        theta = max(0.995, 1 - g_norm)
+        theta = jnp.float64(max(0.995, 1 - g_norm))
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
@@ -388,7 +417,12 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J_h = J * d
+            J *= d
+            # we don't need unscaled J anymore this iteration, so we overwrite
+            # it with J_h = J * d to avoid carrying so many J-sized matrices
+            # in memory, which can be large
+            J_h = J
+            del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
             )
@@ -423,7 +457,7 @@ def lsqtr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J,
+        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

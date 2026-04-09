@@ -11,6 +11,7 @@ from ._coils import (
     CoilSetMinDistance,
     CoilTorsion,
     LinkingCurrentConsistency,
+    PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
@@ -100,5 +101,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

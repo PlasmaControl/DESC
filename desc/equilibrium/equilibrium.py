@@ -2,6 +2,7 @@
 
 import copy
 import numbers
+import os
 import warnings
 from collections.abc import MutableSequence
 
@@ -30,7 +31,6 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.input_reader import InputReader
 from desc.io import IOAble
 from desc.objectives import (
-    ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -39,7 +39,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import HermiteSplineProfile, PowerSeriesProfile, SplineProfile
+from desc.profiles import HermiteSplineProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -47,15 +47,34 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    get_ess_scale,
     only1,
     setdefault,
     warnif,
 )
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
-from .coords import get_rtz_grid, is_nested, map_coordinates, to_sfl
+from .coords import (
+    _map_poloidal_coordinates,
+    get_rtz_grid,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
-from .utils import parse_axis, parse_profile, parse_surface
+from .utils import (
+    ensure_consistent_profile_eq_resolution,
+    parse_axis,
+    parse_profile,
+    parse_surface,
+)
+
+_kinetic_profile_names = [
+    "_electron_temperature",
+    "_electron_density",
+    "_ion_temperature",
+    "_atomic_number",
+]
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -65,6 +84,10 @@ class Equilibrium(IOAble, Optimizable):
     and profile inputs. It can compute additional information, such as the magnetic
     field and plasma currents, as well as "solving" itself by finding the equilibrium
     fields, and perturbing those fields to find nearby equilibria.
+
+    Note that any passed-in profiles with resolution lower than eq.L will be
+    automatically increased in resolution to match eq.L. Higher resolution profiles will
+    be left untouched.
 
     Parameters
     ----------
@@ -163,7 +186,23 @@ class Equilibrium(IOAble, Optimizable):
         "_M_grid",
         "_N_grid",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis", "_L_basis"]
+    _static_attrs = Optimizable._static_attrs + [
+        "_sym",
+        "_R_sym",
+        "_Z_sym",
+        "_NFP",
+        "_L",
+        "_M",
+        "_N",
+        "_L_grid",
+        "_M_grid",
+        "_N_grid",
+        "_spectral_indexing",
+        "_bdry_mode",
+        "_R_basis",
+        "_Z_basis",
+        "_L_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -193,11 +232,11 @@ class Equilibrium(IOAble, Optimizable):
         **kwargs,
     ):
         errorif(
-            not isinstance(Psi, numbers.Real),
+            not isinstance(float(Psi), numbers.Real),
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = float(Psi)
+        self._Psi = jnp.float64(float(Psi))
 
         errorif(
             spectral_indexing
@@ -355,12 +394,7 @@ class Equilibrium(IOAble, Optimizable):
             "anisotropy",
         ]:
             p = getattr(self, profile)
-            if hasattr(p, "change_resolution"):
-                p.change_resolution(max(p.basis.L, self.L))
-            warnif(
-                isinstance(p, PowerSeriesProfile) and p.sym != "even",
-                msg=f"{profile} profile is not an even power series.",
-            )
+            ensure_consistent_profile_eq_resolution(p, self, name=profile)
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -858,6 +892,46 @@ class Equilibrium(IOAble, Optimizable):
             msg="must pass in a Grid object for argument grid!"
             f" instead got type {type(grid)}",
         )
+        # a check for Redl to prevent computing on-axis or
+        # at a rho=1.0 point where profiles vanish
+        if (
+            any(["Redl" in name for name in names])
+            and self.electron_density is not None
+        ):
+            warnif(
+                grid.axis.size,
+                UserWarning,
+                "Redl formula is undefined at rho=0, "
+                "but grid has grid points at rho=0, note that on-axis"
+                "current will be NaN.",
+            )
+            rho = grid.compress(grid.nodes[:, 0], "rho")
+
+            # check if profiles may go to zero
+            # if they are exactly zero this would cause NaNs since the profiles
+            # vanish.
+            warnif(
+                np.any(np.isclose(self.electron_density(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron density vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
+                np.any(np.isclose(self.electron_temperature(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given electron temperature vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
+                np.any(np.isclose(self.ion_temperature(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion temperature vanishes at at least one provided"
+                "rho grid point.",
+            )
+
         if grid.coordinates != "rtz":
             inbasis = {
                 "r": "rho",
@@ -928,43 +1002,27 @@ class Equilibrium(IOAble, Optimizable):
         dep0d = {
             dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
         }
-        # Unless user asks, don't try to recompute stuff which are only dependencies
-        # of dep0d. Example, suppose the user supplied grid is a field-line following
-        # grid, and the user would like to compute the effective ripple, which requires
-        # the scalar R0 as a dependency. The scalar R0 has the following dependencies:
-        # R0 <- A <- A(z). Each of these are computable on the quadrature grid, and
-        # since R0 is a scalar we can trivially interpolate it back to the user-supplied
-        # grid. We don't need to additionally compute A(z) and interpolate it back;
-        # it was only needed to compute R0, so we should remove it from the dep1dz list.
-        # If we don't remove it from the dep1dz list, then the code would try to create
-        # a linear grid with cross-sections at all the unique zeta values in the
-        # user-supplied grids. Typically, the user-supplied grid lacks unique_zeta_idx
-        # attribute, so this would cause an error.
-        dep0d_deps = set(
-            get_data_deps(dep0d, obj=p, has_axis=grid.axis.size, data=data)
+        deps_after_0d = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d
+            )
+            + names
         )
-        # This filter is stronger than the name implies, but the false positives
-        # that are filtered out will still get computed with the logic in
-        # compute.utils.compute
-        # https://github.com/PlasmaControl/DESC/pull/1024#discussion_r1663080423.
-        just_dep0d_dep = lambda name: name in dep0d_deps and name not in names
         dep1dr = {
             dep
-            for dep in deps
-            if is_1dr_rad_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d
+            if is_1dr_rad_grid(dep) and dep not in need_src_deps
         }
+        deps_after_0d_1dr = set(
+            get_data_deps(
+                names, obj=p, has_axis=grid.axis.size, data=data.keys() | dep0d | dep1dr
+            )
+            + names
+        )
         dep1dz = {
             dep
-            for dep in deps
-            # By including the additional requirement that dep is not just a dependency
-            # of some scalar (0d) quantity, we are ensuring that we do not unnecessarily
-            # compute things like A(z) when it was only needed to compute R0, as in the
-            # example above.
-            if is_1dz_tor_grid(dep)
-            and not just_dep0d_dep(dep)
-            and dep not in need_src_deps
+            for dep in deps_after_0d_1dr
+            if is_1dz_tor_grid(dep) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -977,14 +1035,15 @@ class Equilibrium(IOAble, Optimizable):
         # If the grid samples the full volume, then it is sufficient.
         if grid.L >= self.L_grid and grid.M >= self.M_grid and grid.N >= self.N_grid:
             if isinstance(grid, QuadratureGrid):
-                calc0d = calc1dr = calc1dz = False
+                calc0d = calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
             if isinstance(grid, LinearGrid):
-                calc1dr = calc1dz = False
+                calc1dr = grid.N * grid.NFP < self.N_grid * self.NFP
+                calc1dz = False
         else:
             # Warn if best way to compute accurately is increasing resolution.
             for dep in deps:
                 req = data_index[p][dep]["resolution_requirement"]
-                coords = data_index[p][dep]["coordinates"]
                 msg = lambda direction: (
                     f"Dependency {dep} may require more {direction}"
                     " resolution to compute accurately."
@@ -993,7 +1052,9 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more radial resolution
                     "r" in req and grid.L < self.L_grid
                     # and won't override grid to one with more radial resolution
-                    and not (override_grid and coords in {"z", ""}),
+                    and not (
+                        override_grid and (is_1dz_tor_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
                     msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
                 )
@@ -1001,17 +1062,27 @@ class Equilibrium(IOAble, Optimizable):
                     # if need more poloidal resolution
                     "t" in req and grid.M < self.M_grid
                     # and won't override grid to one with more poloidal resolution
-                    and not (override_grid and coords in {"r", "z", ""}),
+                    and not (
+                        override_grid
+                        and (
+                            is_1dr_rad_grid(dep)
+                            or is_1dz_tor_grid(dep)
+                            or is_0d_vol_grid(dep)
+                        )
+                    ),
                     ResolutionWarning,
                     msg("poloidal") + f" got M_grid={grid.M} < {self._M_grid}.",
                 )
                 warnif(
                     # if need more toroidal resolution
-                    "z" in req and grid.N < self.N_grid
+                    "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
-                    and not (override_grid and coords in {"r", ""}),
+                    and not (
+                        override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
+                    ),
                     ResolutionWarning,
-                    msg("toroidal") + f" got N_grid={grid.N} < {self._N_grid}.",
+                    msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
+                    f"< {self._N_grid}*{self.NFP}.",
                 )
 
         # Now compute dependencies on the proper grids, passing in any available
@@ -1172,7 +1243,7 @@ class Equilibrium(IOAble, Optimizable):
         outbasis=("rho", "theta", "zeta"),
         guess=None,
         params=None,
-        period=None,
+        period=(np.inf, np.inf, np.inf),
         tol=1e-6,
         maxiter=30,
         full_output=False,
@@ -1205,6 +1276,7 @@ class Equilibrium(IOAble, Optimizable):
         period : tuple of float
             Assumed periodicity for each quantity in ``inbasis``.
             Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int
@@ -1281,61 +1353,74 @@ class Equilibrium(IOAble, Optimizable):
         -------
         desc_grid : Grid
             DESC coordinate grid for the given coordinates.
+
         """
         return get_rtz_grid(
             self, radial, poloidal, toroidal, coordinates, period, jitable, **kwargs
         )
 
-    def compute_theta_coords(
-        self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20, full_output=False, **kwargs
+    @staticmethod
+    def _map_poloidal_coordinates(
+        iota,
+        poloidal,
+        zeta,
+        L_lmn,
+        lmbda,
+        varepsilon=None,
+        inbasis="alpha",
+        outbasis="theta",
+        guess=None,
+        *,
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
-        """Find θ (theta_DESC) for given straight field line ϑ (theta_PEST).
+        return _map_poloidal_coordinates(
+            iota,
+            poloidal,
+            zeta,
+            L_lmn,
+            lmbda,
+            varepsilon,
+            inbasis,
+            outbasis,
+            guess,
+            tol=tol,
+            maxiter=maxiter,
+            **kwargs,
+        )
+
+    def _compute_iota_under_jit(self, rho, params=None, profiles=None, **kwargs):
+        """Compute rotational transform in JITable manner.
 
         Parameters
         ----------
-        flux_coords : ndarray
-            Shape (k, 3).
-            Straight field line PEST coordinates [ρ, ϑ, ϕ]. Assumes ζ = ϕ.
-            Each row is a different point in space.
-        L_lmn : ndarray
-            Spectral coefficients for lambda. Defaults to ``eq.L_lmn``.
-        tol : float
-            Stopping tolerance.
-        maxiter : int
-            Maximum number of Newton iterations.
-        full_output : bool, optional
-            If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
-        kwargs : dict, optional
-            Additional keyword arguments to pass to ``root_scalar`` such as
-            ``maxiter_ls``, ``alpha``.
+        rho : jnp.ndarray
+            Surface to compute rotational transform.
+        params : dict[str,jnp.ndarray]
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to ``eq.params_dict``.
+        profiles
+            Optional profiles.
 
         Returns
         -------
-        coords : ndarray
-            Shape (k, 3).
-            DESC computational coordinates [ρ, θ, ζ].
-        info : tuple
-            2 element tuple containing residuals and number of iterations for each
-            point. Only returned if ``full_output`` is True.
+        iota : jnp.ndarray
+            Shape (len(rho), ).
 
         """
-        warnif(
-            True,
-            DeprecationWarning,
-            "Use map_coordinates instead of compute_theta_coords.",
-        )
-        return map_coordinates(
-            self,
-            coords=flux_coords,
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            params=self.params_dict if L_lmn is None else {"L_lmn": L_lmn},
-            tol=tol,
-            maxiter=maxiter,
-            full_output=full_output,
-            **kwargs,
-        )
+        setdefault(params, self.params_dict)
+        if profiles is None:
+            profiles = get_profiles("iota", self)
+        if profiles["iota"] is None:
+            iota_profile = self.get_profile(["iota", "iota_r"], params=params, **kwargs)
+        else:
+            iota_profile = profiles["iota"]
+
+        if jnp.ndim(rho) < 2:
+            zero = jnp.zeros_like(rho)
+            rho = jnp.column_stack([rho, zero, zero])
+        return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
@@ -1377,42 +1462,57 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         rcond=None,
         copy=False,
+        tol=1e-9,
+        maxiter=30,
     ):
-        """Transform this equilibrium to use straight field line coordinates.
+        """Transform this equilibrium to use straight field line PEST coordinates.
 
         Uses a least squares fit to find FourierZernike coefficients of R, Z, Rb, Zb
         with respect to the straight field line coordinates, rather than the boundary
         coordinates. The new lambda value will be zero.
 
-        NOTE: Though the converted equilibrium will have the same flux surfaces,
-        the force balance error will likely be higher than the original equilibrium.
+        The flux surfaces of the returned equilibrium usually differ from the original
+        by 1% when the default resolution parameters are used.
 
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
+            Radial resolution to use for SFL equilibrium.
+            Default is ``3*eq.L``.
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
+            Poloidal resolution to use for SFL equilibrium.
+            Default is ``4*eq.M``.
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
+            toroidal resolution to use for SFL equilibrium.
+            Default is ``3*eq.N``.
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 2*L
+            Radial grid resolution to use for fit to Zernike series.
+            Default is ``1.5*L``.
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 2*M
+            Poloidal grid resolution to use for fit to Zernike series.
+            Default is ``1.5*M``.
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 2*N
+            Toroidal grid resolution to use for fit to Fourier series.
+            Default is ``N``.
         rcond : float, optional
-            cutoff for small singular values in least squares fit.
+            Cutoff for small singular values in the least squares fit.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
+        tol : float
+            Tolerance for coordinate mapping.
+            Default is ``1e-9``.
+        maxiter : int
+            Maximum number of Newton iterations.
 
         Returns
         -------
-        eq_sfl : Equilibrium
+        eq_PEST : Equilibrium
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)
+        return to_sfl(
+            self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol, maxiter=maxiter
+        )
 
     @property
     def surface(self):
@@ -1469,7 +1569,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = float(np.squeeze(Psi))
+        self._Psi = jnp.float64(float(np.squeeze(Psi)))
 
     @property
     def NFP(self):
@@ -1635,6 +1735,21 @@ class Equilibrium(IOAble, Optimizable):
     @pressure.setter
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
+        self._pressure = ensure_consistent_profile_eq_resolution(
+            self._pressure, self, name="pressure"
+        )
+        has_kinetic = any(
+            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
+        )  # don't warn if pressure is being set to None
+        warnif(
+            has_kinetic and new is not None,
+            UserWarning,
+            "Pressure profile is being assigned to an "
+            "equilibrium which already has at least one kinetic profile assigned to"
+            " it. The default is to use the equilibrium's assigned pressure profile"
+            " for all computations. It is recommended to remove the unneeded "
+            "profile(s) to avoid unexpected behavior, by setting them to None",
+        )
 
     @optimizable_parameter
     @property
@@ -1683,6 +1798,19 @@ class Equilibrium(IOAble, Optimizable):
     @electron_temperature.setter
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
+        self._electron_temperature = ensure_consistent_profile_eq_resolution(
+            self._electron_temperature, self, name="electron temperature"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron temperature profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1711,6 +1839,19 @@ class Equilibrium(IOAble, Optimizable):
     @electron_density.setter
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
+        self._electron_density = ensure_consistent_profile_eq_resolution(
+            self._electron_density, self, name="electron density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1739,6 +1880,18 @@ class Equilibrium(IOAble, Optimizable):
     @ion_temperature.setter
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
+        self._ion_temperature = ensure_consistent_profile_eq_resolution(
+            self._ion_temperature, self, name="ion temperature"
+        )
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1765,6 +1918,19 @@ class Equilibrium(IOAble, Optimizable):
     @atomic_number.setter
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
+        self._atomic_number = ensure_consistent_profile_eq_resolution(
+            self._atomic_number, self, name="atomic number"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Atomic number profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1789,6 +1955,9 @@ class Equilibrium(IOAble, Optimizable):
     @iota.setter
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
+        self._iota = ensure_consistent_profile_eq_resolution(
+            self._iota, self, name="iota"
+        )
         if self.iota is None:
             return
         warnif(
@@ -1824,6 +1993,9 @@ class Equilibrium(IOAble, Optimizable):
     @current.setter
     def current(self, new):
         self._current = parse_profile(new, "current")
+        self._current = ensure_consistent_profile_eq_resolution(
+            self._current, self, name="current"
+        )
         if self.current is None:
             return
         warnif(
@@ -2026,46 +2198,35 @@ class Equilibrium(IOAble, Optimizable):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
-        basis_L = FourierZernikeBasis(
-            L=L,
-            M=M,
-            N=N,
-            NFP=na_eq.nfp,
-            sym="sin" if not na_eq.lasym else False,
-            spectral_indexing=spectral_indexing,
-        )
 
         transform_R = Transform(grid, basis_R, method="direct1")
         transform_Z = Transform(grid, basis_Z, method="direct1")
-        transform_L = Transform(grid, basis_L, method="direct1")
         A_R = transform_R.matrices["direct1"][0][0][0]
         A_Z = transform_Z.matrices["direct1"][0][0][0]
-        A_L = transform_L.matrices["direct1"][0][0][0]
 
         W = 1 / grid.nodes[:, 0].flatten() ** w
-        A_Rw = A_R * W[:, None]
-        A_Zw = A_Z * W[:, None]
-        A_Lw = A_L * W[:, None]
+        A_R = A_R * W[:, None]
+        A_Z = A_Z * W[:, None]
+        A_L = A_Z  # can just reuse Z for L, works for both sym and asym cases
 
+        rho = grid.nodes[grid.unique_rho_idx, 0]
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
         L_1D = np.zeros((grid.num_nodes,))
+        phi_cyl_ax = np.linspace(0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False)
+        nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+        phi_B = phi_cyl_ax + nu_B_ax
         for rho_i in rho:
             R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
-            phi_cyl_ax = np.linspace(
-                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
-            )
-            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
-            phi_B = phi_cyl_ax + nu_B_ax
             nu_B = phi_B - phi0_2D
             idx = np.nonzero(grid.nodes[:, 0] == rho_i)[0]
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
             L_1D[idx] = -nu_B.flatten(order="F") * na_eq.iota
 
-        inputs["R_lmn"] = np.linalg.lstsq(A_Rw, R_1D * W, rcond=None)[0]
-        inputs["Z_lmn"] = np.linalg.lstsq(A_Zw, Z_1D * W, rcond=None)[0]
-        inputs["L_lmn"] = np.linalg.lstsq(A_Lw, L_1D * W, rcond=None)[0]
+        inputs["R_lmn"] = np.linalg.lstsq(A_R, R_1D * W, rcond=None)[0]
+        inputs["Z_lmn"] = np.linalg.lstsq(A_Z, Z_1D * W, rcond=None)[0]
+        inputs["L_lmn"] = np.linalg.lstsq(A_L, L_1D * W, rcond=None)[0]
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -2090,6 +2251,7 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium generated from the given input file.
 
         """
+        path = os.path.expanduser(path)
         inputs = InputReader().parse_inputs(path)[-1]
         if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
@@ -2106,6 +2268,7 @@ class Equilibrium(IOAble, Optimizable):
         unused_keys = [
             "pres_ratio",
             "bdry_ratio",
+            "curr_ratio",
             "pert_order",
             "ftol",
             "xtol",
@@ -2117,7 +2280,7 @@ class Equilibrium(IOAble, Optimizable):
             "output_path",
             "verbose",
         ]
-        [inputs.pop(key) for key in unused_keys]
+        [inputs.pop(key, None) for key in unused_keys]
         inputs.update(kwargs)
         return cls(**inputs)
 
@@ -2150,15 +2313,27 @@ class Equilibrium(IOAble, Optimizable):
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2177,6 +2352,8 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
@@ -2227,8 +2404,8 @@ class Equilibrium(IOAble, Optimizable):
 
     def optimize(
         self,
-        objective=None,
-        constraints=None,
+        objective,
+        constraints,
         optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
@@ -2247,22 +2424,34 @@ class Equilibrium(IOAble, Optimizable):
         objective : ObjectiveFunction
             Objective function to optimize.
         constraints : Objective or tuple of Objective
-            Objective function to satisfy. Default = fixed-boundary force balance.
+            Objective function representing the constraints to satisfy.
         optimizer : str or Optimizer (optional)
             optimizer to use
         ftol, xtol, gtol, ctol : float
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
-        x_scale : array_like or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
             dimension is proportional to ``x_scale[j]``. Improved convergence may
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
-            function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the Jacobian or Hessian matrix.
+            function. Default is ``'auto'``, which iteratively updates the scale using
+            the inverse norms of the columns of the Jacobian or Hessian matrix.
+            If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
+            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
+            which are passed through ``options``. ``ess_alpha`` is the decay rate of
+            the scaling, and ``ess_order`` is the norm order for multi-index modes,
+            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
+            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
+            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
+            be the same size as sum(thing.dim_x for thing in things). If a list, the
+            list should have 1 element for each thing, and each element should either
+            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            with the same keys and dimensions as thing.params_dict to specify scales
+            manually.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2281,15 +2470,22 @@ class Equilibrium(IOAble, Optimizable):
             Boolean flag indicating if the optimizer exited successfully and
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
+            Additionally, stores the before and after values of the objectives
+            and constraints in the ``Objective values`` key.
 
         """
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints(eq=self)
-            constraints = (ForceBalance(eq=self), *constraints)
         if not isinstance(constraints, (list, tuple)):
             constraints = tuple([constraints])
+        warnif(
+            not any([con._equilibrium for con in constraints]),
+            UserWarning,
+            "Detected no equilibrium constraints passed, equilibrium optimization "
+            "problems usually require equilibrium constraints in order to produce "
+            "meaningful, physical results. Consider adding `ForceBalance` as a "
+            "constraint.",
+        )
 
         things, result = optimizer.optimize(
             self,
@@ -2388,6 +2584,50 @@ class Equilibrium(IOAble, Optimizable):
         )
 
         return eq
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the all ones scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        bdry_scale = self.surface._get_ess_scale(alpha, order, min_value)
+        axis_scale = self.axis._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {
+            "R_lmn": self.R_basis.modes,
+            "Z_lmn": self.Z_basis.modes,
+            "L_lmn": self.L_basis.modes,
+        }
+        # note there is no ESS for profiles, since they may not be polynomials, and
+        # even if they are, they're usually low order and not in an orthogonal basis
+        # so its not clear if ESS is appropriate.
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        scales["Ra_n"] = axis_scale["R_n"]
+        scales["Za_n"] = axis_scale["Z_n"]
+        scales["Rb_lmn"] = bdry_scale["R_lmn"]
+        scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        if hasattr(self.surface, "Phi_mn"):
+            scales["Phi_mn"] = bdry_scale["Phi_mn"]
+        return scales
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

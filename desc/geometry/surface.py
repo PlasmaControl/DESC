@@ -1,5 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
+import os
 import warnings
 
 import numpy as np
@@ -15,12 +16,22 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.compute import get_transforms
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, setdefault
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    get_ess_scale,
+    rpz2xyz_vec,
+    setdefault,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Surface
 
@@ -65,7 +76,7 @@ class FourierRZToroidalSurface(Surface):
         "_NFP",
         "_rho",
     ]
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -317,6 +328,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
+        path = os.path.expanduser(path)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             inputs = InputReader().parse_inputs(path)[-1]
@@ -655,7 +667,7 @@ class FourierRZToroidalSurface(Surface):
     def constant_offset_surface(
         self, offset, grid=None, M=None, N=None, full_output=False
     ):
-        """Create a FourierRZSurface with constant offset from the base surface (self).
+        """Create a new FourierRZToroidalSurface with constant offset from self.
 
         Implementation of algorithm described in Appendix B of
         "An improved current potential method for fast computation of
@@ -665,6 +677,10 @@ class FourierRZToroidalSurface(Surface):
         NOTE: Must have the toroidal angle as the cylindrical toroidal angle
         in order for this algorithm to work properly
 
+        NOTE: if one wants to use this inside of an optimization, one should
+        use the private method _constant_offset_surface directly, and refer to
+        the documentation in PR #2016 for more details.
+
         Parameters
         ----------
         base_surface : FourierRZToroidalSurface
@@ -673,11 +689,11 @@ class FourierRZToroidalSurface(Surface):
             constant offset (in m) of the desired surface from the input surface
             offset will be in the normal direction to the surface.
         grid : Grid, optional
-            Grid object of the points on the given surface to evaluate the
+            Grid object of the points on the offset surface to evaluate the
             offset points at, from which the offset surface will be created by fitting
             offset points with the basis defined by the given M and N.
-            If None, defaults to a LinearGrid with M and N and NFP equal to the
-            base_surface.M and base_surface.N and base_surface.NFP
+            If None, defaults to a LinearGrid with M and N and NFP equal to twice the
+            base_surface.M and base_surface.N and NFP equal to base_surface.NFP
         M : int, optional
             Poloidal resolution of the basis used to fit the offset points
             to create the resulting constant offset surface, by default equal
@@ -700,12 +716,14 @@ class FourierRZToroidalSurface(Surface):
             dictionary containing  the following data, in the cylindrical basis:
                 ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
                     the base_surface evaluated at the input ``grid``
-                ``x`` : (``grid.num_nodes`` x 3) array of the position vectors on
+                ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
                     the base_surface evaluated at the input ``grid``
                 ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
-                    position vectors on the offset surface, corresponding to the
+                    coordinates on the offset surface, corresponding to the
                     ``x`` points on the base_surface (i.e. the points to which the
                     offset surface was fit)
+                ``transforms`` : dict containing the Transform objects used to
+                    fit R and Z of the
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True
@@ -714,7 +732,7 @@ class FourierRZToroidalSurface(Surface):
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
 
-        base_surface = self
+        base_surface = self.copy()
         if grid is None:
             grid = LinearGrid(
                 M=base_surface.M * 2,
@@ -727,61 +745,97 @@ class FourierRZToroidalSurface(Surface):
         ), "base_surface must be a FourierRZToroidalSurface!"
         M = base_surface.M if M is None else int(M)
         N = base_surface.N if N is None else int(N)
+        base_surface.change_resolution(M=M, N=N)
 
-        def n_and_r_jax(nodes):
-            data = base_surface.compute(
-                ["X", "Y", "Z", "n_rho"],
-                grid=Grid(nodes, jitable=True, sort=False),
-                method="jitable",
-            )
-
-            phi = nodes[:, 2]
-            re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
-            n = data["n_rho"]
-            n = rpz2xyz_vec(n, phi=phi)
-            r_offset = re + offset * n
-            return n, re, r_offset
-
-        def fun_jax(zeta_hat, theta, zeta):
-            nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
-            n, r, r_offset = n_and_r_jax(nodes)
-            return jnp.arctan(r_offset[0, 1] / r_offset[0, 0]) - zeta
-
-        vecroot = jit(
-            vmap(
-                lambda x0, *p: root_scalar(
-                    fun_jax, x0, jac=None, args=p, full_output=full_output
-                )
-            )
+        R_lmn, Z_lmn, data, (res, niter) = _constant_offset_surface(
+            base_surface, offset, grid=grid
         )
-        if full_output:
-            zetas, (res, niter) = vecroot(
-                grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2]
-            )
-        else:
-            zetas = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
 
-        zetas = np.asarray(zetas)
-        nodes = np.vstack((np.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
-        n, x, x_offsets = n_and_r_jax(nodes)
-
-        data = {}
-        data["n"] = xyz2rpz_vec(n, phi=nodes[:, 1])
-        data["x"] = xyz2rpz(x)
-        data["x_offset_surface"] = xyz2rpz(x_offsets)
-
-        offset_surface = FourierRZToroidalSurface.from_values(
-            data["x_offset_surface"],
-            theta=nodes[:, 1],
-            M=M,
-            N=N,
-            NFP=base_surface.NFP,
-            sym=base_surface.sym,
+        offset_surface = FourierRZToroidalSurface(
+            R_lmn,
+            Z_lmn,
+            data["transforms"]["R"].basis.modes[:, 1:],
+            data["transforms"]["Z"].basis.modes[:, 1:],
+            base_surface.NFP,
+            base_surface.sym,
         )
+
         if full_output:
             return offset_surface, data, (res, niter)
         else:
             return offset_surface
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        This method calculates the axis of the surface by finding the mid point of the
+        R and Z values at theta=0 and pi degrees for a bunch of toroidal angles and
+        fitting a Fourier curve to it.
+        For general non-convex surfaces, the geometric center (aka centroid) might not
+        be inside the given surface. Since we use the axis for the initial guess of the
+        magnetic axis, it is important to have the axis inside the surface, and form
+        good nested flux surfaces. This method is a simple way to get a good initial
+        guess for the axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        # over-sample to get a good axis fit
+        grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
+        data = self.compute(["R", "Z"], grid=grid)
+        R = data["R"]
+        Z = data["Z"]
+        # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
+        # angles, find the mid point of them and fit a Fourier curve to it.
+        Rout = R[::2]
+        Rin = R[1::2]
+        Zout = Z[::2]
+        Zin = Z[1::2]
+        Rmid = (Rout + Rin) / 2
+        Zmid = (Zout + Zin) / 2
+        phis = (
+            jnp.linspace(0, 2 * np.pi / self.NFP, len(Rmid), endpoint=False)
+            if self.N > 0
+            else jnp.zeros_like(Rmid)
+        )
+        axis = FourierRZCurve.from_values(
+            jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
+        )
+        return axis
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
 
 
 class ZernikeRZToroidalSection(Surface):
@@ -838,7 +892,11 @@ class ZernikeRZToroidalSection(Surface):
         "_zeta",
     ]
 
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + [
+        "_spectral_indexing",
+        "_R_basis",
+        "_Z_basis",
+    ]
 
     @execute_on_cpu
     def __init__(
@@ -1070,3 +1128,184 @@ class ZernikeRZToroidalSection(Surface):
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    def get_axis(self):
+        """Get the axis of the surface.
+
+        Computes the R and Z value at rho=0 and creates N=0 FourierRZCurve
+        to represent the axis of the cross section.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Circular axis of the surface.
+
+        """
+        from desc.geometry import FourierRZCurve
+
+        grid = LinearGrid(rho=0)
+        data = self.compute(["R", "Z"], grid=grid)
+        axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)
+        return axis
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
+
+
+def _constant_offset_surface(
+    base_surface,
+    offset,
+    grid,
+    transforms=None,
+    params=None,
+):
+    """Create a FourierRZToroidalSurface with constant offset from the base surface.
+
+    Implementation of algorithm described in Appendix B of
+    "An improved current potential method for fast computation of
+    stellarator coil shapes", Landreman (2017)
+    https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
+
+    NOTE: Must have the toroidal angle as the cylindrical toroidal angle
+    in order for this algorithm to work properly
+
+    NOTE: this function lacks the checks of the constant_offset_surface
+    so that it is jittable/differentiable
+
+    Parameters
+    ----------
+    base_surface : FourierRZToroidalSurface
+        Surface from which the constant offset surface will be found.
+    offset : float
+        constant offset (in m) of the desired surface from the input surface
+        offset will be in the normal direction to the surface.
+    grid : Grid, optional
+        Grid object of the points on the offset surface to evaluate the
+        offset points at, from which the offset surface will be created by fitting
+        offset points with the basis defined by the given M and N.
+        If None, defaults to a LinearGrid with M and N and NFP equal to twice the
+        base_surface.M and base_surface.N and NFP equal to base_surface.NFP
+    transforms: dict, optional
+        Transforms to use to fit the offset surface's R and Z, respectively. If None,
+        new transforms will be created using the given surface's M and N.
+        If given, should contain the keys ["R"] and ["Z"], with the pinv matrices
+        already built, and the corresponding grid should match the input grid.
+    params : dict, optional
+        dictionary of parameters to use when computing data from the base_surface.
+        If None, uses base_surface.params_dict, however the resulting computation
+        will not be differentiable with respect to the base_surface parameters
+        (since the JAX AD inside of an objective traces the params dictionaries
+        that are passed to their compute methods)
+
+    Returns
+    -------
+    R_lmn, Z_lmn : array-like
+        coefficients describing the offset surface geometry
+    data : dict
+        dictionary containing  the following data, in the cylindrical basis:
+            ``n`` : (``grid.num_nodes`` x 3) array of the unit surface normal on
+                the base_surface evaluated at the input ``grid``
+            ``x`` : (``grid.num_nodes`` x 3) array of coordinates on
+                the base_surface evaluated at the input ``grid``
+            ``x_offset_surface`` : (``grid.num_nodes`` x 3) array of the
+                coordinates on the offset surface, corresponding to the
+                ``x`` points on the base_surface (i.e. the points to which the
+                offset surface was fit)
+        as well as the transforms used to fit R and Z.
+    info : tuple
+        2 element tuple containing residuals and number of iterations
+        for each point.
+
+    """
+    if params is None:
+        params = base_surface.params_dict
+
+    def n_and_r_jax(nodes):
+        data = base_surface.compute(
+            ["X", "Y", "Z", "n_rho"],
+            grid=Grid(nodes, jitable=True, sort=False),
+            method="jitable",
+            params=params,
+        )
+
+        phi = nodes[:, 2]
+        re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
+        n = data["n_rho"]
+        n = rpz2xyz_vec(n, phi=phi)
+        r_offset = re + offset * n
+        return n, re, r_offset
+
+    def fun_jax(zeta_hat, theta, zeta):
+        nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
+        n, r, r_offset = n_and_r_jax(nodes)
+        # add 2pi to the arctan2<0 so it matches our convention of
+        # zeta being btwn 0 and 2pi
+        zeta_offset = jnp.arctan2(r_offset[0, 1], r_offset[0, 0])
+        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - zeta
+
+    vecroot = jit(
+        vmap(
+            lambda x0, *p: root_scalar(
+                fun_jax, x0, jac=None, args=p, full_output=True, tol=1e-12, maxiter=100
+            )
+        )
+    )
+    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+
+    zetas = jnp.asarray(zetas)
+    nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
+    n, x, x_offsets = n_and_r_jax(nodes)
+
+    data = {}
+    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 2])
+    data["x"] = xyz2rpz(x)
+    data["x_offset_surface"] = xyz2rpz(x_offsets)
+
+    if transforms is None:
+        # NOTE: we are assuming here that the rootfind was successful for every point,
+        # so that the zeta=arctan(y/x) of the offset surface point are the same as
+        # the grid nodes' zeta values. If this is not the case, the fitting
+        # will be incorrect.
+        transforms = get_transforms(
+            obj=base_surface,
+            keys=["R", "Z"],
+            grid=grid,
+            # this is more robust than letting method become fft if
+            # jitable=False, and will also work within jitted functions
+            jitable=True,
+        )
+        transforms["R"].build_pinv()
+        transforms["Z"].build_pinv()
+
+    R_lmn = transforms["R"].fit(data["x_offset_surface"][:, 0])
+    Z_lmn = transforms["Z"].fit(data["x_offset_surface"][:, 2])
+
+    data["transforms"] = transforms
+
+    return R_lmn, Z_lmn, data, (res, niter)

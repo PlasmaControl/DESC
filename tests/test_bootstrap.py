@@ -775,6 +775,7 @@ class TestBootstrapCompute:
         helicity = (1, 0)
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile(
             5.0e20 * np.array([1, -1]), modes=[0, 8]
         )
@@ -924,6 +925,7 @@ class TestBootstrapCompute:
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)[-1]
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1013,6 +1015,7 @@ class TestBootstrapCompute:
         helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)[-1]
+        eq.pressure = None
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1069,6 +1072,13 @@ class TestBootstrapCompute:
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
+        grid2 = LinearGrid(rho=0.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid3 = LinearGrid(rho=1.0, M=eq.M, N=eq.N, NFP=eq.NFP)
+        with pytest.warns(UserWarning, match="rho=0"):
+            eq.compute("<J*B> Redl", grid=grid2, helicity=helicity)
+        with pytest.warns(UserWarning, match="vanish"):
+            eq.compute("<J*B> Redl", grid=grid3, helicity=helicity)
+
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
@@ -1557,7 +1567,8 @@ def test_bootstrap_optimization_comparison_qa():
         PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
     )
     eq0.ion_temperature = PowerSeriesProfile(np.array([1.0, -1.0]), sym=True) * 9.45e3
-    eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
+    with pytest.warns(UserWarning, match="not an even power series"):
+        eq0.current = PowerSeriesProfile(np.zeros((eq0.L + 1,)), sym=False)
     eq0, _ = eq0.solve(objective="force", optimizer="lsq-exact", verbose=3)
     eq1 = eq0.copy()
     eq2 = eq0.copy()

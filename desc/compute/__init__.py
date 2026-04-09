@@ -139,6 +139,10 @@ def _build_data_index():  # noqa: C901
         # transitive data deps of key K is just:
         #   union of (each direct dep D) + (D's already-cached full data deps)
         # No recursion needed — O(number of direct deps) per key.
+
+        # The deps are stored in topological order (not alphabetical) so that
+        # iterating over them computes quantities in valid dependency order.
+        topo_index = {key: i for i, key in enumerate(order)}
         for key in order:
             d = data_index[p][key]
             deps_info = d["dependencies"]
@@ -150,7 +154,7 @@ def _build_data_index():  # noqa: C901
             for dep in direct_data:
                 full_data_set.add(dep)
                 full_data_set.update(data_index[p][dep]["full_dependencies"]["data"])
-            deps_no_axis = sorted(full_data_set)
+            deps_no_axis = sorted(full_data_set, key=topo_index.__getitem__)
 
             transforms, params, profiles = _collect_deps(p, [key] + deps_no_axis)
             full = {
@@ -177,7 +181,7 @@ def _build_data_index():  # noqa: C901
                 full_data_axis_set.update(
                     data_index[p][dep]["full_with_axis_dependencies"]["data"]
                 )
-            deps_with_axis = sorted(full_data_axis_set)
+            deps_with_axis = sorted(full_data_axis_set, key=topo_index.__getitem__)
 
             if len(deps_no_axis) >= len(deps_with_axis):
                 # This quantity and all its dependencies do not need anything

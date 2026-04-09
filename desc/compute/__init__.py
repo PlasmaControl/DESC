@@ -59,10 +59,49 @@ from .utils import (
 # Rather than having to recursively compute the full dependencies every time we
 # compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
+def _topo_sort(p):
+    """Return keys of data_index[p] in topological order (deps before dependents).
+
+    Uses Kahn's algorithm over direct ``dependencies["data"]`` and
+    ``dependencies["axis_limit_data"]`` edges so that when _build_data_index
+    processes a key, all of its transitive dependencies are already cached and
+    _get_deps_1_key returns in O(1) instead of recursing the full tree.
+    """
+    from collections import defaultdict, deque
+
+    in_degree = {key: 0 for key in data_index[p]}
+    # use defaultdict as it auto-creates an empty list for any missing key
+    dependents = defaultdict(list)
+    for key in data_index[p]:
+        seen = set(data_index[p][key]["dependencies"]["data"]) | set(
+            data_index[p][key]["dependencies"]["axis_limit_data"]
+        )
+        for dep in seen:
+            if dep in data_index[p]:
+                in_degree[key] += 1
+                dependents[dep].append(key)
+
+    # deque double-ended queue so when we pop, we don't shift any
+    # elements in the list and thus keep O(1) complexity
+    queue = deque(k for k, d in in_degree.items() if d == 0)
+    order = []
+    while queue:
+        key = queue.popleft()
+        order.append(key)
+        for dependent in dependents[key]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
+
+    # Append any remaining keys (shouldn't occur in a valid DAG, but be safe)
+    remaining = set(data_index[p]) - set(order)
+    return order + list(remaining)
+
+
 def _build_data_index():
 
     for p in data_index:
-        for key in data_index[p]:
+        for key in _topo_sort(p):
             full = {
                 "data": get_data_deps(key, p, has_axis=False, basis="rpz"),
                 "transforms": get_derivs(key, p, has_axis=False, basis="rpz"),

@@ -1985,7 +1985,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b * bc_mask, tol=5e-4, maxiter=int(2 * n_total))
+        y, _ = cg(Ashift, b * bc_mask, tol=1e-8, maxiter=int(2 * n_total))
         return y * bc_mask
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)

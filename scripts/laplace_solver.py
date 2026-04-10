@@ -42,7 +42,7 @@ import os
 chunk_size = 50
 
 
-resolutions = 3 * np.logspace(1, 4, 4, base=2).astype(int)
+resolutions = np.linspace(24, 36, 7, dtype=int)
 
 # Root mean square errors in B_t, B_z, and phi for each resolution, relative to the "true" values computed from the Green's function.
 B_t_errs = np.zeros_like(resolutions, dtype=float)

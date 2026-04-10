@@ -2008,7 +2008,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         print(e)
 
     a = Ax(v)
-    b = w[0]
+    b = w[0] * v
     diff = np.abs(a - b)
     rel = diff / np.maximum(np.abs(b), 1e-12)
     try:

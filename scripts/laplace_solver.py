@@ -373,8 +373,10 @@ ax[2].plot(resolutions, phi_errs, marker="o")
 #ax[2].set_yscale("log")
 ax[2].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
-plt.tight_layout()
+
 fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium in {coords} coords", fontsize=16)
+
+plt.tight_layout()
 fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)
 
 """

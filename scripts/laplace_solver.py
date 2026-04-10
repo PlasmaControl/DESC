@@ -352,8 +352,8 @@ for i, res in enumerate(resolutions):
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
     B_t_errs[i] = ((dot(B, e_theta) - D_theta @ phi)**2).mean()**0.5
-    B_z_errs = ((dot(B, e_zeta) - D_zeta @ phi)**2).mean()**0.5
-    phi_matrix = ((phi - phi_true)**2).mean()**0.5
+    B_z_errs[i] = ((dot(B, e_zeta) - D_zeta @ phi)**2).mean()**0.5
+    phi_errs[i] = ((phi - phi_true)**2).mean()**0.5
 
 
 # Plot errors vs resolution

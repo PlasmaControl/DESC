@@ -2,7 +2,6 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from functools import lru_cache
 
 from equinox import Module
 from interpax import CubicHermiteSpline, PPoly
@@ -146,15 +145,6 @@ class Bounce(Module, ABC):
     @abstractmethod
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line."""
-
-
-@lru_cache(maxsize=1)
-def _default_quad():
-    """Compute and cache the default quadrature instead of module level import time."""
-    return get_quadrature(
-        leggauss(32),
-        (automorphism_sin, grad_automorphism_sin),
-    )
 
 
 class Bounce2D(Bounce):
@@ -305,7 +295,16 @@ class Bounce2D(Bounce):
         is_reshaped = is_reshaped or is_fourier
         vander = setdefault(vander, {})
 
-        self._quad = get_quadrature(setdefault(quad, _default_quad()), automorphism)
+        self._quad = get_quadrature(
+            setdefault(
+                quad,
+                get_quadrature(
+                    leggauss(32),
+                    (automorphism_sin, grad_automorphism_sin),
+                ),
+            ),
+            automorphism,
+        )
         self._NFP = grid.NFP
         self._num_t = grid.num_theta
         self._modes_z, self._modes_t = rfft2_modes(
@@ -1472,7 +1471,13 @@ class Bounce1D(Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
-        quad = setdefault(quad, _default_quad())
+        quad = setdefault(
+            quad,
+            get_quadrature(
+                leggauss(32),
+                (automorphism_sin, grad_automorphism_sin),
+            ),
+        )
 
         self._quad = get_quadrature(quad, automorphism)
         self._data = {

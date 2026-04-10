@@ -36,13 +36,11 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
-            y = jnp.exp(x)
+            x = jnp.arange(2)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
-        y = jnp.exp(x)
+        x = jnp.arange(2)
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))
@@ -54,10 +52,10 @@ def print_backend_info():
     if use_jax:
         print(
             f"Using JAX backend: jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+            + f"jaxlib version={jaxlib.__version__}, dtype={x.dtype}."
         )
     else:
-        print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
+        print(f"Using NumPy backend: version={np.__version__}, dtype={x.dtype}.")
     print(
         "Using device: {}, with {:.2f} GB available memory.".format(
             desc_config.get("device"), desc_config.get("avail_mem")

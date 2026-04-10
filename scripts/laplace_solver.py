@@ -42,7 +42,7 @@ import os
 chunk_size = 50
 
 
-resolutions = np.linspace(24, 36, 7, dtype=int)
+resolutions = np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
 
 # Root mean square errors in B_t, B_z, and phi for each resolution, relative to the "true" values computed from the Green's function.
 B_t_errs = np.zeros_like(resolutions, dtype=float)
@@ -359,20 +359,21 @@ for i, res in enumerate(resolutions):
 # Plot errors vs resolution
 fig, ax = plt.subplots(1, 3, figsize=(20, 5))
 ax[0].plot(resolutions, B_t_errs, marker="o")
-ax[0].set_xscale("log")
-ax[0].set_yscale("log")
+#ax[0].set_xscale("log")
+#ax[0].set_yscale("log")
 ax[0].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[0].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
 ax[1].plot(resolutions, B_z_errs, marker="o")
-ax[1].set_xscale("log")
-ax[1].set_yscale("log")
+#ax[1].set_xscale("log")
+#ax[1].set_yscale("log")
 ax[1].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[1].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$", fontsize=12)
 ax[2].plot(resolutions, phi_errs, marker="o")
-ax[2].set_xscale("log")
-ax[2].set_yscale("log")
+#ax[2].set_xscale("log")
+#ax[2].set_yscale("log")
 ax[2].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
+plt.tight_layout()
 fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium in {coords} coords", fontsize=16)
 fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)
 

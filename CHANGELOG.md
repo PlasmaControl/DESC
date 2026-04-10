@@ -1,10 +1,20 @@
 Changelog
 =========
 
+
+Performance Improvements
+
+- Reduces import time of `desc.compute` module which is triggered by almost all other DESC modules. Now, `_build_data_index` uses depth-first search dependency tree construction algorithm.
+
+
+v0.17.1
+-------
+
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+
 
 v0.17.0
 -------

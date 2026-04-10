@@ -318,11 +318,11 @@ def fft_grid_data(p):
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
     kwargs = dict(
-        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
+        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta * grid.NFP,
-        num_transit=10,
-        num_well=20 * 10,
-        nufft_eps=1e-8,
+        num_transit=5,
+        num_well=20 * 5,
+        nufft_eps=1e-10,
     )
     data = eq.compute(fft_names, grid, surf_batch_size=1, **kwargs)
 
@@ -333,7 +333,7 @@ def fft_grid_data(p):
     d = eq.compute(fft_names, grid, surf_batch_size=2, data=d, **kwargs)
     for name in fft_names:
         np.testing.assert_allclose(
-            d[name], data[name], rtol=1e-8, atol=1e-8, err_msg=name
+            d[name], data[name], rtol=1e-9, atol=1e-9, err_msg=name
         )
 
     data = apply(data, grid.compress, fft_names)
@@ -349,13 +349,13 @@ def raz_grid_data(p):
     raz_names = ["old effective ripple", "old Gamma_c", "old Gamma_c Velasco"]
 
     eq = get("W7-X")
-    num_transit = 10
+    num_transit = 2
     Y_B = eq.N_grid * 2 * eq.NFP
     rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
-    data = eq.compute(raz_names, grid, num_well=20 * num_transit)
+    data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)
     data = apply(data, grid.compress, raz_names)
     return data

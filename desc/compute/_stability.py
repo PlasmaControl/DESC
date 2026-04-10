@@ -2002,23 +2002,19 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     b = mu[sort_idxs][0] * v
     diff = np.abs(a - b)
     rel = diff / np.maximum(np.abs(b), 1e-12)
-    if not np.allclose(a, b):
-        print(
-            f"max abs diff = {diff.max():.3e}, "
-            f"max rel diff = {rel.max():.3e}, "
-            f"mismatched = {(~np.isclose(a, b)).sum()}/{a.size}"
-        )
+    try:
+        np.testing.assert_allclose(a, b)
+    except AssertionError as e:
+        print(e)
 
     a = Ax(v)
     b = w[0]
     diff = np.abs(a - b)
     rel = diff / np.maximum(np.abs(b), 1e-12)
-    if not np.allclose(a, b):
-        print(
-            f"max abs diff = {diff.max():.3e}, "
-            f"max rel diff = {rel.max():.3e}, "
-            f"mismatched = {(~np.isclose(a, b)).sum()}/{a.size}"
-        )
+    try:
+        np.testing.assert_allclose(a, b)
+    except AssertionError as e:
+        print(e)
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))

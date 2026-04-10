@@ -1491,7 +1491,6 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     D_theta0 = transforms["diffmat"].D_theta
 
     # Square matrix
-    n_rho = D_rho0.shape[0]
     n_theta = D_theta0.shape[0]
     n_zeta = D_zeta0.shape[0]
 
@@ -1505,6 +1504,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     # Get differentiation matrices
     D_rho0 = transforms["diffmat"].D_rho
     D_rho0 = D_rho0[bc_mask, bc_mask]
+    n_rho = D_rho0.shape[0]
     
 
     # RG: Will fail for non-diagonal weight matrices

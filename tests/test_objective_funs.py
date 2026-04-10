@@ -1092,15 +1092,10 @@ class TestObjectiveFunction:
             expect_intersect=False,
             tol=None,
         ):
-            params = [  # ensure all params are arrays of floats
-                {k: np.array(list(map(float, v))) for k, v in data.items()}
-                for data in coils.params_dict
-            ]
             # vanilla
             obj1 = CoilSetMinDistance(coils, grid=grid)
             obj1.build()
             f1 = obj1.compute(params=coils.params_dict)
-            g1 = obj1.jac_unscaled(params)[0][0]
             assert f1.size == coils.num_coils
             np.testing.assert_allclose(f1, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
@@ -1128,12 +1123,16 @@ class TestObjectiveFunction:
             )
             obj4.build()
             f4 = obj4.compute(params=coils.params_dict)
-            g4 = obj1.jac_unscaled(params)[0][0]
             assert f4.size == coils.num_coils
             np.testing.assert_allclose(f4, mindist, rtol=5e-2, atol=1e-3)
             # test derivatives
-            for key in g1.keys():
-                np.testing.assert_allclose(g1[key], g4[key])
+            obj1 = ObjectiveFunction(obj1)
+            obj3 = ObjectiveFunction(obj3)
+            obj1.build()
+            obj3.build()
+            g1 = obj1.jac_unscaled(obj1.x(coils))
+            g3 = obj3.jac_unscaled(obj3.x(coils))
+            np.testing.assert_allclose(g1, g3)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -1142,7 +1141,7 @@ class TestObjectiveFunction:
         coils_linear = CoilSet.linspaced_linear(
             coil, n=n, displacement=[0, 0, disp], check_intersection=False
         )
-        test(coils_linear, disp / n, num_neighbors=1)
+        test(coils_linear, disp / n, num_neighbors=2)
 
         # planar toroidal coils, without symmetry
         # min points are at the inboard midplane and are corners of a square inscribed

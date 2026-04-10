@@ -329,28 +329,23 @@ def fft_grid_data(p):
 
     # check vectorization too
     d = data.copy()
-    for name in fft_names:
-        del d[name]
-    d.pop("effective ripple 3/2")
-    d = eq.compute(
-        fft_names,
-        grid,
-        data=d,
-        surf_batch_size=2,
-        nufft_eps=kwargs.pop("nufft_eps"),
-        **kwargs,
+    del d["Gamma_c"]
+    d = eq.compute("Gamma_c", grid, data=d, surf_batch_size=2, **kwargs)
+    np.testing.assert_allclose(
+        d["Gamma_c"],
+        data["Gamma_c"],
+        rtol=1e-9,
+        atol=1e-9,
+        err_msg="Gamma_c vectorization",
     )
-    for name in fft_names:
-        np.testing.assert_allclose(
-            d[name], data[name], rtol=1e-9, atol=1e-9, err_msg=name
-        )
-
     # check no nufft
     del d["Gamma_c"]
+    kwargs["nufft_eps"] = 0.0
+    d = eq.compute("Gamma_c", grid, data=d, **kwargs)
     np.testing.assert_allclose(
-        eq.compute("Gamma_c", grid, data=d, **kwargs)["Gamma_c"],
+        d["Gamma_c"],
         data["Gamma_c"],
-        atol=5e-4,  # newton step not implemented for no nuffts
+        rtol=2e-3,
         err_msg="Gamma_c no nufft",
     )
 

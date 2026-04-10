@@ -1407,6 +1407,7 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        device_id=0,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -1430,6 +1431,7 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
             use_softmin=use_softmin,
             softmin_alpha=softmin_alpha,
             dist_chunk_size=dist_chunk_size,
+            device_id=device_id,
         )
 
 

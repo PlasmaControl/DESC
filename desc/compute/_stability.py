@@ -1494,17 +1494,19 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     n_theta = D_theta0.shape[0]
     n_zeta = D_zeta0.shape[0]
 
-    # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
-    n_surf = n_theta * n_zeta
-    bc_mask = jnp.ones(3 * n_total)
-    bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
-    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
-
-
     # Get differentiation matrices
     D_rho0 = transforms["diffmat"].D_rho
+    
+    n_rho = D_rho0.shape[0] - 1
+    n_total = (n_rho+1) * n_theta * n_zeta
+
+    # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
+    n_surf = n_theta * n_zeta
+    bc_mask = jnp.ones(3 * n_total, dtype=bool)
+    bc_mask = bc_mask.at[:n_surf].set(False)                    # ρ=0 in ρ-block
+    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(False)   # ρ=1 in ρ-block
+    
     D_rho0 = D_rho0[bc_mask, bc_mask]
-    n_rho = D_rho0.shape[0]
     
 
     # RG: Will fail for non-diagonal weight matrices
@@ -1517,8 +1519,6 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         return u.reshape(n_rho, n_theta, n_zeta)
 
     W = _reshape(jnp.kron(w_rho, jnp.kron(w_theta, w_zeta)))
-
-    n_total = n_rho * n_theta * n_zeta
 
     iota = _reshape(data["iota"])
     psi_r = _reshape(data["psi_r"]) / (a_N**2 * B_N)

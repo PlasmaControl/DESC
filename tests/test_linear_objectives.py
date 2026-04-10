@@ -1094,7 +1094,8 @@ def test_share_parameters_four_objects():
 
     subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": True, "i_l": [1, 2]})
     subobj.build()
-    obj = ObjectiveFunction(subobj)
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj = ObjectiveFunction(subobj)
     obj.build()
 
     # check dimensions
@@ -1126,7 +1127,8 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
 
     subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": [2]})
     subobj.build()
-    obj = ObjectiveFunction(subobj)
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj = ObjectiveFunction(subobj)
     obj.build()
 
     # check dimensions

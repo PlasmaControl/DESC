@@ -1488,20 +1488,30 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
             D_zeta0 = 1j * n_mode_axisym * jnp.array([[1]])
     else:
         D_zeta0 = transforms["diffmat"].D_zeta
+    D_theta0 = transforms["diffmat"].D_theta
+
+    # Square matrix
+    n_rho = D_rho0.shape[0]
+    n_theta = D_theta0.shape[0]
+    n_zeta = D_zeta0.shape[0]
+
+    # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
+    n_surf = n_theta * n_zeta
+    bc_mask = jnp.ones(3 * n_total)
+    bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
+    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
+
 
     # Get differentiation matrices
     D_rho0 = transforms["diffmat"].D_rho
-    D_theta0 = transforms["diffmat"].D_theta
+    D_rho0 = D_rho0[bc_mask, bc_mask]
+    
 
     # RG: Will fail for non-diagonal weight matrices
     w_rho = jnp.diagonal(transforms["diffmat"].W_rho)
     w_theta = jnp.diagonal(transforms["diffmat"].W_theta)
     w_zeta = jnp.diagonal(transforms["diffmat"].W_zeta)
 
-    # Square matrix
-    n_rho = D_rho0.shape[0]
-    n_theta = D_theta0.shape[0]
-    n_zeta = D_zeta0.shape[0]
 
     def _reshape(u):
         return u.reshape(n_rho, n_theta, n_zeta)
@@ -1607,15 +1617,8 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     Linv_D = jax.lax.linalg.triangular_solve(L_D, I3, left_side=True, lower=True)
     Linv_DT = jnp.swapaxes(Linv_D, -1, -2)
 
-    # Dirichlet BC mask: ξ^ρ = 0 at ρ=0 and ρ=1
-    n_surf = n_theta * n_zeta
-    bc_mask = jnp.ones(3 * n_total)
-    bc_mask = bc_mask.at[:n_surf].set(0.0)                    # ρ=0 in ρ-block
-    bc_mask = bc_mask.at[n_total - n_surf:n_total].set(0.0)   # ρ=1 in ρ-block
-
-
     def Ax(x_flat):
-        x_flat = x_flat * bc_mask  # enforce BC on input
+        x_flat = x_flat #* bc_mask  # enforce BC on input
         # --no-verify solver → physical: u = D · L_D^{-T} · x ---
         x = jnp.transpose(x_flat.reshape(3, n_total), axes=(1, 0))
         x = diagBsqinv * jnp.einsum("lij,lj->li", Linv_DT, x)  # use Linv_DT here
@@ -1970,7 +1973,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
         y = ys.T + yus.T
 
-        return y.flatten() * bc_mask  # enforce BC on output
+        return y.flatten() #* bc_mask  # enforce BC on output
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -2e-4)
@@ -1982,11 +1985,11 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     def OPinv(b):
         def Ashift(x):
             # identity on BC DOFs so CG sees a non-singular operator everywhere
-            return Ax(x) - sigma * (x * bc_mask) + (1.0 - bc_mask) * x
+            return Ax(x) - sigma * x#(x * bc_mask) + (1.0 - bc_mask) * x
 
         # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b * bc_mask, tol=1e-8, maxiter=int(2 * n_total))
-        return y * bc_mask
+        y, _ = cg(Ashift, b, tol=1e-8, maxiter=int(2 * n_total))#* bc_mask, tol=1e-8, maxiter=int(2 * n_total))
+        return y# * bc_mask
 
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
     alg = eig.eigh_partial(tridiag)
@@ -2005,6 +2008,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     try:
         np.testing.assert_allclose(a, b)
     except AssertionError as e:
+        print("OPinv(v) \neq mu * v")
         print(e)
 
     a = Ax(v)
@@ -2012,6 +2016,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     diff = np.abs(a - b)
     rel = diff / np.maximum(np.abs(b), 1e-12)
     try:
+        print("Ax(v) \neq w * v")
         np.testing.assert_allclose(a, b)
     except AssertionError as e:
         print(e)

@@ -1,10 +1,20 @@
 Changelog
 =========
 
+
+New Features
+
+- Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives has to be built before building the `ObjectiveFunction`.
+
+
+v0.17.1
+-------
+
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+
 
 v0.17.0
 -------

@@ -1092,27 +1092,32 @@ class TestObjectiveFunction:
             expect_intersect=False,
             tol=None,
         ):
+            params = [  # ensure all params are arrays of floats
+                {k: np.array(list(map(float, v))) for k, v in data.items()}
+                for data in coils.params_dict
+            ]
             # vanilla
             obj1 = CoilSetMinDistance(coils, grid=grid)
             obj1.build()
-            f = obj1.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist)
+            f1 = obj1.compute(params=coils.params_dict)
+            g1 = obj1.jac_unscaled(params)[0][0]
+            assert f1.size == coils.num_coils
+            np.testing.assert_allclose(f1, mindist)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
             # softmin
             obj2 = CoilSetMinDistance(
                 coils, grid=grid, use_softmin=True, softmin_alpha=10
             )
             obj2.build()
-            f = obj2.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
+            f2 = obj2.compute(params=coils.params_dict)
+            assert f2.size == coils.num_coils
+            np.testing.assert_allclose(f2, mindist, rtol=5e-2, atol=1e-3)
             # num_neighbors
             obj3 = CoilSetMinDistance(coils, grid=grid, num_neighbors=num_neighbors)
             obj3.build()
-            f = obj3.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist)
+            f3 = obj3.compute(params=coils.params_dict)
+            assert f3.size == coils.num_coils
+            np.testing.assert_allclose(f3, mindist)
             # softmin & num_neighbors
             obj4 = CoilSetMinDistance(
                 coils,
@@ -1122,9 +1127,13 @@ class TestObjectiveFunction:
                 num_neighbors=num_neighbors,
             )
             obj4.build()
-            f = obj4.compute(params=coils.params_dict)
-            assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist, rtol=5e-2, atol=1e-3)
+            f4 = obj4.compute(params=coils.params_dict)
+            g4 = obj1.jac_unscaled(params)[0][0]
+            assert f4.size == coils.num_coils
+            np.testing.assert_allclose(f4, mindist, rtol=5e-2, atol=1e-3)
+            # test derivatives
+            for key in g1.keys():
+                np.testing.assert_allclose(g1[key], g4[key])
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3

@@ -882,9 +882,10 @@ class CoilSetMinDistance(_Objective):
         runtime.
     num_neighbors : int, optional
         Limit the pairwise distance computation to the num_neighbors nearest neighbors
-        per coil, determined by centroid distance. Which coils are the nearest neighbors
-        is assumed fixed during the derivative computation. Default value of None or
-        num_neighbors >= num_coils computes the full pairwise distances.
+        per coil, determined by centroid distance. This is helpful for reducing memory
+        usage when you have hundreds of small coils, with a recommended value of about
+        num_neighbors = 20. Default value of None or num_neighbors >= num_coils - 1
+        computes the full pairwise distances.
 
     """
 
@@ -1016,7 +1017,7 @@ class CoilSetMinDistance(_Objective):
 
         def body(k):
             # dist[i,j,n] is the distance from the jth point on the kth coil
-            # to the nth point on the ith coil
+            # to the nth point on the ith coil; shape(ncoils,num_nodes,num_nodes)
             coil_pts = pts[k]
             other_pts = get_other_pts(k)
             dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)

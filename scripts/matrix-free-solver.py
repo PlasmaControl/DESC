@@ -231,7 +231,6 @@ data = eq.compute(
     incompressible=False,
     gamma=100,
     v_guess=v_guess,
-    axisym=True
 )
 
 print(data["finite-n lambda matfree"])

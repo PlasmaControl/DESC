@@ -159,6 +159,7 @@ for i, res in enumerate(resolutions):
                     pressure=p_profile,
                     Psi=1,
                 )
+            eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
             eq.save(save_path + eq_save_name)
     else:
         eq.surface = field
@@ -237,6 +238,10 @@ for i, res in enumerate(resolutions):
     override = False
     print(save_path + phi_save_name)
     print(os.path.exists(save_path + phi_save_name))
+
+    # x0 for Green's function
+    x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
+
     if os.path.exists(save_path + phi_save_name) and not override:
         print("loading phi matrix")
         phi_matrix = np.load(save_path + phi_save_name)
@@ -313,7 +318,6 @@ for i, res in enumerate(resolutions):
         data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
         
         # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
-        x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
         B = _grad_G(data["x"] - x0)
 
         # Compute B dot n

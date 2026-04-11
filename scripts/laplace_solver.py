@@ -272,7 +272,7 @@ for i, res in enumerate(resolutions):
             field = SourceFreeField(surface, grid.M, grid.N)
             data, RpZ_data = field.compute(
                 ["∇φ", "Phi", "x", "n_rho"],
-                grid,
+                pest_grid,
                 data=data,
                 problem="exterior Neumann",
                 on_boundary=True,

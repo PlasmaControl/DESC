@@ -310,8 +310,10 @@ for i, res in enumerate(resolutions):
     else:
         # rho, theta, zeta locations of surface nodes, ordered by (zeta, theta)
         compute_grid = pest_grid
-
+        
+    # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     phi_true = _G(data["x"] - x0)
+    B = _grad_G(data["x"] - x0)
     if fixed_point:
         phi = data["Phi"]
         B_theta = dot(data["∇φ"], data["e_theta"])
@@ -319,9 +321,6 @@ for i, res in enumerate(resolutions):
     else:
         # Compute values at surface nodes
         data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
-        
-        # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
-        B = _grad_G(data["x"] - x0)
 
         # Compute B dot n
         B_dot_n = dot(B, data["n_rho"])

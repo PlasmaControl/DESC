@@ -296,8 +296,11 @@ for i, res in enumerate(resolutions):
 
         # phi_matrix_pest is in DESC Fortran order (theta fastest).
         # Reorder to AGNI C order (zeta fastest) expected by the stability solver.
-
-        np.save(save_path + phi_save_name, phi_matrix)
+        if fixed_point:
+            phi_save_name = phi_save_name.replace("_matrix.npy", "_fixed_point.npz")
+            np.savez(save_path + phi_save_name, **data)
+        else:
+            np.save(save_path + phi_save_name, phi_matrix)
 
     n_surf = n_theta * n_zeta
 

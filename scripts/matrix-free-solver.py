@@ -14,77 +14,22 @@ from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
 from desc.utils import dot
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
-from desc.io import load
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
 
-# make or load an ultra high aspect-ratio tokamak (essentially a screw pinch)
-from desc.equilibrium import Equilibrium
-from desc.continuation import solve_continuation_automatic
-from desc.geometry import FourierRZToroidalSurface
-from desc.profiles import PowerSeriesProfile
-from desc.grid import QuadratureGrid
-import os
-
-# Input parameters
-p_multiplier = 1/2 # Factor to multiply solovev pressure profile by
-R = 4  # Major radius
-aspect_ratio = 25  # Aspect ratio of the tokamak
-a = R / aspect_ratio  # Minor radius
-save_path = "./high_aspect_ratio_tokamak/"
-save_tag = f"axisym_AR{aspect_ratio}_p{p_multiplier}_R{R}"
-save_name = f"equilibrium_{save_tag}.h5"
-os.makedirs(save_path, exist_ok=True)
-
-print("solving equilibrium")
-solovev = get("solovev")
-override = True
-if os.path.exists(save_path + save_name) and not override:
-    eq = load(save_path + save_name)
-else:
-    p_coeffs = np.array([1.8e4, 0, -3.6e4, 0, 1.8e4])  # Pressure profile coefficients
-    # Create a very high aspect ratio tokamak
-    eq = Equilibrium(
-        L=12,
-        M=12,
-        N=0,
-        surface=FourierRZToroidalSurface.from_shape_parameters(
-            major_radius=R,
-            aspect_ratio=aspect_ratio,
-            elongation=1,
-            triangularity=0,
-            squareness=0,
-            eccentricity=0,
-            torsion=0,
-            twist=0,
-            NFP=solovev.NFP,
-            sym=solovev.sym,
-        ),
-        NFP=1,
-        #current=PowerSeriesProfile([0, 0, I]),
-        iota = PowerSeriesProfile([1, 0.0, 0.2]),#PowerSeriesProfile([0.3, 0.0, 0.2]),
-        pressure=p_multiplier * solovev.pressure.copy(),#PowerSeriesProfile(p_coeffs),
-        Psi=solovev.Psi,
-    )
-
-    # Solve equilbrium
-    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
-    eq.save(save_path + save_name)
-
-print("equilibrium solved")
-#eq = get("SOLOVEV")
-
-# resolution for low-res solve
-n_rho = 26
-n_theta = 32
-n_zeta = 1#9
+#eq = get("precise_QH")
+#eq = get("precise_QA")
+eq = get("HSX")#get("W7-X")
+n_rho = 12
+n_theta = 12
+n_zeta = 9
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
 #n_theta = 32
 #n_zeta = 10
-print("making input grid and diffmats")
+
 x, w = leggauss_lob(n_rho)
 
 rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
@@ -118,8 +63,6 @@ diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=
 reshaped_nodes = jnp.reshape(
     grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
 )
-print("mapping coordinates")
-
 rtz_nodes = map_coordinates(
     eq,
     reshaped_nodes,  # (ρ,θ_PEST,ζ)
@@ -129,17 +72,9 @@ rtz_nodes = map_coordinates(
     tol=1e-12,
     maxiter=50,
 )
-
-print("coordinates mapped")
-
-print("making grid of mapped coordinates")
 grid = Grid(rtz_nodes)
 
-print("computing eigenmode at low res")
-tic = time.time()
-data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100, axisym=True)
-toc = time.time()
-print(f"matrix full took {toc-tic} s.")
+data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100)
 
 print(data["finite-n lambda"])
 X = data["finite-n eigenfunction"]
@@ -175,6 +110,7 @@ psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
 #plt.plot(theta, xi_sup_rho[:, :, 0].T * psi_r[:, :, 0].T, "-og")
 ##plt.plot(theta, xi_sup_rho[:, :, 0].T, '-og');
 #plt.show()
+
 # SAVE low-res grids & eigenfunction components (to upscale later)
 rho_low = rho
 theta_low = np.concatenate((theta, np.array([2*np.pi])))

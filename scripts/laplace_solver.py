@@ -1,3 +1,6 @@
+from desc import set_device
+set_device("gpu")
+
 import numpy as np
 from desc.geometry import FourierRZToroidalSurface
 from desc.utils import rpz2xyz
@@ -33,14 +36,12 @@ import os
 
 from newcomb import *
 
-from desc import set_device
-set_device("gpu")
-
 from desc.integrals.singularities import _grad_G
 import os
 
 chunk_size = 50
 
+fixed_point = True
 
 resolutions = np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
 
@@ -51,9 +52,12 @@ phi_errs = np.zeros_like(resolutions, dtype=float)
 
 for i, res in enumerate(resolutions):
     # Misc inputs
-    pest = True
+    if fixed_point:
+        pest = False
+    else:
+        pest = True
     coords = "rvp" if pest else "rtz" 
-    from_scratch = False
+    from_scratch = True
 
     # Equilibrium paremeteters
     if from_scratch:
@@ -83,7 +87,7 @@ for i, res in enumerate(resolutions):
         p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
         p_profile = PowerSeriesProfile(p_coeffs)
     else:
-        eq_tag = "HSX"
+        eq_tag = "ESTELL"
         axisym = False
         n_mode_axisym = 0
 
@@ -119,17 +123,11 @@ for i, res in enumerate(resolutions):
 
     # Make surface
     if from_scratch:
-        surface = FourierRZToroidalSurface.from_shape_parameters(
-            major_radius=R0,
-            aspect_ratio=aspect_ratio,
-            elongation=1,
-            triangularity=0,
-            squareness=0,
-            eccentricity=0,
-            torsion=0,
-            twist=0,
-            NFP=NFP,
-            sym=True,
+        surface = FourierRZToroidalSurface(
+            R_lmn=[R0, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
         )
 
     else:
@@ -146,14 +144,14 @@ for i, res in enumerate(resolutions):
 
     # NOTE: equilibrium LCFS must be ForceFreeField object 
     if from_scratch:
-        override = True
+        override = False
         if os.path.exists(save_path + eq_save_name) and (not override):
             eq = load(save_path + eq_save_name)
         else:
             eq = Equilibrium(
                     L=12, 
                     M=12,
-                    N=0,
+                    N=8,
                     surface=field,
                     NFP=field.NFP,
                     iota = iota_profile,
@@ -164,13 +162,6 @@ for i, res in enumerate(resolutions):
             eq.save(save_path + eq_save_name)
     else:
         eq.surface = field
-
-    print(eq.surface.Phi_basis.M, eq.surface.Phi_basis.N)
-
-    # Evaluate stability using Rahul's method
-    # The rest of the script is basically unchanged from what Rahul sent me
-    # resolution for low-res solve
-
 
     # PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator
     pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
@@ -267,6 +258,27 @@ for i, res in enumerate(resolutions):
             phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
             phi_matrix = phi_matrix.transpose(1,0,3,2)
             phi_matrix = phi_matrix.reshape(n_surf, n_surf)
+        elif fixed_point:
+            maxiter=30
+            chunk_size=1000
+            data = surface.compute(["x", "n_rho", "e_theta", "e_zeta"], grid=grid, basis="xyz")
+            data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
+
+            field = SourceFreeField(surface, grid.M, grid.N)
+            data, RpZ_data = field.compute(
+                ["∇φ", "Phi", "x", "n_rho"],
+                grid,
+                data=data,
+                problem="exterior Neumann",
+                on_boundary=True,
+                maxiter=maxiter,
+                full_output=True,
+                chunk_size=chunk_size,
+                basis="xyz",
+            )
+            assert data is RpZ_data
+            print("num iterations:", data["num iter"])
+            print("Phi error     :", data["Phi error"])
         else:
             data_phi = eq.surface.compute(
                 ["phi_matrix"],
@@ -291,19 +303,46 @@ for i, res in enumerate(resolutions):
         # rho, theta, zeta locations of surface nodes, ordered by (zeta, theta)
         compute_grid = pest_grid
 
-    # Compute values at surface nodes
-    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
-    
-    # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
-    x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
-    B = _grad_G(data["x"] - x0)
-
-    # Compute B dot n
-    B_dot_n = dot(B, data["n_rho"])
-
-    # Compute phi and compare to expected value
-    phi = phi_matrix @ B_dot_n
     phi_true = _G(data["x"] - x0)
+    if fixed_point:
+        phi = data["Phi"]
+        B_theta = dot(data["∇φ"], data["e_theta"])
+        B_zeta = dot(data["∇φ"], data["e_zeta"])
+    else:
+        # Compute values at surface nodes
+        data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
+        
+        # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
+        x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
+        B = _grad_G(data["x"] - x0)
+
+        # Compute B dot n
+        B_dot_n = dot(B, data["n_rho"])
+
+        # Compute phi and compare to expected value
+        
+        phi = phi_matrix @ B_dot_n
+
+        # Compute B dot e_theta and B dot e_zeta, and compare to D_theta @ phi and D_zeta @ phi, respectively.
+        if pest:
+            e_theta = data["e_theta_PEST"]
+            e_zeta = data["e_phi"]
+        else:
+            e_theta = data["e_theta"]
+            e_zeta = data["e_zeta"]
+
+        # Make differentiation matrices
+        I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
+        I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))
+        if pest:
+            D_theta = jax.lax.stop_gradient(jnp.kron(D1, I_zeta0))
+            D_zeta = jax.lax.stop_gradient(jnp.kron(I_theta0, D2))
+        else:
+            D_theta = jax.lax.stop_gradient(jnp.kron(I_zeta0, D1))
+            D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
+
+        B_theta = D_theta @ phi
+        B_zeta = D_zeta @ phi
 
     # Plot phi from matrix vs phi from Green's function, and save
     fig, ax = plt.subplots(1, 1, figsize=(10, 7))
@@ -315,32 +354,12 @@ for i, res in enumerate(resolutions):
     fig.suptitle("PEST grid: checking that $\\Phi$ from matrix matches $G(\\mathbf{x}-\\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
     fig.savefig(plot_path + f"phi_plot_{save_tag}.png", dpi=150)
 
-    # Compute B dot e_theta and B dot e_zeta, and compare to D_theta @ phi and D_zeta @ phi, respectively.
-    if pest:
-        e_theta = data["e_theta_PEST"]
-        e_zeta = data["e_phi"]
-    else:
-        e_theta = data["e_theta"]
-        e_zeta = data["e_zeta"]
-
-
-    # Make differentiation matrices
-    
-    I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
-    I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))
-    if pest:
-        D_theta = jax.lax.stop_gradient(jnp.kron(D1, I_zeta0))
-        D_zeta = jax.lax.stop_gradient(jnp.kron(I_theta0, D2))
-    else:
-        D_theta = jax.lax.stop_gradient(jnp.kron(I_zeta0, D1))
-        D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
-
 
     # Plot B dot e_theta vs D_theta @ phi, and B dot e_zeta vs D_zeta @ phi, and save
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
-    ax[0].plot(dot(B, e_zeta), D_zeta @ phi, linestyle="None", marker=".")
+    ax[0].plot(dot(B, e_zeta), B_zeta, linestyle="None", marker=".")
     ax[0].plot(dot(B, e_zeta), dot(B, e_zeta), linestyle="dashed")
-    ax[1].plot(dot(B, e_theta), D_theta @ phi, linestyle="None", marker=".")
+    ax[1].plot(dot(B, e_theta), B_theta, linestyle="None", marker=".")
     ax[1].plot(dot(B, e_theta), dot(B, e_theta), linestyle="dashed")
     ax[0].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$ vs $D_\\zeta \\Phi$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
     ax[0].set_xlabel("$\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$", fontsize=12)
@@ -351,8 +370,8 @@ for i, res in enumerate(resolutions):
     fig.suptitle("Checking that derivatives of $\\Phi$ from matrix match $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ and $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
-    B_t_errs[i] = ((dot(B, e_theta) - D_theta @ phi)**2).mean()**0.5
-    B_z_errs[i] = ((dot(B, e_zeta) - D_zeta @ phi)**2).mean()**0.5
+    B_t_errs[i] = ((dot(B, e_theta) - B_theta)**2).mean()**0.5
+    B_z_errs[i] = ((dot(B, e_zeta) - B_zeta @ phi)**2).mean()**0.5
     phi_errs[i] = ((phi - phi_true)**2).mean()**0.5
 
 

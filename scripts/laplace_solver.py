@@ -310,10 +310,19 @@ for i, res in enumerate(resolutions):
     else:
         # rho, theta, zeta locations of surface nodes, ordered by (zeta, theta)
         compute_grid = pest_grid
-        
+
     # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     phi_true = _G(data["x"] - x0)
     B = _grad_G(data["x"] - x0)
+
+    # Basis vectors at surface nodes
+    if pest:
+        e_theta = data["e_theta_PEST"]
+        e_zeta = data["e_phi"]
+    else:
+        e_theta = data["e_theta"]
+        e_zeta = data["e_zeta"]
+        
     if fixed_point:
         phi = data["Phi"]
         B_theta = dot(data["∇φ"], data["e_theta"])
@@ -326,16 +335,7 @@ for i, res in enumerate(resolutions):
         B_dot_n = dot(B, data["n_rho"])
 
         # Compute phi and compare to expected value
-        
         phi = phi_matrix @ B_dot_n
-
-        # Compute B dot e_theta and B dot e_zeta, and compare to D_theta @ phi and D_zeta @ phi, respectively.
-        if pest:
-            e_theta = data["e_theta_PEST"]
-            e_zeta = data["e_phi"]
-        else:
-            e_theta = data["e_theta"]
-            e_zeta = data["e_zeta"]
 
         # Make differentiation matrices
         I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))

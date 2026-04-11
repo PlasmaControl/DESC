@@ -21,9 +21,9 @@ from scipy.interpolate import RegularGridInterpolator
 #eq = get("precise_QH")
 #eq = get("precise_QA")
 eq = get("HSX")#get("W7-X")
-n_rho = 12
-n_theta = 12
-n_zeta = 9
+n_rho = 14
+n_theta = 14
+n_zeta = 14
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -203,8 +203,6 @@ data = eq.compute(
     incompressible=False,
     gamma=100,
     v_guess=v_guess,
-    axisym=False,
-    #sigma=data["finite-n lambda"].min()-(2e-4),
 )
 
 print(data["finite-n lambda matfree"])
@@ -219,8 +217,3 @@ toc = time.time()
 print(f"matrix free took {toc-tic} s.")
 
 print(data["finite-n lambda matfree"].min())
-
-np.save(save_path + f"xi_rho_{save_tag}.npy", xi_sup_rho_final)
-np.save(save_path + f"xi_theta_{save_tag}.npy", xi_sup_theta_final)
-np.save(save_path + f"xi_zeta_{save_tag}.npy", xi_sup_zeta_final)
-np.save(save_path + f"lambda_{save_tag}.npy", data["finite-n lambda matfree"])

@@ -1,7 +1,7 @@
 # A script to set up and solve a high aspect-ratio tokamak equilibrium using DESC,
 # and then evaluate its stability using Newcomb's procedure.
-from desc import set_device
-set_device("gpu")
+#from desc import set_device
+#set_device("gpu")
 
 import pdb
 import time

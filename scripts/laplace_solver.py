@@ -68,7 +68,7 @@ for i, res in enumerate(resolutions):
         n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
         NFP = 1  # Number of field periods
 
-        name = "Low aspect ratio non-axisymmetric"
+        name = "Low aspect ratio non-axisym"
         fixed_iota = True
 
         if fixed_iota:
@@ -353,7 +353,7 @@ for i, res in enumerate(resolutions):
         B_zeta = D_zeta @ phi
 
     # title to display on plots
-    eq_title = f"; {name} equilibrium, M={M}, N={N} in {coords} coords"
+    eq_title = f"\n {name} equilibrium, M={M}, N={N} in {coords} coords"
 
     # Plot phi from matrix vs phi from Green's function, and save
     fig, ax = plt.subplots(1, 1, figsize=(10, 7))
@@ -362,8 +362,9 @@ for i, res in enumerate(resolutions):
     ax.set_title("$\\Phi$ from matrix vs $G(\\mathbf{x}-\\mathbf{x}_0)$" + eq_title, fontsize=14)
     ax.set_xlabel("$G(\\mathbf{x}-\\mathbf{x}_0)$", fontsize=12)
     ax.set_ylabel("$\\Phi$ from matrix", fontsize=12)
+    fig.tight_layout()
     fig.savefig(plot_path + f"phi_plot_{save_tag}.png", dpi=150)
-
+    
 
     # Plot B dot e_theta vs D_theta @ phi, and B dot e_zeta vs D_zeta @ phi, and save
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
@@ -378,6 +379,7 @@ for i, res in enumerate(resolutions):
     ax[1].set_xlabel("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
     ax[1].set_ylabel("$D_\\theta \\Phi$ from matrix", fontsize=12)
     fig.suptitle("Checking that derivatives of $\\Phi$ from matrix match $\\nabla G(\\mathbf{x}-\\mathbf{x}_0)$", fontsize=16)
+    fig.tight_layout()
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
     B_t_errs[i] = ((dot(B, e_theta) - B_theta)**2).mean()**0.5
@@ -405,7 +407,7 @@ ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
 
 fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution" + eq_title, fontsize=16)
 
-plt.tight_layout()
+fig.tight_layout()
 fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)
 
 """

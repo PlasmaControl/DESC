@@ -1976,7 +1976,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
     sigma = kwargs.get("sigma", -2e-4)
-    num_matvecs = 10
+    num_matvecs = 50
 
 
     # get eigenvalues of (A − σI)⁻¹ instead of A, which are related to the eigenvalues of A by λ = σ + 1/μ
@@ -1991,7 +1991,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         return y#* bc_mask
 
     # --no-verify tridiag = decomp.tridiag_sym(num_matvecs, reortho="full",materialize=True)
-    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=False)
+    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
     alg = eig.eigh_partial(tridiag)
     mu, vecs = alg(lambda x: OPinv(x), v0)
     print(vecs.shape)

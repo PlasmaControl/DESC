@@ -16,14 +16,21 @@ from desc.utils import dot
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-
+import os
 
 #eq = get("precise_QH")
 #eq = get("precise_QA")
-eq = get("W7-X")
+name = "W7-X"
+eq = get(name)
 n_rho = 18
 n_theta = 18
 n_zeta = 9
+
+# save directory
+save_path = "eigenvalue_solve/"
+lr_save_name = f"low_res_efunc_{name}_n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}.npy"
+lr_evalue_save_name = f"low_res_evalue_{name}_n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}.npy"
+os.makedirs(save_path, exist_ok=True)
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -73,11 +80,16 @@ rtz_nodes = map_coordinates(
     maxiter=50,
 )
 grid = Grid(rtz_nodes)
+if not os.path.exists(save_path + lr_save_name):
+    data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100)
+    print(data["finite-n lambda"])
+    X = data["finite-n eigenfunction"]
 
-data = eq.compute("finite-n lambda", grid=grid, diffmat=diffmat, incompressible=False, gamma=100)
-
-print(data["finite-n lambda"])
-X = data["finite-n eigenfunction"]
+    np.save(save_path + lr_save_name, X)
+    np.save(save_path + lr_evalue_save_name, data["finite-n lambda"])
+else:
+    print(f"Loading low-res eigenfunction from {save_path + lr_save_name}")
+    X = np.load(save_path + lr_save_name)
 
 idx0 = (n_rho - 2) * n_theta * n_zeta
 idx1 = idx0 + (n_rho) * n_theta * n_zeta
@@ -101,7 +113,7 @@ xi_sup_theta = np.concatenate((xi_sup_theta, xi_sup_theta[:, :, 0:1]), axis=2)
 xi_sup_zeta = np.concatenate((xi_sup_zeta0, xi_sup_zeta0[:, :, 0:1]), axis=2)
 xi_sup_zeta = np.concatenate((xi_sup_zeta, xi_sup_zeta[:, 0:1, :]), axis=1)
 
-psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
+# psi_r = np.reshape(data["psi_r"], (n_rho, n_theta, n_zeta))
 
 #rtz_nodes
 #plt.plot(rho, xi_sup_rho[:, :, 0] * psi_r[:, :, 0], "-or")

@@ -744,15 +744,12 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     (ϑ, NFP ζ) coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to
     F(α=α₀ ± ε, ζ) with ε → 0 as f converges to F.
 
-    This property was mentioned because parameterizing the stream map in (α, ζ) enables
-    partial summation. However, the small discontinuity due to discretization error
-    between branch cuts is undesirable as it can give significant error to the singular
-    integrals whose integration boundary is near a branch cut. If we were using splines
-    instead of pseudo-spectral methods to interpolate then we would have to account
-    for this.
-
     """
+    X = angle.shape[-2]
+    Y = truncate_rule(angle.shape[-1])
     num_alpha = alpha.size
+    domain = (0, 2 * jnp.pi / NFP)
+
     # peeling off field lines
     alpha = get_alphas(alpha, iota, num_transit, NFP)
     if angle.ndim == 2:
@@ -762,8 +759,6 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     # (since this avoids modding on more points later and keeps θ bounded).
     alpha %= 2 * jnp.pi
 
-    domain = (0, 2 * jnp.pi / NFP)
-    Y = truncate_rule(angle.shape[-1])
     delta = (
         FourierChebyshevSeries(angle, domain, truncate=Y)
         .compute_cheb(alpha)
@@ -772,6 +767,11 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+    if X < 24:
+        # Short circuit convergence to enforce continuity. This is needed as
+        # we assume continuity of |B| along B when gathering bounce points.
+        delta = PiecewiseChebyshevSeries.stitch(delta)
+
     return PiecewiseChebyshevSeries(delta, domain)
 
 

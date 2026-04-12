@@ -13,6 +13,7 @@ from functools import partial
 
 import numpy as np
 from jax.scipy.sparse.linalg import cg
+from jax.experimental.sparse.linalg import lobpcg_standard
 from scipy.constants import mu_0
 from scipy.sparse.linalg import eigsh
 
@@ -1981,7 +1982,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     #   largest eigenvalue of (-A)  ==  -lambda_min(A)
     # X must be shape (n, k); we search for k=1 eigenvector.
     X0 = v0.reshape(-1, 1)
-    theta, U, iters = jax.experimental.sparse.linalg.lobpcg_standard(
+    theta, U, iters = lobpcg_standard(
         lambda x: -Ax(x), X0, m=num_matvecs
     )
     # theta[0] is the largest eigenvalue of -A, so lambda_min = -theta[0]

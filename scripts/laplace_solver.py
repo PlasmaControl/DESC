@@ -266,7 +266,7 @@ for i, res in enumerate(resolutions):
         elif fixed_point:
             maxiter=30
             chunk_size=1000
-            data = surface.compute(["x", "n_rho", "e_theta", "e_zeta"], grid=grid, basis="xyz")
+            data = surface.compute(["x", "n_rho", "e_theta", "e_zeta"], grid=pest_grid, basis="xyz")
             data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
 
             field = SourceFreeField(surface, grid.M, grid.N)

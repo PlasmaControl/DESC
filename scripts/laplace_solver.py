@@ -126,32 +126,26 @@ for i, res in enumerate(resolutions):
 
 
     # Make surface
-    if from_scratch:
-        surface = FourierRZToroidalSurface(
-            R_lmn=[R0, 1, 0.2],
-            Z_lmn=[-2, -0.2],
-            modes_R=[[0, 0], [1, 0], [0, 1]],
-            modes_Z=[[-1, 0], [0, -1]],
-        )
-
-    else:
+    if not from_scratch:
         eq = get(eq_tag)
         eq.change_resolution(NFP=1)
         surface = eq.surface
         NFP = eq.NFP
 
-    #assert surface.NFP == 1
-
-
-    # Precompute interpolator and surface values
-    field = SourceFreeField(surface, M, N)
 
     # NOTE: equilibrium LCFS must be ForceFreeField object 
     if from_scratch:
-        override = False
+        override = True
         if os.path.exists(save_path + eq_save_name) and (not override):
             eq = load(save_path + eq_save_name)
         else:
+            surface = FourierRZToroidalSurface(
+                R_lmn=[R0, 1, 0.2],
+                Z_lmn=[-2, -0.2],
+                modes_R=[[0, 0], [1, 0], [0, 1]],
+                modes_Z=[[-1, 0], [0, -1]],
+            )
+            field = SourceFreeField(surface, M, N)
             eq = Equilibrium(
                     L=12, 
                     M=12,

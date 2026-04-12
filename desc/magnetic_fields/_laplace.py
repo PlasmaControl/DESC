@@ -60,6 +60,7 @@ class SourceFreeField(FourierRZToroidalSurface):
     """
 
     _immediate_attributes_ = ["_surface", "_Phi_basis", "_B0", "I", "Y"]
+    _io_attrs_ = FourierRZToroidalSurface._io_attrs_ + ["_Phi_basis", "_B0", "I", "Y"]
 
     def __init__(
         self,

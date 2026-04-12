@@ -284,6 +284,11 @@ for i, res in enumerate(resolutions):
             assert data is RpZ_data
             print("num iterations:", data["num iter"])
             print("Phi error     :", data["Phi error"])
+
+            # phi from fixed-point iteration, and its derivatives along the basis vectors
+            phi = data["Phi"]
+            B_theta = dot(data["∇φ"], data["e_theta"])
+            B_zeta = dot(data["∇φ"], data["e_zeta"])
         else:
             data_phi = eq.surface.compute(
                 ["phi_matrix"],
@@ -302,7 +307,6 @@ for i, res in enumerate(resolutions):
             np.save(save_path + phi_save_name, phi_matrix)
 
     n_surf = n_theta * n_zeta
-
     if pest:
         # rho, theta, zeta locations of surface nodes, ordered by (theta, zeta)
         compute_grid = Grid(rtz_nodes[-n_surf:])
@@ -310,6 +314,9 @@ for i, res in enumerate(resolutions):
         # rho, theta, zeta locations of surface nodes, ordered by (zeta, theta)
         compute_grid = pest_grid
 
+    # Compute values at surface nodes
+    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
+    
     # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     phi_true = _G(data["x"] - x0)
     B = _grad_G(data["x"] - x0)
@@ -322,14 +329,7 @@ for i, res in enumerate(resolutions):
         e_theta = data["e_theta"]
         e_zeta = data["e_zeta"]
         
-    if fixed_point:
-        phi = data["Phi"]
-        B_theta = dot(data["∇φ"], data["e_theta"])
-        B_zeta = dot(data["∇φ"], data["e_zeta"])
-    else:
-        # Compute values at surface nodes
-        data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
-
+    if not fixed_point:
         # Compute B dot n
         B_dot_n = dot(B, data["n_rho"])
 

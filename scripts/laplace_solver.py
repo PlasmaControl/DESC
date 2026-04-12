@@ -55,8 +55,8 @@ for i, res in enumerate(resolutions):
     if fixed_point:
         pest = False
     else:
-        pest = False
-    coords = "rvp" if pest else "rtz" 
+        pest = True
+    coords = "($\\rho, \\vartheta, \\phi$)" if pest else "($\\rho, \\theta, \\zeta$)" 
     from_scratch = True
 
     # Equilibrium paremeteters
@@ -68,7 +68,9 @@ for i, res in enumerate(resolutions):
         n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
         NFP = 1  # Number of field periods
 
+        name = "Low aspect ratio non-axisymmetric"
         fixed_iota = True
+
         if fixed_iota:
             iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
             iota_profile = PowerSeriesProfile(iota_coeffs)
@@ -87,7 +89,7 @@ for i, res in enumerate(resolutions):
         p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
         p_profile = PowerSeriesProfile(p_coeffs)
     else:
-        eq_tag = "ESTELL"
+        eq_tag = name = "ESTELL"
         axisym = False
         n_mode_axisym = 0
 
@@ -356,14 +358,16 @@ for i, res in enumerate(resolutions):
         B_theta = D_theta @ phi
         B_zeta = D_zeta @ phi
 
+    # title to display on plots
+    eq_title = f"; {name} equilibrium, M={M}, N={N} in {coords} coords"
+
     # Plot phi from matrix vs phi from Green's function, and save
     fig, ax = plt.subplots(1, 1, figsize=(10, 7))
     ax.plot(_G(data["x"] - x0), phi, linestyle="None", marker=".")
     ax.plot(_G(data["x"] - x0),_G(data["x"] - x0), linestyle="dashed")
-    ax.set_title("$\\Phi$ from matrix vs $G(\mathbf{x}-\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
+    ax.set_title("$\\Phi$ from matrix vs $G(\\mathbf{x}-\\mathbf{x}_0)$" + eq_title, fontsize=14)
     ax.set_xlabel("$G(\\mathbf{x}-\\mathbf{x}_0)$", fontsize=12)
     ax.set_ylabel("$\\Phi$ from matrix", fontsize=12)
-    fig.suptitle("PEST grid: checking that $\\Phi$ from matrix matches $G(\\mathbf{x}-\\mathbf{x}_0)$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
     fig.savefig(plot_path + f"phi_plot_{save_tag}.png", dpi=150)
 
 
@@ -373,13 +377,13 @@ for i, res in enumerate(resolutions):
     ax[0].plot(dot(B, e_zeta), dot(B, e_zeta), linestyle="dashed")
     ax[1].plot(dot(B, e_theta), B_theta, linestyle="None", marker=".")
     ax[1].plot(dot(B, e_theta), dot(B, e_theta), linestyle="dashed")
-    ax[0].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$ vs $D_\\zeta \\Phi$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
+    ax[0].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$ vs $D_\\zeta \\Phi$" + eq_title, fontsize=14)
     ax[0].set_xlabel("$\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$", fontsize=12)
     ax[0].set_ylabel("$D_\\zeta \\Phi$ from matrix", fontsize=12)
-    ax[1].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ vs $D_\\theta \\Phi$; HSX equilibrium, " + f"M={M}, N={N}", fontsize=14)
+    ax[1].set_title("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ vs $D_\\theta \\Phi$" + eq_title, fontsize=14)
     ax[1].set_xlabel("$\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
     ax[1].set_ylabel("$D_\\theta \\Phi$ from matrix", fontsize=12)
-    fig.suptitle("Checking that derivatives of $\\Phi$ from matrix match $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$ and $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$; HSX equilibrium, " + f"M={M}, N={N} in {coords} coords", fontsize=16)
+    fig.suptitle("Checking that derivatives of $\\Phi$ from matrix match $\\nabla G(\\mathbf{x}-\\mathbf{x}_0)$", fontsize=16)
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
     B_t_errs[i] = ((dot(B, e_theta) - B_theta)**2).mean()**0.5
@@ -405,7 +409,7 @@ ax[2].plot(resolutions, phi_errs, marker="o")
 ax[2].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[2].set_ylabel("RMS error in $\\Phi$ from matrix", fontsize=12)
 
-fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution; HSX equilibrium in {coords} coords", fontsize=16)
+fig.suptitle(f"Error in $\\Phi$ from matrix and its derivatives vs resolution" + eq_title, fontsize=16)
 
 plt.tight_layout()
 fig.savefig(plot_path + f"error_plot_{save_tag}.png", dpi=150)

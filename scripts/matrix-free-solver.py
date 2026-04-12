@@ -20,10 +20,10 @@ from scipy.interpolate import RegularGridInterpolator
 
 #eq = get("precise_QH")
 #eq = get("precise_QA")
-eq = get("HSX")#get("W7-X")
-n_rho = 14
-n_theta = 14
-n_zeta = 14
+eq = get("W7-X")
+n_rho = 26
+n_theta = 32
+n_zeta = 9
 
 # This will probably OOM with the matrix-full method
 #n_rho = 48
@@ -125,13 +125,12 @@ xi_zeta_low = np.asarray(xi_sup_zeta)     # (n_rho, n_theta, n_zeta)
 ###----Interpolate and upscale the eigenfunction----###
 #######################################################
 
-# High-res solve
-print("making high-res grid and diffmats")
-n_rho   = 64
+n_rho = 64
 n_theta = 64
 n_zeta = 12
 
 x, w = leggauss_lob(n_rho)
+
 rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
 dx_f = jax.vmap(
     lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
@@ -139,10 +138,12 @@ dx_f = jax.vmap(
     )
 )
 
-scale_vector     = 1 / (dx_f(x)[:, None])
+scale_vector = 1 / (dx_f(x)[:, None])
 scale_vector_inv = dx_f(x)[:, None]
 
 D0, W0 = legendre_diffmat(n_rho)
+
+# scaled D_rho
 D0 = D0 * scale_vector
 W0 = W0 * scale_vector_inv
 
@@ -152,49 +153,72 @@ D1, W1 = fourier_diffmat(n_theta)
 zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
 D2, W2 = fourier_diffmat(n_zeta)
 
-grid0   = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+# rho, theta, zeta are in PEST coordinates
+grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+
 diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
 
+# reshaped according to rho
 reshaped_nodes = jnp.reshape(
     grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
 )
 
-print("mapping coordinates to high-res grid")
+# These nodes are in DESC coordinates
 rtz_nodes = map_coordinates(
     eq,
-    reshaped_nodes,
+    reshaped_nodes,  # (ρ,θ_PEST,ζ)
     inbasis=("rho", "theta_PEST", "zeta"),
     outbasis=("rho", "theta", "zeta"),
     period=(jnp.inf, 2 * jnp.pi, jnp.inf),
     tol=1e-12,
     maxiter=50,
 )
+
+# These nodes are in DESC coordinates
 grid = Grid(rtz_nodes)
 
-# Interpolate low-res eigenfunction onto high-res grid
-rho_hi   = np.asarray(rho)
+
+# -------------------------
+# UPSCALE: 3D interpolation on (rho,theta,zeta),
+# periodic extension in theta/zeta, NO FFT.
+# -------------------------
+Ltheta = 2.0 * np.pi
+Lzeta = 2.0 * np.pi / eq.NFP
+
+rho_hi = np.asarray(rho)
 theta_hi = np.asarray(theta)
-zeta_hi  = np.asarray(zeta)
+zeta_hi = np.asarray(zeta)
 
 def _interp3_periodic(f_ext, pts):
-    i0 = RegularGridInterpolator(
-        (rho_low, theta_low, zeta_low),
-        f_ext,
-        method="linear",
-        bounds_error=False,
-        fill_value=None,
-    )
-    return i0(pts).reshape(n_rho, n_theta, n_zeta)
 
-xi_rho_hi   = _interp3_periodic(xi_rho_low,   reshaped_nodes)
+    i0 = RegularGridInterpolator(
+         (rho_low, theta_low, zeta_low),
+         f_ext,
+         method="linear",
+         #method="pchip",
+         bounds_error=False,
+         fill_value=None,
+     )
+    out = i0(pts)
+
+    return out.reshape(n_rho, n_theta, n_zeta)
+
+xi_rho_hi = _interp3_periodic(xi_rho_low, reshaped_nodes)
 xi_theta_hi = _interp3_periodic(xi_theta_low, reshaped_nodes)
-xi_zeta_hi  = _interp3_periodic(xi_zeta_low,  reshaped_nodes)
+xi_zeta_hi = _interp3_periodic(xi_zeta_low, reshaped_nodes)
+
+# Normalizing doesn't improves convergence.
 
 v_guess = jnp.concatenate(
-    [xi_rho_hi.flatten(), xi_theta_hi.flatten(), xi_zeta_hi.flatten()], axis=0
+    [
+        (xi_rho_hi).flatten(),
+        (xi_theta_hi).flatten(),
+        (xi_zeta_hi).flatten(),
+    ],
+    axis=0,
 )
-v_guess = v_guess / jnp.linalg.norm(v_guess)
-print("computing eigenmode at high res with matrix-free method")
+v_guess = v_guess/jnp.linalg.norm(v_guess)
+
 tic = time.time()
 data = eq.compute(
     "finite-n lambda matfree",
@@ -216,4 +240,3 @@ xi_sup_zeta_final = np.reshape(v[2*n_total:], (n_rho, n_theta, n_zeta))
 toc = time.time()
 print(f"matrix free took {toc-tic} s.")
 
-print(data["finite-n lambda matfree"].min())

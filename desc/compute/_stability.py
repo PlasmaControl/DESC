@@ -13,7 +13,6 @@ from functools import partial
 
 import numpy as np
 from jax.scipy.sparse.linalg import cg
-from matfree import decomp, eig
 from scipy.constants import mu_0
 from scipy.sparse.linalg import eigsh
 
@@ -1975,61 +1974,31 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
         return y.flatten()# * bc_mask  # enforce BC on output
 
     v0 = kwargs.get("v_guess", jnp.ones(n_total))
-    sigma = kwargs.get("sigma", -2e-4)
-    num_matvecs = 10
+    num_matvecs = kwargs.get("num_matvecs", 100)
 
+    # lobpcg_standard finds the *largest* k eigenvalues of the operator it's given.
+    # We want the smallest (most negative) eigenvalue of A, so we negate:
+    #   largest eigenvalue of (-A)  ==  -lambda_min(A)
+    # X must be shape (n, k); we search for k=1 eigenvector.
+    X0 = v0.reshape(-1, 1)
+    theta, U, iters = jax.experimental.sparse.linalg.lobpcg_standard(
+        lambda x: -Ax(x), X0, m=num_matvecs
+    )
+    # theta[0] is the largest eigenvalue of -A, so lambda_min = -theta[0]
+    w = jnp.array([-theta[0]])
+    v = U[:, 0]
+    v_all = U.T  # shape (k, n), consistent with dense solver convention
 
-    # get eigenvalues of (A − σI)⁻¹ instead of A, which are related to the eigenvalues of A by λ = σ + 1/μ
-    # σ should be close to the target eigenvalue
-    def OPinv(b):
-        def Ashift(x):
-            # identity on BC DOFs so CG sees a non-singular operator everywhere
-            return Ax(x) - sigma * x#(x * bc_mask) + (1.0 - bc_mask) * x
-
-        # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-8, maxiter=int(2 * n_total))
-        return y#* bc_mask
-
-    # --no-verify tridiag = decomp.tridiag_sym(num_matvecs, reortho="full",materialize=True)
-    tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=False)
-    alg = eig.eigh_partial(tridiag)
-    mu, vecs = alg(lambda x: OPinv(x), v0)
-    print(vecs.shape)
-
-    sort_idxs = jnp.argsort(mu, descending=True)
-    w = sigma + 1.0 / mu[sort_idxs]
-    v = vecs[sort_idxs][0, :]
-
-    test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
-    test1 = Ax(v) / jnp.linalg.norm(Ax(v))
-
-
-    np.testing.assert_allclose(OPinv(v), mu[sort_idxs][0] * v)
-    a = OPinv(v)
-    b = mu[sort_idxs][0] * v
-    diff = np.abs(a - b)
-    rel = diff / np.maximum(np.abs(b), 1e-12)
-    try:
-        np.testing.assert_allclose(a, b)
-    except AssertionError as e:
-        print("OPinv(v) \neq mu * v")
-        print(e)
-
-    a = Ax(v)
-    b = w[0] * v
-    diff = np.abs(a - b)
-    rel = diff / np.maximum(np.abs(b), 1e-12)
-    try:
-        print("Ax(v) \neq w * v")
-        np.testing.assert_allclose(a, b)
-    except AssertionError as e:
-        print(e)
-
-    test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
-    test1 = Ax(v) / jnp.linalg.norm(Ax(v))
-
-    print(jnp.sort(jnp.abs(test0 - test1), descending=True)[:80])
-
+    print(f"LOBPCG converged in {iters} iterations, lambda_min = {float(w[0]):.6e}")
+    
+    # Sanity check: Rayleigh quotient (quadratically better estimate than lobpcg theta)
+    w_rq = jnp.dot(v, Ax(v)) / jnp.dot(v, v)
+    residual = jnp.linalg.norm(Ax(v) - w_rq * v) / (jnp.abs(w_rq) + 1e-30)
+    print(f"  Rayleigh quotient = {float(w_rq):.6e}, relative residual = {float(residual):.3e}")
+    np.testing.assert_allclose(Ax(v), w_rq * v)
+    np.testing.assert_allclose(Ax(v), w * v)
+    w = jnp.array([w_rq])
+    
     data["finite-n lambda matfree"] = w
     data["finite-n eigenfunction matfree"] = v
     data["finite-n eigenfunction matfree all"] = v_all

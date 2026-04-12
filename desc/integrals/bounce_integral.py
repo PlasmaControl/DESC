@@ -1094,24 +1094,19 @@ class Bounce2D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        errorif(
-            isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
-            NotImplementedError,
-            "Must choose Bounce2D(spline=True) for this feature.",
-        )
         if not is_fourier:
             f = Bounce2D.fourier(f)
 
         num_transit = self._theta.X // self._NFP
         K_z = self._num_z // 2 * self._NFP
-        mins, B_mins = get_mins(
-            self._c["knots"],
-            self._c["B(z)"],
-            num_mins=num_transit * max(K_z, 5),  # liberal heuristic
-            # We set fill value to 0 since we chose our coordinates
-            # such that all bounce points are at ζ >= 0; and therefore,
-            # junk values in B_mins cannot be selected in argmin.
-            fill_value=0.0,
+        num_mins = num_transit * max(K_z, 5)  # liberal heuristic
+        # We set fill value to 0 since we chose our coordinates
+        # such that all bounce points are at ζ >= 0; and therefore,
+        # junk values in B_mins cannot be selected in argmin.
+        mins, B_mins = (
+            self._c["B(z)"].extrema1d(1, num_mins, fill_value=0.0, eps=_eps)
+            if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
+            else get_mins(self._c["knots"], self._c["B(z)"], num_mins, fill_value=0.0)
         )
         t = self._theta.eval1d(mins)
 

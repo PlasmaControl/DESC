@@ -297,7 +297,7 @@ for i, res in enumerate(resolutions):
             B_theta = dot(data["∇φ"], data["e_theta"])
             B_zeta = dot(data["∇φ"], data["e_zeta"])
         else:
-            data_phi = eq.surface.compute(
+            data_phi = field.compute(
                 ["phi_matrix"],
                 grid=pest_grid,
                 problem="exterior Neumann",
@@ -322,7 +322,7 @@ for i, res in enumerate(resolutions):
         compute_grid = pest_grid
 
     # Compute values at surface nodes
-    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi"], grid=compute_grid, basis="xyz")
+    data = eq.compute(["x", "n_rho", "e_theta_PEST", "e_phi|v,r"], grid=compute_grid, basis="xyz")
     
     # Toy magnetic field (grad(G) where G is Green's function for Laplace's equation in 3D)
     phi_true = _G(data["x"] - x0)
@@ -331,7 +331,7 @@ for i, res in enumerate(resolutions):
     # Basis vectors at surface nodes
     if pest:
         e_theta = data["e_theta_PEST"]
-        e_zeta = data["e_phi"]
+        e_zeta = data["e_phi|v,r"]
     else:
         e_theta = data["e_theta"]
         e_zeta = data["e_zeta"]

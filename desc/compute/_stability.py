@@ -1982,9 +1982,11 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     #   largest eigenvalue of (-A)  ==  -lambda_min(A)
     # X must be shape (n, k); we search for k=1 eigenvector.
     X0 = v0.reshape(-1, 1)
-    theta, U, iters = lobpcg_standard(
-        lambda x: -Ax(x), X0, m=num_matvecs
-    )
+    def Ax_batched(X):
+        # lobpcg_standard passes X as (n, k); vmap Ax over columns
+        return jax.vmap(lambda x: -Ax(x), in_axes=1, out_axes=1)(X)
+
+    theta, U, iters = lobpcg_standard(Ax_batched, X0, m=num_matvecs)
     # theta[0] is the largest eigenvalue of -A, so lambda_min = -theta[0]
     w = jnp.array([-theta[0]])
     v = U[:, 0]

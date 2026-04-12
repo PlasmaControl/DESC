@@ -21,8 +21,8 @@ from scipy.interpolate import RegularGridInterpolator
 #eq = get("precise_QH")
 #eq = get("precise_QA")
 eq = get("W7-X")
-n_rho = 26
-n_theta = 32
+n_rho = 18
+n_theta = 18
 n_zeta = 9
 
 # This will probably OOM with the matrix-full method

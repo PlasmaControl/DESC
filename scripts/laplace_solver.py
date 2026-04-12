@@ -268,8 +268,6 @@ for i, res in enumerate(resolutions):
             chunk_size=1000
             data = surface.compute(["x", "n_rho", "e_theta", "e_zeta"], grid=pest_grid, basis="xyz")
             data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
-
-            field = SourceFreeField(surface, grid.M, grid.N)
             data, RpZ_data = field.compute(
                 ["∇φ", "Phi", "x", "n_rho"],
                 pest_grid,

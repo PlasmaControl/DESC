@@ -2002,9 +2002,15 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))
-
-
-    np.testing.assert_allclose(OPinv(v), mu[sort_idxs][0] * v)
+    # Refine Ritz vector with inverse iteration (5 CG solves)
+    
+    for _ in range(5):
+        v = OPinv(v)
+        v = v / jnp.linalg.norm(v)
+    w_rq = jnp.dot(v, Ax(v)) / jnp.dot(v, v)
+    mu_rq = jnp.dot(v, OPinv(v)) / jnp.dot(v, v)
+    np.testing.assert_allclose(OPinv(v), mu_rq * v)
+    np.testing.assert_allclose(Ax(v), w_rq * v)
     a = OPinv(v)
     b = mu[sort_idxs][0] * v
     diff = np.abs(a - b)
@@ -2032,7 +2038,6 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     data["finite-n lambda matfree"] = w
     data["finite-n eigenfunction matfree"] = v
-    data["finite-n eigenfunction matfree all"] = v_all
 
     return data
 

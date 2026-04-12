@@ -359,12 +359,12 @@ for i, res in enumerate(resolutions):
         from desc.transform import Transform
         from desc.basis import DoubleFourierSeries
         if pest:
-            basis = DoubleFourierSeries(pest_grid.M, pest_grid.N, NFP=pest_grid.NFP, sym=False)
+            basis = DoubleFourierSeries(pest_grid.M-1, pest_grid.N-1, NFP=pest_grid.NFP, sym=False)
             transform = Transform(pest_grid, basis, build_pinv=True, derivs=1)
             # reshape phi back to (zeta, theta)
             phi_zt = phi.reshape(n_theta, n_zeta).transpose(1,0).reshape(n_surf)
             phi_c = transform.fit(phi_zt)
-            B_zeta = transform.transform(phi, dz=1)
+            B_zeta = transform.transform(phi_c, dz=1)
 
             # transpose back
             B_zeta = B_zeta.reshape(n_theta, n_zeta).transpose(1,0).reshape(n_surf)

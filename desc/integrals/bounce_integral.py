@@ -70,6 +70,7 @@ from desc.utils import (
     flatten_mat,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 
 
@@ -213,7 +214,10 @@ class Bounce2D(Bounce):
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline`` option is 100.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -337,6 +341,10 @@ class Bounce2D(Bounce):
                 check=check,
             )
         else:
+            warnif(
+                Y_B > grid.num_theta + grid.num_zeta,
+                msg="Unnecessarily high resolution for Y_B with spline=False.",
+            )
             self._c["B(z)"] = fast_chebyshev(
                 self._theta,
                 self._c["|B|"],
@@ -794,6 +802,7 @@ class Bounce2D(Bounce):
             num_well = num_well_rule(self._theta.X // self._NFP, self._NFP)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            # Skip Newton update since these points are exponentially accurate.
             z1, z2 = self._c["B(z)"].intersect1d(
                 self._swap_pitch(pitch_inv), _eps, num_well
             )
@@ -831,7 +840,6 @@ class Bounce2D(Bounce):
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs : dict
             Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d`` or
             ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
@@ -1029,12 +1037,30 @@ class Bounce2D(Bounce):
         return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
     def _nummt(self, z, data, low_ram):
-        t = self._theta.eval1d(flatten_mat(z, 3), loop=low_ram).reshape(z.shape)
-        t = jnp.exp(1j * self._modes_t * t[..., None])
-        z = jnp.exp(1j * self._modes_z * z[..., None])
+        shape = z.shape
+        z = flatten_mat(z, 3)
+        t = self._theta.eval1d(z, loop=low_ram).reshape(*shape, 1)
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            # Using the same |B| that gave bounce points increases correlation
+            # in discretization error in an open neighboorhood around the
+            # current point in the optimization landscape, and hence removes
+            # noise from optimization derivatives. For example, the difference
+            # between the auto derivative and a 4 point finite difference
+            # stencil at the optimal step size is reduced from 10³ to 10⁻⁶ for
+            # Γ_c (which has the singular weight 1/v_∥).
+            # Also uses less memory due to the dimension reduction.
+            B = self._c["B(z)"].eval1d(z, loop=low_ram).reshape(shape)
+
+        z = z.reshape(*shape, 1)
+        z = jnp.exp(1j * self._modes_z * z)
+        t = jnp.exp(1j * self._modes_t * t)
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
-        data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            data["|B|"] = B
+        else:
+            data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+
         return data
 
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False):
@@ -1199,9 +1225,6 @@ class Bounce2D(Bounce):
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate ρ(l), α(m) will be plotted.
-        kwargs
-            Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -1252,9 +1275,6 @@ class Bounce2D(Bounce):
         m : int
             Index into the ``alpha`` array supplied to make this object.
             The alpha value corresponds to ``alpha[m]``.
-        kwargs
-            Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------

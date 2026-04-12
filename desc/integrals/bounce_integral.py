@@ -804,7 +804,7 @@ class Bounce2D(Bounce):
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             # Skip Newton update since these points are exponentially accurate.
             z1, z2 = self._c["B(z)"].intersect1d(
-                self._swap_pitch(pitch_inv), _eps, num_well
+                self._swap_pitch(pitch_inv), num_intersect=num_well, eps=_eps
             )
             z1 = move(z1)
             z2 = move(z2)
@@ -1243,7 +1243,7 @@ class Bounce2D(Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, _eps)
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, eps=_eps)
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 

@@ -245,8 +245,15 @@ for i, res in enumerate(resolutions):
     x0 = eq.axis.compute("x", grid=Grid(np.array([[0, 0, 0]])), basis="xyz")["x"].flatten()
 
     if os.path.exists(save_path + phi_save_name) and not override:
-        print("loading phi matrix")
-        phi_matrix = np.load(save_path + phi_save_name)
+        if fixed_point:
+            print("loading phi from fixed-point iteration")
+            data = np.load(save_path + phi_save_name)
+            phi = data["Phi"]
+            B_theta = data["B_theta"]
+            B_zeta = data["B_zeta"]
+        else:
+            print("loading phi matrix")
+            phi_matrix = np.load(save_path + phi_save_name)
     else:
         # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
         #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
@@ -347,7 +354,21 @@ for i, res in enumerate(resolutions):
             D_zeta = jax.lax.stop_gradient(jnp.kron(D2, I_theta0))
 
         B_theta = D_theta @ phi
-        B_zeta = D_zeta @ phi
+        #B_zeta = D_zeta @ phi
+
+        from desc.transform import Transform
+        from desc.basis import DoubleFourierSeries
+        if pest:
+            basis = DoubleFourierSeries(pest_grid.M, pest_grid.N, NFP=pest_grid.NFP, sym=False)
+            transform = Transform(pest_grid, basis, build_pinv=True, derivs=1)
+            # reshape phi back to (zeta, theta)
+            phi_zt = phi.reshape(n_theta, n_zeta).transpose(1,0).reshape(n_surf)
+            phi_c = transform.fit(phi_zt)
+            B_zeta = transform.transform(phi, dz=1)
+
+            # transpose back
+            B_zeta = B_zeta.reshape(n_theta, n_zeta).transpose(1,0).reshape(n_surf)
+            
 
     # Plot phi from matrix vs phi from Green's function, and save
     fig, ax = plt.subplots(1, 1, figsize=(10, 7))

@@ -41,7 +41,7 @@ import os
 
 chunk_size = 50
 
-fixed_point = True
+fixed_point = False
 
 resolutions = np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
 
@@ -112,6 +112,8 @@ for i, res in enumerate(resolutions):
     eq_save_name = f"equilibrium_{save_tag}.h5"
     if pest:
         phi_save_name = f"{save_tag}_phi_matrix.npy"
+    elif fixed_point:
+        phi_save_name = phi_save_name.replace("_matrix.npy", "_fixed_point.npz")
     else:
         phi_save_name = f"{save_tag}_phi_matrix_rtz.npy"
     phi_save_name = phi_save_name.replace(f"_pest_{pest}", "")
@@ -295,7 +297,6 @@ for i, res in enumerate(resolutions):
         # phi_matrix_pest is in DESC Fortran order (theta fastest).
         # Reorder to AGNI C order (zeta fastest) expected by the stability solver.
         if fixed_point:
-            phi_save_name = phi_save_name.replace("_matrix.npy", "_fixed_point.npz")
             np.savez(save_path + phi_save_name, **data)
         else:
             np.save(save_path + phi_save_name, phi_matrix)
@@ -375,7 +376,7 @@ for i, res in enumerate(resolutions):
     fig.savefig(plot_path + f"B_plot_{save_tag}.png", dpi=150)
 
     B_t_errs[i] = ((dot(B, e_theta) - B_theta)**2).mean()**0.5
-    B_z_errs[i] = ((dot(B, e_zeta) - B_zeta @ phi)**2).mean()**0.5
+    B_z_errs[i] = ((dot(B, e_zeta) - B_zeta)**2).mean()**0.5
     phi_errs[i] = ((phi - phi_true)**2).mean()**0.5
 
 

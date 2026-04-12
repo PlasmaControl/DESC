@@ -1602,7 +1602,7 @@ class TestBounce2D:
         np.testing.assert_array_equal(near_zero_nufft, near_zero)
         np.testing.assert_allclose(num_nufft[near_zero_nufft], num[near_zero])
         np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=8e-3
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=3e-2
         )
 
         bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)

@@ -1981,18 +1981,21 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
 
     # get eigenvalues of (A − σI)⁻¹ instead of A, which are related to the eigenvalues of A by λ = σ + 1/μ
     # σ should be close to the target eigenvalue
-    def OPinv(b):
-        def Ashift(x):
-            # identity on BC DOFs so CG sees a non-singular operator everywhere
-            return Ax(x) - sigma * x#(x * bc_mask) + (1.0 - bc_mask) * x
+    def get_OPinv(sigma):
+        def OPinv(b):
+            def Ashift(x):
+                # identity on BC DOFs so CG sees a non-singular operator everywhere
+                return Ax(x) - sigma * x#(x * bc_mask) + (1.0 - bc_mask) * x
 
-        # RG: conj-gradient will only work if Ashift is SPD
-        y, _ = cg(Ashift, b, tol=1e-8, maxiter=int(2 * n_total))
-        return y#* bc_mask
+            # RG: conj-gradient will only work if Ashift is SPD
+            y, _ = cg(Ashift, b, tol=1e-8, maxiter=int(2 * n_total))
+            return y#* bc_mask
+        return OPinv
 
     # --no-verify tridiag = decomp.tridiag_sym(num_matvecs, reortho="full",materialize=True)
     tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
     alg = eig.eigh_partial(tridiag)
+    OPinv = get_OPinv(sigma)
     mu, vecs = alg(lambda x: OPinv(x), v0)
     print(vecs.shape)
 
@@ -2003,7 +2006,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))
     # Refine Ritz vector with inverse iteration (5 CG solves)
-    
+    OPinv = get_OPinv(w[0] - 1e-6)  # shift close to the Ritz value to speed up convergence
     for _ in range(5):
         v = OPinv(v)
         v = v / jnp.linalg.norm(v)

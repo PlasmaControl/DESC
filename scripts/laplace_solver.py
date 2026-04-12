@@ -135,7 +135,7 @@ for i, res in enumerate(resolutions):
 
     # NOTE: equilibrium LCFS must be ForceFreeField object 
     if from_scratch:
-        override = True
+        override = False
         if os.path.exists(save_path + eq_save_name) and (not override):
             eq = load(save_path + eq_save_name)
         else:

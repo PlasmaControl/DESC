@@ -39,22 +39,19 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
-            if np.isnan(master_data[p][name]).all():
+            if not np.isfinite(master_data[p][name]).all():
                 mean = 1.0
             else:
-                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
-                if not np.isfinite(mean):
-                    # since eq grid has nodes on axis, some quantities are infinite
-                    # so just use 1.0 as a scale for the tolerance
-                    print(f"mean(|master data|) of {name} for {p} is not finite.")
-                    mean = 1.0
+                mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
+                err_msg = f"Parameterization: {p}. Name: {name}."
+                assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
                     atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
                     rtol=1e-8,
-                    err_msg=f"Parameterization: {p}. Name: {name}.",
+                    err_msg=err_msg,
                 )
             except AssertionError as e:
                 error = True

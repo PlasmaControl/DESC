@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.backend import tree_broadcast as jax_tree_broadcast
 from desc.backend import tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
@@ -892,6 +892,12 @@ class CoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
+    num_neighbors : int, optional
+        Limit the pairwise distance computation to the num_neighbors nearest neighbors
+        per coil, determined by centroid distance. This is helpful for reducing memory
+        usage when you have hundreds of small coils, with a recommended value of about
+        num_neighbors = 20. Default value of None or num_neighbors >= num_coils - 1
+        computes the full pairwise distances.
 
     """
 
@@ -901,7 +907,11 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
-    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+    _static_attrs = _Objective._static_attrs + [
+        "_use_softmin",
+        "_dist_chunk_size",
+        "_num_neighbors",
+    ]
 
     _scalar = False
     _units = "(m)"
@@ -923,6 +933,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        num_neighbors=None,
         device_id=0,
     ):
         from desc.coils import CoilSet
@@ -933,6 +944,7 @@ class CoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
+        self._num_neighbors = num_neighbors
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -997,15 +1009,31 @@ class CoilSetMinDistance(_Objective):
             constants = self.constants
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
-        )
+        )  # pts.shape = (num_coils, num_nodes, 3)
+        num_coils = self.dim_f
+
+        if self._num_neighbors is not None and self._num_neighbors < num_coils - 1:
+            # only consider nearest neighbors
+            centroids = jnp.mean(pts, axis=1)  # (num_coils, 3)
+            centroid_dists = safenorm(centroids[:, None] - centroids[None, :], axis=-1)
+            centroid_dists = centroid_dists.at[jnp.diag_indices(num_coils)].set(jnp.inf)
+
+            def get_other_pts(k):
+                neighbors_idx = jax.lax.stop_gradient(
+                    jnp.argsort(centroid_dists[k])[: self._num_neighbors]
+                )
+                return pts[neighbors_idx]
+
+        else:  # consider all other coils
+
+            def get_other_pts(k):
+                return jnp.delete(pts, k, axis=0, assume_unique_indices=True)
 
         def body(k):
-            # pts shape (ncoils, num_nodes, 3)
-            # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
-            # to the nth point on the ith coil
+            # to the nth point on the ith coil; shape(ncoils,num_nodes,num_nodes)
             coil_pts = pts[k]
-            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            other_pts = get_other_pts(k)
             dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
             if self._use_softmin:
                 return softmin(dist, self._softmin_alpha)

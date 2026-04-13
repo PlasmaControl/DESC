@@ -68,7 +68,7 @@ for i, res in enumerate(resolutions):
         n_mode_axisym = 0 # If axisym is True, the toroidal mode number to solve for
         NFP = 1  # Number of field periods
 
-        name = "Low aspect ratio non-axisym"
+        name = "Low aspect ratio highly non-axisym"
         fixed_iota = True
 
         if fixed_iota:
@@ -109,7 +109,8 @@ for i, res in enumerate(resolutions):
     plot_path = save_path + "plots/"
     if from_scratch:
         profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
-        eq_tag = f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
+        name_lower = name.lower().replace(" ", "_").replace("-", "_")
+        eq_tag = f"{name_lower}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
     save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}"
     eq_save_name = f"equilibrium_{save_tag}.h5"
     if pest:
@@ -139,11 +140,11 @@ for i, res in enumerate(resolutions):
         if os.path.exists(save_path + eq_save_name) and (not override):
             eq = load(save_path + eq_save_name)
         else:
-            surface = FourierRZToroidalSurface(
-                R_lmn=[R0, 1, 0.2],
-                Z_lmn=[-2, -0.2],
-                modes_R=[[0, 0], [1, 0], [0, 1]],
-                modes_Z=[[-1, 0], [0, -1]],
+            FourierRZToroidalSurface(
+                R_lmn=[R0, 1, 0.2, 0.1],
+                Z_lmn=[-2, -0.2, 1, 0.1],
+                modes_R=[[0, 0], [1, 0], [0, 4], [1, 1]],
+                modes_Z=[[-1, 0], [0, -1], [1, 4], [1, 1]],
             )
             field = SourceFreeField(surface, M, N)
             eq = Equilibrium(

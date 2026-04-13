@@ -140,7 +140,7 @@ for i, res in enumerate(resolutions):
         if os.path.exists(save_path + eq_save_name) and (not override):
             eq = load(save_path + eq_save_name)
         else:
-            FourierRZToroidalSurface(
+            surface = FourierRZToroidalSurface(
                 R_lmn=[R0, 1, 0.2, 0.1],
                 Z_lmn=[-2, -0.2, 1, 0.1],
                 modes_R=[[0, 0], [1, 0], [0, 4], [1, 1]],

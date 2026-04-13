@@ -362,14 +362,13 @@ class ObjectiveFunction(IOAble):
 
         use_jits = [obj._use_jit for obj in self.objectives]
         if not all(use_jits):
-            if self._use_jit:
-                warnif(
-                    True,
-                    UserWarning,
-                    "At least 1 sub-objective has use_jit=False. Setting "
-                    "use_jit=False for the whole ObjectiveFunction. "
-                    f"Sub-objective use_jit values: {use_jits}",
-                )
+            warnif(
+                self._use_jit,
+                UserWarning,
+                "At least 1 sub-objective has use_jit=False. Setting "
+                "use_jit=False for the whole ObjectiveFunction. "
+                f"Sub-objective use_jit values: {use_jits}",
+            )
             self._use_jit = False
 
         timer = Timer()

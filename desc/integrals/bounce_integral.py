@@ -399,7 +399,7 @@ class Bounce2D(Bounce):
                 eq.NFP,
                 # Due to legacy reasons Y_B is resolution over full transit
                 # if spline is true.
-                Y_B if obj._hyperparam["spline"] else Y_B * eq.NFP,
+                Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
             )
 
         obj._constants["_vander"] = get_vander(
@@ -501,7 +501,7 @@ class Bounce2D(Bounce):
             "num_well",
             # Due to legacy reasons Y_B is resolution over full transit
             # if spline is true.
-            num_well_rule(num_transit, grid.NFP, Y_B if spline else Y_B * grid.NFP),
+            num_well_rule(num_transit, grid.NFP, Y_B if spline else (Y_B * grid.NFP)),
         )
 
         return (

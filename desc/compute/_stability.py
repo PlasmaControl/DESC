@@ -2006,7 +2006,7 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))
     # Refine Ritz vector with inverse iteration (5 CG solves)
-    OPinv = get_OPinv(w[0] - 1e-6)  # shift close to the Ritz value to speed up convergence
+    OPinv = get_OPinv(w[0] - 2e-4)  # shift close to the Ritz value to speed up convergence
     for _ in range(5):
         v = OPinv(v)
         v = v / jnp.linalg.norm(v)

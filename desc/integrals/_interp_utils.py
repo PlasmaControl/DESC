@@ -160,8 +160,6 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    opts = options.Opts(modeord=1)
-
     # TODO: Delete this if block after
     # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
     # and then bump min version requirement.
@@ -172,6 +170,7 @@ def nufft2d2r(
         f = jnp.fft.fftshift(f, (-2, -1))
         return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
+    opts = options.Opts(modeord=1)
     return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
 
 
@@ -261,7 +260,7 @@ _root_companion = jnp.vectorize(
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
+@partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
     k=0.0,

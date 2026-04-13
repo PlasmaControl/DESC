@@ -189,7 +189,7 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     return z[..., 0, :, :], z[..., 1, :, :]
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("num_well", "nufft_eps"))
+@partial(jax.custom_jvp, nondiff_argnums=(2, 3))
 def regular_points(o, pitch_inv, num_well, nufft_eps):
     """Bounce points then newton, with regularized jvp."""
     return _newton(
@@ -765,8 +765,9 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
         .swapaxes(0, -3)
     )
     alpha = alpha.swapaxes(0, -2)
-    delta = delta.at[..., 0].add(alpha)
+    delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+
     if X < 24:
         # Short circuit convergence to enforce continuity. This is needed as
         # we assume continuity of |B| along B when gathering bounce points.
@@ -1066,21 +1067,27 @@ def Y_B_rule(grid, spline):
     return (Y_B * grid.NFP) if spline else Y_B
 
 
-def num_well_rule(num_transit, NFP, Y_B=None):
+def num_well_rule(num_transit, NFP, extrema_per_transit=None):
     """Guess upper bound for number of wells based on spectrum.
 
     This should be loose enough that it is equivalent to ``num_well=None``,
     but more performant.
     """
     num_well = num_transit * (20 + NFP)
-    return num_well if Y_B is None else min(num_well, num_transit * Y_B)
-
-
-def get_vander(grid, Y, Y_B, NFP):
-    """Builds Vandermonde matrices for objectives."""
-    Y_trunc = truncate_rule(Y)
-    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
-    x = jnp.linspace(
-        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
+    return (
+        num_well
+        if extrema_per_transit is None
+        else min(num_well, num_transit * extrema_per_transit)
     )
-    return {"dct spline": chebvander(x, Y_trunc - 1)}
+
+
+def get_vander(grid, Y, Y_B, NFP, spline):
+    """Builds Vandermonde matrices for objectives."""
+    if spline:
+        Y_trunc = truncate_rule(Y)
+        Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+        x = jnp.linspace(
+            -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
+        )
+        return {"dct spline": chebvander(x, Y_trunc - 1)}
+    return {}

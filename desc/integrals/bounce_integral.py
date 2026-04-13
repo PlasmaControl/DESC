@@ -355,8 +355,8 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _objective_build(obj, names, eta):
-        """Default build for bounce integrals objectives.
+    def _build(obj, names, eta):
+        """Builds the objective, selecting default values if they were not specified.
 
         Examples
         --------
@@ -391,14 +391,20 @@ class Bounce2D(Bounce):
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(obj._grid, spline=True)
+            Y_B = Y_B_rule(obj._grid, obj._hyperparam["spline"])
             obj._hyperparam["Y_B"] = Y_B
         if obj._hyperparam["num_well"] is None:
             obj._hyperparam["num_well"] = num_well_rule(
-                obj._hyperparam["num_transit"], eq.NFP, Y_B
+                obj._hyperparam["num_transit"],
+                eq.NFP,
+                # Due to legacy reasons Y_B is resolution over full transit
+                # if spline is true.
+                Y_B if obj._hyperparam["spline"] else Y_B * eq.NFP,
             )
 
-        obj._constants["_vander"] = get_vander(obj._grid, Y, Y_B, eq.NFP)
+        obj._constants["_vander"] = get_vander(
+            obj._grid, Y, Y_B, eq.NFP, obj._hyperparam["spline"]
+        )
 
         num_quad = obj._hyperparam.pop("num_quad")
         if eta == 1:
@@ -491,7 +497,12 @@ class Bounce2D(Bounce):
         num_transit = kwargs.get("num_transit", 20)
 
         Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
-        num_well = kwargs.get("num_well", num_well_rule(num_transit, grid.NFP, Y_B))
+        num_well = kwargs.get(
+            "num_well",
+            # Due to legacy reasons Y_B is resolution over full transit
+            # if spline is true.
+            num_well_rule(num_transit, grid.NFP, Y_B if spline else Y_B * grid.NFP),
+        )
 
         return (
             angle,
@@ -502,9 +513,9 @@ class Bounce2D(Bounce):
             num_pitch,
             pitch_batch_size,
             surf_batch_size,
-            quad,
             nufft_eps,
             spline,
+            quad,
             vander,
         )
 
@@ -675,10 +686,12 @@ class Bounce2D(Bounce):
         X : int
             Poloidal Fourier grid resolution to interpolate the angle.
             Preferably rounded down to power of 2.
+            Default is 32.
         Y : int
             Toroidal Chebyshev grid resolution over a single field period
             to interpolate the angle.
             Preferably rounded down to power of 2.
+            Default is 32.
         rho : float or jnp.ndarray
             Shape (num ρ, ).
             Flux surfaces labels in [0, 1] on which to compute.

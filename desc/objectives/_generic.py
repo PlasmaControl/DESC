@@ -412,7 +412,6 @@ class LinearObjectiveFromUser(_FixedObjective):
         normalize_target=False,
         name="custom linear",
         jac_chunk_size=None,
-        device_id=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -426,7 +425,6 @@ class LinearObjectiveFromUser(_FixedObjective):
             normalize_target=normalize_target,
             name=name,
             jac_chunk_size=jac_chunk_size,
-            device_id=device_id,
         )
 
     def build(self, use_jit=False, verbose=1):

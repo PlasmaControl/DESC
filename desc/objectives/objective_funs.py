@@ -1536,8 +1536,9 @@ class _Objective(IOAble, ABC):
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
         # if we have multiple GPU devices, this will help the data placement
-        # TODO: figure out why we cannot use it with constraints? Computation
-        # gets stuck!
+        # linear objectives have a separate ObjectiveFunction hence cannot make
+        # use of the "with" context manager of the main objective, they should run
+        # on the default device to avoid staling code.
         if (
             desc_config["num_device"] != 1
             and desc_config["kind"] == "gpu"

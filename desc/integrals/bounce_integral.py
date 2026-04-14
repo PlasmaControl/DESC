@@ -299,7 +299,7 @@ class Bounce2D(Bounce):
             quad = get_quadrature(
                 leggauss(32), (automorphism_sin, grad_automorphism_sin)
             )
-        elif automorphism is not None:
+        else:
             quad = get_quadrature(quad, automorphism)
         self._quad = jax.lax.stop_gradient(quad)
 
@@ -1473,7 +1473,7 @@ class Bounce1D(Bounce):
             quad = get_quadrature(
                 leggauss(32), (automorphism_sin, grad_automorphism_sin)
             )
-        elif automorphism is not None:
+        else:
             quad = get_quadrature(quad, automorphism)
         self._quad = jax.lax.stop_gradient(quad)
         self._data = {

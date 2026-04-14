@@ -34,12 +34,20 @@ a = 1  # Minor radius
 aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
-axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
-n_mode_axisym = 0  # If axisym is True, the toroidal mode number to solve for
+axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
+n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
+
+# Low-res solve for eigenfunction guess
+n_rho = 24
+n_theta = 24
+if axisym:
+    n_zeta = 1
+else:
+    n_zeta = 14
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.ones(1)#np.linspace(0.6, 1.5, 10)
+iota_on_axis_values = np.linspace(0.6, 1.5, 10)
 
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)
@@ -63,12 +71,13 @@ for iota_0 in iota_on_axis_values:
         f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
         f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"
+        f"n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}"
     )
     save_name = f"equilibrium_{save_tag}.h5"
 
     print(f"\n=== iota_0 = {iota_0:.4f} ===")
     print("solving equilibrium")
-    """
+    
     eq = Equilibrium(
         L=12,
         M=12,
@@ -95,14 +104,9 @@ for iota_0 in iota_on_axis_values:
     eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
     eq.save(save_path + save_name)
     print("equilibrium solved")
-    """
-    eq = get("HSX")
-    
-    # Low-res solve for eigenfunction guess
-    n_rho = 14
-    n_theta = 14
-    n_zeta = 14
 
+    
+    
     print("making input grid and diffmats")
     x, w = leggauss_lob(n_rho)
 
@@ -189,112 +193,12 @@ for iota_0 in iota_on_axis_values:
     xi_rho_low   = np.asarray(xi_sup_rho)
     xi_theta_low = np.asarray(xi_sup_theta)
     xi_zeta_low  = np.asarray(xi_sup_zeta)
+    np.save(save_path + f"xi_rho_low_{save_tag}.npy", xi_rho_low)
+    np.save(save_path + f"xi_theta_low_{save_tag}.npy", xi_theta_low)
+    np.save(save_path + f"xi_zeta_low_{save_tag}.npy", xi_zeta_low)
 
-    # High-res solve
-    print("making high-res grid and diffmats")
-    n_rho   = 64
-    n_theta = 64
-    n_zeta = 12
+    results_lambda_min.append(data["finite-n lambda"][0])
 
-    x, w = leggauss_lob(n_rho)
-    rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
-    dx_f = jax.vmap(
-        lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
-            x_val, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0
-        )
-    )
-
-    scale_vector     = 1 / (dx_f(x)[:, None])
-    scale_vector_inv = dx_f(x)[:, None]
-
-    D0, W0 = legendre_diffmat(n_rho)
-    D0 = D0 * scale_vector
-    W0 = W0 * scale_vector_inv
-
-    theta = jnp.linspace(0.0, 2 * jnp.pi, n_theta, endpoint=False)
-    D1, W1 = fourier_diffmat(n_theta)
-
-    zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
-    D2, W2 = fourier_diffmat(n_zeta)
-
-    grid0   = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
-    diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
-
-    reshaped_nodes = jnp.reshape(
-        grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
-    )
-
-    print("mapping coordinates to high-res grid")
-    rtz_nodes = map_coordinates(
-        eq,
-        reshaped_nodes,
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-        tol=1e-12,
-        maxiter=50,
-    )
-    grid = Grid(rtz_nodes)
-
-    # Interpolate low-res eigenfunction onto high-res grid
-    rho_hi   = np.asarray(rho)
-    theta_hi = np.asarray(theta)
-    zeta_hi  = np.asarray(zeta)
-
-    def _interp3_periodic(f_ext, pts):
-        i0 = RegularGridInterpolator(
-            (rho_low, theta_low, zeta_low),
-            f_ext,
-            method="linear",
-            bounds_error=False,
-            fill_value=None,
-        )
-        return i0(pts).reshape(n_rho, n_theta, n_zeta)
-
-    xi_rho_hi   = _interp3_periodic(xi_rho_low,   reshaped_nodes)
-    xi_theta_hi = _interp3_periodic(xi_theta_low, reshaped_nodes)
-    xi_zeta_hi  = _interp3_periodic(xi_zeta_low,  reshaped_nodes)
-
-    v_guess = jnp.concatenate(
-        [xi_rho_hi.flatten(), xi_theta_hi.flatten(), xi_zeta_hi.flatten()], axis=0
-    )
-    v_guess = v_guess / jnp.linalg.norm(v_guess)
-
-    print("computing eigenmode at high res with matrix-free method")
-    tic = time.time()
-    data = eq.compute(
-        "finite-n lambda matfree",
-        grid=grid,
-        diffmat=diffmat,
-        incompressible=False,
-        gamma=100,
-        v_guess=v_guess,
-        axisym=axisym,
-        n_mode_axisym=n_mode_axisym,
-        #sigma=data["finite-n lambda"].min()-(2e-4),
-    )
-    toc = time.time()
-    print(f"matrix free took {toc-tic:.1f} s.")
-    print(data["finite-n lambda matfree"])
-
-    lambda_min = float(data["finite-n lambda matfree"].min())
-    print(f"lambda_min = {lambda_min:.6e}")
-
-    results_iota0.append(iota_0)
-    results_lambda_min.append(lambda_min)
-
-    v = data["finite-n eigenfunction matfree"]
-    n_total = n_rho * n_theta * n_zeta
-    xi_sup_rho_final   = np.reshape(v[:n_total],          (n_rho, n_theta, n_zeta))
-    xi_sup_theta_final = np.reshape(v[n_total:2*n_total],  (n_rho, n_theta, n_zeta))
-    xi_sup_zeta_final  = np.reshape(v[2*n_total:],         (n_rho, n_theta, n_zeta))
-
-    np.save(save_path + f"xi_rho_{save_tag}.npy",        xi_sup_rho_final)
-    np.save(save_path + f"xi_theta_{save_tag}.npy",      xi_sup_theta_final)
-    np.save(save_path + f"xi_zeta_{save_tag}.npy",       xi_sup_zeta_final)
-    np.save(save_path + f"lambda_{save_tag}.npy",        data["finite-n lambda matfree"])
-    np.save(save_path + f"rtz_nodes_{save_tag}.npy",     rtz_nodes)
-    np.save(save_path + f"eigenfunction_{save_tag}.npy", data["finite-n eigenfunction matfree all"])
 
 # ── Save summary ──────────────────────────────────────────────────────────────
 results_iota0      = np.array(results_iota0)

@@ -101,7 +101,7 @@ for iota_0 in iota_on_axis_values:
         Psi=1,
     )
 
-    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13)[-1]
+    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
     eq.save(save_path + save_name)
     print("equilibrium solved")
 

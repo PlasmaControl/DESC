@@ -57,7 +57,7 @@ for i, res in enumerate(resolutions):
     else:
         pest = True
     coords = "($\\rho, \\vartheta, \\phi$)" if pest else "($\\rho, \\theta, \\zeta$)" 
-    from_scratch = True
+    from_scratch = False
 
     # Equilibrium paremeteters
     if from_scratch:
@@ -89,7 +89,7 @@ for i, res in enumerate(resolutions):
         p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
         p_profile = PowerSeriesProfile(p_coeffs)
     else:
-        eq_tag = name = "ESTELL"
+        eq_tag = name = "NCSX"
         axisym = False
         n_mode_axisym = 0
 

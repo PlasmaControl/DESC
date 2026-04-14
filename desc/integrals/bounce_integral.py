@@ -46,8 +46,8 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
-    _eps,
     _JF_BUG,
+    _eps,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,

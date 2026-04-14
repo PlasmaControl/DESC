@@ -26,8 +26,8 @@ from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
-    _eps,
     _JF_BUG,
+    _eps,
     chebder,
     nufft1d2r,
     nufft2d2r,

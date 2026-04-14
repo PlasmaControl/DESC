@@ -345,7 +345,10 @@ def fft_grid_data(p):
     np.testing.assert_allclose(
         d["Gamma_c"],
         data["Gamma_c"],
-        rtol=2e-3,
+        # This is large since no nuffts + spline for bounce points
+        # are innaccurate due to lack of Newton step after finding bounce point
+        # approximation with splines.
+        rtol=0.2,
         err_msg="Gamma_c no nufft",
     )
 

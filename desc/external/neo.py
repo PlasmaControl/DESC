@@ -26,8 +26,8 @@ class NeoIO:
 
         self.eq = eq
         self.ns = ns  # number of surfaces
-        self.M_booz = setdefault(M_booz, 5 * eq.M + 1)
-        self.N_booz = setdefault(N_booz, 5 * eq.N)
+        self.M_booz = setdefault(M_booz, 6 * eq.M + 1)
+        self.N_booz = setdefault(N_booz, 6 * eq.N)
 
     @staticmethod
     def read(name):
@@ -39,12 +39,36 @@ class NeoIO:
         neo_eps[~good] = np.interp(neo_rho[~good], neo_rho[good], neo_eps[good])
         return neo_rho, neo_eps
 
-    def write(self, **kwargs):
-        """Write neo input file."""
+    def write(self, *, theta_n=300, phi_n=300, num_pitch=150, n_step_per=500, **kwargs):
+        """Write neo input file.
+
+        Parameters
+        ----------
+        theta_n, phi_n : int
+            Spline resolution.
+        num_pitch : int
+            Resolution for quadrature over velocity coordinate.
+            Default is 150.
+        nstep_per : int
+            Runge-Kutta steps to perform within each field period. Default is 500.
+
+            NEO employs a constant step size (2π/NFP/``nstep_per``),
+            explicit Runge-Kutta scheme which has algebraic convergence of order 3/2
+            for the bounce integrals of interest. The accuracy of the bounce points is
+            also only found with first order accuracy in (2π/NFP/``nstep_per``) so the
+            algebraic convergence is capped at 3/2 independent of the integrator.
+
+        """
         print(f"Writing VMEC wout to {self.vmec_file}")
         VMECIO.save(self.eq, self.vmec_file, surfs=self.ns, verbose=0)
         self._write_booz()
-        self._write_neo(**kwargs)
+        self._write_neo(
+            theta_n=theta_n,
+            phi_n=phi_n,
+            num_pitch=num_pitch,
+            nstep_per=n_step_per,
+            **kwargs,
+        )
 
     def _write_booz(self):
         print(f"Writing boozer output file to {self.booz_file}")
@@ -59,17 +83,18 @@ class NeoIO:
 
     def _write_neo(
         self,
-        theta_n=200,
-        phi_n=200,
-        num_pitch=150,
+        theta_n,
+        phi_n,
+        num_pitch,
+        nstep_per,
         multra=1,
         acc_req=0.01,
         nbins=100,
-        nstep_per=75,
         nstep_min=500,
         nstep_max=2000,
         verbose=2,
     ):
+        """Write NEO file."""
         print(f"Writing NEO input file to {self.neo_in_file}")
         f = open(self.neo_in_file, "w")
 

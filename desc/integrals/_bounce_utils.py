@@ -39,7 +39,7 @@ from desc.utils import atleast_nd, flatten_mat, setdefault
 _sentinel = -1e5
 
 
-def bounce_points(pitch_inv, knots, B, num_well=-1):
+def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -68,10 +68,12 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
+    return_mask : bool
+        Whether to return the mask ``z1<z2``. Default is ``False``.
 
     Returns
     -------
-    z1, z2, mask : tuple[jnp.ndarray]
+    z1, z2 : tuple[jnp.ndarray]
         Shape (..., num pitch, num well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
@@ -110,10 +112,10 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-    return z1, z2, mask
+    return (z1, z2, mask) if return_mask else (z1, z2)
 
 
-def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
+def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
     """Newton step using maps used in the quadrature.
 
     An error of ε in a bounce point manifests
@@ -132,7 +134,8 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         Shape (num ρ, num α, num pitch, num well).
         Subset of points to refine.
     nufft_eps : float
-        Desired error ε of the bounce points.
+        Desired error ε of the returned bounce points.
+        Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
 
     Returns
     -------
@@ -189,19 +192,30 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     return z[..., 0, :, :], z[..., 1, :, :]
 
 
-@partial(jax.custom_jvp, nondiff_argnums=(2, 3))
-def regular_points(o, pitch_inv, num_well, nufft_eps):
-    """Bounce points then newton, with regularized jvp."""
+@partial(jax.custom_jvp, nondiff_argnums=(2,))
+def regular_points(o, pitch_inv, num_well):
+    """Bounce points then Newton, with regularized jvp.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    num_well : int
+        The usual suspect.
+
+    """
     return _newton(
         o,
         pitch_inv,
-        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well),
-        nufft_eps,
+        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well, True),
+        min(o._nufft_eps, 1e-10),
     )
 
 
 @regular_points.defjvp
-def regular_points_jvp(num_well, nufft_eps, primals, tangents):
+def regular_points_jvp(num_well, primals, tangents):
     """Implicit function theorem with regularization.
 
     Regularization used to smooth the discretized system so that it recognizes
@@ -210,8 +224,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    See supplementary information in DESC/publications/unalmis2025.
 
     """
     # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
@@ -219,7 +232,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
     o, p = primals
     do, dp = tangents
 
-    z1, z2 = regular_points(o, p, num_well, nufft_eps)
+    z1, z2 = regular_points(o, p, num_well)
 
     shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
 
@@ -240,6 +253,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
 
     mask = (z1 < z2)[..., None, :, :]
 
+    nufft_eps = min(o._nufft_eps, 1e-10)
     dB_dz = nufft2d2r(
         z,
         t,

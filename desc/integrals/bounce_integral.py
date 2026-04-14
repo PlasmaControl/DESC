@@ -3,7 +3,7 @@
 import warnings
 from abc import ABC, abstractmethod
 
-from equinox import Module
+import equinox as eqx
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
@@ -47,7 +47,6 @@ from desc.integrals._bounce_utils import (
 )
 from desc.integrals._interp_utils import (
     _eps,
-    can_use_nufft,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -74,7 +73,7 @@ from desc.utils import (
 )
 
 
-class Bounce(Module, ABC):
+class Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
@@ -93,9 +92,9 @@ class Bounce(Module, ABC):
             If ``True``, then the pitch angles are chosen so that the quadrature
             over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
             interior completed by an open midpoint scheme near the boundary such
-            that an accuracy of fourth order is preserved. If the integrand is not
-            sufficiently smooth then quadrature accuracy reduces to third order.
-            If ``False``, then an open midpoint scheme is returned.
+            that an accuracy of fourth order is preserved.
+            If ``False``, then an open midpoint scheme is returned, which
+            is only recommended for plotting purposes.
 
         Returns
         -------
@@ -270,6 +269,7 @@ class Bounce2D(Bounce):
     """
 
     required_names = ["B^zeta", "|B|", "iota"]
+    """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
     _quad: tuple[jax.Array]
     _NFP: int
@@ -278,6 +278,7 @@ class Bounce2D(Bounce):
     _modes_t: jax.Array
     _c: dict[str, jax.Array]
     _theta: PiecewiseChebyshevSeries
+    _nufft_eps: float = eqx.field(static=True)
 
     def __init__(
         self,
@@ -325,6 +326,8 @@ class Bounce2D(Bounce):
         iota, alpha = jnp.atleast_1d(iota, alpha)
         self._theta = theta_on_fieldlines(angle, iota, alpha, num_transit, grid.NFP)
 
+        self._nufft_eps = float(nufft_eps)
+
         if Y_B is None:
             Y_B = Y_B_rule(grid, spline)
         if spline:
@@ -336,7 +339,7 @@ class Bounce2D(Bounce):
                 self._modes_t,
                 self._modes_z,
                 self._NFP,
-                nufft_eps,
+                self._nufft_eps,
                 vander_t=vander.get("dct spline", None),
                 check=check,
             )
@@ -824,14 +827,11 @@ class Bounce2D(Bounce):
             return z1, z2
 
         pitch_inv = broadcast_for_bounce(pitch_inv)
-        if can_use_nufft:
-            return regular_points(self, pitch_inv, num_well, 1e-10)
-
-        # Newton update has only been implemented for nuffts; contributions welcome.
-        z1, z2, _ = bounce_points(
-            pitch_inv, self._c["knots"], self._c["B(z)"], num_well
-        )
-        return z1, z2
+        if self._nufft_eps < 1e-14:
+            # FIXME: Newton update has only been implemented for nuffts; contributions
+            # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
+            return bounce_points(pitch_inv, self._c["knots"], self._c["B(z)"], num_well)
+        return regular_points(self, pitch_inv, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -974,7 +974,6 @@ class Bounce2D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv, num_well)
-        z1, z2 = points
 
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
@@ -983,27 +982,17 @@ class Bounce2D(Bounce):
         elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, :, None, None]
 
-        z = bijection_from_disc(x, z1[..., None], z2[..., None])
-
         if nufft_eps < 1e-14:
-            data = self._nummt(z, data, low_ram)
+            data = self._nummt(x, *points, data, low_ram)
         else:
-            data = self._nufft(
-                z,
-                data,
-                nufft_eps,
-                low_ram,
-                mask=flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], z.shape), 4),
-                sentinel=0.5 * jnp.min(pitch_inv),
-            )
+            data = self._nufft(x, *points, data, low_ram, nufft_eps, pitch_inv)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
-        data["zeta"] = z
 
         # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        cov = grad_bijection_from_disc(z1, z2)
+        cov = grad_bijection_from_disc(*points)
         result = [
             (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).dot(w) * cov
             for f in integrand
@@ -1011,7 +1000,7 @@ class Bounce2D(Bounce):
 
         if check:
             check_interp(
-                z,
+                data["zeta"],
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
                 [data[k] for k in data if k not in ("zeta", "|e_zeta|r,a|", "|B|")],
@@ -1021,25 +1010,31 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, z, data, eps, low_ram, mask, sentinel):
-        shape = z.shape
-        z = flatten_mat(z, 3)
+    def _nufft(self, x, z1, z2, data, low_ram, eps, pitch_inv):
+        shape = (*z1.shape, x.size)
+
+        z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
         t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
         z = flatten_mat(z)
-        c = jnp.where(
-            mask[:, None] if mask.ndim == 2 else mask,
-            nufft2d2r(
-                z,
-                t,
-                jnp.concatenate(
-                    [*data.values(), self._c["B^zeta"], self._c["|B|"]], -3
-                ),
-                (0, 2 * jnp.pi / self._NFP),
-                vec=True,
-                eps=eps,
-                mask=mask,
-            ),
-            sentinel,  # replace junk zeros to avoid nans
+        # t and z have shape (num rho surfaces, num points on each surface)
+        #            or just (                  num points on each surface).
+
+        if False:
+            # Waiting for jax-finufft to merge pull request with this feature.
+            mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
+            sentinel = 0.5 * jnp.min(pitch_inv)
+        else:
+            mask = sentinel = None
+
+        c = nufft2d2r(
+            z,
+            t,
+            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
+            (0, 2 * jnp.pi / self._NFP),
+            vec=True,
+            eps=eps,
+            mask=mask,
+            sentinel=sentinel,
         )
         c = (
             c.reshape(len(data) + 2, *shape)
@@ -1047,12 +1042,18 @@ class Bounce2D(Bounce):
             # reshape before swap to avoid memory copy
             else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
         )
-        return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
-    def _nummt(self, z, data, low_ram):
-        shape = z.shape
-        z = flatten_mat(z, 3)
+        data = dict(zip([*data.keys(), "B^zeta", "|B|"], c))
+        data["zeta"] = z.reshape(shape)
+        return data
+
+    def _nummt(self, x, z1, z2, data, low_ram):
+        shape = (*z1.shape, x.size)
+
+        zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
+        z = flatten_mat(zeta, 3)
         t = self._theta.eval1d(z, loop=low_ram).reshape(*shape, 1)
+
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             # Using the same |B| that gave bounce points increases correlation
             # in discretization error in an open neighboorhood around the
@@ -1064,7 +1065,7 @@ class Bounce2D(Bounce):
             # Also uses less memory due to the dimension reduction.
             B = self._c["B(z)"].eval1d(z, loop=low_ram).reshape(shape)
 
-        z = z.reshape(*shape, 1)
+        z = zeta[..., None]
         z = jnp.exp(1j * self._modes_z * z)
         t = jnp.exp(1j * self._modes_t * t)
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
@@ -1073,6 +1074,7 @@ class Bounce2D(Bounce):
             data["|B|"] = B
         else:
             data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        data["zeta"] = zeta
 
         return data
 
@@ -1265,9 +1267,7 @@ class Bounce2D(Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            kwargs["z1"], kwargs["z2"], _ = bounce_points(
-                pitch_inv, self._c["knots"], B
-            )
+            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._c["knots"], B)
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1476,6 +1476,7 @@ class Bounce1D(Bounce):
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
+    """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
     _quad: tuple[jax.Array]
     _data: dict[str, jax.Array]
@@ -1656,10 +1657,9 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        z1, z2, _ = bounce_points(
+        return bounce_points(
             broadcast_for_bounce(pitch_inv), self._zeta, self._B, num_well
         )
-        return z1, z2
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1883,7 +1883,7 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            kwargs["z1"], kwargs["z2"], _ = bounce_points(pitch_inv, self._zeta, B)
+            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._zeta, B)
             kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
             PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)

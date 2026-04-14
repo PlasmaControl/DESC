@@ -214,13 +214,7 @@ doc_bounce = """
     spline : bool
         Whether to use cubic splines to compute bounce points instead of
         Chebyshev series. Default is ``True``.
-    use_bounce1d : bool
-        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
-        basically replacing some pseudo-spectral methods with local splines.
-        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
-        depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
-    """
+    """.rstrip()
 
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably

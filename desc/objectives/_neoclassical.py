@@ -37,7 +37,7 @@ class EffectiveRipple(_Objective):
 
     __doc__ = (
         __doc__.rstrip()
-        + doc_bounce.rstrip()
+        + doc_bounce
         + collect_docs(
             target_default="``target=0``.",
             bounds_default="``target=0``.",

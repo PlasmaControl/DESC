@@ -8,13 +8,11 @@ from interpax import interp1d
 try:
     from jax_finufft import nufft2, options
 
-    can_use_nufft = True
 except (ImportError, ModuleNotFoundError):
     warnings.warn(
         "jax_finufft is not installed. NUFFT functions will not be available.",
         UserWarning,
     )
-    can_use_nufft = False
 except Exception as e:
     error_str = str(e)
     # This error will probably happen pretty often, we skip it to prevent breaking
@@ -35,7 +33,6 @@ except Exception as e:
             f"will not be available: {e}",
             UserWarning,
         )
-    can_use_nufft = False
 
 from desc.backend import jax, jnp
 
@@ -98,6 +95,7 @@ def nufft2d2r(
     vec=False,
     eps=1e-6,
     mask=None,
+    sentinel=0.0,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -137,6 +135,12 @@ def nufft2d2r(
         of ``(x),(x),(b,f0,f1)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
+    mask : jnp.ndarray, optional
+        Boolean mask of points to interpolate to. Should have same shape as ``x0``
+        and ``x1``. This does nothing until the merge of
+        https://github.com/flatironinstitute/jax-finufft/pull/216.
+    sentinel : float
+        Value to pad array where the mask is false.
 
     Returns
     -------
@@ -171,7 +175,10 @@ def nufft2d2r(
         return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
     opts = options.Opts(modeord=1)
-    return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    if mask is not None:
+        f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, sentinel)
+    return f
 
 
 # Warning: method must be specified as keyword argument.
@@ -359,8 +366,7 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    See supplementary information in DESC/publications/unalmis2025.
 
     """
     c, k, a_min, a_max = primals

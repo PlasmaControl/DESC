@@ -53,7 +53,7 @@ class GammaC(_Objective):
 
     __doc__ = (
         __doc__.rstrip()
-        + doc_bounce.rstrip()
+        + doc_bounce
         + """
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.

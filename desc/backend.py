@@ -36,11 +36,13 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.arange(2)
+            x = jnp.linspace(0, 5, 2)
+            y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.arange(2)
+        x = jnp.linspace(0, 5, 2)
+        y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
         warnings.warn(colored("Failed to load JAX", "red"))

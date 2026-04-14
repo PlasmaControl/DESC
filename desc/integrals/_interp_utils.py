@@ -36,7 +36,6 @@ except Exception as e:
 
 from desc.backend import jax, jnp
 
-
 _JF_BUG = True
 """https://github.com/flatironinstitute/jax-finufft/issues/158.
 
@@ -180,7 +179,7 @@ def nufft2d2r(
 
     opts = options.Opts(modeord=1)
     f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
-    if mask is not None:
+    if mask is not None and sentinel != 0.0:
         f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, sentinel)
     return f
 

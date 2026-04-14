@@ -37,6 +37,15 @@ except Exception as e:
 from desc.backend import jax, jnp
 
 
+_JF_BUG = True
+"""https://github.com/flatironinstitute/jax-finufft/issues/158.
+
+   Wait for jax-finufft to merge
+   https://github.com/flatironinstitute/jax-finufft/pull/216
+   then bump min version and set this to False.
+"""
+
+
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
     """Non-uniform 1D real fast Fourier transform of second type.
 
@@ -164,12 +173,7 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    # TODO: Delete this if block after
-    # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
-    # and then bump min version requirement.
-    JF_BUG = True
-    if JF_BUG:
-        # https://github.com/flatironinstitute/jax-finufft/pull/159
+    if _JF_BUG:
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
         return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real

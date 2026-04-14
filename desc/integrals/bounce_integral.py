@@ -47,6 +47,7 @@ from desc.integrals._bounce_utils import (
 )
 from desc.integrals._interp_utils import (
     _eps,
+    _JF_BUG,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -268,7 +269,7 @@ class Bounce2D(Bounce):
 
     """
 
-    required_names = ["B^zeta", "|B|", "iota"]
+    required_names = ["B^zeta", "|B|", "iota"]  # TODO(#2152)
     """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
     _quad: tuple[jax.Array]
@@ -1019,12 +1020,11 @@ class Bounce2D(Bounce):
         # t and z have shape (num rho surfaces, num points on each surface)
         #            or just (                  num points on each surface).
 
-        if False:
-            # Waiting for jax-finufft to merge pull request with this feature.
+        if _JF_BUG:
+            mask = sentinel = None
+        else:
             mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
             sentinel = 0.5 * jnp.min(pitch_inv)
-        else:
-            mask = sentinel = None
 
         c = nufft2d2r(
             z,

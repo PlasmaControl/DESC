@@ -27,6 +27,7 @@ from orthax.chebyshev import chebvander
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
     _eps,
+    _JF_BUG,
     chebder,
     nufft1d2r,
     nufft2d2r,
@@ -173,7 +174,11 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
         (0, 2 * jnp.pi / o._NFP),
         vec=True,
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4),
+        mask=(
+            None
+            if _JF_BUG
+            else flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4)
+        ),
     )
     B, dB_dz, dB_dt = (
         B.reshape(3, *shape)
@@ -264,7 +269,7 @@ def regular_points_jvp(num_well, primals, tangents):
         (0, 2 * jnp.pi / o._NFP),
         vec=True,
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
     )
     dB_do = nufft2d2r(
         z,
@@ -272,7 +277,7 @@ def regular_points_jvp(num_well, primals, tangents):
         do._c["|B|"].squeeze(-3),
         (0, 2 * jnp.pi / o._NFP),
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
     ).reshape(shape)
 
     dB_dz, dB_dt = (

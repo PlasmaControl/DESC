@@ -2003,36 +2003,24 @@ def _AGNI_matfree(params, transforms, profiles, data, **kwargs):
     w = sigma + 1.0 / mu[sort_idxs]
     v = vecs[sort_idxs][0, :]
 
-    test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
-    test1 = Ax(v) / jnp.linalg.norm(Ax(v))
     # Refine Ritz vector with inverse iteration (5 CG solves)
-    OPinv = get_OPinv(w[0] - 2e-4)  # shift close to the Ritz value to speed up convergence
     for _ in range(5):
-        v = OPinv(v)
-        v = v / jnp.linalg.norm(v)
+        # See how close the Ritz vector is to an actual eigenvector of OPinv
+        mu_rq = jnp.dot(v, OPinv(v)) / jnp.dot(v, v)
+        try:
+            np.testing.assert_allclose(OPinv(v), mu_rq * v)
+        except AssertionError as e:
+            print("OPinv(v) \neq mu * v")
+            print(e)
+        w_rq = jnp.dot(v, Ax(v)) / jnp.dot(v, v)
+        OPinv = get_OPinv(w_rq - 2 * np.abs(w_rq)) 
+        for _ in range(5):
+            v = OPinv(v)
+            v = v / jnp.linalg.norm(v)
     w_rq = jnp.dot(v, Ax(v)) / jnp.dot(v, v)
     mu_rq = jnp.dot(v, OPinv(v)) / jnp.dot(v, v)
     np.testing.assert_allclose(OPinv(v), mu_rq * v)
     np.testing.assert_allclose(Ax(v), w_rq * v)
-    a = OPinv(v)
-    b = mu[sort_idxs][0] * v
-    diff = np.abs(a - b)
-    rel = diff / np.maximum(np.abs(b), 1e-12)
-    try:
-        np.testing.assert_allclose(a, b)
-    except AssertionError as e:
-        print("OPinv(v) \neq mu * v")
-        print(e)
-
-    a = Ax(v)
-    b = w[0] * v
-    diff = np.abs(a - b)
-    rel = diff / np.maximum(np.abs(b), 1e-12)
-    try:
-        print("Ax(v) \neq w * v")
-        np.testing.assert_allclose(a, b)
-    except AssertionError as e:
-        print(e)
 
     test0 = Ax(v0) / jnp.linalg.norm(Ax(v0))
     test1 = Ax(v) / jnp.linalg.norm(Ax(v))

@@ -50,6 +50,9 @@ B_t_errs = np.zeros_like(resolutions, dtype=float)
 B_z_errs = np.zeros_like(resolutions, dtype=float)
 phi_errs = np.zeros_like(resolutions, dtype=float)
 
+just_plot = True
+path_exists = np.ones_like(resolutions, dtype=bool)
+
 for i, res in enumerate(resolutions):
     # Misc inputs
     if fixed_point:
@@ -252,6 +255,10 @@ for i, res in enumerate(resolutions):
         else:
             print("loading phi matrix")
             phi_matrix = np.load(save_path + phi_save_name)
+        
+    elif just_plot:
+        path_exists[i]=False
+        continue
     else:
         # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
         #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
@@ -391,17 +398,17 @@ for i, res in enumerate(resolutions):
 
 # Plot errors vs resolution
 fig, ax = plt.subplots(1, 3, figsize=(20, 5))
-ax[0].plot(resolutions, B_t_errs, marker="o")
+ax[0].plot(resolutions[path_exists], B_t_errs[path_exists], marker="o")
 #ax[0].set_xscale("log")
 #ax[0].set_yscale("log")
 ax[0].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[0].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\theta$", fontsize=12)
-ax[1].plot(resolutions, B_z_errs, marker="o")
+ax[1].plot(resolutions[path_exists], B_z_errs[path_exists], marker="o")
 #ax[1].set_xscale("log")
 #ax[1].set_yscale("log")
 ax[1].set_xlabel("Resolution (M=N)", fontsize=12)
 ax[1].set_ylabel("RMS error in $\\mathbf{B} \\cdot \\mathbf{e}_\\zeta$", fontsize=12)
-ax[2].plot(resolutions, phi_errs, marker="o")
+ax[2].plot(resolutions[path_exists], phi_errs[path_exists], marker="o")
 #ax[2].set_xscale("log")
 #ax[2].set_yscale("log")
 ax[2].set_xlabel("Resolution (M=N)", fontsize=12)

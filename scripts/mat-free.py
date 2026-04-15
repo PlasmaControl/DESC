@@ -47,7 +47,7 @@ else:
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.linspace(0.6, 1.5, 10)
+iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)
@@ -57,7 +57,7 @@ results_lambda_min = []
 stabilities = []
 
 for iota_0 in iota_on_axis_values:
-    iota_coeffs = np.array([iota_0, -0.05])
+    iota_coeffs = np.array([iota_0, -0.5])
     iota_modes  = np.array([0, 2])
     iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
     I_profile = None

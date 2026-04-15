@@ -73,10 +73,15 @@ for iota_0 in iota_on_axis_values:
     # nearest theta index to pi/2
     i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
 
+    # ι=1 surface location: ι₀ − 0.05ρ² = 1  →  ρ = sqrt((ι₀−1)/0.05)
+    rho_iota1 = np.sqrt((iota_0 - 1.0) / 0.05) if iota_0 > 1.0 else None
+
     def _plot_vs_rho(i_theta, theta_label, fname_suffix):
         fig, ax = plt.subplots(figsize=(7, 5))
         for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
             ax.plot(rho, xi[:, i_theta, 0], color=color, lw=2, label=label)
+        if rho_iota1 is not None and rho_iota1 <= 1.0:
+            ax.axvline(rho_iota1, color="red", lw=1.2, ls=":", label=r"$\iota=1$")
         ax.set_xlabel(r"$\rho$", fontsize=14)
         ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
         ax.set_title(title_base + f",  {theta_label}", fontsize=12)

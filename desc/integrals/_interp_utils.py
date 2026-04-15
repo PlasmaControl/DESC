@@ -103,7 +103,7 @@ def nufft2d2r(
     vec=False,
     eps=1e-6,
     mask=None,
-    sentinel=0.0,
+    sentinel=None,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -149,6 +149,7 @@ def nufft2d2r(
         https://github.com/flatironinstitute/jax-finufft/pull/216.
     sentinel : float
         Value to pad array where the mask is false.
+        Default is 0.0.
 
     Returns
     -------
@@ -179,7 +180,7 @@ def nufft2d2r(
 
     opts = options.Opts(modeord=1)
     f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
-    if mask is not None and sentinel != 0.0:
+    if mask is not None and sentinel is not None:
         f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, sentinel)
     return f
 

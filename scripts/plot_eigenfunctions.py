@@ -15,21 +15,26 @@ save_path   = "./high_aspect_ratio_tokamak/"
 plot_path   = save_path + "eigenfunction_plots/"
 os.makedirs(plot_path, exist_ok=True)
 
-# These must match what run_newcomb.py used for the high-res solve
-n_rho   = 64
-n_theta = 64
-n_zeta  = 64
-
-# rho grid (reproduced from run_newcomb.py)
-x, _ = leggauss_lob(n_rho)
-rho   = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
-theta = np.linspace(0.0, 2 * np.pi, n_theta, endpoint=False)
 
 # Fixed parameters used when building the save_tag
 aspect_ratio = 200
 NFP          = 1
 axisym       = False
 p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
+
+# These must match what mat-free.py used for the high-res solve
+n_rho = 24
+n_theta = 24
+if axisym:
+    n_zeta = 1
+else:
+    n_zeta = 14
+
+# rho grid (reproduced from mat-free.py)
+x, _ = leggauss_lob(n_rho)
+rho   = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
+theta = np.linspace(0.0, 2 * np.pi, n_theta, endpoint=False)
+
 
 # rho indices to use for the "vs theta" plots
 rho_plot_indices = [8, 20, 35, 50]

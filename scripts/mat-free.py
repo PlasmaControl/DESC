@@ -28,8 +28,6 @@ from desc.grid import QuadratureGrid
 import os
 
 from newcomb import *
-from desc.compute._stability import term_by_term_stability
-from desc.compute.utils import get_params, get_transforms
 
 # Input parameters
 a = 1  # Minor radius
@@ -37,18 +35,18 @@ aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
 axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
-n_mode_axisym = 1  # toroidal mode number n (axisym case)
-m = 1             # poloidal mode number for the kink trial function
+n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 # Low-res solve for eigenfunction guess
-n_rho = 36
-n_theta = 36
+n_rho = 24
+n_theta = 24
 if axisym:
     n_zeta = 1
 else:
     n_zeta = 14
 
-# Quadratic iota profile: iota(rho) = iota_0 - 0.5*rho^2
+# Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
+# => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
 iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 
 save_path = "./high_aspect_ratio_tokamak/"
@@ -71,7 +69,7 @@ for iota_0 in iota_on_axis_values:
     save_tag = (
         f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
-        f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
+        f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"
         f"n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}"
     )
     save_name = f"equilibrium_{save_tag}.h5"
@@ -151,138 +149,54 @@ for iota_0 in iota_on_axis_values:
 
     grid = Grid(rtz_nodes)
 
-    # ── q=1 surface ───────────────────────────────────────────────────────────
-    # iota(rho) = iota_0 - 0.5*rho^2  =>  q=1 at rho_q1 = sqrt((iota_0-1)/0.5)
-    if iota_0 <= 1.0:
-        print(f"  iota_0={iota_0:.4f}: no q=1 surface inside plasma, skipping")
-        results_lambda_min.append(np.nan)
-        continue
-    rho_q1 = np.sqrt((iota_0 - 1.0) / 0.5)
-    print(f"  q=1 surface at rho_q1 = {rho_q1:.4f}")
-
-    # ── Screw-pinch equilibrium quantities on 1-D radial grid ────────────────
-    grid1d = LinearGrid(rho=np.array(rho), theta=0.0, zeta=0.0, NFP=NFP)
-    data1d = eq.compute(data_keys + ["a", "R0", "p", "psi_r"], grid=grid1d)
-    a_val  = float(data1d["a"])
-    R0_val = float(data1d["R0"])
-    r_arr  = np.array(rho) * a_val               # physical minor radius (n_rho,)
-    k_sc   = -n_mode_axisym / R0_val             # toroidal wavenumber (newcomb sign)
-
-    B_theta_1d = np.array(B_theta_pinch(data1d, r_arr))  # (n_rho,)
-    B_z_1d     = np.array(B_z_pinch(data1d, R0_val))      # (n_rho,)
-    B_mag_1d   = np.sqrt(B_theta_1d**2 + B_z_1d**2)
-    psi_r_1d   = np.array(data1d["psi_r"])                # (n_rho,)
-    p_1d       = np.array(data1d["p"])                    # (n_rho,) pressure
-
-    k0sq_1d = k_sc**2 + (m / r_arr)**2                   # (n_rho,)
-    Fs_1d, _ = F(np.array(rho), data1d, m=m, k=k_sc, a=a_val, R0=R0_val)
-    Fs_1d    = np.array(Fs_1d)
-    f_1d, _  = fg(np.array(rho), data1d, m=m, k=k_sc, a=a_val, R0=R0_val)
-    f_1d     = np.array(f_1d)
-    G_1d     = f_1d / r_arr                               # G = F²/k₀²
-
-    gamma_ad  = 5 / 3
-    delta_sq  = gamma_ad * p_1d * k0sq_1d                 # δ²
-
-    # ── Trial function ξ₀(ρ): smooth step, 1 inside q=1, 0 outside ──────────
-    eps_step = 0.05  # smoothing width in rho
-    xi0   = 0.5 * (1.0 - np.tanh((np.array(rho) - rho_q1) / eps_step))  # (n_rho,)
-    # BC: vanish at axis and edge
-    xi0[0]  = 0.0
-    xi0[-1] = 0.0
-
-    # dξ₀/dρ analytically, then d(rξ₀)/dr = ξ₀ + ρ dξ₀/dρ
-    dxi0_drho  = -1.0 / (2.0 * eps_step) / np.cosh((np.array(rho) - rho_q1) / eps_step)**2
-    d_r_xi0_dr = xi0 + np.array(rho) * dxi0_drho   # = d(rξ₀)/dr  (units: 1, since r=ρ·a cancels)
-
-    # ── Formula 2: η₀(ρ) = 1/(r k₀²) [2k B_θ ξ₀ + G d(rξ₀)/dr] ────────────
-    eta0 = (2 * k_sc * B_theta_1d * xi0 + G_1d * d_r_xi0_dr) / (r_arr * k0sq_1d)  # (n_rho,)
-
-    # ── Formula 1: ξ_∥₀(ρ) = B F/(F²+δ²) ∇·ξ_⊥ ─────────────────────────────
-    # ∇·ξ_⊥ for mode e^{i(mθ-nζ)} at amplitude level (angular phase factors absorbed):
-    #   D₀ = (1/r) d(rξ₀)/dr - m η₀ B_z/(r B) + n η₀ B_θ/(R B)
-    div_xi_perp = (
-        d_r_xi0_dr / r_arr
-        - m * eta0 * B_z_1d / (r_arr * B_mag_1d)
-        + n_mode_axisym * eta0 * B_theta_1d / (R0_val * B_mag_1d)
-    )
-    xi_par0 = B_mag_1d * Fs_1d / (Fs_1d**2 + delta_sq) * div_xi_perp  # (n_rho,)
-
-    # ── Build 2D (ρ, θ, ζ) arrays ─────────────────────────────────────────────
-    # Physical convention on the real grid:
-    #   ξ_r(ρ,θ)      = ξ₀(ρ) cos(mθ)
-    #   η_phys(ρ,θ)   = -η₀(ρ) sin(mθ)    [factor i → phase shift]
-    #   ξ_∥_phys(ρ,θ) = -ξ_∥₀(ρ) sin(mθ)
-    #
-    # Physical θ/z components:
-    #   ξ_θ_phys = η_phys B_z/B + ξ_∥_phys B_θ/B  = -(η₀ B_z + ξ_∥₀ B_θ)/B · sin(mθ)
-    #   ξ_z_phys = -η_phys B_θ/B + ξ_∥_phys B_z/B  = (η₀ B_θ - ξ_∥₀ B_z)/B · sin(mθ)
-    #
-    # Contravariant PEST (screw-pinch approx: e_ρ≈a r̂, e_θ≈r θ̂, e_ζ≈R ẑ):
-    #   ξ^ρ = ξ_r / a
-    #   ξ^θ = ξ_θ_phys / r
-    #   ξ^ζ = ξ_z_phys / R
-    #
-    # Storage convention: xi_rho_stored = ξ^ρ / psi_r
-
-    theta_arr = np.array(theta)                    # (n_theta,)
-    cos_mt    = np.cos(m * theta_arr)              # (n_theta,)
-    sin_mt    = np.sin(m * theta_arr)
-
-    # Radial amplitudes, shape (n_rho,) — broadcast over theta below
-    amp_rho   = xi0 / (a_val * psi_r_1d)                                  # ξ^ρ / psi_r
-    amp_theta = -(eta0 * B_z_1d + xi_par0 * B_theta_1d) / (r_arr * B_mag_1d)   # ξ^θ amplitude
-    amp_zeta  = (eta0 * B_theta_1d - xi_par0 * B_z_1d) / (R0_val * B_mag_1d)   # ξ^ζ amplitude
-
-    # (n_rho, n_theta, n_zeta=1)
-    xi_rho_low   = (amp_rho[:, None, None]   * cos_mt[None, :, None]).reshape(n_rho, n_theta, n_zeta)
-    xi_theta_low = (amp_theta[:, None, None] * (-sin_mt[None, :, None])).reshape(n_rho, n_theta, n_zeta)
-    xi_zeta_low  = (amp_zeta[:, None, None]  * (-sin_mt[None, :, None])).reshape(n_rho, n_theta, n_zeta)
-
-    # Enforce Dirichlet BC: ξ^ρ = 0 at ρ=0 and ρ=1
-    xi_rho_low[0,  :, :] = 0.0
-    xi_rho_low[-1, :, :] = 0.0
-
-    np.save(save_path + f"xi_rho_low_{save_tag}.npy",   xi_rho_low)
-    np.save(save_path + f"xi_theta_low_{save_tag}.npy", xi_theta_low)
-    np.save(save_path + f"xi_zeta_low_{save_tag}.npy",  xi_zeta_low)
-
-    # ── term_by_term_stability ────────────────────────────────────────────────
-    print("  running term_by_term_stability")
+    print("computing eigenmode at low res")
     tic = time.time()
-
-    tbt_data_keys = [
-        "g_rr|PEST", "g_rv|PEST", "g_rp|PEST",
-        "g_vv|PEST", "g_vp|PEST", "g_pp|PEST",
-        "g^rr", "g^rv", "g^rz",
-        "J^theta_PEST", "J^zeta", "|J|",
-        "sqrt(g)_PEST",
-        "(sqrt(g)_PEST_r)|PEST",
-        "(sqrt(g)_PEST_v)|PEST",
-        "(sqrt(g)_PEST_p)|PEST",
-        "finite-n instability drive",
-        "iota", "psi_r", "psi_rr", "p", "a",
-    ]
-    tbt_data   = eq.compute(tbt_data_keys, grid=grid)
-    params     = get_params("finite-n lambda", eq)
-    transforms = get_transforms("finite-n lambda", eq, grid, diffmat=diffmat)
-
-    v = jnp.concatenate([xi_rho_low.flatten(), xi_theta_low.flatten(), xi_zeta_low.flatten()])
-    v = v / jnp.linalg.norm(v)
-
-    vec, energy, _ = term_by_term_stability(
-        v, params, transforms, tbt_data,
-        diffmat=diffmat,
-        gamma=100,
-        incompressible=False,
-        axisym=axisym,
-        n_mode_axisym=n_mode_axisym,
-        sigma=0,
+    data = eq.compute(
+        "finite-n lambda", grid=grid, diffmat=diffmat,
+        gamma=100, incompressible=False,
+        axisym=axisym, n_mode_axisym=n_mode_axisym,
     )
     toc = time.time()
-    print(f"  term_by_term_stability took {toc-tic:.1f} s,  Rayleigh quotient = {energy:.6e}")
+    print(f"matrix full took {toc-tic:.1f} s.")
+    print(data["finite-n lambda"])
 
-    results_lambda_min.append(float(energy))
+    X = data["finite-n eigenfunction"]
+    np.save(save_path + f"low_res_eigenfunction_all_{save_tag}.npy", X)
+
+    idx0 = (n_rho - 2) * n_theta * n_zeta
+    idx1 = idx0 + (n_rho) * n_theta * n_zeta
+
+    xi_sup_rho0 = np.reshape(X[:idx0, 0], (n_rho - 2, n_theta, n_zeta))
+    xi_sup_rho = np.concatenate(
+        (np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype),
+         xi_sup_rho0,
+         np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype)),
+        axis=0,
+    )
+    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, 0:1, :]),   axis=1)
+    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, :, 0:1]),   axis=2)
+
+    xi_sup_theta0 = np.reshape(X[idx0:idx1, 0], (n_rho, n_theta, n_zeta))
+    xi_sup_zeta0  = np.reshape(X[idx1:,     0], (n_rho, n_theta, n_zeta))
+
+    xi_sup_theta = np.concatenate((xi_sup_theta0, xi_sup_theta0[:, 0:1, :]), axis=1)
+    xi_sup_theta = np.concatenate((xi_sup_theta,  xi_sup_theta[:, :, 0:1]), axis=2)
+
+    xi_sup_zeta  = np.concatenate((xi_sup_zeta0,  xi_sup_zeta0[:, :, 0:1]), axis=2)
+    xi_sup_zeta  = np.concatenate((xi_sup_zeta,   xi_sup_zeta[:, 0:1, :]),  axis=1)
+
+    rho_low   = rho
+    theta_low = np.concatenate((theta, np.array([2 * np.pi])))
+    zeta_low  = np.concatenate((zeta,  np.array([2 * np.pi / eq.NFP])))
+
+    xi_rho_low   = np.asarray(xi_sup_rho)
+    xi_theta_low = np.asarray(xi_sup_theta)
+    xi_zeta_low  = np.asarray(xi_sup_zeta)
+    np.save(save_path + f"xi_rho_low_{save_tag}.npy", xi_rho_low)
+    np.save(save_path + f"xi_theta_low_{save_tag}.npy", xi_theta_low)
+    np.save(save_path + f"xi_zeta_low_{save_tag}.npy", xi_zeta_low)
+
+    results_lambda_min.append(data["finite-n lambda"][0])
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────

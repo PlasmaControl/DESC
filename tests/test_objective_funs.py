@@ -2551,16 +2551,18 @@ def test_profile_objective_print(capsys):
     pre_width = len("Maximum ")
 
     def test(obj, values, print_init=False, normalize=False):
+        par = obj.xs(eq)
+        f_scaled = obj.compute_scaled_error(*par)
         if print_init:
             # print the initial value too. For this test, it is the
             # same as the final value
-            obj.print_value(obj.xs(eq), obj.xs(eq))
+            obj.print_value(f_scaled, f_scaled, args=par, args0=par)
             print_fmt = (
                 f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                 + "{:10.3e}  -->  {:10.3e} "
             )
         else:
-            obj.print_value(obj.xs(eq))
+            obj.print_value(f_scaled, args=par)
             print_fmt = f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
         out = capsys.readouterr()
 
@@ -2640,7 +2642,9 @@ def test_plasma_vessel_distance_print(capsys):
                 units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
-                obj.print_value(obj.xs(eq, surface), obj.xs(eq, surface))
+                par = obj.xs(eq, surface)
+                f_scaled = obj.compute_scaled_error(*par)
+                obj.print_value(f_scaled, f_scaled, args=par, args0=par)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2657,7 +2661,9 @@ def test_plasma_vessel_distance_print(capsys):
                 units = obj.objectives[0]._units
                 norm = obj.objectives[0].normalization
             else:
-                obj.print_value(obj.xs(eq, surface))
+                par = obj.xs(eq, surface)
+                f_scaled = obj.compute_scaled_error(*par)
+                obj.print_value(f_scaled, args=par)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
                 )
@@ -2753,11 +2759,13 @@ def test_boundary_error_print(capsys):
     obj = VacuumBoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
+    par = obj.xs(eq, coilset)
+    f = np.abs(obj.compute_unscaled(*par))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(obj.xs())
+    f_scaled = obj.compute_scaled_error(*par)
+    obj.print_value(f_scaled, args=par)
     out = capsys.readouterr()
     pre_width = len("Maximum absolute ")
 
@@ -2829,11 +2837,13 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
+    par = obj.xs(eq, coilset)
+    f = np.abs(obj.compute_unscaled(*par))
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    obj.print_value(obj.xs())
+    f_scaled = obj.compute_scaled_error(*par)
+    obj.print_value(f_scaled, args=par)
     out = capsys.readouterr()
 
     corr_out = str(
@@ -2905,12 +2915,14 @@ def test_boundary_error_print(capsys):
     obj = BoundaryError(eq, coilset, field_grid=coil_grid)
     obj.build()
 
-    f = np.abs(obj.compute_unscaled(*obj.xs(eq, coilset)))
+    par = obj.xs(eq, coilset)
+    f = np.abs(obj.compute_unscaled(*par))
     n = len(f) // 3
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    obj.print_value(obj.xs())
+    f_scaled = obj.compute_scaled_error(*par)
+    obj.print_value(f_scaled, args=par)
     out = capsys.readouterr()
 
     corr_out = str(

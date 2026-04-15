@@ -490,7 +490,11 @@ def _print_output(things, things0, objective, constraints, result):
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
         args0_for_this_con = [things0[ind] for ind in arg_inds_for_this_con]
-        _val = con.print_value(con.xs(*args_for_this_con), con.xs(*args0_for_this_con))
+        par = con.xs(*args_for_this_con)
+        par0 = con.xs(*args0_for_this_con)
+        f_scaled = con.compute_scaled_error(*par)
+        f0_scaled = con.compute_scaled_error(*par0)
+        _val = con.print_value(f_scaled, f0_scaled, args=par, args0=par0)
         if con._print_value_fmt in values:
             values[con._print_value_fmt].append(_val)
         else:

@@ -41,8 +41,8 @@ n_mode_axisym = 1  # toroidal mode number n (axisym case)
 m = 1             # poloidal mode number for the kink trial function
 
 # Low-res solve for eigenfunction guess
-n_rho = 24
-n_theta = 24
+n_rho = 36
+n_theta = 36
 if axisym:
     n_zeta = 1
 else:

@@ -23,8 +23,8 @@ axisym       = True
 p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
 
 # These must match what mat-free.py used for the high-res solve
-n_rho = 24
-n_theta = 24
+n_rho = 36
+n_theta = 36
 if axisym:
     n_zeta = 1
 else:
@@ -45,14 +45,16 @@ comp_colors = ["steelblue", "darkorange", "seagreen"]
 
 # ── Load scan metadata ────────────────────────────────────────────────────────
 scan = np.load(save_path + "iota_scan_results.npz")
-iota_on_axis_values = np.linspace(0.8, 1.25, 10)
+iota_on_axis_values = scan["iota_on_axis"]  # array of ι₀ values that were scanned
 
 # ── Loop over equilibria ──────────────────────────────────────────────────────
 for iota_0 in iota_on_axis_values:
+    iota_coeffs = np.array([iota_0, -0.5])  # ι(ρ) = ι₀ - 0.5ρ²
+
     save_tag = (
         f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
-        f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"
+        f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
         f"n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}"
     )
 

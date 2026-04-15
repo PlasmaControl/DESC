@@ -134,6 +134,11 @@ docs = {
 doc_bounce = """
     Notes
     -----
+    Consider using an optimizer that uses a scalar output loss function
+    to improve performance before reducing ``jac_chunk_size``.
+
+    Developer Notes
+    ---------------
     Performance will improve significantly by resolving these GitHub issues.
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output

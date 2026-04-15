@@ -39,7 +39,7 @@ class NeoIO:
         neo_eps[~good] = np.interp(neo_rho[~good], neo_rho[good], neo_eps[good])
         return neo_rho, neo_eps
 
-    def write(self, *, theta_n=300, phi_n=300, num_pitch=150, n_step_per=500, **kwargs):
+    def write(self, *, theta_n=300, phi_n=300, num_pitch=150, nstep_per=500, **kwargs):
         """Write neo input file.
 
         Parameters
@@ -66,7 +66,7 @@ class NeoIO:
             theta_n=theta_n,
             phi_n=phi_n,
             num_pitch=num_pitch,
-            nstep_per=n_step_per,
+            nstep_per=nstep_per,
             **kwargs,
         )
 

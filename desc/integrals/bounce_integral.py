@@ -36,7 +36,7 @@ from desc.integrals._bounce_utils import (
     fast_chebyshev,
     fast_cubic_spline,
     get_mins,
-    get_vander,
+    get_vander_spline,
     mmt_for_bounce,
     move,
     num_well_rule,
@@ -406,8 +406,10 @@ class Bounce2D(Bounce):
                 Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
             )
 
-        obj._constants["_vander"] = get_vander(
-            obj._grid, Y, Y_B, eq.NFP, obj._hyperparam["spline"]
+        obj._constants["_vander"] = (
+            get_vander_spline(obj._grid, Y, Y_B, eq.NFP)
+            if obj._hyperparam["spline"]
+            else {}
         )
 
         num_quad = obj._hyperparam.pop("num_quad")
@@ -1021,10 +1023,10 @@ class Bounce2D(Bounce):
         #            or just (                  num points on each surface).
 
         if _JF_BUG:
-            mask = sentinel = None
+            mask = fill_value = None
         else:
             mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
-            sentinel = 0.5 * jnp.min(pitch_inv)
+            fill_value = 0.5 * jnp.min(pitch_inv)
 
         c = nufft2d2r(
             z,
@@ -1034,7 +1036,7 @@ class Bounce2D(Bounce):
             vec=True,
             eps=eps,
             mask=mask,
-            sentinel=sentinel,
+            fill_value=fill_value,
         )
         c = (
             c.reshape(len(data) + 2, *shape)

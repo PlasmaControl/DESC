@@ -1086,7 +1086,7 @@ def Y_B_rule(grid, spline):
     return (Y_B * grid.NFP) if spline else Y_B
 
 
-def num_well_rule(num_transit, NFP, extrema_per_transit=None):
+def num_well_rule(num_transit, NFP, mins_per_transit=None):
     """Guess upper bound for number of wells based on spectrum.
 
     This should be loose enough that it is equivalent to ``num_well=None``,
@@ -1095,18 +1095,16 @@ def num_well_rule(num_transit, NFP, extrema_per_transit=None):
     num_well = num_transit * (20 + NFP)
     return (
         num_well
-        if extrema_per_transit is None
-        else min(num_well, num_transit * extrema_per_transit)
+        if mins_per_transit is None
+        else min(num_well, num_transit * mins_per_transit)
     )
 
 
-def get_vander(grid, Y, Y_B, NFP, spline):
+def get_vander_spline(grid, Y, Y_B, NFP):
     """Builds Vandermonde matrices for objectives."""
-    if spline:
-        Y_trunc = truncate_rule(Y)
-        Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
-        x = jnp.linspace(
-            -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
-        )
-        return {"dct spline": chebvander(x, Y_trunc - 1)}
-    return {}
+    Y_trunc = truncate_rule(Y)
+    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+    x = jnp.linspace(
+        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
+    )
+    return {"dct spline": chebvander(x, Y_trunc - 1)}

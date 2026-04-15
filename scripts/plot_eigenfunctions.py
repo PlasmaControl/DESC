@@ -40,7 +40,7 @@ comp_colors = ["steelblue", "darkorange", "seagreen"]
 
 # ── Load scan metadata ────────────────────────────────────────────────────────
 scan = np.load(save_path + "iota_scan_results.npz")
-iota_on_axis_values = scan["iota_on_axis"]
+iota_on_axis_values = np.linspace(0.6, 1.5, 10)#scan["iota_on_axis"]
 
 # ── Loop over equilibria ──────────────────────────────────────────────────────
 for iota_0 in iota_on_axis_values:

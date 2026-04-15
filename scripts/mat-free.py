@@ -52,7 +52,6 @@ iota_on_axis_values = np.linspace(0.6, 1.5, 10)
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)
 
-results_iota0 = []
 results_lambda_min = []
 
 stabilities = []
@@ -201,12 +200,11 @@ for iota_0 in iota_on_axis_values:
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────
-results_iota0      = np.array(results_iota0)
 results_lambda_min = np.array(results_lambda_min)
 
 np.savez(
     save_path + "iota_scan_results.npz",
-    iota_on_axis=results_iota0,
+    iota_on_axis=iota_on_axis_values,
     lambda_min=results_lambda_min,
 )
 

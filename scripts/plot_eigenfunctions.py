@@ -102,7 +102,7 @@ for iota_0 in iota_on_axis_values:
         for ax, xi, label in zip(axes, [xi_rho, xi_theta, xi_zeta], labels):
             for i_rho, color in zip(rho_indices, rho_colors):
                 ax.plot(
-                    theta, xi[i_rho, :, 0],
+                    theta, xi[i_rho, :-1, 0],
                     color=color, lw=2,
                     label=rf"$\rho = {rho[i_rho]:.2f}$",
                 )

@@ -161,6 +161,7 @@ for i, res in enumerate(resolutions):
             eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
             eq.save(save_path + eq_save_name)
     else:
+        field = SourceFreeField(eq.surface, M, N)
         eq.surface = field
 
     # PEST grid: uniform in (theta_PEST, zeta) at rho=1, required by BIEST interpolator

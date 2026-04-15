@@ -19,7 +19,7 @@ os.makedirs(plot_path, exist_ok=True)
 # Fixed parameters used when building the save_tag
 aspect_ratio = 200
 NFP          = 1
-axisym       = False
+axisym       = True
 p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
 
 # These must match what mat-free.py used for the high-res solve
@@ -59,7 +59,7 @@ for iota_0 in iota_on_axis_values:
     xi_rho_path   = save_path + f"xi_rho_low_{save_tag}.npy"
     xi_theta_path = save_path + f"xi_theta_low_{save_tag}.npy"
     xi_zeta_path  = save_path + f"xi_zeta_low_{save_tag}.npy"
-
+    print(xi_rho_path)
     if not all(os.path.exists(p) for p in [xi_rho_path, xi_theta_path, xi_zeta_path]):
         print(f"Skipping iota_0={iota_0:.4f}: files not found")
         continue

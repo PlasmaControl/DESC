@@ -37,7 +37,7 @@ theta = np.linspace(0.0, 2 * np.pi, n_theta, endpoint=False)
 
 
 # rho indices to use for the "vs theta" plots
-rho_plot_indices = [8, 20, 35, 50]
+rho_plot_indices = np.linspace(n_rho//4, n_rho - 1, 4, dtype=int)  # 4 values from rho[0] to rho[-1]
 rho_colors       = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
 
 labels     = [r"$\xi^\rho$", r"$\xi^\theta$", r"$\xi^\zeta$"]

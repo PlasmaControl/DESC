@@ -2608,5 +2608,5 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
         "plasma compressibility",
         "instability drive",
     ]
-    energy = {term: dot(x_flat, Ax(x_flat))/dot(x_flat, x_flat) for term in terms}
+    energy = {term: dot(x_flat, Ax(x_flat, term))/dot(x_flat, x_flat) for term in terms}
     return energy

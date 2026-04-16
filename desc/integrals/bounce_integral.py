@@ -262,8 +262,8 @@ class Bounce2D(Bounce):
     Lref : float
         Optional. Reference length scale for normalization.
     spline : bool
-        Whether to use cubic splines to compute bounce points instead of
-        Chebyshev series. Default is ``True``.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 

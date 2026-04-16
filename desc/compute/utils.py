@@ -771,7 +771,7 @@ def get_transforms(  # noqa: C901
                         basis,
                         derivs=derivs[c],
                         build=False,
-                        build_pinv=c == "Phi"
+                        build_pinv=(c in ("Phi", "Phi_PEST"))
                         and (
                             p == "desc.magnetic_fields._laplace.SourceFreeField"
                             or p

@@ -50,7 +50,7 @@ B_t_errs = np.zeros_like(resolutions, dtype=float)
 B_z_errs = np.zeros_like(resolutions, dtype=float)
 phi_errs = np.zeros_like(resolutions, dtype=float)
 
-just_plot = True
+just_plot = False
 path_exists = np.ones_like(resolutions, dtype=bool)
 
 for i, res in enumerate(resolutions):
@@ -395,6 +395,7 @@ for i, res in enumerate(resolutions):
     B_z_errs[i] = ((dot(B, e_zeta) - B_zeta)**2).mean()**0.5
     phi_errs[i] = ((phi - phi_true)**2).mean()**0.5
 
+eq_title = f"\n {name} equilibrium in {coords} coords"
 
 # Plot errors vs resolution
 fig, ax = plt.subplots(1, 3, figsize=(20, 5))

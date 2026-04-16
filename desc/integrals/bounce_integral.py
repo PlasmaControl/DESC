@@ -1115,7 +1115,7 @@ class Bounce2D(Bounce):
             f = Bounce2D.fourier(f)
 
         num_transit = self._theta.X // self._NFP
-        K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal heuristic
+        K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal
         num_mins = kwargs.get("num_mins", num_transit * K_z)
         # We set fill value to 0 since we chose our coordinates
         # such that all bounce points are at ζ >= 0; and therefore,

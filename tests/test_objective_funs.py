@@ -67,6 +67,7 @@ from desc.objectives import (
     HeatingPowerISS04,
     Isodynamicity,
     LinearObjectiveFromUser,
+    LineIntegratedPressure,
     LinkingCurrentConsistency,
     MagneticWell,
     MeanCurvature,
@@ -1635,6 +1636,88 @@ class TestObjectiveFunction:
             vc_source_grid=plasma_grid,
             field_fixed=True,
         )
+
+    @pytest.mark.unit
+    def test_line_integrated_pressure_constant(self):
+        """Test that constant pressure gives back that constant."""
+        # equilibrium with constant pressure p(rho) = 1e4 Pa
+        eq = Equilibrium(
+            pressure=PowerSeriesProfile([1e4]),
+            current=PowerSeriesProfile([0, 0, 2e6]),
+            L=4,
+            M=2,
+            N=0,
+        )
+
+        R0 = eq.compute("R0")["R0"]
+        # chord through the midplane at Z=0
+        chord_endpoints = np.array(
+            [
+                [[R0 - 0.5, 0, 0], [R0 + 0.5, 0, 0]],
+            ]
+        )
+
+        obj = LineIntegratedPressure(
+            eq,
+            chord_endpoints=chord_endpoints,
+            sigma=0.05,
+            target=0,
+            normalize=False,
+        )
+        obj.build(verbose=0)
+        result = obj.compute(eq.params_dict)
+
+        # with constant pressure, line average should equal that constant
+        np.testing.assert_allclose(result, 1e4, rtol=1e-2)
+
+    @pytest.mark.unit
+    def test_line_integrated_pressure_shape_and_multiple_chords(self):
+        """Test output shape with multiple chords."""
+        # p(rho) = 1e4 - 1e4*rho^2 (even powers only)
+        eq = Equilibrium(
+            pressure=PowerSeriesProfile([1e4, 0, -1e4]),
+            current=PowerSeriesProfile([0, 0, 2e6]),
+            L=4,
+            M=2,
+            N=0,
+        )
+
+        R0 = eq.compute("R0")["R0"]
+        # two chords: one horizontal, one vertical
+        chord_endpoints = np.array(
+            [
+                [[R0 - 0.5, 0, 0], [R0 + 0.5, 0, 0]],
+                [[R0, 0, -0.5], [R0, 0, 0.5]],
+            ]
+        )
+
+        obj = LineIntegratedPressure(
+            eq,
+            chord_endpoints=chord_endpoints,
+            sigma=0.05,
+            target=0,
+            normalize=False,
+        )
+        obj.build(verbose=0)
+        result = obj.compute(eq.params_dict)
+
+        assert result.shape == (2,)
+        # pressure is p(rho) = 1e4*(1 - rho^2), so line averages should
+        # be between 0 and 1e4
+        assert np.all(result > 0)
+        assert np.all(result < 1e4)
+
+    @pytest.mark.unit
+    def test_line_integrated_pressure_input_validation(self):
+        """Test that bad chord_endpoints shape raises error."""
+        eq = Equilibrium()
+        # wrong shape: (2, 3) instead of (n, 2, 3)
+        with pytest.raises(ValueError, match="chord_endpoints must have shape"):
+            LineIntegratedPressure(
+                eq,
+                chord_endpoints=np.array([[0, 0, 0], [1, 0, 0]]),
+                sigma=0.05,
+            )
 
     @pytest.mark.unit
     def test_quadratic_flux(self):

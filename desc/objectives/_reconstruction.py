@@ -6,7 +6,7 @@ from scipy.constants import mu_0
 from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms, xyz2rpz, xyz2rpz_vec
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer, dot, errorif
 
 from .normalization import compute_scaling_factors
@@ -122,6 +122,7 @@ class FluxLoop(_Objective):
         "_coils_fixed",
         "_sheet_data_keys",
         "_compute_A_or_B_from_CurrentPotentialField",
+        "_only_plasma_contrib",
     ]
 
     def __init__(
@@ -146,6 +147,7 @@ class FluxLoop(_Objective):
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
+        only_plasma_contrib=True,
     ):
         if target is None and bounds is None:
             target = eq.Psi
@@ -165,6 +167,7 @@ class FluxLoop(_Objective):
         self._B_plasma_chunk_size = B_plasma_chunk_size
         if not coils_fixed:
             things.append(coilset)
+        self._only_plasma_contrib = only_plasma_contrib
         super().__init__(
             things=things,
             target=target,
@@ -367,7 +370,7 @@ class FluxLoop(_Objective):
             Aplasma = jnp.zeros_like(self._flux_loop_all_x)
         A = Aplasma
 
-        if not self._coils_fixed:
+        if not self._coils_fixed and not self._only_plasma_contrib:
             Acoil = self._coils.compute_magnetic_vector_potential(
                 self._flux_loop_all_x,
                 basis="rpz",
@@ -385,7 +388,7 @@ class FluxLoop(_Objective):
             indices_are_sorted=True,
         )
 
-        if self._coils_fixed:
+        if self._coils_fixed and not self._only_plasma_contrib:
             fluxes += constants["flux_from_coils"]
         return fluxes
 
@@ -1070,3 +1073,209 @@ class PointBMeasurement(_Objective):
             # if passed in.
             B += self._B_from_field
         return B.flatten()
+
+
+class LineIntegratedPressure(_Objective):
+    """Line-averaged pressure along chords through the plasma.
+
+    Computes the line-averaged pressure along straight-line chords using a
+    Gaussian kernel volume integral approach:
+
+    result = ∫ p(ρ,θ,ζ) f(x) √g dV / ∫ f(x) √g dV
+
+    where f(x) = exp(-d²/σ²) is a Gaussian kernel and d is the perpendicular
+    distance from the point x to the chord line. This avoids the need to trace
+    rays through flux coordinates by converting the line integral into a volume
+    integral weighted by a narrow Gaussian centered on the chord.
+
+    The chord is treated as an infinite line through the two given endpoints.
+    Since the plasma volume is finite and the Gaussian drops off rapidly, this
+    is equivalent to a segment integral for chords that extend beyond the plasma.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium for which the pressure will be calculated.
+    chord_endpoints : ndarray, shape(n, 2, 3)
+        Cartesian (X, Y, Z) coordinates of the start and end points of each
+        chord. ``chord_endpoints[i, 0, :]`` is the start point and
+        ``chord_endpoints[i, 1, :]`` is the end point of chord i.
+    sigma : float
+        Gaussian kernel width in meters. Controls the effective beam width of
+        the line integral. Should be at least a few times the grid spacing for
+        reliable integration, and small relative to the plasma minor radius for
+        good spatial resolution.
+    grid : Grid, optional
+        Grid for the volume integration. Should be a QuadratureGrid for accurate
+        integration. Defaults to
+        ``QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="",
+        normalize_detail="Uses the on-axis pressure scale for normalization.",
+    )
+
+    _coordinates = "rtz"
+    _units = "(Pa)"
+    _print_value_fmt = "Line Integrated Pressure: "
+    _print_error = True
+
+    def __init__(
+        self,
+        eq,
+        chord_endpoints,
+        sigma,
+        *,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="line-integrated-pressure",
+        jac_chunk_size=None,
+    ):
+        chord_endpoints = np.asarray(chord_endpoints)
+        errorif(
+            chord_endpoints.ndim != 3 or chord_endpoints.shape[1:] != (2, 3),
+            ValueError,
+            "chord_endpoints must have shape (n, 2, 3), "
+            f"got {chord_endpoints.shape}",
+        )
+        self._chord_endpoints = chord_endpoints
+        self._sigma = sigma
+        self._grid = grid
+
+        if target is None and bounds is None:
+            target = 0
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["p"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = self._chord_endpoints.shape[0]
+        self._data_keys = ["p", "sqrt(g)", "X", "Y", "Z"]
+
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+
+        # pre-compute chord geometry
+        P1 = self._chord_endpoints[:, 0, :]  # (n_chords, 3)
+        chord_dir = self._chord_endpoints[:, 1, :] - P1
+        chord_length = np.linalg.norm(chord_dir, axis=1, keepdims=True)
+        chord_unit = chord_dir / chord_length  # (n_chords, 3)
+
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "quad_weights": 1.0,
+            "P1": jnp.asarray(P1),
+            "chord_unit": jnp.asarray(chord_unit),
+            "sigma": self._sigma,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute line-averaged pressure along chords.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray, shape(n_chords,)
+            Line-averaged pressure for each chord.
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+
+        # Cartesian coordinates of each grid node, shape (num_nodes, 3)
+        xyz = jnp.stack([data["X"], data["Y"], data["Z"]], axis=-1)
+
+        P1 = constants["P1"]  # (n_chords, 3)
+        u = constants["chord_unit"]  # (n_chords, 3)
+        sigma = constants["sigma"]
+
+        # perpendicular distance squared from each node to each chord
+        # using projection: d^2 = |v|^2 - (v . u)^2
+        diff = xyz[jnp.newaxis, :, :] - P1[:, jnp.newaxis, :]  # (n_chords, N, 3)
+        v_dot_u = jnp.sum(diff * u[:, jnp.newaxis, :], axis=-1)  # (n_chords, N)
+        v_sq = jnp.sum(diff**2, axis=-1)  # (n_chords, N)
+        d_sq = v_sq - v_dot_u**2  # (n_chords, N)
+
+        # Gaussian kernel
+        kernel = jnp.exp(-d_sq / sigma**2)  # (n_chords, N)
+
+        # volume element: sqrt(g) * quadrature weights
+        grid = constants["transforms"]["grid"]
+        dV = data["sqrt(g)"] * grid.weights  # (N,)
+
+        # weighted integrals
+        p = data["p"]  # (N,)
+        numerator = jnp.sum(
+            kernel * p[jnp.newaxis, :] * dV[jnp.newaxis, :], axis=1
+        )  # (n_chords,)
+        denominator = jnp.sum(kernel * dV[jnp.newaxis, :], axis=1)  # (n_chords,)
+
+        return numerator / denominator

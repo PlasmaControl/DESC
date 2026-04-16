@@ -151,7 +151,7 @@ def _lsmr_compute_potential(
     potential_data,
     source_data,
     interpolator,
-    phi_transform,
+    basis,
     problem,
     chunk_size=None,
     pest_coords=False,
@@ -163,7 +163,6 @@ def _lsmr_compute_potential(
 
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
-    basis = phi_transform
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
@@ -262,7 +261,7 @@ def _compute_single_layer_matrix(
     # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
 
     # this vmap applies col to each basis function, and therefore acts on Bn in Fourier space
-    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(jnp.eye(source_grid.num_nodes))#source_data["Phi (periodic)"].T).T
+    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(jnp.eye(N_source)).T#source_data["Phi (periodic)"].T).T
     return spectral_matrix
 
 

@@ -215,8 +215,8 @@ doc_bounce = """
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
-        Whether to use cubic splines to compute bounce points instead of
-        Chebyshev series. Default is ``True``.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
     """.rstrip()
 
 

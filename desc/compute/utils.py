@@ -731,14 +731,19 @@ def get_transforms(  # noqa: C901
         pm = kwargs["phi_matrix"]
         transforms["phi_matrix"] = pm
     
+        
     for c in derivs.keys():
         if c in transforms:
             continue
-        if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
-            basis = getattr(obj, c + "_basis")
+        if hasattr(obj, c + "_basis") or (c == "Phi_PEST" and hasattr(obj, "Phi_basis")):  # regular stuff like R, Z, lambda etc.
+            basis = getattr(obj, c + "_basis") if c != "Phi_PEST" else getattr(obj, "Phi_basis")
             # first check if we already have a transform with a compatible basis
             if not jitable:
                 for transform in transforms.values():
+                    if c == "Phi_PEST":
+                        # compute Phi Fourier decomposition in PEST coordinates
+                        if "pest_grid" in kwargs or "pest_grid" in transforms:
+                            grid = kwargs.get("pest_grid", transforms.get("pest_grid"))
                     if basis.equiv(getattr(transform, "basis", None)):
                         ders = np.unique(
                             np.vstack([derivs[c], transform.derivatives]), axis=0

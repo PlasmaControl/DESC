@@ -121,6 +121,7 @@ def compute(  # noqa: C901
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
     pm_kw = kwargs.pop("phi_matrix", None)
+    pg_kw = kwargs.pop("pest_grid", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
@@ -128,6 +129,10 @@ def compute(  # noqa: C901
     
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
+    
+    if "pest_grid" not in transforms and pg_kw is not None:
+        transforms["pest_grid"] = pg_kw
+
 
     bad_kwargs = kwargs.keys() - allowed_kwargs
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
@@ -730,6 +735,8 @@ def get_transforms(  # noqa: C901
     if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
         pm = kwargs["phi_matrix"]
         transforms["phi_matrix"] = pm
+    if "pest_grid" in kwargs and kwargs["pest_grid"] is not None:
+        transforms["pest_grid"] = kwargs["pest_grid"]
     
         
     for c in derivs.keys():
@@ -857,6 +864,15 @@ def get_transforms(  # noqa: C901
             )
         elif c == "phi_matrix":
             transforms["phi_matrix"] = None
+        elif c == "pest_grid":
+            transforms["pest_grid"] = errorif(
+                "pest_grid" not in transforms,
+                ValueError,
+                "Compute requested 'pest_grid' but none was provided. "
+                "Please provide a LinearGrid with the same resolution as grid "
+                "containing the PEST coordinates corresponding to the (theta, zeta) "
+                "coordinates of grid.",
+            )
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

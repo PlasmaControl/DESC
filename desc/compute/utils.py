@@ -706,9 +706,14 @@ def get_transforms(  # noqa: C901
     from desc.basis import DoubleFourierSeries
     from desc.grid import LinearGrid
     from desc.transform import Transform
-
-    method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
+    
     keys = [keys] if isinstance(keys, str) else keys
+    if jitable or kwargs.get("method") == "jitable":
+        method = "jitable"
+    elif ("phi_matrix" in keys) or ("phi_matrix_pest" in keys):
+        method = "direct1"
+    else:
+        method = "auto"
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
 

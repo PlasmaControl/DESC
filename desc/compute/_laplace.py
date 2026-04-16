@@ -73,7 +73,7 @@ def _D_plus_half(
     prune_data=True,
     pest_coords=False,
     _midpoint_quad=False,
-    _D_quad=False,  
+    _D_quad=False,
 ):
     """Compute (D[Φ] + Φ/2)(x).
 
@@ -94,7 +94,7 @@ def _D_plus_half(
         Set to ``True`` to perform double layer potential quadrature without removing
         singularities. Default is ``False``. This is intended for developer use.
     pest_coords : bool
-        Set to True to do the entire computation in PEST coordinates. Interpolator 
+        Set to True to do the entire computation in PEST coordinates. Interpolator
         grid must be in PEST coordinates, and fft2able.
     """
     if basis is None:
@@ -151,7 +151,7 @@ def _lsmr_compute_potential(
     potential_data,
     source_data,
     interpolator,
-    basis,
+    phi_transform,
     problem,
     chunk_size=None,
     pest_coords=False,
@@ -163,7 +163,7 @@ def _lsmr_compute_potential(
 
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
-
+    basis = phi_transform
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
@@ -233,7 +233,7 @@ def _compute_single_layer_matrix(
 
     Returns
     -------
-    M_S : jnp.ndarray, shape (N_eval, N_source)
+    M_S : jnp.ndarray, shape (N_eval, N_modes)
         Matrix satisfying S[B0*n] = M_S @ B_n.
     """
     source_grid = interpolator.source_grid
@@ -259,14 +259,16 @@ def _compute_single_layer_matrix(
     # chunk_size controls inner parallelism (eval points per singular_integral call).
     # outer_chunk_size controls how many columns are processed simultaneously.
     # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
-    return vmap_chunked(col, chunk_size=outer_chunk_size)(jnp.eye(N_source)).T
+
+    # this vmap applies col to each basis function, and therefore acts on Bn in Fourier space
+    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(source_data["Phi (periodic)"].T).T
+    return spectral_matrix
 
 
 def _lsmr_compute_phi_matrix(
-    potential_data,
     source_data,
     interpolator,
-    basis,
+    phi_transform,
     problem,
     chunk_size=None,
     outer_chunk_size=1,
@@ -305,31 +307,43 @@ def _lsmr_compute_phi_matrix(
         Matrix satisfying Phi (periodic) = A @ B_n.
     """
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
-    
+
+    # hard-code that Phi and Bn are on the same grid (necessary for external mode stabiliy)
+    potential_data = source_data.copy()
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
     if pest_coords:
-        assert source_grid.can_fft2, f"pest_grid must have can_fft2=True, got {source_grid}"
-        assert potential_grid.can_fft2, (
-            f"potential pest_grid must have can_fft2=True, got {potential_grid}"
-        )
+        assert (
+            source_grid.can_fft2
+        ), f"pest_grid must have can_fft2=True, got {source_grid}"
+        assert (
+            potential_grid.can_fft2
+        ), f"potential pest_grid must have can_fft2=True, got {potential_grid}"
 
+    basis = phi_transform.basis
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
 
     # Build double-layer operator D: shape (N_potential, N_modes).
     # Prune into a separate copy so original dicts are available for M_S below.
-    potential_data_d, source_data_d = _prune_data(
-        potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half
-    )
-    Phi = basis.evaluate(potential_grid)
+    
+    # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
+    Phi = phi_transform.matrices["direct1"][0][0][0]
+    pinv = phi_transform.matrices["pinv"]
     print("basis evaluated on potential grid")
-    potential_data_d["Phi(x) (periodic)"] = Phi
-    source_data_d["Phi (periodic)"] = (
-        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
-    )
+    potential_data["Phi(x) (periodic)"] = Phi
+    source_data["Phi (periodic)"] = Phi
     print("source data computed")
+
+    potential_data_d, source_data_d = _prune_data(
+        potential_data,
+        potential_grid,
+        source_data,
+        source_grid,
+        _kernel_dipole_plus_half,
+    )
+    
     D = _D_plus_half(
         potential_data_d,
         source_data_d,
@@ -345,11 +359,12 @@ def _lsmr_compute_phi_matrix(
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
 
-    # Build single-layer matrix M_S: shape (N_potential, N_source).
+    # Build single-layer matrix M_S: shape (N_potential, N_modes).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
-    M_S = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, outer_chunk_size
+    M_S_spectral = _compute_single_layer_matrix(
+        potential_data, source_data, interpolator, chunk_size, outer_chunk_size, pinv
     )
+    M_S = M_S_spectral @ pinv
     print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).
@@ -359,7 +374,7 @@ def _lsmr_compute_phi_matrix(
         A_mn = jnp.linalg.lstsq(D, M_S)[0]
     print("linear system solved")
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
-    return A_mn, - Phi @ A_mn # sign convention that makes B dot n the outward normal
+    return A_mn, -Phi @ A_mn  # sign convention that makes B dot n the outward normal
 
 
 def _iteration_operator(
@@ -680,10 +695,9 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
 def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["A_mn"], data["phi_matrix"] = _lsmr_compute_phi_matrix(
-        data.get("potential data", data),
         data,
         data["interpolator"],
-        transforms["Phi"].basis,
+        transforms["Phi"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         outer_chunk_size=kwargs.get("outer_chunk_size", 1),
@@ -742,10 +756,9 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
 
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
-        data.get("potential data", data),
         data,
         data["interpolator_pest"],
-        transforms["Phi"].basis,
+        transforms["Phi"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         outer_chunk_size=kwargs.get("outer_chunk_size", 1),

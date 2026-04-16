@@ -38,8 +38,8 @@ axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 # Low-res solve for eigenfunction guess
-n_rho = 24
-n_theta = 24
+n_rho = 36
+n_theta = 36
 if axisym:
     n_zeta = 1
 else:

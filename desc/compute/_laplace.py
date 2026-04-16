@@ -513,7 +513,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"grid": []},
+    transforms={"grid": [], "pest_grid": []},
     profiles=[],
     data=["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
@@ -535,7 +535,7 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
 def _interpolator_pest(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     rtz_grid = transforms["grid"]
-    pest_grid = kwargs["pest_grid"]
+    pest_grid = transforms["pest_grid"]
     potential_grid = kwargs.get("potential_grid", pest_grid)
     # Relabel PEST basis vectors to standard names expected by get_interpolator
     # (_best_ratio uses e_theta, e_zeta, |e_theta x e_zeta|).
@@ -725,7 +725,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0, 0, 0]]},
+    transforms={"Phi_PEST": [[0, 0, 0]], "pest_grid": []},
     profiles=[],
     data=list(
         (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
@@ -753,6 +753,9 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
+# MOVE PEST GRID TO TRANSFORMS
+# THEN COMPUTE PHI ON THE PEST GRID
+# THEN USE THAT INSTEAD IN THE KERNELS TO COMPUTE D AND M_S
 def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     # Relabel PEST basis vectors to the standard key names expected by the
@@ -816,7 +819,7 @@ def _A_mn_compute(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0, 0, 0]]},
+    transforms={"Phi": [[0, 0, 0]], "pest_grid": []},
     profiles=[],
     data=["phi_matrix_pest"],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",

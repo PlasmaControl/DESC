@@ -1080,7 +1080,9 @@ class Bounce2D(Bounce):
 
         return data
 
-    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False, **kwargs):
+    def interp_to_argmin(
+        self, f, points, *, nufft_eps=1e-6, is_fourier=False, **kwargs
+    ):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters

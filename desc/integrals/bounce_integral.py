@@ -1080,7 +1080,7 @@ class Bounce2D(Bounce):
 
         return data
 
-    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False):
+    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False, **kwargs):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
@@ -1115,8 +1115,8 @@ class Bounce2D(Bounce):
             f = Bounce2D.fourier(f)
 
         num_transit = self._theta.X // self._NFP
-        K_z = self._num_z // 2 * self._NFP
-        num_mins = num_transit * max(K_z, 5)  # liberal heuristic
+        K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal heuristic
+        num_mins = kwargs.get("num_mins", num_transit * K_z)
         # We set fill value to 0 since we chose our coordinates
         # such that all bounce points are at ζ >= 0; and therefore,
         # junk values in B_mins cannot be selected in argmin.

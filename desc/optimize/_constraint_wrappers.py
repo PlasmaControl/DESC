@@ -1312,17 +1312,15 @@ class ProximalProjection(ObjectiveFunction):
 
 def jit_if_possible(func):
     """Jit a function if use_jit."""
+    jitted_func = functools.partial(jit, static_argnames=["op"])(func)
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # this has to be ObjectiveFunction
+        # first arg has to be ObjectiveFunction
         obj = args[0]
-        if not getattr(obj, "_use_jit", False):
-            # Apply jit if we should
-            jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+        if getattr(obj, "_use_jit", False):
             return jitted_func(*args, **kwargs)
         else:
-            # Run normally if not jittable
             return func(*args, **kwargs)
 
     return wrapper

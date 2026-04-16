@@ -1056,6 +1056,9 @@ def truncate_rule(Y):
     constant is ~ (4/π²) log(Y) when the data is corrupted by ≤ 10⁻⁸ noise from
     the inexact Newton solve. The Lebesgue constant discussed here is the one in
     L Mason, J.C. & Handscomb, David C. 2002 Chebyshev Polynomials, chapter 5.
+    This is useful since we evaluate the series on a much denser grid than the
+    Newton solve grid; and therefore, prefer all discretization error is from
+    the error of the projection rather than the interpolation.
 
     """
     return max(1, 7 * Y // 8)
@@ -1087,9 +1090,11 @@ def Y_B_rule(grid, spline):
     Parameters
     ----------
     grid : Grid
-        Grid.
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
     spline : bool
-        Whether |B| will be approximated with cubic spline or Chebyshev.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series.
 
     Returns
     -------

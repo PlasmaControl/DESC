@@ -34,7 +34,7 @@ a = 1  # Minor radius
 aspect_ratio = 200  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
-axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
+axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 # Low-res solve for eigenfunction guess

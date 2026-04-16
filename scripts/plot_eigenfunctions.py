@@ -54,7 +54,7 @@ for iota_0 in iota_on_axis_values:
     save_tag = (
         f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
-        f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
+        f"_iota0_{iota_0:.4f}_d2iota_{-0.1:.4f}"#{2*iota_coeffs[-1]:.4f}"
         f"n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}"
     )
 

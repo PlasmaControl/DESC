@@ -102,11 +102,13 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
     z2 = (dB_dz >= 0) & epigraph_and(mask, dB_dz)
+    del dB_dz
 
     # Transform out of local power basis expansion.
     intersect = flatten_mat(intersect + knots[:-1, None])
     z1 = take_mask(intersect, z1, size=num_well, fill_value=_sentinel)
     z2 = take_mask(intersect, z2, size=num_well, fill_value=_sentinel)
+    del intersect
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
     # Set to zero so integration is over set of measure zero
@@ -707,7 +709,7 @@ def get_alphas(alpha, iota, num_transit, NFP):
     return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
 
 
-def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
+def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -725,6 +727,15 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
         Number of toroidal transits to follow field line.
     NFP : int
         Number of field periods.
+    X_min : int
+        See notes section. This parameter should never be changed.
+        It is included in the function signature for code optics only.
+        It is the number below which we short-circuit convergence to enforce
+        continuity by removing a discontinuity which is near machine precision
+        due to exponential convergence. This is not a hack; it has rigorous
+        mathematical justification regardless of the size of the removed
+        discontinuity, and does not bias the output beyond that of more
+        floating point operations in finite-precision.
 
     Returns
     -------
@@ -787,9 +798,9 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
 
-    if X < 24:
-        # Short circuit convergence to enforce continuity. This is needed as
-        # we assume continuity of |B| along B when gathering bounce points.
+    if X < X_min:
+        # This is needed as our algorithm assumes continuity of |B| along field
+        # lines when gathering bounce points. This is always true physically.
         delta = PiecewiseChebyshevSeries.stitch(delta)
 
     return PiecewiseChebyshevSeries(delta, domain)

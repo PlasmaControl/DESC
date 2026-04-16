@@ -331,12 +331,6 @@ def _lsmr_compute_phi_matrix(
     
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
     Phi = phi_transform.matrices["direct1"][0][0][0]
-    import numpy as np
-    print(potential_grid)
-    print(source_grid)
-    print(phi_transform.grid)
-    np.testing.assert_allclose(potential_grid.nodes, phi_transform.grid.nodes)
-    np.testing.assert_allclose(Phi, basis.evaluate(potential_grid))
     pinv = phi_transform.matrices["pinv"]
     print("basis evaluated on potential grid")
     potential_data["Phi(x) (periodic)"] = Phi

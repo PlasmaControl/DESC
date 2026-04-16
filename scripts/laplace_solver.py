@@ -114,7 +114,7 @@ for i, res in enumerate(resolutions):
         profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
         name_lower = name.lower().replace(" ", "_").replace("-", "_")
         eq_tag = f"{name_lower}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
-    save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}_pseudospectral"
+    save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}_debug"#_pseudospectral"
     eq_save_name = f"equilibrium_{save_tag}.h5"
     if pest:
         phi_save_name = f"{save_tag}_phi_matrix.npy"

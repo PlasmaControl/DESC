@@ -224,6 +224,7 @@ def _compute_single_layer_matrix(
     source_data : dict
         Data at source points (must include |e_theta x e_zeta| and geometry).
         Does not need to include B0*n.
+        In _lsmr_compute_phi_matrix, eval_data and source_data are hard-coded to be the same.
     interpolator : _BIESTInterpolator
     chunk_size : int or None
         Chunk size for eval-point batching *inside* each ``singular_integral`` call.
@@ -362,7 +363,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_modes).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S_spectral = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, outer_chunk_size, pinv
+        potential_data, source_data, interpolator, chunk_size, outer_chunk_size
     )
     M_S = M_S_spectral @ pinv
     print("single layer matrix computed")

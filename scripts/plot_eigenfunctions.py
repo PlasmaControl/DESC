@@ -76,7 +76,7 @@ for iota_0 in iota_on_axis_values:
     i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
 
     # ι=1 surface location: ι₀ − 0.05ρ² = 1  →  ρ = sqrt((ι₀−1)/0.05)
-    rho_iota1 = np.sqrt((iota_0 - 1.0) / 0.05) if iota_0 > 1.0 else None
+    rho_iota1 = np.sqrt((iota_0 - 1.0) / iota_coeffs[1]) if iota_0 > 1.0 else None
 
     def _plot_vs_rho(i_theta, theta_label, fname_suffix):
         fig, ax = plt.subplots(figsize=(7, 5))
@@ -152,7 +152,7 @@ ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
 ax.set_title(
     r"Stability eigenvalue vs $\iota_0$" + "\n"
-    r"$\iota(\rho) = \iota_0 - 0.05\,\rho^2$",
+    f"$\\iota(\\rho) = \\iota_0 - {iota_coeffs[1]}\\rho^2$",
     fontsize=12,
 )
 ax.tick_params(labelsize=12)

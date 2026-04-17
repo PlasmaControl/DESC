@@ -328,11 +328,14 @@ def _lsmr_compute_phi_matrix(
     # Prune into a separate copy so original dicts are available for M_S below.
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = phi_transform.matrices["direct1"][0][0][0]
-    
+    #Phi = phi_transform.matrices["direct1"][0][0][0]
+    Phi = basis.evaluate(potential_grid)
+    import numpy as np
+    np.testing.assert_allclose(
+        Phi, phi_transform.matrices["direct1"][0][0][0], rtol=1e-7, atol=1e-10
+    )
     potential_data_d, source_data_d = _prune_data(potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half)
     
-    #Phi = basis.evaluate(potential_grid)
 
     potential_data_d["Phi(x) (periodic)"] = Phi
     source_data_d["Phi (periodic)"] = (
@@ -340,10 +343,7 @@ def _lsmr_compute_phi_matrix(
         )
 
     
-    import numpy as np
-    np.testing.assert_allclose(
-        Phi, basis.evaluate(potential_grid), rtol=1e-7, atol=1e-10
-    )
+    
     
     pinv = phi_transform.matrices["pinv"]
     potential_data["Phi(x) (periodic)"] = Phi

@@ -1052,6 +1052,8 @@ def broadcast_for_bounce(pitch_inv):
 def truncate_rule(Y):
     """Truncation of Chebyshev series to reduce spectral aliasing.
 
+    The truncation will remove aliasing error at the shortest wavelengths
+    where the signal to noise ratio is lowest.
     We truncate with a 7/8 rule in the toroidal direction so that the Lebesgue
     constant is ~ (4/π²) log(Y) when the data is corrupted by ≤ 10⁻⁸ noise from
     the inexact Newton solve. The Lebesgue constant discussed here is the one in

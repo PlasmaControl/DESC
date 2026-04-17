@@ -140,6 +140,7 @@ doc_bounce = """
     Developer notes: Performance will improve significantly by resolving GitHub issues:
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
+      * ``2168`` Sparse cotangent pullbacks
 
     Parameters
     ----------

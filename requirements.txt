@@ -4,7 +4,7 @@ diffrax >= 0.6.0, <= 0.7.2
 equinox >=0.11.10, <=0.13.6
 h5py >= 3.0.0, <= 3.16.0
 interpax >= 0.3.3, < 0.4
-interpax_fft >= 0.0.6, <= 0.0.6
+interpax_fft >= 0.0.6, <= 0.0.7
 jax-finufft >= 1.1.0, <= 1.3.1
 matplotlib >= 3.7.3, <= 3.10.8
 mpmath >= 1.0.0, <= 1.4.1
@@ -13,7 +13,7 @@ numpy >= 1.20.0, <= 2.5
 nvgpu <= 0.10.0
 optax < 0.3.0
 orthax < 0.3
-plotly >= 5.16, <= 6.6.0
+plotly >= 5.16, <= 6.7.0
 psutil <= 7.2.2
 pylatexenc >= 2.0, <= 2.10
 quadax >= 0.2.2, < 0.3

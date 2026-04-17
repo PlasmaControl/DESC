@@ -178,23 +178,27 @@ def _compute(
     case, either call above function or manually convert the output to xyz basis.
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
-    parameterization = _parse_parameterization(parameterization)
+    p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     if data is None:
         data = {}
 
-    names += get_data_deps(
-        names, parameterization, has_axis=transforms["grid"].axis.size
+    all_deps = []
+    deps_type = (
+        "full_with_axis_dependencies"
+        if transforms["grid"].axis.size
+        else "full_dependencies"
     )
-    names_tiers = [(data_index[parameterization][name]["tier"], name) for name in names]
-    names_tiers = sorted(list(set(names_tiers)))
+    for name in names:
+        all_deps += data_index[p][name][deps_type]["data"]
+    all_deps = sorted(set(all_deps), key=data_index[p]["topological_order"].__getitem__)
 
-    for _, name in names_tiers:
+    for _, name in all_deps:
         if name in data:
             # don't compute something that's already been computed
             continue
-        data = data_index[parameterization][name]["fun"](
+        data = data_index[p][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
 

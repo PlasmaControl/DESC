@@ -143,6 +143,7 @@ def _build_data_index():  # noqa: C901
         # The deps are stored in topological order (not alphabetical) so that
         # iterating over them computes quantities in valid dependency order.
         topo_index = {key: i for i, key in enumerate(order)}
+        data_index[p]["topological_order"] = topo_index
         for key in order:
             d = data_index[p][key]
             deps_info = d["dependencies"]

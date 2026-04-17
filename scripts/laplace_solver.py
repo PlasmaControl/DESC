@@ -238,7 +238,7 @@ for i, res in enumerate(resolutions):
     """"""
     print("computing phi matrix")
     # Compute the matrix A such that Phi_periodic = A @ B0*n.
-    override = False
+    override = True
     print(save_path + phi_save_name)
     print(os.path.exists(save_path + phi_save_name))
 

@@ -266,6 +266,7 @@ def _compute_single_layer_matrix(
 
 
 def _lsmr_compute_phi_matrix(
+    potential_data,
     source_data,
     interpolator,
     phi_transform,
@@ -309,7 +310,7 @@ def _lsmr_compute_phi_matrix(
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
     # hard-code that Phi and Bn are on the same grid (necessary for external mode stabiliy)
-    potential_data = source_data.copy()
+    #potential_data = source_data.copy()
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
@@ -703,6 +704,7 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
 def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["A_mn"], data["phi_matrix"] = _lsmr_compute_phi_matrix(
+        data.get("potential data", data),
         data,
         data["interpolator"],
         transforms["Phi"],
@@ -767,6 +769,7 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
 
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
+        data.get("potential data", data),
         data,
         data["interpolator_pest"],
         transforms["Phi_PEST"],

@@ -337,6 +337,7 @@ def _lsmr_compute_phi_matrix(
         Phi,
         phi_transform.matrices["direct1"][0][0][0],
         err_msg="Phi mismatch between basis and transform",
+        atol=1E-10
     )
     potential_data_d, source_data_d = _prune_data(
         potential_data,

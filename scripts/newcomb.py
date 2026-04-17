@@ -139,7 +139,7 @@ def _odefun(rho, u, args):
         jitable=True,
     )
     transforms = get_transforms(data_keys, eq, grid, jitable=True)
-    profiles = eq.get_profiles()
+    profiles = get_profiles(data_keys, eq, grid)
 
     data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",

@@ -43,7 +43,7 @@ from . import (
     _stability,
     _surface,
 )
-from .data_index import all_kwargs, allowed_kwargs, data_index
+from .data_index import _topological_order, all_kwargs, allowed_kwargs, data_index
 from .utils import (
     compute,
     get_data_deps,
@@ -56,9 +56,6 @@ from .utils import (
 
 # just need to import all the submodules here to register everything in the
 # data_index
-
-
-_topological_order = {}
 
 
 # Rather than having to recursively compute the full dependencies every time we

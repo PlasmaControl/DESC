@@ -10,7 +10,7 @@ from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
-from .data_index import allowed_kwargs, data_index, deprecated_names
+from .data_index import _topological_order, allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -177,8 +177,6 @@ def _compute(
     cannot give the argument basis='xyz' since that will break the recursion. In that
     case, either call above function or manually convert the output to xyz basis.
     """
-    from . import _topological_order
-
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):

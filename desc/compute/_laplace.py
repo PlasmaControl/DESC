@@ -734,7 +734,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0,0,0]]},#{"Phi_PEST": [[0, 0, 0]], "pest_grid": []},
+    transforms={"Phi": [[0,0,0]], "Phi_PEST": [[0, 0, 0]], "pest_grid": []},
     profiles=[],
     data=list(
         (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
@@ -773,12 +773,14 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     # passed here is consistent with what the interpolator was built with.
     data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
+    print(transforms["Phi"].basis)
+    print(transforms["Phi_PEST"].basis)
 
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
         data.get("potential data", data),
         data,
         data["interpolator_pest"],
-        transforms["Phi"].basis,#["Phi_PEST"],
+        transforms["Phi_PEST"].basis,#["Phi_PEST"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         outer_chunk_size=kwargs.get("outer_chunk_size", 1),

@@ -58,6 +58,9 @@ from .utils import (
 # data_index
 
 
+_topological_order = {}
+
+
 # Rather than having to recursively compute the full dependencies every time we
 # compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
@@ -143,7 +146,7 @@ def _build_data_index():  # noqa: C901
         # The deps are stored in topological order (not alphabetical) so that
         # iterating over them computes quantities in valid dependency order.
         topo_index = {key: i for i, key in enumerate(order)}
-        data_index[p]["topological_order"] = topo_index
+        _topological_order[p] = topo_index
         for key in order:
             d = data_index[p][key]
             deps_info = d["dependencies"]
@@ -212,30 +215,3 @@ def _build_data_index():  # noqa: C901
 
 
 _build_data_index()
-
-
-def set_tier(name, p):
-    """Determine how deep in the dependency tree a given name is.
-
-    tier of 0 means no dependencies on other data,
-    tier of 1 means it depends on only tier 0 stuff,
-    tier of 2 means it depends on tier 0 and tier 1, etc etc.
-
-    Designed such that if you compute things in the order determined by tiers,
-    all dependencies will always be computed in the correct order.
-    """
-    if "tier" in data_index[p][name]:
-        return
-    if len(data_index[p][name]["full_with_axis_dependencies"]["data"]) == 0:
-        data_index[p][name]["tier"] = 0
-    else:
-        thistier = 0
-        for name1 in data_index[p][name]["full_with_axis_dependencies"]["data"]:
-            set_tier(name1, p)
-            thistier = max(thistier, data_index[p][name1]["tier"])
-        data_index[p][name]["tier"] = thistier + 1
-
-
-for par in data_index.keys():
-    for name in data_index[par]:
-        set_tier(name, par)

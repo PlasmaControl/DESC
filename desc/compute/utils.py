@@ -177,6 +177,8 @@ def _compute(
     cannot give the argument basis='xyz' since that will break the recursion. In that
     case, either call above function or manually convert the output to xyz basis.
     """
+    from . import _topological_order
+
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
@@ -184,17 +186,18 @@ def _compute(
     if data is None:
         data = {}
 
-    all_deps = []
+    all_deps = set()
     deps_type = (
         "full_with_axis_dependencies"
         if transforms["grid"].axis.size
         else "full_dependencies"
     )
     for name in names:
-        all_deps += data_index[p][name][deps_type]["data"]
-    all_deps = sorted(set(all_deps), key=data_index[p]["topological_order"].__getitem__)
+        all_deps.update(data_index[p][name][deps_type]["data"])
+    all_deps.update(names)
+    all_deps = sorted(all_deps, key=_topological_order[p].__getitem__)
 
-    for _, name in all_deps:
+    for name in all_deps:
         if name in data:
             # don't compute something that's already been computed
             continue

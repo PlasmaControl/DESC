@@ -331,7 +331,7 @@ def _lsmr_compute_phi_matrix(
     # Prune into a separate copy so original dicts are available for M_S below.
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = basis.evaluate(source_grid)  # phi_transform.matrices["direct1"][0][0][0]
+    Phi = basis.evaluate(potential_grid)  # phi_transform.matrices["direct1"][0][0][0]
     import numpy as np
     np.testing.assert_allclose(
         Phi,

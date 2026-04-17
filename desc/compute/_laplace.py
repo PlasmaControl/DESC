@@ -350,13 +350,13 @@ def _lsmr_compute_phi_matrix(
     #source_data["Phi (periodic)"] = Phi
     print("source data computed")
 
-    potential_data_d, source_data_d = _prune_data(
+    """potential_data_d, source_data_d = _prune_data(
         potential_data,
         potential_grid,
         source_data,
         source_grid,
         _kernel_dipole_plus_half,
-    )
+    )"""
     
     D = _D_plus_half(
         potential_data_d,

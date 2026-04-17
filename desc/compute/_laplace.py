@@ -320,20 +320,33 @@ def _lsmr_compute_phi_matrix(
         assert (
             potential_grid.can_fft2
         ), f"potential pest_grid must have can_fft2=True, got {potential_grid}"
-
-    basis = phi_transform.basis
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
 
     # Build double-layer operator D: shape (N_potential, N_modes).
     # Prune into a separate copy so original dicts are available for M_S below.
-    
+
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = phi_transform.matrices["direct1"][0][0][0]
+    # Phi = phi_transform.matrices["direct1"][0][0][0]
+    basis = phi_transform.basis
+    potential_data_d, source_data_d = _prune_data(potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half)
+    
+    Phi = basis.evaluate(potential_grid)
+    
+    potential_data_d["Phi(x) (periodic)"] = Phi
+    source_data_d["Phi (periodic)"] = (
+            Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
+        )
+
+    
+    import numpy as np
+    np.testing.assert_allclose(
+        Phi, phi_transform.matrices["direct1"][0][0][0], rtol=1e-7, atol=1e-10
+    )
     pinv = phi_transform.matrices["pinv"]
     print("basis evaluated on potential grid")
-    potential_data["Phi(x) (periodic)"] = Phi
-    source_data["Phi (periodic)"] = Phi
+    #potential_data["Phi(x) (periodic)"] = Phi
+    #source_data["Phi (periodic)"] = Phi
     print("source data computed")
 
     potential_data_d, source_data_d = _prune_data(

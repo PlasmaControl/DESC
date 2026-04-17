@@ -43,7 +43,7 @@ chunk_size = 50
 
 fixed_point = False
 
-resolutions = np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
+resolutions = np.array([30])#np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
 
 # Root mean square errors in B_t, B_z, and phi for each resolution, relative to the "true" values computed from the Green's function.
 B_t_errs = np.zeros_like(resolutions, dtype=float)

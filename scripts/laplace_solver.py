@@ -58,7 +58,7 @@ for i, res in enumerate(resolutions):
     if fixed_point:
         pest = False
     else:
-        pest = False
+        pest = True
     coords = "($\\rho, \\vartheta, \\phi$)" if pest else "($\\rho, \\theta, \\zeta$)" 
     from_scratch = False
 

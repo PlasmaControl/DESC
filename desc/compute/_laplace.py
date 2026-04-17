@@ -352,7 +352,7 @@ def _lsmr_compute_phi_matrix(
         Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
     )
 
-    pinv = phi_transform.matrices["pinv"]
+    #pinv = phi_transform.matrices["pinv"]
 
     # potential_data["Phi(x) (periodic)"] = Phi
     # source_data["Phi (periodic)"] = Phi

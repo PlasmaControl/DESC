@@ -336,12 +336,12 @@ def _lsmr_compute_phi_matrix(
     )
     potential_data_d, source_data_d = _prune_data(potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half)
     
-
+    """
     potential_data_d["Phi(x) (periodic)"] = Phi
     source_data_d["Phi (periodic)"] = (
             Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
         )
-
+    """
     
     
     

@@ -261,7 +261,9 @@ def _compute_single_layer_matrix(
     # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
 
     # this vmap applies col to each basis function, and therefore acts on Bn in Fourier space
-    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(jnp.eye(N_source)).T#source_data["Phi (periodic)"].T).T
+    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(
+        jnp.eye(N_source)
+    ).T  # source_data["Phi (periodic)"].T).T
     return spectral_matrix
 
 
@@ -310,7 +312,7 @@ def _lsmr_compute_phi_matrix(
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
     # hard-code that Phi and Bn are on the same grid (necessary for external mode stabiliy)
-    #potential_data = source_data.copy()
+    # potential_data = source_data.copy()
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
@@ -329,23 +331,33 @@ def _lsmr_compute_phi_matrix(
     # Prune into a separate copy so original dicts are available for M_S below.
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = phi_transform.matrices["direct1"][0][0][0]
-    potential_data_d, source_data_d = _prune_data(potential_data, potential_grid, source_data, source_grid, _kernel_dipole_plus_half)
-    
-    
+    Phi = basis.evaluate(source_grid)  # phi_transform.matrices["direct1"][0][0][0]
+    import numpy as np
+    np.testing.assert_allclose(
+        Phi,
+        phi_transform.matrices["direct1"][0][0][0],
+        err_msg="Phi mismatch between basis and transform",
+    )
+    potential_data_d, source_data_d = _prune_data(
+        potential_data,
+        potential_grid,
+        source_data,
+        source_grid,
+        _kernel_dipole_plus_half,
+    )
+
     potential_data_d["Phi(x) (periodic)"] = Phi
     source_data_d["Phi (periodic)"] = (
-            Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
-        )
-    
+        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
+    )
 
     pinv = phi_transform.matrices["pinv"]
-    
-    #potential_data["Phi(x) (periodic)"] = Phi
-    #source_data["Phi (periodic)"] = Phi
-    
+
+    # potential_data["Phi(x) (periodic)"] = Phi
+    # source_data["Phi (periodic)"] = Phi
+
     print("source data computed")
-    
+
     D = _D_plus_half(
         potential_data_d,
         source_data_d,
@@ -366,7 +378,7 @@ def _lsmr_compute_phi_matrix(
     M_S_spectral = _compute_single_layer_matrix(
         potential_data, source_data, interpolator, chunk_size, outer_chunk_size
     )
-    M_S = M_S_spectral #@ pinv
+    M_S = M_S_spectral  # @ pinv
     print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).

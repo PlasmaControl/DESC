@@ -271,7 +271,7 @@ def _lsmr_compute_phi_matrix(
     potential_data,
     source_data,
     interpolator,
-    basis,#phi_transform,
+    phi_transform,
     problem,
     chunk_size=None,
     outer_chunk_size=1,
@@ -316,7 +316,7 @@ def _lsmr_compute_phi_matrix(
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
-    #basis = phi_transform.basis
+    basis = phi_transform.basis
     if pest_coords:
         assert (
             source_grid.can_fft2
@@ -332,13 +332,13 @@ def _lsmr_compute_phi_matrix(
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
     Phi = basis.evaluate(potential_grid)  # phi_transform.matrices["direct1"][0][0][0]
-    """import numpy as np
+    import numpy as np
     np.testing.assert_allclose(
         Phi,
         phi_transform.matrices["direct1"][0][0][0],
         err_msg="Phi mismatch between basis and transform",
         atol=1E-10
-    )"""
+    )
     potential_data_d, source_data_d = _prune_data(
         potential_data,
         potential_grid,
@@ -780,7 +780,7 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
         data.get("potential data", data),
         data,
         data["interpolator_pest"],
-        transforms["Phi"].basis,
+        transforms["Phi"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         outer_chunk_size=kwargs.get("outer_chunk_size", 1),

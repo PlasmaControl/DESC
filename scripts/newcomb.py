@@ -40,7 +40,7 @@ def B_theta_pinch(data, r):
         B_theta computed in the screw pinch approximation
         (as in Friedberg chapter 11).
     """
-    return dot(data["B"], data["e^vartheta"]) * r
+    return dot(data["B"], data["e^vartheta"]) * r # |e^vartheta| = 1/r in screw pinch approximation
 
 
 def B_z_pinch(data, R0):
@@ -62,7 +62,7 @@ def B_z_pinch(data, R0):
         B_z computed in the screw pinch approximation
         (as in Friedberg chapter 11).
     """
-    return dot(data["B"], data["grad(phi)"]) * R0
+    return dot(data["B"], data["grad(phi)"]) * R0 # |grad(phi)| = 1/R0 in screw pinch approximation
 
 
 def evaluate_suydam(eq, npoints=50):
@@ -128,8 +128,8 @@ def _odefun(rho, u, args):
 
     Returns
     -------
-    du_drho : jnp.ndarray
-        Array containing [d(xi)/drho, d(f * xi_r)/drho].
+    du_dr : jnp.ndarray
+        Array containing [d(xi)/dr, d(f * xi_r)/dr].
     """
     eq, m, k, a, R0 = args
     params = eq.params_dict
@@ -155,7 +155,7 @@ def _odefun(rho, u, args):
     dFdr = m / r * (B_theta_r - B_theta / r) + k * B_z_r
     dfdr = (Fs / k0_sq) * (F + 2 * r * dFdr + (2 * m**2 * F) / (r**2 * k0_sq))
     """
-    
+    # df/dr = 1/a (df/drho)
     return jnp.stack([u[1] / f[0], g[0] * u[0]]) * (1 / a)
 
 
@@ -329,7 +329,7 @@ def compute_minimizing_perturbation(
 
 
 # --- STEP 3: Handle resonant surfaces ---
-def find_resonant_surfaces(eq, m, n, n_points=1000):
+def find_resonant_surfaces(eq, m, n, n_points=5000):
     """
     Find resonant surfaces where k * B_z + m * B_theta / r = 0, which correspond 
     to rational q surfaces in a perfect screw pinch.
@@ -394,14 +394,14 @@ def find_resonant_surfaces(eq, m, n, n_points=1000):
             return float(Fs[0])
         # Use brentq to find the root of Fs between rho_array[i] and rho_array[i+1]
         rho_root = brentq(
-            Fs_func, float(rho_array[i]), float(rho_array[i + 1]), xtol=1e-13
+            Fs_func, float(rho_array[i]), float(rho_array[i + 1]), xtol=1e-14
         )
         resonant_rhos.append(rho_root)
 
     return jnp.array(resonant_rhos)
 
 
-def find_xi(eq, m, n, nrho=5000, nlog=100):
+def find_xi(eq, m, n, nrho=5000, nlog=500):
     """
     Find the minimizing perturbation xi for mode (m, n) across the entire plasma radius,
     accounting for resonant surfaces. The plasma radius is divided into segments between resonant surfaces,
@@ -438,7 +438,7 @@ def find_xi(eq, m, n, nrho=5000, nlog=100):
         from_axis = i == 0
         # Rhos to save at
         drho = np.minimum(
-            (rho_end - rho_start) * 1e-1, 1e-2
+            (rho_end - rho_start) * 1e-2, 1e-3
         )  # distance from resonant surface to start/end logging
         rhos_segment = jnp.hstack([
             rho_start + jnp.logspace(jnp.log10(drho) - 2, jnp.log10(drho), nlog, endpoint=False),

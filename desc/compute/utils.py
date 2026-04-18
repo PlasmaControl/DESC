@@ -703,6 +703,7 @@ def get_transforms(  # noqa: C901
         Keys for R, Z, L, etc
 
     """
+    print(kwargs)
     from desc.basis import DoubleFourierSeries
     from desc.grid import LinearGrid
     from desc.transform import Transform
@@ -732,12 +733,18 @@ def get_transforms(  # noqa: C901
         transforms["phi_matrix"] = pm    
         
     for c in derivs.keys():
-        grid_temp = grid
         if c in transforms:
             continue
         if hasattr(obj, c + "_basis") or (c == "Phi_PEST" and hasattr(obj, "Phi_basis")):  # regular stuff like R, Z, lambda etc.
+            if c == "Phi_PEST":
+                print("Found Phi_PEST basis")
+                if "pest_grid" not in kwargs:
+                    print("but no pest_grid in kwargs")
             if c == "Phi_PEST" and "pest_grid" in kwargs:
+                print("success")
                 grid_temp = kwargs.get("pest_grid")
+            else:
+                grid_temp = grid
             basis = getattr(obj, c + "_basis") if c != "Phi_PEST" else getattr(obj, "Phi_basis")
             # first check if we already have a transform with a compatible basis
             if not jitable:

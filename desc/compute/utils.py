@@ -128,7 +128,7 @@ def compute(  # noqa: C901
     
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
-
+    
     bad_kwargs = kwargs.keys() - allowed_kwargs
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
 
@@ -749,14 +749,14 @@ def get_transforms(  # noqa: C901
             # first check if we already have a transform with a compatible basis
             if not jitable:
                 for transform in transforms.values():
-                    if basis.equiv(getattr(transform, "basis", None)):
+                    if basis.equiv(getattr(transform, "basis", None)) and grid_temp.equiv(getattr(transform, "grid", None)):
                         ders = np.unique(
                             np.vstack([derivs[c], transform.derivatives]), axis=0
                         ).astype(int)
                         # don't build until we know all the derivs we need
                         transform.change_derivatives(ders, build=False)
                         if (
-                            c == "Phi"
+                            c in ("Phi", "Phi_PEST")
                             and p
                             == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
                         ):

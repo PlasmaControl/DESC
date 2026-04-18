@@ -37,12 +37,12 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
+            x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
+        x = jnp.linspace(0, 5, 2)
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")

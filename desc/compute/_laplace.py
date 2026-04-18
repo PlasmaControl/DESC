@@ -784,7 +784,7 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
         data.get("potential data", data),
         data,
         data["interpolator_pest"],
-        transforms["Phi"],
+        transforms["Phi_PEST"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         outer_chunk_size=kwargs.get("outer_chunk_size", 1),

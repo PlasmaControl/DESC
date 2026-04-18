@@ -332,6 +332,10 @@ def _lsmr_compute_phi_matrix(
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
     Phi = basis.evaluate(potential_grid)  # phi_transform.matrices["direct1"][0][0][0]
+    print(phi_transform.grid)
+    print(potential_grid)
+    print(phi_transform.grid.nodes)
+    print(potential_grid.nodes)
     import numpy as np
     np.testing.assert_allclose(
         Phi,
@@ -563,7 +567,7 @@ def _interpolator_pest(params, transforms, profiles, data, **kwargs):
 
         def fun(x):
             return rfft_interp2d(
-                rtz_grid.meshgrid_reshape(x, "rtz")[0],
+                pest_grid.meshgrid_reshape(x, "rtz")[0],#rtz_grid.meshgrid_reshape(x, "rtz")[0],
                 potential_grid.num_theta,
                 potential_grid.num_zeta,
                 dx=dt,

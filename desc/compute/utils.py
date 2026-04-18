@@ -121,7 +121,6 @@ def compute(  # noqa: C901
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
     pm_kw = kwargs.pop("phi_matrix", None)
-    pg_kw = kwargs.pop("pest_grid", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
@@ -129,10 +128,6 @@ def compute(  # noqa: C901
     
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
-    
-    if "pest_grid" not in transforms and pg_kw is not None:
-        transforms["pest_grid"] = pg_kw
-
 
     bad_kwargs = kwargs.keys() - allowed_kwargs
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
@@ -734,23 +729,19 @@ def get_transforms(  # noqa: C901
         transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
     if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
         pm = kwargs["phi_matrix"]
-        transforms["phi_matrix"] = pm
-    if "pest_grid" in kwargs and kwargs["pest_grid"] is not None:
-        transforms["pest_grid"] = kwargs["pest_grid"]
-    
+        transforms["phi_matrix"] = pm    
         
     for c in derivs.keys():
+        grid_temp = grid
         if c in transforms:
             continue
         if hasattr(obj, c + "_basis") or (c == "Phi_PEST" and hasattr(obj, "Phi_basis")):  # regular stuff like R, Z, lambda etc.
+            if c == "Phi_PEST" and "pest_grid" in kwargs:
+                grid_temp = kwargs.get("pest_grid")
             basis = getattr(obj, c + "_basis") if c != "Phi_PEST" else getattr(obj, "Phi_basis")
             # first check if we already have a transform with a compatible basis
             if not jitable:
                 for transform in transforms.values():
-                    if c == "Phi_PEST":
-                        # compute Phi Fourier decomposition in PEST coordinates
-                        if "pest_grid" in kwargs or "pest_grid" in transforms:
-                            grid = kwargs.get("pest_grid", transforms.get("pest_grid"))
                     if basis.equiv(getattr(transform, "basis", None)):
                         ders = np.unique(
                             np.vstack([derivs[c], transform.derivatives]), axis=0
@@ -767,7 +758,7 @@ def get_transforms(  # noqa: C901
                         break
                 else:  # if we didn't exit the loop early
                     c_transform = Transform(
-                        grid,
+                        grid_temp,
                         basis,
                         derivs=derivs[c],
                         build=False,
@@ -783,7 +774,7 @@ def get_transforms(  # noqa: C901
                     )
             else:  # don't perform checks if jitable=True as they are not jit-safe
                 c_transform = Transform(
-                    grid,
+                    grid_temp,
                     basis,
                     derivs=derivs[c],
                     build=False,
@@ -864,15 +855,6 @@ def get_transforms(  # noqa: C901
             )
         elif c == "phi_matrix":
             transforms["phi_matrix"] = None
-        elif c == "pest_grid":
-            transforms["pest_grid"] = errorif(
-                "pest_grid" not in transforms,
-                ValueError,
-                "Compute requested 'pest_grid' but none was provided. "
-                "Please provide a LinearGrid with the same resolution as grid "
-                "containing the PEST coordinates corresponding to the (theta, zeta) "
-                "coordinates of grid.",
-            )
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

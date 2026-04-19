@@ -19,7 +19,7 @@ os.makedirs(plot_path, exist_ok=True)
 # Fixed parameters used when building the save_tag
 aspect_ratio = 200
 NFP          = 1
-axisym       = True
+axisym       = False
 p_coeffs     = np.array([0.125, 0, 0, 0, -0.125])
 
 # These must match what mat-free.py used for the high-res solve
@@ -152,7 +152,7 @@ ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
 ax.set_title(
     r"Stability eigenvalue vs $\iota_0$" + "\n"
-    f"$\\iota(\\rho) = \\iota_0 - {iota_coeffs[1]}\\rho^2$",
+    f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[1])}\\rho^2$",
     fontsize=12,
 )
 ax.tick_params(labelsize=12)

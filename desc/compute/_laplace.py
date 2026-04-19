@@ -243,27 +243,14 @@ def _compute_single_layer_matrix(
         eval_data, interpolator.eval_grid, source_data, source_grid, _kernel_monopole
     )
     # B0*n is not in source_data_p (no specific B_n to prune); supply it per-column.
-    source_no_Bn = {k: v for k, v in source_data_p.items() if k != "B0*n"}
-
-    @jit
-    def col(b_n):
-        return singular_integral(
-            eval_data_p,
-            {**source_no_Bn, "B0*n": b_n},
-            interpolator,
-            _kernel_monopole,
-            chunk_size=chunk_size,
-            _prune_data=False,
-        ).squeeze(-1)
-
-    # chunk_size controls inner parallelism (eval points per singular_integral call).
-    # outer_chunk_size controls how many columns are processed simultaneously.
-    # Keeping them separate avoids OOM from outer*inner simultaneous intermediates.
-
-    # this vmap applies col to each basis function, and therefore acts on Bn in Fourier space
-    spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(
-        source_data["Phi (periodic)"].T
-    ).T
+    spectral_matrix = singular_integral(
+        eval_data_p,
+        source_data_p,
+        interpolator,
+        _kernel_monopole,
+        chunk_size=chunk_size,
+        _prune_data=False,
+    ).squeeze(-1)
     return spectral_matrix
 
 
@@ -347,8 +334,8 @@ def _lsmr_compute_phi_matrix(
 
     pinv = phi_transform.matrices["pinv"]
 
-    potential_data["Phi(x) (periodic)"] = Phi
-    source_data["Phi (periodic)"] = Phi
+    # potential_data["Phi(x) (periodic)"] = Phi
+    source_data["B0*n"] = Phi # use same basis for B0*n as for phi
 
     print("source data computed")
 
@@ -556,7 +543,9 @@ def _interpolator_pest(params, transforms, profiles, data, **kwargs):
 
         def fun(x):
             return rfft_interp2d(
-                pest_grid.meshgrid_reshape(x, "rtz")[0],#rtz_grid.meshgrid_reshape(x, "rtz")[0],
+                pest_grid.meshgrid_reshape(x, "rtz")[
+                    0
+                ],  # rtz_grid.meshgrid_reshape(x, "rtz")[0],
                 potential_grid.num_theta,
                 potential_grid.num_zeta,
                 dx=dt,
@@ -727,7 +716,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"Phi": [[0,0,0]], "Phi_PEST": [[0, 0, 0]]},
+    transforms={"Phi": [[0, 0, 0]], "Phi_PEST": [[0, 0, 0]]},
     profiles=[],
     data=list(
         (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})

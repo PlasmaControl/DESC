@@ -213,6 +213,7 @@ def _compute_single_layer_matrix(
     interpolator,
     chunk_size=None,
     outer_chunk_size=1,
+    ndim=None,
 ):
     """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
 
@@ -250,6 +251,7 @@ def _compute_single_layer_matrix(
         _kernel_monopole,
         chunk_size=chunk_size,
         _prune_data=False,
+        ndim=ndim,
     ).squeeze(-1)
     return spectral_matrix
 
@@ -357,7 +359,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_modes).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S_spectral = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, outer_chunk_size
+        potential_data, source_data, interpolator, chunk_size, outer_chunk_size, ndim=basis.num_modes
     )
     M_S = M_S_spectral @ pinv
     print("single layer matrix computed")

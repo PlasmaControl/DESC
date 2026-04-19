@@ -184,9 +184,9 @@ def _compute(
 
     has_axis = bool(transforms["grid"].axis.size)
     needed = _get_deps(p, names, data=data, has_axis=has_axis)
-    order = sorted(needed, key=_topological_order[p].__getitem__)
+    needed = sorted(needed, key=_topological_order[p].__getitem__)
 
-    for name in order:
+    for name in needed:
         if name in data:
             # a previously-called fun may have populated this already
             continue
@@ -260,8 +260,8 @@ def _get_deps(parameterization, names, data=None, has_axis=False, check_fun=None
     """
     p = _parse_parameterization(parameterization)
     deps = set()
-    # Iterative DFS: prune the dependency tree as soon as we hit a key that is
-    # already in ``data`` — its own dependencies don't need to be gathered.
+    # below while loop expands each direct dependency if they are not
+    # in data or they are already added to the set before
     stack = [n for n in names if data is None or n not in data]
     while stack:
         name = stack.pop()

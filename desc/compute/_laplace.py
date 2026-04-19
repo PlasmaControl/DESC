@@ -331,18 +331,7 @@ def _lsmr_compute_phi_matrix(
     # Prune into a separate copy so original dicts are available for M_S below.
 
     # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = basis.evaluate(potential_grid)  # phi_transform.matrices["direct1"][0][0][0]
-    print(phi_transform.grid)
-    print(potential_grid)
-    print(phi_transform.grid.nodes)
-    print(potential_grid.nodes)
-    import numpy as np
-    np.testing.assert_allclose(
-        Phi,
-        phi_transform.matrices["direct1"][0][0][0],
-        err_msg="Phi mismatch between basis and transform",
-        atol=1E-10
-    )
+    Phi = phi_transform.matrices["direct1"][0][0][0]
     potential_data_d, source_data_d = _prune_data(
         potential_data,
         potential_grid,

@@ -212,7 +212,6 @@ def _compute_single_layer_matrix(
     source_data,
     interpolator,
     chunk_size=None,
-    outer_chunk_size=1,
     ndim=None,
 ):
     """Compute the single-layer operator as a matrix M_S where S[B0*n] = M_S @ B_n.
@@ -228,9 +227,6 @@ def _compute_single_layer_matrix(
     interpolator : _BIESTInterpolator
     chunk_size : int or None
         Chunk size for eval-point batching *inside* each ``singular_integral`` call.
-    outer_chunk_size : int or None
-        Chunk size for the outer vmap over source columns. Defaults to 1 to avoid
-        OOM from materialising many columns simultaneously.
 
     Returns
     -------
@@ -263,7 +259,6 @@ def _lsmr_compute_phi_matrix(
     phi_transform,
     problem,
     chunk_size=None,
-    outer_chunk_size=1,
     pest_coords=False,
     _midpoint_quad=False,
     _D_quad=False,
@@ -287,9 +282,6 @@ def _lsmr_compute_phi_matrix(
         One of {"interior Neumann", "exterior Neumann", "interior Dirichlet"}.
     chunk_size : int or None
         Inner chunk size for eval-point batching inside each ``singular_integral`` call.
-    outer_chunk_size : int or None
-        Outer chunk size for the column loop in ``_compute_single_layer_matrix``.
-        Defaults to 1 to avoid OOM from materialising many columns simultaneously.
     _midpoint_quad : bool
     _D_quad : bool
 
@@ -359,7 +351,7 @@ def _lsmr_compute_phi_matrix(
     # Build single-layer matrix M_S: shape (N_potential, N_modes).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
     M_S_spectral = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, outer_chunk_size, ndim=basis.num_modes
+        potential_data, source_data, interpolator, chunk_size, ndim=basis.num_modes
     )
     M_S = M_S_spectral @ pinv
     print("single layer matrix computed")
@@ -684,10 +676,6 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     chunk_size=_doc["chunk_size"],
-    outer_chunk_size=(
-        "int or None : Chunk size for the outer column loop when building the "
-        "single-layer matrix. Defaults to 1 to limit peak memory usage."
-    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -700,7 +688,6 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
-        outer_chunk_size=kwargs.get("outer_chunk_size", 1),
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
     )
@@ -739,10 +726,6 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         Passed through to ``interpolator_pest``.
         """,
     chunk_size=_doc["chunk_size"],
-    outer_chunk_size=(
-        "int or None : Chunk size for the outer column loop when building the "
-        "single-layer matrix. Defaults to 1 to limit peak memory usage."
-    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -767,7 +750,6 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
         transforms["Phi_PEST"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
-        outer_chunk_size=kwargs.get("outer_chunk_size", 1),
         pest_coords=True,
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
         _D_quad=kwargs.get("_D_quad", False),
@@ -793,10 +775,6 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     chunk_size=_doc["chunk_size"],
-    outer_chunk_size=(
-        "int or None : Chunk size for the outer column loop when building the "
-        "single-layer matrix. Defaults to 1 to limit peak memory usage."
-    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )
@@ -826,10 +804,6 @@ def _A_mn_compute(params, transforms, profiles, data, **kwargs):
         Passed through to ``interpolator_pest``.
         """,
     chunk_size=_doc["chunk_size"],
-    outer_chunk_size=(
-        "int or None : Chunk size for the outer column loop when building the "
-        "single-layer matrix. Defaults to 1 to limit peak memory usage."
-    ),
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
 )

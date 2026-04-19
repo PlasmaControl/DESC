@@ -127,6 +127,7 @@ def compute(  # noqa: C901
                     f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
 
+        # this call is purely for validation of the grid/deps consistency
         _ = _get_deps(p, names, data, transforms["grid"].axis.size, check_fun=check_fun)
 
     if data is None:
@@ -144,7 +145,6 @@ def compute(  # noqa: C901
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-
         for name in data.keys():
             errorif(
                 data_index[p][name]["dim"] == (3, 3),
@@ -382,11 +382,14 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    profs = []
-    for key in deps:
-        profs += data_index[p][key]["dependencies"]["profiles"]
-    profs = sorted(set(profs))
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    profs = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any profiles, no problem
+    # this way we skip calling get_data_deps again
+    for key in keys:
+        profs.update(data_index[p][key][deps_type]["profiles"])
+    profs = sorted(profs)
     if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None
@@ -419,12 +422,18 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    params = []
-    for key in deps:
-        params += data_index[p][key]["dependencies"]["params"]
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    params = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any params, no problem
+    # this way we skip calling get_data_deps again
+    # TODO (#568): This will probably need w_lmn
+    for key in keys:
+        params.update(data_index[p][key][deps_type]["params"])
+    params = sorted(params)
+
     if isinstance(obj, str) or inspect.isclass(obj):
-        return params
+        return list(params)
     temp_params = {}
     for name in params:
         p = getattr(obj, name)
@@ -570,60 +579,6 @@ def get_transforms(
             t.build()
 
     return transforms
-
-
-def has_data_dependencies(parameterization, qty, data, axis=False):
-    """Determine if we have the data needed to compute qty."""
-    return _has_data(qty, data, parameterization) and (
-        not axis or _has_axis_limit_data(qty, data, parameterization)
-    )
-
-
-def has_dependencies(parameterization, qty, params, transforms, profiles, data):
-    """Determine if we have the ingredients needed to compute qty.
-
-    Parameters
-    ----------
-    parameterization : str or class
-        Type of thing we're checking dependencies for. eg desc.equilibrium.Equilibrium
-    qty : str
-        Name of something from the data index.
-    params : dict[str, jnp.ndarray]
-        Dictionary of parameters we have.
-    transforms : dict[str, Transform]
-        Dictionary of transforms we have.
-    profiles : dict[str, Profile]
-        Dictionary of profiles we have.
-    data : dict[str, jnp.ndarray]
-        Dictionary of what we've computed so far.
-
-    Returns
-    -------
-    has_dependencies : bool
-        Whether we have what we need.
-    """
-    return (
-        _has_data(qty, data, parameterization)
-        and (
-            not transforms["grid"].axis.size
-            or _has_axis_limit_data(qty, data, parameterization)
-        )
-        and _has_params(qty, params, parameterization)
-        and _has_profiles(qty, profiles, parameterization)
-        and _has_transforms(qty, transforms, parameterization)
-    )
-
-
-def _has_data(qty, data, parameterization):
-    p = _parse_parameterization(parameterization)
-    deps = data_index[p][qty]["dependencies"]["data"]
-    return all(d in data for d in deps)
-
-
-def _has_axis_limit_data(qty, data, parameterization):
-    p = _parse_parameterization(parameterization)
-    deps = data_index[p][qty]["dependencies"]["axis_limit_data"]
-    return all(d in data for d in deps)
 
 
 def _has_params(qty, params, parameterization):

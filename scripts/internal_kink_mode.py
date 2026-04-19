@@ -271,7 +271,7 @@ for iota_0 in iota_on_axis_values:
     v = jnp.concatenate([xi_rho_low.flatten(), xi_theta_low.flatten(), xi_zeta_low.flatten()])
     v = v / jnp.linalg.norm(v)
 
-    vec, energy, _ = term_by_term_stability(
+    vec, energy = term_by_term_stability(
         v, params, transforms, tbt_data,
         diffmat=diffmat,
         gamma=100,

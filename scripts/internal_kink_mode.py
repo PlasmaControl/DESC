@@ -287,7 +287,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     print(f"  term_by_term_stability took {toc-tic:.1f} s,  Rayleigh quotient = {total_energy:.6e}")
     for key, value in energy.items():
         print(f"    {key}: {value:.6e}")
-        results_term_by_term[key][i] = value
+        results_term_by_term[key][i] = value[0]
 
 
     results_lambda_min[i] = total_energy

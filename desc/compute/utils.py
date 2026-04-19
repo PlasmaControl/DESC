@@ -222,10 +222,11 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     if not data:
         out = []
         for key in keys:
-            out += _get_deps_1_key(p, key, has_axis)
+            out += data_index[p][key][deps_type]["data"]
         out = set(out)
     else:
         out = _get_deps(p, keys, data=data, has_axis=has_axis)
@@ -233,46 +234,6 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     if basis.lower() == "xyz":
         out.add("phi")
     return sorted(out)
-
-
-def _get_deps_1_key(p, key, has_axis):
-    """Gather all quantities required to compute ``key``.
-
-    Parameters
-    ----------
-    p : str
-        Type of object to compute for, eg Equilibrium, Curve, etc.
-    key : str
-        Name of the quantity to compute.
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
-
-    Returns
-    -------
-    deps_1_key : list of str
-        Dependencies required to compute ``key``.
-
-
-    """
-    if has_axis:
-        if "full_with_axis_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_with_axis_dependencies"]["data"]
-    elif "full_dependencies" in data_index[p][key]:
-        return data_index[p][key]["full_dependencies"]["data"]
-
-    deps = data_index[p][key]["dependencies"]["data"]
-    if len(deps) == 0:
-        return deps
-    out = deps.copy()  # to avoid modifying the data_index
-    for dep in deps:
-        out += _get_deps_1_key(p, dep, has_axis)
-    if has_axis:
-        axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
-        out += axis_limit_deps.copy()  # to be safe
-        for dep in axis_limit_deps:
-            out += _get_deps_1_key(p, dep, has_axis)
-
-    return sorted(set(out))
 
 
 def _get_deps(parameterization, names, data=None, has_axis=False, check_fun=None):
@@ -349,10 +310,9 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     """
     p = _parse_parameterization(parameterization)
     out = seeds.copy()
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     for key in search_space:
-        deps = data_index[p][key][
-            "full_with_axis_dependencies" if has_axis else "full_dependencies"
-        ]["data"]
+        deps = data_index[p][key][deps_type]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -382,25 +342,11 @@ def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-
-    def _get_derivs_1_key(key):
-        if has_axis:
-            if "full_with_axis_dependencies" in data_index[p][key]:
-                return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
-        elif "full_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, p, has_axis=has_axis, basis=basis)
-        derivs = {}
-        for dep in deps:
-            for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
-                if key not in derivs:
-                    derivs[key] = []
-                derivs[key] += val
-        return derivs
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
 
     derivs = {}
     for key in keys:
-        derivs1 = _get_derivs_1_key(key)
+        derivs1 = data_index[p][key][deps_type]["transforms"]
         for key1, val in derivs1.items():
             if key1 not in derivs:
                 derivs[key1] = []

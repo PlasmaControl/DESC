@@ -252,7 +252,7 @@ def _compute_single_layer_matrix(
         chunk_size=chunk_size,
         _prune_data=False,
         ndim=ndim,
-    ).squeeze(-1)
+    )
     return spectral_matrix
 
 

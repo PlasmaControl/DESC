@@ -863,11 +863,12 @@ _kernel_BS_plus_grad_S.keys = _dx.keys + [
 
 def _kernel_monopole(eval_data, source_data, ds, diag=False):
     """Kernel of single layer operator S[B0*n]: (B0*n)(y) G(x-y) da(y)."""
-    return (
-        ds
-        * (source_data["|e_theta x e_zeta|"] * source_data["B0*n"])
-        * _G(_dx(eval_data, source_data, diag))
+    out = (
+        ds * (source_data["|e_theta x e_zeta|"]) * _G(_dx(eval_data, source_data, diag))
     )
+    if source_data["B0*n"].ndim > 1:
+        out = out[..., jnp.newaxis]
+    return out * source_data["B0*n"]
 
 
 _kernel_monopole.ndim = 1

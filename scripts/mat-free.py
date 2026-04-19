@@ -38,12 +38,12 @@ axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 # Low-res solve for eigenfunction guess
-n_rho = 36
-n_theta = 36
+n_rho = 24
+n_theta = 24
 if axisym:
     n_zeta = 1
 else:
-    n_zeta = 14
+    n_zeta = 10
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)

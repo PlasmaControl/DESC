@@ -262,8 +262,8 @@ def _compute_single_layer_matrix(
 
     # this vmap applies col to each basis function, and therefore acts on Bn in Fourier space
     spectral_matrix = vmap_chunked(col, chunk_size=outer_chunk_size)(
-        jnp.eye(N_source)
-    ).T  # source_data["Phi (periodic)"].T).T
+        source_data["Phi (periodic)"].T
+    ).T
     return spectral_matrix
 
 
@@ -345,10 +345,10 @@ def _lsmr_compute_phi_matrix(
         Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
     )
 
-    #pinv = phi_transform.matrices["pinv"]
+    pinv = phi_transform.matrices["pinv"]
 
-    # potential_data["Phi(x) (periodic)"] = Phi
-    # source_data["Phi (periodic)"] = Phi
+    potential_data["Phi(x) (periodic)"] = Phi
+    source_data["Phi (periodic)"] = Phi
 
     print("source data computed")
 
@@ -372,7 +372,7 @@ def _lsmr_compute_phi_matrix(
     M_S_spectral = _compute_single_layer_matrix(
         potential_data, source_data, interpolator, chunk_size, outer_chunk_size
     )
-    M_S = M_S_spectral  # @ pinv
+    M_S = M_S_spectral @ pinv
     print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).

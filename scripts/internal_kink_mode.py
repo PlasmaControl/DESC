@@ -28,7 +28,7 @@ from desc.grid import QuadratureGrid
 import os
 
 from newcomb import *
-from desc.compute._stability import term_by_term_stability
+from desc.compute._stability import term_by_term_stability, energy_terms
 from desc.compute.utils import get_params, get_transforms
 
 # Input parameters
@@ -54,11 +54,12 @@ iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)
 
-results_lambda_min = []
+results_lambda_min = np.zeros_like(iota_on_axis_values)
+results_term_by_term = {term: np.zeros_like(iota_on_axis_values) for term in energy_terms}
 
 stabilities = []
 
-for iota_0 in iota_on_axis_values:
+for i, iota_0 in enumerate(iota_on_axis_values):
     iota_coeffs = np.array([iota_0, -0.5])
     iota_modes  = np.array([0, 2])
     iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
@@ -156,7 +157,7 @@ for iota_0 in iota_on_axis_values:
     # iota(rho) = iota_0 - 0.5*rho^2  =>  q=1 at rho_q1 = sqrt((iota_0-1)/0.5)
     if iota_0 <= 1.0:
         print(f"  iota_0={iota_0:.4f}: no q=1 surface inside plasma, skipping")
-        results_lambda_min.append(np.nan)
+        results_lambda_min[i] = np.nan
         continue
     rho_q1 = np.sqrt((iota_0 - 1.0) / 0.5)
     print(f"  q=1 surface at rho_q1 = {rho_q1:.4f}")
@@ -281,14 +282,17 @@ for iota_0 in iota_on_axis_values:
         sigma=0,
     )
     toc = time.time()
-    print(f"  term_by_term_stability took {toc-tic:.1f} s,  Rayleigh quotient = {energy:.6e}")
+    total_energy = np.sum([value for key, value in energy.items()])
+    print(f"  term_by_term_stability took {toc-tic:.1f} s,  Rayleigh quotient = {total_energy:.6e}")
+    for key, value in energy.items():
+        print(f"    {key}: {value:.6e}")
+        results_term_by_term[key][i] = value
 
-    results_lambda_min.append(float(energy))
+
+    results_lambda_min[i] = total_energy
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────
-results_lambda_min = np.array(results_lambda_min)
-
 np.savez(
     save_path + "iota_scan_results_analytic.npz",
     iota_on_axis=iota_on_axis_values,

@@ -2067,7 +2067,13 @@ def _AGNI_eigenfunction_matfree(params, transforms, profiles, data, **kwargs):
     return data  # noqa: unused dependency
 
 
-
+energy_terms = [
+        "Q^2",
+        "mixed Q-J",
+        "J^2",
+        "plasma compressibility",
+        "instability drive",
+    ]
 def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     """
     AGNI: Analysis of Global Normal-modes in Ideal MHD.
@@ -2601,12 +2607,5 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
         y = ys.T + yus.T
 
         return y.flatten() * bc_mask  # enforce BC on output
-    terms = [
-        "Q^2",
-        "mixed Q-J",
-        "J^2",
-        "plasma compressibility",
-        "instability drive",
-    ]
-    energy = {term: dot(x_flat, Ax(x_flat, term))/dot(x_flat, x_flat) for term in terms}
+    energy = {term: dot(x_flat, Ax(x_flat, term))/dot(x_flat, x_flat) for term in energy_terms}
     return energy

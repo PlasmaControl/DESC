@@ -127,9 +127,7 @@ def compute(  # noqa: C901
                     f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
 
-        _ = _get_deps(
-            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
-        )
+        _ = _get_deps(p, names, data, transforms["grid"].axis.size, check_fun=check_fun)
 
     if data is None:
         data = {}
@@ -184,20 +182,13 @@ def _compute(
     if data is None:
         data = {}
 
-    all_deps = set()
-    deps_type = (
-        "full_with_axis_dependencies"
-        if transforms["grid"].axis.size
-        else "full_dependencies"
-    )
-    for name in names:
-        all_deps.update(data_index[p][name][deps_type]["data"])
-    all_deps.update(names)
-    all_deps = sorted(all_deps, key=_topological_order[p].__getitem__)
+    has_axis = bool(transforms["grid"].axis.size)
+    needed = _get_deps(p, names, data=data, has_axis=has_axis)
+    order = sorted(needed, key=_topological_order[p].__getitem__)
 
-    for name in all_deps:
+    for name in order:
         if name in data:
-            # don't compute something that's already been computed
+            # a previously-called fun may have populated this already
             continue
         data = data_index[p][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
@@ -237,7 +228,7 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
             out += _get_deps_1_key(p, key, has_axis)
         out = set(out)
     else:
-        out = _get_deps(p, keys, deps=set(), data=data, has_axis=has_axis)
+        out = _get_deps(p, keys, data=data, has_axis=has_axis)
         out.difference_update(keys)
     if basis.lower() == "xyz":
         out.add("phi")
@@ -284,7 +275,7 @@ def _get_deps_1_key(p, key, has_axis):
     return sorted(set(out))
 
 
-def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fun=None):
+def _get_deps(parameterization, names, data=None, has_axis=False, check_fun=None):
     """Gather all quantities required to compute ``names`` given already computed data.
 
     Parameters
@@ -293,8 +284,6 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
-    deps : set[str]
-        Dependencies gathered so far.
     data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
@@ -309,28 +298,31 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
 
     """
     p = _parse_parameterization(parameterization)
-    for name in names:
-        if name not in deps and (data is None or name not in data):
-            if check_fun is not None:
-                check_fun(name)
-            deps.add(name)
-            deps = _get_deps(
-                p,
-                data_index[p][name]["dependencies"]["data"],
-                deps,
-                data,
-                has_axis,
-                check_fun,
-            )
-            if has_axis:
-                deps = _get_deps(
-                    p,
-                    data_index[p][name]["dependencies"]["axis_limit_data"],
-                    deps,
-                    data,
-                    has_axis,
-                    check_fun,
-                )
+    deps = set()
+    # Iterative DFS: prune the dependency tree as soon as we hit a key that is
+    # already in ``data`` — its own dependencies don't need to be gathered.
+    stack = [n for n in names if data is None or n not in data]
+    while stack:
+        name = stack.pop()
+        if name in deps:
+            continue
+        if check_fun is not None:
+            check_fun(name)
+        deps.add(name)
+        direct = data_index[p][name]["dependencies"]
+        for dep in direct["data"]:
+            if dep in deps:
+                continue
+            if data is not None and dep in data:
+                continue
+            stack.append(dep)
+        if has_axis:
+            for dep in direct["axis_limit_data"]:
+                if dep in deps:
+                    continue
+                if data is not None and dep in data:
+                    continue
+                stack.append(dep)
     return deps
 
 

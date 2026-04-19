@@ -283,6 +283,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     )
     toc = time.time()
     total_energy = np.sum([value for key, value in energy.items()])
+    print(energy)
     print(f"  term_by_term_stability took {toc-tic:.1f} s,  Rayleigh quotient = {total_energy:.6e}")
     for key, value in energy.items():
         print(f"    {key}: {value:.6e}")

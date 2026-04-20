@@ -39,7 +39,7 @@ from newcomb import *
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 50
+chunk_size = 30
 
 fixed_point = False
 
@@ -238,7 +238,7 @@ for i, res in enumerate(resolutions):
     """"""
     print("computing phi matrix")
     # Compute the matrix A such that Phi_periodic = A @ B0*n.
-    override = True
+    override = False
     print(save_path + phi_save_name)
     print(os.path.exists(save_path + phi_save_name))
 

@@ -39,7 +39,7 @@ from newcomb import *
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 10
+chunk_size = 30
 
 fixed_point = False
 
@@ -95,10 +95,16 @@ for i, res in enumerate(resolutions):
         eq_tag = name = "NCSX"
         axisym = False
         n_mode_axisym = 0
+        eq = get(eq_tag)
+        eq.change_resolution(NFP=1)
+        surface = eq.surface
+        NFP = eq.NFP
+        aspect_ratio = eq.compute("R0/a")["R0/a"]
+
 
     # Define resolution
     M = res
-    N = res
+    N = (res * aspect_ratio).astype(int)
     n_rho = 1#14
     n_theta = 2 * M
     if axisym:
@@ -127,15 +133,6 @@ for i, res in enumerate(resolutions):
     pest_save_name = f"{save_tag}_rvp.h5"
     surf_save_name = f"{save_tag}_surf.npy"
     os.makedirs(plot_path, exist_ok=True)
-
-
-    # Make surface
-    if not from_scratch:
-        eq = get(eq_tag)
-        eq.change_resolution(NFP=1)
-        surface = eq.surface
-        NFP = eq.NFP
-
 
     # NOTE: equilibrium LCFS must be ForceFreeField object 
     if from_scratch:

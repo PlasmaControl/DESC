@@ -116,7 +116,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         alpha,
         num_transit,
         num_well,
-        num_pitch,
+        pitch_quad,
         pitch_batch_size,
         surf_batch_size,
         nufft_eps,
@@ -126,6 +126,10 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
     def Gamma_c(data):
+        pitch_inv, weight = Bounce2D.pitch_inv(
+            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        )
+
         bounce = Bounce2D(
             grid,
             data,
@@ -167,9 +171,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            batch_map(fun, pitch_inv, pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,
         )
 
@@ -187,26 +189,16 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    data["Gamma_c"] = (
-        Bounce2D.batch(
-            Gamma_c,
-            fun_data,
-            data,
-            angle,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
-        / data["V_psi"]
-        / (num_transit * 2**0.5)
-    )
+
+    out = Bounce2D.batch(Gamma_c, fun_data, data, angle, grid, surf_batch_size)
+    data["Gamma_c"] = grid.expand(out) / data["V_psi"] / (num_transit * 2**0.5)
     return data
 
 
 def _radial_drift(data, B, pitch):
     return safediv(
-        data["cvdrift0"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
+        data["cvdrift0"] * (1 - 0.5 * pitch * B),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 
@@ -267,7 +259,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         alpha,
         num_transit,
         num_well,
-        num_pitch,
+        pitch_quad,
         _,
         _,
         nufft_eps,
@@ -277,6 +269,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
     def gamma_c0(data):
+        pitch_inv, _ = Bounce2D.pitch_inv(
+            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        )
+
         bounce = Bounce2D(
             grid,
             data,
@@ -290,11 +286,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             spline=spline,
             vander=vander,
         )
-
-        points = bounce.points(data["pitch_inv"], num_well)
+        points = bounce.points(pitch_inv, num_well)
         drift1, drift2 = bounce.integrate(
             [_drift1, _drift2],
-            data["pitch_inv"],
+            pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
@@ -302,6 +297,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             is_fourier=True,
             low_ram=True,
         )
+
         return (2 / jnp.pi) * jnp.arctan(
             safediv(
                 drift1,
@@ -323,9 +319,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
-    data["gamma_c"] = Bounce2D.batch(
-        gamma_c0, fun_data, data, angle, grid, num_pitch, 1
-    )
+
+    data["gamma_c"] = Bounce2D.batch(gamma_c0, fun_data, data, angle, grid, 1, False)
     return data
 
 
@@ -379,7 +374,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         alpha,
         num_transit,
         num_well,
-        num_pitch,
+        pitch_quad,
         pitch_batch_size,
         surf_batch_size,
         nufft_eps,
@@ -389,6 +384,10 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ) = Bounce2D._defaults(-1, grid, **kwargs)
 
     def Gamma_c(data):
+        pitch_inv, weight = Bounce2D.pitch_inv(
+            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        )
+
         bounce = Bounce2D(
             grid,
             data,
@@ -418,28 +417,21 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            batch_map(fun, pitch_inv, pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,
         )
 
-    data["Gamma_c Velasco"] = (
-        Bounce2D.batch(
-            Gamma_c,
-            {
-                "cvdrift0": data["cvdrift0"],
-                "gbdrift (periodic)": data["gbdrift (periodic)"],
-                "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
-            },
-            data,
-            angle,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
-        / data["V_psi"]
-        / (num_transit * 2**0.5)
+    out = Bounce2D.batch(
+        Gamma_c,
+        {
+            "cvdrift0": data["cvdrift0"],
+            "gbdrift (periodic)": data["gbdrift (periodic)"],
+            "gbdrift (secular)/phi": data["gbdrift (secular)/phi"],
+        },
+        data,
+        angle,
+        grid,
+        surf_batch_size,
     )
+    data["Gamma_c Velasco"] = grid.expand(out) / data["V_psi"] / (num_transit * 2**0.5)
     return data

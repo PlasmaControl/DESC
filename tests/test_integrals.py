@@ -1099,7 +1099,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         bounce = Bounce1D(grid, data, check=True)
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_inv(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1280,26 +1280,24 @@ class TestBounce:
             + np.cos(data["theta_PEST"])
             - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
         )
-        gbdrift_analytic_low_order = fudge_1 * (
+        gbdrift_analytical_low_order = fudge_1 * (
             -data["shear"]
             + np.cos(data["theta_PEST"])
             - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
         cvdrift_analytical = gbdrift_analytical + fudge_2 * alpha_MHD / B**2
-        cvdrift_analytic_low_order = (
-            gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
+        cvdrift_analytical_low_order = (
+            gbdrift_analytical_low_order + fudge_2 * alpha_MHD / B0**2
         )
         np.testing.assert_allclose(gbdrift, gbdrift_analytical, atol=1e-2)
         np.testing.assert_allclose(cvdrift, cvdrift_analytical, atol=2e-2)
-        np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
-        np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
+        np.testing.assert_allclose(gbdrift, gbdrift_analytical_low_order, atol=1e-2)
+        np.testing.assert_allclose(cvdrift, cvdrift_analytical_low_order, atol=2e-2)
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
-            0
-        ][:-1]
+        pitch_inv = Bounce1D.pitch_inv(np.min(B), np.max(B), 100, simp=False)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1342,7 +1340,9 @@ class TestBounce:
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytical_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(data)
+        drift_analytical, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(
+            data
+        )
 
         bounce = Bounce1D(
             things["grid"].source_grid,
@@ -1367,16 +1367,16 @@ class TestBounce:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
+        assert drift_numerical.size == drift_analytical.size, msg
 
         np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+            drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, data)
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_analytical)
         ax.plot(pitch_inv, drift_numerical)
         return fig
 
@@ -1519,7 +1519,7 @@ class TestBounce2D:
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_inv(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,

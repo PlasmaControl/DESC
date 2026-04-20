@@ -326,6 +326,8 @@ def fft_grid_data(p):
         nufft_eps=1e-10,
     )
     data = eq.compute(fft_names, grid, **kwargs)
+    for name in fft_names:
+        assert data[name].ndim == 1
 
     # check vectorization too
     d = data.copy()
@@ -373,5 +375,7 @@ def raz_grid_data(p):
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
     data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)
+    for name in raz_names:
+        assert data[name].ndim == 1
     data = apply(data, grid.compress, raz_names)
     return data

@@ -24,6 +24,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jax, jnp, rfft2
 from desc.batching import batch_map
+from desc.derivatives import sparse_pullback
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
     Y_B_rule,
@@ -78,7 +79,7 @@ class Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=True):
+    def pitch_inv(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -88,14 +89,8 @@ class Bounce(eqx.Module, ABC):
         max_B : jnp.ndarray
             Maximum B value.
         num_pitch : int
-            Number of values.
-        simp : bool
-            If ``True``, then the pitch angles are chosen so that the quadrature
-            over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
-            interior completed by an open midpoint scheme near the boundary such
-            that an accuracy of fourth order is preserved.
-            If ``False``, then an open midpoint scheme is returned, which
-            is only recommended for plotting purposes.
+            Number of values for quadrature using Simpson’s 1/3 in the
+            interior completed by an open midpoint scheme near the boundary.
 
         Returns
         -------
@@ -104,18 +99,22 @@ class Bounce(eqx.Module, ABC):
             1/λ values and weights.
 
         """
-        errorif(
-            num_pitch > 1e5,
-            msg="Floating point error impedes detection of bounce points "
-            f"near global extrema. Choose {num_pitch} < 1e5.",
-        )
-        # Samples should be uniformly spaced in |B| and not λ.
-        # Important to do an open quadrature since the bounce integrals at the
-        # global maxima of |B| are not computable even ignoring precision issues.
-        x, w = simpson2(num_pitch) if simp else uniform(num_pitch)
+        if isinstance(num_pitch, int):
+            errorif(
+                num_pitch > 1e5,
+                msg="Floating point error impedes detection of bounce points "
+                f"near global extrema. Choose {num_pitch} < 1e5.",
+            )
+            simp = kwargs.get("simp", True)
+
+            num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
+        x, w = jax.lax.stop_gradient(num_pitch)
+
         x = bijection_from_disc(x, min_B[..., None], max_B[..., None])
         w = w * grad_bijection_from_disc(min_B, max_B)[..., None]
         return x, w
+
+    get_pitch_inv_quad = pitch_inv
 
     @abstractmethod
     def points(self, pitch_inv, num_well=None):
@@ -466,7 +465,7 @@ class Bounce2D(Bounce):
                 if "quad" in kwargs
                 else chebgauss2(kwargs.get("num_quad", 32))
             )
-            num_pitch = kwargs.get("num_pitch", 51)
+            pitch_quad = simpson2(kwargs.get("num_pitch", 51))
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
         elif eta == -1:
             quad = (
@@ -474,7 +473,7 @@ class Bounce2D(Bounce):
                 if "quad" in kwargs
                 else chebgauss1(kwargs.get("num_quad", 32))
             )
-            num_pitch = kwargs.get("num_pitch", 65)
+            pitch_quad = simpson2(kwargs.get("num_pitch", 65))
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
         else:
             quad = (
@@ -485,7 +484,7 @@ class Bounce2D(Bounce):
                     (automorphism_sin, grad_automorphism_sin),
                 )
             )
-            num_pitch = kwargs.get("num_pitch", 65)
+            pitch_quad = simpson2(kwargs.get("num_pitch", 65))
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
 
         pitch_batch_size = kwargs.get("pitch_batch_size", None)
@@ -517,7 +516,7 @@ class Bounce2D(Bounce):
             alpha,
             num_transit,
             num_well,
-            num_pitch,
+            pitch_quad,
             pitch_batch_size,
             surf_batch_size,
             nufft_eps,
@@ -527,17 +526,7 @@ class Bounce2D(Bounce):
         )
 
     @staticmethod
-    def batch(
-        fun,
-        fun_data,
-        desc_data,
-        angle,
-        grid,
-        num_pitch,
-        surf_batch_size=1,
-        simp=True,
-        expand_out=False,
-    ):
+    def batch(fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -569,19 +558,15 @@ class Bounce2D(Bounce):
             Angle returned by ``Bounce2D.angle``.
         grid : Grid
             Grid on which ``fun_data`` and ``desc_data`` were computed.
-        num_pitch : int
-            Number of pitch angles to add to ``fun_data`` for use in the computation.
         surf_batch_size : int
             Number of flux surfaces with which to compute simultaneously.
             Default is ``1``.
-        simp : bool
-            Whether the pitch angles should be chosen for use with open Simpson rule
-            instead of uniform weights for quadrature over velocity coordinate.
-            Default is True.
-        expand_out : bool
-            Whether to expand output to full grid so that the first dimension
-            has size ``grid.num_nodes`` instead of ``grid.num_rho``.
-            Default is False.
+        sparse : bool
+            Whether to differentiate with sparsity preserving pullbacks.
+            Default is ``True``, which makes the most sense if the output has
+            shape (num_rho, ). Otherwise, if the output shape is larger, and
+            the final objective of interest is a lower dimensional quantity
+            than the output, it may be preferable to set to ``False``.
 
         Returns
         -------
@@ -594,15 +579,14 @@ class Bounce2D(Bounce):
         for name in fun_data:
             fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
         fun_data["iota"] = grid.compress(desc_data["iota"])
+        fun_data["min_tz |B|"] = grid.compress(desc_data["min_tz |B|"])
+        fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
         fun_data["angle"] = angle
-        fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce.get_pitch_inv_quad(
-            grid.compress(desc_data["min_tz |B|"]),
-            grid.compress(desc_data["max_tz |B|"]),
-            num_pitch,
-            simp=simp,
-        )
-        out = batch_map(fun, fun_data, surf_batch_size)
-        return grid.expand(out) if expand_out else out
+
+        if sparse:
+            return sparse_pullback(fun, fun_data, batch_size=surf_batch_size)
+
+        return batch_map(fun, fun_data, batch_size=surf_batch_size)
 
     @staticmethod
     def reshape(grid, f):
@@ -835,6 +819,7 @@ class Bounce2D(Bounce):
             # FIXME: Newton update has only been implemented for nuffts; contributions
             # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
             return bounce_points(pitch_inv, self._c["knots"], self._c["B(z)"], num_well)
+
         return regular_points(self, pitch_inv, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -965,12 +950,12 @@ class Bounce2D(Bounce):
             and pitch value.
 
         """
-        x, w = setdefault(quad, self._quad)
+        x, w = jax.lax.stop_gradient(self._quad if quad is None else quad)
+
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
 
         exclude = ("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta")
-        data = setdefault(data, {})
         if is_fourier:
             data = apply(data, subset=names, exclude=exclude)
         else:
@@ -1321,7 +1306,7 @@ class Bounce2D(Bounce):
         v_ax_numticks=None,
         **kwargs,
     ):
-        """Plot frequency spectrum of the given stream map.
+        """Plot frequency spectrum of the given inverse stream map.
 
         Parameters
         ----------
@@ -1429,6 +1414,8 @@ class Bounce1D(Bounce):
     Examples
     --------
       * ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``
+      * ``desc/compute/_old.py::_epsilon_32_1D``
+      * ``desc/compute/_old.py::_Gamma_c_1D``
 
     See Also
     --------
@@ -1502,6 +1489,7 @@ class Bounce1D(Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
+
         if quad is None:
             quad = get_quadrature(
                 leggauss(32), (automorphism_sin, grad_automorphism_sin)
@@ -1509,6 +1497,7 @@ class Bounce1D(Bounce):
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = jax.lax.stop_gradient(quad)
+
         self._data = {
             "|b^zeta|": jnp.abs(data["B^zeta"]) * Lref / data["|B|"],
             "|B|": data["|B|"] / Bref,
@@ -1537,16 +1526,7 @@ class Bounce1D(Bounce):
         )
 
     @staticmethod
-    def batch(
-        fun,
-        fun_data,
-        desc_data,
-        grid,
-        num_pitch,
-        surf_batch_size=1,
-        simp=True,
-        expand_out=False,
-    ):
+    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -1555,8 +1535,8 @@ class Bounce1D(Bounce):
 
         Examples
         --------
-        * ``desc/compute/_old.py::_epsilon_32_1D``
-        * ``desc/compute/_old.py::_Gamma_c_1D``
+          * ``desc/compute/_old.py::_epsilon_32_1D``
+          * ``desc/compute/_old.py::_Gamma_c_1D``
 
         Parameters
         ----------
@@ -1575,19 +1555,15 @@ class Bounce1D(Bounce):
             functions in ``desc.compute``.
         grid : Grid
             Grid on which ``fun_data`` and ``desc_data`` were computed.
-        num_pitch : int
-            Number of pitch angles to add to ``fun_data`` for use in the computation.
         surf_batch_size : int
             Number of flux surfaces with which to compute simultaneously.
             Default is ``1``.
-        simp : bool
-            Whether the pitch angles should be chosen for use with open Simpson rule
-            instead of uniform weights for quadrature over velocity coordinate.
-            Default is True.
-        expand_out : bool
-            Whether to expand output to full grid so that the first dimension
-            has size ``grid.num_nodes`` instead of ``grid.num_rho``.
-            Default is False.
+        sparse : bool
+            Whether to differentiate with sparsity preserving pullbacks.
+            Default is ``True``, which makes the most sense if the output has
+            shape (num_rho, ). Otherwise, if the output shape is larger, and
+            the final objective of interest is a lower dimensional quantity
+            than the output, it may be preferable to set to ``False``.
 
         Returns
         -------
@@ -1598,14 +1574,13 @@ class Bounce1D(Bounce):
             fun_data[name] = desc_data[name]
         for name in fun_data:
             fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
-        fun_data["pitch_inv"], fun_data["pitch_inv weight"] = Bounce.get_pitch_inv_quad(
-            grid.compress(desc_data["min_tz |B|"]),
-            grid.compress(desc_data["max_tz |B|"]),
-            num_pitch,
-            simp=simp,
-        )
-        out = batch_map(fun, fun_data, surf_batch_size)
-        return grid.expand(out) if expand_out else out
+        fun_data["min_tz |B|"] = grid.compress(desc_data["min_tz |B|"])
+        fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
+
+        if sparse:
+            return sparse_pullback(fun, fun_data, batch_size=surf_batch_size)
+
+        return batch_map(fun, fun_data, batch_size=surf_batch_size)
 
     @staticmethod
     def reshape(grid, f):
@@ -1773,11 +1748,12 @@ class Bounce1D(Bounce):
             and pitch value.
 
         """
-        x, w = setdefault(quad, self._quad)
+        x, w = jax.lax.stop_gradient(self._quad if quad is None else quad)
+
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
 
-        data = apply(setdefault(data, {}), subset=names, exclude=("|B|",))
+        data = apply(data, subset=names, exclude=("|B|",))
 
         if points is None:
             points = self.points(pitch_inv, num_well)

@@ -156,6 +156,8 @@ def _dI_2(data, B, pitch):
         "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
         "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
         "\\langle \\sum_j H_j^2 / I_j \\rangle"
+        # B₀ has units of λ⁻¹.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
     ),
     units="~",
     units_long="None",
@@ -201,7 +203,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         alpha,
         num_transit,
         num_well,
-        num_pitch,
+        pitch_quad,
         pitch_batch_size,
         surf_batch_size,
         nufft_eps,
@@ -211,10 +213,10 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     ) = Bounce2D._defaults(1, grid, **kwargs)
 
     def eps_32(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
-        # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (I₁²/I₂).sum(-1).
-        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
+        pitch_inv, weight = Bounce2D.pitch_inv(
+            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        )
+
         bounce = Bounce2D(
             grid,
             data,
@@ -242,28 +244,23 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
         return jnp.sum(
-            batch_map(fun, data["pitch_inv"], pitch_batch_size)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 3,
+            batch_map(fun, pitch_inv, pitch_batch_size) * weight / pitch_inv**3,
             axis=-1,
         )
 
     B0 = data["max_tz |B|"]
     scalar = (jnp.pi * data["R0"]) ** 2 / (num_transit * 4 * 2**0.5)
 
+    out = Bounce2D.batch(
+        eps_32,
+        {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+        data,
+        angle,
+        grid,
+        surf_batch_size,
+    )
     data["effective ripple 3/2"] = scalar * (
-        (B0 / data["<|grad(rho)|>"]) ** 2
-        * Bounce2D.batch(
-            eps_32,
-            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
-            data,
-            angle,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
-        / data["V_psi"]
+        (B0 / data["<|grad(rho)|>"]) ** 2 * grid.expand(out) / data["V_psi"]
     )
     return data
 

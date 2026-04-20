@@ -6,7 +6,7 @@ New Features
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
-- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
+- Method to compute bounce integrals in batches that supports sparse pullbacks is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
 
@@ -16,6 +16,10 @@ Bug Fixes
 
 Performance Improvements
 
+- Sparse reverse-mode differentiation was introduced to DESC
+  to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170).
+  Plumbing to use this method was added to DESC that
+  will be progressively taken advantage of in the future.
 - Reduces import time of `desc` modules.
     - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
     - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)

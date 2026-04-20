@@ -134,13 +134,10 @@ docs = {
 doc_bounce = """
     Notes
     -----
-    Consider using an optimizer that uses a scalar output loss function
-    to improve performance before reducing ``jac_chunk_size``.
-
     Developer notes: Performance will improve significantly by resolving GitHub issues:
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
-      * ``2168`` Sparse cotangent pullbacks
+      * ``2171`` Single contangent pullback through compute pipeline.
 
     Parameters
     ----------
@@ -219,6 +216,8 @@ doc_bounce = """
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``.
     """.rstrip()
+# TODO: In the PR that we change Y_B to per field period for spline as requested
+#       by @ddudt, can also change surf_batch_size to None.
 
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably
@@ -233,6 +232,7 @@ def collect_docs(
     normalize_target_detail=None,
     loss_detail=None,
     coil=False,
+    jac_chunk_size=True,
 ):
     """Collect default parameters for the docstring of Objective.
 
@@ -256,6 +256,8 @@ def collect_docs(
     coil : bool, optional
         Whether the objective is a coil objective. If ``True``, updates docs
         of ``target``, ``weight``, ``bounds``, and ``loss_function``.
+    jac_chunk_size : bool
+        Whether to include the ``jac_chunk_size`` parameter in the docstring.
 
     Returns
     -------
@@ -267,6 +269,9 @@ def collect_docs(
 
     # Copy to allow for objective-specific updates to docs
     docs_obj = docs.copy()
+    if not jac_chunk_size:
+        del docs_obj["jac_chunk_size"]
+
     if coil:
         docs_obj["target"] = doc_target_coil
         docs_obj["bounds"] = doc_bounds_coil

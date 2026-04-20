@@ -197,6 +197,20 @@ def vmap_chunked(
     - https://github.com/jax-ml/jax/issues/26689
     - https://github.com/jax-ml/jax/issues/27591
     - https://github.com/jax-ml/jax/issues/31919
+    - Due to an actively worked on issue in JAX,
+      https://docs.jax.dev/en/latest/jep/
+      2026-custom-derivatives.html#main-problem-descriptions,
+      this function can simply ignore custom derivative rules
+      of the function in wraps if ``chunk_size`` is not ``None``,
+      and therefore can damp the effeciency gains of ``sparse_pullback``.
+      Use ``batch_map`` instead to avoid this,
+      or try to make a hack with jax.custom_transforms to bypass this.
+
+    See Also
+    --------
+    batch_map
+        If the function supports native vectorization, use ``batch_map`` instead
+        for the reasons discussed the docstring.
 
     Parameters
     ----------
@@ -239,7 +253,14 @@ def batch_map(
     vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
     supplied function. This makes compilation faster and avoids the weaknesses of
     applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303.
+    dynamic values, or messing up how to effeciently compute jvp's and vjp's, e.g. see
+    https://docs.jax.dev/en/latest/jep/
+    2026-custom-derivatives.html#main-problem-descriptions
+
+    See Also
+    --------
+    vmap_chunked
+        If the function does not support native vectorization.
 
     Parameters
     ----------

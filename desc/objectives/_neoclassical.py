@@ -10,7 +10,7 @@ from desc.utils import setdefault, warnif
 
 from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs, doc_bounce
-from .utils import _parse_callable_target_bounds
+from .utils import _parse_callable_target_bounds, errorif
 
 
 class EffectiveRipple(_Objective):
@@ -43,6 +43,7 @@ class EffectiveRipple(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
+            jac_chunk_size=False,
         )
     )
 
@@ -67,7 +68,6 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
-        jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
         X=32,
@@ -83,8 +83,12 @@ class EffectiveRipple(_Objective):
         nufft_eps=1e-6,
         spline=True,
         use_bounce1d=False,
-        **kwargs,
     ):
+        errorif(
+            deriv_mode == "fwd",
+            ValueError,
+            "Reverse mode should be used for the objective: EffectiveRipple.",
+        )
         try:
             import jax_finufft  # noqa: F401
         except:  # noqa: E722
@@ -92,9 +96,10 @@ class EffectiveRipple(_Objective):
                 nufft_eps >= 1e-14,
                 msg="\njax-finufft is not installed properly.\n"
                 "Setting parameter nufft_eps to zero.\n"
-                "Performance will deteriorate significantly.\n",
+                "Performance may be somewhat slower.\n",
             )
             nufft_eps = 0.0
+        nufft_eps = float(nufft_eps)
 
         if target is None and bounds is None:
             target = 0.0
@@ -132,7 +137,7 @@ class EffectiveRipple(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            jac_chunk_size=jac_chunk_size,
+            jac_chunk_size=None,
         )
 
     def build(self, use_jit=True, verbose=1):

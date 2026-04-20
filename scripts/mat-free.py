@@ -128,6 +128,10 @@ for iota_0 in iota_on_axis_values:
 
     zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
     D2, W2 = fourier_diffmat(n_zeta)
+    print(W0.shape)
+    W0 = jnp.diag(W0)
+    W1 = jnp.diag(W1)
+    W2 = jnp.diag(W2)
 
     grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
     diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)

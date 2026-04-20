@@ -2816,6 +2816,9 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ####################
     ####----Q²_ρρ----###
     ####################
+    print(A.shape)
+    print(D_theta.shape)
+    
     A = A.at[rho_idx, rho_idx].add(
         D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
         + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)

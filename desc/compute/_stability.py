@@ -23,6 +23,16 @@ from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot
 from .data_index import register_compute_fun
 
+import os
+
+def _agni_mem_trace_enabled(kwargs):
+    flag = os.environ.get("AGNI_MEM_TRACE", "0").strip().lower()
+    return bool(kwargs.get("debug_matfree", False)) or flag not in {"", "0", "false", "no", "off"}
+
+
+def _agni_mem_trace(kwargs, *parts):
+    if _agni_mem_trace_enabled(kwargs):
+        print(*parts)
 
 @register_compute_fun(
     name="D_shear",
@@ -2826,6 +2836,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     print("g_rr", g_rr.shape)
     print("D_zetaT", D_zetaT.shape)
     print("D_zeta", D_zeta.shape)
+
 
     A = A.at[rho_idx, rho_idx].add(
         D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)

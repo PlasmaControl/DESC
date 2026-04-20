@@ -104,7 +104,7 @@ for i, res in enumerate(resolutions):
 
     # Define resolution
     M = res
-    N = (res * aspect_ratio).astype(int)
+    N = np.int64(res * aspect_ratio)
     n_rho = 1#14
     n_theta = 2 * M
     if axisym:

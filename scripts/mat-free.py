@@ -63,6 +63,10 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta):
 
     zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
     D2, W2 = fourier_diffmat(n_zeta)
+
+    W0 = jnp.diag(W0)
+    W1 = jnp.diag(W1)
+    W2 = jnp.diag(W2)
     
     diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
 

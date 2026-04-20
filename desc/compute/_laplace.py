@@ -356,7 +356,20 @@ def _lsmr_compute_phi_matrix(
     print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).
-    A_mn = jnp.linalg.solve(D, M_S) @ pinv
+    if potential_grid.num_nodes == basis.num_modes:
+        A_mn = jnp.linalg.solve(D, M_S) 
+        print(A_mn.shape)
+        print(pinv.shape)
+        print(D.shape)
+        print(M_S.shape)
+        A_mn = A_mn @ pinv
+    else:
+        A_mn = jnp.linalg.lstsq(D, M_S)[0]
+        print(A_mn.shape)
+        print(pinv.shape)
+        print(D.shape)
+        print(M_S.shape)
+        A_mn = A_mn @ pinv
     print("linear system solved")
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
     return A_mn, -Phi @ A_mn  # sign convention that makes B dot n the outward normal

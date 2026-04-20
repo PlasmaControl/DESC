@@ -216,8 +216,6 @@ doc_bounce = """
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``.
     """.rstrip()
-# TODO: In the PR that we change Y_B to per field period for spline as requested
-#       by @ddudt, can also change surf_batch_size to None.
 
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably

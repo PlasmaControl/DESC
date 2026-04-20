@@ -969,7 +969,7 @@ def fast_cubic_spline(
     if axisymmetric:
         t = t.reshape(*lines, num_transit, -1, 1)
 
-    if nufft_eps < 1e-14 or f.shape[-1] < 16:
+    if nufft_eps < 1e-14 or f.shape[-1] <= 16:
         f = f[..., None, None, None, :, :]
         f = irfft_mmt_pos(t, f, num_t, modes=modes_t)
     else:

@@ -73,11 +73,13 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta):
 
     return diffmat, rho, theta, zeta
 
-def mapping_and_grid(eq, n_rho, n_theta, n_zeta):
+def mapping_and_grid(eq, rho, theta, zeta):
+    n_rho = rho.shape[0]
+    n_theta = theta.shape[0]
+    n_zeta = zeta.shape[0]
+
     # rho, theta, zeta are in PEST coordinates
     grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
-
-    
 
     # reshaped according to rho
     reshaped_nodes = jnp.reshape(
@@ -239,8 +241,8 @@ for iota_0 in iota_on_axis_values:
     v_guess = None
     
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
-        diffmat, rho, theta, zeta = nodes_and_diffmats(eq, n_rho, n_theta, n_zeta)
-        grid, reshaped_nodes = mapping_and_grid(eq, n_rho, n_theta, n_zeta)
+        diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
+        grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
 
         print("computing eigenmode at low res")
 

@@ -350,17 +350,13 @@ def _lsmr_compute_phi_matrix(
 
     # Build single-layer matrix M_S: shape (N_potential, N_modes).
     # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
-    M_S_spectral = _compute_single_layer_matrix(
+    M_S = _compute_single_layer_matrix(
         potential_data, source_data, interpolator, chunk_size, ndim=basis.num_modes
     )
-    M_S = M_S_spectral @ pinv
     print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).
-    if potential_grid.num_nodes == basis.num_modes:
-        A_mn = jnp.linalg.solve(D, M_S)
-    else:
-        A_mn = jnp.linalg.lstsq(D, M_S)[0]
+    A_mn = jnp.linalg.solve(D, M_S) @ pinv
     print("linear system solved")
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
     return A_mn, -Phi @ A_mn  # sign convention that makes B dot n the outward normal

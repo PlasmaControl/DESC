@@ -51,7 +51,7 @@
    notebooks/tutorials/QFM_surface.ipynb
    notebooks/tutorials/ideal_ballooning_stability.ipynb
    notebooks/tutorials/EffectiveRipple.ipynb
-
+   notebooks/tutorials/deflation.ipynb
 
 .. toctree::
    :maxdepth: 1

@@ -43,7 +43,7 @@ chunk_size = 50
 
 fixed_point = False
 
-resolutions = np.array([30])#np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 36, 7, dtype=int)])
+resolutions = np.hstack([3 * np.logspace(1, 2, num=2, base=2, dtype=int), np.linspace(24, 48, 13, dtype=int)])
 
 # Root mean square errors in B_t, B_z, and phi for each resolution, relative to the "true" values computed from the Green's function.
 B_t_errs = np.zeros_like(resolutions, dtype=float)
@@ -58,7 +58,7 @@ for i, res in enumerate(resolutions):
     if fixed_point:
         pest = False
     else:
-        pest = False
+        pest = True
     coords = "($\\rho, \\vartheta, \\phi$)" if pest else "($\\rho, \\theta, \\zeta$)" 
     from_scratch = False
 
@@ -114,7 +114,7 @@ for i, res in enumerate(resolutions):
         profile_tag = f"iota_{"_".join(iota_coeffs.astype(str))}" if fixed_iota else f"I_{"_".join(I_coeffs.astype(str))}"
         name_lower = name.lower().replace(" ", "_").replace("-", "_")
         eq_tag = f"{name_lower}_p_{"_".join(p_coeffs.astype(str))}_{profile_tag}"
-    save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}_debug"#_pseudospectral"
+    save_tag = f"{eq_tag}_M_{M}_N_{N}_pest_{pest}_pseudospectral"
     eq_save_name = f"equilibrium_{save_tag}.h5"
     if pest:
         phi_save_name = f"{save_tag}_phi_matrix.npy"

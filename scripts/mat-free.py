@@ -66,10 +66,6 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta):
     
     diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
 
-    # add boundaries for interpolation later
-    theta = np.concatenate((theta, np.array([2 * np.pi])))
-    zeta  = np.concatenate((zeta,  np.array([2 * np.pi / eq.NFP])))
-
 
     return diffmat, rho, theta, zeta
 
@@ -137,6 +133,10 @@ def add_bc(X, n_rho, n_theta, n_zeta):
 # periodic extension in theta/zeta, NO FFT.
 # -------------------------
 def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta):
+    # add boundaries for interpolation later
+    theta_low = np.concatenate((theta_low, np.array([2 * np.pi])))
+    zeta_low  = np.concatenate((zeta_low,  np.array([2 * np.pi / eq.NFP])))
+
     def _interp3_periodic(f_ext, pts):
 
         i0 = RegularGridInterpolator(

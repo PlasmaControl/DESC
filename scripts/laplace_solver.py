@@ -50,7 +50,7 @@ B_t_errs = np.zeros_like(resolutions, dtype=float)
 B_z_errs = np.zeros_like(resolutions, dtype=float)
 phi_errs = np.zeros_like(resolutions, dtype=float)
 
-just_plot = False
+just_plot = True
 path_exists = np.ones_like(resolutions, dtype=bool)
 
 for i, res in enumerate(resolutions):
@@ -346,6 +346,7 @@ for i, res in enumerate(resolutions):
         B_dot_n = dot(B, data["n_rho"])
 
         # Compute phi and compare to expected value
+        print(phi_matrix)
         phi = phi_matrix @ B_dot_n
 
         # Make differentiation matrices

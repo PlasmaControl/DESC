@@ -152,7 +152,7 @@ for iota_0 in iota_on_axis_values:
     print("computing eigenmode at low res")
     tic = time.time()
     data = eq.compute(
-        "finite-n lambda", grid=grid, diffmat=diffmat,
+        "finite-n lambda3", grid=grid, diffmat=diffmat,
         gamma=100, incompressible=False,
         axisym=axisym, n_mode_axisym=n_mode_axisym,
     )

@@ -261,11 +261,11 @@ for iota_0 in iota_on_axis_values:
         print(f"matrix full took {toc-tic:.1f} s.")
         print(data["finite-n lambda3"])
 
-        X = data["finite-n eigenfunction"]
+        X = data["finite-n eigenfunction3"]
         xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
 
         # High-res interpolation
-        xi_rho_interp, xi_theta_interp, xi_zeta_interp = interpolate_xi(
+        v_guess = interpolate_xi(
             xi_rho_low, xi_theta_low, xi_zeta_low, rho, theta, zeta, reshaped_nodes, n_rho, n_theta, n_zeta
         )
 
@@ -274,6 +274,23 @@ for iota_0 in iota_on_axis_values:
         np.save(save_path + f"xi_rho_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_rho_low)
         np.save(save_path + f"xi_theta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_theta_low)
         np.save(save_path + f"xi_zeta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_zeta_low)
+
+
+        xi_full = data["finite-n xi"]
+        deltaB = data["finite-n deltaB"]
+        deltaB_r = data["finite-n deltaB_r"]
+        deltaB_v = data["finite-n deltaB_v"]
+        deltaB_z = data["finite-n deltaB_z"]
+
+        np.savez(
+            save_path + f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npz",
+            xi=xi_full,
+            deltaB=deltaB,
+            deltaB_r=deltaB_r,
+            deltaB_v=deltaB_v,
+            deltaB_z=deltaB_z,
+            lambda_min=data["finite-n lambda3"],
+        )
 
         results_lambda_min.append(data["finite-n lambda3"][0])
 

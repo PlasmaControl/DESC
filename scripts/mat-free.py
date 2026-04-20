@@ -37,13 +37,135 @@ NFP = 1
 axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
-# Low-res solve for eigenfunction guess
-n_rho = 24
-n_theta = 24
-if axisym:
-    n_zeta = 1
-else:
-    n_zeta = 10
+
+# helper functions
+def nodes_and_diffmats(n_rho, n_theta, n_zeta):
+    x, w = leggauss_lob(n_rho)
+
+    rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
+    dx_f = jax.vmap(
+        lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
+            x_val, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0
+        )
+    )
+
+    scale_vector = 1 / (dx_f(x)[:, None])
+    scale_vector_inv = dx_f(x)[:, None]
+
+    D0, W0 = legendre_diffmat(n_rho)
+
+    # scaled D_rho
+    D0 = D0 * scale_vector
+    W0 = W0 * scale_vector_inv
+
+    theta = jnp.linspace(0.0, 2 * jnp.pi, n_theta, endpoint=False)
+    D1, W1 = fourier_diffmat(n_theta)
+
+    zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
+    D2, W2 = fourier_diffmat(n_zeta)
+    
+    diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
+
+    # add boundaries for interpolation later
+    theta = np.concatenate((theta, np.array([2 * np.pi])))
+    zeta  = np.concatenate((zeta,  np.array([2 * np.pi / eq.NFP])))
+
+
+    return diffmat, rho, theta, zeta
+
+def mapping_and_grid(eq, n_rho, n_theta, n_zeta):
+    # rho, theta, zeta are in PEST coordinates
+    grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+
+    
+
+    # reshaped according to rho
+    reshaped_nodes = jnp.reshape(
+        grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
+    )
+
+    # These nodes are in DESC coordinates
+    rtz_nodes = map_coordinates(
+        eq,
+        reshaped_nodes,  # (ρ,θ_PEST,ζ)
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+        tol=1e-12,
+        maxiter=50,
+    )
+
+    # These nodes are in DESC coordinates
+    grid = Grid(rtz_nodes)
+
+    return grid, reshaped_nodes
+
+def add_bc(X, n_rho, n_theta, n_zeta):
+    idx0 = (n_rho - 2) * n_theta * n_zeta
+    idx1 = idx0 + (n_rho) * n_theta * n_zeta
+
+    xi_sup_rho0 = np.reshape(X[:idx0, 0], (n_rho - 2, n_theta, n_zeta))
+    xi_sup_rho = np.concatenate(
+        (np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype),
+         xi_sup_rho0,
+         np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype)),
+        axis=0,
+    )
+    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, 0:1, :]),   axis=1)
+    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, :, 0:1]),   axis=2)
+
+    xi_sup_theta0 = np.reshape(X[idx0:idx1, 0], (n_rho, n_theta, n_zeta))
+    xi_sup_zeta0  = np.reshape(X[idx1:,     0], (n_rho, n_theta, n_zeta))
+
+    xi_sup_theta = np.concatenate((xi_sup_theta0, xi_sup_theta0[:, 0:1, :]), axis=1)
+    xi_sup_theta = np.concatenate((xi_sup_theta,  xi_sup_theta[:, :, 0:1]), axis=2)
+
+    xi_sup_zeta  = np.concatenate((xi_sup_zeta0,  xi_sup_zeta0[:, :, 0:1]), axis=2)
+    xi_sup_zeta  = np.concatenate((xi_sup_zeta,   xi_sup_zeta[:, 0:1, :]),  axis=1)
+
+    xi_rho_low   = np.asarray(xi_sup_rho)
+    xi_theta_low = np.asarray(xi_sup_theta)
+    xi_zeta_low  = np.asarray(xi_sup_zeta)
+
+    return xi_rho_low, xi_theta_low, xi_zeta_low
+
+
+# -------------------------
+# UPSCALE: 3D interpolation on (rho,theta,zeta),
+# periodic extension in theta/zeta, NO FFT.
+# -------------------------
+def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta):
+    def _interp3_periodic(f_ext, pts):
+
+        i0 = RegularGridInterpolator(
+            (rho_low, theta_low, zeta_low),
+            f_ext,
+            method="linear",
+            #method="pchip",
+            bounds_error=False,
+            fill_value=None,
+        )
+        out = i0(pts)
+
+        return out.reshape(n_rho, n_theta, n_zeta)
+
+    xi_rho_hi = _interp3_periodic(xi_rho_low, reshaped_nodes)
+    xi_theta_hi = _interp3_periodic(xi_theta_low, reshaped_nodes)
+    xi_zeta_hi = _interp3_periodic(xi_zeta_low, reshaped_nodes)
+
+    # Normalizing doesn't improves convergence.
+
+    v_guess = jnp.concatenate(
+        [
+            (xi_rho_hi).flatten(),
+            (xi_theta_hi).flatten(),
+            (xi_zeta_hi).flatten(),
+        ],
+        axis=0,
+    )
+    v_guess = v_guess/jnp.linalg.norm(v_guess)
+    return v_guess
+
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
@@ -107,100 +229,48 @@ for iota_0 in iota_on_axis_values:
     
     
     print("making input grid and diffmats")
-    x, w = leggauss_lob(n_rho)
+    # Low-res solve for eigenfunction guess
+    n_rhos = np.array([14, 24, 36])
+    n_thetas = np.array([14, 24, 36])
+    if axisym:
+        n_zetas = np.ones(3)
+    else:
+        n_zetas = np.array([9, 12, 14])
+    
+    v_guess = None
+    
+    for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
+        diffmat, rho, theta, zeta = nodes_and_diffmats(eq, n_rho, n_theta, n_zeta)
+        grid, reshaped_nodes = mapping_and_grid(eq, n_rho, n_theta, n_zeta)
 
-    rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
-    dx_f = jax.vmap(
-        lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
-            x_val, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0
+        print("computing eigenmode at low res")
+
+        tic = time.time()
+        data = eq.compute(
+            "finite-n lambda3", grid=grid, diffmat=diffmat,
+            gamma=100, incompressible=False,
+            axisym=axisym, n_mode_axisym=n_mode_axisym,
+            v_guess=v_guess
         )
-    )
+        toc = time.time()
+        print(f"matrix full took {toc-tic:.1f} s.")
+        print(data["finite-n lambda3"])
 
-    scale_vector = 1 / (dx_f(x)[:, None])
-    scale_vector_inv = dx_f(x)[:, None]
+        X = data["finite-n eigenfunction"]
+        xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
 
-    D0, W0 = legendre_diffmat(n_rho)
-    D0 = D0 * scale_vector
-    W0 = W0 * scale_vector_inv
+        # High-res interpolation
+        xi_rho_interp, xi_theta_interp, xi_zeta_interp = interpolate_xi(
+            xi_rho_low, xi_theta_low, xi_zeta_low, rho, theta, zeta, reshaped_nodes, n_rho, n_theta, n_zeta
+        )
 
-    theta = jnp.linspace(0.0, 2 * jnp.pi, n_theta, endpoint=False)
-    D1, W1 = fourier_diffmat(n_theta)
 
-    zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
-    D2, W2 = fourier_diffmat(n_zeta)
-    print(W0.shape)
-    W0 = jnp.diag(W0)
-    W1 = jnp.diag(W1)
-    W2 = jnp.diag(W2)
+        np.save(save_path + f"low_res_eigenfunction_all_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", X)
+        np.save(save_path + f"xi_rho_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_rho_low)
+        np.save(save_path + f"xi_theta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_theta_low)
+        np.save(save_path + f"xi_zeta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_zeta_low)
 
-    grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
-    diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
-
-    reshaped_nodes = jnp.reshape(
-        grid0.meshgrid_reshape(grid0.nodes, order="rtz"), (n_rho * n_theta * n_zeta, 3)
-    )
-    print("mapping coordinates")
-    rtz_nodes = map_coordinates(
-        eq,
-        reshaped_nodes,
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-        tol=1e-12,
-        maxiter=50,
-    )
-    print("coordinates mapped")
-
-    grid = Grid(rtz_nodes)
-
-    print("computing eigenmode at low res")
-    tic = time.time()
-    data = eq.compute(
-        "finite-n lambda3", grid=grid, diffmat=diffmat,
-        gamma=100, incompressible=False,
-        axisym=axisym, n_mode_axisym=n_mode_axisym,
-    )
-    toc = time.time()
-    print(f"matrix full took {toc-tic:.1f} s.")
-    print(data["finite-n lambda"])
-
-    X = data["finite-n eigenfunction"]
-    np.save(save_path + f"low_res_eigenfunction_all_{save_tag}.npy", X)
-
-    idx0 = (n_rho - 2) * n_theta * n_zeta
-    idx1 = idx0 + (n_rho) * n_theta * n_zeta
-
-    xi_sup_rho0 = np.reshape(X[:idx0, 0], (n_rho - 2, n_theta, n_zeta))
-    xi_sup_rho = np.concatenate(
-        (np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype),
-         xi_sup_rho0,
-         np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype)),
-        axis=0,
-    )
-    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, 0:1, :]),   axis=1)
-    xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, :, 0:1]),   axis=2)
-
-    xi_sup_theta0 = np.reshape(X[idx0:idx1, 0], (n_rho, n_theta, n_zeta))
-    xi_sup_zeta0  = np.reshape(X[idx1:,     0], (n_rho, n_theta, n_zeta))
-
-    xi_sup_theta = np.concatenate((xi_sup_theta0, xi_sup_theta0[:, 0:1, :]), axis=1)
-    xi_sup_theta = np.concatenate((xi_sup_theta,  xi_sup_theta[:, :, 0:1]), axis=2)
-
-    xi_sup_zeta  = np.concatenate((xi_sup_zeta0,  xi_sup_zeta0[:, :, 0:1]), axis=2)
-    xi_sup_zeta  = np.concatenate((xi_sup_zeta,   xi_sup_zeta[:, 0:1, :]),  axis=1)
-
-    rho_low   = rho
-    theta_low = np.concatenate((theta, np.array([2 * np.pi])))
-    zeta_low  = np.concatenate((zeta,  np.array([2 * np.pi / eq.NFP])))
-
-    xi_rho_low   = np.asarray(xi_sup_rho)
-    xi_theta_low = np.asarray(xi_sup_theta)
-    xi_zeta_low  = np.asarray(xi_sup_zeta)
-    np.save(save_path + f"xi_rho_low_{save_tag}.npy", xi_rho_low)
-    np.save(save_path + f"xi_theta_low_{save_tag}.npy", xi_theta_low)
-    np.save(save_path + f"xi_zeta_low_{save_tag}.npy", xi_zeta_low)
-
-    results_lambda_min.append(data["finite-n lambda"][0])
+        results_lambda_min.append(data["finite-n lambda3"][0])
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────

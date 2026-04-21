@@ -12,7 +12,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.equilibrium import Equilibrium
 from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
-from desc.utils import dot
+from desc.utils import dot, apply
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.io import load
 import numpy as np
@@ -177,11 +177,10 @@ iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 save_path = "./high_aspect_ratio_tokamak/"
 os.makedirs(save_path, exist_ok=True)
 
-results_lambda_min = []
+results_lambda_min = np.zeros_like(iota_on_axis_values)
+stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
 
-stabilities = []
-
-for iota_0 in iota_on_axis_values:
+for i, iota_0 in enumerate(iota_on_axis_values):
     iota_coeffs = np.array([iota_0, -0.5])
     iota_modes  = np.array([0, 2])
     iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
@@ -233,22 +232,35 @@ for iota_0 in iota_on_axis_values:
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
     n_rhos = np.array([14, 24, 36])
-    n_thetas = np.array([4, 24, 36])
+    n_thetas = np.array([14, 24, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
         n_zetas = np.array([9, 12, 14])
     
     v_guess = None
+    X = None
     
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
-        X_path = save_path + f"low_res_eigenfunction_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy"
+        # paths for saving eigenfunction and related data
+        save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"
+        X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
+        savez_path = save_path + f"{save_tag_res}.npz"
+
+        # produce diffmats and grid nodes for the current resolution
+        diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
+        
         if os.path.exists(X_path):
             X = np.load(X_path)
+            data = np.load(savez_path)
+            lambda_min = data["lambda_min"]
+            data.close()
         else:
-            diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
             grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
-
+            if X is not None:
+                v_guess = interpolate_xi(
+                    xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta
+                )
             print("computing eigenmode at low res")
 
             tic = time.time()
@@ -265,37 +277,40 @@ for iota_0 in iota_on_axis_values:
             X = data["finite-n eigenfunction3"]
 
             np.save(X_path, X)
+
+            # save processed eigenfunction and related data for later analysis
+            xi_full = data["finite-n xi"]
+            deltaB = data["finite-n deltaB"]
+            deltaB_r = data["finite-n deltaB_r"]
+            deltaB_v = data["finite-n deltaB_v"]
+            deltaB_z = data["finite-n deltaB_z"]
+            lambda_min = data["finite-n lambda3"]
+
+            np.savez(
+                savez_path,
+                xi=xi_full,
+                deltaB=deltaB,
+                deltaB_r=deltaB_r,
+                deltaB_v=deltaB_v,
+                deltaB_z=deltaB_z,
+                lambda_min=lambda_min,
+            )
         
+        # add boundaries back to the low-res eigenfunction for interpolation later
         xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
 
-        # High-res interpolation
-        v_guess = interpolate_xi(
-            xi_rho_low, xi_theta_low, xi_zeta_low, rho, theta, zeta, reshaped_nodes, n_rho, n_theta, n_zeta
-        )
+        # Save nodes for interpolation
+        rho_low = rho
+        theta_low = theta
+        zeta_low = zeta
 
+        # save eigenfunction components
+        np.save(save_path + f"xi_rho_{save_tag_res}.npy", xi_rho_low)
+        np.save(save_path + f"xi_theta_{save_tag_res}.npy", xi_theta_low)
+        np.save(save_path + f"xi_zeta_{save_tag_res}.npy", xi_zeta_low)
 
-        np.save(save_path + f"xi_rho_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_rho_low)
-        np.save(save_path + f"xi_theta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_theta_low)
-        np.save(save_path + f"xi_zeta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_zeta_low)
-
-
-        xi_full = data["finite-n xi"]
-        deltaB = data["finite-n deltaB"]
-        deltaB_r = data["finite-n deltaB_r"]
-        deltaB_v = data["finite-n deltaB_v"]
-        deltaB_z = data["finite-n deltaB_z"]
-
-        np.savez(
-            save_path + f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npz",
-            xi=xi_full,
-            deltaB=deltaB,
-            deltaB_r=deltaB_r,
-            deltaB_v=deltaB_v,
-            deltaB_z=deltaB_z,
-            lambda_min=data["finite-n lambda3"],
-        )
-
-        results_lambda_min.append(data["finite-n lambda3"][0])
+    # add the final lambda_min to the results list for this iota_0
+    results_lambda_min[i] = lambda_min
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────

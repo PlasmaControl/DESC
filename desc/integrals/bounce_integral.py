@@ -1863,20 +1863,21 @@ class Options(NamedTuple):
         num_quad = kwargs.get("num_quad", 32)
         num_transit = kwargs.get("num_transit", 20)
 
-        quad = kwargs.get("quad", False)
+        quad = kwargs.get("quad", None)
         if eta == 1:
-            quad = quad or chebgauss2(num_quad)
+            quad = chebgauss2(num_quad) if quad is None else quad
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
             num_pitch = kwargs.get("num_pitch", 51)
         elif eta == -1:
-            quad = quad or chebgauss1(num_quad)
+            quad = chebgauss1(num_quad) if quad is None else quad
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
         else:
-            quad = quad or get_quadrature(
-                leggauss(num_quad),
-                (automorphism_sin, grad_automorphism_sin),
-            )
+            if quad is None:
+                quad = get_quadrature(
+                    leggauss(num_quad),
+                    (automorphism_sin, grad_automorphism_sin),
+                )
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
 

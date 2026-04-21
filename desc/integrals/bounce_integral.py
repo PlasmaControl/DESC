@@ -2,6 +2,7 @@
 
 import warnings
 from abc import ABC, abstractmethod
+from typing import NamedTuple
 
 import equinox as eqx
 from interpax import CubicHermiteSpline, PPoly
@@ -79,7 +80,7 @@ class Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def pitch_inv(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -113,8 +114,6 @@ class Bounce(eqx.Module, ABC):
         x = bijection_from_disc(x, min_B[..., None], max_B[..., None])
         w = w * grad_bijection_from_disc(min_B, max_B)[..., None]
         return x, w
-
-    get_pitch_inv_quad = pitch_inv
 
     @abstractmethod
     def points(self, pitch_inv, num_well=None):
@@ -238,6 +237,9 @@ class Bounce2D(Bounce):
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    spline : bool
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
     is_reshaped : bool
         Whether the arrays in ``data`` are already reshaped to the expected form of
         shape (..., num ζ, num θ) or (num ρ, num ζ, num θ).
@@ -254,9 +256,6 @@ class Bounce2D(Bounce):
         Optional. Reference magnetic field strength for normalization.
     Lref : float
         Optional. Reference length scale for normalization.
-    spline : bool
-        Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series. Default is ``True``.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
@@ -286,11 +285,11 @@ class Bounce2D(Bounce):
         *,
         automorphism=None,
         nufft_eps=1e-6,
+        spline=True,
         is_reshaped=False,
         is_fourier=False,
         Bref=1.0,
         Lref=1.0,
-        spline=True,
         check=False,
         vander=None,
         **kwargs,
@@ -359,174 +358,9 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _build(obj, names, eta):
-        """Builds the objective, selecting default values if they were not specified.
-
-        Examples
-        --------
-          * ``desc/objectives/_fast_ion.py::GammaC``
-          * ``desc/objectives/_neoclassical.py::EffectiveRipple``
-
-        Parameters
-        ----------
-        obj : _Objective
-            The objective instance.
-        names : str
-            Builds profiles and transforms for the compute quantities registered
-            with these names.
-        eta : int
-            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
-            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
-            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
-
-        """
-        from desc.compute import get_profiles, get_transforms
-        from desc.objectives.utils import _parse_callable_target_bounds
-
-        eq = obj.things[0]
-        if obj._grid is None:
-            obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert obj._grid.can_fft2
-
-        X = obj._hyperparam.pop("X")
-        Y = obj._hyperparam.pop("Y")
-        obj._constants["x"] = fourier_pts(X)
-        obj._constants["y"] = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
-
-        Y_B = obj._hyperparam["Y_B"]
-        if Y_B is None:
-            Y_B = Y_B_rule(obj._grid, obj._hyperparam["spline"])
-            obj._hyperparam["Y_B"] = Y_B
-        if obj._hyperparam["num_well"] is None:
-            obj._hyperparam["num_well"] = num_well_rule(
-                obj._hyperparam["num_transit"],
-                eq.NFP,
-                # Due to legacy reasons Y_B is resolution over full transit
-                # if spline is true.
-                Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
-            )
-
-        obj._constants["_vander"] = (
-            get_vander_spline(obj._grid, Y, Y_B, eq.NFP)
-            if obj._hyperparam["spline"]
-            else {}
-        )
-
-        num_quad = obj._hyperparam.pop("num_quad")
-        if eta == 1:
-            obj._constants["quad"] = chebgauss2(num_quad)
-        elif eta == -1:
-            obj._constants["quad"] = chebgauss1(num_quad)
-        else:
-            obj._constants["quad"] = get_quadrature(
-                leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
-            )
-
-        rho = obj._grid.compress(obj._grid.nodes[:, 0])
-        obj._constants["lambda"] = get_transforms(
-            "lambda",
-            eq,
-            grid=LinearGrid(
-                rho=rho, M=eq.L_basis.M, zeta=obj._constants["y"], NFP=eq.NFP
-            ),
-        )["L"]
-
-        obj._constants["profiles"] = get_profiles(names, eq, grid=obj._grid)
-        obj._constants["transforms"] = get_transforms(names, eq, grid=obj._grid)
-        obj._dim_f = obj._grid.num_rho
-        obj._target, obj._bounds = _parse_callable_target_bounds(
-            obj._target, obj._bounds, rho
-        )
-
-    @staticmethod
-    def _defaults(eta, grid, **kwargs):
-        """Defaults for the registered compute functions.
-
-        Parameters
-        ----------
-        eta : int
-            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
-            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
-            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
-        grid : Grid
-            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-
-        Returns
-        -------
-            angle, Y_B, alpha, num_transit, num_well, num_pitch
-            pitch_batch_size, surf_batch_size,
-            quad, nufft_eps, spline, vander
-
-        """
-        if eta == 1:
-            quad = (
-                kwargs["quad"]
-                if "quad" in kwargs
-                else chebgauss2(kwargs.get("num_quad", 32))
-            )
-            pitch_quad = simpson2(kwargs.get("num_pitch", 51))
-            nufft_eps = kwargs.get("nufft_eps", 1e-6)
-        elif eta == -1:
-            quad = (
-                kwargs["quad"]
-                if "quad" in kwargs
-                else chebgauss1(kwargs.get("num_quad", 32))
-            )
-            pitch_quad = simpson2(kwargs.get("num_pitch", 65))
-            nufft_eps = kwargs.get("nufft_eps", 1e-7)
-        else:
-            quad = (
-                kwargs["quad"]
-                if "quad" in kwargs
-                else get_quadrature(
-                    leggauss(kwargs.get("num_quad", 32)),
-                    (automorphism_sin, grad_automorphism_sin),
-                )
-            )
-            pitch_quad = simpson2(kwargs.get("num_pitch", 65))
-            nufft_eps = kwargs.get("nufft_eps", 1e-7)
-
-        pitch_batch_size = kwargs.get("pitch_batch_size", None)
-        surf_batch_size = kwargs.get("surf_batch_size", 1)
-        assert (
-            surf_batch_size == 1 or pitch_batch_size is None
-        ), f"Expected pitch_batch_size to be None, got {pitch_batch_size}."
-
-        spline = kwargs.get("spline", True)
-        vander = kwargs.get("_vander", None)
-
-        angle = parse_argname_change(
-            kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-        )
-        alpha = kwargs.get("alpha", jnp.array([0.0]))
-        num_transit = kwargs.get("num_transit", 20)
-
-        Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
-        num_well = kwargs.get(
-            "num_well",
-            # Due to legacy reasons Y_B is resolution over full transit
-            # if spline is true.
-            num_well_rule(num_transit, grid.NFP, Y_B if spline else (Y_B * grid.NFP)),
-        )
-
-        return (
-            angle,
-            Y_B,
-            alpha,
-            num_transit,
-            num_well,
-            pitch_quad,
-            pitch_batch_size,
-            surf_batch_size,
-            nufft_eps,
-            spline,
-            quad,
-            vander,
-        )
-
-    @staticmethod
-    def batch(fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True):
+    def batch(
+        fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True, **kwargs
+    ):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -567,6 +401,10 @@ class Bounce2D(Bounce):
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to set to ``False``.
+        **kwargs
+            Keyword arguments to pass into ``fun``.
+            These arguments are not split into batches.
+
 
         Returns
         -------
@@ -584,9 +422,9 @@ class Bounce2D(Bounce):
         fun_data["angle"] = angle
 
         if sparse:
-            return sparse_pullback(fun, fun_data, batch_size=surf_batch_size)
+            return sparse_pullback(fun, fun_data, surf_batch_size, **kwargs)
 
-        return batch_map(fun, fun_data, batch_size=surf_batch_size)
+        return batch_map(fun, fun_data, surf_batch_size, **kwargs)
 
     @staticmethod
     def reshape(grid, f):
@@ -950,7 +788,7 @@ class Bounce2D(Bounce):
             and pitch value.
 
         """
-        x, w = jax.lax.stop_gradient(self._quad if quad is None else quad)
+        x, w = self._quad if quad is None else quad
 
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
@@ -1210,7 +1048,7 @@ class Bounce2D(Bounce):
         return jnp.abs(jnp.reciprocal(B_sup_z).dot(w).sum((-1, -2)).mean(-1)) * dz_dx
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot B and bounce points on the specified field line.
+        """Plot the quantity on the specified field line.
 
         Parameters
         ----------
@@ -1526,7 +1364,7 @@ class Bounce1D(Bounce):
         )
 
     @staticmethod
-    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True):
+    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True, **kwargs):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -1564,6 +1402,9 @@ class Bounce1D(Bounce):
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to set to ``False``.
+        **kwargs
+            Keyword arguments to pass into ``fun``.
+            These arguments are not split into batches.
 
         Returns
         -------
@@ -1578,9 +1419,9 @@ class Bounce1D(Bounce):
         fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
 
         if sparse:
-            return sparse_pullback(fun, fun_data, batch_size=surf_batch_size)
+            return sparse_pullback(fun, fun_data, surf_batch_size, **kwargs)
 
-        return batch_map(fun, fun_data, batch_size=surf_batch_size)
+        return batch_map(fun, fun_data, surf_batch_size, **kwargs)
 
     @staticmethod
     def reshape(grid, f):
@@ -1748,7 +1589,7 @@ class Bounce1D(Bounce):
             and pitch value.
 
         """
-        x, w = jax.lax.stop_gradient(self._quad if quad is None else quad)
+        x, w = self._quad if quad is None else quad
 
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
@@ -1874,3 +1715,281 @@ class Bounce1D(Bounce):
             PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)
         )
         return fig, ax
+
+
+class Options(NamedTuple):
+    """Parameter container for Bounce2D."""
+
+    # TODO(#2152): Consider instead of having users pass in 10 kwargs
+    #    have them pass in this object, e.g. eq.compute(bounce_opts=opts).
+    #    Reasons: 1) eq.compute kwarg namespace is polluted;
+    #    e.g. some other compute function can't use the kwarg spline.
+    #    2) Long kwarg descriptions aren't readable in the public list
+    #       of variables docs.
+    _doc = {
+        "angle": """jnp.ndarray :
+            Shape (num rho, X, Y).
+            Angle returned by ``Bounce2D.angle``.
+            """,
+        "Y_B": """int :
+            Desired resolution for algorithm to compute bounce points.
+            If the option ``spline`` is ``True``, the bounce points are found with
+            8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+            then the bounce points are found with spectral accuracy in this parameter.
+            A reference value for the ``spline=True`` option is
+            ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+            A reference value for the ``spline=False`` option is
+            ``(grid.num_theta+grid.num_zeta)//2``.
+
+            An error of ε in a bounce point manifests
+            𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+            𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+            """,
+        "alpha": """jnp.ndarray :
+            Shape (num alpha, ).
+            Starting field line poloidal labels.
+            Default is single field line. To compute a surface average
+            on a rational surface, it is necessary to average over multiple
+            field lines until the surface is covered sufficiently.
+            """,
+        "num_transit": """int :
+            Number of toroidal transits to follow field line.
+            In an axisymmetric device, field line integration over a single poloidal
+            transit is sufficient to capture a surface average. For a 3D
+            configuration, more transits will approximate surface averages on an
+            irrational magnetic surface better, with diminishing returns.
+            """,
+        "num_well": """int :
+            Maximum number of wells to detect for each pitch and field line.
+            Giving ``-1`` will detect all wells but due to current limitations in
+            JAX this will have worse performance.
+            Specifying a number that tightly upper bounds the number of wells will
+            increase performance. In general, an upper bound on the number of wells
+            per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
+            toroidal Fourier resolution of B, respectively, in straight-field line
+            PEST coordinates, and ι is the rotational transform normalized by 2π.
+            A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
+            The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+            are useful to select a reasonable value.
+
+            This is the most important parameter to specify for performance.
+            """,
+        "num_quad": """int :
+            Resolution for quadrature of bounce integrals.
+            Default is 32. This parameter is ignored if given ``quad``.
+            """,
+        "num_pitch": """int :
+            Resolution for quadrature over velocity coordinate.
+            """,
+        "pitch_batch_size": """int :
+            Number of pitch values with which to compute simultaneously.
+            If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+            Default is ``num_pitch``.
+            """,
+        "surf_batch_size": """int :
+            Number of flux surfaces with which to compute simultaneously.
+            If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+            Default is ``1``.
+            Only consider increasing if ``pitch_batch_size`` is ``None``.
+            """,
+        "nufft_eps": """float :
+            Precision requested for interpolation with non-uniform fast Fourier
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+            """,
+        "spline": """bool :
+            Whether to use cubic splines to compute initial guess for bounce points
+            instead of Chebyshev series. Default is ``True``.
+            """,
+        "quad": """tuple[jnp.ndarray] :
+            Used to compute bounce integrals.
+            Quadrature points xₖ and weights wₖ for the
+            approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+            """,
+        "_vander": """dict[str,jnp.ndarray] :
+            Precomputed transform matrix "dct spline".
+            This private parameter is intended to be used only by
+            developers for objectives.
+            """,
+        "theta": "",
+    }
+
+    _static_argnames = (
+        "nufft_eps",
+        "num_transit",
+        "num_pitch",
+        "num_quad",
+        "num_well",
+        "pitch_batch_size",
+        "spline",
+        "surf_batch_size",
+        "Y_B",
+    )
+
+    alpha: jnp.ndarray
+    nufft_eps: float
+    num_transit: int
+    num_well: int
+    pitch_batch_size: int
+    pitch_quad: tuple[jnp.ndarray]
+    quad: tuple[jnp.ndarray]
+    spline: bool
+    surf_batch_size: int
+    vander: tuple[jnp.ndarray]
+    Y_B: int
+
+    @classmethod
+    def guess(cls, eta, grid, **kwargs):
+        """Guess parameters based on eta and grid if not given in kwargs.
+
+        Parameters
+        ----------
+        eta : int
+            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
+            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
+            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
+        grid : Grid
+            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+
+        """
+        pitch_batch_size = kwargs.get("pitch_batch_size", None)
+        surf_batch_size = kwargs.get("surf_batch_size", 1)
+        errorif(
+            (surf_batch_size > 1) and (pitch_batch_size is not None),
+            msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
+        )
+
+        alpha = kwargs.get("alpha", jnp.array([0.0]))
+        num_quad = kwargs.get("num_quad", 32)
+        num_transit = kwargs.get("num_transit", 20)
+
+        quad = kwargs.get("quad", False)
+        if eta == 1:
+            quad = quad or chebgauss2(num_quad)
+            nufft_eps = kwargs.get("nufft_eps", 1e-6)
+            num_pitch = kwargs.get("num_pitch", 51)
+        elif eta == -1:
+            quad = quad or chebgauss1(num_quad)
+            nufft_eps = kwargs.get("nufft_eps", 1e-7)
+            num_pitch = kwargs.get("num_pitch", 65)
+        else:
+            quad = quad or get_quadrature(
+                leggauss(num_quad),
+                (automorphism_sin, grad_automorphism_sin),
+            )
+            nufft_eps = kwargs.get("nufft_eps", 1e-7)
+            num_pitch = kwargs.get("num_pitch", 65)
+
+        quad = jax.lax.stop_gradient(quad)
+        pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
+
+        spline = kwargs.get("spline", True)
+        Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
+        num_well = kwargs.get(
+            "num_well",
+            # Due to legacy reasons Y_B is resolution over full transit
+            # if spline is true.
+            num_well_rule(num_transit, grid.NFP, Y_B if spline else (Y_B * grid.NFP)),
+        )
+
+        return cls(
+            alpha=alpha,
+            nufft_eps=nufft_eps,
+            num_transit=num_transit,
+            num_well=num_well,
+            pitch_batch_size=pitch_batch_size,
+            pitch_quad=pitch_quad,
+            quad=quad,
+            spline=spline,
+            surf_batch_size=surf_batch_size,
+            vander=kwargs.get("_vander", None),
+            Y_B=Y_B,
+        )
+
+    @staticmethod
+    def _build_objective(obj, names, eta):
+        """Builds the objective, selecting default values if they were not specified.
+
+        Examples
+        --------
+          * ``desc/objectives/_fast_ion.py::GammaC``
+          * ``desc/objectives/_neoclassical.py::EffectiveRipple``
+
+        Parameters
+        ----------
+        obj : _Objective
+            The objective instance.
+        names : str
+            Builds profiles and transforms for the compute quantities registered
+            with these names.
+        eta : int
+            The number η ∈ {−1, 1} denoting which factor (v_∥)^η matches the
+            behavior of the integrand near the bounce points. If η ∉ {-1, 1},
+            then a quadrature that works for all η ∈ {−1, 0, 1} will be used.
+
+        """
+        from desc.compute import get_profiles, get_transforms
+        from desc.objectives.utils import _parse_callable_target_bounds
+
+        eq = obj.things[0]
+        if obj._grid is None:
+            obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        assert obj._grid.can_fft2
+
+        X = obj._hyperparam.pop("X")
+        Y = obj._hyperparam.pop("Y")
+        obj._constants["x"] = fourier_pts(X)
+        obj._constants["y"] = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
+
+        Y_B = obj._hyperparam["Y_B"]
+        if Y_B is None:
+            Y_B = Y_B_rule(obj._grid, obj._hyperparam["spline"])
+            obj._hyperparam["Y_B"] = Y_B
+        if obj._hyperparam["num_well"] is None:
+            obj._hyperparam["num_well"] = num_well_rule(
+                obj._hyperparam["num_transit"],
+                eq.NFP,
+                # Due to legacy reasons Y_B is resolution over full transit
+                # if spline is true.
+                Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
+            )
+
+        obj._constants["_vander"] = (
+            get_vander_spline(obj._grid, Y, Y_B, eq.NFP)
+            if obj._hyperparam["spline"]
+            else {}
+        )
+
+        num_quad = obj._hyperparam.pop("num_quad")
+        if eta == 1:
+            obj._constants["quad"] = chebgauss2(num_quad)
+        elif eta == -1:
+            obj._constants["quad"] = chebgauss1(num_quad)
+        else:
+            obj._constants["quad"] = get_quadrature(
+                leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+            )
+
+        rho = obj._grid.compress(obj._grid.nodes[:, 0])
+        obj._constants["lambda"] = get_transforms(
+            "lambda",
+            eq,
+            grid=LinearGrid(
+                rho=rho, M=eq.L_basis.M, zeta=obj._constants["y"], NFP=eq.NFP
+            ),
+        )["L"]
+
+        obj._constants["profiles"] = get_profiles(names, eq, grid=obj._grid)
+        obj._constants["transforms"] = get_transforms(names, eq, grid=obj._grid)
+        obj._dim_f = obj._grid.num_rho
+        obj._target, obj._bounds = _parse_callable_target_bounds(
+            obj._target, obj._bounds, rho
+        )
+
+    def keys(self):
+        """Names of elements in tuple."""
+        return self._fields
+
+    def __getitem__(self, key):
+        """Lookup by string or index."""
+        return getattr(self, key) if isinstance(key, str) else tuple.__getitem__(key)

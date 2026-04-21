@@ -101,8 +101,8 @@ def sparse_pullback(
     fn,
     y,
     /,
-    *args,
     batch_size=None,
+    *,
     reduction=None,
     chunk_reduction=identity,
     **kwargs,
@@ -139,14 +139,9 @@ def sparse_pullback(
         Chunk-wise reduction operation.
         Should typically apply ``reduction`` along the mapped axis,
         e.g. ``jnp.add.reduce``.
-    *args
-        Positional arguments used for closure conversion of ``fn``.
-        Currently assumed to be constant across first axis of ``y``,
-        i.e. these arguments are not split into batches.
     **kwargs
         Keyword arguments used for closure conversion of ``fn``.
-        Currently assumed to be constant across first axis of ``y``,
-        i.e. these arguments are not split into batches.
+        These arguments are not split into batches.
 
     Returns
     -------
@@ -165,14 +160,14 @@ def sparse_pullback(
         return chunk_reduction(
             _sparse_pullback(
                 y,
-                fn=eqx.filter_closure_convert(fn, y, *args, **kwargs),
+                fn=eqx.filter_closure_convert(fn, y, **kwargs),
             )
         )
 
     y, remain = _batch_and_remainder(y, batch_size)
 
     y = _scanmap(
-        sparse_pullback_map(fn, _get_first_chunk(y), *args, **kwargs),
+        sparse_pullback_map(fn, _get_first_chunk(y), **kwargs),
         (0,),
         reduction,
         chunk_reduction,
@@ -187,7 +182,7 @@ def sparse_pullback(
     remain = chunk_reduction(
         _sparse_pullback(
             remain,
-            fn=eqx.filter_closure_convert(fn, remain, *args, **kwargs),
+            fn=eqx.filter_closure_convert(fn, remain, **kwargs),
         )
     )
 

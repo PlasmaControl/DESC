@@ -5,9 +5,8 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D
-from ..utils import cross, dot, safediv
-from ._neoclassical import _bounce_doc, _bounce_static_argnames
+from ..integrals.bounce_integral import Bounce2D, Options
+from ..utils import cross, dot, parse_argname_change, safediv
 from .data_index import register_compute_fun
 
 # We rewrite equivalents of Nemov et al.'s expressions (21, 22) to resolve
@@ -82,9 +81,9 @@ def _drift2(data, B, pitch):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **_bounce_doc,
+    **Options._doc,
 )
-@partial(jit, static_argnames=_bounce_static_argnames)
+@partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -109,50 +108,28 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
     grid = transforms["grid"]
-    (
-        angle,
-        Y_B,
-        alpha,
-        num_transit,
-        num_well,
-        pitch_quad,
-        pitch_batch_size,
-        surf_batch_size,
-        nufft_eps,
-        spline,
-        quad,
-        vander,
-    ) = Bounce2D._defaults(-2, grid, **kwargs)
+    opts = Options.guess(-2, grid, **kwargs)
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce2D.pitch_inv(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
 
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["angle"],
-            Y_B,
-            alpha,
-            num_transit,
-            quad,
-            nufft_eps=nufft_eps,
-            is_fourier=True,
-            spline=spline,
-            vander=vander,
-        )
+        bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
 
         def fun(pitch_inv):
-            points = bounce.points(pitch_inv, num_well)
+            points = bounce.points(pitch_inv, opts.num_well)
             v_tau, drift1, drift2 = bounce.integrate(
                 [_v_tau, _drift1, _drift2],
                 pitch_inv,
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
-                nufft_eps=nufft_eps,
+                nufft_eps=opts.nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -163,7 +140,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     * bounce.interp_to_argmin(
                         data["|grad(rho)|*|e_alpha|r,p|"],
                         points,
-                        nufft_eps=nufft_eps,
+                        nufft_eps=opts.nufft_eps,
                         is_fourier=True,
                     ),
                 )
@@ -171,7 +148,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
-            batch_map(fun, pitch_inv, pitch_batch_size) * weight / pitch_inv**2,
+            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,
         )
 
@@ -190,8 +167,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
     }
 
-    out = Bounce2D.batch(Gamma_c, fun_data, data, angle, grid, surf_batch_size)
-    data["Gamma_c"] = grid.expand(out) / data["V_psi"] / (num_transit * 2**0.5)
+    out = Bounce2D.batch(Gamma_c, fun_data, data, angle, grid, opts.surf_batch_size)
+    data["Gamma_c"] = grid.expand(out) / data["V_psi"] / (opts.num_transit * 2**0.5)
     return data
 
 
@@ -239,9 +216,9 @@ def _poloidal_drift(data, B, pitch):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **_bounce_doc,
+    **Options._doc,
 )
-@partial(jit, static_argnames=_bounce_static_argnames)
+@partial(jit, static_argnames=Options._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -252,48 +229,26 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
     grid = transforms["grid"]
-    (
-        angle,
-        Y_B,
-        alpha,
-        num_transit,
-        num_well,
-        pitch_quad,
-        _,
-        _,
-        nufft_eps,
-        spline,
-        quad,
-        vander,
-    ) = Bounce2D._defaults(-2, grid, **kwargs)
+    opts = Options.guess(-2, grid, **kwargs)
 
     def gamma_c0(data):
-        pitch_inv, _ = Bounce2D.pitch_inv(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
 
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["angle"],
-            Y_B,
-            alpha,
-            num_transit,
-            quad,
-            nufft_eps=nufft_eps,
-            is_fourier=True,
-            spline=spline,
-            vander=vander,
-        )
-        points = bounce.points(pitch_inv, num_well)
+        bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
+        points = bounce.points(pitch_inv, opts.num_well)
         drift1, drift2 = bounce.integrate(
             [_drift1, _drift2],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
-            nufft_eps=nufft_eps,
+            nufft_eps=opts.nufft_eps,
             is_fourier=True,
             low_ram=True,
         )
@@ -305,7 +260,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
                 * bounce.interp_to_argmin(
                     data["|grad(rho)|*|e_alpha|r,p|"],
                     points,
-                    nufft_eps=nufft_eps,
+                    nufft_eps=opts.nufft_eps,
                     is_fourier=True,
                 ),
             )
@@ -351,9 +306,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **_bounce_doc,
+    **Options._doc,
 )
-@partial(jit, static_argnames=_bounce_static_argnames)
+@partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
@@ -367,40 +322,18 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
     grid = transforms["grid"]
-    (
-        angle,
-        Y_B,
-        alpha,
-        num_transit,
-        num_well,
-        pitch_quad,
-        pitch_batch_size,
-        surf_batch_size,
-        nufft_eps,
-        spline,
-        quad,
-        vander,
-    ) = Bounce2D._defaults(-1, grid, **kwargs)
+    opts = Options.guess(-1, grid, **kwargs)
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce2D.pitch_inv(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
 
-        bounce = Bounce2D(
-            grid,
-            data,
-            data["angle"],
-            Y_B,
-            alpha,
-            num_transit,
-            quad,
-            nufft_eps=nufft_eps,
-            is_fourier=True,
-            spline=spline,
-            vander=vander,
-        )
+        bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
 
         def fun(pitch_inv):
             v_tau, radial_drift, poloidal_drift = bounce.integrate(
@@ -408,8 +341,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
-                num_well=num_well,
-                nufft_eps=nufft_eps,
+                num_well=opts.num_well,
+                nufft_eps=opts.nufft_eps,
                 is_fourier=True,
             )
             # This is γ_c π/2.
@@ -417,7 +350,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         return jnp.sum(
-            batch_map(fun, pitch_inv, pitch_batch_size) * weight / pitch_inv**2,
+            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,
         )
 
@@ -431,7 +364,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         data,
         angle,
         grid,
-        surf_batch_size,
+        opts.surf_batch_size,
     )
-    data["Gamma_c Velasco"] = grid.expand(out) / data["V_psi"] / (num_transit * 2**0.5)
+    data["Gamma_c Velasco"] = (
+        grid.expand(out) / data["V_psi"] / (opts.num_transit * 2**0.5)
+    )
     return data

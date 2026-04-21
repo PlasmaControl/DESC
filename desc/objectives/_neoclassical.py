@@ -5,7 +5,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
-from desc.integrals.bounce_integral import Bounce2D
+from desc.integrals.bounce_integral import Options
 from desc.utils import setdefault, warnif
 
 from ..integrals.quad_utils import chebgauss2
@@ -154,7 +154,7 @@ class EffectiveRipple(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._build(self, names="effective ripple", eta=1)
+        Options._build_objective(self, names="effective ripple", eta=1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

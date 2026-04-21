@@ -245,7 +245,14 @@ def vmap_chunked(
 
 
 def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=identity
+    fun,
+    fun_input,
+    /,
+    batch_size=None,
+    *,
+    reduction=None,
+    chunk_reduction=identity,
+    **kwargs,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
@@ -278,6 +285,9 @@ def batch_map(
         Chunk-wise reduction operation.
         Should typically apply ``reduction`` along the mapped axis,
         e.g. ``jnp.add.reduce``.
+    **kwargs
+        Keyword arguments to pass to ``fn``.
+        These arguments are not split into batches.
 
     Returns
     -------
@@ -285,6 +295,8 @@ def batch_map(
         Returns ``chunk_reduction(fun(fun_input))``.
 
     """
+    if kwargs:
+        fun = partial(fun, **kwargs)
     return (
         chunk_reduction(fun(fun_input))
         if batch_size is None

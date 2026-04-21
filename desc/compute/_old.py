@@ -9,7 +9,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jit, jnp
 
-from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_integral import Bounce1D, Options
 from ..integrals.quad_utils import (
     automorphism_sin,
     chebgauss2,
@@ -19,15 +19,15 @@ from ..integrals.quad_utils import (
 )
 from ..utils import cross, dot, safediv
 from ._fast_ion import _drift1, _drift2, _radial_drift, _v_tau
-from ._neoclassical import _bounce_doc, _dI_1, _dI_2
+from ._neoclassical import _dI_1, _dI_2
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
-    "num_well": _bounce_doc["num_well"],
-    "num_quad": _bounce_doc["num_quad"],
-    "num_pitch": _bounce_doc["num_pitch"],
-    "surf_batch_size": _bounce_doc["surf_batch_size"],
-    "quad": _bounce_doc["quad"],
+    "num_well": Options._doc["num_well"],
+    "num_quad": Options._doc["num_quad"],
+    "num_pitch": Options._doc["num_pitch"],
+    "surf_batch_size": Options._doc["surf_batch_size"],
+    "quad": Options._doc["quad"],
 }
 
 
@@ -82,7 +82,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def eps_32(data):
-        pitch_inv, weight = Bounce1D.pitch_inv(
+        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
 
@@ -218,7 +218,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.pitch_inv(
+        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
 
@@ -321,7 +321,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.pitch_inv(
+        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
 

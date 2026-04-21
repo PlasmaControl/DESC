@@ -7,7 +7,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
-from desc.integrals.bounce_integral import Bounce2D
+from desc.integrals.bounce_integral import Options
 from desc.utils import setdefault, warnif
 
 from ..integrals.quad_utils import (
@@ -187,7 +187,7 @@ class GammaC(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._build(
+        Options._build_objective(
             self, names=self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
         )
         super().build(use_jit=use_jit, verbose=verbose)

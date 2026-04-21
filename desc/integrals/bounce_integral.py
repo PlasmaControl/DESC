@@ -788,7 +788,7 @@ class Bounce2D(Bounce):
             and pitch value.
 
         """
-        x, w = self._quad if quad is None else quad
+        x, w = setdefault(quad, self._quad)
 
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
@@ -1048,7 +1048,7 @@ class Bounce2D(Bounce):
         return jnp.abs(jnp.reciprocal(B_sup_z).dot(w).sum((-1, -2)).mean(-1)) * dz_dx
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
-        """Plot the quantity on the specified field line.
+        """Plot B and bounce points on the specified field line.
 
         Parameters
         ----------
@@ -1589,7 +1589,7 @@ class Bounce1D(Bounce):
             and pitch value.
 
         """
-        x, w = self._quad if quad is None else quad
+        x, w = setdefault(quad, self._quad)
 
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]

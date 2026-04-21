@@ -232,33 +232,40 @@ for iota_0 in iota_on_axis_values:
     
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
-    n_rhos = np.array([9, 14, 24, 36])
-    n_thetas = np.array([9, 14, 24, 36])
+    n_rhos = np.array([14, 24, 36])
+    n_thetas = np.array([4, 24, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
-        n_zetas = np.array([6, 9, 12, 14])
+        n_zetas = np.array([9, 12, 14])
     
     v_guess = None
     
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
-        diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
-        grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
+        X_path = save_path + f"low_res_eigenfunction_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy"
+        if os.path.exists(X_path):
+            X = np.load(X_path)
+        else:
+            diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
+            grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
 
-        print("computing eigenmode at low res")
+            print("computing eigenmode at low res")
 
-        tic = time.time()
-        data = eq.compute(
-            "finite-n lambda3", grid=grid, diffmat=diffmat,
-            gamma=100, incompressible=False,
-            axisym=axisym, n_mode_axisym=n_mode_axisym,
-            v_guess=v_guess
-        )
-        toc = time.time()
-        print(f"matrix full took {toc-tic:.1f} s.")
-        print(data["finite-n lambda3"])
+            tic = time.time()
+            data = eq.compute(
+                "finite-n lambda3", grid=grid, diffmat=diffmat,
+                gamma=100, incompressible=False,
+                axisym=axisym, n_mode_axisym=n_mode_axisym,
+                v_guess=v_guess
+            )
+            toc = time.time()
+            print(f"matrix full took {toc-tic:.1f} s.")
+            print(data["finite-n lambda3"])
 
-        X = data["finite-n eigenfunction3"]
+            X = data["finite-n eigenfunction3"]
+
+            np.save(X_path, X)
+        
         xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
 
         # High-res interpolation
@@ -267,7 +274,6 @@ for iota_0 in iota_on_axis_values:
         )
 
 
-        np.save(save_path + f"low_res_eigenfunction_all_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", X)
         np.save(save_path + f"xi_rho_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_rho_low)
         np.save(save_path + f"xi_theta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_theta_low)
         np.save(save_path + f"xi_zeta_{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}.npy", xi_zeta_low)

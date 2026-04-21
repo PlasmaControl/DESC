@@ -113,8 +113,8 @@ def add_bc(X, n_rho, n_theta, n_zeta):
     xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, 0:1, :]),   axis=1)
     xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, :, 0:1]),   axis=2)
 
-    xi_sup_theta0 = np.reshape(X[idx0:idx1, 0], (n_rho, n_theta, n_zeta))
-    xi_sup_zeta0  = np.reshape(X[idx1:,     0], (n_rho, n_theta, n_zeta))
+    xi_sup_theta0 = np.reshape(X[idx0:idx1], (n_rho, n_theta, n_zeta))
+    xi_sup_zeta0  = np.reshape(X[idx1:], (n_rho, n_theta, n_zeta))
 
     xi_sup_theta = np.concatenate((xi_sup_theta0, xi_sup_theta0[:, 0:1, :]), axis=1)
     xi_sup_theta = np.concatenate((xi_sup_theta,  xi_sup_theta[:, :, 0:1]), axis=2)
@@ -232,12 +232,12 @@ for iota_0 in iota_on_axis_values:
     
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
-    n_rhos = np.array([14, 24, 36])
-    n_thetas = np.array([14, 24, 36])
+    n_rhos = np.array([5, 14, 24, 36])
+    n_thetas = np.array([5, 14, 24, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
-        n_zetas = np.array([9, 12, 14])
+        n_zetas = np.array([3, 9, 12, 14])
     
     v_guess = None
     

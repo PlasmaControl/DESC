@@ -167,7 +167,18 @@ def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, ze
         axis=0,
     )
     v_guess = v_guess/jnp.linalg.norm(v_guess)
-    return v_guess
+
+    # store indices needed to apply dirichlet BC to ξ^ρ
+    n_total = n_rho * n_theta * n_zeta
+    n_shell = n_theta * n_zeta
+    rho_start = n_shell
+    rho_end = n_total - n_shell
+    keep_1 = jnp.arange(rho_start, rho_end)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+
+    return v_guess[keep]
 
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
@@ -242,6 +253,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     X = None
     
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
+        print(f"\n--- Solving at low res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---")
         # paths for saving eigenfunction and related data
         save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"
         X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
@@ -255,6 +267,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             data = np.load(savez_path)
             lambda_min = data["lambda_min"]
             data.close()
+            print("loaded low-res eigenfunction and lambda_min from previous run")
         else:
             grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
             if X is not None:

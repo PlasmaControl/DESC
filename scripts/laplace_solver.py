@@ -39,7 +39,7 @@ from newcomb import *
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 50
+chunk_size = 25
 
 fixed_point = False
 
@@ -273,7 +273,7 @@ for i, res in enumerate(resolutions):
                     break
                 except Exception as e:
                     msg = str(e).upper()
-                    if "RESOURCE_EXHAUSTED" not in msg and "OUT OF MEMORY" not in msg:
+                    if "memory" not in msg:
                         raise
                     if chunk_size <= 1:
                         raise
@@ -322,7 +322,7 @@ for i, res in enumerate(resolutions):
                     break
                 except Exception as e:
                     msg = str(e).upper()
-                    if "RESOURCE_EXHAUSTED" not in msg and "OUT OF MEMORY" not in msg:
+                    if "memory" not in msg:
                         raise
                     if chunk_size <= 1:
                         raise

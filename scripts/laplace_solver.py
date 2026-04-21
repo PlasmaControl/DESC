@@ -39,7 +39,7 @@ from newcomb import *
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 5
+chunk_size = 50
 
 fixed_point = False
 
@@ -99,12 +99,12 @@ for i, res in enumerate(resolutions):
         eq.change_resolution(NFP=1)
         surface = eq.surface
         NFP = eq.NFP
-        aspect_ratio = eq.compute("R0/a")["R0/a"]
+        #aspect_ratio = eq.compute("R0/a")["R0/a"]
 
 
     # Define resolution
     M = res
-    N = np.int64(res * aspect_ratio)
+    N = 2 * res# np.int64(res * aspect_ratio)
     n_rho = 1#14
     n_theta = 2 * M
     if axisym:
@@ -260,14 +260,25 @@ for i, res in enumerate(resolutions):
         # Equilibrium doesn't expose Phi_basis directly; get it from the SourceFreeField surface
         #phi_transform = Transform(eq.surface.Phi_basis, rtz_surface_grid)
         if pest:
-            data_phi = eq.compute(
-                ["phi_matrix_pest"],
-                rtz_surface_grid,
-                pest_grid=pest_grid,
-                problem="exterior Neumann",
-                chunk_size=chunk_size,
-                #transforms={"Phi": phi_transform},
-            )
+            while True:
+                try:
+                    data_phi = eq.compute(
+                        ["phi_matrix_pest"],
+                        rtz_surface_grid,
+                        pest_grid=pest_grid,
+                        problem="exterior Neumann",
+                        chunk_size=chunk_size,
+                        #transforms={"Phi": phi_transform},
+                    )
+                    break
+                except Exception as e:
+                    msg = str(e).upper()
+                    if "RESOURCE_EXHAUSTED" not in msg and "OUT OF MEMORY" not in msg:
+                        raise
+                    if chunk_size <= 1:
+                        raise
+                    chunk_size = chunk_size // 2
+                    print(f"OOM: halving chunk_size to {chunk_size}, retrying...")
             phi_matrix = np.array(data_phi["phi_matrix_pest"])
 
             # Reshape to align with surface nodes for AGNI grid
@@ -299,13 +310,24 @@ for i, res in enumerate(resolutions):
             B_theta = dot(data["∇φ"], data["e_theta"])
             B_zeta = dot(data["∇φ"], data["e_zeta"])
         else:
-            data_phi = field.compute(
-                ["phi_matrix"],
-                grid=pest_grid,
-                problem="exterior Neumann",
-                chunk_size=chunk_size,
-                #transforms={"Phi": phi_transform},
-            )
+            while True:
+                try:
+                    data_phi = field.compute(
+                        ["phi_matrix"],
+                        grid=pest_grid,
+                        problem="exterior Neumann",
+                        chunk_size=chunk_size,
+                        #transforms={"Phi": phi_transform},
+                    )
+                    break
+                except Exception as e:
+                    msg = str(e).upper()
+                    if "RESOURCE_EXHAUSTED" not in msg and "OUT OF MEMORY" not in msg:
+                        raise
+                    if chunk_size <= 1:
+                        raise
+                    chunk_size = chunk_size // 2
+                    print(f"OOM: halving chunk_size to {chunk_size}, retrying...")
             phi_matrix = np.array(data_phi["phi_matrix"])
 
         # phi_matrix_pest is in DESC Fortran order (theta fastest).

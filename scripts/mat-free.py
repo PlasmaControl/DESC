@@ -102,17 +102,14 @@ def mapping_and_grid(eq, rho, theta, zeta):
 
     return grid, reshaped_nodes
 
-def add_bc(X, n_rho, n_theta, n_zeta):
-    idx0 = (n_rho - 2) * n_theta * n_zeta
-    idx1 = idx0 + (n_rho) * n_theta * n_zeta
 
-    xi_sup_rho0 = np.reshape(X[:idx0, 0], (n_rho - 2, n_theta, n_zeta))
-    xi_sup_rho = np.concatenate(
-        (np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype),
-         xi_sup_rho0,
-         np.zeros((1, n_theta, n_zeta), dtype=xi_sup_rho0.dtype)),
-        axis=0,
-    )
+
+def add_bc(X, n_rho, n_theta, n_zeta):
+    # indices for slicing the input vector X into the three components
+    idx0 = n_rho * n_theta * n_zeta
+    idx1 = 2 * idx0
+
+    xi_sup_rho = np.reshape(X[:idx0], (n_rho, n_theta, n_zeta))
     xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, 0:1, :]),   axis=1)
     xi_sup_rho   = np.concatenate((xi_sup_rho,   xi_sup_rho[:, :, 0:1]),   axis=2)
 

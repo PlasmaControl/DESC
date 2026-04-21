@@ -438,7 +438,7 @@ def find_xi(eq, m, n, nrho=5000, nlog=500):
         from_axis = i == 0
         # Rhos to save at
         drho = np.minimum(
-            (rho_end - rho_start) * 1e-2, 1e-3
+            (rho_end - rho_start) * 1e-3, 1e-4
         )  # distance from resonant surface to start/end logging
         rhos_segment = jnp.hstack([
             rho_start + jnp.logspace(jnp.log10(drho) - 2, jnp.log10(drho), nlog, endpoint=False),

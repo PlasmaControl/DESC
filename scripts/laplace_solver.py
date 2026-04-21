@@ -39,7 +39,7 @@ from newcomb import *
 from desc.integrals.singularities import _grad_G
 import os
 
-chunk_size = 25
+chunk_size = 10
 
 fixed_point = False
 

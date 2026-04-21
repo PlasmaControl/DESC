@@ -297,7 +297,6 @@ class Bounce2D(Bounce):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
         is_reshaped = is_reshaped or is_fourier
-        vander = setdefault(vander, {})
 
         if quad is None:
             quad = get_quadrature(
@@ -340,7 +339,7 @@ class Bounce2D(Bounce):
                 self._modes_z,
                 self._NFP,
                 self._nufft_eps,
-                vander_t=vander.get("dct spline", None),
+                vander_t=None if vander is None else vander.get("dct spline", None),
                 check=check,
             )
         else:
@@ -358,9 +357,7 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def batch(
-        fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True, **kwargs
-    ):
+    def batch(fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -401,10 +398,6 @@ class Bounce2D(Bounce):
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to set to ``False``.
-        **kwargs
-            Keyword arguments to pass into ``fun``.
-            These arguments are not split into batches.
-
 
         Returns
         -------
@@ -422,9 +415,9 @@ class Bounce2D(Bounce):
         fun_data["angle"] = angle
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size, **kwargs)
+            return sparse_pullback(fun, fun_data, surf_batch_size)
 
-        return batch_map(fun, fun_data, surf_batch_size, **kwargs)
+        return batch_map(fun, fun_data, surf_batch_size)
 
     @staticmethod
     def reshape(grid, f):
@@ -1364,7 +1357,7 @@ class Bounce1D(Bounce):
         )
 
     @staticmethod
-    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True, **kwargs):
+    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -1402,9 +1395,6 @@ class Bounce1D(Bounce):
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to set to ``False``.
-        **kwargs
-            Keyword arguments to pass into ``fun``.
-            These arguments are not split into batches.
 
         Returns
         -------
@@ -1419,9 +1409,9 @@ class Bounce1D(Bounce):
         fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size, **kwargs)
+            return sparse_pullback(fun, fun_data, surf_batch_size)
 
-        return batch_map(fun, fun_data, surf_batch_size, **kwargs)
+        return batch_map(fun, fun_data, surf_batch_size)
 
     @staticmethod
     def reshape(grid, f):

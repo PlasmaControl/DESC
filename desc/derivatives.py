@@ -51,7 +51,7 @@ def _sparse_pullback_bwd(p, g, perturbed, y, *, fn):
     return tree_map(apply, p)
 
 
-def sparse_pullback_map(fn, *args, **kwargs):
+def sparse_pullback_map(fn, y):
     """Wrapper for sparsity exploiting pullback.
 
     Wraps the given map with logic to ensure cotangents flow through the diagonal
@@ -72,10 +72,6 @@ def sparse_pullback_map(fn, *args, **kwargs):
     ----------
     fn : callable
         Vectorized map.
-    *args
-        Positional arguments used for closure conversion of ``fn``.
-    **kwargs
-        Keyword arguments used for closure conversion of ``fn``.
 
     Returns
     -------
@@ -88,7 +84,7 @@ def sparse_pullback_map(fn, *args, **kwargs):
     >>> out = fn(y)
 
     """
-    fn = eqx.filter_closure_convert(fn, *args, **kwargs)
+    fn = eqx.filter_closure_convert(fn, y)
 
     @wraps(fn)
     def wrapper(y):
@@ -105,7 +101,6 @@ def sparse_pullback(
     *,
     reduction=None,
     chunk_reduction=identity,
-    **kwargs,
 ):
     """Compute ``chunk_reduction(fn(fun_input))`` in batches with sparse pullbacks.
 
@@ -139,9 +134,6 @@ def sparse_pullback(
         Chunk-wise reduction operation.
         Should typically apply ``reduction`` along the mapped axis,
         e.g. ``jnp.add.reduce``.
-    **kwargs
-        Keyword arguments used for closure conversion of ``fn``.
-        These arguments are not split into batches.
 
     Returns
     -------
@@ -157,17 +149,12 @@ def sparse_pullback(
         n_elements = tree_leaves(y)[0].shape[0]
 
     if batch_size is None or n_elements <= batch_size:
-        return chunk_reduction(
-            _sparse_pullback(
-                y,
-                fn=eqx.filter_closure_convert(fn, y, **kwargs),
-            )
-        )
+        return chunk_reduction(_sparse_pullback(y, fn=fn))
 
     y, remain = _batch_and_remainder(y, batch_size)
 
     y = _scanmap(
-        sparse_pullback_map(fn, _get_first_chunk(y), **kwargs),
+        sparse_pullback_map(fn, _get_first_chunk(y)),
         (0,),
         reduction,
         chunk_reduction,
@@ -179,12 +166,7 @@ def sparse_pullback(
     if n_elements % batch_size == 0:
         return y
 
-    remain = chunk_reduction(
-        _sparse_pullback(
-            remain,
-            fn=eqx.filter_closure_convert(fn, remain, **kwargs),
-        )
-    )
+    remain = chunk_reduction(_sparse_pullback(remain, fn=fn))
 
     if reduction is None:
         return _concat(y, remain)

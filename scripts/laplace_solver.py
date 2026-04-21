@@ -50,7 +50,7 @@ B_t_errs = np.zeros_like(resolutions, dtype=float)
 B_z_errs = np.zeros_like(resolutions, dtype=float)
 phi_errs = np.zeros_like(resolutions, dtype=float)
 
-just_plot = True
+just_plot = False
 path_exists = np.ones_like(resolutions, dtype=bool)
 
 for i, res in enumerate(resolutions):

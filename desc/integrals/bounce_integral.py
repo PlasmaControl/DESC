@@ -243,7 +243,9 @@ class Bounce2D(Bounce):
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series. Default is ``True``.
+        instead of Chebyshev series. Default is ``True``. It can be preferable
+        to set to ``False`` on equilibria with high ``NFP``, (such cases make
+        smaller ``Y_B`` feasible), or on GPUs where eigenvalue solves are fast.
     Bref : float
         Optional. Reference magnetic field strength for normalization.
     Lref : float
@@ -398,7 +400,8 @@ class Bounce2D(Bounce):
             Default is ``True``, which makes the most sense if the output has
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
-            than the output, it may be preferable to set to ``False``.
+            than the output, it may be preferable to delay the vjp
+            by setting to ``False``.
 
         Returns
         -------
@@ -1390,7 +1393,8 @@ class Bounce1D(Bounce):
             Default is ``True``, which makes the most sense if the output has
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
-            than the output, it may be preferable to set to ``False``.
+            than the output, it may be preferable to delay the vjp
+            by setting to ``False``.
 
         Returns
         -------
@@ -1784,7 +1788,9 @@ class Options(NamedTuple):
             """,
         "spline": """bool :
             Whether to use cubic splines to compute initial guess for bounce points
-            instead of Chebyshev series. Default is ``True``.
+            instead of Chebyshev series. Default is ``True``. It can be preferable
+            to set to ``False`` on equilibria with high ``NFP``, (such cases make
+            smaller ``Y_B`` feasible), or on GPUs where eigenvalue solves are fast.
             """,
         "quad": """tuple[jnp.ndarray] :
             Used to compute bounce integrals.
@@ -1855,9 +1861,6 @@ class Options(NamedTuple):
         if eta == 1:
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
             num_pitch = kwargs.get("num_pitch", 51)
-        elif eta == -1:
-            nufft_eps = kwargs.get("nufft_eps", 1e-7)
-            num_pitch = kwargs.get("num_pitch", 65)
         else:
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)

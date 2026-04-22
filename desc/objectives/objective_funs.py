@@ -214,7 +214,9 @@ doc_bounce = """
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series. Default is ``True``.
+        instead of Chebyshev series. Default is ``True``. It can be preferable
+        to set to ``False`` on equilibria with high ``NFP``, (such cases make
+        smaller ``Y_B`` feasible), or on GPUs where eigenvalue solves are fast.
     """.rstrip()
 
 

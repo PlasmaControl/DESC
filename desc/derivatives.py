@@ -46,7 +46,7 @@ def _sparse_pullback_bwd(p, g, perturbed, y, *, fn):
             return None
         # not doing sparse linear algebra here since we
         # do not assume the cotangent is sparse.
-        # could do case fn expands leaf, but un that scenario
+        # could do case fn expands leaf, but in that scenario
         # it is always the case user should diagonalize later so
         # better to just error.
         return leaf * g.reshape(g.shape + (1,) * (leaf.ndim - g.ndim))

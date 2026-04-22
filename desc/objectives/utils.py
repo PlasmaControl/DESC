@@ -93,6 +93,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
+    else:
+        cols = np.arange(constraint.dim_x)
     assert A.shape[1] == xp.size
 
     # check for degenerate rows and delete if necessary
@@ -153,7 +155,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
-    f = constraint.compute_scaled_error(D * xp)
+    x_full = put(jnp.zeros(constraint.dim_x), cols, D * xp)
+    f = constraint.compute_scaled_error(x_full)
     offset = 0
     for con in constraint.objectives:
         dim = con.dim_f

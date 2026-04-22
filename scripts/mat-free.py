@@ -31,7 +31,7 @@ from newcomb import *
 
 # Input parameters
 a = 1  # Minor radius
-aspect_ratio = 200  # Aspect ratio of the tokamak
+aspect_ratio = 10  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
 axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
@@ -39,7 +39,7 @@ n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 
 # Paths
-save_path = "./high_aspect_ratio_tokamak/"
+save_path = "./eigenvalue_solve/"
 plot_path   = save_path + "eigenfunction_plots/"
 os.makedirs(save_path, exist_ok=True)
 os.makedirs(plot_path, exist_ok=True)

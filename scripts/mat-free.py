@@ -30,13 +30,16 @@ import os
 from stability_helpers import *
 
 # Input parameters
-a = 1  # Minor radius
-aspect_ratio = 5  # Aspect ratio of the tokamak
-R = aspect_ratio * a  # Major radius
-NFP = 1
-axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
-n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
-
+from_scratch = True
+if from_scratch:
+    a = 1  # Minor radius
+    aspect_ratio = 4  # Aspect ratio of the tokamak
+    R = aspect_ratio * a  # Major radius
+    NFP = 1
+    axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
+    n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
+else:
+    eq_name = "NCSX"
 
 # Paths
 save_path = "./eigenvalue_solve/"
@@ -53,58 +56,60 @@ stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
 
 
 for i, iota_0 in enumerate(iota_on_axis_values):
-    eq_name = "NCSX"
+    if not from_scratch:
+        eq = get(eq_name)
+        print(f"Loaded equilibrium {eq_name} from DESC examples.")
+    else:
+        iota_coeffs = np.array([iota_0, -0.1])
+        iota_modes  = np.array([0, 2])
+        iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+        I_profile = None
+        p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
+        p_profile = PowerSeriesProfile(p_coeffs)
+        eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
 
-
-    iota_coeffs = np.array([iota_0, -0.5])
-    iota_modes  = np.array([0, 2])
-    iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
-    I_profile = None
-
-    p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
-    p_profile = PowerSeriesProfile(p_coeffs)
-
+        print(f"\n=== iota_0 = {iota_0:.4f} ===")
+        
     # Save directory and filename
     save_tag = (
-        f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
+        f"axisym_{axisym}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
-        f"{eq_name}"
-        #f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
-    )
-    save_name = f"equilibrium_{save_tag}.h5"
-
-    print(f"\n=== iota_0 = {iota_0:.4f} ===")
-    print("solving equilibrium")
-    """
-    eq = Equilibrium(
-        L=12,
-        M=12,
-        N=0,
-        surface=FourierRZToroidalSurface.from_shape_parameters(
-            major_radius=R,
-            aspect_ratio=aspect_ratio,
-            elongation=1,
-            triangularity=0,
-            squareness=0,
-            eccentricity=0,
-            torsion=0,
-            twist=0,
-            NFP=NFP,
-            sym=True,
-        ),
-        NFP=NFP,
-        iota=iota_profile,
-        current=I_profile,
-        pressure=p_profile,
-        Psi=1,
+        f"_{eq_name}"
     )
 
-    eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
-    eq.save(save_path + save_name)
-    
-    """
-    eq = get(eq_name)
-    print("equilibrium solved")
+    if from_scratch:
+        save_name = f"equilibrium_{save_tag}.h5"
+        if os.path.exists(save_path + save_name):
+            eq = load(save_path + save_name)
+            print(f"Loaded equilibrium from {save_path + save_name}")
+        else:
+            print("solving equilibrium")
+            eq = Equilibrium(
+                L=12,
+                M=12,
+                N=0,
+                surface=FourierRZToroidalSurface.from_shape_parameters(
+                    major_radius=R,
+                    aspect_ratio=aspect_ratio,
+                    elongation=1,
+                    triangularity=0,
+                    squareness=0,
+                    eccentricity=0,
+                    torsion=0,
+                    twist=0,
+                    NFP=NFP,
+                    sym=True,
+                ),
+                NFP=NFP,
+                iota=iota_profile,
+                current=I_profile,
+                pressure=p_profile,
+                Psi=1,
+            )
+
+            eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
+            eq.save(save_path + save_name)
+            print("equilibrium solved")
 
     # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
     rho_iota1 = (

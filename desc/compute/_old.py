@@ -221,7 +221,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         )
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(pitch_inv, num_well)
-        v_tau, drift1, drift2 = bounce.integrate(
+        v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
             pitch_inv,
             data,
@@ -231,8 +231,8 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         # This is γ_c π/2.
         gamma_c = jnp.arctan(
             safediv(
-                drift1,
-                drift2
+                radial_drift,
+                poloidal_drift
                 * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         )

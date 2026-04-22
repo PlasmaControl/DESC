@@ -306,11 +306,8 @@ class Bounce2D(Bounce):
         s = data["|B|"].shape
         is_reshaped = (
             len(s) > 1
-            and (s[-2] == grid.num_zeta)
-            and (
-                (s[-1] == grid.num_theta and is_real)
-                or (s[-1] == (grid.num_theta // 2 + 1) and not is_real)
-            )
+            and s[-2] == grid.num_zeta
+            and s[-1] == (grid.num_theta if is_real else (grid.num_theta // 2 + 1))
         )
         errorif(
             is_reshaped and jnp.size(data["iota"]) != (s[0] if (len(s) > 2) else 1),

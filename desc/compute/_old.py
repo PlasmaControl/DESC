@@ -107,7 +107,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
 
     B0 = data["max_tz |B|"]
     scalar = jnp.pi / (8 * 2**0.5) * data["R0"] ** 2
-
     out = Bounce1D.batch(
         eps_32,
         {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},

@@ -183,8 +183,9 @@ class Bounce2D(Bounce):
         Some comments comparing ``Bounce1D`` to ``Bounce2D`` are given below.
         ``Bounce1D`` uses lower order accurate, one-dimensional splines.
         ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
-        moving grid interpolation problem and avoids recomputing 3D Fourier-Zernike
-        series on a time-dependent grid.
+        moving grid interpolation problem, avoids recomputing 3D Fourier-Zernike
+        series on a time-dependent grid, and is able to compute the derivative
+        matrix relevant to optimzation with a compact sparse/diagonal pullback.
 
     Parameters
     ----------

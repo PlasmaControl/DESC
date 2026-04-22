@@ -3368,7 +3368,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
         v_full_ = jnp.concatenate([vr_, vv_, vz_])
         return v_full_[keep]
-    np.testing.assert_allclose(v_mode, _xi_to_v(xi_full), rtol=1e-5, atol=1e-8)
+    np.testing.assert_allclose(v_mode, _xi_to_v(xi_full), rtol=1e-8, atol=1e-13)
     if debug_compare_reconstruction:
         linvt_full = _assemble_diagblocks_comp_major(
             Linv, rho_idx, ups_idx, zeta_idx

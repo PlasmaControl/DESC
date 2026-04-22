@@ -206,7 +206,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
         # save plots of the solved eigenfunction at this resolution
         print("saving solved-eigenfunction plots")
-        _save_eigenfunction_plots(
+        save_eigenfunction_plots(
             xi_rho_low, xi_theta_low, xi_zeta_low,
             rho, theta, rho_iota1, title_base,
             f"solved_{save_tag_res}",

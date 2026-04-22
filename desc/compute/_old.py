@@ -18,7 +18,13 @@ from ..integrals.quad_utils import (
     simpson2,
 )
 from ..utils import safediv
-from ._fast_ion import _drift1, _drift2, _gamma_c_data, _radial_drift, _v_tau
+from ._fast_ion import (
+    _gamma_c_data,
+    _poloidal_drift_nemov,
+    _radial_drift,
+    _radial_drift_nemov,
+    _v_tau,
+)
 from ._neoclassical import _dI_1, _dI_2
 from .data_index import register_compute_fun
 
@@ -222,7 +228,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(pitch_inv, num_well)
         v_tau, drift1, drift2 = bounce.integrate(
-            [_v_tau, _drift1, _drift2],
+            [_v_tau, _radial_drift_nemov, _poloidal_drift_nemov],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],

@@ -25,6 +25,23 @@ from .data_index import register_compute_fun
 # (|∇ρ| ‖e_α|ρ,ϕ‖)ᵢ ∫ dℓ [ (1 − λ|B|/2)/√(1 − λ|B|) ∂|B|/∂ρ + √(1 − λ|B|) K ] / |B|
 
 
+def _gamma_c_data(data):
+    # The grid has to be dense enough to avoid aliasing error on |B| anyway,
+    # so we might as well interplate anything smoother than |B| with one
+    # Fourier series rather than transforming each term. Last term in K
+    # behaves as ∂log(|B|²/(R₀B₀B^ϕ))/∂ρ |B| where R₀B₀ is a constant with
+    # units Tesla meters. Smoothness is determined by positive lower bound of
+    # log argument, and hence behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
+    return {
+        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
+        "|B|_r|v,p": data["|B|_r|v,p"],
+        "K": data["iota_r"]
+        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
+        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
+    }
+
+
 def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
     # τ is the bounce time, and I is defined in Nemov et al. eq. 36.
@@ -118,7 +135,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-
         bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
 
         def fun(pitch_inv):
@@ -152,22 +168,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             axis=-1,
         )
 
-    # It is assumed the grid is sufficiently dense to reconstruct |B|,
-    # so anything smoother than |B| may be captured accurately as a single
-    # Fourier series rather than transforming each component. Last term in K
-    # behaves as ∂log(|B|²/(R₀B₀B^ϕ))/∂ρ |B| where R₀B₀ is a constant with
-    # units Tesla meters. Smoothness is determined by positive lower bound of
-    # log argument, and hence behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
-
-    out = Bounce2D.batch(Gamma_c, fun_data, data, angle, grid, opts.surf_batch_size)
+    out = Bounce2D.batch(
+        Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
+    )
     data["Gamma_c"] = grid.expand(out) / data["V_psi"] / (opts.num_transit * 2**0.5)
     return data
 
@@ -239,7 +242,6 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-
         bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
         points = bounce.points(pitch_inv, opts.num_well)
         drift1, drift2 = bounce.integrate(
@@ -252,7 +254,6 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             is_fourier=True,
             low_ram=True,
         )
-
         return (2 / jnp.pi) * jnp.arctan(
             safediv(
                 drift1,
@@ -266,16 +267,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             )
         ).sum(-1)
 
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
-
-    data["gamma_c"] = Bounce2D.batch(gamma_c0, fun_data, data, angle, grid, 1, False)
+    data["gamma_c"] = Bounce2D.batch(
+        gamma_c0, _gamma_c_data(data), data, angle, grid, 1, False
+    )
     return data
 
 
@@ -332,7 +326,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-
         bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
 
         def fun(pitch_inv):

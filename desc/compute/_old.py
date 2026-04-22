@@ -17,8 +17,8 @@ from ..integrals.quad_utils import (
     grad_automorphism_sin,
     simpson2,
 )
-from ..utils import cross, dot, safediv
-from ._fast_ion import _drift1, _drift2, _radial_drift, _v_tau
+from ..utils import safediv
+from ._fast_ion import _drift1, _drift2, _gamma_c_data, _radial_drift, _v_tau
 from ._neoclassical import _dI_1, _dI_2
 from .data_index import register_compute_fun
 
@@ -85,7 +85,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         I_1, I_2 = bounce.integrate(
             [_dI_1, _dI_2],
@@ -94,7 +93,6 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
             ["|grad(rho)|*kappa_g"],
             num_well=num_well,
         )
-
         return jnp.sum(
             safediv(I_1**2, I_2).sum(-1).mean(-2) * weight / pitch_inv**3,
             axis=-1,
@@ -221,7 +219,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(pitch_inv, num_well)
         v_tau, drift1, drift2 = bounce.integrate(
@@ -231,7 +228,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
         )
-
         # This is γ_c π/2.
         gamma_c = jnp.arctan(
             safediv(
@@ -245,16 +241,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             axis=-1,
         )
 
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
-
-    out = Bounce1D.batch(Gamma_c, fun_data, data, grid, surf_batch_size)
+    out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, surf_batch_size)
     data["old Gamma_c"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
@@ -324,7 +311,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift, _poloidal_drift],
@@ -333,7 +319,6 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             ["cvdrift0", "gbdrift"],
             num_well=num_well,
         )
-
         # This is γ_c π/2.
         gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(

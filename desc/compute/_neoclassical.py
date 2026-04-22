@@ -108,7 +108,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-
         bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
 
         def fun(pitch_inv):
@@ -130,7 +129,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     B0 = data["max_tz |B|"]
     scalar = (jnp.pi * data["R0"]) ** 2 / (opts.num_transit * 4 * 2**0.5)
-
     out = Bounce2D.batch(
         eps_32,
         {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},

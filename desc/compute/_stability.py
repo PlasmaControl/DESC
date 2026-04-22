@@ -3274,6 +3274,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     if v0 is None:
         w, v = eigsh(np.asarray(A), k=1, sigma=-1e-3, which="LM", tol=1e-8, return_eigenvectors=True)
     else:
+        print("using v0")
         w, v = eigsh(np.asarray(A), k=1, sigma=-1e-3, v0=v0, which="LM", tol=1e-8, return_eigenvectors=True)
 
     idxs = jnp.where(jnp.abs(v) > 5e-5)[0]

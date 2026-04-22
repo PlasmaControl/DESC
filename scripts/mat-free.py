@@ -38,6 +38,20 @@ axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
 n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
 
 
+# Paths
+save_path = "./high_aspect_ratio_tokamak/"
+plot_path   = save_path + "eigenfunction_plots/"
+os.makedirs(save_path, exist_ok=True)
+os.makedirs(plot_path, exist_ok=True)
+
+# Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
+# => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
+iota_on_axis_values = np.linspace(0.8, 1.25, 10)
+
+results_lambda_min = np.zeros_like(iota_on_axis_values)
+stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
+
+
 # helper functions
 def nodes_and_diffmats(n_rho, n_theta, n_zeta):
     x, w = leggauss_lob(n_rho)
@@ -67,7 +81,7 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta):
     W0 = jnp.diag(W0)
     W1 = jnp.diag(W1)
     W2 = jnp.diag(W2)
-    
+
     diffmat = DiffMat(D_rho=D0, W_rho=W0, D_theta=D1, W_theta=W1, D_zeta=D2, W_zeta=W2)
 
 
@@ -177,19 +191,78 @@ def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, ze
     keep_2 = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_1, keep_2])
 
+    return v_guess[keep], xi_rho_hi, xi_theta_hi, xi_zeta_hi
 
-    return v_guess[keep]
+
+# ── Plotting ───────────────────────────────────────────────────────────────────
+rho_colors  = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+labels      = [r"$\xi^\rho$", r"$\xi^\theta$", r"$\xi^\zeta$"]
+comp_colors = ["steelblue", "darkorange", "seagreen"]
 
 
-# Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
-# => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.linspace(0.8, 1.25, 10)
+def _save_eigenfunction_plots(xi_rho, xi_theta, xi_zeta, rho, theta, rho_iota1, title_base, tag):
+    """Save 4 eigenfunction diagnostic plots tagged with `tag`.
 
-save_path = "./high_aspect_ratio_tokamak/"
-os.makedirs(save_path, exist_ok=True)
+    Works for both the raw-solve arrays (shape n_rho × (n_theta+1) × (n_zeta+1),
+    from add_bc) and the interpolated arrays (shape n_rho × n_theta × n_zeta).
+    Uses `len(theta)` as the authoritative theta length so the trailing boundary
+    column is automatically ignored when present.
+    """
+    n_rho_loc = xi_rho.shape[0]
+    n_theta_loc = len(theta)
+    rho_plot_indices = np.linspace(n_rho_loc // 4, n_rho_loc - 1, 4, dtype=int)
+    i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
 
-results_lambda_min = np.zeros_like(iota_on_axis_values)
-stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
+    def _plot_vs_rho(i_theta, theta_label, fname_suffix):
+        fig, ax = plt.subplots(figsize=(7, 5))
+        for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
+            ax.plot(rho, xi[:, i_theta, 0], color=color, lw=2, label=label)
+        if rho_iota1 is not None and rho_iota1 <= 1.0:
+            ax.axvline(rho_iota1, color="red", lw=1.2, ls=":", label=r"$\iota=1$")
+        ax.set_xlabel(r"$\rho$", fontsize=14)
+        ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
+        ax.set_title(title_base + f",  {theta_label}", fontsize=12)
+        ax.tick_params(labelsize=12)
+        ax.legend(fontsize=13)
+        ax.axhline(0, color="gray", lw=0.7, ls="--")
+        plt.tight_layout()
+        fig.savefig(plot_path + f"{fname_suffix}_{tag}.png", dpi=150)
+        plt.close(fig)
+
+    def _plot_vs_theta(rho_indices, suptitle_extra, fname_suffix):
+        fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=False)
+        for ax, xi, label in zip(axes, [xi_rho, xi_theta, xi_zeta], labels):
+            for i_rho, color in zip(rho_indices, rho_colors):
+                ax.plot(
+                    theta, xi[i_rho, :n_theta_loc, 0],
+                    color=color, lw=2,
+                    label=rf"$\rho = {rho[i_rho]:.2f}$",
+                )
+            ax.set_xlabel(r"$\theta$", fontsize=14)
+            ax.set_ylabel(label, fontsize=14)
+            ax.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+            ax.set_xticklabels(["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+            ax.tick_params(labelsize=11)
+            ax.axhline(0, color="gray", lw=0.7, ls="--")
+            ax.legend(fontsize=10)
+        fig.suptitle(title_base + suptitle_extra, fontsize=13)
+        plt.tight_layout()
+        fig.savefig(plot_path + f"{fname_suffix}_{tag}.png", dpi=150)
+        plt.close(fig)
+
+    _plot_vs_rho(0, r"$\theta=0$", "xi_vs_rho_theta0")
+    _plot_vs_rho(
+        i_theta_half_pi,
+        rf"$\theta \approx \pi/2$  ($\theta={theta[i_theta_half_pi]:.3f}$)",
+        "xi_vs_rho_theta_half_pi",
+    )
+    _plot_vs_theta(rho_plot_indices, "", "xi_vs_theta")
+    _plot_vs_theta(
+        [n_rho_loc - 1],
+        rf"  —  $\rho = {rho[-1]:.3f}$ (boundary BC check)",
+        "xi_vs_theta_bc",
+    )
+
 
 for i, iota_0 in enumerate(iota_on_axis_values):
     iota_coeffs = np.array([iota_0, -0.5])
@@ -210,7 +283,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     print(f"\n=== iota_0 = {iota_0:.4f} ===")
     print("solving equilibrium")
-    
+
     eq = Equilibrium(
         L=12,
         M=12,
@@ -238,20 +311,27 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     eq.save(save_path + save_name)
     print("equilibrium solved")
 
-    
-    
+    # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
+    rho_iota1 = (
+        np.sqrt((iota_0 - 1.0) / (-iota_coeffs[1])) if iota_0 > 1.0 else None
+    )
+    title_base = (
+        rf"$\iota_0 = {iota_0:.3f}$,  "
+        rf"$\iota(\rho) = \iota_0 + {2*iota_coeffs[-1]:.2f}\,\rho^2$"
+    )
+
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
-    n_rhos = np.array([14, 24, 36])
-    n_thetas = np.array([14, 24, 36])
+    n_rhos = np.array([14, 18, 36])
+    n_thetas = np.array([14, 18, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
         n_zetas = np.array([9, 12, 14])
-    
+
     v_guess = None
     X = None
-    
+
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
         print(f"\n--- Solving at low res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---")
         # paths for saving eigenfunction and related data
@@ -261,7 +341,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
         # produce diffmats and grid nodes for the current resolution
         diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
-        
+
         if os.path.exists(X_path):
             X = np.load(X_path)
             data = np.load(savez_path)
@@ -271,8 +351,15 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         else:
             grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
             if X is not None:
-                v_guess = interpolate_xi(
-                    xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta
+                v_guess, xi_rho_interp, xi_theta_interp, xi_zeta_interp = interpolate_xi(
+                    xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low,
+                    reshaped_nodes, n_rho, n_theta, n_zeta,
+                )
+                print("saving after-interpolation plots")
+                _save_eigenfunction_plots(
+                    xi_rho_interp, xi_theta_interp, xi_zeta_interp,
+                    rho, theta, rho_iota1, title_base,
+                    f"interp_{save_tag_res}",
                 )
             print("computing eigenmode at low res")
 
@@ -308,7 +395,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
                 deltaB_z=deltaB_z,
                 lambda_min=lambda_min,
             )
-        
+
         # add boundaries back to the low-res eigenfunction for interpolation later
         xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
 
@@ -322,8 +409,17 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         np.save(save_path + f"xi_theta_{save_tag_res}.npy", xi_theta_low)
         np.save(save_path + f"xi_zeta_{save_tag_res}.npy", xi_zeta_low)
 
+        # save plots of the solved eigenfunction at this resolution
+        print("saving solved-eigenfunction plots")
+        _save_eigenfunction_plots(
+            xi_rho_low, xi_theta_low, xi_zeta_low,
+            rho, theta, rho_iota1, title_base,
+            f"solved_{save_tag_res}",
+        )
+
     # add the final lambda_min to the results list for this iota_0
     results_lambda_min[i] = lambda_min
+    print(f"iota_0={iota_0:.4f}: plots saved")
 
 
 # ── Save summary ──────────────────────────────────────────────────────────────
@@ -339,122 +435,17 @@ print("Done. Results saved to", save_path)
 print("Run analyze_stability.py for Mercier + delta_W breakdown.")
 
 
-# ── Plotting ───────────────────────────────────────────────────────────────────
-plot_path   = save_path + "eigenfunction_plots/"
-os.makedirs(plot_path, exist_ok=True)
-
-# rho indices to use for the "vs theta" plots
-rho_plot_indices = np.linspace(n_rho//4, n_rho - 1, 4, dtype=int)  # 4 values from rho[0] to rho[-1]
-rho_colors       = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
-
-labels     = [r"$\xi^\rho$", r"$\xi^\theta$", r"$\xi^\zeta$"]
-comp_colors = ["steelblue", "darkorange", "seagreen"]
-
-
-# ── Loop over equilibria ──────────────────────────────────────────────────────
-for iota_0 in iota_on_axis_values:
-    iota_coeffs = np.array([iota_0, -0.5])  # ι(ρ) = ι₀ - 0.5ρ²
-
-    save_tag = (
-        f"axisym_{axisym}_ar_{aspect_ratio}_NFP_{NFP}"
-        f"_p_{'_'.join(p_coeffs.astype(str))}"
-        f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
-        f"n_rho_{n_rho}_n_theta_{n_theta}_n_zeta_{n_zeta}"
-    )
-
-    xi_rho_path   = save_path + f"xi_rho_low_{save_tag}.npy"
-    xi_theta_path = save_path + f"xi_theta_low_{save_tag}.npy"
-    xi_zeta_path  = save_path + f"xi_zeta_low_{save_tag}.npy"
-    print(xi_rho_path)
-    if not all(os.path.exists(p) for p in [xi_rho_path, xi_theta_path, xi_zeta_path]):
-        print(f"Skipping iota_0={iota_0:.4f}: files not found")
-        continue
-
-    xi_rho   = np.load(xi_rho_path)    # (n_rho, n_theta, n_zeta)
-    xi_theta = np.load(xi_theta_path)
-    xi_zeta  = np.load(xi_zeta_path)
-
-    title_base = rf"$\iota_0 = {iota_0:.3f}$,  $\iota(\rho) = \iota_0 - 0.05\,\rho^2$"
-
-    # nearest theta index to pi/2
-    i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
-
-    # ι=1 surface location: ι₀ − 0.05ρ² = 1  →  ρ = sqrt((ι₀−1)/0.05)
-    rho_iota1 = np.sqrt((iota_0 - 1.0) / iota_coeffs[1]) if iota_0 > 1.0 else None
-
-    def _plot_vs_rho(i_theta, theta_label, fname_suffix):
-        fig, ax = plt.subplots(figsize=(7, 5))
-        for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
-            ax.plot(rho, xi[:, i_theta, 0], color=color, lw=2, label=label)
-        if rho_iota1 is not None and rho_iota1 <= 1.0:
-            ax.axvline(rho_iota1, color="red", lw=1.2, ls=":", label=r"$\iota=1$")
-        ax.set_xlabel(r"$\rho$", fontsize=14)
-        ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
-        ax.set_title(title_base + f",  {theta_label}", fontsize=12)
-        ax.tick_params(labelsize=12)
-        ax.legend(fontsize=13)
-        ax.axhline(0, color="gray", lw=0.7, ls="--")
-        plt.tight_layout()
-        fig.savefig(plot_path + f"{fname_suffix}_{save_tag}.png", dpi=150)
-        plt.close(fig)
-
-    # ── Plot 1: xi vs rho at theta=0 ────────────────────────────────────────
-    _plot_vs_rho(0, r"$\theta=0$", "xi_vs_rho_theta0")
-
-    # ── Plot 2: xi vs rho at theta=pi/2 ─────────────────────────────────────
-    _plot_vs_rho(
-        i_theta_half_pi,
-        rf"$\theta \approx \pi/2$  ($\theta={theta[i_theta_half_pi]:.3f}$)",
-        "xi_vs_rho_theta_half_pi",
-    )
-
-    def _plot_vs_theta(rho_indices, suptitle_extra, fname_suffix):
-        fig, axes = plt.subplots(1, 3, figsize=(16, 5), sharey=False)
-        for ax, xi, label in zip(axes, [xi_rho, xi_theta, xi_zeta], labels):
-            for i_rho, color in zip(rho_indices, rho_colors):
-                ax.plot(
-                    theta, xi[i_rho, :-1, 0],
-                    color=color, lw=2,
-                    label=rf"$\rho = {rho[i_rho]:.2f}$",
-                )
-            ax.set_xlabel(r"$\theta$", fontsize=14)
-            ax.set_ylabel(label, fontsize=14)
-            ax.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
-            ax.set_xticklabels(["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
-            ax.tick_params(labelsize=11)
-            ax.axhline(0, color="gray", lw=0.7, ls="--")
-            ax.legend(fontsize=10)
-        fig.suptitle(title_base + suptitle_extra, fontsize=13)
-        plt.tight_layout()
-        fig.savefig(plot_path + f"{fname_suffix}_{save_tag}.png", dpi=150)
-        plt.close(fig)
-
-    # ── Plot 3: xi vs theta at a few interior rho values ────────────────────
-    _plot_vs_theta(rho_plot_indices, "", "xi_vs_theta")
-
-    # ── Plot 4: xi vs theta at rho=1 (Dirichlet BC check) ───────────────────
-    # rho[-1] is the outermost grid point; xi^rho should be ~0 there
-    _plot_vs_theta(
-        [n_rho - 1],
-        rf"  —  $\rho = {rho[-1]:.3f}$ (boundary BC check)",
-        "xi_vs_theta_bc",
-    )
-
-    print(f"iota_0={iota_0:.4f}: plots saved")
-
-print("Done. Plots saved to", plot_path)
-
 # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(7, 5))
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
-ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-",marker=".",
+ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-", marker=".",
         color="steelblue", lw=2, ms=7)
 ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
 ax.set_title(
     r"Stability eigenvalue vs $\iota_0$" + "\n"
-    f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[1])}\\rho^2$",
+    f"$\\iota(\\rho) = \\iota_0 + {2*iota_coeffs[-1]}\\rho^2$",
     fontsize=12,
 )
 ax.tick_params(labelsize=12)

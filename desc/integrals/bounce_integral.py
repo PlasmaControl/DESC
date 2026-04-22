@@ -1850,28 +1850,21 @@ class Options(NamedTuple):
         )
 
         alpha = kwargs.get("alpha", jnp.array([0.0]))
-        num_quad = kwargs.get("num_quad", 32)
         num_transit = kwargs.get("num_transit", 20)
-
         quad = kwargs.get("quad", None)
+        if quad is None:
+            quad = Options._quad(eta, kwargs.get("num_quad", 32))
+        quad = jax.lax.stop_gradient(quad)
+
         if eta == 1:
-            quad = chebgauss2(num_quad) if quad is None else quad
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
             num_pitch = kwargs.get("num_pitch", 51)
         elif eta == -1:
-            quad = chebgauss1(num_quad) if quad is None else quad
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
         else:
-            if quad is None:
-                quad = get_quadrature(
-                    leggauss(num_quad),
-                    (automorphism_sin, grad_automorphism_sin),
-                )
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
-
-        quad = jax.lax.stop_gradient(quad)
         pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         spline = kwargs.get("spline", True)
@@ -1897,8 +1890,26 @@ class Options(NamedTuple):
             Y_B=Y_B,
         )
 
+    def keys(self):
+        """Names of elements in tuple."""
+        return self._fields
+
+    def __getitem__(self, key):
+        """Lookup by string or index."""
+        return getattr(self, key) if isinstance(key, str) else tuple.__getitem__(key)
+
     @staticmethod
-    def _build_objective(obj, names, eta):
+    def _quad(eta, num_quad):
+        if eta == 1:
+            return chebgauss2(num_quad)
+        if eta == -1:
+            return chebgauss1(num_quad)
+        return get_quadrature(
+            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+        )
+
+    @staticmethod
+    def _build_objective(o, names, eta):
         """Builds the objective, selecting default values if they were not specified.
 
         Examples
@@ -1908,7 +1919,7 @@ class Options(NamedTuple):
 
         Parameters
         ----------
-        obj : _Objective
+        o : _Objective
             The objective instance.
         names : str
             Builds profiles and transforms for the compute quantities registered
@@ -1922,65 +1933,45 @@ class Options(NamedTuple):
         from desc.compute import get_profiles, get_transforms
         from desc.objectives.utils import _parse_callable_target_bounds
 
-        eq = obj.things[0]
-        if obj._grid is None:
-            obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        assert obj._grid.can_fft2
+        eq = o.things[0]
+        if o._grid is None:
+            o._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+        assert o._grid.can_fft2
 
-        X = obj._hyperparam.pop("X")
-        Y = obj._hyperparam.pop("Y")
-        obj._constants["x"] = fourier_pts(X)
-        obj._constants["y"] = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
+        X = o._hyperparam.pop("X")
+        Y = o._hyperparam.pop("Y")
+        o._constants["x"] = fourier_pts(X)
+        o._constants["y"] = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
 
-        Y_B = obj._hyperparam["Y_B"]
+        Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(obj._grid, obj._hyperparam["spline"])
-            obj._hyperparam["Y_B"] = Y_B
-        if obj._hyperparam["num_well"] is None:
-            obj._hyperparam["num_well"] = num_well_rule(
-                obj._hyperparam["num_transit"],
+            Y_B = Y_B_rule(o._grid, o._hyperparam["spline"])
+            o._hyperparam["Y_B"] = Y_B
+        if o._hyperparam["num_well"] is None:
+            o._hyperparam["num_well"] = num_well_rule(
+                o._hyperparam["num_transit"],
                 eq.NFP,
                 # Due to legacy reasons Y_B is resolution over full transit
                 # if spline is true.
-                Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
+                Y_B if o._hyperparam["spline"] else (Y_B * eq.NFP),
             )
 
-        obj._constants["_vander"] = (
-            get_vander_spline(obj._grid, Y, Y_B, eq.NFP)
-            if obj._hyperparam["spline"]
+        o._constants["_vander"] = (
+            get_vander_spline(o._grid, Y, Y_B, eq.NFP)
+            if o._hyperparam["spline"]
             else {}
         )
+        o._constants["quad"] = Options._quad(eta, o._hyperparam.pop("num_quad"))
 
-        num_quad = obj._hyperparam.pop("num_quad")
-        if eta == 1:
-            obj._constants["quad"] = chebgauss2(num_quad)
-        elif eta == -1:
-            obj._constants["quad"] = chebgauss1(num_quad)
-        else:
-            obj._constants["quad"] = get_quadrature(
-                leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
-            )
-
-        rho = obj._grid.compress(obj._grid.nodes[:, 0])
-        obj._constants["lambda"] = get_transforms(
+        rho = o._grid.compress(o._grid.nodes[:, 0])
+        o._constants["lambda"] = get_transforms(
             "lambda",
             eq,
             grid=LinearGrid(
-                rho=rho, M=eq.L_basis.M, zeta=obj._constants["y"], NFP=eq.NFP
+                rho=rho, M=eq.L_basis.M, zeta=o._constants["y"], NFP=eq.NFP
             ),
         )["L"]
-
-        obj._constants["profiles"] = get_profiles(names, eq, grid=obj._grid)
-        obj._constants["transforms"] = get_transforms(names, eq, grid=obj._grid)
-        obj._dim_f = obj._grid.num_rho
-        obj._target, obj._bounds = _parse_callable_target_bounds(
-            obj._target, obj._bounds, rho
-        )
-
-    def keys(self):
-        """Names of elements in tuple."""
-        return self._fields
-
-    def __getitem__(self, key):
-        """Lookup by string or index."""
-        return getattr(self, key) if isinstance(key, str) else tuple.__getitem__(key)
+        o._constants["profiles"] = get_profiles(names, eq, grid=o._grid)
+        o._constants["transforms"] = get_transforms(names, eq, grid=o._grid)
+        o._dim_f = o._grid.num_rho
+        o._target, o._bounds = _parse_callable_target_bounds(o._target, o._bounds, rho)

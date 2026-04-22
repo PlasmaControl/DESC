@@ -1,6 +1,7 @@
 """Old compute functions.
 
 These do not appear in the public documentation under the list of variables.
+They are kept for verification and correctness testing.
 """
 
 from functools import partial

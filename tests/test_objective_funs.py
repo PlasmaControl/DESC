@@ -2080,14 +2080,11 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_against_compute_bounce(self, use_bounce1d):
+    def test_objective_against_compute_bounce(self):
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        obj_grid = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
-        )
+        obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
         num_transit = 4
@@ -2099,40 +2096,17 @@ class TestObjectiveFunction:
             num_pitch=10,
         )
         names = ["effective ripple", "Gamma_c"]
-        if use_bounce1d:
-            names = ["old " + n for n in names]
-            angle = None
-            alpha = np.array([0.0])
-            zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
-            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-        else:
-            angle = Bounce2D.angle(eq, X, Y, rho)
-            grid = obj_grid
+        angle = Bounce2D.angle(eq, X, Y, rho)
+        grid = obj_grid
 
         data = eq.compute(names, grid, angle=angle, **opts)
-        obj = EffectiveRipple(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-6,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        obj = EffectiveRipple(eq, grid=obj_grid, nufft_eps=1e-6, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
-        obj = GammaC(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-7,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
@@ -4163,13 +4137,6 @@ class TestObjectiveNaNGrad:
         #       (When we used to do the Newton step the atol could be 1e-6).
         np.testing.assert_allclose(g, g_0, atol=0.0025)
 
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
-
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
         """Gamma_c."""
@@ -4196,13 +4163,6 @@ class TestObjectiveNaNGrad:
         # TODO: Reduce tolerance after someone implements the Newton step.
         #       (When we used to do the Newton step the atol could be 1e-6).
         np.testing.assert_allclose(g, g_0, atol=0.042)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

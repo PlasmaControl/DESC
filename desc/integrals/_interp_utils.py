@@ -328,7 +328,8 @@ def polyroot_vec(
     if (
         num_coef in func
         and get_only_real_roots
-        and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
+        and jnp.isrealobj(c)
+        and jnp.isrealobj(k)
     ):
         # Compute from analytic formula to avoid the issue of complex roots with small
         # imaginary parts. Also consumes less memory.

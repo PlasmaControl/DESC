@@ -82,7 +82,7 @@ class EffectiveRipple(_Objective):
         )
         try:
             import jax_finufft  # noqa: F401
-        except:  # noqa: E722
+        except Exception:
             warnif(
                 nufft_eps >= 1e-14,
                 msg="\njax-finufft is not installed properly.\n"

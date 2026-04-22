@@ -52,15 +52,7 @@ def _dI_2(data, B, pitch):
 
 @register_compute_fun(
     name="effective ripple 3/2",
-    label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
-        "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
-        "\\langle \\sum_j H_j^2 / I_j \\rangle"
-        # B₀ has units of λ⁻¹.
-        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
-    ),
+    label="\\epsilon_{\\mathrm{eff}}^{3/2}",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude to 3/2 power",
@@ -122,6 +114,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
+        # B₀ has units of λ⁻¹.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**3,
             axis=-1,

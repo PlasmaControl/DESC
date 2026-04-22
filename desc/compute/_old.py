@@ -21,9 +21,9 @@ from ..integrals.quad_utils import (
 from ..utils import safediv
 from ._fast_ion import (
     _gamma_c_data,
-    _poloidal_drift_nemov,
-    _radial_drift,
-    _radial_drift_nemov,
+    _poloidal_drift_periodic,
+    _radial_drift_1,
+    _radial_drift_2,
     _v_tau,
 )
 from ._neoclassical import _dI_1, _dI_2
@@ -40,13 +40,7 @@ _bounce1D_doc = {
 
 @register_compute_fun(
     name="old effective ripple 3/2",
-    label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
-        "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
-        "\\langle \\sum_j H_j^2 / I_j \\rangle"
-    ),
+    label="\\epsilon_{\\mathrm{eff}}^{3/2}",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude to 3/2 power",
@@ -228,7 +222,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         points = bounce.points(pitch_inv, num_well)
         v_tau, drift1, drift2 = bounce.integrate(
-            [_v_tau, _radial_drift_nemov, _poloidal_drift_nemov],
+            [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
@@ -252,13 +246,6 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
     return data
-
-
-def _poloidal_drift(data, B, pitch):
-    return safediv(
-        data["gbdrift"] * (1 - 0.5 * pitch * B),
-        jnp.sqrt(jnp.abs(1 - pitch * B)),
-    )
 
 
 @register_compute_fun(
@@ -313,13 +300,19 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
     )
 
+    def _poloidal_drift_secular(data, B, pitch):
+        return safediv(
+            data["gbdrift"] * (1 - 0.5 * pitch * B),
+            jnp.sqrt(jnp.abs(1 - pitch * B)),
+        )
+
     def Gamma_c(data):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
         bounce = Bounce1D(grid, data, quad, is_reshaped=True)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
-            [_v_tau, _radial_drift, _poloidal_drift],
+            [_v_tau, _radial_drift_2, _poloidal_drift_secular],
             pitch_inv,
             data,
             ["cvdrift0", "gbdrift"],

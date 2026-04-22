@@ -786,8 +786,12 @@ class Bounce2D(Bounce):
         if not isinstance(integrand, (list, tuple)):
             integrand = [integrand]
 
-        exclude = ("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta")
-        data = apply(data, _fourier_if_real, names, exclude)
+        data = apply(
+            data,
+            _fourier_if_real,
+            subset=names,
+            exclude=("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta"),
+        )
 
         if points is None:
             points = self.points(pitch_inv, num_well)

@@ -199,6 +199,9 @@ class Bounce2D(Bounce):
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce2D.required_names``.
+        If the input is not a real-valued array, then it
+        is assumed that the Fourier transform as returned by ``Bounce2D.fourier``
+        was given instead.
     angle : jnp.ndarray
         Shape (num ρ, X, Y).
         Angle returned by ``Bounce2D.angle``.
@@ -241,18 +244,6 @@ class Bounce2D(Bounce):
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``.
-    is_reshaped : bool
-        Whether the arrays in ``data`` are already reshaped to the expected form of
-        shape (..., num ζ, num θ) or (num ρ, num ζ, num θ).
-        This option can be used to iteratively compute bounce integrals one flux
-        surface at a time, reducing memory usage.
-        To do so, set to ``True`` and provide only those chunks of the reshaped data.
-        If set to ``True``, then it is assumed that ``data["iota"]`` has shape
-        ``(grid.num_rho,)`` or is a scalar.
-    is_fourier : bool
-        If true, then it is assumed that ``data`` holds Fourier transforms
-        as returned by ``Bounce2D.fourier`` and ``data["iota"]`` has shape
-        ``(grid.num_rho,)`` or is a scalar. Default is false.
     Bref : float
         Optional. Reference magnetic field strength for normalization.
     Lref : float
@@ -287,8 +278,6 @@ class Bounce2D(Bounce):
         automorphism=None,
         nufft_eps=1e-6,
         spline=True,
-        is_reshaped=False,
-        is_fourier=False,
         Bref=1.0,
         Lref=1.0,
         check=False,
@@ -297,7 +286,6 @@ class Bounce2D(Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        is_reshaped = is_reshaped or is_fourier
 
         if quad is None:
             quad = get_quadrature(
@@ -313,11 +301,27 @@ class Bounce2D(Bounce):
             grid.num_zeta, grid.num_theta, (0, 2 * jnp.pi / grid.NFP)
         )
 
+        # Figure out if input is split into batches or needs a Fourier transform.
+        is_real = jnp.isrealobj(data["|B|"])
+        s = data["|B|"].shape
+        is_reshaped = (
+            len(s) > 1
+            and (s[-2] == grid.num_zeta)
+            and (
+                (s[-1] == grid.num_theta and is_real)
+                or (s[-1] == (grid.num_theta // 2 + 1) and not is_real)
+            )
+        )
+        errorif(
+            is_reshaped and jnp.size(data["iota"]) != (s[0] if (len(s) > 2) else 1),
+            msg="You forgot to call grid.compress(data['iota'])",
+        )
+
         self._c = {"|B|": data["|B|"] / Bref, "B^zeta": data["B^zeta"] * Lref / Bref}
         if not is_reshaped:
             self._c["|B|"] = Bounce2D.reshape(grid, self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.reshape(grid, self._c["B^zeta"])
-        if not is_fourier:
+        if is_real:
             self._c["|B|"] = Bounce2D.fourier(self._c["|B|"])
             self._c["B^zeta"] = Bounce2D.fourier(self._c["B^zeta"])
 
@@ -375,8 +379,7 @@ class Bounce2D(Bounce):
         fun : callable
             A function  which takes a single argument ``fun_data`` and computes
             bounce integrals assuming ``fun_data`` holds all required quantities
-            to construct a ``Bounce2D`` operator as well as call its methods with
-            the flag ``is_fourier=True``.
+            to construct a ``Bounce2D`` operator as well as call its methods.
         fun_data : dict[str, jnp.ndarray]
             Data to reshape, interpolate, and pass to ``fun``.
             The structure of the data should match the structure
@@ -711,11 +714,11 @@ class Bounce2D(Bounce):
         *,
         num_well=None,
         nufft_eps=1e-6,
-        is_fourier=False,
         low_ram=False,
         quad=None,
         check=False,
         plot=False,
+        **kwargs,
     ):
         """Bounce integrate ∫ f(ρ,α,λ,ℓ) dℓ.
 
@@ -743,7 +746,9 @@ class Bounce2D(Bounce):
             Real scalar-valued periodic functions in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
-            expected shape.
+            expected shape. If the input is not a real-valued array, then it
+            is assumed that the Fourier transform as returned by ``Bounce2D.fourier``
+            was given instead.
         names : str or list[str]
             Names in ``data`` to interpolate. Default is all keys in ``data``.
         points : tuple[jnp.ndarray]
@@ -757,9 +762,6 @@ class Bounce2D(Bounce):
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-        is_fourier : bool
-            If true, then it is assumed that ``data`` holds Fourier transforms
-            as returned by ``Bounce2D.fourier``. Default is false.
         low_ram : bool
             Whether to use a more memory efficient algorithm.
             However, this is slower to differentiate with JAX.
@@ -788,10 +790,7 @@ class Bounce2D(Bounce):
             integrand = [integrand]
 
         exclude = ("|B|", "B^zeta", "|e_zeta|r,a|", "zeta", "theta")
-        if is_fourier:
-            data = apply(data, subset=names, exclude=exclude)
-        else:
-            data = apply(data, Bounce2D.fourier, names, exclude)
+        data = apply(data, _fourier_if_real, names, exclude)
 
         if points is None:
             points = self.points(pitch_inv, num_well)
@@ -898,9 +897,7 @@ class Bounce2D(Bounce):
 
         return data
 
-    def interp_to_argmin(
-        self, f, points, *, nufft_eps=1e-6, is_fourier=False, **kwargs
-    ):
+    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
@@ -910,7 +907,9 @@ class Bounce2D(Bounce):
             Real scalar-valued periodic function in (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP)
             evaluated on the ``grid`` supplied to construct this object.
             Use the method ``Bounce2D.reshape`` to reshape the data into the
-            expected shape.
+            expected shape. If the input is not a real-valued array, then it
+            is assumed that the Fourier transform as returned by ``Bounce2D.fourier``
+            was given instead.
         points : tuple[jnp.ndarray]
             Shape (num ρ, num α, num pitch, num well).
             Optional, output of method ``self.points``.
@@ -920,9 +919,6 @@ class Bounce2D(Bounce):
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-        is_fourier : bool
-            If true, then it is assumed that ``f`` is the Fourier transforms
-            as returned by ``Bounce2D.fourier``. Default is false.
 
         Returns
         -------
@@ -931,8 +927,7 @@ class Bounce2D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        if not is_fourier:
-            f = Bounce2D.fourier(f)
+        f = _fourier_if_real(f)
 
         num_transit = self._theta.X // self._NFP
         K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal
@@ -1225,6 +1220,10 @@ class Bounce2D(Bounce):
         return fig
 
 
+def _fourier_if_real(thing):
+    return Bounce2D.fourier(thing) if jnp.isrealobj(thing) else thing
+
+
 class Bounce1D(Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
@@ -1287,13 +1286,6 @@ class Bounce1D(Bounce):
         Optional. Reference magnetic field strength for normalization.
     Lref : float
         Optional. Reference length scale for normalization.
-    is_reshaped : bool
-        Whether the arrays in ``data`` are already reshaped to the expected form of
-        shape (..., num ζ) or (..., num α, num ζ) or
-        (num ρ, num α, num ζ). This option can be used to iteratively
-        compute bounce integrals one flux surface or one field line at a time,
-        respectively, reducing memory usage.
-        To do so, set to ``True`` and provide only those chunks of the reshaped data.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
@@ -1316,8 +1308,8 @@ class Bounce1D(Bounce):
         automorphism=None,
         Bref=1.0,
         Lref=1.0,
-        is_reshaped=False,
         check=False,
+        **kwargs,
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
@@ -1340,6 +1332,9 @@ class Bounce1D(Bounce):
             - self._data["|b^zeta|"] * data["|B|_z|r,a"]
         ) / data["|B|"]
 
+        # Figure out if input is split into batches.
+        s = data["|B|"].shape
+        is_reshaped = len(s) > 1 and s[-2] == grid.num_alpha and s[-1] == grid.num_zeta
         if not is_reshaped:
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
@@ -1375,8 +1370,7 @@ class Bounce1D(Bounce):
         fun : callable
             A function  which takes a single argument ``fun_data`` and computes
             bounce integrals assuming ``fun_data`` holds all required quantities
-            to construct a ``Bounce1D`` operator with the flag ``is_reshaped=True``
-            as well as call its methods.
+            to construct a ``Bounce1D`` operator as well as call its methods.
         fun_data : dict[str, jnp.ndarray]
             Data to reshape, interpolate, and pass to ``fun``.
             The structure of the data should match the structure

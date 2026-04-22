@@ -86,13 +86,9 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad)
         I_1, I_2 = bounce.integrate(
-            [_dI_1, _dI_2],
-            pitch_inv,
-            data,
-            ["|grad(rho)|*kappa_g"],
-            num_well=num_well,
+            [_dI_1, _dI_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
         )
         return jnp.sum(
             safediv(I_1**2, I_2).sum(-1).mean(-2) * weight / pitch_inv**3,
@@ -219,7 +215,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad)
         points = bounce.points(pitch_inv, num_well)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
@@ -310,7 +306,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
+        bounce = Bounce1D(grid, data, quad)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift_2, _poloidal_drift_secular],
             pitch_inv,

@@ -100,7 +100,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-        bounce = Bounce2D(grid, data, data["angle"], **opts, is_fourier=True)
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def fun(pitch_inv):
             I_1, I_2 = bounce.integrate(
@@ -110,7 +110,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 ["|grad(rho)|*kappa_g"],
                 num_well=opts.num_well,
                 nufft_eps=opts.nufft_eps,
-                is_fourier=True,
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 

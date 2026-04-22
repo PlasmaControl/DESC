@@ -173,7 +173,7 @@ labels      = [r"$\xi^\rho$", r"$\xi^\theta$", r"$\xi^\zeta$"]
 comp_colors = ["steelblue", "darkorange", "seagreen"]
 
 
-def save_eigenfunction_plots(xi_rho, xi_theta, xi_zeta, rho, theta, rho_iota1, title_base, tag):
+def save_eigenfunction_plots(plot_path, xi_rho, xi_theta, xi_zeta, rho, theta, rho_iota1, title_base, tag):
     """Save 4 eigenfunction diagnostic plots tagged with `tag`.
 
     Works for both the raw-solve arrays (shape n_rho × (n_theta+1) × (n_zeta+1),

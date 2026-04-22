@@ -137,7 +137,8 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         # produce diffmats and grid nodes for the current resolution
         diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
-        if os.path.exists(X_path):
+        override = True
+        if os.path.exists(X_path) and not override:
             X = np.load(X_path)
             data = np.load(savez_path)
             lambda_min = data["lambda_min"]
@@ -207,6 +208,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         # save plots of the solved eigenfunction at this resolution
         print("saving solved-eigenfunction plots")
         save_eigenfunction_plots(
+            plot_path,
             xi_rho_low, xi_theta_low, xi_zeta_low,
             rho, theta, rho_iota1, title_base,
             f"solved_{save_tag_res}",

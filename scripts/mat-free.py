@@ -49,7 +49,7 @@ os.makedirs(plot_path, exist_ok=True)
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.zeros(1)#np.linspace(0.8, 1.25, 10)
+iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 
 results_lambda_min = np.zeros_like(iota_on_axis_values)
 stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)

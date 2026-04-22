@@ -135,7 +135,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         savez_path = save_path + f"{save_tag_res}.npz"
 
         # produce diffmats and grid nodes for the current resolution
-        diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta)
+        diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
         if os.path.exists(X_path):
             X = np.load(X_path)
@@ -148,7 +148,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             if X is not None:
                 v_guess, xi_rho_interp, xi_theta_interp, xi_zeta_interp = interpolate_xi(
                     xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low,
-                    reshaped_nodes, n_rho, n_theta, n_zeta,
+                    reshaped_nodes, n_rho, n_theta, n_zeta, NFP
                 )
                 print("saving after-interpolation plots")
                 save_eigenfunction_plots(

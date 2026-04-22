@@ -26,7 +26,7 @@ from newcomb import *
 
 
 # helper functions
-def nodes_and_diffmats(n_rho, n_theta, n_zeta):
+def nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP):
     x, w = leggauss_lob(n_rho)
 
     rho = automorphism_staircase1(x, eps=1e-2, x_0=0.5, m_1=2.0, m_2=2.0)
@@ -48,7 +48,7 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta):
     theta = jnp.linspace(0.0, 2 * jnp.pi, n_theta, endpoint=False)
     D1, W1 = fourier_diffmat(n_theta)
 
-    zeta = jnp.linspace(0.0, 2 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
+    zeta = jnp.linspace(0.0, 2 * jnp.pi / NFP, n_zeta, endpoint=False)
     D2, W2 = fourier_diffmat(n_zeta)
 
     W0 = jnp.diag(W0)
@@ -120,10 +120,10 @@ def add_bc(X, n_rho, n_theta, n_zeta):
 # UPSCALE: 3D interpolation on (rho,theta,zeta),
 # periodic extension in theta/zeta, NO FFT.
 # -------------------------
-def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta):
+def interpolate_xi(xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low, reshaped_nodes, n_rho, n_theta, n_zeta, NFP):
     # add boundaries for interpolation later
     theta_low = np.concatenate((theta_low, np.array([2 * np.pi])))
-    zeta_low  = np.concatenate((zeta_low,  np.array([2 * np.pi / eq.NFP])))
+    zeta_low  = np.concatenate((zeta_low,  np.array([2 * np.pi / NFP])))
 
     def _interp3_periodic(f_ext, pts):
 

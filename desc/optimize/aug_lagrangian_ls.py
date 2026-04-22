@@ -237,6 +237,7 @@ def lsq_auglag(  # noqa: C901
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
+    f0 = f
     cost = 1 / 2 * jnp.dot(f, f)
     c = constraint_wrapped.fun(z, *args)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
@@ -623,6 +624,8 @@ def lsq_auglag(  # noqa: C901
         allx=[z2xs(x)[0] for x in allx],
         alltr=alltr,
     )
+    result["fse"] = f
+    result["fse0"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

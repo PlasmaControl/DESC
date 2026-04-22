@@ -176,6 +176,7 @@ def lsqtr(  # noqa: C901
     x = make_strictly_feasible(x, lb, ub)
 
     f = fun(x, *args)
+    f0 = f
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
@@ -467,6 +468,8 @@ def lsqtr(  # noqa: C901
         allx=allx,
         alltr=alltr,
     )
+    result["fse"] = f
+    result["fse0"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

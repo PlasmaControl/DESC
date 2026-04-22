@@ -174,6 +174,10 @@ class Optimizer(IOAble):
             Supported](https://desc-docs.readthedocs.io/en/stable/optimizers.html)
             for more details on the options available to each specific optimizer.
 
+            Additionally, one can suppress the summary of objective values via
+            options["print_summary"]=False. This can prevent additional objective
+            computation for scalar optimizers or bounded objectives. Default is True.
+
         copy : bool
             Whether to return the current things or a copy (leaving the original
             unchanged).
@@ -189,7 +193,8 @@ class Optimizer(IOAble):
             ``message`` which describes the cause of the termination. See
             `OptimizeResult` for a description of other attributes.
             Additionally, stores the before and after values of the objectives
-            and constraints in the ``Objective values`` key.
+            and constraints in the ``Objective values`` key, if "print_summary"
+            key of ``options`` is True.
 
         """
         options = {} if options is None else options
@@ -203,7 +208,7 @@ class Optimizer(IOAble):
             TypeError,
             "objective should be of type ObjectiveFunction.",
         )
-
+        print_summary = options.pop("print_summary", True)
         # get unique things
         things, indices, unique_indices = unique_list(
             flatten_list(things, flatten_tuple=True)
@@ -364,14 +369,15 @@ class Optimizer(IOAble):
             ind = things.index(thing)
             things[ind].params_dict = params
 
-        # we always want to populate result dict with before/after values, but may
-        # not always want to print, so we first capture the output and then decide
-        # what to do about it.
-        with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-            result = _print_output(things, things0, objective, constraints, result)
-            text_out = buf.getvalue()
-        if verbose > 0:
-            print(text_out)
+        # we always want to populate result dict with before/after values unless
+        # user specifically asks to skip, but may not always want to print, so
+        # we first capture the output and then decide what to do about it.
+        if print_summary:
+            with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                result = _print_output(things, things0, objective, constraints, result)
+                text_out = buf.getvalue()
+            if verbose > 0:
+                print(text_out)
 
         if copy:
             # need to swap things and things0, since things should be unchanged
@@ -485,7 +491,11 @@ def _print_output(things, things0, objective, constraints, result):
     print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
     print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    fse = result.get("fse", None)
+    fse0 = result.get("fse0", None)
+    values = objective.print_value(
+        x=objective.x(*state), x0=objective.x(*state_0), fse=fse, fse0=fse0
+    )
     for con in constraints:
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]

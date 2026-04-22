@@ -593,7 +593,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, x0=None, constants=None):
+    def print_value(self, x, x0=None, fse=None, fse0=None, constants=None):
         """Print the value(s) of the objective.
 
         Parameters
@@ -602,6 +602,12 @@ class ObjectiveFunction(IOAble):
             State vector.
         x0 : ndarray, optional
             Initial state vector before optimization.
+        fse : ndarray, optional
+            Output of self.compute_scaled_error(x), if available
+            through last iteration of the optimization.
+        fse0 : ndarray, optional
+            Output of self.compute_scaled_error(x0), if available
+            through first iteration of the optimization.
         constants : list
             Constant parameters passed to sub-objectives.
 
@@ -616,10 +622,16 @@ class ObjectiveFunction(IOAble):
 
         # Compute scaled error array (majority of optimizers use this)
         # to avoid recompiling individual objectives.
-        f_full = self.compute_scaled_error(x, constants=constants)
+        if fse is not None:
+            f_full = fse
+        else:
+            f_full = self.compute_scaled_error(x, constants=constants)
         f = jnp.sum(f_full**2) / 2  # compute_scalar
         if x0 is not None:
-            f0_full = self.compute_scaled_error(x0, constants=constants)
+            if fse0 is not None:
+                f0_full = fse0
+            else:
+                f0_full = self.compute_scaled_error(x0, constants=constants)
             f0 = jnp.sum(f0_full**2) / 2
 
         if x0 is not None:
@@ -641,7 +653,10 @@ class ObjectiveFunction(IOAble):
         # fall back to compute_unscaled for this case. Overall, this should
         # reduce the extra jit compilations for the print_value
         params = self.unpack_state(x)
-        params0 = self.unpack_state(x0) if x0 is not None else [None] * len(params)
+        if x0 is not None:
+            params0 = self.unpack_state(x0)
+        else:
+            params0 = [None] * len(params)
         assert len(params) == len(constants) == len(self.objectives)
         assert len(params0) == len(constants) == len(self.objectives)
 

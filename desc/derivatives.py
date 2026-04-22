@@ -152,7 +152,9 @@ def sparse_pullback(
         n_elements = tree_leaves(y)[0].shape[0]
 
     if batch_size is None or n_elements <= batch_size:
-        return chunk_reduction(_sparse_pullback(y, fn=fn))
+        return chunk_reduction(
+            _sparse_pullback(y, fn=eqx.filter_closure_convert(fn, y))
+        )
 
     y, remain = _batch_and_remainder(y, batch_size)
 
@@ -169,7 +171,9 @@ def sparse_pullback(
     if n_elements % batch_size == 0:
         return y
 
-    remain = chunk_reduction(_sparse_pullback(remain, fn=fn))
+    remain = chunk_reduction(
+        _sparse_pullback(remain, fn=eqx.filter_closure_convert(fn, remain))
+    )
 
     if reduction is None:
         return _concat(y, remain)

@@ -3347,6 +3347,28 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         d[ups_idx]  * (                      Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
         d[zeta_idx] * (                                           Linv[:, 2, 2] * vz),
     ])
+
+    def _xi_to_v(xi_full):
+        """Invert the preconditioning transform: given xi_full recover v_full[keep].
+
+        Forward:  xi = diag(d) @ Linv^T @ v   (upper-triangular in v)
+        Inverse:  back-substitute from the last row up.
+        Returns the reduced vector v[keep], ready to pass as v_guess.
+        """
+        xr = xi_full[rho_idx]
+        xv = xi_full[ups_idx]
+        xz = xi_full[zeta_idx]
+
+        # row 2 (zeta): xi_z = d_z * Linv[:,2,2] * vz
+        vz_ = xz / (d[zeta_idx] * Linv[:, 2, 2])
+        # row 1 (theta): xi_v = d_v * (Linv[:,1,1]*vv + Linv[:,2,1]*vz)
+        vv_ = (xv / d[ups_idx]  - Linv[:, 2, 1] * vz_) / Linv[:, 1, 1]
+        # row 0 (rho):  xi_r = d_r * (Linv[:,0,0]*vr + Linv[:,1,0]*vv + Linv[:,2,0]*vz)
+        vr_ = (xr / d[rho_idx]  - Linv[:, 1, 0] * vv_ - Linv[:, 2, 0] * vz_) / Linv[:, 0, 0]
+
+        v_full_ = jnp.concatenate([vr_, vv_, vz_])
+        return v_full_[keep]
+    np.testing.assert_allclose(v_mode, _xi_to_v(xi_full), rtol=1e-5, atol=1e-8)
     if debug_compare_reconstruction:
         linvt_full = _assemble_diagblocks_comp_major(
             Linv, rho_idx, ups_idx, zeta_idx

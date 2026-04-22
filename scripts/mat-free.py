@@ -53,6 +53,9 @@ stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
 
 
 for i, iota_0 in enumerate(iota_on_axis_values):
+    eq_name = "NCSX"
+
+
     iota_coeffs = np.array([iota_0, -0.5])
     iota_modes  = np.array([0, 2])
     iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
@@ -100,7 +103,6 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     eq.save(save_path + save_name)
     
     """
-    eq_name = "NCSX"
     eq = get(eq_name)
     print("equilibrium solved")
 

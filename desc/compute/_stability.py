@@ -3271,11 +3271,18 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         "converting A2 to NumPy",
     )
 
-    if v0 is None:
+    """if v0 is None:
         w, v = eigsh(np.asarray(A), k=1, sigma=-1e-3, which="LM", tol=1e-8, return_eigenvectors=True)
     else:
         print("using v0")
         w, v = eigsh(np.asarray(A), k=1, sigma=-1e-3, v0=v0, which="LM", tol=1e-8, return_eigenvectors=True)
+    """
+    w, v = jnp.linalg.eigh(A)
+    # get least stable mode
+    min_idx = jnp.argmin(w)
+    w = w[min_idx]
+    v = v[:, min_idx]
+    
 
     idxs = jnp.where(jnp.abs(v) > 5e-5)[0]
     y = A @ v

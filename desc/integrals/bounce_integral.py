@@ -185,7 +185,7 @@ class Bounce2D(Bounce):
         ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
         moving grid interpolation problem, avoids recomputing 3D Fourier-Zernike
         series on a time-dependent grid, and is able to compute the derivative
-        matrix relevant to optimzation with a compact sparse/diagonal pullback.
+        matrix relevant to optimzation with a compact sparse pullback.
 
     Parameters
     ----------

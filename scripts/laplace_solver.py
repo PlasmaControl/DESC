@@ -434,6 +434,17 @@ for s, (scan_label, N_func) in enumerate(scan_configs):
 
 eq_title = f"\n {name} equilibrium in {coords} coords"
 
+# Save plot data
+np.savez(
+    plot_path + "error_plot_scan_comparison_data.npz",
+    scan_labels=[label for label, _ in scan_configs],
+    path_exists_all=path_exists_all,
+    total_pts_all=total_pts_all,
+    B_t_errs_all=B_t_errs_all,
+    B_z_errs_all=B_z_errs_all,
+    phi_errs_all=phi_errs_all,
+)
+
 # Plot errors vs total grid points for all three scan types
 fig, ax = plt.subplots(1, 3, figsize=(20, 5))
 for s, (scan_label, _) in enumerate(scan_configs):

@@ -61,6 +61,9 @@ def nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP):
     return diffmat, rho, theta, zeta
 
 def mapping_and_grid(eq, rho, theta, zeta):
+    """accepts rho, theta, zeta in PEST coordinates and returns a Grid in DESC coordinates and 
+    the nodes in PEST coordinates, ordered by (rho, theta, zeta)
+    """
     n_rho = rho.shape[0]
     n_theta = theta.shape[0]
     n_zeta = zeta.shape[0]

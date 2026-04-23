@@ -110,8 +110,8 @@ else:
 # ── Equilibrium quantities at the surface (fixed) ────────────────────────────
 data_eq = eq.compute(["x", "n_rho", "g^rr", "sqrt(g)_PEST"], grid=grid, basis="xyz")
 a_N = a
-sqrtg = data_eq["sqrt(g)_PEST"][:, None]
-g_sup_rr = data_eq["g^rr"][:, None]
+sqrtg = data_eq["sqrt(g)_PEST"]
+g_sup_rr = data_eq["g^rr"]
 sqrtg_grad_rho = sqrtg * np.sqrt(g_sup_rr)
 #  pre-build the weighted phi_matrix (independent of coil)
 integration_weights = sqrtg_grad_rho * grid0.meshgrid_reshape(grid0.weights, order="rtz").reshape(n_surf)

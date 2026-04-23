@@ -3120,6 +3120,8 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
                 )
             )
         )
+    else:
+        print("no phi matrix, imposing dirichlet BC on xi^rho by removing boundary nodes")
 
 
     #### Instability drive term
@@ -3346,6 +3348,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         v_full_ = jnp.concatenate([vr_, vv_, vz_])
         return v_full_[keep]
     if transforms.get("xi", None) is not None:
+        print("using provided xi to compute energy without eigendecomposition")
         xi = transforms["xi"]
         v = _xi_to_v(xi)
         data["Av"] = A @ v

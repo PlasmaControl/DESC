@@ -152,7 +152,7 @@ data = eq.compute(
 
 a_N = data["a"]
 B_N = data["Psi"] / (jnp.pi * a_N**2)
-psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
+psi_r = data["psi_r"] / (a_N**2 * B_N)
 
 # evaluate quantities
 rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T

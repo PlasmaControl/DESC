@@ -437,10 +437,10 @@ eq_title = f"\n {name} equilibrium in {coords} coords"
 # Plot errors vs total grid points for all three scan types
 fig, ax = plt.subplots(1, 3, figsize=(20, 5))
 for s, (scan_label, _) in enumerate(scan_configs):
-    mask = path_exists_all[s]
-    ax[0].plot(total_pts_all[s, mask], B_t_errs_all[s, mask], marker="o", label=scan_label)
-    ax[1].plot(total_pts_all[s, mask], B_z_errs_all[s, mask], marker="o", label=scan_label)
-    ax[2].plot(total_pts_all[s, mask], phi_errs_all[s, mask],  marker="o", label=scan_label)
+    mask = path_exists_all[s]&(~np.isnan(B_t_errs_all[s]))&(~np.isnan(B_z_errs_all[s]))&(~np.isnan(phi_errs_all[s]))
+    ax[0].plot(total_pts_all[s, mask], B_t_errs_all[s, mask], marker=".", linestyle="dashed", label=scan_label)
+    ax[1].plot(total_pts_all[s, mask], B_z_errs_all[s, mask], marker=".", linestyle="dashed", label=scan_label)
+    ax[2].plot(total_pts_all[s, mask], phi_errs_all[s, mask],  marker=".", linestyle="dashed", label=scan_label)
 for a in ax:
     a.legend(fontsize=11)
 ax[0].set_xlabel("Total grid points ($n_\\theta \\times n_\\zeta$)", fontsize=12)

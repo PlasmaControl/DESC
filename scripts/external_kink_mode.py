@@ -181,21 +181,28 @@ surface_nodes_agni = np.array(rtz_nodes[-n_surf:]) # last n_surf nodes
 surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 pest_grid_surf = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
-data_phi = eq.compute(
-            ["phi_matrix_pest"],
-            rtz_surface_grid,
-            pest_grid=pest_grid_surf,
-            problem="exterior Neumann",
-            chunk_size=1,
-            #transforms={"Phi": phi_transform},
-        )
-phi_matrix = np.array(data_phi["phi_matrix_pest"])
 
-# Reshape to align with surface nodes for AGNI grid
-phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
-phi_matrix = phi_matrix.transpose(1,0,3,2)
-phi_matrix = phi_matrix.reshape(n_surf, n_surf)
+phi_path = save_path + f"phi_matrix_{save_tag}.npy"
+if os.path.exists(phi_path):
+    print(f"Loading phi matrix from {phi_path}")
+    phi_matrix = np.load(phi_path)
+else:
+    data_phi = eq.compute(
+                ["phi_matrix_pest"],
+                rtz_surface_grid,
+                pest_grid=pest_grid_surf,
+                problem="exterior Neumann",
+                chunk_size=1,
+                #transforms={"Phi": phi_transform},
+            )
+    phi_matrix = np.array(data_phi["phi_matrix_pest"])
 
+    # Reshape to align with surface nodes for AGNI grid
+    phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
+    phi_matrix = phi_matrix.transpose(1,0,3,2)
+    phi_matrix = phi_matrix.reshape(n_surf, n_surf)
+
+    np.save(phi_path, phi_matrix)
 data = eq.compute(
     "finite-n lambda3",
     xi=xi,

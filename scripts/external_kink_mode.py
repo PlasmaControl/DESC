@@ -12,7 +12,7 @@ from desc.equilibrium.coords import map_coordinates
 from desc.equilibrium import Equilibrium
 from desc.backend import jnp, jax
 from matplotlib import pyplot as plt
-from desc.utils import dot, cross
+from desc.utils import dot, cross, safenorm
 from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.io import load
 import numpy as np
@@ -142,6 +142,7 @@ data = eq.compute(
         "<|B|>_vol",
         "iota",
         "sqrt(g)_PEST",
+        "R",
     ],
     grid=grid,  # pest_grid,
 )
@@ -150,25 +151,34 @@ data = eq.compute(
 rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T
 r = rho * a
 eps = 1 / aspect_ratio
-b_theta = dot(data["b"], data["n_theta"])
+n_theta = data["e^vartheta"] / safenorm(data["e^vartheta"], axis=-1)
+n_zeta = data["grad(phi)"] / safenorm(data["grad(phi)"], axis=-1)
+b_theta = dot(data["b"], n_theta)
 print(b_theta / eps)
-b_z = dot(data["b"], data["n_zeta"])
+b_z = dot(data["b"], n_zeta)
 print(b_z)  # should be ~ 1 + O(eps^2)
 iota = data["iota"]
 B_0 = data["<|B|>_vol"]
-R_0 = data["R0"]
+R = data["R"]
 
 # get analytic eigenfunction
-delta = 1e-2  # small shift to avoid singularity at rational surface
+k = - n / R
+k0_sq = k**2 + (1 / r**2)
+F = k * b_z + b_theta / r  # F/B
+G = - k * b_theta + b_z / r  # G/B
+
+
+delta = 1e-4  # small shift to avoid singularity at rational surface
 xi_0 = 1
 xi_normal = xi_0 * np.cos(theta - n * zeta)
-# k0_sq =
+xi_eta = -1 / (r * k0_sq) * (2 * k * b_theta + G) * xi_0 * np.sin(theta - n * zeta)
+"""
 xi_eta = (
     -xi_0
     * b_z
     * ((1 - iota * n * (eps**2) * (rho**2)) / (1 + (n**2) * (eps**2) * (rho**2)))
     * np.sin(theta - n * zeta)
-)
+)"""
 
 """xi_parallel = (
     (1 / (rho * eps))
@@ -176,8 +186,6 @@ xi_eta = (
     * (1 + n * iota * eps**2 * rho**2)
     * xi_eta
 )"""
-F = -n / R_0 * b_z + b_theta / r  # F/B
-G = n / R_0 * b_theta + b_z / r  # G/B
 # xi_parallel = - (F/(F**2 + delta**2)) * G * xi_eta
 xi_parallel = -(F / (F**2 + delta**2)) * (
     xi_0 * np.sin(theta - n * zeta) / r + G * xi_eta
@@ -276,7 +284,9 @@ for xi, label in zip(
     dt = np.einsum("ij,kjl->kil", D_theta_mat, sqrtg_3d * xi_t_3d)
     dz = np.einsum("ij,klj->kli", D_zeta_mat, sqrtg_3d * xi_z_3d)
 
-    print(f"dr: {np.max(np.abs(dr)):.4e}, dt: {np.max(np.abs(dt)):.4e}, dz: {np.max(np.abs(dz)):.4e}")
+    print(
+        f"dr: {np.max(np.abs(dr)):.4e}, dt: {np.max(np.abs(dt)):.4e}, dz: {np.max(np.abs(dz)):.4e}"
+    )
     div_xi = (dr + dt + dz) / sqrtg_3d
 
     print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
@@ -295,9 +305,11 @@ plt.close(fig)
 
 # get phi matrix
 n_surf = n_theta * n_zeta
-rtz_nodes = grid.nodes # grid nodes are in (rho, theta, zeta)
-surface_nodes_agni = np.array(rtz_nodes[-n_surf:]) # last n_surf nodes
-surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
+rtz_nodes = grid.nodes  # grid nodes are in (rho, theta, zeta)
+surface_nodes_agni = np.array(rtz_nodes[-n_surf:])  # last n_surf nodes
+surf_nodes = (
+    surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1, 0, 2).reshape(n_surf, 3)
+)
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 pest_grid_surf = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
 
@@ -307,18 +319,18 @@ if os.path.exists(phi_path):
     phi_matrix = np.load(phi_path)
 else:
     data_phi = eq.compute(
-                ["phi_matrix_pest"],
-                rtz_surface_grid,
-                pest_grid=pest_grid_surf,
-                problem="exterior Neumann",
-                chunk_size=1,
-                #transforms={"Phi": phi_transform},
-            )
+        ["phi_matrix_pest"],
+        rtz_surface_grid,
+        pest_grid=pest_grid_surf,
+        problem="exterior Neumann",
+        chunk_size=1,
+        # transforms={"Phi": phi_transform},
+    )
     phi_matrix = np.array(data_phi["phi_matrix_pest"])
 
     # Reshape to align with surface nodes for AGNI grid
     phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
-    phi_matrix = phi_matrix.transpose(1,0,3,2)
+    phi_matrix = phi_matrix.transpose(1, 0, 3, 2)
     phi_matrix = phi_matrix.reshape(n_surf, n_surf)
 
     np.save(phi_path, phi_matrix)
@@ -336,6 +348,7 @@ print("minimum eigenvalue:", data["energy"])
 
 # ─── Term-by-term energy contributions ────────────────────────────────────────
 from desc.compute._stability import energy_terms
+
 print("\nTerm-by-term energy contributions:")
 for term_name in energy_terms:
     data_term = eq.compute(
@@ -350,7 +363,7 @@ for term_name in energy_terms:
     )
     print(f"  {term_name}: {data_term['energy']}")
 
-W_0 = 2* np.pi**2 * R_0 * B_0 **2/(mu_0 * a**2)
-delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n/iota_a - 1)
+W_0 = (2 * np.pi**2 * R_0 * B_0**2) / (mu_0 * a**2)
+delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n / iota_a - 1)
 delta_W_analytic = delta_W_hat_analytic * W_0 * eps**2
 print("analytic expectation:", delta_W_analytic)

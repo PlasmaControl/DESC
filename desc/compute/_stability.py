@@ -2629,7 +2629,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     + "using the most compact representation of diffmatrices",
     dim=1,
     params=["Psi"],
-    transforms={"grid": [], "diffmat": [], "phi_matrix": []},
+    transforms={"grid": [], "diffmat": [], "phi_matrix": [], "xi": []},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -3345,9 +3345,12 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
         v_full_ = jnp.concatenate([vr_, vv_, vz_])
         return v_full_[keep]
-    if kwargs.get("xi", None) is not None:
-        xi = kwargs["xi"]
-    w, v = jnp.linalg.eigh(A)
+    if transforms.get("xi", None) is not None:
+        xi = transforms["xi"]
+        v = _xi_to_v(xi)
+        w = dot(v, A @ v) / dot(v, v)
+    else:
+        w, v = jnp.linalg.eigh(A)
     # get least stable mode
     min_idx = jnp.argmin(w)
     w = w[min_idx]

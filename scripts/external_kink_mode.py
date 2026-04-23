@@ -145,6 +145,7 @@ data = eq.compute(
         "R",
         "psi_r",
         "Psi",
+        "a",
     ],
     grid=grid,  # pest_grid,
 )

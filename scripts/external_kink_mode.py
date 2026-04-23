@@ -146,13 +146,13 @@ R_0 = data["R0"]
 delta = 1e-2  # small shift to avoid singularity at rational surface
 xi_0 = 1
 rho, theta, zeta = pest_grid.nodes.T
-xi = xi_0 * np.cos(theta + n * zeta)
+xi = xi_0 * np.cos(theta - n * zeta)
 xi_normal = xi.copy()  # save scalar normal component before xi is overwritten
 xi_eta = (
     -xi_0
     * b_z
     * ((1 - iota * n * (eps**2) * (rho**2)) / (1 + (n**2) * (eps**2) * (rho**2)))
-    * np.sin(theta + n * zeta)
+    * np.sin(theta - n * zeta)
 )
 
 xi_parallel = (

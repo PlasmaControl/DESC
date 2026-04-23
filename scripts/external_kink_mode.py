@@ -89,17 +89,17 @@ if os.path.exists(save_path + save_name):
 else:
     print("solving equilibrium")
     surface = FourierRZToroidalSurface.from_shape_parameters(
-            major_radius=R,
-            aspect_ratio=aspect_ratio,
-            elongation=1,
-            triangularity=0,
-            squareness=0,
-            eccentricity=0,
-            torsion=0,
-            twist=0,
-            NFP=NFP,
-            sym=True,
-        )
+        major_radius=R,
+        aspect_ratio=aspect_ratio,
+        elongation=1,
+        triangularity=0,
+        squareness=0,
+        eccentricity=0,
+        torsion=0,
+        twist=0,
+        NFP=NFP,
+        sym=True,
+    )
     surface = SourceFreeField(surface, M, N)
     eq = Equilibrium(
         L=12,
@@ -125,23 +125,35 @@ print("making input grid and diffmats")
 diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
 pest_grid = Grid(reshaped_nodes, NFP=NFP)
-#pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+# pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
 
 # get data for equilibrium quantites
 data = eq.compute(
-    ["b", "n_rho", "n_theta", "n_zeta", "iota", "e^vartheta", "grad(phi)", "e^rho", "R0", "<|B|>_vol", "iota",
-     "sqrt(g)_PEST"],
-    grid=grid,#pest_grid,
+    [
+        "b",
+        "n_rho",
+        "n_theta",
+        "n_zeta",
+        "iota",
+        "e^vartheta",
+        "grad(phi)",
+        "e^rho",
+        "R0",
+        "<|B|>_vol",
+        "iota",
+        "sqrt(g)_PEST",
+    ],
+    grid=grid,  # pest_grid,
 )
 
 # evaluate quantities
-rho, theta, zeta = reshaped_nodes.T#pest_grid.nodes.T
+rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T
 r = rho * a
 eps = 1 / aspect_ratio
 b_theta = dot(data["b"], data["n_theta"])
-print(b_theta/eps)
+print(b_theta / eps)
 b_z = dot(data["b"], data["n_zeta"])
-print(b_z) # should be ~ 1 + O(eps^2)
+print(b_z)  # should be ~ 1 + O(eps^2)
 iota = data["iota"]
 B_0 = data["<|B|>_vol"]
 R_0 = data["R0"]
@@ -150,7 +162,7 @@ R_0 = data["R0"]
 delta = 1e-2  # small shift to avoid singularity at rational surface
 xi_0 = 1
 xi_normal = xi_0 * np.cos(theta - n * zeta)
-#k0_sq = 
+# k0_sq =
 xi_eta = (
     -xi_0
     * b_z
@@ -164,9 +176,12 @@ xi_eta = (
     * (1 + n * iota * eps**2 * rho**2)
     * xi_eta
 )"""
-F = (-n/R_0 * b_z + b_theta/r) # F/B
-G = (n/R_0 * b_theta + b_z/r) # G/B
-xi_parallel = - (F/(F**2 + delta**2)) * G * xi_eta
+F = -n / R_0 * b_z + b_theta / r  # F/B
+G = n / R_0 * b_theta + b_z / r  # G/B
+# xi_parallel = - (F/(F**2 + delta**2)) * G * xi_eta
+xi_parallel = -(F / (F**2 + delta**2)) * (
+    xi_0 * np.sin(theta - n * zeta) / r + G * xi_eta
+)
 
 
 # reconstruct 3d eigenfunction arrays
@@ -176,7 +191,17 @@ r_hat = data["n_rho"]
 eta_hat = cross(b_hat, r_hat)
 div_fig, div_ax = plt.subplots(figsize=(7, 4))
 
-for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_parallel[:, None] * b_hat], ["normal", "eta", "parallel"]):
+for xi, label in zip(
+    [
+        xi_normal[:, None] * r_hat,
+        xi_eta[:, None] * eta_hat,
+        xi_parallel[:, None] * b_hat,
+        xi_normal[:, None] * r_hat
+        + xi_eta[:, None] * eta_hat
+        + xi_parallel[:, None] * b_hat,
+    ],
+    ["normal", "eta", "parallel", "total"],
+):
 
     # convert to pest coordinates
     xi_r = dot(xi, data["e^rho"])  # xi^rho
@@ -193,9 +218,9 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     xi_t_3d      = pest_grid.meshgrid_reshape(xi_theta,    order="rtz")
     xi_z_3d      = pest_grid.meshgrid_reshape(xi_z,        order="rtz")"""
 
-    #rho_3d   = pest_grid.meshgrid_reshape(rho,   order="rtz")
-    #theta_3d = pest_grid.meshgrid_reshape(theta, order="rtz")
-    #zeta_3d  = pest_grid.meshgrid_reshape(zeta,  order="rtz")
+    # rho_3d   = pest_grid.meshgrid_reshape(rho,   order="rtz")
+    # theta_3d = pest_grid.meshgrid_reshape(theta, order="rtz")
+    # zeta_3d  = pest_grid.meshgrid_reshape(zeta,  order="rtz")
     rho_3d = rho.reshape(n_rho, n_theta, n_zeta)
     theta_3d = theta.reshape(n_rho, n_theta, n_zeta)
     zeta_3d = zeta.reshape(n_rho, n_theta, n_zeta)
@@ -206,25 +231,31 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     xi_t_3d = xi_theta.reshape(n_rho, n_theta, n_zeta)
     xi_z_3d = xi_z.reshape(n_rho, n_theta, n_zeta)
 
-    rho_1d   = np.array(rho_3d[:, 0, 0])
+    rho_1d = np.array(rho_3d[:, 0, 0])
     theta_1d = np.array(theta_3d[0, :, 0])
-    zeta_1d  = np.array(zeta_3d[0, 0, :])
+    zeta_1d = np.array(zeta_3d[0, 0, :])
 
     comp_list = [xi_normal_3d, xi_eta_3d, xi_par_3d, xi_r_3d, xi_t_3d, xi_z_3d]
     comp_labels = [
-        r"$\xi_{\rm normal}$", r"$\xi_\eta$", r"$\xi_\parallel$",
-        r"$\xi^r$", r"$\xi^\theta$", r"$\xi^\zeta$",
+        r"$\xi_{\rm normal}$",
+        r"$\xi_\eta$",
+        r"$\xi_\parallel$",
+        r"$\xi^r$",
+        r"$\xi^\theta$",
+        r"$\xi^\zeta$",
     ]
 
     for xvals, xlabel, fname, slice_fn in [
-        (rho_1d,   r"$\rho$",    "xi_vs_rho.png",   lambda c: c[:, 0, 0]),
-        (theta_1d, r"$\theta$",  "xi_vs_theta.png", lambda c: c[-1, :, 0]),
-        (zeta_1d,  r"$\zeta$",   "xi_vs_zeta.png",  lambda c: c[-1, 0, :]),
+        (rho_1d, r"$\rho$", "xi_vs_rho.png", lambda c: c[:, 0, 0]),
+        (theta_1d, r"$\theta$", "xi_vs_theta.png", lambda c: c[-1, :, 0]),
+        (zeta_1d, r"$\zeta$", "xi_vs_zeta.png", lambda c: c[-1, 0, :]),
     ]:
         fig, axes = plt.subplots(2, 3, figsize=(15, 8))
         for ax, comp, lbl in zip(axes.flat, comp_list, comp_labels):
             ax.plot(xvals, slice_fn(comp))
-            ax.set_xlabel(xlabel); ax.set_ylabel(lbl); ax.set_title(lbl)
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(lbl)
+            ax.set_title(lbl)
             ax.axhline(0, color="gray", lw=0.7, ls="--")
         fig.suptitle(f"Eigenfunction vs {xlabel}")
         plt.tight_layout()
@@ -234,27 +265,34 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     print("Saved eigenfunction plots to", save_path)
 
     # ─── Divergence check: ∇·ξ = (1/√g)[∂ρ(√g ξ^ρ) + ∂ϑ(√g ξ^ϑ) + ∂ζ(√g ξ^ζ)] ──
-    sqrtg_3d    = data["sqrt(g)_PEST"].reshape(n_rho, n_theta, n_zeta)#pest_grid.meshgrid_reshape(data["sqrt(g)_PEST"], order="rtz")
-    D_rho_mat   = np.array(diffmat.D_rho)
+    sqrtg_3d = data["sqrt(g)_PEST"].reshape(
+        n_rho, n_theta, n_zeta
+    )  # pest_grid.meshgrid_reshape(data["sqrt(g)_PEST"], order="rtz")
+    D_rho_mat = np.array(diffmat.D_rho)
     D_theta_mat = np.array(diffmat.D_theta)
-    D_zeta_mat  = np.array(diffmat.D_zeta)
+    D_zeta_mat = np.array(diffmat.D_zeta)
 
-    dr = np.einsum("ij,jkl->ikl", D_rho_mat,   sqrtg_3d * xi_r_3d)
+    dr = np.einsum("ij,jkl->ikl", D_rho_mat, sqrtg_3d * xi_r_3d)
     dt = np.einsum("ij,kjl->kil", D_theta_mat, sqrtg_3d * xi_t_3d)
-    dz = np.einsum("ij,klj->kli", D_zeta_mat,  sqrtg_3d * xi_z_3d)
+    dz = np.einsum("ij,klj->kli", D_zeta_mat, sqrtg_3d * xi_z_3d)
+
+    print(f"dr: {np.max(np.abs(dr)):.4e}, dt: {np.max(np.abs(dt)):.4e}, dz: {np.max(np.abs(dz)):.4e}")
     div_xi = (dr + dt + dz) / sqrtg_3d
 
     print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
     print(f"Divergence check: RMS |∇·ξ| = {np.sqrt(np.mean(div_xi**2)):.4e}")
 
     div_ax.plot(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
+print("total divergence:")
+
 div_ax.legend()
-div_ax.set_xlabel(r"$\rho$"); div_ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
+div_ax.set_xlabel(r"$\rho$")
+div_ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
 div_ax.set_title("Divergence of analytic eigenfunction")
 plt.tight_layout()
 fig.savefig(save_path + "divergence_check.png", dpi=150)
 plt.close(fig)
-"""
+
 # get phi matrix
 n_surf = n_theta * n_zeta
 rtz_nodes = grid.nodes # grid nodes are in (rho, theta, zeta)
@@ -310,9 +348,9 @@ for term_name in energy_terms:
         phi_matrix=phi_matrix,
         term=term_name,
     )
-    print(f"  {term_name}: {data_term['energy']:.6e}")
+    print(f"  {term_name}: {data_term['energy']}")
 
 W_0 = 2* np.pi**2 * R_0 * B_0 **2/(mu_0 * a**2)
 delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n/iota_a - 1)
 delta_W_analytic = delta_W_hat_analytic * W_0 * eps**2
-print("analytic expectation:", delta_W_analytic)"""
+print("analytic expectation:", delta_W_analytic)

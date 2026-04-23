@@ -33,7 +33,7 @@ from stability_helpers import *
 from_scratch = True
 if from_scratch:
     a = 1  # Minor radius
-    aspect_ratio = 4  # Aspect ratio of the tokamak
+    aspect_ratio = 10  # Aspect ratio of the tokamak
     R = aspect_ratio * a  # Major radius
     NFP = 1
     axisym = False  # Whether to enforce axisymmetry in the eigenvalue solve
@@ -122,12 +122,12 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
-    n_rhos = np.array([30])#np.array([20, 36])
-    n_thetas = np.array([30])#np.array([20, 36])
+    n_rhos = np.array([24])#np.array([20, 36])
+    n_thetas = np.array([24])#np.array([20, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
-        n_zetas = np.array([14]) #np.array([12, 14])
+        n_zetas = np.array([18]) #np.array([12, 14])
 
     v_guess = None
     X = None

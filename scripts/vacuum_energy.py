@@ -18,8 +18,8 @@ import os
 from scipy.constants import mu_0
 
 # ── Parameters ────────────────────────────────────────────────────────────────
-M      = 36
-N      = 72
+M      = 28
+N      = 28
 n_theta = 2 * M
 n_zeta  = 2 * N
 n_surf  = n_theta * n_zeta
@@ -37,7 +37,7 @@ I_coil = 1e6  # fixed coil current (A)
 delta_h_fracs = np.linspace(0.3, 1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
-eq = load(f"equilibrium_{eq_tag}__M_{M}_N_{N}_pest_True.h5")
+eq = load(save_path + f"equilibrium_{eq_tag}__M_{M}_N_{N}_pest_True.h5")
 eq.change_resolution(NFP=1)
 surface = SourceFreeField(eq.surface, M, N)
 eq.surface = surface

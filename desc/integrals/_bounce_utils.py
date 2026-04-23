@@ -743,7 +743,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit. ``theta.cheb`` broadcasts with
+        θ over one field period. ``theta.cheb`` broadcasts with
         shape (num ρ, num α, num transit * NFP, max(1,7Y//8)).
 
     Notes
@@ -815,7 +815,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
-        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        θ over one field period. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
@@ -838,7 +838,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         Set of 1D Chebyshev spectral coefficients of ``f`` on field lines.
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
-        ``f`` over one toroidal transit. ``f.cheb`` broadcasts with
+        ``f`` over one field period. ``f.cheb`` broadcasts with
         shape (num ρ, num α, num transit * NFP, Y).
 
     """
@@ -885,7 +885,7 @@ def fast_cubic_spline(
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
-        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        θ over one field period. ``theta.cheb`` should broadcast with
         shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).

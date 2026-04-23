@@ -131,7 +131,7 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
     data = eq.compute(Bounce2D.required_names + ["min_tz |B|", "max_tz |B|"], grid=grid)
     angle = Bounce2D.angle(eq, X, Y, rho=rho)
     bounce = Bounce2D(grid, data, angle, Y_B, num_transit=2)
-    pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
+    pitch_inv, _ = Bounce2D.pitch_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
         num_pitch,
@@ -621,7 +621,7 @@ def plot_bavg_drift(
 
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
+    pitch, _ = Bounce2D.pitch_quad(minB, maxB, num_pitch)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)

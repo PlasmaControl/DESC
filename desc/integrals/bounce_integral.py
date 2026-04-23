@@ -80,7 +80,7 @@ class Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
+    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -89,13 +89,18 @@ class Bounce(eqx.Module, ABC):
             Minimum B value.
         max_B : jnp.ndarray
             Maximum B value.
-        num_pitch : int
-            Number of values for quadrature using Simpson’s 1/3 in the
-            interior completed by an open midpoint scheme near the boundary.
+        num_pitch : int or tuple[jnp.ndarray]
+            If given an integer, this is interpreted as the resolution for
+            a quadrature using Simpson’s 1/3 in the interior completed by an
+            open midpoint scheme near the boundary.
+            If given a tuple, then this is interpreted as the quadrature
+            points xₖ and weights wₖ for the approximation of the integral
+            ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). Then this method simply rescales
+            the quadrature for integration between ``min_B`` and ``max_B``.
 
         Returns
         -------
-        x, w : tuple[jnp.ndarray]
+        pitch_inv, weight : tuple[jnp.ndarray]
             Shape (min_B.shape, num pitch).
             1/λ values and weights.
 
@@ -118,6 +123,9 @@ class Bounce(eqx.Module, ABC):
         x = bijection_from_disc(x, min_B, max_B)
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
+
+    get_pitch_inv_quad = pitch_quad
+    """Alias to ``pitch_quad``."""
 
     @abstractmethod
     def points(self, pitch_inv, num_well=None):
@@ -143,7 +151,10 @@ class Bounce(eqx.Module, ABC):
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
-        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j."""
+        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
+
+        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+        """
 
     @abstractmethod
     def plot(self, l, m, pitch_inv=None, **kwargs):
@@ -235,7 +246,7 @@ class Bounce2D(Bounce):
         configuration, more transits will approximate surface averages on an
         irrational magnetic surface better, with diminishing returns.
     quad : tuple[jnp.ndarray]
-        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+        Quadrature points xₖ and weights wₖ for the approximation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
     automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
@@ -908,6 +919,8 @@ class Bounce2D(Bounce):
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
+        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+
         Parameters
         ----------
         f : jnp.ndarray
@@ -979,7 +992,7 @@ class Bounce2D(Bounce):
         ----------
         quad : tuple[jnp.ndarray]
             Quadrature points xₖ and weights wₖ for the
-            approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+            approximation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
             Default is Gauss-Legendre quadrature on each field period along
             the field line.
 
@@ -1283,7 +1296,7 @@ class Bounce1D(Bounce):
         Data evaluated on ``grid``.
         Must include names in ``Bounce1D.required_names``.
     quad : tuple[jnp.ndarray]
-        Quadrature points xₖ and weights wₖ for the approximate evaluation of an
+        Quadrature points xₖ and weights wₖ for the approximation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
     automorphism : tuple[Callable] or None
         The first callable should be an automorphism of the real interval [-1, 1].
@@ -1639,6 +1652,8 @@ class Bounce1D(Bounce):
     def interp_to_argmin(self, f, points, *, method="cubic"):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
+        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+
         Parameters
         ----------
         f : jnp.ndarray
@@ -1799,7 +1814,7 @@ class Options(NamedTuple):
         "quad": """tuple[jnp.ndarray] :
             Used to compute bounce integrals.
             Quadrature points xₖ and weights wₖ for the
-            approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
+            approximation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
             """,
         "_vander": """dict[str,jnp.ndarray] :
             Precomputed transform matrix "dct spline".
@@ -1827,8 +1842,8 @@ class Options(NamedTuple):
     num_transit: int
     num_well: int
     pitch_batch_size: int
+    pitch_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
-    speed_quad: tuple[jnp.ndarray]
     spline: bool
     surf_batch_size: int
     vander: tuple[jnp.ndarray]
@@ -1869,7 +1884,7 @@ class Options(NamedTuple):
         else:
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
-        speed_quad = jax.lax.stop_gradient(simpson2(num_pitch))
+        pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         spline = kwargs.get("spline", True)
         Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
@@ -1887,8 +1902,8 @@ class Options(NamedTuple):
             num_transit=num_transit,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
+            pitch_quad=pitch_quad,
             quad=quad,
-            speed_quad=speed_quad,
             spline=spline,
             surf_batch_size=surf_batch_size,
             vander=kwargs.get("_vander", None),

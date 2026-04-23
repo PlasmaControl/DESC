@@ -83,7 +83,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def eps_32(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
         bounce = Bounce1D(grid, data, quad)
@@ -212,7 +212,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     )
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
         bounce = Bounce1D(grid, data, quad)
@@ -303,7 +303,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], pitch_quad
         )
         bounce = Bounce1D(grid, data, quad)

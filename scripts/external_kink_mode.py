@@ -174,7 +174,7 @@ xi_parallel = - (F/(F**2 + delta**2)) * G * xi_eta
 b_hat = data["b"]
 r_hat = data["n_rho"]
 eta_hat = cross(b_hat, r_hat)
-fig, ax = plt.subplots(figsize=(7, 4))
+div_fig, div_ax = plt.subplots(figsize=(7, 4))
 
 for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_parallel[:, None] * b_hat], ["normal", "eta", "parallel"]):
 
@@ -247,10 +247,10 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
     print(f"Divergence check: RMS |∇·ξ| = {np.sqrt(np.mean(div_xi**2)):.4e}")
 
-    ax.plot(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
-plt.legend()
-ax.set_xlabel(r"$\rho$"); ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
-ax.set_title("Divergence of analytic eigenfunction")
+    div_ax.plot(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
+div_ax.legend()
+div_ax.set_xlabel(r"$\rho$"); div_ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
+div_ax.set_title("Divergence of analytic eigenfunction")
 plt.tight_layout()
 fig.savefig(save_path + "divergence_check.png", dpi=150)
 plt.close(fig)

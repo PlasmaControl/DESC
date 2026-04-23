@@ -143,9 +143,15 @@ data = eq.compute(
         "iota",
         "sqrt(g)_PEST",
         "R",
+        "psi_r",
+        "Psi",
     ],
     grid=grid,  # pest_grid,
 )
+
+a_N = data["a"]
+B_N = data["Psi"] / (jnp.pi * a_N**2)
+psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
 
 # evaluate quantities
 rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T
@@ -215,7 +221,7 @@ for xi, label in zip(
     xi_r = dot(xi, data["e^rho"])  # xi^rho
     xi_theta = dot(xi, data["e^vartheta"])  # xi^theta
     xi_z = dot(xi, data["grad(phi)"])  # xi^z
-    xi = np.concatenate((xi_r, xi_theta, xi_z), axis=0)
+    xi = np.concatenate((xi_r/(psi_r + 1E-5), xi_theta, xi_z), axis=0)
 
     # ─── Debugging: eigenfunction plots ──────────────────────────────────────────
     # Reshape all 1D (n_total,) arrays to (n_rho, n_theta, n_zeta)

@@ -148,9 +148,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-2, grid, **kwargs)
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
-        )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def fun(pitch_inv):
@@ -177,6 +174,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             )
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
+        pitch_inv, weight = Bounce2D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,
@@ -235,10 +235,10 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = Options.guess(-2, grid, loop=True, **kwargs)
 
     def gamma_c0(data):
-        pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
+        pitch_inv, _ = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
@@ -250,7 +250,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
             nufft_eps=opts.nufft_eps,
-            low_ram=True,
+            loop=opts.loop,
         )
         return (2 / jnp.pi) * jnp.arctan(
             safediv(
@@ -318,9 +318,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-1, grid, **kwargs)
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
-        )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def fun(pitch_inv):
@@ -336,6 +333,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
             return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
+        pitch_inv, weight = Bounce2D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
             axis=-1,

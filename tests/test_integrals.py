@@ -1099,7 +1099,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         bounce = Bounce1D(grid, data, check=True)
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1297,9 +1297,7 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
-            0
-        ][:-1]
+        pitch_inv = Bounce1D.pitch_quad(np.min(B), np.max(B), 100, simp=False)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1521,7 +1519,7 @@ class TestBounce2D:
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1597,7 +1595,7 @@ class TestBounce2D:
             points=points,
             nufft_eps=1e-7,
             check=True,
-            low_ram=True,
+            loop=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)

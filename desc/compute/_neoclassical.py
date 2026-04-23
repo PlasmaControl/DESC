@@ -95,13 +95,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
     grid = transforms["grid"]
     opts = Options.guess(1, grid, **kwargs)
-    # TODO: avoid closing over grid by storing a named tuple grid
-    #       with attributes (NFP, num theta, num zeta) in opts?
 
     def eps_32(data):
-        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
-        )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def fun(pitch_inv):
@@ -117,6 +112,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
         # B₀ has units of λ⁻¹.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
+        pitch_inv, weight = Bounce2D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**3,
             axis=-1,

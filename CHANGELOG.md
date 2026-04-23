@@ -13,6 +13,7 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 
 Performance Improvements
 

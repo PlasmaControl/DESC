@@ -49,7 +49,7 @@ os.makedirs(plot_path, exist_ok=True)
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.linspace(0.8, 1.25, 10)
+iota_on_axis_values = 0.9 * np.ones(1) # #np.linspace(0.8, 1.25, 10)
 
 results_lambda_min = np.zeros_like(iota_on_axis_values)
 stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
@@ -122,12 +122,12 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
-    n_rhos = np.array([18])#np.array([20, 36])
-    n_thetas = np.array([18])#np.array([20, 36])
+    n_rhos = np.array([30])#np.array([20, 36])
+    n_thetas = np.array([30])#np.array([20, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:
-        n_zetas = np.array([12]) #np.array([12, 14])
+        n_zetas = np.array([14]) #np.array([12, 14])
 
     v_guess = None
     X = None

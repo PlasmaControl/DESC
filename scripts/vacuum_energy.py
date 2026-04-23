@@ -23,20 +23,21 @@ N      = 72
 n_theta = 2 * M
 n_zeta  = 2 * N
 n_surf  = n_theta * n_zeta
-eq_tag  = "NCSX"
+eq_tag  = "low_aspect_ratio_highly_non_axisym_p_0.125_0.0_0.0_0.0_-0.125_iota_0.9_0.0_0.1_0.0_0.1"
+eq_name = "Low aspect ratio, highly non-axisymmetric"
 NFP     = 1
 
 save_path = "results/phi_matrix/"
-phi_save_name = f"{eq_tag}_M_{M}_N_{N}_pseudospectral_phi_matrix.npy"
+phi_save_name = f"{eq_tag}_M_{M}_N_{N}_phi_matrix.npy"
 os.makedirs(save_path, exist_ok=True)
 
 I_coil = 1e6  # fixed coil current (A)
 
 # vertical coil offset scan: Delta_h / a from 0.01 to 0.1
-delta_h_fracs = np.linspace(0.01, 0.10, 20)
+delta_h_fracs = np.linspace(0.3, 1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
-eq = get(eq_tag)
+eq = load(f"equilibrium_{eq_tag}__M_{M}_N_{N}_pest_True.h5")
 eq.change_resolution(NFP=1)
 surface = SourceFreeField(eq.surface, M, N)
 eq.surface = surface
@@ -163,7 +164,7 @@ ax.plot(delta_h_fracs, W_V_true_vals, marker="s", linestyle="--",
         label=r"$W_V^{\rm true}$ (direct $\int B^2\,dV$)")
 ax.set_xlabel(r"$\Delta_h / a$", fontsize=13)
 ax.set_ylabel("Vacuum energy (J)",  fontsize=13)
-ax.set_title(f"Vacuum energy vs coil offset — {eq_tag} ($I = {I_coil:.0e}$ A)", fontsize=13)
+ax.set_title(f"Vacuum energy vs coil offset — {eq_name} ($I = {I_coil:.0e}$ A)", fontsize=13)
 ax.legend(fontsize=12)
 fig.tight_layout()
 fig.savefig(save_path + "W_V_vs_delta_h.png", dpi=150)

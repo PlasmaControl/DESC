@@ -135,9 +135,12 @@ data = eq.compute(
 
 # evaluate quantities
 rho, theta, zeta = pest_grid.nodes.T
+r = rho * a
 eps = 1 / aspect_ratio
 b_theta = dot(data["b"], data["n_theta"])
+print(b_theta/eps)
 b_z = dot(data["b"], data["n_zeta"])
+print(b_z) # should be ~ 1 + O(eps^2)
 iota = data["iota"]
 B_0 = data["<|B|>_vol"]
 R_0 = data["R0"]
@@ -148,6 +151,7 @@ xi_0 = 1
 rho, theta, zeta = pest_grid.nodes.T
 xi = xi_0 * np.cos(theta - n * zeta)
 xi_normal = xi.copy()  # save scalar normal component before xi is overwritten
+#k0_sq = 
 xi_eta = (
     -xi_0
     * b_z
@@ -155,13 +159,15 @@ xi_eta = (
     * np.sin(theta - n * zeta)
 )
 
-xi_parallel = (
+"""xi_parallel = (
     (1 / (rho * eps))
     * ((n - iota) / ((n - iota)**2 + delta**2))
     * (1 + n * iota * eps**2 * rho**2)
     * xi_eta
-)
-
+)"""
+F = (-n/R_0 * b_z + b_theta/r) # F/B
+G = (n/R_0 * b_theta + b_z/r) # G/B
+xi_parallel = - (F/(F**2 + delta**2)) * G * xi_eta
 
 # reconstruct 3d eigenfunction arrays
 # \hat{\eta} = \hat{b} \times \hat{r}

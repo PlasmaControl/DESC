@@ -12,8 +12,7 @@ from ..integrals.quad_utils import chebgauss2
 from .objective_funs import _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
 
-_bounce_overwrite = {
-    "deriv_mode": """
+_bounce_overwrite = {"deriv_mode": """
     deriv_mode : {"auto", "fwd", "rev"}
         Specify how to compute Jacobian matrix, either forward mode or reverse mode AD.
         ``auto`` selects forward or reverse mode based on the size of the input and
@@ -24,8 +23,7 @@ _bounce_overwrite = {
         In ``rev`` mode, reducing the value of the parameter ``pitch_batch_size`` does
         not reduce memory consumption, so it is recommended to retain the default unless
         you have explicitly requested to use ``fwd`` mode.
-        """
-}
+        """}
 
 
 class EffectiveRipple(_Objective):

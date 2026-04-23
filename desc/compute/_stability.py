@@ -2083,6 +2083,7 @@ energy_terms = [
         "J^2",
         "plasma compressibility",
         "instability drive",
+        "vacuum"
     ]
 def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     """
@@ -2735,7 +2736,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     _J2     = 1.0 if term in (None, "J^2") else 0.0
     _pcomp  = 1.0 if term in (None, "plasma compressibility") else 0.0
     _idrive = 1.0 if term in (None, "instability drive") else 0.0
-
+    _vacuum = 1.0 if term in (None, "vacuum") else 0.0
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
 
@@ -3130,7 +3131,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         print(W[b_idx, :].shape)
         print(D_zeta[b_idx, b_idx].shape)
         A = A.at[b_idx, b_idx].add(
-            _cT(
+            _vacuum * _cT(
                 W[b_idx, :]
                 * psi_r_s**3 # this is just for consistency; psi' = 1 here
                 * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])

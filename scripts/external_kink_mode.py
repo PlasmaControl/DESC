@@ -151,11 +151,11 @@ data = eq.compute(
 rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T
 r = rho * a
 eps = 1 / aspect_ratio
-n_theta = data["e^vartheta"] / safenorm(data["e^vartheta"], axis=-1)
-n_zeta = data["grad(phi)"] / safenorm(data["grad(phi)"], axis=-1)
-b_theta = dot(data["b"], n_theta)
+normal_theta = data["e^vartheta"] / safenorm(data["e^vartheta"], axis=-1)[:, None]
+normal_zeta = data["grad(phi)"] / safenorm(data["grad(phi)"], axis=-1)[:, None]
+b_theta = dot(data["b"], normal_theta)
 print(b_theta / eps)
-b_z = dot(data["b"], n_zeta)
+b_z = dot(data["b"], normal_zeta)
 print(b_z)  # should be ~ 1 + O(eps^2)
 iota = data["iota"]
 B_0 = data["<|B|>_vol"]

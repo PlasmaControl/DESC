@@ -2669,6 +2669,8 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     + "iterative eigenvalue solver",
     debug_compare_reconstruction="bool: validate old/new Au and xi reconstructions",
     xi="debugging: analytic eigenfunction to compare against for debugging purposes",
+    term="str: if set, only include this term in the matrix (one of energy_terms). "
+    "Valid values: 'Q^2', 'mixed Q-J', 'J^2', 'plasma compressibility', 'instability drive'.",
 )
 def _AGNI3(params, transforms, profiles, data, **kwargs):
     """
@@ -2727,6 +2729,12 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     n_mode_axisym = kwargs.get("n_mode_axisym", 1)
     incompressible = kwargs.get("incompressible", False)
     debug_compare_reconstruction = kwargs.get("debug_compare_reconstruction", False)
+    term = kwargs.get("term", None)
+    _q2     = 1.0 if term in (None, "Q^2") else 0.0
+    _mQJ    = 1.0 if term in (None, "mixed Q-J") else 0.0
+    _J2     = 1.0 if term in (None, "J^2") else 0.0
+    _pcomp  = 1.0 if term in (None, "plasma compressibility") else 0.0
+    _idrive = 1.0 if term in (None, "instability drive") else 0.0
 
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
@@ -2829,10 +2837,12 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ####################
 
     A = A.at[rho_idx, rho_idx].add(
-        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
-        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
-        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
-        + _cT((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta) @ D_theta
+        _q2 * (
+            D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+            + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+            + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+            + _cT((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta) @ D_theta
+        )
     )
 
     ####################
@@ -2840,7 +2850,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ####################
     # enforcing symmetry exactly
     A = A.at[ups_idx, ups_idx].add(
-        0.5
+        _q2 * 0.5
         * (
             D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
             + _cT((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta) @ D_zeta
@@ -2848,38 +2858,42 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        +_cT(D_rho * iota_psi_r2.T)
-        @ ((psi_r_over_sqrtg * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
+        _q2 * (
+            +_cT(D_rho * iota_psi_r2.T)
+            @ ((psi_r_over_sqrtg * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
+        )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1 * _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
+        _q2 * (-1 * _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta))
     )
 
     ####################
     ####----Q²_ζζ---####
     ####################
     A = A.at[ups_idx, ups_idx].add(
-        0.5
+        _q2 * 0.5
         * (
             _cT(D_theta) @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
             + _cT((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta) @ D_theta
         )
     )
     A = A.at[rho_idx, rho_idx].add(
-        +_cT(D_rho * psi_r2.T)
-        @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * psi_r2.T))
+        _q2 * (
+            +_cT(D_rho * psi_r2.T)
+            @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * psi_r2.T))
+        )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        1 * _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
+        _q2 * (1 * _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_pp) * D_theta))
     )
 
     ####################
     ####----Q²_ρϑ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT(D_theta)
             @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
@@ -2890,7 +2904,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     ## transposed part of the mixed term along the ρ-ρ block diagonal
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
             @ D_theta
@@ -2900,15 +2914,17 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
-        + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        _q2 * (
+            _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+            + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        )
     )
 
     ######################
     ####-----Q²_ρζ-----###
     ######################
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT(D_theta)
             @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
@@ -2917,7 +2933,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
             @ D_theta
@@ -2926,7 +2942,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
             + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
@@ -2937,7 +2953,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ######-----Q²_ϑζ-----#####
     ##########################
     A = A.at[ups_idx, ups_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT(D_zeta) @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
             + _cT((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta) @ D_zeta
@@ -2945,7 +2961,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1
+        _q2 * -1
         * (
             _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
             - _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
@@ -2953,7 +2969,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        1
+        _q2 * 1
         * (
             _cT(D_rho * iota_psi_r2.T)
             @ ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
@@ -2961,7 +2977,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
     # ρ-ρ symmetrizing term
     A = A.at[rho_idx, rho_idx].add(
-        1
+        _q2 * 1
         * (
             _cT((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
             @ (D_rho * iota_psi_r2.T)
@@ -2972,7 +2988,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     # \xi^{\rho} (\mathbf{J} \times \nabla\rho)/|\nabla \rho|^2 \cdot \mathbf{Q}
     # Some algebra is performed to replace g_sup_rv and g_sup_rp
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _mQJ * -1
         * (
             (
                 W
@@ -2988,7 +3004,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     # ρ-ρ block transposed for symmetry
     A = A.at[rho_idx, rho_idx].add(
-        -1
+        _mQJ * -1
         * (
             _cT(
                 (
@@ -3005,12 +3021,14 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -(W * psi_r2 * sqrtg * j_sup_theta) * D_theta
-        + (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        _mQJ * (
+            -(W * psi_r2 * sqrtg * j_sup_theta) * D_theta
+            + (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        )
     )
 
     ## diagonal |J|² term
-    A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
+    A = A.at[rho_idx, rho_idx].add(_J2 * jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
 
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
@@ -3049,24 +3067,30 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     # purely stabilizing and doesn't change the marginal stability
     # To improve performance set exact to False
     A = A.at[rho_idx, rho_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+        _pcomp * (_cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T)))
     )
     A = A.at[ups_idx, ups_idx].add(
-        _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
+        _pcomp * (_cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta))
     )
     A = A.at[rho_idx, ups_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
+        _pcomp * (_cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta))
     )
 
     A = A.at[zeta_idx, zeta_idx].add(
-        _cT(C_theta + C_zeta * iotainv.T)
-        @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _pcomp * (
+            _cT(C_theta + C_zeta * iotainv.T)
+            @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        )
     )
     A = A.at[rho_idx, zeta_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _pcomp * (
+            _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        )
     )
     A = A.at[ups_idx, zeta_idx].add(
-        _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _pcomp * (
+            _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        )
     )
     # check if phi_matrix is provided
     phi_matrix = transforms.get("phi_matrix", None)
@@ -3127,7 +3151,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     #### Instability drive term
     #Au = jnp.zeros((3 * n_total, 3 * n_total))
     #Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
-    au_diag = (W * psi_r2 * sqrtg * F).flatten()
+    au_diag = _idrive * (W * psi_r2 * sqrtg * F).flatten()
 
     A = A.at[ups_idx, rho_idx].set(_cT(A[rho_idx, ups_idx]))
     A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))

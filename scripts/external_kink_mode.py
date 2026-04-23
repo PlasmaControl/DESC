@@ -124,8 +124,8 @@ print("making input grid and diffmats")
 # get grid in PEST coordinates and corresponding diffmats
 diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
-pest_grid = Grid(reshaped_nodes, NFP=NFP)
-#pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+#pest_grid = Grid(reshaped_nodes, NFP=NFP)
+pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
 
 # get data for equilibrium quantites
 data = eq.compute(
@@ -177,7 +177,7 @@ r_hat = data["n_rho"]
 eta_hat = cross(b_hat, r_hat)
 fig, ax = plt.subplots(figsize=(7, 4))
 
-for xi in [xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_parallel[:, None] * b_hat]:
+for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_parallel[:, None] * b_hat], ["normal", "eta", "parallel"]):
 
     # convert to pest coordinates
     xi_r = dot(xi, data["e^rho"])  # xi^rho
@@ -238,7 +238,7 @@ for xi in [xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_parallel[:,
     print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
     print(f"Divergence check: RMS |∇·ξ| = {np.sqrt(np.mean(div_xi**2)):.4e}")
 
-    ax.semilogy(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30)
+    ax.semilogy(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
 
 ax.set_xlabel(r"$\rho$"); ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
 ax.set_title("Divergence of analytic eigenfunction")

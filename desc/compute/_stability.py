@@ -2629,7 +2629,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     + "using the most compact representation of diffmatrices",
     dim=1,
     params=["Psi"],
-    transforms={"grid": [], "diffmat": []},
+    transforms={"grid": [], "diffmat": [], "phi_matrix": []},
     profiles=[],
     coordinates="rtz",
     data=[
@@ -2668,6 +2668,7 @@ def term_by_term_stability(x_flat, params, transforms, data, **kwargs):
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
     debug_compare_reconstruction="bool: validate old/new Au and xi reconstructions",
+    xi="debugging: analytic eigenfunction to compare against for debugging purposes",
 )
 def _AGNI3(params, transforms, profiles, data, **kwargs):
     """
@@ -3067,6 +3068,58 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     A = A.at[ups_idx, zeta_idx].add(
         _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
     )
+    # check if phi_matrix is provided
+    phi_matrix = transforms.get("phi_matrix", None)
+    if phi_matrix is not None:
+        phi_matrix = phi_matrix/a_N
+    
+    # number of nodes per surface
+    n_shell = n_theta_max * n_zeta_max
+    rho_start = n_shell
+
+    # if no phi_matrix, remove boundary nodes to impose dirichlet BC on xi^rho
+    if phi_matrix is None:
+        rho_end = n_total - n_shell
+    else:
+        rho_end = n_total
+
+    keep_1 = jnp.arange(rho_start, rho_end)
+    keep_2 = jnp.arange(n_total, 3 * n_total)
+    keep = jnp.concatenate([keep_1, keep_2])
+
+    # add vacuum energy contribution
+    if phi_matrix is not None:
+        print("success!")
+        b_idx = slice(n_total - n_shell, n_total)
+
+        # surface quantities
+        psi_r_s = 1 # psi_r[b_idx, :] = 1 on the boundary
+        print(psi_r_s)
+        sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
+        iota_s = iota[b_idx, :]
+
+        # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
+        print(phi_matrix.shape)
+        print(sqrtg_grad_rho.shape)
+        print(iota_s.shape)
+        print(D_theta[b_idx, b_idx].shape)
+        print(W[b_idx, :].shape)
+        print(D_zeta[b_idx, b_idx].shape)
+        A = A.at[b_idx, b_idx].add(
+            _cT(
+                W[b_idx, :]
+                * psi_r_s**3 # this is just for consistency; psi' = 1 here
+                * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
+            )
+            @ (
+                phi_matrix
+                @ (
+                    psi_r_s
+                    / sqrtg_grad_rho
+                    * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
+                )
+            )
+        )
 
 
     #### Instability drive term
@@ -3244,14 +3297,9 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     A = A[pinv][:, pinv]
 
+    
     # store indices needed to apply dirichlet BC to ξ^ρ
-    n_shell = n_theta_max * n_zeta_max
-    rho_start = n_shell
-    rho_end = n_total - n_shell
-    keep_1 = jnp.arange(rho_start, rho_end)
-    keep_2 = jnp.arange(n_total, 3 * n_total)
-    keep = jnp.concatenate([keep_1, keep_2])
-
+    
     A = A.at[jnp.diag_indices(A.shape[0])].add(1e-11)
 
     A = A[jnp.ix_(keep, keep)]
@@ -3277,6 +3325,28 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         print("using v0")
         w, v = eigsh(np.asarray(A), k=1, sigma=-1e-3, v0=v0, which="LM", tol=1e-8, return_eigenvectors=True)
     """
+    def _xi_to_v(xi_full):
+        """Invert the preconditioning transform: given xi_full recover v_full[keep].
+
+        Forward:  xi = diag(d) @ Linv^T @ v   (upper-triangular in v)
+        Inverse:  back-substitute from the last row up.
+        Returns the reduced vector v[keep], ready to pass as v_guess.
+        """
+        xr = xi_full[rho_idx]
+        xv = xi_full[ups_idx]
+        xz = xi_full[zeta_idx]
+
+        # row 2 (zeta): xi_z = d_z * Linv[:,2,2] * vz
+        vz_ = xz / (d[zeta_idx] * Linv[:, 2, 2])
+        # row 1 (theta): xi_v = d_v * (Linv[:,1,1]*vv + Linv[:,2,1]*vz)
+        vv_ = (xv / d[ups_idx]  - Linv[:, 2, 1] * vz_) / Linv[:, 1, 1]
+        # row 0 (rho):  xi_r = d_r * (Linv[:,0,0]*vr + Linv[:,1,0]*vv + Linv[:,2,0]*vz)
+        vr_ = (xr / d[rho_idx]  - Linv[:, 1, 0] * vv_ - Linv[:, 2, 0] * vz_) / Linv[:, 0, 0]
+
+        v_full_ = jnp.concatenate([vr_, vv_, vz_])
+        return v_full_[keep]
+    if kwargs.get("xi", None) is not None:
+        xi = kwargs["xi"]
     w, v = jnp.linalg.eigh(A)
     # get least stable mode
     min_idx = jnp.argmin(w)
@@ -3348,26 +3418,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         d[zeta_idx] * (                                           Linv[:, 2, 2] * vz),
     ])
 
-    def _xi_to_v(xi_full):
-        """Invert the preconditioning transform: given xi_full recover v_full[keep].
-
-        Forward:  xi = diag(d) @ Linv^T @ v   (upper-triangular in v)
-        Inverse:  back-substitute from the last row up.
-        Returns the reduced vector v[keep], ready to pass as v_guess.
-        """
-        xr = xi_full[rho_idx]
-        xv = xi_full[ups_idx]
-        xz = xi_full[zeta_idx]
-
-        # row 2 (zeta): xi_z = d_z * Linv[:,2,2] * vz
-        vz_ = xz / (d[zeta_idx] * Linv[:, 2, 2])
-        # row 1 (theta): xi_v = d_v * (Linv[:,1,1]*vv + Linv[:,2,1]*vz)
-        vv_ = (xv / d[ups_idx]  - Linv[:, 2, 1] * vz_) / Linv[:, 1, 1]
-        # row 0 (rho):  xi_r = d_r * (Linv[:,0,0]*vr + Linv[:,1,0]*vv + Linv[:,2,0]*vz)
-        vr_ = (xr / d[rho_idx]  - Linv[:, 1, 0] * vv_ - Linv[:, 2, 0] * vz_) / Linv[:, 0, 0]
-
-        v_full_ = jnp.concatenate([vr_, vv_, vz_])
-        return v_full_[keep]
+    
     np.testing.assert_allclose(v_mode, _xi_to_v(xi_full), rtol=1e-8, atol=1e-13)
     if debug_compare_reconstruction:
         linvt_full = _assemble_diagblocks_comp_major(

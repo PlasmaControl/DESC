@@ -121,6 +121,7 @@ def compute(  # noqa: C901
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
     pm_kw = kwargs.pop("phi_matrix", None)
+    xi = kwargs.pop("xi", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
@@ -128,6 +129,9 @@ def compute(  # noqa: C901
     
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
+
+    if "xi" not in transforms and xi is not None:
+        transforms["xi"] = xi
     
     bad_kwargs = kwargs.keys() - allowed_kwargs
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
@@ -730,6 +734,8 @@ def get_transforms(  # noqa: C901
     if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
         pm = kwargs["phi_matrix"]
         transforms["phi_matrix"] = pm    
+    if "xi" in kwargs and kwargs["xi"] is not None:
+        transforms["xi"] = kwargs["xi"]
         
     for c in derivs.keys():
         if c in transforms:

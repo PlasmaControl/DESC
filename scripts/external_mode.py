@@ -1,0 +1,375 @@
+# A script to set up and solve a high aspect-ratio tokamak equilibrium using DESC,
+# and then evaluate its stability using Newcomb's procedure.
+# from desc import set_device
+# set_device("gpu")
+
+import pdb
+import time
+from desc.examples import get
+from desc.grid import LinearGrid, Grid
+from desc.diffmat_utils import *
+from desc.equilibrium.coords import map_coordinates
+from desc.equilibrium import Equilibrium
+from desc.backend import jnp, jax
+from matplotlib import pyplot as plt
+from desc.utils import dot, cross
+from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
+from desc.io import load
+import numpy as np
+from scipy.interpolate import RegularGridInterpolator
+from desc.magnetic_fields import SourceFreeField
+
+
+# Make or load an ultra high aspect-ratio tokamak (essentially a screw pinch)
+from desc.equilibrium import Equilibrium
+from desc.continuation import solve_continuation_automatic
+from desc.geometry import FourierRZToroidalSurface
+from desc.profiles import PowerSeriesProfile
+from desc.grid import QuadratureGrid
+import os
+
+from newcomb import *
+from desc.compute._stability import term_by_term_stability, energy_terms
+from desc.compute.utils import get_params, get_transforms
+
+from stability_helpers import *
+
+# Input parameters
+a = 1  # Minor radius
+aspect_ratio = 10  # Aspect ratio of the tokamak
+R = aspect_ratio * a  # Major radius
+NFP = 1
+n = 1  # toroidal mode number
+
+# resolutions for phi matrix
+M = 9
+N = 9
+
+# number of grid points in each direction for the eigenvalue solve
+n_rho = 18
+n_theta = 2 * M
+n_zeta = 2 * N
+
+# Quadratic iota profile: iota(rho) = iota_0 - 0.5*rho^2
+iota_on_axis_values = np.linspace(0.8, 1.25, 10)
+
+# Paths
+save_path = "./external_kink_mode/"
+plot_path   = save_path + "eigenfunction_plots/"
+os.makedirs(save_path, exist_ok=True)
+os.makedirs(plot_path, exist_ok=True)
+# Save directory and filename
+
+results_lambda_min = np.zeros_like(iota_on_axis_values)
+results_term_by_term = {
+    term: np.zeros_like(iota_on_axis_values) for term in energy_terms
+}
+
+iota_prime = -0.5
+iota_a = 1.1  # iota on edge; iota_a > 1should be unstable
+iota_0 = iota_a - iota_prime
+iota_coeffs = np.array([iota_0, iota_prime])  # iota(rho) = iota_0 + (iota_prime) rho^2
+iota_modes = np.array([0, 2])
+iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+
+p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
+p_profile = PowerSeriesProfile(p_coeffs)
+
+# Save directory and filename
+save_tag = (
+    f"ar_{aspect_ratio}_NFP_{NFP}"
+    f"_p_{'_'.join(p_coeffs.astype(str))}"
+    f"_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
+    f"_external"
+)
+save_name = f"equilibrium_{save_tag}.h5"
+save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"
+X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
+savez_path = save_path + f"{save_tag_res}.npz"
+
+
+
+print(f"\n=== iota_0 = {iota_0:.4f} ===")
+
+if os.path.exists(save_path + save_name):
+    print("loading existing equilibrium from", save_path + save_name)
+    eq = load(save_path + save_name)
+else:
+    print("solving equilibrium")
+    surface = FourierRZToroidalSurface.from_shape_parameters(
+            major_radius=R,
+            aspect_ratio=aspect_ratio,
+            elongation=1,
+            triangularity=0,
+            squareness=0,
+            eccentricity=0,
+            torsion=0,
+            twist=0,
+            NFP=NFP,
+            sym=True,
+        )
+    surface = SourceFreeField(surface, M, N)
+    eq = Equilibrium(
+        L=12,
+        M=12,
+        N=0,
+        surface=surface,
+        NFP=NFP,
+        iota=iota_profile,
+        pressure=p_profile,
+        Psi=1,
+    )
+
+    eq = solve_continuation_automatic(
+        eq, ftol=1e-13, gtol=1e-13, xtol=1e-13, verbose=0
+    )[-1]
+    eq.save(save_path + save_name)
+    print("equilibrium solved")
+
+
+print("making input grid and diffmats")
+
+# get grid in PEST coordinates and corresponding diffmats
+diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
+grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
+pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+
+# get data for equilibrium quantites
+data = eq.compute(
+    ["b", "n_rho", "n_theta", "n_zeta", "iota", "e^vartheta", "grad(phi)", "e^rho", "R0", "<|B|>_vol", "iota",
+     "sqrt(g)_PEST"],
+    grid=pest_grid,
+)
+
+# evaluate quantities
+rho, theta, zeta = pest_grid.nodes.T
+eps = 1 / aspect_ratio
+b_theta = dot(data["b"], data["n_theta"])
+b_z = dot(data["b"], data["n_zeta"])
+iota = data["iota"]
+B_0 = data["<|B|>_vol"]
+R_0 = data["R0"]
+
+# get analytic eigenfunction
+delta = 1e-2  # small shift to avoid singularity at rational surface
+xi_0 = 1
+rho, theta, zeta = pest_grid.nodes.T
+xi = xi_0 * np.cos(theta + n * zeta)
+xi_normal = xi.copy()  # save scalar normal component before xi is overwritten
+xi_eta = (
+    -xi_0
+    * b_z
+    * ((1 - iota * n * (eps**2) * (rho**2)) / (1 + (n**2) * (eps**2) * (rho**2)))
+    * np.sin(theta + n * zeta)
+)
+
+xi_parallel = (
+    (1 / (rho * eps))
+    * ((n - iota) / ((n - iota**2) + delta**2))
+    * (1 + n * iota * eps**2 * rho**2)
+    * xi_eta
+)
+
+
+# reconstruct 3d eigenfunction arrays
+# \hat{\eta} = \hat{b} \times \hat{r}
+b_hat = data["b"]
+r_hat = data["n_rho"]
+eta_hat = cross(b_hat, r_hat)
+xi = xi[:, None] * r_hat + xi_eta[:, None] * eta_hat + xi_parallel[:, None] * b_hat
+
+# convert to pest coordinates
+xi_r = dot(xi, data["e^rho"])  # xi^rho
+xi_theta = dot(xi, data["e^vartheta"])  # xi^theta
+xi_z = dot(xi, data["grad(phi)"])  # xi^z
+xi = np.concatenate((xi_r, xi_theta, xi_z), axis=0)
+
+# ─── Debugging: eigenfunction plots ──────────────────────────────────────────
+# Reshape all 1D (n_total,) arrays to (n_rho, n_theta, n_zeta)
+xi_normal_3d = pest_grid.meshgrid_reshape(xi_normal,   order="rtz")
+xi_eta_3d    = pest_grid.meshgrid_reshape(xi_eta,      order="rtz")
+xi_par_3d    = pest_grid.meshgrid_reshape(xi_parallel, order="rtz")
+xi_r_3d      = pest_grid.meshgrid_reshape(xi_r,        order="rtz")
+xi_t_3d      = pest_grid.meshgrid_reshape(xi_theta,    order="rtz")
+xi_z_3d      = pest_grid.meshgrid_reshape(xi_z,        order="rtz")
+
+rho_3d   = pest_grid.meshgrid_reshape(rho,   order="rtz")
+theta_3d = pest_grid.meshgrid_reshape(theta, order="rtz")
+zeta_3d  = pest_grid.meshgrid_reshape(zeta,  order="rtz")
+rho_1d   = np.array(rho_3d[:, 0, 0])
+theta_1d = np.array(theta_3d[0, :, 0])
+zeta_1d  = np.array(zeta_3d[0, 0, :])
+
+comp_list = [xi_normal_3d, xi_eta_3d, xi_par_3d, xi_r_3d, xi_t_3d, xi_z_3d]
+comp_labels = [
+    r"$\xi_{\rm normal}$", r"$\xi_\eta$", r"$\xi_\parallel$",
+    r"$\xi^r$", r"$\xi^\theta$", r"$\xi^\zeta$",
+]
+
+for xvals, xlabel, fname, slice_fn in [
+    (rho_1d,   r"$\rho$",    "xi_vs_rho.png",   lambda c: c[:, 0, 0]),
+    (theta_1d, r"$\theta$",  "xi_vs_theta.png", lambda c: c[-1, :, 0]),
+    (zeta_1d,  r"$\zeta$",   "xi_vs_zeta.png",  lambda c: c[-1, 0, :]),
+]:
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+    for ax, comp, lbl in zip(axes.flat, comp_list, comp_labels):
+        ax.plot(xvals, slice_fn(comp))
+        ax.set_xlabel(xlabel); ax.set_ylabel(lbl); ax.set_title(lbl)
+        ax.axhline(0, color="gray", lw=0.7, ls="--")
+    fig.suptitle(f"Eigenfunction vs {xlabel}")
+    plt.tight_layout()
+    fig.savefig(save_path + fname, dpi=150)
+    plt.close(fig)
+
+print("Saved eigenfunction plots to", save_path)
+
+# ─── Divergence check: ∇·ξ = (1/√g)[∂ρ(√g ξ^ρ) + ∂ϑ(√g ξ^ϑ) + ∂ζ(√g ξ^ζ)] ──
+sqrtg_3d    = pest_grid.meshgrid_reshape(data["sqrt(g)_PEST"], order="rtz")
+D_rho_mat   = np.array(diffmat.D_rho)
+D_theta_mat = np.array(diffmat.D_theta)
+D_zeta_mat  = np.array(diffmat.D_zeta)
+
+dr = np.einsum("ij,jkl->ikl", D_rho_mat,   sqrtg_3d * xi_r_3d)
+dt = np.einsum("ij,kjl->kil", D_theta_mat, sqrtg_3d * xi_t_3d)
+dz = np.einsum("ij,klj->kli", D_zeta_mat,  sqrtg_3d * xi_z_3d)
+div_xi = (dr + dt + dz) / sqrtg_3d
+
+print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
+print(f"Divergence check: RMS |∇·ξ| = {np.sqrt(np.mean(div_xi**2)):.4e}")
+
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.semilogy(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30)
+ax.set_xlabel(r"$\rho$"); ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
+ax.set_title("Divergence of analytic eigenfunction")
+plt.tight_layout()
+fig.savefig(save_path + "divergence_check.png", dpi=150)
+plt.close(fig)
+
+# get phi matrix
+n_surf = n_theta * n_zeta
+rtz_nodes = grid.nodes # grid nodes are in (rho, theta, zeta)
+surface_nodes_agni = np.array(rtz_nodes[-n_surf:]) # last n_surf nodes
+surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
+rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
+pest_grid_surf = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
+
+phi_path = save_path + f"phi_matrix_{save_tag}.npy"
+if os.path.exists(phi_path):
+    print(f"Loading phi matrix from {phi_path}")
+    phi_matrix = np.load(phi_path)
+else:
+    data_phi = eq.compute(
+                ["phi_matrix_pest"],
+                rtz_surface_grid,
+                pest_grid=pest_grid_surf,
+                problem="exterior Neumann",
+                chunk_size=1,
+                #transforms={"Phi": phi_transform},
+            )
+    phi_matrix = np.array(data_phi["phi_matrix_pest"])
+
+    # Reshape to align with surface nodes for AGNI grid
+    phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
+    phi_matrix = phi_matrix.transpose(1,0,3,2)
+    phi_matrix = phi_matrix.reshape(n_surf, n_surf)
+
+    np.save(phi_path, phi_matrix)
+tic = time.time()
+data = eq.compute(
+    "finite-n lambda3", grid=grid, diffmat=diffmat,
+    gamma=10, incompressible=False,
+)
+toc = time.time()
+print(f"matrix full took {toc-tic:.1f} s.")
+print(data["finite-n lambda3"])
+
+X = data["finite-n eigenfunction3"]
+
+np.save(X_path, X)
+
+# save processed eigenfunction and related data for later analysis
+xi_full = data["finite-n xi"]
+deltaB = data["finite-n deltaB"]
+deltaB_r = data["finite-n deltaB_r"]
+deltaB_v = data["finite-n deltaB_v"]
+deltaB_z = data["finite-n deltaB_z"]
+lambda_min = data["finite-n lambda3"]
+
+np.savez(
+    savez_path,
+    xi=xi_full,
+    deltaB=deltaB,
+    deltaB_r=deltaB_r,
+    deltaB_v=deltaB_v,
+    deltaB_z=deltaB_z,
+    lambda_min=lambda_min,
+)
+
+# add boundaries back to the low-res eigenfunction for interpolation later
+xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
+
+# Save nodes for interpolation
+rho_low = rho
+theta_low = theta
+zeta_low = zeta
+
+# save eigenfunction components
+np.save(save_path + f"xi_rho_{save_tag_res}.npy", xi_rho_low)
+np.save(save_path + f"xi_theta_{save_tag_res}.npy", xi_theta_low)
+np.save(save_path + f"xi_zeta_{save_tag_res}.npy", xi_zeta_low)
+
+# save plots of the solved eigenfunction at this resolution
+print("saving solved-eigenfunction plots")
+rho_iota1 = (
+        np.sqrt((iota_0 - 1.0) / (-iota_coeffs[1])) if iota_0 > 1.0 else None
+    )
+title_base = (
+        rf"$\iota_0 = {iota_0:.3f}$,  "
+        rf"$\iota(\rho) = \iota_0 + {2*iota_coeffs[-1]:.2f}\,\rho^2$"
+    )
+save_eigenfunction_plots(
+    plot_path,
+    xi_rho_low, xi_theta_low, xi_zeta_low,
+    rho, theta, rho_iota1, title_base,
+    f"solved_{save_tag_res}",
+)
+
+# add the final lambda_min to the results list for this iota_0
+results_lambda_min[i] = lambda_min
+print(f"iota_0={iota_0:.4f}: plots saved")
+
+
+# ── Save summary ──────────────────────────────────────────────────────────────
+results_lambda_min = np.array(results_lambda_min)
+
+np.savez(
+    save_path + "iota_scan_results.npz",
+    iota_on_axis=iota_on_axis_values,
+    lambda_min=results_lambda_min,
+)
+
+print("Done. Results saved to", save_path)
+print("Run analyze_stability.py for Mercier + delta_W breakdown.")
+
+
+# ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.axhline(0, color="gray", lw=0.8, ls="--")
+ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
+ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-", marker=".",
+        color="steelblue", lw=2, ms=7)
+ax.set_xlabel(r"$\iota_0$", fontsize=14)
+ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+ax.set_title(
+    r"Stability eigenvalue vs $\iota_0$" + "\n"
+    f"$\\iota(\\rho) = \\iota_0 + {2*iota_coeffs[-1]}\\rho^2$",
+    fontsize=12,
+)
+ax.tick_params(labelsize=12)
+ax.legend(fontsize=11)
+fig.tight_layout()
+fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
+plt.show()
+print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
+
+

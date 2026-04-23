@@ -186,7 +186,7 @@ data_phi = eq.compute(
             rtz_surface_grid,
             pest_grid=pest_grid_surf,
             problem="exterior Neumann",
-            chunk_size=50,
+            chunk_size=1,
             #transforms={"Phi": phi_transform},
         )
 phi_matrix = np.array(data_phi["phi_matrix_pest"])

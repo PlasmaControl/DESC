@@ -862,6 +862,8 @@ def get_transforms(  # noqa: C901
             )
         elif c == "phi_matrix":
             transforms["phi_matrix"] = None
+        elif c == "xi":
+            transforms["xi"] = None
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

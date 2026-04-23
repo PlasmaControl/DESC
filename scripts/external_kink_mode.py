@@ -182,7 +182,7 @@ surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).res
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 data_phi = eq.compute(
             ["phi_matrix_pest"],
-            grid,
+            rtz_surface_grid,
             pest_grid=pest_grid,
             problem="exterior Neumann",
             chunk_size=50,

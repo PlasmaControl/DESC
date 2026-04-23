@@ -42,11 +42,11 @@ NFP = 1
 n = 1  # toroidal mode number
 
 # resolutions for phi matrix
-M = 18
-N = 18
+M = 9
+N = 9
 
 # number of grid points in each direction for the eigenvalue solve
-n_rho = 36
+n_rho = 18
 n_theta = 2 * M
 n_zeta = 2 * N
 

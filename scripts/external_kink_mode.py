@@ -180,10 +180,11 @@ rtz_nodes = grid.nodes # grid nodes are in (rho, theta, zeta)
 surface_nodes_agni = np.array(rtz_nodes[-n_surf:]) # last n_surf nodes
 surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
 rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
+pest_grid_surf = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
 data_phi = eq.compute(
             ["phi_matrix_pest"],
             rtz_surface_grid,
-            pest_grid=pest_grid,
+            pest_grid=pest_grid_surf,
             problem="exterior Neumann",
             chunk_size=50,
             #transforms={"Phi": phi_transform},

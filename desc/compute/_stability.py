@@ -3348,7 +3348,10 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     if transforms.get("xi", None) is not None:
         xi = transforms["xi"]
         v = _xi_to_v(xi)
-        w = dot(v, A @ v) / dot(v, v)
+        data["Av"] = A @ v
+        w = dot(v, data["Av"])
+        data["energy"] = w * 2 * (B_N**2 * a_N**3)/mu_0
+        return data
     else:
         w, v = jnp.linalg.eigh(A)
     # get least stable mode

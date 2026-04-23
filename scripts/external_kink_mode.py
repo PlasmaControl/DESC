@@ -128,16 +128,18 @@ pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
 
 # get data for equilibrium quantites
 data = eq.compute(
-    ["b", "n_rho", "n_theta", "n_zeta", "iota", "e^vartheta", "grad(phi)", "e^rho"],
+    ["b", "n_rho", "n_theta", "n_zeta", "iota", "e^vartheta", "grad(phi)", "e^rho", "R0", "<|B|>_vol", "iota"],
     grid=pest_grid,
 )
-iota = eq.compute("iota", grid=pest_grid)["iota"]
 
 # evaluate quantities
 rho, theta, zeta = pest_grid.nodes.T
 eps = 1 / aspect_ratio
 b_theta = dot(data["b"], data["n_theta"])
 b_z = dot(data["b"], data["n_zeta"])
+iota = data["iota"]
+B_0 = data["<|B|>_vol"]
+R_0 = data["R0"]
 
 # get analytic eigenfunction
 delta = 1e-2  # small shift to avoid singularity at rational surface
@@ -173,7 +175,11 @@ xi_z = dot(xi, data["grad(phi)"])  # xi^z
 xi = np.concatenate((xi_r, xi_theta, xi_z), axis=0)
 
 # get phi matrix
-
+n_surf = n_theta * n_zeta
+rtz_nodes = grid.nodes # grid nodes are in (rho, theta, zeta)
+surface_nodes_agni = np.array(rtz_nodes[-n_surf:]) # last n_surf nodes
+surf_nodes = surface_nodes_agni.reshape(n_theta, n_zeta, 3).transpose(1,0,2).reshape(n_surf,3)
+rtz_surface_grid = Grid(surf_nodes, NFP=NFP)
 data_phi = eq.compute(
             ["phi_matrix_pest"],
             grid,
@@ -187,7 +193,7 @@ phi_matrix = np.array(data_phi["phi_matrix_pest"])
 # Reshape to align with surface nodes for AGNI grid
 phi_matrix = phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta)
 phi_matrix = phi_matrix.transpose(1,0,3,2)
-phi_matrix = phi_matrix.reshape(n_zeta * n_theta, n_zeta * n_theta)
+phi_matrix = phi_matrix.reshape(n_surf, n_surf)
 
 data = eq.compute(
     "finite-n lambda3",
@@ -198,3 +204,10 @@ data = eq.compute(
     incompressible=False,
     phi_matrix=phi_matrix,
 )
+
+print("minimum eigenvalue:", data["energy"])
+
+W_0 = 2* np.pi**2 * R_0 * B_0 **2/(mu_0 * a**2)
+delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n/iota_a - 1)
+delta_W_analytic = delta_W_hat_analytic * W_0 * eps**2
+print("analytic expectation:", delta_W_analytic)

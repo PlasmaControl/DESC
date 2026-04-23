@@ -157,7 +157,7 @@ xi_eta = (
 
 xi_parallel = (
     (1 / (rho * eps))
-    * ((n - iota) / ((n - iota**2) + delta**2))
+    * ((n - iota) / ((n - iota)**2 + delta**2))
     * (1 + n * iota * eps**2 * rho**2)
     * xi_eta
 )

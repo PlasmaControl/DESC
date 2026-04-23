@@ -78,7 +78,7 @@ rtz_nodes = map_coordinates(
 )
 grid = Grid(rtz_nodes, NFP=NFP)
 
-# Surface grid in BIEST/AGNI order (zeta outermost, theta fastest)
+# Surface grid in BIEST order (zeta outermost, theta fastest)
 surf_nodes = (
     np.array(rtz_nodes)
     .reshape(n_theta, n_zeta, 3)
@@ -108,13 +108,13 @@ else:
     print("phi_matrix saved.")
 
 # ── Equilibrium quantities at the surface (fixed) ────────────────────────────
-data_eq = eq.compute(["x", "n_rho"], grid=grid, basis="xyz")
-surface_jacobian = surface.compute(
-    "|e_theta x e_zeta|", grid=grid, basis="xyz"
-)["|e_theta x e_zeta|"]
-
+data_eq = eq.compute(["x", "n_rho", "g^rr", "sqrt(g)_PEST"], grid=grid, basis="xyz")
+a_N = a
+sqrtg = data_eq["sqrt(g)_PEST"][:, None]
+g_sup_rr = data_eq["g^rr"][:, None]
+sqrtg_grad_rho = sqrtg * np.sqrt(g_sup_rr)
 #  pre-build the weighted phi_matrix (independent of coil)
-integration_weights = surface_jacobian * grid.weights
+integration_weights = sqrtg_grad_rho * grid0.meshgrid_reshape(grid0.weights, order="rtz").reshape(n_surf)
 full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
 # ── W_V_true: direct volume integral ─────────────────────────────────────────

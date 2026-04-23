@@ -124,8 +124,8 @@ print("making input grid and diffmats")
 # get grid in PEST coordinates and corresponding diffmats
 diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
-#pest_grid = Grid(reshaped_nodes, NFP=NFP)
-pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+pest_grid = Grid(reshaped_nodes, NFP=NFP)
+#pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
 
 # get data for equilibrium quantites
 data = eq.compute(
@@ -149,7 +149,6 @@ R_0 = data["R0"]
 # get analytic eigenfunction
 delta = 1e-2  # small shift to avoid singularity at rational surface
 xi_0 = 1
-rho, theta, zeta = pest_grid.nodes.T
 xi_normal = xi_0 * np.cos(theta - n * zeta)
 #k0_sq = 
 xi_eta = (
@@ -187,16 +186,26 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
 
     # ─── Debugging: eigenfunction plots ──────────────────────────────────────────
     # Reshape all 1D (n_total,) arrays to (n_rho, n_theta, n_zeta)
-    xi_normal_3d = pest_grid.meshgrid_reshape(xi_normal,   order="rtz")
+    """xi_normal_3d = pest_grid.meshgrid_reshape(xi_normal,   order="rtz")
     xi_eta_3d    = pest_grid.meshgrid_reshape(xi_eta,      order="rtz")
     xi_par_3d    = pest_grid.meshgrid_reshape(xi_parallel, order="rtz")
     xi_r_3d      = pest_grid.meshgrid_reshape(xi_r,        order="rtz")
     xi_t_3d      = pest_grid.meshgrid_reshape(xi_theta,    order="rtz")
-    xi_z_3d      = pest_grid.meshgrid_reshape(xi_z,        order="rtz")
+    xi_z_3d      = pest_grid.meshgrid_reshape(xi_z,        order="rtz")"""
 
-    rho_3d   = pest_grid.meshgrid_reshape(rho,   order="rtz")
-    theta_3d = pest_grid.meshgrid_reshape(theta, order="rtz")
-    zeta_3d  = pest_grid.meshgrid_reshape(zeta,  order="rtz")
+    #rho_3d   = pest_grid.meshgrid_reshape(rho,   order="rtz")
+    #theta_3d = pest_grid.meshgrid_reshape(theta, order="rtz")
+    #zeta_3d  = pest_grid.meshgrid_reshape(zeta,  order="rtz")
+    rho_3d = rho.reshape(n_rho, n_theta, n_zeta)
+    theta_3d = theta.reshape(n_rho, n_theta, n_zeta)
+    zeta_3d = zeta.reshape(n_rho, n_theta, n_zeta)
+    xi_normal_3d = xi_normal.reshape(n_rho, n_theta, n_zeta)
+    xi_eta_3d = xi_eta.reshape(n_rho, n_theta, n_zeta)
+    xi_par_3d = xi_parallel.reshape(n_rho, n_theta, n_zeta)
+    xi_r_3d = xi_r.reshape(n_rho, n_theta, n_zeta)
+    xi_t_3d = xi_theta.reshape(n_rho, n_theta, n_zeta)
+    xi_z_3d = xi_z.reshape(n_rho, n_theta, n_zeta)
+
     rho_1d   = np.array(rho_3d[:, 0, 0])
     theta_1d = np.array(theta_3d[0, :, 0])
     zeta_1d  = np.array(zeta_3d[0, 0, :])
@@ -225,7 +234,7 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     print("Saved eigenfunction plots to", save_path)
 
     # ─── Divergence check: ∇·ξ = (1/√g)[∂ρ(√g ξ^ρ) + ∂ϑ(√g ξ^ϑ) + ∂ζ(√g ξ^ζ)] ──
-    sqrtg_3d    = pest_grid.meshgrid_reshape(data["sqrt(g)_PEST"], order="rtz")
+    sqrtg_3d    = data["sqrt(g)_PEST"].reshape(n_rho, n_theta, n_zeta)#pest_grid.meshgrid_reshape(data["sqrt(g)_PEST"], order="rtz")
     D_rho_mat   = np.array(diffmat.D_rho)
     D_theta_mat = np.array(diffmat.D_theta)
     D_zeta_mat  = np.array(diffmat.D_zeta)
@@ -238,8 +247,8 @@ for xi, label in zip([xi_normal[:, None] * r_hat, xi_eta[:, None] * eta_hat, xi_
     print(f"Divergence check: max |∇·ξ| = {np.max(np.abs(div_xi)):.4e}")
     print(f"Divergence check: RMS |∇·ξ| = {np.sqrt(np.mean(div_xi**2)):.4e}")
 
-    ax.semilogy(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
-
+    ax.plot(rho_1d, np.max(np.abs(div_xi), axis=(1, 2)) + 1e-30, label=label)
+plt.legend()
 ax.set_xlabel(r"$\rho$"); ax.set_ylabel(r"$\max_{\theta,\zeta}|\nabla\cdot\xi|$")
 ax.set_title("Divergence of analytic eigenfunction")
 plt.tight_layout()

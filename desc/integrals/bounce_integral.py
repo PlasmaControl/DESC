@@ -109,10 +109,14 @@ class Bounce(eqx.Module, ABC):
             simp = kwargs.get("simp", True)
 
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
-        x, w = jax.lax.stop_gradient(num_pitch)
+        x, w = num_pitch
 
-        x = bijection_from_disc(x, min_B[..., None], max_B[..., None])
-        w = w * grad_bijection_from_disc(min_B, max_B)[..., None]
+        if jnp.ndim(min_B):
+            min_B = min_B[..., None]
+            max_B = max_B[..., None]
+
+        x = bijection_from_disc(x, min_B, max_B)
+        w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
     @abstractmethod
@@ -419,9 +423,9 @@ class Bounce2D(Bounce):
         fun_data["angle"] = angle
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size)
+            return sparse_pullback(fun, fun_data, surf_batch_size, strip_dim0=True)
 
-        return batch_map(fun, fun_data, surf_batch_size)
+        return batch_map(fun, fun_data, surf_batch_size, strip_dim0=True)
 
     @staticmethod
     def reshape(grid, f):
@@ -714,7 +718,7 @@ class Bounce2D(Bounce):
         *,
         num_well=None,
         nufft_eps=1e-6,
-        low_ram=False,
+        loop=False,
         quad=None,
         check=False,
         plot=False,
@@ -762,9 +766,9 @@ class Bounce2D(Bounce):
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-        low_ram : bool
-            Whether to use a more memory efficient algorithm.
-            However, this is slower to differentiate with JAX.
+        loop : bool
+            Whether to use loops to compute sums where a loop option is implemented.
+            This is slower to differentiate with JAX.
             For best performance, one should only use this option if batching
             is already being done via ``Bounce2D.batch``  with ``surf_batch_size=1``.
         quad : tuple[jnp.ndarray]
@@ -807,9 +811,9 @@ class Bounce2D(Bounce):
             pitch = pitch[:, None, :, None, None]
 
         if nufft_eps < 1e-14:
-            data = self._nummt(x, *points, data, low_ram)
+            data = self._nummt(x, *points, data, loop)
         else:
-            data = self._nufft(x, *points, data, low_ram, nufft_eps, pitch_inv)
+            data = self._nufft(x, *points, data, loop, nufft_eps, pitch_inv)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
 
         # Strictly increasing ζ knots enforces dζ > 0.
@@ -834,11 +838,11 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, x, z1, z2, data, low_ram, eps, pitch_inv):
+    def _nufft(self, x, z1, z2, data, loop, eps, pitch_inv):
         shape = (*z1.shape, x.size)
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
-        t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
+        t = flatten_mat(self._theta.eval1d(z, loop=loop))
         z = flatten_mat(z)
         # t and z have shape (num rho surfaces, num points on each surface)
         #            or just (                  num points on each surface).
@@ -870,12 +874,12 @@ class Bounce2D(Bounce):
         data["zeta"] = z.reshape(shape)
         return data
 
-    def _nummt(self, x, z1, z2, data, low_ram):
+    def _nummt(self, x, z1, z2, data, loop):
         shape = (*z1.shape, x.size)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
         z = flatten_mat(zeta, 3)
-        t = self._theta.eval1d(z, loop=low_ram).reshape(*shape, 1)
+        t = self._theta.eval1d(z, loop=loop).reshape(*shape, 1)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             # Using the same |B| that gave bounce points increases correlation
@@ -886,7 +890,7 @@ class Bounce2D(Bounce):
             # stencil at the optimal step size is reduced from 10³ to 10⁻⁶ for
             # Γ_c (which has the singular weight 1/v_∥).
             # Also uses less memory due to the dimension reduction.
-            B = self._c["B(z)"].eval1d(z, loop=low_ram).reshape(shape)
+            B = self._c["B(z)"].eval1d(z, loop=loop).reshape(shape)
 
         z = zeta[..., None]
         z = jnp.exp(1j * self._modes_z * z)
@@ -1409,9 +1413,9 @@ class Bounce1D(Bounce):
         fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size)
+            return sparse_pullback(fun, fun_data, surf_batch_size, strip_dim0=True)
 
-        return batch_map(fun, fun_data, surf_batch_size)
+        return batch_map(fun, fun_data, surf_batch_size, strip_dim0=True)
 
     @staticmethod
     def reshape(grid, f):
@@ -1818,12 +1822,13 @@ class Options(NamedTuple):
     )
 
     alpha: jnp.ndarray
+    loop: bool
     nufft_eps: float
     num_transit: int
     num_well: int
     pitch_batch_size: int
-    pitch_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
+    speed_quad: tuple[jnp.ndarray]
     spline: bool
     surf_batch_size: int
     vander: tuple[jnp.ndarray]
@@ -1864,7 +1869,7 @@ class Options(NamedTuple):
         else:
             nufft_eps = kwargs.get("nufft_eps", 1e-7)
             num_pitch = kwargs.get("num_pitch", 65)
-        pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
+        speed_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         spline = kwargs.get("spline", True)
         Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
@@ -1877,12 +1882,13 @@ class Options(NamedTuple):
 
         return cls(
             alpha=alpha,
+            loop=kwargs.get("loop", False),
             nufft_eps=nufft_eps,
             num_transit=num_transit,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
-            pitch_quad=pitch_quad,
             quad=quad,
+            speed_quad=speed_quad,
             spline=spline,
             surf_batch_size=surf_batch_size,
             vander=kwargs.get("_vander", None),

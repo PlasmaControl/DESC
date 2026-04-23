@@ -584,7 +584,10 @@ class _Grid(IOAble, ABC):
 
         """
         surface_label = self.get_label(surface_label)
-        errorif(len(x) != getattr(self, f"num_{surface_label}"))
+        errorif(
+            len(x) != getattr(self, f"num_{surface_label}"),
+            msg=f"Got unexpected len(x) of {len(x)}.",
+        )
         return x[getattr(self, f"inverse_{surface_label}_idx")]
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):

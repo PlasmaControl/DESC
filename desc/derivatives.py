@@ -104,12 +104,23 @@ def sparse_pullback(
     *,
     reduction=None,
     chunk_reduction=identity,
+    strip_dim0=False,
 ):
     """Compute ``chunk_reduction(fn(fun_input))`` in batches with sparse pullbacks.
 
     Wraps the given map with logic to ensure cotangents flow through the diagonal
     of its pullback. The derivatives will be exact for maps whose Jacobians are
     block diagonal.
+
+    Notes
+    -----
+    This method does not automatically wrap ``fn`` with ``vmap``.
+    Unless ``fn`` is already wrapped with ``vmap``, the leading dimension
+    of ``y`` will not be stripped before it is passed into ``fn``.
+    This can be inconvenient for nesting calls to ``sparse_pullback``, since
+    only batching along the first axis is currently supported.
+    However, the ``strip_dim0`` flag should cover the most common case
+    of nesting calls where ``batch_size`` is one on the outermost call.
 
     See Also
     --------
@@ -137,6 +148,11 @@ def sparse_pullback(
         Chunk-wise reduction operation.
         Should typically apply ``reduction`` along the mapped axis,
         e.g. ``jnp.add.reduce``.
+    strip_dim0 : bool
+        Whether to strip the leading dim of ``y`` before passing it
+        to ``fn``; see notes. This flag only works if ``batch_size`` is one.
+        It should be set to ``False`` if ``fn`` is wrapped in ``vmap``.
+        Default is ``False``.
 
     Returns
     -------
@@ -148,15 +164,21 @@ def sparse_pullback(
     >>> out = sparse_pullback(fn, y)
 
     """
-    if batch_size is not None:
-        n_elements = tree_leaves(y)[0].shape[0]
+    if strip_dim0 and batch_size == 1:
+        return _scanmap(
+            sparse_pullback_map(fn, _get_first_chunk(y)),
+            0,
+            reduction,
+            identity,
+        )(y)
 
-    if batch_size is None or n_elements <= batch_size:
+    if batch_size is None or (n_elements := tree_leaves(y)[0].shape[0]) <= batch_size:
         return chunk_reduction(
             _sparse_pullback(y, fn=eqx.filter_closure_convert(fn, y))
         )
 
     y, remain = _batch_and_remainder(y, batch_size)
+    # Note that num_batches in _batch_and_remainder is always positive.
 
     y = _scanmap(
         sparse_pullback_map(fn, _get_first_chunk(y)),

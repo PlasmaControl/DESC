@@ -149,7 +149,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.speed_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
@@ -239,7 +239,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     def gamma_c0(data):
         pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.speed_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         points = bounce.points(pitch_inv, opts.num_well)
@@ -319,7 +319,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.speed_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 

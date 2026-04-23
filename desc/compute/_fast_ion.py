@@ -235,7 +235,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = Options.guess(-2, grid, loop=True, **kwargs)
 
     def gamma_c0(data):
         pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
@@ -250,7 +250,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
             nufft_eps=opts.nufft_eps,
-            low_ram=True,
+            loop=opts.loop,
         )
         return (2 / jnp.pi) * jnp.arctan(
             safediv(

@@ -1597,7 +1597,7 @@ class TestBounce2D:
             points=points,
             nufft_eps=1e-7,
             check=True,
-            low_ram=True,
+            loop=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)

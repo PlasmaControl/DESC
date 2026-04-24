@@ -36,7 +36,7 @@ from stability_helpers import *
 
 # Input parameters
 a = 1  # Minor radius
-aspect_ratio = 200  # Aspect ratio of the tokamak
+aspect_ratio = 100  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
 n = 1  # toroidal mode number

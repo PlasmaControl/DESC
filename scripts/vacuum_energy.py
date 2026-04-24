@@ -83,7 +83,6 @@ field = eq.surface  # SourceFreeField object
 
 # ── Coil builder ─────────────────────────────────────────────────────────────
 R_n = np.array([R0])
-R_modes = np.array
 
 def make_coil(delta_h):
     Z_n_pos = np.hstack([delta_h * a])
@@ -174,7 +173,7 @@ full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
 # ── W_V_true: direct volume integral ─────────────────────────────────────────
 def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, r_max_factor=20.0):
-    """(2π/2μ₀) ∫_{r>a} B²(R,Z) R dr dθ  [one toroidal slice]."""
+    """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M_quad, N=0)
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
@@ -190,7 +189,7 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, r_max_facto
     B_sq    = np.sum(B**2, axis=-1)
     jac     = r_v * (R0 + r_v * np.cos(t_v))
     weights = quad_grid.spacing[valid].prod(axis=-1) * r_max_factor
-    return (2 * np.pi) / (2 * mu_0) * np.dot(B_sq, jac * weights)
+    return 1 / (2 * mu_0) * np.dot(B_sq, jac * weights)
 
 # ── Delta_h scan ─────────────────────────────────────────────────────────────
 W_V_vals      = np.zeros(len(delta_h_fracs))

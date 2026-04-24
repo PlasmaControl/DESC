@@ -42,8 +42,8 @@ NFP = 1
 n = 1  # toroidal mode number
 
 # resolutions for phi matrix
-M = 9
-N = 9
+M = 32
+N = 32
 
 # number of grid points in each direction for the eigenvalue solve
 n_rho = 18
@@ -153,7 +153,7 @@ data = eq.compute(
 )
 
 a_N = data["a"]
-B_N = data["Psi"] / (jnp.pi * a_N**2)
+B_N = eq.Psi / (jnp.pi * a_N**2)
 psi_r = data["psi_r"] / (a_N**2 * B_N)
 
 # evaluate quantities
@@ -364,11 +364,6 @@ psi_r_s = 1  # psi_r[b_idx, :] = 1 on the boundary
 sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 g_sup_rr = data["g^rr"][:, None] * a_N**2
 sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
-print("sqrt(g) |grad(rho)| on boundary:", sqrtg_grad_rho.flatten())
-
-surface_jacobian = eq.surface.compute("|e_theta x e_zeta|", grid=rtz_surface_grid)[
-    "|e_theta x e_zeta|"
-]
 
 iota_s = iota[b_idx, None]
 xi_b = xi[b_idx]
@@ -384,15 +379,10 @@ W_theta = diffmat.W_theta
 W_zeta = diffmat.W_zeta
 W = jnp.kron(jnp.diag(W_theta), jnp.diag(W_zeta))
 
-
-def _cT(x):
-    return jnp.conjugate(jnp.transpose(x))
-
-
-B_dot_n = jnp.ones_like(B_dot_n)
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
+W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))
 
-analytic_W_V = (np.mean(r[b_idx])**2 * np.mean(F[b_idx])**2 * np.mean(data["|B|"][b_idx])**2) * xi_0**2
+analytic_W_V = np.mean((r[b_idx] * F[b_idx] * data["|B|"][b_idx])**2) * xi_0**2
 analytic_W_V = analytic_W_V * 2 * np.pi**2 * R_0 / (mu_0)
 
 print("W_V from AGNI:", W_V)

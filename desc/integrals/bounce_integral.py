@@ -353,10 +353,8 @@ class Bounce2D(Bounce):
                 self._theta,
                 self._c["|B|"],
                 Y_B,
-                self._num_t,
                 self._modes_t,
                 self._modes_z,
-                self._NFP,
                 self._nufft_eps,
                 vander_t=None if vander is None else vander.get("dct spline", None),
                 check=check,
@@ -370,7 +368,6 @@ class Bounce2D(Bounce):
                 self._theta,
                 self._c["|B|"],
                 Y_B,
-                self._num_t,
                 self._modes_t,
                 self._modes_z,
             )

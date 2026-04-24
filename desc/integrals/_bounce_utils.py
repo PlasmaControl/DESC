@@ -805,7 +805,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24)
     return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
+def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -822,8 +822,6 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
     Y : int
         Chebyshev spectral resolution for ``f`` over a field period.
         Preferably power of 2.
-    num_t : int
-        Fourier resolution in poloidal direction.
     modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
@@ -841,24 +839,42 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         shape (num ρ, num α, num field periods, Y).
 
     """
+    lines = theta.cheb.shape[:-2]
+    axisymmetric = f.shape[-2] == 1
+    if axisymmetric:
+        vander = None
+        z_eff = jnp.array([0.0], ndmin=2)
+    else:
+        z_eff = cheb_pts(Y, theta.domain)[:, None] if vander is None else None
+
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
+    # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = z_eff.size.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     f = ifft_mmt(
-        cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
+        z_eff,
         f,
         theta.domain,
         axis=-2,
         modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt_pos(theta.evaluate(Y), f, num_t, modes=modes_t)
+
+    t = theta.evaluate(Y)
+    if axisymmetric:
+        t = t.reshape(*lines, -1, 1)
+
+    # f shape is (...,            1, z_eff.size, modes_t.size)
+    # t shape is (..., theta.X *? Y, z_eff.size)
+    f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
+    if axisymmetric:
+        f = f.reshape(*lines, theta.X, Y)
+
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
-    assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
+    assert f.cheb.shape == (*lines, theta.X, Y)
     return f
 
 
@@ -866,10 +882,8 @@ def fast_cubic_spline(
     theta,
     f,
     Y,
-    num_t,
     modes_t,
     modes_z,
-    NFP=1,
     nufft_eps=1e-6,
     *,
     vander_t=None,
@@ -891,14 +905,10 @@ def fast_cubic_spline(
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per field period to interpolate ``f``.
-    num_t : int
-        Fourier resolution in poloidal direction.
     modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
-    NFP : int
-        Number of field periods.
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
@@ -923,26 +933,21 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert theta.domain == (0, 2 * jnp.pi / NFP)
-
-    lines = theta.cheb.shape[:-2]
-    num_transit = theta.X // NFP
-
     x = jnp.linspace(-1, 1, Y, endpoint=False)
     z = bijection_from_disc(x, *theta.domain)
     axisymmetric = f.shape[-2] == 1
-    num_z = 1 if axisymmetric else Y
+    z_eff = 1 if axisymmetric else Y
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
+    #   |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = z_eff.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
-    if num_z >= f.shape[-2]:
+    if z_eff >= f.shape[-2]:
         f = f.squeeze(-3)
-        p = num_z - f.shape[-2]
+        p = z_eff - f.shape[-2]
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
         pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
@@ -958,32 +963,37 @@ def fast_cubic_spline(
             vander=vander_z,
         )
 
+    lines = theta.cheb.shape[:-2]  # (..., num α)
+    num_field_periods = theta.X
+
     # θ at uniform ζ on field lines
-    t = idct_mmt(
-        x,
-        theta.cheb.reshape(*lines, num_transit, NFP, 1, theta.Y),
-        vander=vander_t,
-    )
+    t = idct_mmt(x, theta.cheb[..., None, :], vander=vander_t)
+    assert t.shape == (*lines, num_field_periods, Y)
     if axisymmetric:
-        t = t.reshape(*lines, num_transit, -1, 1)
+        t = t.reshape(*lines, -1, 1)
 
     if nufft_eps < 1e-14 or f.shape[-1] <= 16:
-        f = f[..., None, None, None, :, :]
-        f = irfft_mmt_pos(t, f, num_t, modes=modes_t)
+        f = f[..., None, None, :, :]
+        # f shape is (...,     1,                      1, z_eff, modes_t.size)
+        # t shape is (..., num α, num field periods *? Y, z_eff)
+        f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
     else:
         if len(lines) > 1:
-            t = t.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
+            t = t.transpose(0, 3, 1, 2).reshape(lines[0], z_eff, -1)
         else:
-            t = t.transpose(3, 0, 1, 2).reshape(num_z, -1)
+            t = t.transpose(2, 0, 1).reshape(z_eff, -1)
+        # f shape is (..., z_eff, modes_t.size)
+        # t shape is (..., z_eff, num α * num field periods *? Y)
         f = nufft1d2r(t, f, eps=nufft_eps).mT
+        # f shape is (..., num α * num field periods *? Y, z_eff)
     f = f.reshape(*lines, -1)
 
     z = jnp.ravel(
-        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(theta.X)[:, None]
+        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(num_field_periods)[:, None]
     )
     f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, theta.X * Y - 1, 4)
+    assert f.shape == (*lines, num_field_periods * Y - 1, 4)
     return f, z
 
 

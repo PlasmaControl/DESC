@@ -949,9 +949,9 @@ class Bounce2D(Bounce):
 
         num_field_periods = self._theta.X
         num_mins = kwargs.get(
-            # heuristic assumes iota is not massive
             "num_mins",
-            num_field_periods * max(self._num_z, self._num_t, 3) // 3,
+            # heuristic assumes iota is not massive
+            num_field_periods * max(self._num_z, self._num_t) // 2,
         )
         # We set fill value to 0 since we chose our coordinates
         # such that all bounce points are at ζ >= 0; and therefore,

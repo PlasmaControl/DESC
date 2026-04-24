@@ -383,7 +383,7 @@ print(W_zeta.shape)
 W = jnp.kron(W_theta, W_zeta)[:, None]
 print(W.sum())
 print("normalization", ((B_N**2 * a_N**3)/(2 * mu_0)))
-print("just the jacobian:", dot(B_dot_n, W * sqrtg_grad_rho @ B_dot_n))
+print("just the jacobian:", dot(B_dot_n, W * sqrtg_grad_rho * B_dot_n))
 print("B_dot_n = 1",  - dot(np.ones_like(B_dot_n), (W * sqrtg_grad_rho * phi_matrix) @ np.ones_like(B_dot_n)))
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
 W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))

@@ -362,7 +362,7 @@ g_sup_rr = data["g^rr"][:, None]# * a_N**2
 sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
 
 iota_s = iota[b_idx, None]
-xi_b = xi[b_idx]
+xi_b = xi_r[b_idx]#xi[b_idx]
 
 I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
 I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))

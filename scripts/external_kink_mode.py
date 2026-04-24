@@ -389,7 +389,7 @@ print(analytic_W_V.shape)
 
 print("W_V from AGNI:", W_V)
 print("analytic W_V:", np.sum(analytic_W_V))
-"""
+
 # ─── Term-by-term energy contributions ────────────────────────────────────────
 from desc.compute._stability import energy_terms
 
@@ -411,4 +411,4 @@ W_0 = (2 * np.pi**2 * R_0 * B_0**2) / (mu_0 * a**2)
 delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n / iota_a - 1)
 delta_W_analytic = delta_W_hat_analytic * W_0 * eps**2
 print("analytic expectation:", delta_W_analytic)
-"""
+

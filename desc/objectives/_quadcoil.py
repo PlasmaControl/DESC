@@ -848,7 +848,7 @@ class QuadcoilProxy(_Objective):
             plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
         return plasma_dofs
 
-    def solve_quadcoil_surface_current_field(self, *all_params):
+    def solve_quadcoil_surface_current(self, *all_params):
         """Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
 
         Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.

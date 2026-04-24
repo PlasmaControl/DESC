@@ -147,12 +147,6 @@ class Bounce(Module, ABC):
         """Plot B and bounce points on the specified field line."""
 
 
-default_quad = get_quadrature(
-    leggauss(32),
-    (automorphism_sin, grad_automorphism_sin),
-)
-
-
 class Bounce2D(Bounce):
     """Computes bounce integrals using pseudo-spectral methods.
 
@@ -302,7 +296,14 @@ class Bounce2D(Bounce):
         is_reshaped = is_reshaped or is_fourier
         vander = setdefault(vander, {})
 
-        self._quad = get_quadrature(setdefault(quad, default_quad), automorphism)
+        if quad is None:
+            quad = get_quadrature(
+                leggauss(32), (automorphism_sin, grad_automorphism_sin)
+            )
+        else:
+            quad = get_quadrature(quad, automorphism)
+        self._quad = jax.lax.stop_gradient(quad)
+
         self._NFP = grid.NFP
         self._num_t = grid.num_theta
         self._modes_z, self._modes_t = rfft2_modes(
@@ -1469,9 +1470,13 @@ class Bounce1D(Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
-        quad = setdefault(quad, default_quad)
-
-        self._quad = get_quadrature(quad, automorphism)
+        if quad is None:
+            quad = get_quadrature(
+                leggauss(32), (automorphism_sin, grad_automorphism_sin)
+            )
+        else:
+            quad = get_quadrature(quad, automorphism)
+        self._quad = jax.lax.stop_gradient(quad)
         self._data = {
             "|b^zeta|": jnp.abs(data["B^zeta"]) * Lref / data["|B|"],
             "|B|": data["|B|"] / Bref,

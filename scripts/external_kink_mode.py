@@ -380,7 +380,7 @@ W_zeta = diffmat.W_zeta
 print(W_theta.shape)
 print(W_zeta.shape)
 W = jnp.kron(W_theta, W_zeta)[:, None]
-
+print(W.sum())
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
 W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))
 

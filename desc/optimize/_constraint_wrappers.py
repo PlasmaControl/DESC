@@ -639,7 +639,7 @@ class ProximalProjection(ObjectiveFunction):
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
 
-        (self._eq_Z, self._eq_D, self._eq_unfixed_idx) = (
+        self._eq_Z, self._eq_D, self._eq_unfixed_idx = (
             self._eq_solve_objective._Z,
             self._eq_solve_objective._D,
             self._eq_solve_objective._unfixed_idx,

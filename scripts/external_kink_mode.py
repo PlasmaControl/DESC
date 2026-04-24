@@ -392,7 +392,7 @@ def _cT(x):
 B_dot_n = jnp.ones_like(B_dot_n)
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
 
-analytic_W_V = (r**2 * F[b_idx]**2 * data["B"][b_idx]**2) * xi_0**2
+analytic_W_V = (r[b_idx]**2 * F[b_idx]**2 * data["B"][b_idx]**2) * xi_0**2
 analytic_W_V = analytic_W_V * 2 * np.pi**2 * R_0 / (mu_0)
 
 print("W_V from AGNI:", W_V)

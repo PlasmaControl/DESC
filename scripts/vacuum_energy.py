@@ -36,7 +36,7 @@ os.makedirs(save_path, exist_ok=True)
 I_coil = 1e6  # fixed coil current (A)
 
 # vertical coil offset scan: Delta_h / a from 0.01 to 0.1
-delta_h_fracs = np.linspace(0.3, 1, 20)
+delta_h_fracs = np.linspace(0.01, 0.1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
 R0 = 2
@@ -83,8 +83,8 @@ c = eq.axis
 Z_modes = np.hstack([c.Z_basis.modes[:, 2], 0])
 
 def make_coil(delta_h):
-    Z_n_pos = np.hstack([c.Z_n,  delta_h])
-    Z_n_neg = np.hstack([c.Z_n, -delta_h])
+    Z_n_pos = np.hstack([c.Z_n,  delta_h * a])
+    Z_n_neg = np.hstack([c.Z_n, -delta_h * a])
     return CoilSet([
         FourierRZCoil(current=I_coil,  R_n=c.R_n, Z_n=Z_n_pos,
                       NFP=c.NFP, modes_R=c.R_basis.modes[:, 2], modes_Z=Z_modes),

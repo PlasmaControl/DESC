@@ -1957,7 +1957,7 @@ class Options(NamedTuple):
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
-        num_well = round(num_field_periods * (1 + 20/NFP))
+        num_well = round(num_field_periods * (1 + 20 / NFP))
         return (
             num_well
             if mins_per_field_period is None

@@ -19,7 +19,7 @@ from scipy.constants import mu_0
 from desc.profiles import PowerSeriesProfile
 
 # ── Parameters ────────────────────────────────────────────────────────────────
-pest    = False   # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
+pest    = True   # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
 M       = 28
 N       = 28
 n_theta = 2 * M

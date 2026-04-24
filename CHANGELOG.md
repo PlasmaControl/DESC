@@ -25,7 +25,6 @@ Performance Improvements
     - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
     - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
-- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
 
 Breaking Changes

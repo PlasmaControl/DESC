@@ -84,6 +84,11 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
         line and pitch, is padded with zero.
 
     """
+    if num_well is None or num_well < 0 or num_well > B.shape[-2]:
+        # The number of interior minima for C¹ continuous cubic spline must be < N,
+        # and every minima must be a simple root.
+        num_well = B.shape[-2]
+
     B = B[..., None, :, :]
     intersect = polyroot_vec(
         c=B,
@@ -725,7 +730,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24)
     num_field_periods : int
         Number of field periods to follow field line.
     NFP : int
-        Number of field periods.
+        Number of field periods per toroidal transit.
     X_min : int
         See notes section. This parameter should never be changed.
         It is included in the function signature for code optics only.
@@ -1061,30 +1066,3 @@ def truncate_rule(Y):
 
     """
     return max(1, 7 * Y // 8)
-
-
-def Y_B_rule(grid):
-    """Guess Y_B from grid resolution.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-
-    """
-    return (grid.num_theta + grid.num_zeta) // 2
-
-
-def num_well_rule(num_field_periods, NFP, mins_per_field_period=None):
-    """Guess upper bound for number of wells based on spectrum.
-
-    This should be loose enough that it is equivalent to ``num_well=None``,
-    but more performant.
-    """
-    num_well = (num_field_periods // NFP) * (20 + NFP)
-    return (
-        num_well
-        if mins_per_field_period is None
-        else min(num_well, num_field_periods * mins_per_field_period)
-    )

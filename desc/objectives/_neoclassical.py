@@ -17,7 +17,7 @@ class EffectiveRipple(_Objective):
     transport from ripple wells can become the dominant transport channel.
     The effective ripple (ε) proxy estimates the neoclassical transport
     coefficients in the banana regime. To ensure low neoclassical transport,
-    a stellarator is typically optimized so that ε < 0.02.
+    a stellarator is typically optimized so that ε < 10⁻².
 
     References
     ----------

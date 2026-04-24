@@ -122,7 +122,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     B0 = data["max_tz |B|"]
     scalar = (jnp.pi * data["R0"]) ** 2 / (
-        (opts.num_field_periods // grid.NFP) * 4 * 2**0.5
+        opts.num_field_periods / grid.NFP * 4 * 2**0.5
     )
     out = Bounce2D.batch(
         eps_32,

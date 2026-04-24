@@ -29,7 +29,6 @@ from desc.batching import batch_map
 from desc.derivatives import sparse_pullback
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    Y_B_rule,
     _sentinel,
     argmin,
     bounce_points,
@@ -41,7 +40,6 @@ from desc.integrals._bounce_utils import (
     get_mins,
     mmt_for_bounce,
     move,
-    num_well_rule,
     plot_ppoly,
     regular_points,
     set_default_plot_kwargs,
@@ -303,12 +301,12 @@ class Bounce2D(Bounce):
         assert grid.can_fft2
 
         if quad is None:
-            quad = get_quadrature(
-                leggauss(32), (automorphism_sin, grad_automorphism_sin)
+            quad = jax.lax.stop_gradient(
+                get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
             )
         else:
             quad = get_quadrature(quad, automorphism)
-        self._quad = jax.lax.stop_gradient(quad)
+        self._quad = quad
 
         self._NFP = grid.NFP
         self._num_t = grid.num_theta
@@ -347,7 +345,7 @@ class Bounce2D(Bounce):
         self._nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Y_B_rule(grid)
+            Y_B = Options._guess_Y_B(grid)
         if spline:
             self._c["B(z)"], self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -649,10 +647,15 @@ class Bounce2D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        if num_well is None:
-            num_well = num_well_rule(self._theta.X, self._NFP)
+        num_field_periods = self._theta.X
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            if num_well is None:
+                num_well = Options._guess_num_well(
+                    num_field_periods,
+                    self._NFP,
+                    self._c["B(z)"].Y // 2,
+                )
             # Skip Newton update since these points are exponentially accurate.
             z1, z2 = self._c["B(z)"].intersect1d(
                 self._swap_pitch(pitch_inv), num_intersect=num_well, eps=_eps
@@ -661,6 +664,8 @@ class Bounce2D(Bounce):
             z2 = move(z2)
             return z1, z2
 
+        if num_well is None:
+            num_well = Options._guess_num_well(num_field_periods, self._NFP)
         pitch_inv = broadcast_for_bounce(pitch_inv)
         if self._nufft_eps < 1e-14:
             # FIXME: Newton update has only been implemented for nuffts; contributions
@@ -947,12 +952,11 @@ class Bounce2D(Bounce):
         """
         f = _fourier_if_real(f)
 
-        num_field_periods = self._theta.X
-        num_mins = kwargs.get(
-            "num_mins",
-            # heuristic assumes iota is not massive
-            num_field_periods * max(self._num_z, self._num_t) // 2,
-        )
+        num_mins = kwargs.get("num_mins", -1)
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            bound = self._c["B(z)"].X * (self._c["B(z)"].Y // 2)
+            num_mins = bound if (num_mins < 0) else min(num_mins, bound)
+
         # We set fill value to 0 since we chose our coordinates
         # such that all bounce points are at ζ >= 0; and therefore,
         # junk values in B_mins cannot be selected in argmin.
@@ -1004,9 +1008,10 @@ class Bounce2D(Bounce):
         """
         warnings.warn(
             "This result will converge to "
-            "(num transit / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ where (α,ζ) ∈ Ω = [0, 2π)². "
+            "(num field periods / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ, "
+            "where (α,ζ) ∈ Ω = [0, 2π/NFP)².\n"
             "This can be computed more efficiently as "
-            '(num transit / 2π) * eq.compute("V_psi").',
+            '(num field periods / 2π) * eq.compute("V_psi") / eq.NFP.\n',
             DeprecationWarning,
         )
 
@@ -1024,12 +1029,18 @@ class Bounce2D(Bounce):
 
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
-        # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = x.size.
+        # of size
+        # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × deg/z_eff and |𝛇| = z_eff.
         # Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
+        if self._c["B^zeta"].shape[-2] == 1:  # axisymmetric
+            z_eff = jnp.array([0.0], ndmin=2)
+        else:
+            z_eff = bijection_from_disc(x, *self._theta.domain)[:, None]
+
         B_sup_z = ifft_mmt(
-            bijection_from_disc(x, *self._theta.domain)[:, None],
+            z_eff,
             self._c["B^zeta"],
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
@@ -1327,12 +1338,12 @@ class Bounce1D(Bounce):
         assert grid.is_meshgrid
 
         if quad is None:
-            quad = get_quadrature(
-                leggauss(32), (automorphism_sin, grad_automorphism_sin)
+            quad = jax.lax.stop_gradient(
+                get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
             )
         else:
             quad = get_quadrature(quad, automorphism)
-        self._quad = jax.lax.stop_gradient(quad)
+        self._quad = quad
 
         self._data = {
             "|b^zeta|": jnp.abs(data["B^zeta"]) * Lref / data["|B|"],
@@ -1876,9 +1887,14 @@ class Options(NamedTuple):
         pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         spline = kwargs.get("spline", True)
-        Y_B = kwargs.get("Y_B", Y_B_rule(grid))
+        Y_B = kwargs.get("Y_B", Options._guess_Y_B(grid))
         num_well = kwargs.get(
-            "num_well", num_well_rule(num_field_periods, grid.NFP, Y_B)
+            "num_well",
+            Options._guess_num_well(
+                num_field_periods,
+                grid.NFP,
+                Y_B if spline else (Y_B // 2),
+            ),
         )
 
         return cls(
@@ -1913,6 +1929,53 @@ class Options(NamedTuple):
         return get_quadrature(
             leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
         )
+
+    @staticmethod
+    def _guess_num_well(num_field_periods, NFP, mins_per_field_period=None):
+        """Guess upper bound for number of wells based on spectrum.
+
+        Parameters
+        ----------
+        num_field_periods : int
+            Number of field periods to follow field line.
+        NFP : int
+            Number of field periods per toroidal transit.
+        mins_per_field_period : int
+            An upper bound for the number of minima of B, (and hence number of wells),
+            per field period. For splines this is the number of knots per field period.
+            For Chebyshev series, this is the max degree floor division by 2.
+
+        Returns
+        -------
+        num_well : int
+            A guess for the max number of wells that exist for any pitch angle
+            or field line after following it for the specified length.
+            The guess will ideally be more conservative than
+            ``num_field_periods*mins_per_field_period`` to enhance performance
+            (due to limitations in JAX), yet sill remain loose enough that all
+            wells are always detected.
+
+        """
+        # e.g. heliotron with nfp 19 needs num field periods * 2
+        num_well = round(num_field_periods * (1 + 20/NFP))
+        return (
+            num_well
+            if mins_per_field_period is None
+            else min(num_well, num_field_periods * mins_per_field_period)
+        )
+
+    @staticmethod
+    def _guess_Y_B(grid):
+        """Guess Y_B from grid resolution.
+
+        Parameters
+        ----------
+        grid : Grid
+            Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+            (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+
+        """
+        return (grid.num_theta + grid.num_zeta) // 2
 
     @staticmethod
     def _build_objective(o, names, eta):
@@ -1951,11 +2014,12 @@ class Options(NamedTuple):
 
         Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(o._grid)
-            o._hyperparam["Y_B"] = Y_B
+            o._hyperparam["Y_B"] = Y_B = Options._guess_Y_B(o._grid)
         if o._hyperparam["num_well"] is None:
-            o._hyperparam["num_well"] = num_well_rule(
-                o._hyperparam["num_field_periods"], eq.NFP, Y_B
+            o._hyperparam["num_well"] = Options._guess_num_well(
+                o._hyperparam["num_field_periods"],
+                eq.NFP,
+                Y_B if o._hyperparam["spline"] else (Y_B // 2),
             )
 
         o._constants["_vander"] = (

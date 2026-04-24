@@ -839,13 +839,13 @@ def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
         shape (num ρ, num α, num field periods, Y).
 
     """
-    lines = theta.cheb.shape[:-2]
-    axisymmetric = f.shape[-2] == 1
-    if axisymmetric:
+    if f.shape[-2] == 1:  # axisymmetric
         vander = None
         z_eff = jnp.array([0.0], ndmin=2)
+    elif vander is None:
+        z_eff = cheb_pts(Y, theta.domain)[:, None]
     else:
-        z_eff = cheb_pts(Y, theta.domain)[:, None] if vander is None else None
+        z_eff = None
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
@@ -861,20 +861,10 @@ def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
         modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
-
-    t = theta.evaluate(Y)
-    if axisymmetric:
-        t = t.reshape(*lines, -1, 1)
-
-    # f shape is (...,            1, z_eff.size, modes_t.size)
-    # t shape is (..., theta.X *? Y, z_eff.size)
-    f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
-    if axisymmetric:
-        f = f.reshape(*lines, theta.X, Y)
-
+    f = irfft_mmt_pos(theta.evaluate(Y), f, n=jnp.nan, modes=modes_t)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
-    assert f.cheb.shape == (*lines, theta.X, Y)
+    assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
     return f
 
 
@@ -962,6 +952,7 @@ def fast_cubic_spline(
             modes=modes_z,
             vander=vander_z,
         )
+    # f shape is (..., z_eff, modes_t.size)
 
     lines = theta.cheb.shape[:-2]  # (..., num α)
     num_field_periods = theta.X
@@ -969,20 +960,20 @@ def fast_cubic_spline(
     # θ at uniform ζ on field lines
     t = idct_mmt(x, theta.cheb[..., None, :], vander=vander_t)
     assert t.shape == (*lines, num_field_periods, Y)
-    if axisymmetric:
-        t = t.reshape(*lines, -1, 1)
 
     if nufft_eps < 1e-14 or f.shape[-1] <= 16:
         f = f[..., None, None, :, :]
-        # f shape is (...,     1,                      1, z_eff, modes_t.size)
-        # t shape is (..., num α, num field periods *? Y, z_eff)
         f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
+        assert f.shape == t.shape
     else:
+        if axisymmetric:
+            t = t.reshape(*lines, -1, 1)
         if len(lines) > 1:
+            # incoming t shape is (num ρ, num α, num field periods *? Y, z_eff)
             t = t.transpose(0, 3, 1, 2).reshape(lines[0], z_eff, -1)
         else:
+            # incoming t shape is (num α, num field periods *? Y, z_eff)
             t = t.transpose(2, 0, 1).reshape(z_eff, -1)
-        # f shape is (..., z_eff, modes_t.size)
         # t shape is (..., z_eff, num α * num field periods *? Y)
         f = nufft1d2r(t, f, eps=nufft_eps).mT
         # f shape is (..., num α * num field periods *? Y, z_eff)

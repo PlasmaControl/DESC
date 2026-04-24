@@ -1021,7 +1021,7 @@ class Bounce2D(Bounce):
 
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
-        # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = x.size.
+        # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = x.size.
         # Partial summation is more efficient than direct evaluation when
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 

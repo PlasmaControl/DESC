@@ -36,14 +36,14 @@ from stability_helpers import *
 
 # Input parameters
 a = 1  # Minor radius
-aspect_ratio = 100  # Aspect ratio of the tokamak
+aspect_ratio = 10  # Aspect ratio of the tokamak
 R = aspect_ratio * a  # Major radius
 NFP = 1
 n = 1  # toroidal mode number
 
 # resolutions for phi matrix
-M = 32
-N = 32
+M = 20
+N = 50
 
 # number of grid points in each direction for the eigenvalue solve
 n_rho = 18
@@ -383,7 +383,7 @@ print(W_zeta.shape)
 W = jnp.kron(W_theta, W_zeta)[:, None]
 print(W.sum())
 print("normalization", ((B_N**2 * a_N**3)/(2 * mu_0)))
-print("just the jacobian:", dot(B_dot_n, W * sqrtg_grad_rho * B_dot_n))
+print("just the jacobian:", dot(B_dot_n, (W * sqrtg_grad_rho).flatten() * B_dot_n))
 print("B_dot_n = 1",  - dot(np.ones_like(B_dot_n), (W * sqrtg_grad_rho * phi_matrix) @ np.ones_like(B_dot_n)))
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
 W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))

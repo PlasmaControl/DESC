@@ -680,7 +680,7 @@ def argmin(z1, z2, f, mins, B_mins):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_alphas(alpha, iota, num_transit, NFP):
+def get_alphas(alpha, iota, num_field_periods, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -691,24 +691,24 @@ def get_alphas(alpha, iota, num_transit, NFP):
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
     NFP: int
         Number of field periods.
 
     Returns
     -------
     alphas : jnp.ndarray
-        Shape (num α, num ρ, num transit * NFP).
+        Shape (num α, num ρ, num field periods).
         Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
     alpha = alpha[:, None, None]
     iota = iota[:, None]
-    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_field_periods)
 
 
-def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
+def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -722,8 +722,8 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
     NFP : int
         Number of field periods.
     X_min : int
@@ -743,7 +743,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` broadcasts with
-        shape (num ρ, num α, num transit * NFP, max(1,7Y//8)).
+        shape (num ρ, num α, num field periods, max(1,7Y//8)).
 
     Notes
     -----
@@ -780,7 +780,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     domain = (0, 2 * jnp.pi / NFP)
 
     # peeling off field lines
-    alpha = get_alphas(alpha, iota, num_transit, NFP)
+    alpha = get_alphas(alpha, iota, num_field_periods, NFP)
     if angle.ndim == 2:
         alpha = alpha.squeeze(1)
 
@@ -795,7 +795,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     )
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
-    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_field_periods, Y)
 
     if X < X_min:
         # This is needed as our algorithm assumes continuity of |B| along field
@@ -815,7 +815,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit * NFP, theta.Y).
+        shape (num ρ, num α, num field periods, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -838,7 +838,7 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         ``f`` over one field period. ``f.cheb`` broadcasts with
-        shape (num ρ, num α, num transit * NFP, Y).
+        shape (num ρ, num α, num field periods, Y).
 
     """
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
@@ -885,7 +885,7 @@ def fast_cubic_spline(
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit * NFP, theta.Y).
+        shape (num ρ, num α, num field periods, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
@@ -912,14 +912,14 @@ def fast_cubic_spline(
     Returns
     -------
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, num α, num transit * NFP * Y - 1, 4).
+        Shape broadcasts with (num ρ, num α, num field periods * Y - 1, 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
         Second to last axis enumerates the polynomials that compose a particular
         spline.
     knots : jnp.ndarray
-        Shape (num transit * NFP * Y).
+        Shape (num field periods * Y).
         Knots of spline ``f``.
 
     """
@@ -983,7 +983,7 @@ def fast_cubic_spline(
     )
     f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, num_transit * NFP * Y - 1, 4)
+    assert f.shape == (*lines, theta.X * Y - 1, 4)
     return f, z
 
 
@@ -1076,15 +1076,15 @@ def Y_B_rule(grid):
     return (grid.num_theta + grid.num_zeta) // 2
 
 
-def num_well_rule(num_transit, NFP, mins_per_transit=None):
+def num_well_rule(num_field_periods, NFP, mins_per_field_period=None):
     """Guess upper bound for number of wells based on spectrum.
 
     This should be loose enough that it is equivalent to ``num_well=None``,
     but more performant.
     """
-    num_well = num_transit * (20 + NFP)
+    num_well = (num_field_periods // NFP) * (20 + NFP)
     return (
         num_well
-        if mins_per_transit is None
-        else min(num_well, num_transit * mins_per_transit)
+        if mins_per_field_period is None
+        else min(num_well, num_field_periods * mins_per_field_period)
     )

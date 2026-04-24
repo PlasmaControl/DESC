@@ -4699,7 +4699,7 @@ def plot_gammac(
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
-        * ``num_transit``: int
+        * ``num_field_periods``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
 
@@ -4739,8 +4739,8 @@ def plot_gammac(
     Y = kwargs.pop("Y", 32)
     Y_B = kwargs.pop("Y_B", Y_B_rule(grid))
     num_quad = kwargs.pop("num_quad", 32)
-    num_transit = kwargs.pop("num_transit", 2)
-    num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B * eq.NFP))
+    num_field_periods = kwargs.pop("num_field_periods", 10)
+    num_well = kwargs.pop("num_well", num_well_rule(num_field_periods, eq.NFP, Y_B))
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4756,7 +4756,7 @@ def plot_gammac(
         grid=grid,
         angle=Bounce2D.angle(eq, X, Y, rho),
         Y_B=Y_B,
-        num_transit=num_transit,
+        num_field_periods=num_field_periods,
         num_quad=num_quad,
         num_pitch=num_pitch,
         num_well=num_well,

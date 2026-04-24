@@ -30,8 +30,8 @@ Performance Improvements
 
 Breaking Changes
 
-- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier. Note that if you run old code with your previous resolution settings, then the resolution for the computation will be higher by a factor of the number of field periods, so you may want
-to set ``Y_B=(grid.num_theta+grid.num_zeta)//2`` or similiar (see the documentation for more details).
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 
 
 v0.17.1

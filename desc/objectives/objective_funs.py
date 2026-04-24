@@ -174,8 +174,8 @@ doc_bounce = """
         Default is single field line. To compute a surface average
         on a rational surface, it is necessary to average over multiple
         field lines until the surface is covered sufficiently.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
         In an axisymmetric device, field line integration over a single poloidal
         transit is sufficient to capture a surface average. For a 3D
         configuration, more transits will approximate surface averages on an

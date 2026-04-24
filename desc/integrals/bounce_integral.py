@@ -237,8 +237,8 @@ class Bounce2D(Bounce):
         Default is single field line. To compute a surface average
         on a rational surface, it is necessary to average over multiple
         field lines until the surface is covered sufficiently.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
         In an axisymmetric device, field line integration over a single poloidal
         transit is sufficient to capture a surface average. For a 3D
         configuration, more transits will approximate surface averages on an
@@ -287,7 +287,7 @@ class Bounce2D(Bounce):
         angle,
         Y_B=None,
         alpha=jnp.array([0.0]),
-        num_transit=20,
+        num_field_periods=20,
         quad=None,
         *,
         automorphism=None,
@@ -340,7 +340,9 @@ class Bounce2D(Bounce):
         angle = parse_argname_change(angle, kwargs, "theta", "angle")
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
         iota, alpha = jnp.atleast_1d(iota, alpha)
-        self._theta = theta_on_fieldlines(angle, iota, alpha, num_transit, grid.NFP)
+        self._theta = theta_on_fieldlines(
+            angle, iota, alpha, num_field_periods, grid.NFP
+        )
 
         self._nufft_eps = float(nufft_eps)
 
@@ -651,7 +653,7 @@ class Bounce2D(Bounce):
 
         """
         if num_well is None:
-            num_well = num_well_rule(self._theta.X // self._NFP, self._NFP)
+            num_well = num_well_rule(self._theta.X, self._NFP)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
             # Skip Newton update since these points are exponentially accurate.
@@ -1755,8 +1757,8 @@ class Options(NamedTuple):
             on a rational surface, it is necessary to average over multiple
             field lines until the surface is covered sufficiently.
             """,
-        "num_transit": """int :
-            Number of toroidal transits to follow field line.
+        "num_field_periods": """int :
+            Number of field periods to follow field line.
             In an axisymmetric device, field line integration over a single poloidal
             transit is sufficient to capture a surface average. For a 3D
             configuration, more transits will approximate surface averages on an
@@ -1820,7 +1822,7 @@ class Options(NamedTuple):
 
     _static_argnames = (
         "nufft_eps",
-        "num_transit",
+        "num_field_periods",
         "num_pitch",
         "num_quad",
         "num_well",
@@ -1833,7 +1835,7 @@ class Options(NamedTuple):
     alpha: jnp.ndarray
     loop: bool
     nufft_eps: float
-    num_transit: int
+    num_field_periods: int
     num_well: int
     pitch_batch_size: int
     pitch_quad: tuple[jnp.ndarray]
@@ -1866,7 +1868,8 @@ class Options(NamedTuple):
         )
 
         alpha = kwargs.get("alpha", jnp.array([0.0]))
-        num_transit = kwargs.get("num_transit", 20)
+        num_field_periods = kwargs.get("num_field_periods", 20)
+
         quad = kwargs.get("quad", None)
         if quad is None:
             quad = Options._quad(eta, kwargs.get("num_quad", 32))
@@ -1883,14 +1886,14 @@ class Options(NamedTuple):
         spline = kwargs.get("spline", True)
         Y_B = kwargs.get("Y_B", Y_B_rule(grid))
         num_well = kwargs.get(
-            "num_well", num_well_rule(num_transit, grid.NFP, Y_B * grid.NFP)
+            "num_well", num_well_rule(num_field_periods, grid.NFP, Y_B)
         )
 
         return cls(
             alpha=alpha,
             loop=kwargs.get("loop", False),
             nufft_eps=nufft_eps,
-            num_transit=num_transit,
+            num_field_periods=num_field_periods,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
             pitch_quad=pitch_quad,
@@ -1960,7 +1963,7 @@ class Options(NamedTuple):
             o._hyperparam["Y_B"] = Y_B
         if o._hyperparam["num_well"] is None:
             o._hyperparam["num_well"] = num_well_rule(
-                o._hyperparam["num_transit"], eq.NFP, Y_B * eq.NFP
+                o._hyperparam["num_field_periods"], eq.NFP, Y_B
             )
 
         o._constants["_vander"] = (

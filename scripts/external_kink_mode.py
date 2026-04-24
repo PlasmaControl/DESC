@@ -146,8 +146,10 @@ data = eq.compute(
         "psi_r",
         "Psi",
         "a",
+        "g^rr",
+        "B"
     ],
-    grid=grid,  # pest_grid,
+    grid=grid,  # ordered (rho, theta, zeta),
 )
 
 a_N = data["a"]
@@ -167,12 +169,13 @@ print(b_z)  # should be ~ 1 + O(eps^2)
 iota = data["iota"]
 B_0 = data["<|B|>_vol"]
 R = data["R"]
+R_0 = data["R0"]
 
 # get analytic eigenfunction
-k = - n / R
+k = -n / R
 k0_sq = k**2 + (1 / r**2)
 F = k * b_z + b_theta / r  # F/B
-G = - k * b_theta + b_z / r  # G/B
+G = -k * b_theta + b_z / r  # G/B
 
 
 delta = 1e-4  # small shift to avoid singularity at rational surface
@@ -222,7 +225,7 @@ for xi, label in zip(
     xi_r = dot(xi, data["e^rho"])  # xi^rho
     xi_theta = dot(xi, data["e^vartheta"])  # xi^theta
     xi_z = dot(xi, data["grad(phi)"])  # xi^z
-    xi = np.concatenate((xi_r/(psi_r + 1E-5), xi_theta, xi_z), axis=0)
+    xi = np.concatenate((xi_r / (psi_r + 1e-5), xi_theta, xi_z), axis=0)
 
     # ─── Debugging: eigenfunction plots ──────────────────────────────────────────
     # Reshape all 1D (n_total,) arrays to (n_rho, n_theta, n_zeta)
@@ -341,7 +344,7 @@ else:
     phi_matrix = phi_matrix.reshape(n_surf, n_surf)
 
     np.save(phi_path, phi_matrix)
-data = eq.compute(
+"""data = eq.compute(
     "finite-n lambda3",
     xi=xi,
     grid=grid,
@@ -352,7 +355,49 @@ data = eq.compute(
 )
 
 print("minimum eigenvalue:", data["energy"])
+"""
+n_total = n_rho * n_theta * n_zeta
+b_idx = slice(n_total - n_surf, n_total)
 
+# surface quantities
+psi_r_s = 1  # psi_r[b_idx, :] = 1 on the boundary
+sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
+g_sup_rr = data["g^rr"][:, None] * a_N**2
+sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
+print("sqrt(g) |grad(rho)| on boundary:", sqrtg_grad_rho.flatten())
+
+surface_jacobian = eq.surface.compute("|e_theta x e_zeta|", grid=rtz_surface_grid)[
+    "|e_theta x e_zeta|"
+]
+np.testing.assert_allclose(surface_jacobian, sqrtg_grad_rho.flatten(), rtol=1e-5, atol=1e-8)
+iota_s = iota[b_idx, None]
+xi_b = xi[b_idx]
+
+I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta))
+I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta))
+D_theta = jax.lax.stop_gradient(jnp.kron(D_theta_mat, I_zeta0))
+D_zeta = jax.lax.stop_gradient(jnp.kron(I_theta0, D_zeta_mat))
+B_dot_n = (
+    psi_r_s / sqrtg_grad_rho * (iota_s * D_theta + D_zeta)
+) @ xi_b  # B dot n = (1/sqrt(g)|grad(rho)|) * (iota ∂_θ + ∂_ζ) xi^ρ on the boundary
+W_theta = diffmat.W_theta
+W_zeta = diffmat.W_zeta
+W = jnp.kron(jnp.diag(W_theta), jnp.diag(W_zeta))
+
+
+def _cT(x):
+    return jnp.conjugate(jnp.transpose(x))
+
+
+B_dot_n = jnp.ones_like(B_dot_n)
+W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
+
+analytic_W_V = (r**2 * F[b_idx]**2 * data["B"][b_idx]**2) * xi_0**2
+analytic_W_V = analytic_W_V * 2 * np.pi**2 * R_0 / (mu_0)
+
+print("W_V from AGNI:", W_V)
+print("analytic W_V:", np.sum(analytic_W_V))
+"""
 # ─── Term-by-term energy contributions ────────────────────────────────────────
 from desc.compute._stability import energy_terms
 
@@ -374,3 +419,4 @@ W_0 = (2 * np.pi**2 * R_0 * B_0**2) / (mu_0 * a**2)
 delta_W_hat_analytic = 2 * a**2 * xi_0**2 * iota_a * n * (n / iota_a - 1)
 delta_W_analytic = delta_W_hat_analytic * W_0 * eps**2
 print("analytic expectation:", delta_W_analytic)
+"""

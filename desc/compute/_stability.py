@@ -1266,7 +1266,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         print(W[b_idx, :].shape)
         print(D_zeta[b_idx, b_idx].shape)
         A = A.at[b_idx, b_idx].add(
-            _cT(
+            -_cT(
                 W[b_idx, :]
                 * psi_r_s**3 # this is just for consistency; psi' = 1 here
                 * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
@@ -3131,7 +3131,7 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         print(W[b_idx, :].shape)
         print(D_zeta[b_idx, b_idx].shape)
         A = A.at[b_idx, b_idx].add(
-            _vacuum * _cT(
+            -_vacuum * _cT(
                 W[b_idx, :]
                 * psi_r_s**3 # this is just for consistency; psi' = 1 here
                 * (iota_s * D_theta[b_idx, b_idx] + D_zeta[b_idx, b_idx])
@@ -3371,14 +3371,28 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         vr_ = (xr / d[rho_idx]  - Linv[:, 1, 0] * vv_ - Linv[:, 2, 0] * vz_) / Linv[:, 0, 0]
 
         v_full_ = jnp.concatenate([vr_, vv_, vz_])
+        
         return v_full_[keep]
+    def _v_to_xi(v):
+        v_mode = v[:, 0] if jnp.ndim(v) == 2 else v
+        v_full = jnp.zeros(3 * n_total, dtype=v_mode.dtype).at[keep].set(v_mode)
+        vr, vv, vz = v_full[rho_idx], v_full[ups_idx], v_full[zeta_idx]
+        xi_full = jnp.concatenate([
+            d[rho_idx]  * (Linv[:, 0, 0] * vr + Linv[:, 1, 0] * vv + Linv[:, 2, 0] * vz),
+            d[ups_idx]  * (                      Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
+            d[zeta_idx] * (                                           Linv[:, 2, 2] * vz),
+        ])
+        return xi_full
     if transforms.get("xi", None) is not None:
         print("using provided xi to compute energy without eigendecomposition")
         xi = transforms["xi"]
         v = _xi_to_v(xi)
+        # check v --> xi is consistent with the provided xi
+        np.testing.assert_allclose(xi, _v_to_xi(v), rtol=1e-8, atol=1e-13)
+        
         data["Av"] = A @ v
         w = dot(v, data["Av"])
-        data["energy"] = w * 2 * (B_N**2 * a_N**3)/mu_0
+        data["energy"] = w * 2 * mu_0/(B_N**2 * a_N**3)
         return data
     else:
         w, v = jnp.linalg.eigh(A)

@@ -699,7 +699,7 @@ def get_alphas(alpha, iota, num_field_periods, NFP):
     num_field_periods : int
         Number of field periods to follow field line.
     NFP: int
-        Number of field periods.
+        Number of field periods per toroidal transit.
 
     Returns
     -------

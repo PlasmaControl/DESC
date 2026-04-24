@@ -133,6 +133,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     X = None
 
     for n_rho, n_theta, n_zeta in zip(n_rhos, n_thetas, n_zetas):
+        print(n_rho, n_theta, n_zeta)
         print(f"\n--- Solving at low res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---")
         # paths for saving eigenfunction and related data
         save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"

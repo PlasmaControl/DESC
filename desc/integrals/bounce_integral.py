@@ -947,9 +947,12 @@ class Bounce2D(Bounce):
         """
         f = _fourier_if_real(f)
 
-        num_transit = self._theta.X // self._NFP
-        K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal
-        num_mins = kwargs.get("num_mins", num_transit * K_z)
+        num_field_periods = self._theta.X
+        num_mins = kwargs.get(
+            # heuristic assumes iota is not massive
+            "num_mins",
+            num_field_periods * max(self._num_z, self._num_t, 3) // 3,
+        )
         # We set fill value to 0 since we chose our coordinates
         # such that all bounce points are at ζ >= 0; and therefore,
         # junk values in B_mins cannot be selected in argmin.

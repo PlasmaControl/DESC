@@ -201,6 +201,7 @@ def _test_proximal_ripple(use_bounce1d, method):
                 num_transit=num_transit,
                 num_well=10 * num_transit,
                 num_quad=16,
+                Y_B=64,
                 use_bounce1d=use_bounce1d,
             )
         ]

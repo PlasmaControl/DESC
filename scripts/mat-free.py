@@ -49,7 +49,7 @@ os.makedirs(plot_path, exist_ok=True)
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = 0.9 * np.ones(1) # #np.linspace(0.8, 1.25, 10)
+iota_on_axis_values = 1.1 * np.ones(1) # #np.linspace(0.8, 1.25, 10)
 
 results_lambda_min = np.zeros_like(iota_on_axis_values)
 stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
@@ -117,7 +117,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     )
     title_base = (
         rf"$\iota_0 = {iota_0:.3f}$,  "
-        rf"$\iota(\rho) = \iota_0 + {2*iota_coeffs[-1]:.2f}\,\rho^2$"
+        rf"$\iota(\rho) = \iota_0 - {np.abs(iota_coeffs[-1]):.2f}\,\rho^2$"
     )
 
     print("making input grid and diffmats")
@@ -247,7 +247,7 @@ ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
 ax.set_title(
     r"Stability eigenvalue vs $\iota_0$" + "\n"
-    f"$\\iota(\\rho) = \\iota_0 + {2*iota_coeffs[-1]}\\rho^2$",
+    f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
     fontsize=12,
 )
 ax.tick_params(labelsize=12)

@@ -43,23 +43,18 @@ n = 1  # toroidal mode number
 
 # resolutions for phi matrix
 M = 20
-N = 50
+N = 80
 
 # number of grid points in each direction for the eigenvalue solve
-n_rho = 18
+n_rho = 1#18
 n_theta = 2 * M
 n_zeta = 2 * N
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.5*rho^2
-iota_on_axis_values = np.linspace(0.8, 1.25, 10)
 
 save_path = "./external_kink_mode/"
 os.makedirs(save_path, exist_ok=True)
 
-results_lambda_min = np.zeros_like(iota_on_axis_values)
-results_term_by_term = {
-    term: np.zeros_like(iota_on_axis_values) for term in energy_terms
-}
 
 iota_prime = -0.5
 iota_a = 1.1  # iota on edge; iota_a > 1should be unstable

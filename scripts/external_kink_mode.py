@@ -46,7 +46,7 @@ M = 20
 N = 80
 
 # number of grid points in each direction for the eigenvalue solve
-n_rho = 1#18
+n_rho = 18
 n_theta = 2 * M
 n_zeta = 2 * N
 

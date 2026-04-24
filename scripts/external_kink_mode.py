@@ -360,7 +360,8 @@ n_total = n_rho * n_theta * n_zeta
 b_idx = slice(n_total - n_surf, n_total)
 
 # surface quantities
-psi_r_s = 1  # psi_r[b_idx, :] = 1 on the boundary
+psi_r_s = psi_r[b_idx, :]#1  # psi_r[b_idx, :] = 1 on the boundary
+print(psi_r_s)
 sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 g_sup_rr = data["g^rr"][:, None] * a_N**2
 sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
@@ -386,6 +387,7 @@ W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))
 
 analytic_W_V = np.mean((r[b_idx] * F[b_idx] * data["|B|"][b_idx])**2) * xi_0**2
 analytic_W_V = analytic_W_V * 2 * np.pi**2 * R_0 / (mu_0)
+print(analytic_W_V.shape)
 
 print("W_V from AGNI:", W_V)
 print("analytic W_V:", np.sum(analytic_W_V))

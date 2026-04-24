@@ -16,6 +16,7 @@ from desc.io import load
 from desc.equilibrium.coords import map_coordinates
 import os
 from scipy.constants import mu_0
+from desc.profiles import PowerSeriesProfile
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 M      = 28
@@ -23,11 +24,12 @@ N      = 28
 n_theta = 2 * M
 n_zeta  = 2 * N
 n_surf  = n_theta * n_zeta
-eq_tag  = "low_aspect_ratio_highly_non_axisym_p_0.125_0.0_0.0_0.0_-0.125_iota_0.9_0.0_0.1_0.0_0.1"
-eq_name = "Low aspect ratio, highly non-axisymmetric"
+eq_tag  = "circular_tokamak"
+eq_name = "Circular tokamak"
 NFP     = 1
 
 save_path = "results/phi_matrix/"
+eq_save_name = f"{eq_tag}_M_{M}_N_{N}_equilibrium.h5"
 phi_save_name = f"{eq_tag}_M_{M}_N_{N}_phi_matrix.npy"
 os.makedirs(save_path, exist_ok=True)
 
@@ -37,11 +39,42 @@ I_coil = 1e6  # fixed coil current (A)
 delta_h_fracs = np.linspace(0.3, 1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
-eq = load(save_path + f"equilibrium_{eq_tag}__M_{M}_N_{N}_pest_True.h5")
-eq.change_resolution(NFP=1)
-surface = SourceFreeField(eq.surface, M, N)
-eq.surface = surface
+R0 = 2
+a = 1
 
+if os.path.exists(save_path + eq_save_name):
+    eq = load(save_path + eq_save_name)
+    eq.change_resolution(NFP=1)
+    eq.surface = SourceFreeField(eq.surface, M, N, NFP=1)
+else:
+    surface = FourierRZToroidalSurface.from_shape_parameters(
+        major_radius=R0,
+        aspect_ratio=int(R0/a),
+        elongation=1,
+        triangularity=0,
+        squareness=0,
+        eccentricity=0,
+        torsion=0,
+        NFP=1,
+    )
+    surface = SourceFreeField(surface, M, N, NFP=1)
+    iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
+    p_profile = np.array([0.125, 0, 0, 0, -0.125])
+    eq = Equilibrium(
+            L=12,
+            M=12,
+            N=0,
+            surface=surface,
+            NFP=NFP,
+            iota=PowerSeriesProfile(iota_coeffs),
+            pressure=PowerSeriesProfile(p_profile),
+            Psi=1,
+        )
+
+    eq = solve_continuation_automatic(
+        eq, ftol=1e-13, gtol=1e-13, xtol=1e-13, verbose=0
+    )[-1]
+    eq.save(save_path + eq_save_name)
 a  = eq.compute("a")["a"]
 R0 = eq.compute("R0")["R0"]
 

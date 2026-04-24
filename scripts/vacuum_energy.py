@@ -26,8 +26,12 @@ N = 28
 n_theta = 2 * M
 n_zeta = 2 * N
 n_surf = n_theta * n_zeta
-eq_tag = "circular_tokamak"
-eq_name = "Circular tokamak"
+R0 = 4
+a = 1
+elongation = 2
+
+eq_tag = f"R0_{R0}_a_{a}_elongation_{elongation}"
+eq_name = "Rotating ellipse"
 NFP = 1
 
 save_path = "results/phi_matrix/"
@@ -44,9 +48,6 @@ I_coil = 1e6  # fixed coil current (A)
 delta_h_fracs = np.linspace(0.01, 0.1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
-R0 = 4
-a = 1
-elongation = 2
 if os.path.exists(save_path + eq_save_name):
     eq = load(save_path + eq_save_name)
     eq.change_resolution(NFP=1)
@@ -183,17 +184,6 @@ else:
 full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
 # ── W_V_true: direct volume integral ─────────────────────────────────────────
-surf_grid = LinearGrid(M=1000, N=1000, NFP=NFP)
-data = surface.compute(["x", "|e_theta x e_zeta|"], grid=surf_grid)
-x = data["x"]
-surf_jac = data["|e_theta x e_zeta|"]
-x0 = np.zeros_like(x)
-# x0 = uniform grid at R=R0, Z=0, zeta=same as x
-x0[:, 0] = R0
-x0[:, 1] = x[:, 1]
-r = safenorm(x - x0, axis=-1)
-
-
 def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, r_max_factor=20.0):
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M_quad, N=0)
@@ -221,7 +211,7 @@ def compute_external_coil_energy_3d(
 ):
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M, N=N)
-    surf_data = surface.compute(["x"], grid=quad_grid)
+    surf_data = eq.surface.compute(["x"], grid=quad_grid)
     r = safenorm(surf_data["x"] - np.array(
         [R0 * np.ones(quad_grid.num_nodes), quad_grid.nodes[:, 2], 0]
     ), axis=-1) # distance from R=R0, Z=0, zeta=same as quad_grid

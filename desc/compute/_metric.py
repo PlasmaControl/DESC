@@ -1311,6 +1311,123 @@ def _g_sub_tz_rrr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="g_tt_t",
+    label="\\partial_{\\theta} g_{\\theta\\theta}",
+    units="m^2",
+    units_long="square meters",
+    description="Poloidal-poloidal metric element, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_t"],
+)
+def _g_tt_t(params, transforms, profiles, data, **kwargs):
+    # ∂_θ(eθ · eθ) = 2 eθ · eθθ
+    data["g_tt_t"] = 2 * dot(data["e_theta"], data["e_theta_t"])
+    return data
+
+
+@register_compute_fun(
+    name="g_tt_z",
+    label="\\partial_{\\zeta} g_{\\theta\\theta}",
+    units="m^2",
+    units_long="square meters",
+    description="Poloidal-poloidal metric element, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_z"],
+)
+def _g_tt_z(params, transforms, profiles, data, **kwargs):
+    # ∂_ζ(eθ · eθ) = 2 eθ · eθζ
+    data["g_tt_z"] = 2 * dot(data["e_theta"], data["e_theta_z"])
+    return data
+
+
+@register_compute_fun(
+    name="g_tz_t",
+    label="\\partial_{\\theta} g_{\\theta\\zeta}",
+    units="m^2",
+    units_long="square meters",
+    description="Poloidal-toroidal metric element, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_t", "e_zeta", "e_theta", "e_theta_z"],
+)
+def _g_tz_t(params, transforms, profiles, data, **kwargs):
+    # ∂_θ(eθ · eζ) = eθθ · eζ + eθ · eζθ,  and eζθ = eθζ = "e_theta_z"
+    data["g_tz_t"] = dot(data["e_theta_t"], data["e_zeta"]) + dot(
+        data["e_theta"], data["e_theta_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g_tz_z",
+    label="\\partial_{\\zeta} g_{\\theta\\zeta}",
+    units="m^2",
+    units_long="square meters",
+    description="Poloidal-toroidal metric element, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta_z", "e_zeta", "e_theta", "e_zeta_z"],
+)
+def _g_tz_z(params, transforms, profiles, data, **kwargs):
+    # ∂_ζ(eθ · eζ) = eθζ · eζ + eθ · eζζ
+    data["g_tz_z"] = dot(data["e_theta_z"], data["e_zeta"]) + dot(
+        data["e_theta"], data["e_zeta_z"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g_zz_t",
+    label="\\partial_{\\theta} g_{\\zeta\\zeta}",
+    units="m^2",
+    units_long="square meters",
+    description="Toroidal-toroidal metric element, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_theta_z"],
+)
+def _g_zz_t(params, transforms, profiles, data, **kwargs):
+    # ∂_θ(eζ · eζ) = 2 eζ · eζθ,  and eζθ = eθζ = "e_theta_z"
+    data["g_zz_t"] = 2 * dot(data["e_zeta"], data["e_theta_z"])
+    return data
+
+
+@register_compute_fun(
+    name="g_zz_z",
+    label="\\partial_{\\zeta} g_{\\zeta\\zeta}",
+    units="m^2",
+    units_long="square meters",
+    description="Toroidal-toroidal metric element, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_zeta_z"],
+)
+def _g_zz_z(params, transforms, profiles, data, **kwargs):
+    data["g_zz_z"] = 2 * dot(data["e_zeta"], data["e_zeta_z"])
+    return data
+
+
+@register_compute_fun(
     name="g^rr",
     label="g^{\\rho\\rho}",
     units="m^{-2}",
@@ -2649,4 +2766,145 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
     data["finite-n instability drive"] = (
         2 * dot(data["J x grad(rho)"], data["(B*grad) grad(rho)"]) / data["g^rr"] ** 2
     )
+    return data
+
+
+################################################################################
+##############----------------PLASMA ROTATION METRICS-------------##############
+################################################################################
+
+
+# A = ∇ψ × ∇|B|
+@register_compute_fun(
+    name="|grad psi cross grad |B||^2",
+    label="|\\mathbf{A}|^2",
+    units="T^4",
+    units_long="Tesla^4",
+    description="Squared magnitude of A = grad(psi) x grad(|B|)",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r", "|B|_t", "|B|_z", "g_tt", "g_tz", "g_zz", "sqrt(g)"],
+)
+def _A_mag_sq(params, transforms, profiles, data, **kwargs):
+    # A^θ = -(ψ_ρ/√g)|B|_z,  A^ζ = +(ψ_ρ/√g)|B|_t
+    # |A|² = (ψ_ρ²/g)[g_tt |B|_z² − 2g_tz |B|_t |B|_z + g_zz |B|_t²]
+    B_t = data["|B|_t"]
+    B_z = data["|B|_z"]
+    Q = data["g_tt"] * B_z**2 - 2.0 * data["g_tz"] * B_t * B_z + data["g_zz"] * B_t**2
+    data["|grad psi cross grad |B||^2"] = (
+        data["psi_r"] ** 2 / data["sqrt(g)"] ** 2
+    ) * Q
+    return data
+
+
+@register_compute_fun(
+    name="Nies supersonic rotation metric",
+    label="\\mathbf{A} \\cdot \\nabla \\lvert\\mathbf{A}\\lvert",
+    units="T^4 / m",
+    units_long="Tesla^4 per meter",
+    # description="Nies metric, when reduced to 0, along with the QA objective"+
+    # " will give a QA plasma with rotation",
+    description="as",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r",
+        "|B|_t",
+        "|B|_z",
+        "|B|_tt",
+        "|B|_tz",
+        "|B|_zz",
+        "g_tt",
+        "g_tz",
+        "g_zz",
+        "g_tt_t",
+        "g_tt_z",
+        "g_tz_t",
+        "g_tz_z",
+        "g_zz_t",
+        "g_zz_z",
+        "sqrt(g)",
+        "sqrt(g)_t",
+        "sqrt(g)_z",
+        "|grad psi cross grad |B||^2",
+    ],
+)
+def _Nies_supersonic_rotation_metric(params, transforms, profiles, data, **kwargs):
+    """
+    Pointwise penalty to enable fast rotation.
+
+    Since the quantity A = ∇ ψ × ∇|B|
+    A · ∇|A| = (1/2|A|) [A^θ ∂_θ(|A|²)  +  A^ζ ∂_ζ(|A|²)]
+
+    with  |A|² = (ψ_ρ²/g) Q  so that
+
+        ∂_x(|A|²) = (ψ_ρ²/g) [∂_x Q  −  Q · 2√g (∂_x√g) / g]
+                  = (ψ_ρ²/g) [∂_x Q  −  2Q (∂_x√g)/√g]
+    for some coordinate x
+    """
+    psi_r = data["psi_r"]
+    sqrtg = data["sqrt(g)"]
+    sqrtg_t = data["sqrt(g)_t"]
+    sqrtg_z = data["sqrt(g)_z"]
+
+    B_t = data["|B|_t"]
+    B_z = data["|B|_z"]
+    B_tt = data["|B|_tt"]
+    B_tz = data["|B|_tz"]
+    B_zz = data["|B|_zz"]
+
+    g_tt = data["g_tt"]
+    g_tz = data["g_tz"]
+    g_zz = data["g_zz"]
+
+    g_tt_t = data["g_tt_t"]
+    g_tt_z = data["g_tt_z"]
+    g_tz_t = data["g_tz_t"]
+    g_tz_z = data["g_tz_z"]
+    g_zz_t = data["g_zz_t"]
+    g_zz_z = data["g_zz_z"]
+
+    # A^θ = -(ψ_ρ/√g)|B|_ζ,
+    # A^ζ = +(ψ_ρ/√g)|B|_θ
+    # This can go boom very close to the axis.
+    inv_sqrtg = safediv(psi_r, sqrtg)
+    A_sup_t = -inv_sqrtg * B_z
+    A_sup_z = inv_sqrtg * B_t
+
+    Q = g_tt * B_z**2 - 2.0 * g_tz * B_t * B_z + g_zz * B_t**2
+
+    dQ_dt = (
+        g_tt_t * B_z**2
+        + 2.0 * g_tt * B_z * B_tz
+        - 2.0 * g_tz_t * B_t * B_z
+        - 2.0 * g_tz * (B_tt * B_z + B_t * B_tz)
+        + g_zz_t * B_t**2
+        + 2.0 * g_zz * B_t * B_tt
+    )
+
+    dQ_dz = (
+        g_tt_z * B_z**2
+        + 2.0 * g_tt * B_z * B_zz
+        - 2.0 * g_tz_z * B_t * B_z
+        - 2.0 * g_tz * (B_tz * B_z + B_t * B_zz)
+        + g_zz_z * B_t**2
+        + 2.0 * g_zz * B_t * B_tz
+    )
+
+    # ∂(|A|²)/∂θ  and  ∂(|A|²)/∂ζ                                    #
+    # |A|² = (ψ_ρ²/√g²) Q
+    psi_r_sq_over_g = psi_r**2 / sqrtg**2
+    d_A2_dt = psi_r_sq_over_g * (dQ_dt - 2.0 * Q * sqrtg_t / sqrtg)
+    d_A2_dz = psi_r_sq_over_g * (dQ_dz - 2.0 * Q * sqrtg_z / sqrtg)
+
+    numerator = A_sup_t * d_A2_dt + A_sup_z * d_A2_dz
+    two_A_mag = 2.0 * (data["|A|^2"] ** 0.5)
+
+    data["A_dot_grad_|A|"] = safediv(numerator, two_A_mag)
     return data

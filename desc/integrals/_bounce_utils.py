@@ -849,7 +849,8 @@ def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
+    # of size
+    # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
@@ -931,7 +932,7 @@ def fast_cubic_spline(
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
+    # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 

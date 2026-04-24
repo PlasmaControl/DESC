@@ -55,7 +55,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
         Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    num_well : int or None
+    num_well : int
         Specify to return the first ``num_well`` pairs of bounce points for each
         pitch and field line. Choosing ``-1`` will detect all wells, but due
         to current limitations in JAX this will have worse performance.
@@ -605,7 +605,7 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    num_mins : jnp.ndarray
+    num_mins : int
         Number of minima to return. Otherwise returns maximum possible.
     fill_value : float
         If there were less than ``num_mins`` minima detected, then the result

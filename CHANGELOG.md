@@ -28,6 +28,11 @@ Performance Improvements
 - Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
 
+Breaking Changes
+
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier. Note that if you run old code with your previous resolution settings, then the resolution for the computation will be higher by a factor of the number of field periods, so you may want
+to set ``Y_B=(grid.num_theta+grid.num_zeta)//2`` or similiar (see the documentation for more details).
+
 
 v0.17.1
 -------

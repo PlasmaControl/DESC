@@ -2089,7 +2089,7 @@ class TestObjectiveFunction:
         Y = 32
         num_transit = 4
         opts = dict(
-            Y_B=64,
+            Y_B=13,
             num_transit=num_transit,
             num_well=15 * num_transit,
             num_quad=16,

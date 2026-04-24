@@ -21,6 +21,7 @@ from interpax_fft import (
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from matplotlib.ticker import MaxNLocator
+from orthax.chebyshev import chebvander
 from orthax.legendre import leggauss
 
 from desc.backend import jax, jnp, rfft2
@@ -38,7 +39,6 @@ from desc.integrals._bounce_utils import (
     fast_chebyshev,
     fast_cubic_spline,
     get_mins,
-    get_vander_spline,
     mmt_for_bounce,
     move,
     num_well_rule,
@@ -46,6 +46,7 @@ from desc.integrals._bounce_utils import (
     regular_points,
     set_default_plot_kwargs,
     theta_on_fieldlines,
+    truncate_rule,
 )
 from desc.integrals._interp_utils import (
     _JF_BUG,
@@ -225,10 +226,7 @@ class Bounce2D(Bounce):
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline=True`` option is
-        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
-        A reference value for the ``spline=False`` option is
-        ``(grid.num_theta+grid.num_zeta)//2``.
+        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -347,7 +345,7 @@ class Bounce2D(Bounce):
         self._nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Y_B_rule(grid, spline)
+            Y_B = Y_B_rule(grid)
         if spline:
             self._c["B(z)"], self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -1042,8 +1040,7 @@ class Bounce2D(Bounce):
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
             modes=self._modes_z,
-        )
-        B_sup_z = B_sup_z[..., None, None, None, :, :]
+        )[..., None, None, None, :, :]
         B_sup_z = irfft_mmt_pos(
             idct_mmt(x, self._theta.cheb.reshape(shape)),
             B_sup_z,
@@ -1745,10 +1742,7 @@ class Options(NamedTuple):
             If the option ``spline`` is ``True``, the bounce points are found with
             8th order accuracy in this parameter. If the option ``spline`` is ``False``,
             then the bounce points are found with spectral accuracy in this parameter.
-            A reference value for the ``spline=True`` option is
-            ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
-            A reference value for the ``spline=False`` option is
-            ``(grid.num_theta+grid.num_zeta)//2``.
+            A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
             An error of ε in a bounce point manifests
             𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -1887,12 +1881,9 @@ class Options(NamedTuple):
         pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         spline = kwargs.get("spline", True)
-        Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
+        Y_B = kwargs.get("Y_B", Y_B_rule(grid))
         num_well = kwargs.get(
-            "num_well",
-            # Due to legacy reasons Y_B is resolution over full transit
-            # if spline is true.
-            num_well_rule(num_transit, grid.NFP, Y_B if spline else (Y_B * grid.NFP)),
+            "num_well", num_well_rule(num_transit, grid.NFP, Y_B * grid.NFP)
         )
 
         return cls(
@@ -1965,19 +1956,19 @@ class Options(NamedTuple):
 
         Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(o._grid, o._hyperparam["spline"])
+            Y_B = Y_B_rule(o._grid)
             o._hyperparam["Y_B"] = Y_B
         if o._hyperparam["num_well"] is None:
             o._hyperparam["num_well"] = num_well_rule(
-                o._hyperparam["num_transit"],
-                eq.NFP,
-                # Due to legacy reasons Y_B is resolution over full transit
-                # if spline is true.
-                Y_B if o._hyperparam["spline"] else (Y_B * eq.NFP),
+                o._hyperparam["num_transit"], eq.NFP, Y_B * eq.NFP
             )
 
         o._constants["_vander"] = (
-            get_vander_spline(o._grid, Y, Y_B, eq.NFP)
+            {
+                "dct spline": chebvander(
+                    jnp.linspace(-1, 1, Y_B, endpoint=False), truncate_rule(Y) - 1
+                )
+            }
             if o._hyperparam["spline"]
             else {}
         )

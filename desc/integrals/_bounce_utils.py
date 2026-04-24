@@ -22,7 +22,6 @@ from interpax_fft import (
 )
 from interpax_fft._series import _add2legend, _plot_intersect
 from matplotlib import pyplot as plt
-from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
@@ -891,8 +890,7 @@ def fast_cubic_spline(
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
-        Number of knots per toroidal transit to interpolate ``f``.
-        This number will be rounded up to an integer multiple of ``NFP``.
+        Number of knots per field period to interpolate ``f``.
     num_t : int
         Fourier resolution in poloidal direction.
     modes_t : jnp.ndarray
@@ -914,14 +912,14 @@ def fast_cubic_spline(
     Returns
     -------
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, num α, num transit * Y - 1, 4).
+        Shape broadcasts with (num ρ, num α, num transit * NFP * Y - 1, 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
         Second to last axis enumerates the polynomials that compose a particular
         spline.
     knots : jnp.ndarray
-        Shape (num transit * Y).
+        Shape (num transit * NFP * Y).
         Knots of spline ``f``.
 
     """
@@ -930,15 +928,15 @@ def fast_cubic_spline(
     lines = theta.cheb.shape[:-2]
     num_transit = theta.X // NFP
 
-    axisymmetric = f.shape[-2] == 1
-    Y, num_z = round_up_rule(Y, NFP, axisymmetric)
-    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_z, endpoint=False)
+    x = jnp.linspace(-1, 1, Y, endpoint=False)
     z = bijection_from_disc(x, *theta.domain)
+    axisymmetric = f.shape[-2] == 1
+    num_z = 1 if axisymmetric else Y
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y/NFP.
+    #   |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
@@ -985,7 +983,7 @@ def fast_cubic_spline(
     )
     f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, num_transit * Y - 1, 4)
+    assert f.shape == (*lines, num_transit * NFP * Y - 1, 4)
     return f, z
 
 
@@ -1065,27 +1063,7 @@ def truncate_rule(Y):
     return max(1, 7 * Y // 8)
 
 
-def round_up_rule(Y, NFP, axisymmetric):
-    """Round Y up to NFP multiple.
-
-    Returns
-    -------
-    Y : int
-        Number of points per toroidal transit.
-    num_z : int
-        Number of points per field period.
-    axisymmetric : bool
-        Whether there toroidal smmetry.
-
-    """
-    if axisymmetric:
-        assert Y % NFP == 0, "Should set NFP = 1."
-        NFP = Y
-    num_z = (Y + NFP - 1) // NFP
-    return num_z * NFP, num_z
-
-
-def Y_B_rule(grid, spline):
+def Y_B_rule(grid):
     """Guess Y_B from grid resolution.
 
     Parameters
@@ -1093,21 +1071,9 @@ def Y_B_rule(grid, spline):
     grid : Grid
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-    spline : bool
-        Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series.
-
-    Returns
-    -------
-    Y_B : int
-        Desired resolution for algorithm to compute bounce points.
 
     """
-    Y_B = (grid.num_theta + grid.num_zeta) // 2
-    # Due to backwards compatibility reasons Y_B is expected to indicate
-    # resolution over full transit (a single field period) when spline is
-    # true (false).
-    return (Y_B * grid.NFP) if spline else Y_B
+    return (grid.num_theta + grid.num_zeta) // 2
 
 
 def num_well_rule(num_transit, NFP, mins_per_transit=None):
@@ -1122,13 +1088,3 @@ def num_well_rule(num_transit, NFP, mins_per_transit=None):
         if mins_per_transit is None
         else min(num_well, num_transit * mins_per_transit)
     )
-
-
-def get_vander_spline(grid, Y, Y_B, NFP):
-    """Builds Vandermonde matrices for objectives."""
-    Y_trunc = truncate_rule(Y)
-    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
-    x = jnp.linspace(
-        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
-    )
-    return {"dct spline": chebvander(x, Y_trunc - 1)}

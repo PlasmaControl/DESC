@@ -117,7 +117,7 @@ def dual_pi_formatter(ax_axis, iota_NFP, NFP=1):
     return ax_axis
 
 
-def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
+def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=64, num_pitch=20):
     """High resolution plot for the paper."""
     plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams["font.size"] = 14
@@ -383,7 +383,7 @@ def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
                 grid=grid,
                 angle=Bounce2D.angle(eq, X=res[0], Y=res[1], rho=rho),
                 alpha=alpha,
-                Y_B=200,
+                Y_B=40,
                 num_transit=num_transit,
                 num_well=20 * num_transit,
                 num_quad=res[2],
@@ -469,7 +469,7 @@ def test_plot_optimized_ripple(mode=1):
             grid=grid,
             angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
             alpha=jnp.linspace(0, 2 * jnp.pi, 3, endpoint=False),
-            Y_B=200,
+            Y_B=40,
             num_transit=num_transit,
             num_well=20 * num_transit,
             num_quad=32,

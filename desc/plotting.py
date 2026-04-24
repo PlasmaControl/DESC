@@ -4737,10 +4737,10 @@ def plot_gammac(
     kwargs.pop("surf_batch_size", None)
     X = kwargs.pop("X", 32)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", Y_B_rule(grid, spline=True))
+    Y_B = kwargs.pop("Y_B", Y_B_rule(grid))
     num_quad = kwargs.pop("num_quad", 32)
     num_transit = kwargs.pop("num_transit", 2)
-    num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B))
+    num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B * eq.NFP))
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")

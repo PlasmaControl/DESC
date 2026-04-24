@@ -301,9 +301,7 @@ class Bounce2D(Bounce):
         assert grid.can_fft2
 
         if quad is None:
-            quad = jax.lax.stop_gradient(
-                get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
-            )
+            quad = Options._quad(-2, 32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -1338,9 +1336,7 @@ class Bounce1D(Bounce):
         assert grid.is_meshgrid
 
         if quad is None:
-            quad = jax.lax.stop_gradient(
-                get_quadrature(leggauss(32), (automorphism_sin, grad_automorphism_sin))
-            )
+            quad = Options._quad(-2, 32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -1876,7 +1872,6 @@ class Options(NamedTuple):
         quad = kwargs.get("quad", None)
         if quad is None:
             quad = Options._quad(eta, kwargs.get("num_quad", 32))
-        quad = jax.lax.stop_gradient(quad)
 
         if eta == 1:
             nufft_eps = kwargs.get("nufft_eps", 1e-6)
@@ -1923,12 +1918,15 @@ class Options(NamedTuple):
     @staticmethod
     def _quad(eta, num_quad):
         if eta == 1:
-            return chebgauss2(num_quad)
-        if eta == -1:
-            return chebgauss1(num_quad)
-        return get_quadrature(
-            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
-        )
+            quad = chebgauss2(num_quad)
+        elif eta == -1:
+            quad = chebgauss1(num_quad)
+        else:
+            quad = get_quadrature(
+                leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+            )
+        quad = jax.lax.stop_gradient(quad)
+        return quad
 
     @staticmethod
     def _guess_num_well(num_field_periods, NFP, mins_per_field_period=None):

@@ -89,8 +89,8 @@ def make_coil(delta_h):
     Z_n_pos = np.hstack([delta_h * a])
     Z_n_neg = np.hstack([-delta_h * a])
     return CoilSet([
-        FourierRZCoil(current= I_coil, R_n=R_n, Z_n=Z_n_pos, NFP=surface.NFP),
-        FourierRZCoil(current=-I_coil, R_n=R_n, Z_n=Z_n_neg, NFP=surface.NFP),
+        FourierRZCoil(current= I_coil, R_n=R_n, Z_n=Z_n_pos, NFP=eq.NFP),
+        FourierRZCoil(current=-I_coil, R_n=R_n, Z_n=Z_n_neg, NFP=eq.NFP),
     ])
 
 # ── Grid setup ────────────────────────────────────────────────────────────────

@@ -377,7 +377,9 @@ B_dot_n = (
 ) @ xi_b  # B dot n = (1/sqrt(g)|grad(rho)|) * (iota ∂_θ + ∂_ζ) xi^ρ on the boundary
 W_theta = diffmat.W_theta
 W_zeta = diffmat.W_zeta
-W = jnp.kron(jnp.diag(W_theta), jnp.diag(W_zeta))
+print(W_theta.shape)
+print(W_zeta.shape)
+W = jnp.kron(jnp.diag(W_theta), jnp.diag(W_zeta))[:, None]
 
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
 W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))

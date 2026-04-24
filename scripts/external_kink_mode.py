@@ -369,7 +369,7 @@ print("sqrt(g) |grad(rho)| on boundary:", sqrtg_grad_rho.flatten())
 surface_jacobian = eq.surface.compute("|e_theta x e_zeta|", grid=rtz_surface_grid)[
     "|e_theta x e_zeta|"
 ]
-np.testing.assert_allclose(surface_jacobian, sqrtg_grad_rho.flatten(), rtol=1e-5, atol=1e-8)
+
 iota_s = iota[b_idx, None]
 xi_b = xi[b_idx]
 

@@ -149,7 +149,7 @@ data = eq.compute(
 
 a_N = data["a"]
 B_N = eq.Psi / (jnp.pi * a_N**2)
-psi_r = data["psi_r"] / (a_N**2 * B_N)
+psi_r = data["psi_r"]# / (a_N**2 * B_N)
 
 # evaluate quantities
 rho, theta, zeta = reshaped_nodes.T  # pest_grid.nodes.T
@@ -357,8 +357,8 @@ b_idx = slice(n_total - n_surf, n_total)
 # surface quantities
 psi_r_s = psi_r[b_idx, None]#1  # psi_r[b_idx, :] = 1 on the boundary
 print(psi_r_s)
-sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
-g_sup_rr = data["g^rr"][:, None] * a_N**2
+sqrtg = data["sqrt(g)_PEST"][:, None]# * 1 / a_N**3
+g_sup_rr = data["g^rr"][:, None]# * a_N**2
 sqrtg_grad_rho = sqrtg[b_idx, :] * np.sqrt(g_sup_rr[b_idx, :])
 
 iota_s = iota[b_idx, None]
@@ -381,8 +381,8 @@ print("normalization", ((B_N**2 * a_N**3)/(2 * mu_0)))
 print("just the jacobian:", dot(B_dot_n, (W * sqrtg_grad_rho).flatten() * B_dot_n))
 print("B_dot_n = 1",  - dot(np.ones_like(B_dot_n), (W * sqrtg_grad_rho * phi_matrix) @ np.ones_like(B_dot_n)))
 W_V = - dot(B_dot_n, (W * sqrtg_grad_rho * phi_matrix) @ B_dot_n)
-W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))
-
+#W_V = W_V * ((B_N**2 * a_N**3)/(2 * mu_0))
+W_V = W_V * (1 / (2 * mu_0))
 analytic_W_V = np.mean((r[b_idx] * F[b_idx] * data["|B|"][b_idx])**2) * xi_0**2
 analytic_W_V = analytic_W_V * 2 * np.pi**2 * R_0 / (mu_0)
 print(analytic_W_V.shape)

@@ -360,7 +360,7 @@ n_total = n_rho * n_theta * n_zeta
 b_idx = slice(n_total - n_surf, n_total)
 
 # surface quantities
-psi_r_s = psi_r[b_idx, :]#1  # psi_r[b_idx, :] = 1 on the boundary
+psi_r_s = psi_r[b_idx, None]#1  # psi_r[b_idx, :] = 1 on the boundary
 print(psi_r_s)
 sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 g_sup_rr = data["g^rr"][:, None] * a_N**2

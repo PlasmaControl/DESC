@@ -125,7 +125,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     n_rhos = np.array([24])#np.array([20, 36])
     n_thetas = np.array([36])#np.array([20, 36])
     if axisym:
-        n_zetas = np.ones(3)
+        n_zetas = np.ones(3, dtype=int)
     else:
         n_zetas = np.array([12]) #np.array([12, 14])
 

@@ -1019,14 +1019,6 @@ class Bounce2D(Bounce):
             quad = leggauss(deg)
         x, w = quad
 
-        shape = (
-            *self._theta.cheb.shape[:-2],
-            self._theta.X // self._NFP,
-            self._NFP,
-            1,
-            self._theta.Y,
-        )
-
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
         # compute a set of 2D Fourier series each on non-uniform tensor product grids
         # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = x.size.
@@ -1039,9 +1031,9 @@ class Bounce2D(Bounce):
             (0, 2 * jnp.pi / self._NFP),
             axis=-2,
             modes=self._modes_z,
-        )[..., None, None, None, :, :]
+        )[..., None, None, :, :]
         B_sup_z = irfft_mmt_pos(
-            idct_mmt(x, self._theta.cheb.reshape(shape)),
+            idct_mmt(x, self._theta.cheb[..., None, :]),
             B_sup_z,
             self._num_t,
             modes=self._modes_t,
@@ -1051,7 +1043,7 @@ class Bounce2D(Bounce):
         # Simple mean over α because when ζ extends beyond one transit we need
         # to weight all field lines uniformly regardless of their area wrt α.
         dz_dx = jnp.pi / self._NFP
-        return jnp.abs(jnp.reciprocal(B_sup_z).dot(w).sum((-1, -2)).mean(-1)) * dz_dx
+        return jnp.abs(jnp.reciprocal(B_sup_z).dot(w).sum(-1).mean(-1)) * dz_dx
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
         """Plot B and bounce points on the specified field line.

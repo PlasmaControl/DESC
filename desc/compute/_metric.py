@@ -2777,9 +2777,9 @@ def _finite_n_instability_driver(params, transforms, profiles, data, **kwargs):
 # A = ∇ψ × ∇|B|
 @register_compute_fun(
     name="|grad psi cross grad |B||^2",
-    label="|\\mathbf{A}|^2",
+    label="|\\mathbf{\\nabla}} \\psi \\times \\mathbf{\\nabla} |B||^2",
     units="T^4",
-    units_long="Tesla^4",
+    units_long="Tesla^4 per metre^2",
     description="Squared magnitude of A = grad(psi) x grad(|B|)",
     dim=1,
     params=[],
@@ -2801,10 +2801,11 @@ def _A_mag_sq(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="Nies supersonic rotation metric",
-    label="\\mathbf{A} \\cdot \\nabla \\lvert\\mathbf{A}\\lvert",
+    name="Nies rotation metric",
+    label="(\\mathbf{\\nabla}} \\psi \\times \\mathbf{\\nabla} |B|)\\cdot"
+    + " \\mathbf{\\nabla}(\\mathbf{\\nabla}} \\psi \\times \\mathbf{\\nabla} |B|)",
     units="T^4 / m",
-    units_long="Tesla^4 per meter",
+    units_long="Tesla^4 per meter^3",
     description="Nies metric. When reduced to 0 along with the QA objective"
     + " will give a QA plasma with rotation",
     dim=1,
@@ -2834,7 +2835,7 @@ def _A_mag_sq(params, transforms, profiles, data, **kwargs):
         "|grad psi cross grad |B||^2",
     ],
 )
-def _Nies_supersonic_rotation_metric(params, transforms, profiles, data, **kwargs):
+def _Nies_rotation_metric(params, transforms, profiles, data, **kwargs):
     """
     Pointwise penalty to enable fast rotation.
 
@@ -2903,7 +2904,7 @@ def _Nies_supersonic_rotation_metric(params, transforms, profiles, data, **kwarg
     d_A2_dz = psi_r_sq_over_g * (dQ_dz - 2.0 * Q * sqrtg_z / sqrtg)
 
     numerator = A_sup_t * d_A2_dt + A_sup_z * d_A2_dz
-    two_A_mag = 2.0 * (data["|A|^2"] ** 0.5)
+    two_A_mag = 2.0 * (data["|grad psi cross grad |B||^2"] ** 0.5)
 
-    data["A_dot_grad_|A|"] = safediv(numerator, two_A_mag)
+    data["Nies rotation metric"] = safediv(numerator, two_A_mag)
     return data

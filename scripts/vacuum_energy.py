@@ -156,7 +156,7 @@ else:
 # ── Surface quantities & integration weights (fixed, independent of coil) ────
 if pest:
     data_eq = eq.compute(
-        ["x", "n_rho", "g^rr", "sqrt(g)_PEST"], grid=compute_grid, basis="xyz"
+        ["x", "n_rho", "g^rr", "sqrt(g)_PEST"], grid=compute_grid
     )
     sqrtg_grad_rho     = data_eq["sqrt(g)_PEST"] * np.sqrt(data_eq["g^rr"])
     integration_weights = (
@@ -165,7 +165,7 @@ if pest:
     )
 else:
     data_eq = eq.compute(
-        ["x", "n_rho", "|e_theta x e_zeta|"], grid=compute_grid, basis="xyz"
+        ["x", "n_rho", "|e_theta x e_zeta|"], grid=compute_grid
     )
     integration_weights = data_eq["|e_theta x e_zeta|"] * compute_grid.weights
 

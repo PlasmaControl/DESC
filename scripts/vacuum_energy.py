@@ -183,7 +183,7 @@ for k, frac in enumerate(delta_h_fracs):
     B_k  = coil_k.compute_magnetic_field(data_eq["x"],
                                           source_grid=LinearGrid(N=pest_grid.N))
     Bn_k = dot(B_k, data_eq["n_rho"])
-    W_V_vals[k] = float(Bn_k @ full_matrix @ Bn_k)
+    W_V_vals[k] = - float(Bn_k @ full_matrix @ Bn_k)
 
     # W_V_true from direct integration
     W_V_true_vals[k] = compute_external_coil_energy(coil_k, R0, a)

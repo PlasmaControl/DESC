@@ -82,17 +82,15 @@ R0 = eq.compute("R0")["R0"]
 field = eq.surface  # SourceFreeField object
 
 # ── Coil builder ─────────────────────────────────────────────────────────────
-c       = eq.axis
-Z_modes = np.hstack([c.Z_basis.modes[:, 2], 0])
+R_n = np.array([R0])
+R_modes = np.array
 
 def make_coil(delta_h):
-    Z_n_pos = np.hstack([c.Z_n,  delta_h * a])
-    Z_n_neg = np.hstack([c.Z_n, -delta_h * a])
+    Z_n_pos = np.hstack([delta_h * a])
+    Z_n_neg = np.hstack([-delta_h * a])
     return CoilSet([
-        FourierRZCoil(current= I_coil, R_n=c.R_n, Z_n=Z_n_pos,
-                      NFP=c.NFP, modes_R=c.R_basis.modes[:, 2], modes_Z=Z_modes),
-        FourierRZCoil(current=-I_coil, R_n=c.R_n, Z_n=Z_n_neg,
-                      NFP=c.NFP, modes_R=c.R_basis.modes[:, 2], modes_Z=Z_modes),
+        FourierRZCoil(current= I_coil, R_n=R_n, Z_n=Z_n_pos, NFP=surface.NFP),
+        FourierRZCoil(current=-I_coil, R_n=R_n, Z_n=Z_n_neg, NFP=surface.NFP),
     ])
 
 # ── Grid setup ────────────────────────────────────────────────────────────────

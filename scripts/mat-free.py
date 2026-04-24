@@ -123,7 +123,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     print("making input grid and diffmats")
     # Low-res solve for eigenfunction guess
     n_rhos = np.array([15])#np.array([20, 36])
-    n_thetas = np.array([24])#np.array([20, 36])
+    n_thetas = np.array([12])#np.array([20, 36])
     if axisym:
         n_zetas = np.ones(3)
     else:

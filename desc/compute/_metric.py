@@ -2805,9 +2805,8 @@ def _A_mag_sq(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{A} \\cdot \\nabla \\lvert\\mathbf{A}\\lvert",
     units="T^4 / m",
     units_long="Tesla^4 per meter",
-    # description="Nies metric, when reduced to 0, along with the QA objective"+
-    # " will give a QA plasma with rotation",
-    description="as",
+    description="Nies metric. When reduced to 0 along with the QA objective"
+    + " will give a QA plasma with rotation",
     dim=1,
     params=[],
     transforms={},

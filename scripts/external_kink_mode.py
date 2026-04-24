@@ -42,8 +42,8 @@ NFP = 1
 n = 1  # toroidal mode number
 
 # resolutions for phi matrix
-M = 20
-N = 80
+M = 8
+N = 8
 
 # number of grid points in each direction for the eigenvalue solve
 n_rho = 18

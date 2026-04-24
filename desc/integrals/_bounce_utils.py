@@ -849,7 +849,7 @@ def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = z_eff.size.
+    # of size |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
@@ -931,7 +931,7 @@ def fast_cubic_spline(
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num α × num field periods and |𝛇| = z_eff.
+    #   |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
@@ -967,16 +967,14 @@ def fast_cubic_spline(
         assert f.shape == t.shape
     else:
         if axisymmetric:
-            t = t.reshape(*lines, -1, 1)
-        if len(lines) > 1:
-            # incoming t shape is (num ρ, num α, num field periods *? Y, z_eff)
+            t = t.reshape(*lines, -1, z_eff)
+        if len(lines) > 1:  # then lines is (num ρ, num α)
             t = t.transpose(0, 3, 1, 2).reshape(lines[0], z_eff, -1)
         else:
-            # incoming t shape is (num α, num field periods *? Y, z_eff)
             t = t.transpose(2, 0, 1).reshape(z_eff, -1)
-        # t shape is (..., z_eff, num α * num field periods *? Y)
+        # t shape is (..., z_eff, num α × num field periods × Y/z_eff)
         f = nufft1d2r(t, f, eps=nufft_eps).mT
-        # f shape is (..., num α * num field periods *? Y, z_eff)
+        # f shape is (..., num α × num field periods × Y/z_eff, z_eff)
     f = f.reshape(*lines, -1)
 
     z = jnp.ravel(

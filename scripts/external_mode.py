@@ -268,7 +268,7 @@ for i, free_param in enumerate(free_parameter_values):
 
         np.savez(
             savez_path,
-            xi=xi_full,
+            xi=xi,
             deltaB=deltaB,
             deltaB_r=deltaB_r,
             deltaB_v=deltaB_v,

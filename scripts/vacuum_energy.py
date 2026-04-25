@@ -266,9 +266,9 @@ for k, frac in enumerate(delta_h_fracs):
         R0,
         a - elongation,
         r_max_factor=2*elongation,
-        L=1000,
-        M=1000,
-        N=1000,
+        L=500,
+        M=500,
+        N=100,
     )
 
     print(

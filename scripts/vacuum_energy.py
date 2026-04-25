@@ -205,13 +205,14 @@ def compute_external_coil_energy_3d(
     quad_grid = QuadratureGrid(L=L, M=M, N=N)
     surf_data = eq.surface.compute(["x"], grid=quad_grid)
     r = safenorm(surf_data["x"] - np.array(
-        [R0 * np.ones(quad_grid.num_nodes), quad_grid.nodes[:, 2], 0]
+        [R0 * np.ones(quad_grid.num_nodes), quad_grid.nodes[:, 2], np.zeros(quad_grid.num_nodes)]
     ), axis=-1) # distance from R=R0, Z=0, zeta=same as quad_grid
     
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
     R_flat = R0 + r_flat * np.cos(t_flat)
     Z_flat = r_flat * np.sin(t_flat)
+    print(np.sum(r_flat>r)/len(r_flat), "fraction of points outside plasma surface")
     valid = (R_flat > 0) & (r_flat > r) # only include points outside the plasma surface
     R_v, Z_v = R_flat[valid], Z_flat[valid]
     r_v, t_v = r_flat[valid], t_flat[valid]

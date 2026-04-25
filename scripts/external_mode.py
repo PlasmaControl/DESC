@@ -83,7 +83,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     if from_scratch:
         save_name = f"equilibrium_{save_tag}.h5"
-        override = True
+        override = False
         if os.path.exists(save_path + save_name) and not override:
             eq = load(save_path + save_name)
             print(f"Loaded equilibrium from {save_path + save_name}")
@@ -195,7 +195,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     # produce diffmats and grid nodes for the current resolution
     diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
-    override = False
+    override = True
     if os.path.exists(X_path) and not override:
         X = np.load(X_path)
         data = np.load(savez_path)

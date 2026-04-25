@@ -21,8 +21,8 @@ from desc.profiles import PowerSeriesProfile
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 pest = True  # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
-M = 28
-N = 28
+M = 32
+N = 32
 n_theta = 2 * M
 n_zeta = 2 * N
 n_surf = n_theta * n_zeta
@@ -219,6 +219,10 @@ def compute_external_coil_energy_3d(
     
     # [a-elongation, a+elongation]
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
+    print("r flat min:", r_flat.min())
+    print("r flat max:", r_flat.max())
+    print("r min:", r.min())
+    print("r max:", r.max())
     t_flat = quad_grid.nodes[:, 1]
     R_flat = R0 + r_flat * np.cos(t_flat)
     Z_flat = r_flat * np.sin(t_flat)
@@ -262,9 +266,9 @@ for k, frac in enumerate(delta_h_fracs):
         R0,
         a - elongation,
         r_max_factor=2*elongation,
-        L=100,
-        M=100,
-        N=100,
+        L=1000,
+        M=1000,
+        N=1000,
     )
 
     print(

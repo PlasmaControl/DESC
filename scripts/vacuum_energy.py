@@ -199,7 +199,7 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         r = surf_grid.meshgrid_reshape(r, order="ztr")
         r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
         mask = r_2d[0, 0, :] < r.max()
-        r_2d_small = r_2d[mask, :]
+        r_2d_small = r_2d[:, :, mask]
         print(r_2d_small.shape, r.shape)
         in_plasma_factor = r_2d_small > r # only include points outside the plasma surface
         in_plasma_factor = in_plasma_factor.astype(float)

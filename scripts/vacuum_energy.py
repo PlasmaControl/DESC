@@ -175,6 +175,7 @@ else:
 
 full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
+
 # ── W_V_true: direct volume integral ─────────────────────────────────────────
 def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, r_max_factor=20.0):
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
@@ -204,16 +205,26 @@ def compute_external_coil_energy_3d(
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M, N=N)
     surf_data = eq.surface.compute(["x"], grid=quad_grid)
-    r = safenorm(surf_data["x"] - np.array(
-        [R0 * np.ones(quad_grid.num_nodes), quad_grid.nodes[:, 2], np.zeros(quad_grid.num_nodes)]
-    ), axis=-1) # distance from R=R0, Z=0, zeta=same as quad_grid
-    
+    r = safenorm(
+        surf_data["x"]
+        - np.column_stack(
+            [
+                R0 * np.ones(quad_grid.num_nodes),
+                surf_data["x"][:, 1],
+                np.zeros(quad_grid.num_nodes),
+            ]
+        ),
+        axis=-1,
+    )  # distance from R=R0, Z=0, zeta=same as quad_grid
+
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
     R_flat = R0 + r_flat * np.cos(t_flat)
     Z_flat = r_flat * np.sin(t_flat)
-    print(np.sum(r_flat>r)/len(r_flat), "fraction of points outside plasma surface")
-    valid = (R_flat > 0) & (r_flat > r) # only include points outside the plasma surface
+    print(np.sum(r_flat > r) / len(r_flat), "fraction of points outside plasma surface")
+    valid = (R_flat > 0) & (
+        r_flat > r
+    )  # only include points outside the plasma surface
     R_v, Z_v = R_flat[valid], Z_flat[valid]
     r_v, t_v = r_flat[valid], t_flat[valid]
     coords = np.column_stack([R_v, np.zeros(valid.sum()), Z_v])
@@ -246,7 +257,13 @@ for k, frac in enumerate(delta_h_fracs):
         coil_k, R0, a + elongation, r_max_factor=10000, L=2**12, M_quad=2**12
     )
     W_V_true_vals[k] += compute_external_coil_energy_3d(
-        coil_k, R0, a - elongation, r_max_factor=(a + elongation)/(a - elongation), L=100, M=100, N=100,
+        coil_k,
+        R0,
+        a - elongation,
+        r_max_factor=(a + elongation) / (a - elongation),
+        L=100,
+        M=100,
+        N=100,
     )
 
     print(

@@ -208,7 +208,7 @@ for k, frac in enumerate(delta_h_fracs):
     coil_k = make_coil(delta_h)
 
     B_k = coil_k.compute_magnetic_field(
-        data_eq["x"], source_grid=LinearGrid(N=pest_grid.N)
+        data_eq["x"], source_grid=LinearGrid(N=64)
     )
     Bn_k = dot(B_k, data_eq["n_rho"])
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)

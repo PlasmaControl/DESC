@@ -259,7 +259,7 @@ for i, free_param in enumerate(free_parameter_values):
         np.save(X_path, X)
 
         # save processed eigenfunction and related data for later analysis
-        xi_full = data["finite-n xi"]
+        xi = data["finite-n xi"]
         deltaB = data["finite-n deltaB"]
         deltaB_r = data["finite-n deltaB_r"]
         deltaB_v = data["finite-n deltaB_v"]

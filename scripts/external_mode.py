@@ -154,8 +154,8 @@ for i, free_param in enumerate(free_parameter_values):
     # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
     rho_iota1 = None
     title_base = (
-        rf"$\iota_0 = {iota_0:.3f}$,  "
-        rf"$\iota(\rho) = \iota_0 - {np.abs(iota_coeffs[-1]):.2f}\,\rho^2$"
+        rf"$\iota_0 = {iota_0:.3f}$, and $\alpha= {alpha}$"
+        rf"$\iota(\rho) = (\iota_0 / (\alpha^2\rho^2))[\alpha * \rho^2 + (1 - \alpha) * \log(1 - \alpha * \rho^2)]$"
         rf", free-boundary modes"
     )
 
@@ -311,39 +311,77 @@ for i, free_param in enumerate(free_parameter_values):
 # ── Save summary ──────────────────────────────────────────────────────────────
 results_lambda_min = np.array(results_lambda_min)
 
-np.savez(
-    save_path + "iota_scan_results.npz",
-    iota_on_axis=iota_on_axis_values,
-    lambda_min=results_lambda_min,
-)
-
-print("Done. Results saved to", save_path)
-print("Run analyze_stability.py for Mercier + delta_W breakdown.")
-
-
-# ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(7, 5))
-ax.axhline(0, color="gray", lw=0.8, ls="--")
-ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
-ax.plot(
-    iota_on_axis_values,
-    results_lambda_min,
-    linestyle="-",
-    marker=".",
-    color="steelblue",
-    lw=2,
-    ms=7,
-)
-ax.set_xlabel(r"$\iota_0$", fontsize=14)
-ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
-ax.set_title(
-    r"Stability eigenvalue vs $\iota_0$" + "\n"
-    f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
-    fontsize=12,
-)
-ax.tick_params(labelsize=12)
-ax.legend(fontsize=11)
+if power_series:
+    np.savez(
+        save_path + "iota_scan_results.npz",
+        iota_on_axis=free_parameter_values,
+        lambda_min=results_lambda_min,
+    )
+    # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
+    ax.axhline(0, color="gray", lw=0.8, ls="--")
+    ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
+    ax.plot(
+        free_parameter_values,
+        results_lambda_min,
+        linestyle="-",
+        marker=".",
+        color="steelblue",
+        lw=2,
+        ms=7,
+    )
+    ax.set_xlabel(r"$\iota_0$", fontsize=14)
+    ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+    ax.set_title(
+        r"Stability eigenvalue vs $\iota_0$" + "\n"
+        f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
+        fontsize=12,
+    )
+    ax.tick_params(labelsize=12)
+    ax.legend(fontsize=11)
+    fig.tight_layout()
+    fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
+    plt.show()
+    print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
+
+else:
+    alpha = free_parameter_values
+    np.savez(
+        save_path + "alpha_scan_results.npz",
+        alpha=free_parameter_values,
+        lambda_min=results_lambda_min,
+    )
+    # ── Lambda vs iota_a summary plot ────────────────────────────────────────────
+    ax.axhline(0, color="gray", lw=0.8, ls="--")
+    ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1$")
+    ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1/2$")
+
+    iota_a = (iota_0 / (alpha**2)) * (
+                alpha + (1 - alpha) * np.log(1 - alpha)
+            )
+    ax.plot(
+        iota_a,
+        results_lambda_min,
+        linestyle="-",
+        marker=".",
+        color="steelblue",
+        lw=2,
+        ms=7,
+    )
+    ax.set_xlabel(r"$\iota_a$", fontsize=14)
+    ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+    ax.set_title(
+        r"Stability eigenvalue vs $\iota_a$" + "\n"
+        f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
+        fontsize=18,
+    )
+    ax.tick_params(labelsize=15)
+    ax.legend(fontsize=18)
 fig.tight_layout()
-fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
+fig.savefig(plot_path + f"power_series_{power_series}_external_modes_lambda_vs_iota0.png", dpi=150)
 plt.show()
 print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
+
+print("Done. Results saved to", save_path)
+
+

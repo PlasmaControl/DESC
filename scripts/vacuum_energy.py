@@ -183,20 +183,20 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
     if N > 0:
-        quad_grid_3d = QuadratureGrid(L=L, M=M_quad, N=N)
-        surf_data = eq.surface.compute(["x"], grid=quad_grid_3d)
+        surf_grid = LinearGrid(M=M_quad, N=N)
+        surf_data = eq.surface.compute(["x"], grid=surf_grid)
         r = safenorm(
             surf_data["x"]
             - np.column_stack(
                 [
-                    R0 * np.ones(quad_grid.num_nodes),
+                    R0 * np.ones(surf_grid.num_nodes),
                     surf_data["x"][:, 1],
-                    np.zeros(quad_grid.num_nodes),
+                    np.zeros(surf_grid.num_nodes),
                 ]
             ),
             axis=-1,
         )  # distance from R=R0, Z=0, zeta=same as quad_grid
-        r = quad_grid_3d.meshgrid_reshape(r, order="ztr")
+        r = surf_grid.meshgrid_reshape(r, order="ztr")
         r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
         print(r.shape, r_2d.shape)
         in_plasma_factor = r_flat > r # only include points outside the plasma surface
@@ -239,7 +239,7 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12
+        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12, N=100,
     )
     print(
         f"  Δh/a = {frac:.3f}  W_V = {W_V_vals[k]:.4e}  W_V_true = {W_V_true_vals[k]:.4e}"

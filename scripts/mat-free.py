@@ -34,7 +34,7 @@ from_scratch = True
 if from_scratch:
     a = 1  # Minor radius
     aspect_ratio = 10  # Aspect ratio of the tokamak
-    R = aspect_ratio * a  # Major radius
+    R_0 = aspect_ratio * a  # Major radius
     NFP = 1
     axisym = True  # Whether to enforce axisymmetry in the eigenvalue solve
     n_mode_axisym = 1  # If axisym is True, the toroidal mode number to solve for
@@ -89,7 +89,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
                 M=12,
                 N=0,
                 surface=FourierRZToroidalSurface.from_shape_parameters(
-                    major_radius=R,
+                    major_radius=R_0,
                     aspect_ratio=aspect_ratio,
                     elongation=1,
                     triangularity=0,
@@ -110,6 +110,8 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
             eq.save(save_path + save_name)
             print("equilibrium solved")
+
+    B_0 = eq.compute("<|B|>_axis")["<|B|>_axis"]
 
     # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
     rho_iota1 = (
@@ -143,7 +145,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         # produce diffmats and grid nodes for the current resolution
         diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
-        override = True
+        override = False
         if os.path.exists(X_path) and not override:
             X = np.load(X_path)
             data = np.load(savez_path)
@@ -239,7 +241,8 @@ print("Run analyze_stability.py for Mercier + delta_W breakdown.")
 
 
 # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(7, 5))
+fig, axs = plt.subplots(figsize=(14, 5))
+ax = axs[0]
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
 ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-", marker=".",
@@ -257,3 +260,4 @@ fig.tight_layout()
 fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
 plt.show()
 print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
+

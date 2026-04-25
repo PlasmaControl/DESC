@@ -65,7 +65,7 @@ class EffectiveRipple(_Objective):
         X=32,
         Y=32,
         Y_B=None,
-        alpha=jnp.array([0.0]),
+        alpha=None,
         num_field_periods=20,
         num_well=None,
         num_quad=32,
@@ -96,6 +96,8 @@ class EffectiveRipple(_Objective):
             target = 0.0
 
         self._grid = grid
+        if alpha is None:
+            alpha = jnp.zeros(1)
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
             "X": X,

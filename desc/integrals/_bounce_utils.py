@@ -593,7 +593,7 @@ def plot_ppoly(
 
 
 def get_mins(knots, B, num_mins=-1, fill_value=0.0):
-    """Return minima of (z*, B(z*)) within open interval defined by knots.
+    """Return minima of (z*, B(z*)) within interval defined by knots.
 
     Parameters
     ----------
@@ -647,7 +647,11 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
 
 
 def argmin(z1, z2, f, mins, B_mins):
-    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+    """Returns f at argmin of B between ``z1`` and ``z2``.
+
+    Let E(w) = {ζ ∣ ζ₁(w) < ζ < ζ₂(w)} and A(w) ∈ argmin_E(w) B.
+    Given the minima of B and f interpolated to those minima,
+    returns {f ∘ A(w)}.
 
     Parameters
     ----------
@@ -658,12 +662,18 @@ def argmin(z1, z2, f, mins, B_mins):
     f : jnp.ndarray
         Function interpolated to ``mins``.
         Shape (..., num mins).
+    mins : jnp.ndarray
+        Minima of B.
+        Shape ``f.shape``.
+    B_mins : jnp.ndarray
+        B interpolated to ``mins``.
+        Shape ``f.shape``.
 
     Returns
     -------
     f : jnp.ndarray
         Shape (..., num pitch, num well).
-        ``f`` at the minimum of ``B`` between ``z1`` and ``z2``.
+        Returns f at argmin of B between ``z1`` and ``z2``.
 
     """
     assert z1.ndim > 1 and z2.ndim > 1

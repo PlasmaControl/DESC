@@ -146,9 +146,12 @@ class _Bounce(eqx.Module, ABC):
 
     @abstractmethod
     def interp_to_argmin(self, f, points):
-        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point in magnetic well w.
 
-        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+        Interpolate f to the argmin of the magnetic field
+        between each pair in ``points``. Explicitly, let
+        E(w) = {ζ ∣ ζ₁(w) < ζ < ζ₂(w)} and A(w) ∈ argmin_E(w) B.
+        Returns {f ∘ A(w)}.
         """
 
     @abstractmethod
@@ -277,7 +280,7 @@ class Bounce2D(_Bounce):
         data,
         angle,
         Y_B=None,
-        alpha=jnp.array([0.0]),
+        alpha=None,
         num_field_periods=20,
         quad=None,
         *,
@@ -326,6 +329,8 @@ class Bounce2D(_Bounce):
 
         angle = parse_argname_change(angle, kwargs, "theta", "angle")
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
+        if alpha is None:
+            alpha = jnp.zeros(1)
         iota, alpha = jnp.atleast_1d(iota, alpha)
         self._theta = theta_on_fieldlines(
             angle, iota, alpha, num_field_periods, grid.NFP
@@ -644,11 +649,7 @@ class Bounce2D(_Bounce):
             num_well = Options._guess_num_well(
                 num_field_periods=self._theta.X,
                 NFP=self._NFP,
-                mins_per_field_period=(
-                    (self._B.Y // 2)
-                    if isinstance(self._B, PiecewiseChebyshevSeries)
-                    else None
-                ),
+                mins_per_field_period=getattr(self._B, "Y", jnp.inf) // 2,
             )
 
         if isinstance(self._B, PiecewiseChebyshevSeries):
@@ -914,9 +915,12 @@ class Bounce2D(_Bounce):
         return data
 
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
-        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point in magnetic well w.
 
-        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+        Interpolate f to the argmin of the magnetic field
+        between each pair in ``points``. Explicitly, let
+        E(w) = {ζ ∣ ζ₁(w) < ζ < ζ₂(w)} and A(w) ∈ argmin_E(w) B.
+        Returns {f ∘ A(w)}.
 
         Parameters
         ----------
@@ -1626,9 +1630,12 @@ class Bounce1D(_Bounce):
         return result[0] if len(result) == 1 else result
 
     def interp_to_argmin(self, f, points, *, method="cubic"):
-        """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
+        """Interpolate ``f`` to the deepest point in magnetic well w.
 
-        Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+        Interpolate f to the argmin of the magnetic field
+        between each pair in ``points``. Explicitly, let
+        E(w) = {ζ ∣ ζ₁(w) < ζ < ζ₂(w)} and A(w) ∈ argmin_E(w) B.
+        Returns {f ∘ A(w)}.
 
         Parameters
         ----------
@@ -1823,7 +1830,24 @@ class Options(NamedTuple):
     Y_B: int
 
     @classmethod
-    def guess(cls, eta, grid, **kwargs):
+    def guess(
+        cls,
+        eta,
+        grid,
+        *,
+        alpha=None,
+        nufft_eps=1e-6,
+        num_field_periods=20,
+        num_pitch=51,
+        num_quad=32,
+        num_well=None,
+        pitch_batch_size=None,
+        quad=None,
+        spline=True,
+        surf_batch_size=1,
+        Y_B=None,
+        **kwargs,
+    ):
         """Guess parameters based on eta and grid if not given in kwargs.
 
         Parameters
@@ -1837,41 +1861,31 @@ class Options(NamedTuple):
             (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
         """
-        pitch_batch_size = kwargs.get("pitch_batch_size", None)
-        surf_batch_size = kwargs.get("surf_batch_size", 1)
         errorif(
             (surf_batch_size > 1) and (pitch_batch_size is not None),
             msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
         )
 
-        alpha = kwargs.get("alpha", jnp.array([0.0]))
-        num_field_periods = kwargs.get("num_field_periods", 20)
-
-        quad = kwargs.get("quad", None)
         if quad is None:
-            quad = Options._quad(eta, kwargs.get("num_quad", 32))
+            quad = Options._quad(eta, num_quad)
 
-        if eta == 1:
-            nufft_eps = kwargs.get("nufft_eps", 1e-6)
-            num_pitch = kwargs.get("num_pitch", 51)
-        else:
-            nufft_eps = kwargs.get("nufft_eps", 1e-7)
-            num_pitch = kwargs.get("num_pitch", 65)
+        nufft_eps = float(nufft_eps)
+        if eta != 1:
+            nufft_eps = min(nufft_eps, 1e-7)
+            num_pitch = max(num_pitch, 65)
         pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
-        spline = kwargs.get("spline", True)
-        Y_B = kwargs.get("Y_B", Options._guess_Y_B(grid))
-        num_well = kwargs.get(
-            "num_well",
-            Options._guess_num_well(
+        if Y_B is None:
+            Y_B = Options._guess_Y_B(grid)
+        if num_well is None:
+            num_well = Options._guess_num_well(
                 num_field_periods=num_field_periods,
                 NFP=grid.NFP,
                 mins_per_field_period=Y_B if spline else (Y_B // 2),
-            ),
-        )
+            )
 
         return cls(
-            alpha=alpha,
+            alpha=jnp.zeros(1) if alpha is None else alpha,
             loop=kwargs.get("loop", False),
             nufft_eps=nufft_eps,
             num_field_periods=num_field_periods,
@@ -1907,7 +1921,7 @@ class Options(NamedTuple):
         return quad
 
     @staticmethod
-    def _guess_num_well(num_field_periods, NFP, mins_per_field_period=None):
+    def _guess_num_well(*, num_field_periods, NFP, mins_per_field_period=jnp.inf):
         """Guess upper bound for number of wells based on spectrum.
 
         Parameters
@@ -1927,18 +1941,13 @@ class Options(NamedTuple):
             A guess for the max number of wells that exist for any pitch angle
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
-            ``num_field_periods*mins_per_field_period`` to enhance performance
-            (due to limitations in JAX), yet sill remain loose enough that all
-            wells are always detected.
+            ``num_field_periods*mins_per_field_period`` to enhance performance,
+            yet sill remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
         num_well = round(num_field_periods * (1 + 20 / NFP))
-        return (
-            num_well
-            if mins_per_field_period is None
-            else min(num_well, num_field_periods * mins_per_field_period)
-        )
+        return min(num_well, num_field_periods * mins_per_field_period)
 
     @staticmethod
     def _guess_Y_B(grid):

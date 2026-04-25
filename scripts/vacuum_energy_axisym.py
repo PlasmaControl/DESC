@@ -96,7 +96,7 @@ def make_coil(delta_h):
 
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
-pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False)
+pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, NFP=NFP, sym=False, NFP=64)
 
 if pest:
     # Map PEST angles (theta_PEST, zeta) → rtz native angles

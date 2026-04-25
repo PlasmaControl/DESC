@@ -238,7 +238,7 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12, N=1000,
+        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12, N=200,
     )
     print(
         f"  Δh/a = {frac:.3f}  W_V = {W_V_vals[k]:.4e}  W_V_true = {W_V_true_vals[k]:.4e}"

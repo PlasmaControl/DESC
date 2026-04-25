@@ -202,6 +202,10 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         in_plasma_factor = r_flat > r # only include points outside the plasma surface
         in_plasma_factor = np.mean(in_plasma_factor, axis=0)  # average over zeta to get a 2D mask in (r_flat, t_flat)
         print(in_plasma_factor)
+        print("r flat min:", r_flat.min())
+        print("r flat max:", r_flat.max())
+        print("r min:", r.min())
+        print("r max:", r.max())
     R_flat = R0 + r_flat * np.cos(t_flat)
     Z_flat = r_flat * np.sin(t_flat)
     valid = R_flat > 0
@@ -215,51 +219,6 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         )
     )
     B_sq = np.sum(B**2, axis=-1) * in_plasma_factor_v
-    jac = r_v * (R0 + r_v * np.cos(t_v))
-    weights = quad_grid.spacing[valid].prod(axis=-1) * r_max_factor
-    return 1 / (2 * mu_0) * np.dot(B_sq, jac * weights)
-
-
-def compute_external_coil_energy_3d(
-    coil_field, R0, a, L=50, M=50, N=50, r_max_factor=20.0
-):
-    """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
-    quad_grid = QuadratureGrid(L=L, M=M, N=N)
-    surf_data = eq.surface.compute(["x"], grid=quad_grid)
-    r = safenorm(
-        surf_data["x"]
-        - np.column_stack(
-            [
-                R0 * np.ones(quad_grid.num_nodes),
-                surf_data["x"][:, 1],
-                np.zeros(quad_grid.num_nodes),
-            ]
-        ),
-        axis=-1,
-    )  # distance from R=R0, Z=0, zeta=same as quad_grid
-    
-    # [a-elongation, a+elongation]
-    r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
-    print("r flat min:", r_flat.min())
-    print("r flat max:", r_flat.max())
-    print("r min:", r.min())
-    print("r max:", r.max())
-    t_flat = quad_grid.nodes[:, 1]
-    R_flat = R0 + r_flat * np.cos(t_flat)
-    Z_flat = r_flat * np.sin(t_flat)
-    print(np.sum(r_flat > r) / len(r_flat), "fraction of points outside plasma surface")
-    valid = (R_flat > 0) & (
-        r_flat > r
-    )  # only include points outside the plasma surface
-    R_v, Z_v = R_flat[valid], Z_flat[valid]
-    r_v, t_v = r_flat[valid], t_flat[valid]
-    coords = np.column_stack([R_v, np.zeros(valid.sum()), Z_v])
-    B = np.array(
-        coil_field.compute_magnetic_field(
-            coords, basis="rpz", source_grid=LinearGrid(N=36)
-        )
-    )
-    B_sq = np.sum(B**2, axis=-1)
     jac = r_v * (R0 + r_v * np.cos(t_v))
     weights = quad_grid.spacing[valid].prod(axis=-1) * r_max_factor
     return 1 / (2 * mu_0) * np.dot(B_sq, jac * weights)
@@ -280,18 +239,8 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a + elongation, r_max_factor=10000, L=2**12, M_quad=2**12
+        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12
     )
-    W_V_true_vals[k] += compute_external_coil_energy_3d(
-        coil_k,
-        R0,
-        a - elongation,
-        r_max_factor=2*elongation,
-        L=500,
-        M=500,
-        N=100,
-    )
-
     print(
         f"  Δh/a = {frac:.3f}  W_V = {W_V_vals[k]:.4e}  W_V_true = {W_V_true_vals[k]:.4e}"
     )

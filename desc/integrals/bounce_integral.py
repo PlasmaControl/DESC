@@ -1029,10 +1029,10 @@ class Bounce2D(_Bounce):
         # Partial summation is more efficient than direct evaluation since
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| i.e. when n|𝛉| > n + |𝛉|.
 
-        if self._c["B^zeta"].shape[-2] == 1:  # axisymmetric
-            z_eff = jnp.zeros((1, 1))
-        else:
+        if self._num_z > 1:
             z_eff = bijection_from_disc(x, *self._theta.domain)[:, None]
+        else:
+            z_eff = jnp.zeros((1, 1))
 
         B_sup_z = ifft_mmt(
             z_eff,

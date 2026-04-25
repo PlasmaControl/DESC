@@ -83,7 +83,8 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     if from_scratch:
         save_name = f"equilibrium_{save_tag}.h5"
-        if os.path.exists(save_path + save_name):
+        override = True
+        if os.path.exists(save_path + save_name) and not override:
             eq = load(save_path + save_name)
             print(f"Loaded equilibrium from {save_path + save_name}")
         else:

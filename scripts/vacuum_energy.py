@@ -203,7 +203,7 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         print(r_2d_small.shape, r_surf.shape)
         in_plasma_factor = r_2d_small > r_surf # only include points outside the plasma surface
         in_plasma_factor_full = np.ones_like(r_2d, dtype=bool)
-        in_plasma_factor_full[:, mask, :] = in_plasma_factor
+        in_plasma_factor_full[:, mask, :] = in_plasma_factor.mean(axis=0) # average over zeta
         in_plasma_factor_full = in_plasma_factor_full.reshape(quad_grid.num_nodes)
         
 
@@ -212,7 +212,7 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
     valid = R_flat > 0
     R_v, Z_v = R_flat[valid], Z_flat[valid]
     r_v, t_v = r_flat[valid], t_flat[valid]
-    in_plasma_factor_v = in_plasma_factor[valid] if N > 0 else np.ones_like(r_v, dtype=bool)
+    in_plasma_factor_v = in_plasma_factor_full[valid] if N > 0 else np.ones_like(r_v, dtype=bool)
     print(in_plasma_factor_v)
     coords = np.column_stack([R_v, np.zeros(valid.sum()), Z_v])
     B = np.array(

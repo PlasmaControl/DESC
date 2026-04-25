@@ -198,12 +198,12 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         )  # distance from R=R0, Z=0, zeta=same as quad_grid
         r_surf = surf_grid.meshgrid_reshape(r_surf, order="zrt")
         r_2d = quad_grid.meshgrid_reshape(r_flat, order="zrt")
-        mask = r_2d[0, :, :] < r_surf.max()
+        mask = r_2d[0, :, 0] < r_surf.max()
         r_2d_small = r_2d[:, mask, :]
         print(r_2d_small.shape, r_surf.shape)
         in_plasma_factor = r_2d_small > r_surf # only include points outside the plasma surface
         in_plasma_factor_full = np.ones_like(r_2d, dtype=bool)
-        in_plasma_factor_full[0, mask, :] = in_plasma_factor
+        in_plasma_factor_full[:, mask, :] = in_plasma_factor
         in_plasma_factor_full = in_plasma_factor_full.reshape(quad_grid.num_nodes)
         
 

@@ -177,7 +177,7 @@ full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
 
 # ── W_V_true: direct volume integral ─────────────────────────────────────────
-def compute_external_coil_energy(coil_field, R0, a, elongation, L=50, M_quad=50, N=0, r_max_factor=20.0):
+def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_factor=20.0):
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M_quad, N=0)
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a

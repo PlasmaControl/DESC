@@ -20,7 +20,7 @@ from scipy.constants import mu_0
 from desc.profiles import PowerSeriesProfile
 
 # ── Parameters ────────────────────────────────────────────────────────────────
-pest = True  # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
+pest = False  # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
 M = 32
 N = 32
 n_theta = 2 * M
@@ -45,7 +45,7 @@ os.makedirs(save_path, exist_ok=True)
 I_coil = 1e6  # fixed coil current (A)
 
 # vertical coil offset scan: Delta_h / a from 0.01 to 0.1
-delta_h_fracs = np.linspace(0.01, 0.1, 20)
+delta_h_fracs = np.array([0.05])#np.linspace(0.01, 0.1, 20)
 
 # ── Equilibrium ───────────────────────────────────────────────────────────────
 if os.path.exists(save_path + eq_save_name):

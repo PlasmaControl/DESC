@@ -119,9 +119,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             print("equilibrium solved")
 
     # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
-    rho_iota1 = (
-        np.sqrt((iota_0 - 1.0) / (-iota_coeffs[1])) if iota_0 > 1.0 else None
-    )
+    rho_iota1 = None
     title_base = (
         rf"$\iota_0 = {iota_0:.3f}$,  "
         rf"$\iota(\rho) = \iota_0 - {np.abs(iota_coeffs[-1]):.2f}\,\rho^2$"
@@ -195,10 +193,11 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     # produce diffmats and grid nodes for the current resolution
     diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
-    override = True
-    if os.path.exists(X_path) and not override:
+    override = False
+    if os.path.exists(savez_path) and not override:
         X = np.load(X_path)
         data = np.load(savez_path)
+        xi = data["xi"]
         lambda_min = data["lambda_min"]
         data.close()
         print("loaded low-res eigenfunction and lambda_min from previous run")
@@ -240,7 +239,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         )
 
     # add boundaries back to the low-res eigenfunction for interpolation later
-    xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(X, n_rho, n_theta, n_zeta)
+    xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
 
     # Save nodes for interpolation
     rho_low = rho

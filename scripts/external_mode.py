@@ -211,6 +211,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             "finite-n lambda3", grid=grid, diffmat=diffmat,
             gamma=10, incompressible=False,
             axisym=axisym, n_mode_axisym=n_mode_axisym,
+            phi_matrix=phi_matrix,
         )
         toc = time.time()
         print(f"matrix full took {toc-tic:.1f} s.")

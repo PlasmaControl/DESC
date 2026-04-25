@@ -200,7 +200,13 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
         print(r.shape, r_2d.shape)
         in_plasma_factor = r_flat > r # only include points outside the plasma surface
-        in_plasma_factor = np.mean(in_plasma_factor, axis=0).flatten()  # average over zeta to get a 2D mask in (r_flat, t_flat)
+        print(in_plasma_factor.shape)
+        in_plasma_factor = in_plasma_factor.astype(float)
+        in_plasma_factor = np.mean(in_plasma_factor, axis=0)
+        print(in_plasma_factor.shape)
+        in_plasma_factor = in_plasma_factor.flatten()
+        print(in_plasma_factor.shape)
+        
         print("r flat min:", r_flat.min())
         print("r flat max:", r_flat.max())
         print("r min:", r.min())

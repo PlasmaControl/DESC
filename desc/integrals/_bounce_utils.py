@@ -84,7 +84,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
         line and pitch, is padded with zero.
 
     """
-    if num_well is None or num_well < 0 or num_well > B.shape[-2]:
+    if num_well < 0 or num_well > B.shape[-2]:
         # The number of interior minima for C¹ continuous cubic spline must be < N,
         # and every minima must be a simple root.
         num_well = B.shape[-2]
@@ -220,7 +220,7 @@ def regular_points(o, pitch_inv, num_well):
     return _newton(
         o,
         pitch_inv,
-        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well, True),
+        *bounce_points(pitch_inv, o._c["knots"], o._B, num_well, True),
         min(o._nufft_eps, 1e-10),
     )
 

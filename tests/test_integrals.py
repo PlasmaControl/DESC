@@ -1344,11 +1344,14 @@ class TestBounce:
             data
         )
 
+        data["|B|"] /= data["Bref"]
+        data["|B|_z|r,a"] /= data["Bref"]
+        data["B^zeta"] *= data["a"] / data["Bref"]
+        data["B^zeta_z|r,a"] *= data["a"] / data["Bref"]
+
         bounce = Bounce1D(
             things["grid"].source_grid,
             data,
-            Bref=data["Bref"],
-            Lref=data["a"],
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1650,6 +1653,8 @@ class TestBounce2D:
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
+        grid_data["|B|"] /= data["Bref"]
+        grid_data["B^zeta"] *= data["a"] / data["Bref"]
 
         bounce = Bounce2D(
             grid,
@@ -1658,8 +1663,6 @@ class TestBounce2D:
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
             num_field_periods=3,
-            Bref=data["Bref"],
-            Lref=data["a"],
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,

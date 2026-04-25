@@ -31,6 +31,8 @@ Breaking Changes
 
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- The method name ``get_pitch_inv_quad`` has been shortened to ``pitch_quad`` to
+  make calling it less burdensome.
 
 
 v0.17.1

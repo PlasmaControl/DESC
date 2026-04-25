@@ -75,7 +75,7 @@ from desc.utils import (
 )
 
 
-class Bounce(eqx.Module, ABC):
+class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
@@ -123,9 +123,6 @@ class Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
-    get_pitch_inv_quad = pitch_quad
-    """Alias to ``pitch_quad``."""
-
     @abstractmethod
     def points(self, pitch_inv, num_well=None):
         """Compute bounce points."""
@@ -160,7 +157,7 @@ class Bounce(eqx.Module, ABC):
         """Plot B and bounce points on the specified field line."""
 
 
-class Bounce2D(Bounce):
+class Bounce2D(_Bounce):
     """Computes bounce integrals using pseudo-spectral methods.
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
@@ -588,7 +585,7 @@ class Bounce2D(Bounce):
     def _num_z(self):
         return self._modes_z.size
 
-    def _swap_pitch(self, pitch_inv):
+    def _swap_axes(self, pitch_inv):
         """Transpose to simplify broadcasting.
 
         Parameters
@@ -656,7 +653,7 @@ class Bounce2D(Bounce):
                 )
             # Skip Newton update since these points are exponentially accurate.
             z1, z2 = self._c["B(z)"].intersect1d(
-                self._swap_pitch(pitch_inv), num_intersect=num_well, eps=_eps
+                self._swap_axes(pitch_inv), num_intersect=num_well, eps=_eps
             )
             z1 = move(z1)
             z2 = move(z2)
@@ -706,7 +703,7 @@ class Bounce2D(Bounce):
             return self._c["B(z)"].check_intersect1d(
                 move(z1, False),
                 move(z2, False),
-                self._swap_pitch(pitch_inv),
+                self._swap_axes(pitch_inv),
                 plot=plot,
                 **kwargs,
             )
@@ -1007,7 +1004,7 @@ class Bounce2D(Bounce):
         warnings.warn(
             "This result will converge to "
             "(num field periods / 2π) * ∬_Ω abs(𝐁⋅∇ζ)⁻¹ dα dζ, "
-            "where (α,ζ) ∈ Ω = [0, 2π/NFP)².\n"
+            "where (α,ζ) ∈ Ω = [0, 2π) × [0, 2π/NFP).\n"
             "This can be computed more efficiently as "
             '(num field periods / 2π) * eq.compute("V_psi") / eq.NFP.\n',
             DeprecationWarning,
@@ -1026,11 +1023,10 @@ class Bounce2D(Bounce):
         x, w = quad
 
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
-        # compute a set of 2D Fourier series each on non-uniform tensor product grids
-        # of size
+        # compute a set of 2D Fourier series on non-uniform tensor product grids of size
         # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × deg/z_eff and |𝛇| = z_eff.
-        # Partial summation is more efficient than direct evaluation when
-        # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
+        # Partial summation is more efficient than direct evaluation since
+        # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| i.e. when n|𝛉| > n + |𝛉|.
 
         if self._c["B^zeta"].shape[-2] == 1:  # axisymmetric
             z_eff = jnp.array([0.0], ndmin=2)
@@ -1245,7 +1241,7 @@ def _fourier_if_real(thing):
     return Bounce2D.fourier(thing) if jnp.isrealobj(thing) else thing
 
 
-class Bounce1D(Bounce):
+class Bounce1D(_Bounce):
     """Computes bounce integrals using one-dimensional local spline methods.
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where

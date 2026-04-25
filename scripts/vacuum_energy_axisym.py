@@ -21,16 +21,15 @@ from desc.profiles import PowerSeriesProfile
 
 # ── Parameters ────────────────────────────────────────────────────────────────
 pest = True  # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix)
-M = 28
+M = 40
 N = 0
 n_theta = 2 * M
 n_zeta = 1#2 * N
 n_surf = n_theta * n_zeta
 R0 = 4
 a = 1
-elongation = 0.25
 
-eq_tag = f"R0_{R0}_a_{a}_elongation_{elongation}"
+eq_tag = f"axisym"
 eq_name = "Axisymmetric"
 NFP = 1
 
@@ -96,7 +95,7 @@ def make_coil(delta_h):
 
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
-pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, sym=False, NFP=64)
+pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, sym=False, NFP=128)
 
 if pest:
     # Map PEST angles (theta_PEST, zeta) → rtz native angles
@@ -244,6 +243,6 @@ ax.set_title(
 )
 ax.legend(fontsize=12)
 fig.tight_layout()
-fig.savefig(save_path + "W_V_vs_delta_h.png", dpi=150)
+fig.savefig(save_path + f"W_V_vs_delta_h_{eq_tag}.png", dpi=150)
 plt.show()
 print("done.")

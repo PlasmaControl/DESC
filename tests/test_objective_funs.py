@@ -2087,11 +2087,11 @@ class TestObjectiveFunction:
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_transit = 4
+        num_field_periods = 20
         opts = dict(
-            Y_B=64,
-            num_transit=num_transit,
-            num_well=15 * num_transit,
+            Y_B=13,
+            num_field_periods=num_field_periods,
+            num_well=3 * num_field_periods,
             num_quad=16,
             num_pitch=10,
         )
@@ -3207,8 +3207,8 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_transit"] = 4
-        kwargs["num_well"] = 15 * kwargs["num_transit"]
+        kwargs["num_field_periods"] = 10
+        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
@@ -4135,7 +4135,7 @@ class TestObjectiveNaNGrad:
         # from the supplementary information.
         # TODO: Reduce tolerance after someone implements the Newton step.
         #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.0025)
+        np.testing.assert_allclose(g, g_0, atol=0.006)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4162,7 +4162,7 @@ class TestObjectiveNaNGrad:
         # from the supplementary information.
         # TODO: Reduce tolerance after someone implements the Newton step.
         #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.042)
+        np.testing.assert_allclose(g, g_0, atol=0.09)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

@@ -25,8 +25,14 @@ Performance Improvements
     - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
     - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
-- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+
+Breaking Changes
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- The method name ``get_pitch_inv_quad`` has been shortened to ``pitch_quad`` to
+  make calling it less burdensome.
 
 
 v0.17.1

@@ -22,7 +22,6 @@ from interpax_fft import (
 )
 from interpax_fft._series import _add2legend, _plot_intersect
 from matplotlib import pyplot as plt
-from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
@@ -56,7 +55,7 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
         Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    num_well : int or None
+    num_well : int
         Specify to return the first ``num_well`` pairs of bounce points for each
         pitch and field line. Choosing ``-1`` will detect all wells, but due
         to current limitations in JAX this will have worse performance.
@@ -85,6 +84,11 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
         line and pitch, is padded with zero.
 
     """
+    if num_well < 0 or num_well > B.shape[-2]:
+        # The number of interior minima for C¹ continuous cubic spline must be < N,
+        # and every minima must be a simple root.
+        num_well = B.shape[-2]
+
     B = B[..., None, :, :]
     intersect = polyroot_vec(
         c=B,
@@ -216,7 +220,7 @@ def regular_points(o, pitch_inv, num_well):
     return _newton(
         o,
         pitch_inv,
-        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well, True),
+        *bounce_points(pitch_inv, o._c["knots"], o._B, num_well, True),
         min(o._nufft_eps, 1e-10),
     )
 
@@ -589,7 +593,7 @@ def plot_ppoly(
 
 
 def get_mins(knots, B, num_mins=-1, fill_value=0.0):
-    """Return minima of (z*, B(z*)) within open interval defined by knots.
+    """Return minima of (z*, B(z*)) within interval defined by knots.
 
     Parameters
     ----------
@@ -601,7 +605,7 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    num_mins : jnp.ndarray
+    num_mins : int
         Number of minima to return. Otherwise returns maximum possible.
     fill_value : float
         If there were less than ``num_mins`` minima detected, then the result
@@ -643,7 +647,11 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
 
 
 def argmin(z1, z2, f, mins, B_mins):
-    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
+    """Returns f at argmin of B between ``z1`` and ``z2``.
+
+    Let E(w) = {ζ ∣ ζ₁(w) < ζ < ζ₂(w)} and A(w) ∈ argmin_E(w) B.
+    Given the minima of B and f interpolated to those minima,
+    returns {f ∘ A(w)}.
 
     Parameters
     ----------
@@ -654,12 +662,18 @@ def argmin(z1, z2, f, mins, B_mins):
     f : jnp.ndarray
         Function interpolated to ``mins``.
         Shape (..., num mins).
+    mins : jnp.ndarray
+        Minima of B.
+        Shape ``f.shape``.
+    B_mins : jnp.ndarray
+        B interpolated to ``mins``.
+        Shape ``f.shape``.
 
     Returns
     -------
     f : jnp.ndarray
         Shape (..., num pitch, num well).
-        ``f`` at the minimum of ``B`` between ``z1`` and ``z2``.
+        Returns f at argmin of B between ``z1`` and ``z2``.
 
     """
     assert z1.ndim > 1 and z2.ndim > 1
@@ -681,7 +695,7 @@ def argmin(z1, z2, f, mins, B_mins):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_alphas(alpha, iota, num_transit, NFP):
+def get_alphas(alpha, iota, num_field_periods, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -692,24 +706,24 @@ def get_alphas(alpha, iota, num_transit, NFP):
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
     NFP: int
-        Number of field periods.
+        Number of field periods per toroidal transit.
 
     Returns
     -------
     alphas : jnp.ndarray
-        Shape (num α, num ρ, num transit * NFP).
+        Shape (num α, num ρ, num field periods).
         Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
     alpha = alpha[:, None, None]
     iota = iota[:, None]
-    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_field_periods)
 
 
-def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
+def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -723,10 +737,10 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
     NFP : int
-        Number of field periods.
+        Number of field periods per toroidal transit.
     X_min : int
         See notes section. This parameter should never be changed.
         It is included in the function signature for code optics only.
@@ -744,7 +758,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line ``α[i]``. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` broadcasts with
-        shape (num ρ, num α, num transit * NFP, max(1,7Y//8)).
+        shape (num ρ, num α, num field periods, max(1,7Y//8)).
 
     Notes
     -----
@@ -781,7 +795,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     domain = (0, 2 * jnp.pi / NFP)
 
     # peeling off field lines
-    alpha = get_alphas(alpha, iota, num_transit, NFP)
+    alpha = get_alphas(alpha, iota, num_field_periods, NFP)
     if angle.ndim == 2:
         alpha = alpha.squeeze(1)
 
@@ -796,7 +810,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     )
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
-    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_field_periods, Y)
 
     if X < X_min:
         # This is needed as our algorithm assumes continuity of |B| along field
@@ -806,7 +820,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
+def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
@@ -816,15 +830,13 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit * NFP, theta.Y).
+        shape (num ρ, num α, num field periods, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Chebyshev spectral resolution for ``f`` over a field period.
         Preferably power of 2.
-    num_t : int
-        Fourier resolution in poloidal direction.
     modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
@@ -839,24 +851,32 @@ def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         ``f`` over one field period. ``f.cheb`` broadcasts with
-        shape (num ρ, num α, num transit * NFP, Y).
+        shape (num ρ, num α, num field periods, Y).
 
     """
+    if f.shape[-2] == 1:  # axisymmetric
+        vander = None
+        z_eff = jnp.zeros((1, 1))
+    elif vander is None:
+        z_eff = cheb_pts(Y, theta.domain)[:, None]
+    else:
+        z_eff = None
+
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
-    # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
-    # Partial summation is more efficient than direct evaluation when
-    # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
+    # compute a set of 2D Fourier series on non-uniform tensor product grids of size
+    # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
+    # Partial summation is more efficient than direct evaluation since
+    # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| i.e. when n|𝛉| > n + |𝛉|.
 
     f = ifft_mmt(
-        cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
+        z_eff,
         f,
         theta.domain,
         axis=-2,
         modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt_pos(theta.evaluate(Y), f, num_t, modes=modes_t)
+    f = irfft_mmt_pos(theta.evaluate(Y), f, n=jnp.nan, modes=modes_t)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
     f = PiecewiseChebyshevSeries(f, theta.domain)
     assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
@@ -867,10 +887,8 @@ def fast_cubic_spline(
     theta,
     f,
     Y,
-    num_t,
     modes_t,
     modes_z,
-    NFP=1,
     nufft_eps=1e-6,
     *,
     vander_t=None,
@@ -886,21 +904,16 @@ def fast_cubic_spline(
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
         enumerates field line αᵢ. Each Chebyshev series approximates
         θ over one field period. ``theta.cheb`` should broadcast with
-        shape (num ρ, num α, num transit * NFP, theta.Y).
+        shape (num ρ, num α, num field periods, theta.Y).
     f : jnp.ndarray
         Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
-        Number of knots per toroidal transit to interpolate ``f``.
-        This number will be rounded up to an integer multiple of ``NFP``.
-    num_t : int
-        Fourier resolution in poloidal direction.
+        Number of knots per field period to interpolate ``f``.
     modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
-    NFP : int
-        Number of field periods.
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
@@ -914,37 +927,32 @@ def fast_cubic_spline(
     Returns
     -------
     f : jnp.ndarray
-        Shape broadcasts with (num ρ, num α, num transit * Y - 1, 4).
+        Shape broadcasts with (num ρ, num α, num field periods * Y - 1, 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
         Second to last axis enumerates the polynomials that compose a particular
         spline.
     knots : jnp.ndarray
-        Shape (num transit * Y).
+        Shape (num field periods * Y).
         Knots of spline ``f``.
 
     """
-    assert theta.domain == (0, 2 * jnp.pi / NFP)
-
-    lines = theta.cheb.shape[:-2]
-    num_transit = theta.X // NFP
-
-    axisymmetric = f.shape[-2] == 1
-    Y, num_z = round_up_rule(Y, NFP, axisymmetric)
-    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_z, endpoint=False)
+    x = jnp.linspace(-1, 1, Y, endpoint=False)
     z = bijection_from_disc(x, *theta.domain)
+    axisymmetric = f.shape[-2] == 1
+    z_eff = 1 if axisymmetric else Y
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
-    # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
+    # compute a set of 2D Fourier series on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y/NFP.
-    # Partial summation via FFT is more efficient than direct evaluation when
-    # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
+    # |𝛉|×|𝛇| where |𝛉| = num α × num field periods × Y/z_eff and |𝛇| = z_eff.
+    # Partial summation via FFT is more efficient than direct evaluation since
+    # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| i.e. when n|𝛉| > log|𝛇| + |𝛉|.
 
-    if num_z >= f.shape[-2]:
+    if z_eff >= f.shape[-2]:
         f = f.squeeze(-3)
-        p = num_z - f.shape[-2]
+        p = z_eff - f.shape[-2]
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
         pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
@@ -959,33 +967,37 @@ def fast_cubic_spline(
             modes=modes_z,
             vander=vander_z,
         )
+    # f shape is (..., z_eff, modes_t.size)
+
+    lines = theta.cheb.shape[:-2]  # (..., num α)
+    num_field_periods = theta.X
 
     # θ at uniform ζ on field lines
-    t = idct_mmt(
-        x,
-        theta.cheb.reshape(*lines, num_transit, NFP, 1, theta.Y),
-        vander=vander_t,
-    )
-    if axisymmetric:
-        t = t.reshape(*lines, num_transit, -1, 1)
+    t = idct_mmt(x, theta.cheb[..., None, :], vander=vander_t)
+    assert t.shape == (*lines, num_field_periods, Y)
 
     if nufft_eps < 1e-14 or f.shape[-1] <= 16:
-        f = f[..., None, None, None, :, :]
-        f = irfft_mmt_pos(t, f, num_t, modes=modes_t)
+        f = f[..., None, None, :, :]
+        f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
+        assert f.shape == t.shape
     else:
-        if len(lines) > 1:
-            t = t.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
+        if axisymmetric:
+            t = t.reshape(*lines, -1, z_eff)
+        if len(lines) > 1:  # then lines is (num ρ, num α)
+            t = t.transpose(0, 3, 1, 2).reshape(lines[0], z_eff, -1)
         else:
-            t = t.transpose(3, 0, 1, 2).reshape(num_z, -1)
+            t = t.transpose(2, 0, 1).reshape(z_eff, -1)
+        # t shape is (..., z_eff, num α × num field periods × Y/z_eff)
         f = nufft1d2r(t, f, eps=nufft_eps).mT
+        # f shape is (..., num α × num field periods × Y/z_eff, z_eff)
     f = f.reshape(*lines, -1)
 
     z = jnp.ravel(
-        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(theta.X)[:, None]
+        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(num_field_periods)[:, None]
     )
     f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, num_transit * Y - 1, 4)
+    assert f.shape == (*lines, num_field_periods * Y - 1, 4)
     return f, z
 
 
@@ -1063,72 +1075,3 @@ def truncate_rule(Y):
 
     """
     return max(1, 7 * Y // 8)
-
-
-def round_up_rule(Y, NFP, axisymmetric):
-    """Round Y up to NFP multiple.
-
-    Returns
-    -------
-    Y : int
-        Number of points per toroidal transit.
-    num_z : int
-        Number of points per field period.
-    axisymmetric : bool
-        Whether there toroidal smmetry.
-
-    """
-    if axisymmetric:
-        assert Y % NFP == 0, "Should set NFP = 1."
-        NFP = Y
-    num_z = (Y + NFP - 1) // NFP
-    return num_z * NFP, num_z
-
-
-def Y_B_rule(grid, spline):
-    """Guess Y_B from grid resolution.
-
-    Parameters
-    ----------
-    grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-    spline : bool
-        Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series.
-
-    Returns
-    -------
-    Y_B : int
-        Desired resolution for algorithm to compute bounce points.
-
-    """
-    Y_B = (grid.num_theta + grid.num_zeta) // 2
-    # Due to backwards compatibility reasons Y_B is expected to indicate
-    # resolution over full transit (a single field period) when spline is
-    # true (false).
-    return (Y_B * grid.NFP) if spline else Y_B
-
-
-def num_well_rule(num_transit, NFP, mins_per_transit=None):
-    """Guess upper bound for number of wells based on spectrum.
-
-    This should be loose enough that it is equivalent to ``num_well=None``,
-    but more performant.
-    """
-    num_well = num_transit * (20 + NFP)
-    return (
-        num_well
-        if mins_per_transit is None
-        else min(num_well, num_transit * mins_per_transit)
-    )
-
-
-def get_vander_spline(grid, Y, Y_B, NFP):
-    """Builds Vandermonde matrices for objectives."""
-    Y_trunc = truncate_rule(Y)
-    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
-    x = jnp.linspace(
-        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
-    )
-    return {"dct spline": chebvander(x, Y_trunc - 1)}

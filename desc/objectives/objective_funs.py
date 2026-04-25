@@ -137,7 +137,7 @@ doc_bounce = """
     Developer notes: Performance will improve significantly by resolving GitHub issues:
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
-      * ``2171`` Single contangent pullback through compute pipeline.
+      * ``2171`` Single cotangent pullback through compute pipeline.
 
     Parameters
     ----------
@@ -163,10 +163,7 @@ doc_bounce = """
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline=True`` option is
-        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
-        A reference value for the ``spline=False`` option is
-        ``(grid.num_theta+grid.num_zeta)//2``.
+        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -177,8 +174,8 @@ doc_bounce = """
         Default is single field line. To compute a surface average
         on a rational surface, it is necessary to average over multiple
         field lines until the surface is covered sufficiently.
-    num_transit : int
-        Number of toroidal transits to follow field line.
+    num_field_periods : int
+        Number of field periods to follow field line.
         In an axisymmetric device, field line integration over a single poloidal
         transit is sufficient to capture a surface average. For a 3D
         configuration, more transits will approximate surface averages on an

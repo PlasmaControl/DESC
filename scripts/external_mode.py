@@ -12,7 +12,7 @@ from desc.integrals.quad_utils import leggauss_lob, automorphism_staircase1
 from desc.io import load
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
-
+from desc.magnetic_fields import SourceFreeField
 
 # Make or load an ultra high aspect-ratio tokamak (essentially a screw pinch)
 from desc.equilibrium import Equilibrium
@@ -50,6 +50,17 @@ iota_on_axis_values = np.unique(iota_on_axis_values, sorted=True)  # Remove dupl
 results_lambda_min = np.zeros_like(iota_on_axis_values)
 stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
 
+# phi matrix resolution
+M = 20
+N = 0
+
+# Real space grid resolution for the eigenvalue solve
+n_rho = 24
+n_theta = 2 * M
+if axisym:
+    n_zeta = 1
+else:
+    n_zeta = 2 * N
 
 for i, iota_0 in enumerate(iota_on_axis_values):
     iota_coeffs = np.array([iota_0, -0.1])
@@ -77,11 +88,7 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             print(f"Loaded equilibrium from {save_path + save_name}")
         else:
             print("solving equilibrium")
-            eq = Equilibrium(
-                L=12,
-                M=12,
-                N=0,
-                surface=FourierRZToroidalSurface.from_shape_parameters(
+            surface = FourierRZToroidalSurface.from_shape_parameters(
                     major_radius=R_0,
                     aspect_ratio=aspect_ratio,
                     elongation=1,
@@ -92,7 +99,13 @@ for i, iota_0 in enumerate(iota_on_axis_values):
                     twist=0,
                     NFP=NFP,
                     sym=True,
-                ),
+                )
+            surface = SourceFreeField(surface, M=M, N=0, NFP=NFP)
+            eq = Equilibrium(
+                L=12,
+                M=12,
+                N=0,
+                surface=surface,
                 NFP=NFP,
                 iota=iota_profile,
                 current=I_profile,
@@ -116,17 +129,6 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     print("making input grid and diffmats")
 
-    # phi matrix resolution
-    M = 20
-    N = 0
-
-    # Low-res solve for eigenfunction guess
-    n_rho = 24#np.array([20, 36])
-    n_theta = 2 * M
-    if axisym:
-        n_zeta = 1
-    else:
-        n_zeta = 2 * N
     phi_save_name = f"{save_tag}_M_{M}_N_{N}_pseudospectral_phi_matrix.npy"
 
     

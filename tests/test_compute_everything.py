@@ -320,9 +320,9 @@ def fft_grid_data(p):
 
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
-        Y_B=grid.num_zeta * grid.NFP,
-        num_transit=5,
-        num_well=20 * 5,
+        Y_B=grid.num_zeta,
+        num_field_periods=25,
+        num_well=100,
         nufft_eps=1e-10,
     )
     data = eq.compute(fft_names, grid, **kwargs)
@@ -368,10 +368,10 @@ def raz_grid_data(p):
 
     eq = get("W7-X")
     num_transit = 2
-    Y_B = eq.N_grid * 2 * eq.NFP
+    Y_B = eq.N_grid * 2
     rho = np.linspace(1e-2, 1, 10)
     alpha = np.array([0])
-    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
+    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
     data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)

@@ -88,8 +88,8 @@ class GammaC(_Objective):
         X=32,
         Y=32,
         Y_B=None,
-        alpha=jnp.array([0.0]),
-        num_transit=20,
+        alpha=None,
+        num_field_periods=20,
         num_well=None,
         num_quad=32,
         num_pitch=65,
@@ -120,12 +120,14 @@ class GammaC(_Objective):
             target = 0.0
 
         self._grid = grid
+        if alpha is None:
+            alpha = jnp.zeros(1)
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_transit": num_transit,
+            "num_field_periods": num_field_periods,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,

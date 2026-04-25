@@ -117,7 +117,7 @@ def dual_pi_formatter(ax_axis, iota_NFP, NFP=1):
     return ax_axis
 
 
-def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
+def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=64, num_pitch=20):
     """High resolution plot for the paper."""
     plt.rcParams["figure.constrained_layout.use"] = True
     plt.rcParams["font.size"] = 14
@@ -130,7 +130,7 @@ def test_plot_bounce_point(name="W7-X", X=64, Y=64, Y_B=500, num_pitch=20):
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute(Bounce2D.required_names + ["min_tz |B|", "max_tz |B|"], grid=grid)
     angle = Bounce2D.angle(eq, X, Y, rho=rho)
-    bounce = Bounce2D(grid, data, angle, Y_B, num_transit=2)
+    bounce = Bounce2D(grid, data, angle, Y_B, num_field_periods=10)
     pitch_inv, _ = Bounce2D.pitch_quad(
         grid.compress(data["min_tz |B|"]),
         grid.compress(data["max_tz |B|"]),
@@ -286,7 +286,9 @@ def test_plot_theta_mod(X=64, Y=64, tol=1e-7):
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute(Bounce2D.required_names, grid=grid)
     angle = Bounce2D.angle(eq, X, Y, rho, tol=tol)
-    bounce = Bounce2D(grid, data, angle, 1, np.array([0.0, np.pi / 2, np.pi]), 4)
+    bounce = Bounce2D(
+        grid, data, angle, 1, np.array([0.0, np.pi / 2, np.pi]), num_field_periods=20
+    )
 
     lw = 1.5
     kwargs = dict(title="", show=False, include_legend=False, lw=lw)
@@ -370,7 +372,7 @@ def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
         rho = jnp.linspace(0, 1, 40)
         alpha = jnp.linspace(0, 2 * jnp.pi, 5, endpoint=False)
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        num_transit = 20
+        num_field_periods = 100
         pick_data = {"rho": rho, "eps_32": []}
     else:
         with open(f"res_scan_{name}.pkl", "rb") as file:
@@ -383,9 +385,9 @@ def test_plot_resolution_scan(name="W7-X", mode=1, top=0.0011):
                 grid=grid,
                 angle=Bounce2D.angle(eq, X=res[0], Y=res[1], rho=rho),
                 alpha=alpha,
-                Y_B=200,
-                num_transit=num_transit,
-                num_well=20 * num_transit,
+                Y_B=40,
+                num_field_periods=num_field_periods,
+                num_well=4 * num_field_periods,
                 num_quad=res[2],
                 num_pitch=res[3],
             )
@@ -463,15 +465,15 @@ def test_plot_optimized_ripple(mode=1):
 
     def compute(eq):
         grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-        num_transit = 20
+        num_field_periods = 20 * eq.NFP
         data = eq.compute(
             "effective ripple 3/2",
             grid=grid,
             angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho),
             alpha=jnp.linspace(0, 2 * jnp.pi, 3, endpoint=False),
-            Y_B=200,
-            num_transit=num_transit,
-            num_well=20 * num_transit,
+            Y_B=40,
+            num_field_periods=num_field_periods,
+            num_well=20 * num_field_periods // eq.NFP,
             num_quad=32,
             num_pitch=100,
         )
@@ -585,7 +587,9 @@ def plot_bavg_drift(
     Y = kwargs.pop("Y", 32)
     Y_B = kwargs.pop("Y_B", 64)
     num_quad = kwargs.pop("num_quad", 32)
-    num_transit = kwargs.pop("num_transit", 1 if (eq.NFP > 1) else 2)
+    num_field_periods = kwargs.pop(
+        "num_field_periods", eq.NFP if (eq.NFP > 1) else 2 * eq.NFP
+    )
 
     from desc.integrals.bounce_integral import Bounce2D
 
@@ -608,7 +612,7 @@ def plot_bavg_drift(
         grid=grid,
         angle=Bounce2D.angle(eq, X, Y, rho, tol=1e-9),
         Y_B=Y_B,
-        num_transit=num_transit,
+        num_field_periods=num_field_periods,
         num_quad=num_quad,
         num_pitch=num_pitch,
         alpha=alphas,
@@ -821,7 +825,7 @@ def test_plot_binormal_drift():
         Bounce2D.angle(eq, X=32, Y=32, rho=data["rho"], iota=data["iota"], tol=1e-10),
         32,
         data["alpha"] - 2.5 * np.pi * data["iota"],
-        num_transit=3,
+        num_field_periods=3 * eq.NFP,
         Bref=data["Bref"],
         Lref=data["a"],
         nufft_eps=0,

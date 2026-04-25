@@ -1344,11 +1344,14 @@ class TestBounce:
             data
         )
 
+        data["|B|"] /= data["Bref"]
+        data["|B|_z|r,a"] /= data["Bref"]
+        data["B^zeta"] *= data["a"] / data["Bref"]
+        data["B^zeta_z|r,a"] *= data["a"] / data["Bref"]
+
         bounce = Bounce1D(
             things["grid"].source_grid,
             data,
-            Bref=data["Bref"],
-            Lref=data["a"],
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1478,7 +1481,7 @@ class TestBounce2D:
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
-            num_transit=1,
+            num_field_periods=1,
             nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
@@ -1514,7 +1517,7 @@ class TestBounce2D:
             data,
             angle,
             alpha=alpha,
-            num_transit=2,
+            num_field_periods=38,
             check=True,
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
@@ -1605,7 +1608,9 @@ class TestBounce2D:
             num_nufft[~near_zero_nufft], num[~near_zero], rtol=3e-2
         )
 
-        bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
+        bounce = Bounce2D(
+            grid, data, angle, alpha=alpha, num_field_periods=38, check=True
+        )
         points = bounce.points(pitch_inv)
         z1, z2 = _newton(
             bounce, pitch_inv[:, None], *points, points[0] < points[1], 1e-10
@@ -1648,6 +1653,8 @@ class TestBounce2D:
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
+        grid_data["|B|"] /= data["Bref"]
+        grid_data["B^zeta"] *= data["a"] / data["Bref"]
 
         bounce = Bounce2D(
             grid,
@@ -1655,9 +1662,7 @@ class TestBounce2D:
             Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
-            num_transit=3,
-            Bref=data["Bref"],
-            Lref=data["a"],
+            num_field_periods=3,
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,

@@ -846,7 +846,7 @@ def fast_chebyshev(theta, f, Y, modes_t, modes_z, *, vander=None):
     """
     if f.shape[-2] == 1:  # axisymmetric
         vander = None
-        z_eff = jnp.array([0.0], ndmin=2)
+        z_eff = jnp.zeros((1, 1))
     elif vander is None:
         z_eff = cheb_pts(Y, theta.domain)[:, None]
     else:

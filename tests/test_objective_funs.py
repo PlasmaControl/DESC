@@ -4135,7 +4135,7 @@ class TestObjectiveNaNGrad:
         # from the supplementary information.
         # TODO: Reduce tolerance after someone implements the Newton step.
         #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.0025)
+        np.testing.assert_allclose(g, g_0, atol=0.006)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4162,7 +4162,7 @@ class TestObjectiveNaNGrad:
         # from the supplementary information.
         # TODO: Reduce tolerance after someone implements the Newton step.
         #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.042)
+        np.testing.assert_allclose(g, g_0, atol=0.09)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

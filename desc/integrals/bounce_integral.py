@@ -900,9 +900,10 @@ class Bounce2D(_Bounce):
             # Also uses less memory due to the dimension reduction.
             B = self._c["B(z)"].eval1d(z, loop=loop).reshape(shape)
 
-        z = zeta[..., None]
+        z = zeta[..., None] if self._num_z > 1 else jnp.zeros((1,) * (zeta.ndim + 1))
         z = jnp.exp(1j * self._modes_z * z)
         t = jnp.exp(1j * self._modes_t * t)
+
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
@@ -1029,7 +1030,7 @@ class Bounce2D(_Bounce):
         # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| i.e. when n|𝛉| > n + |𝛉|.
 
         if self._c["B^zeta"].shape[-2] == 1:  # axisymmetric
-            z_eff = jnp.array([0.0], ndmin=2)
+            z_eff = jnp.zeros((1, 1))
         else:
             z_eff = bijection_from_disc(x, *self._theta.domain)[:, None]
 

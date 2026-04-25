@@ -174,8 +174,8 @@ class Bounce2D(_Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    Refrences
-    ---------
+    References
+    ----------
     Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
     and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
@@ -195,7 +195,7 @@ class Bounce2D(_Bounce):
         ``Bounce2D`` is superior for optimization objectives in DESC as it solves the
         moving grid interpolation problem, avoids recomputing 3D Fourier-Zernike
         series on a time-dependent grid, and is able to compute the derivative
-        matrix relevant to optimzation with a compact sparse pullback.
+        matrix relevant to optimization with a compact sparse pullback.
 
     Parameters
     ----------
@@ -886,7 +886,7 @@ class Bounce2D(_Bounce):
 
         if isinstance(self._B, PiecewiseChebyshevSeries):
             # Using the same |B| that gave bounce points increases correlation
-            # in discretization error in an open neighboorhood around the
+            # in discretization error in an open neighborhood around the
             # current point in the optimization landscape, and hence removes
             # noise from optimization derivatives. For example, the difference
             # between the auto derivative and a 4 point finite difference
@@ -1007,15 +1007,7 @@ class Bounce2D(_Bounce):
         )
 
         if quad is None:
-            deg = max(
-                (
-                    self._B.Y
-                    if isinstance(self._B, PiecewiseChebyshevSeries)
-                    else self._theta.Y
-                ),
-                8,
-            )
-            quad = leggauss(deg)
+            quad = leggauss(getattr(self._B, "Y", self._theta.Y))
         x, w = quad
 
         # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
@@ -1234,7 +1226,7 @@ def _fourier_if_real(thing):
 
 
 class Bounce1D(_Bounce):
-    """Computes bounce integrals using one-dimensional local spline methods.
+    """Computes bounce integrals using one-dimensional spline methods.
 
     The bounce integral is defined as ∫ f(ρ,α,λ,ℓ) dℓ where
 
@@ -1266,8 +1258,8 @@ class Bounce1D(_Bounce):
         The domain is projected to ℝ, where information sampled about the function
         at infinity cannot support reconstruction of the function near the origin.
         As the functions of interest do not vanish at infinity, pseudo-spectral
-        techniques are not used. Instead, function approximation is done with local
-        splines. This is useful if one can efficiently obtain data along field lines
+        techniques are not used. Instead, function approximation is done with splines.
+        This is useful if one can efficiently obtain data along field lines
         and the number of toroidal transits to follow a field line is not large.
 
     Parameters

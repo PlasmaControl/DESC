@@ -24,7 +24,7 @@ pest = True  # True → PEST coords (phi_matrix_pest); False → rtz (phi_matrix
 M = 28
 N = 0
 n_theta = 2 * M
-n_zeta = 2 * N
+n_zeta = 1#2 * N
 n_surf = n_theta * n_zeta
 R0 = 4
 a = 1
@@ -66,7 +66,7 @@ else:
     eq = Equilibrium(
         L=12,
         M=12,
-        N=8,
+        N=0,
         surface=surface,
         NFP=NFP,
         iota=PowerSeriesProfile(iota_coeffs),

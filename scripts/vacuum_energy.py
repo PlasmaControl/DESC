@@ -216,7 +216,8 @@ def compute_external_coil_energy_3d(
         ),
         axis=-1,
     )  # distance from R=R0, Z=0, zeta=same as quad_grid
-
+    
+    # [a-elongation, a+elongation]
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
     R_flat = R0 + r_flat * np.cos(t_flat)
@@ -260,7 +261,7 @@ for k, frac in enumerate(delta_h_fracs):
         coil_k,
         R0,
         a - elongation,
-        r_max_factor=(a + elongation) / (a - elongation),
+        r_max_factor=2*elongation,
         L=100,
         M=100,
         N=100,

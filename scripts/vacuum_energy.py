@@ -185,7 +185,7 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
     if N > 0:
         surf_grid = LinearGrid(M=M_quad, N=N)
         surf_data = eq.surface.compute(["x"], grid=surf_grid)
-        r = safenorm(
+        r_surf = safenorm(
             surf_data["x"]
             - np.column_stack(
                 [
@@ -196,18 +196,15 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
             ),
             axis=-1,
         )  # distance from R=R0, Z=0, zeta=same as quad_grid
-        r = surf_grid.meshgrid_reshape(r, order="ztr")
-        r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
-        mask = r_2d[0, 0, :] < r.max()
-        r_2d_small = r_2d[:, :, mask]
-        print(r_2d_small.shape, r.shape)
-        in_plasma_factor = r_2d_small > r # only include points outside the plasma surface
-        in_plasma_factor = in_plasma_factor.astype(float)
-        in_plasma_factor = np.mean(in_plasma_factor, axis=0)
-        print(mask.shape)
-        print(in_plasma_factor.shape)
-        in_plasma_factor = np.where(mask, in_plasma_factor, 1.0)  # points beyond max r are definitely outside
-        in_plasma_factor = in_plasma_factor.flatten()
+        r_surf = surf_grid.meshgrid_reshape(r_surf, order="zrt")
+        r_2d = quad_grid.meshgrid_reshape(r_flat, order="zrt")
+        mask = r_2d[0, :, :] < r_surf.max()
+        r_2d_small = r_2d[:, mask, :]
+        print(r_2d_small.shape, r_surf.shape)
+        in_plasma_factor = r_2d_small > r_surf # only include points outside the plasma surface
+        in_plasma_factor_full = np.ones_like(r_2d, dtype=bool)
+        in_plasma_factor_full[0, mask, :] = in_plasma_factor
+        in_plasma_factor_full = in_plasma_factor_full.reshape(quad_grid.num_nodes)
         
 
     R_flat = R0 + r_flat * np.cos(t_flat)

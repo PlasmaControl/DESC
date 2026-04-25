@@ -2014,7 +2014,10 @@ class Options(NamedTuple):
             "lambda",
             eq,
             grid=LinearGrid(
-                rho=rho, M=eq.L_basis.M, zeta=o._constants["y"], NFP=eq.NFP
+                rho=rho,
+                M=eq.L_basis.M,  # assuming this doesn't change in optimization
+                zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,
+                NFP=eq.NFP,
             ),
         )["L"]
         o._constants["profiles"] = get_profiles(names, eq, grid=o._grid)

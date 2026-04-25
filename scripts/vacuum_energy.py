@@ -177,23 +177,44 @@ full_matrix = phi_matrix * integration_weights[:, None] / (2 * mu_0)
 
 
 # ── W_V_true: direct volume integral ─────────────────────────────────────────
-def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, r_max_factor=20.0):
+def compute_external_coil_energy(coil_field, R0, a, elongation, L=50, M_quad=50, N=0, r_max_factor=20.0):
     """1/(2μ₀) ∫_{r>a} B²(R,Z) R dR dZ dφ  [full torus, weights include dζ=2π]."""
     quad_grid = QuadratureGrid(L=L, M=M_quad, N=0)
     r_flat = quad_grid.nodes[:, 0] * r_max_factor + a
     t_flat = quad_grid.nodes[:, 1]
+    if N > 0:
+        quad_grid_3d = QuadratureGrid(L=L, M=M_quad, N=N)
+        surf_data = eq.surface.compute(["x"], grid=quad_grid_3d)
+        r = safenorm(
+            surf_data["x"]
+            - np.column_stack(
+                [
+                    R0 * np.ones(quad_grid.num_nodes),
+                    surf_data["x"][:, 1],
+                    np.zeros(quad_grid.num_nodes),
+                ]
+            ),
+            axis=-1,
+        )  # distance from R=R0, Z=0, zeta=same as quad_grid
+        r = quad_grid_3d.meshgrid_reshape(r, order="ztr")
+        r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
+        print(r.shape, r_2d.shape)
+        in_plasma_factor = r_flat > r # only include points outside the plasma surface
+        in_plasma_factor = np.mean(in_plasma_factor, axis=0)  # average over zeta to get a 2D mask in (r_flat, t_flat)
+        print(in_plasma_factor)
     R_flat = R0 + r_flat * np.cos(t_flat)
     Z_flat = r_flat * np.sin(t_flat)
     valid = R_flat > 0
     R_v, Z_v = R_flat[valid], Z_flat[valid]
     r_v, t_v = r_flat[valid], t_flat[valid]
+    in_plasma_factor_v = in_plasma_factor[valid] if N > 0 else np.ones_like(r_v, dtype=bool)
     coords = np.column_stack([R_v, np.zeros(valid.sum()), Z_v])
     B = np.array(
         coil_field.compute_magnetic_field(
             coords, basis="rpz", source_grid=LinearGrid(N=36)
         )
     )
-    B_sq = np.sum(B**2, axis=-1)
+    B_sq = np.sum(B**2, axis=-1) * in_plasma_factor_v
     jac = r_v * (R0 + r_v * np.cos(t_v))
     weights = quad_grid.spacing[valid].prod(axis=-1) * r_max_factor
     return 1 / (2 * mu_0) * np.dot(B_sq, jac * weights)

@@ -551,14 +551,18 @@ class Bounce2D(_Bounce):
 
             in_name = "vartheta"
             zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
-            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
+            grid = LinearGrid(
+                rho=rho, M=eq.L_basis.M, zeta=Y if eq.N > 0 else 1, NFP=eq.NFP
+            )
             if iota is None:
                 iota = 0.0
 
         elif name == "delta":
             in_name = "alpha"
             zeta = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
-            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
+            grid = LinearGrid(
+                rho=rho, M=eq.L_basis.M, zeta=zeta if eq.N > 0 else 1, NFP=eq.NFP
+            )
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
 

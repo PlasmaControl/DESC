@@ -204,17 +204,6 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         print("loaded low-res eigenfunction and lambda_min from previous run")
     else:
         grid, reshaped_nodes = mapping_and_grid(eq, rho, theta, zeta)
-        if X is not None:
-            v_guess, xi_rho_interp, xi_theta_interp, xi_zeta_interp = interpolate_xi(
-                xi_rho_low, xi_theta_low, xi_zeta_low, rho_low, theta_low, zeta_low,
-                reshaped_nodes, n_rho, n_theta, n_zeta, NFP
-            )
-            print("saving after-interpolation plots")
-            save_eigenfunction_plots(
-                xi_rho_interp, xi_theta_interp, xi_zeta_interp,
-                rho, theta, rho_iota1, title_base,
-                f"interp_{save_tag_res}",
-            )
         print("computing eigenmode at low res")
 
         tic = time.time()
@@ -222,7 +211,6 @@ for i, iota_0 in enumerate(iota_on_axis_values):
             "finite-n lambda3", grid=grid, diffmat=diffmat,
             gamma=10, incompressible=False,
             axisym=axisym, n_mode_axisym=n_mode_axisym,
-            v_guess=v_guess
         )
         toc = time.time()
         print(f"matrix full took {toc-tic:.1f} s.")

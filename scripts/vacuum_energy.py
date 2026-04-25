@@ -198,9 +198,12 @@ def compute_external_coil_energy(coil_field, R0, a, L=50, M_quad=50, N=0, r_max_
         )  # distance from R=R0, Z=0, zeta=same as quad_grid
         r = surf_grid.meshgrid_reshape(r, order="ztr")
         r_2d = quad_grid.meshgrid_reshape(r_flat, order="ztr")
-        in_plasma_factor = r_2d > r # only include points outside the plasma surface
+        mask = r_2d < r.max()
+        r_2d_small = r_2d[mask]
+        in_plasma_factor = r_2d_small > r # only include points outside the plasma surface
         in_plasma_factor = in_plasma_factor.astype(float)
         in_plasma_factor = np.mean(in_plasma_factor, axis=0)
+        in_plasma_factor = np.where(mask, in_plasma_factor, 1.0)  # points beyond max r are definitely outside
         in_plasma_factor = in_plasma_factor.flatten()
         
 
@@ -238,7 +241,7 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12, N=200,
+        coil_k, R0, a - elongation, r_max_factor=10000, L=2**12, M_quad=2**12, N=1000,
     )
     print(
         f"  Δh/a = {frac:.3f}  W_V = {W_V_vals[k]:.4e}  W_V_true = {W_V_true_vals[k]:.4e}"

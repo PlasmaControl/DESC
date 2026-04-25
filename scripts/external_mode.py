@@ -90,6 +90,7 @@ for i, free_param in enumerate(free_parameter_values):
             iota_modes = np.array([0, 2])
             iota_coeffs = np.array([iota_0, -0.5])
             iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+
         else:
             # iota(rho) = (iota_0 / (alpha^2 * rho^2)) * (alpha * rho^2 + (1 - alpha) * log(1 - alpha * rho^2))
             iota = (iota_0 / (alpha**2 * rho**2)) * (
@@ -97,7 +98,7 @@ for i, free_param in enumerate(free_parameter_values):
             )
             iota[0] = iota_0
             iota_profile = SplineProfile(iota, rho)
-            eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_alpha_{alpha:.4f}"
+        eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_alpha_{alpha:.4f}"
 
     I_profile = None
     p_coeffs = np.array([0.125, 0, 0, 0, -0.125])

@@ -1836,6 +1836,7 @@ class Options(NamedTuple):
         grid,
         *,
         alpha=None,
+        loop=False,
         nufft_eps=1e-6,
         num_field_periods=20,
         num_pitch=51,
@@ -1848,7 +1849,7 @@ class Options(NamedTuple):
         Y_B=None,
         **kwargs,
     ):
-        """Guess parameters based on eta and grid if not given in kwargs.
+        """Guess parameters based on eta and grid.
 
         Parameters
         ----------
@@ -1866,17 +1867,14 @@ class Options(NamedTuple):
             msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
         )
 
-        if quad is None:
-            quad = Options._quad(eta, num_quad)
-
         nufft_eps = float(nufft_eps)
         if eta != 1:
             nufft_eps = min(nufft_eps, 1e-7)
             num_pitch = max(num_pitch, 65)
-        pitch_quad = jax.lax.stop_gradient(simpson2(num_pitch))
 
         if Y_B is None:
             Y_B = Options._guess_Y_B(grid)
+
         if num_well is None:
             num_well = Options._guess_num_well(
                 num_field_periods=num_field_periods,
@@ -1886,13 +1884,13 @@ class Options(NamedTuple):
 
         return cls(
             alpha=jnp.zeros(1) if alpha is None else alpha,
-            loop=kwargs.get("loop", False),
+            loop=loop,
             nufft_eps=nufft_eps,
             num_field_periods=num_field_periods,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
-            pitch_quad=pitch_quad,
-            quad=quad,
+            pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
+            quad=Options._quad(eta, num_quad) if quad is None else quad,
             spline=spline,
             surf_batch_size=surf_batch_size,
             vander=kwargs.get("_vander", None),

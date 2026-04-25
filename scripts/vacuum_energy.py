@@ -28,7 +28,7 @@ n_zeta = 2 * N
 n_surf = n_theta * n_zeta
 R0 = 4
 a = 1
-elongation = 2
+elongation = 0.25
 
 eq_tag = f"R0_{R0}_a_{a}_elongation_{elongation}"
 eq_name = "Rotating ellipse"
@@ -53,26 +53,20 @@ if os.path.exists(save_path + eq_save_name):
     eq.change_resolution(NFP=1)
     eq.surface = SourceFreeField(eq.surface, M, N, NFP=1)
 else:
-    surface = FourierRZToroidalSurface.from_shape_parameters(
-        major_radius=R0,
-        aspect_ratio=int(R0 / a),
-        elongation=elongation,
-        triangularity=0,
-        squareness=0,
-        eccentricity=0,
-        torsion=0,
-        twist=2,
+    surface = FourierRZToroidalSurface(
+        R_lmn=np.array([elongation, R0, -a, -elongation]),
+        Z_lmn=np.array([-elongation, 1.0, -elongation]),
+        modes_R=np.array([[-1, -2], [0, 0], [1, 0], [1, 2]]),
+        modes_Z=np.array([[1, -2], [-1, 0], [-1, 2]]),
         NFP=NFP,
     )
-    surf_N = surface.N
-    print(surf_N)
     surface = SourceFreeField(surface, M, N, NFP=1)
     iota_coeffs = np.array([0.9, 0, 0.1, 0, 0.1])
     p_profile = np.array([0.125, 0, 0, 0, -0.125])
     eq = Equilibrium(
         L=12,
         M=12,
-        N=surf_N,
+        N=8,
         surface=surface,
         NFP=NFP,
         iota=PowerSeriesProfile(iota_coeffs),
@@ -84,8 +78,6 @@ else:
     )[-1]
     eq.save(save_path + eq_save_name)
 
-a = eq.compute("a")["a"]
-R0 = eq.compute("R0")["R0"]
 field = eq.surface  # SourceFreeField object
 
 # ── Coil builder ─────────────────────────────────────────────────────────────
@@ -250,10 +242,10 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a * np.sqrt(elongation), r_max_factor=10000, L=2**12, M_quad=2**12
+        coil_k, R0, a + elongation, r_max_factor=10000, L=2**12, M_quad=2**12
     )
     W_V_true_vals[k] += compute_external_coil_energy_3d(
-        coil_k, R0, a * np.sqrt(elongation), r_max_factor=elongation, L=100, M=100, N=100,
+        coil_k, R0, a - elongation, r_max_factor=(a + elongation)/(a - elongation), L=100, M=100, N=100,
     )
 
     print(

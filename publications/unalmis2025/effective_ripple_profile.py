@@ -40,7 +40,6 @@ obj = ObjectiveFunction(
             grid=grid,
             X=32,
             Y=32,
-            Y_B=20,
             num_field_periods=num_field_periods,
             num_well=3 * num_field_periods,
             num_quad=32,

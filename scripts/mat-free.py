@@ -241,8 +241,7 @@ print("Run analyze_stability.py for Mercier + delta_W breakdown.")
 
 
 # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
-fig, axs = plt.subplots(figsize=(14, 5))
-ax = axs[0]
+fig, ax = plt.subplots(figsize=(7, 5))
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
 ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-", marker=".",

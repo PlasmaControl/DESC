@@ -54,7 +54,7 @@ if power_series:
         free_parameter_values, sorted=True
     )  # Remove duplicates
 else:
-    alpha_values = np.linspace(0.0, 1.0, 20, endpoint=False)
+    alpha_values = np.hstack([np.linspace(0.0, 1.0, 20, endpoint=False), np.linspace(0.95, 1.0, 10, endpoint=False)])
     free_parameter_values = alpha_values
 
 results_lambda_min = np.zeros_like(free_parameter_values)
@@ -154,9 +154,9 @@ for i, free_param in enumerate(free_parameter_values):
     # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
     rho_iota1 = None
     title_base = (
-        rf"$\iota_0 = {iota_0:.3f}$, and $\alpha= {alpha}$"
-        rf"$\iota(\rho) = (\iota_0 / (\alpha^2\rho^2))[\alpha * \rho^2 + (1 - \alpha) * \log(1 - \alpha * \rho^2)]$"
-        rf", free-boundary modes"
+        rf"Free-boundary eigenmode stability for " + "\n"
+        rf"$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$"
+        rf" with $\alpha= {alpha:.3f}$"
     )
 
     print("making input grid and diffmats")
@@ -354,13 +354,13 @@ else:
     # ── Lambda vs iota_a summary plot ────────────────────────────────────────────
     ax.axhline(0, color="gray", lw=0.8, ls="--")
     ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1$")
-    ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1/2$")
+    ax.axvline(2, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1/2$")
 
     iota_a = (iota_0 / (alpha**2)) * (
                 alpha + (1 - alpha) * np.log(1 - alpha)
             )
     ax.plot(
-        iota_a,
+        1/iota_a,
         results_lambda_min,
         linestyle="-",
         marker=".",
@@ -368,11 +368,11 @@ else:
         lw=2,
         ms=7,
     )
-    ax.set_xlabel(r"$\iota_a$", fontsize=14)
+    ax.set_xlabel(r"1/$\iota_a$", fontsize=14)
     ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
     ax.set_title(
-        r"Stability eigenvalue vs $\iota_a$" + "\n"
-        f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
+        r"Stability to free-boundary modes vs $1/\iota_a$ with" + "\n"
+        "$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$",
         fontsize=18,
     )
     ax.tick_params(labelsize=15)

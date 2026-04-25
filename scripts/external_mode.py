@@ -18,7 +18,7 @@ from desc.magnetic_fields import SourceFreeField
 from desc.equilibrium import Equilibrium
 from desc.continuation import solve_continuation_automatic
 from desc.geometry import FourierRZToroidalSurface
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.grid import QuadratureGrid
 import os
 
@@ -38,17 +38,27 @@ else:
 
 # Paths
 save_path = "./eigenvalue_solve/"
-plot_path   = save_path + "eigenfunction_plots/"
+plot_path = save_path + "eigenfunction_plots/"
 os.makedirs(save_path, exist_ok=True)
 os.makedirs(plot_path, exist_ok=True)
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-iota_on_axis_values = np.hstack([np.linspace(0.8, 1.25, 20),np.linspace(0.8, 1.25, 46)])
-iota_on_axis_values = np.unique(iota_on_axis_values, sorted=True)  # Remove duplicates
+power_series = False
 
-results_lambda_min = np.zeros_like(iota_on_axis_values)
-stabilities = np.zeros_like(iota_on_axis_values, dtype=bool)
+if power_series:
+    free_parameter_values = np.hstack(
+        [np.linspace(0.8, 1.25, 20), np.linspace(0.8, 1.25, 46)]
+    )
+    free_parameter_values = np.unique(
+        free_parameter_values, sorted=True
+    )  # Remove duplicates
+else:
+    alpha_values = np.linspace(0.0, 1.0, 20, endpoint=False)
+    free_parameter_values = alpha_values
+
+results_lambda_min = np.zeros_like(free_parameter_values)
+stabilities = np.zeros_like(free_parameter_values, dtype=bool)
 
 # phi matrix resolution
 M = 20
@@ -62,17 +72,37 @@ if axisym:
 else:
     n_zeta = 2 * N
 
-for i, iota_0 in enumerate(iota_on_axis_values):
-    iota_coeffs = np.array([iota_0, -0.1])
-    iota_modes  = np.array([0, 2])
-    iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+for i, free_param in enumerate(free_parameter_values):
+    if power_series:
+        iota_0 = free_param
+        iota_coeffs = np.array([iota_0, -0.1])
+        iota_modes = np.array([0, 2])
+        iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+        print(f"\n=== iota_0 = {iota_0:.4f} ===")
+        eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
+
+    else:
+        alpha = free_param
+        iota_0 = 1.0  # Keep iota_0 fixed and vary alpha instead
+        rho = np.linspace(0, 1, 100)
+        if alpha == 0.0:
+            # limit as alpha → 0: iota(rho) = iota_0 - 0.5 * rho^2
+            iota_modes = np.array([0, 2])
+            iota_coeffs = np.array([iota_0, -0.5])
+            iota_profile = PowerSeriesProfile(iota_coeffs, modes=iota_modes)
+        else:
+            # iota(rho) = (iota_0 / (alpha^2 * rho^2)) * (alpha * rho^2 + (1 - alpha) * log(1 - alpha * rho^2))
+            iota = (iota_0 / (alpha**2 * rho**2)) * (
+                1 * alpha * rho**2 + (1 - alpha) * np.log(1 - alpha * rho**2)
+            )
+            iota[0] = iota_0
+            iota_profile = SplineProfile(iota, rho)
+            eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_alpha_{alpha:.4f}"
+
     I_profile = None
     p_coeffs = np.array([0.125, 0, 0, 0, -0.125])
     p_profile = PowerSeriesProfile(p_coeffs)
-    eq_name = f"ar_{aspect_ratio}_iota0_{iota_0:.4f}_d2iota_{2*iota_coeffs[-1]:.4f}"
 
-    print(f"\n=== iota_0 = {iota_0:.4f} ===")
-        
     # Save directory and filename
     save_tag = (
         f"axisym_{axisym}_NFP_{NFP}"
@@ -90,17 +120,17 @@ for i, iota_0 in enumerate(iota_on_axis_values):
         else:
             print("solving equilibrium")
             surface = FourierRZToroidalSurface.from_shape_parameters(
-                    major_radius=R_0,
-                    aspect_ratio=aspect_ratio,
-                    elongation=1,
-                    triangularity=0,
-                    squareness=0,
-                    eccentricity=0,
-                    torsion=0,
-                    twist=0,
-                    NFP=NFP,
-                    sym=True,
-                )
+                major_radius=R_0,
+                aspect_ratio=aspect_ratio,
+                elongation=1,
+                triangularity=0,
+                squareness=0,
+                eccentricity=0,
+                torsion=0,
+                twist=0,
+                NFP=NFP,
+                sym=True,
+            )
             surface = SourceFreeField(surface, M=M, N=0, NFP=NFP)
             eq = Equilibrium(
                 L=12,
@@ -114,7 +144,9 @@ for i, iota_0 in enumerate(iota_on_axis_values):
                 Psi=1,
             )
 
-            eq = solve_continuation_automatic(eq, ftol=1E-13, gtol=1E-13, xtol=1E-13, verbose=0)[-1]
+            eq = solve_continuation_automatic(
+                eq, ftol=1e-13, gtol=1e-13, xtol=1e-13, verbose=0
+            )[-1]
             eq.save(save_path + save_name)
             print("equilibrium solved")
 
@@ -130,8 +162,9 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
     phi_save_name = f"{save_tag}_M_{M}_N_{N}_pseudospectral_phi_matrix.npy"
 
-    
-    print(f"\n--- Solving at res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---")
+    print(
+        f"\n--- Solving at res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---"
+    )
     # paths for saving eigenfunction and related data
     save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"
     X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
@@ -207,9 +240,13 @@ for i, iota_0 in enumerate(iota_on_axis_values):
 
         tic = time.time()
         data = eq.compute(
-            "finite-n lambda3", grid=grid, diffmat=diffmat,
-            gamma=10, incompressible=False,
-            axisym=axisym, n_mode_axisym=n_mode_axisym,
+            "finite-n lambda3",
+            grid=grid,
+            diffmat=diffmat,
+            gamma=10,
+            incompressible=False,
+            axisym=axisym,
+            n_mode_axisym=n_mode_axisym,
             phi_matrix=phi_matrix,
         )
         toc = time.time()
@@ -255,8 +292,13 @@ for i, iota_0 in enumerate(iota_on_axis_values):
     print("saving solved-eigenfunction plots")
     save_eigenfunction_plots(
         plot_path,
-        xi_rho_low, xi_theta_low, xi_zeta_low,
-        rho, theta, rho_iota1, title_base,
+        xi_rho_low,
+        xi_theta_low,
+        xi_zeta_low,
+        rho,
+        theta,
+        rho_iota1,
+        title_base,
         f"solved_{save_tag_res}",
     )
 
@@ -282,8 +324,15 @@ print("Run analyze_stability.py for Mercier + delta_W breakdown.")
 fig, ax = plt.subplots(figsize=(7, 5))
 ax.axhline(0, color="gray", lw=0.8, ls="--")
 ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
-ax.plot(iota_on_axis_values, results_lambda_min, linestyle="-", marker=".",
-        color="steelblue", lw=2, ms=7)
+ax.plot(
+    iota_on_axis_values,
+    results_lambda_min,
+    linestyle="-",
+    marker=".",
+    color="steelblue",
+    lw=2,
+    ms=7,
+)
 ax.set_xlabel(r"$\iota_0$", fontsize=14)
 ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
 ax.set_title(
@@ -297,4 +346,3 @@ fig.tight_layout()
 fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
 plt.show()
 print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
-

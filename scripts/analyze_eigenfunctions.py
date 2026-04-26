@@ -241,10 +241,14 @@ for i, free_param in enumerate(free_parameter_values):
         f"solved_{save_tag_res}",
     )
 
-    coeffs = ((transform.fit(xi_r).reshape(basis.L + 1, 2 * basis.M + 1))**2).sum(axis=0)
+    coeffs = transform.fit(xi_r)
+    coeffs = np.abs(coeffs)**2
+    coeffs = coeffs.reshape(basis.L + 1, 2 * basis.M + 1)
+    coeffs = coeffs.sum(axis=0)
     print(coeffs)
     coeffs_pos = coeffs[-basis.M:]
     coeffs_neg = coeffs[:basis.M][::-1]
+    print(coeffs_pos, coeffs_neg, coeffs[basis.M])
     coeffs = np.hstack([coeffs[basis.M], coeffs_neg + coeffs_pos])
     coeffs = coeffs/coeffs.sum()  # Normalize mode energies
     coeffs = np.sqrt(coeffs)

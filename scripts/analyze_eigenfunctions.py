@@ -226,12 +226,24 @@ for i, free_param in enumerate(free_parameter_values):
     print("loaded low-res eigenfunction and lambda_min from previous run")
 
     # add boundaries back to the low-res eigenfunction for interpolation later
-    #xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
+    xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
+    save_eigenfunction_plots(
+        plot_path,
+        xi_rho_low,
+        xi_theta_low,
+        xi_zeta_low,
+        rho,
+        theta,
+        rho_iota1,
+        title_base,
+        f"solved_{save_tag_res}",
+    )
+
     coeffs = ((transform.fit(xi_r).reshape(basis.L + 1, 2 * basis.M + 1))**2).sum(axis=0)
     coeffs_pos = coeffs[-basis.M:]
     coeffs_neg = coeffs[:basis.M][::-1]
     coeffs = np.hstack([coeffs[0], coeffs_neg + coeffs_pos])
-    coeffs = coeffs//coeffs.sum()  # Normalize mode energies
+    coeffs = coeffs/coeffs.sum()  # Normalize mode energies
     coeffs = np.sqrt(coeffs)
     modes[i, :] = coeffs
         

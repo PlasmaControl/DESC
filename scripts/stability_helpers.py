@@ -189,15 +189,18 @@ def save_eigenfunction_plots(plot_path, xi_rho, xi_theta, xi_zeta, rho, theta, r
     rho_plot_indices = np.linspace(n_rho_loc // 4, n_rho_loc - 1, 4, dtype=int)
     i_theta_half_pi = int(np.argmin(np.abs(theta - np.pi / 2)))
 
+    label_fsize = 18
+    title_fsize = 20
+    suptitle_fsize = 24 
     def _plot_vs_rho(i_theta, theta_label, fname_suffix):
         fig, ax = plt.subplots(figsize=(7, 5))
         for xi, label, color in zip([xi_rho, xi_theta, xi_zeta], labels, comp_colors):
             ax.plot(rho, xi[:, i_theta, 0], color=color, lw=2, label=label)
         if rho_iota1 is not None and rho_iota1 <= 1.0:
             ax.axvline(rho_iota1, color="red", lw=1.2, ls=":", label=r"$\iota=1$")
-        ax.set_xlabel(r"$\rho$", fontsize=14)
-        ax.set_ylabel(r"$\xi$ (arb.)", fontsize=14)
-        ax.set_title(title_base + f",  {theta_label}", fontsize=12)
+        ax.set_xlabel(r"$\rho$", fontsize=label_fsize)
+        ax.set_ylabel(r"$\xi$ (arb.)", fontsize=label_fsize)
+        ax.set_title(title_base + f",  {theta_label}", fontsize=title_fsize)
         ax.tick_params(labelsize=12)
         ax.legend(fontsize=13)
         ax.axhline(0, color="gray", lw=0.7, ls="--")
@@ -214,14 +217,14 @@ def save_eigenfunction_plots(plot_path, xi_rho, xi_theta, xi_zeta, rho, theta, r
                     color=color, lw=2,
                     label=rf"$\rho = {rho[i_rho]:.2f}$",
                 )
-            ax.set_xlabel(r"$\theta$", fontsize=14)
-            ax.set_ylabel(label, fontsize=14)
+            ax.set_xlabel(r"$\theta$", fontsize=label_fsize)
+            ax.set_ylabel(label, fontsize=label_fsize)
             ax.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
             ax.set_xticklabels(["0", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
             ax.tick_params(labelsize=11)
             ax.axhline(0, color="gray", lw=0.7, ls="--")
-            ax.legend(fontsize=10)
-        fig.suptitle(title_base + suptitle_extra, fontsize=13)
+            ax.legend(fontsize=12)
+        fig.suptitle(title_base + suptitle_extra, fontsize=suptitle_fsize)
         plt.tight_layout()
         fig.savefig(plot_path + f"{fname_suffix}_{tag}.png", dpi=150)
         plt.close(fig)

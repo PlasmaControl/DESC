@@ -331,9 +331,7 @@ class Bounce2D(_Bounce):
 
         angle = parse_argname_change(angle, kwargs, "theta", "angle")
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
-        if alpha is None:
-            alpha = jnp.zeros(1)
-        iota, alpha = jnp.atleast_1d(iota, alpha)
+        iota, alpha = jnp.atleast_1d(iota, jnp.zeros(1) if alpha is None else alpha)
         self._theta = theta_on_fieldlines(
             angle, iota, alpha, num_field_periods, grid.NFP
         )
@@ -655,7 +653,16 @@ class Bounce2D(_Bounce):
             )
 
         if isinstance(self._B, PiecewiseChebyshevSeries):
-            # Skip Newton update since these points are exponentially accurate.
+            # We skip Newton stepping since we use this Chebyshev interpolation of |B|
+            # to compute v_∥ rather than the original Fourier series. This is because
+            # we found the points exactly for the Chebyshev interpolation, which is
+            # exponentially accurate. By using the exact points, we increase
+            # correlation in discretization error in a neighborhood of any given point
+            # in the optimization landscape, and hence remove noise from optimization
+            # derivatives. For example, by using Chebyshev |B| to compute v_∥ instead,
+            # the difference between the auto derivative and a 4 point finite
+            # difference stencil at the optimal step size of 10⁻⁸ is reduced from
+            # 10³ to 10⁻⁶ for Γ_c (which has the singular weight 1/v_∥).
             z1, z2 = self._B.intersect1d(
                 self._swap_axes(pitch_inv), num_intersect=num_well, eps=_eps
             )
@@ -663,13 +670,9 @@ class Bounce2D(_Bounce):
             z2 = move(z2)
             return z1, z2
 
-        pitch_inv = broadcast_for_bounce(pitch_inv)
-        if self._nufft_eps < 1e-14:
-            # FIXME: Newton update has only been implemented for nuffts; contributions
-            # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
-            return bounce_points(pitch_inv, self._c["knots"], self._B, num_well)
-
-        return regular_points(self, pitch_inv, num_well)
+        # We use the original Fourier series |B| to compute v_∥, so a Newton step
+        # is done using the roots of the spline as the initial guess.
+        return regular_points(self, broadcast_for_bounce(pitch_inv), num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -849,57 +852,54 @@ class Bounce2D(_Bounce):
         return result[0] if len(result) == 1 else result
 
     def _nufft(self, x, z1, z2, data, loop, eps, pitch_inv):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
+
+        keys = list(data.keys())
+        keys.append("B^zeta")
+        c = list(data.values())
+        c.append(self._c["B^zeta"])
+        if not (is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries)):
+            c.append(self._c["|B|"])
+            keys.append("|B|")
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
-        t = flatten_mat(self._theta.eval1d(z, loop=loop))
+        t = self._theta.eval1d(z, loop=loop)
+        if is_chebyshev:
+            B = self._B.eval1d(z, loop=loop).reshape(shape)
+        t = flatten_mat(t)
         z = flatten_mat(z)
         # t and z have shape (num rho surfaces, num points on each surface)
         #            or just (                  num points on each surface).
-
         if _JF_BUG:
             mask = fill_value = None
         else:
             mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
             fill_value = 0.5 * jnp.min(pitch_inv)
-
         c = nufft2d2r(
             z,
             t,
-            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
+            jnp.concatenate(c, -3),
             (0, 2 * jnp.pi / self._NFP),
             vec=True,
             eps=eps,
             mask=mask,
             fill_value=fill_value,
         )
-        c = (
-            c.reshape(len(data) + 2, *shape)
-            if c.ndim == 2
-            # reshape before swap to avoid memory copy
-            else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
-        )
+        c = c.swapaxes(0, -2).reshape((-1,) + shape)
 
-        data = dict(zip([*data.keys(), "B^zeta", "|B|"], c))
+        data = dict(zip(keys, c))
+        if is_chebyshev:
+            data["|B|"] = B
         data["zeta"] = z.reshape(shape)
         return data
 
     def _nummt(self, x, z1, z2, data, loop):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
         z = flatten_mat(zeta, 3)
         t = self._theta.eval1d(z, loop=loop).reshape(*shape, 1)
-
-        if isinstance(self._B, PiecewiseChebyshevSeries):
-            # Using the same |B| that gave bounce points increases correlation
-            # in discretization error in an open neighborhood around the
-            # current point in the optimization landscape, and hence removes
-            # noise from optimization derivatives. For example, the difference
-            # between the auto derivative and a 4 point finite difference
-            # stencil at the optimal step size is reduced from 10³ to 10⁻⁶ for
-            # Γ_c (which has the singular weight 1/v_∥).
-            # Also uses less memory due to the dimension reduction.
+        if is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries):
             B = self._B.eval1d(z, loop=loop).reshape(shape)
 
         z = zeta[..., None] if self._num_z > 1 else jnp.zeros((1,) * (zeta.ndim + 1))
@@ -908,12 +908,8 @@ class Bounce2D(_Bounce):
 
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
-        if isinstance(self._B, PiecewiseChebyshevSeries):
-            data["|B|"] = B
-        else:
-            data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        data["|B|"] = B if is_chebyshev else mmt_for_bounce(z, t, self._c["|B|"])
         data["zeta"] = zeta
-
         return data
 
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
@@ -1591,7 +1587,7 @@ class Bounce1D(_Bounce):
 
         pitch = broadcast_for_bounce(1 / pitch_inv)[..., None, None]
 
-        shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
+        shape = z1.shape + (x.size,)  # (..., num pitch, num well, num quad)
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
 

@@ -160,8 +160,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 points,
                 nufft_eps=opts.nufft_eps,
             )
-            # This is γ_c π/2.
-            gamma_c = jnp.arctan(
+            gamma_c_pi_over_2 = jnp.arctan(
                 safediv(
                     radial_drift,
                     poloidal_drift
@@ -172,7 +171,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                     ),
                 )
             )
-            return (v_tau * gamma_c**2).sum(-1).mean(-2)
+            return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
@@ -185,6 +184,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     out = Bounce2D.batch(
         Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
     )
+    assert out.ndim == 1
     data["Gamma_c"] = (
         grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
     )
@@ -331,9 +331,8 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 num_well=opts.num_well,
                 nufft_eps=opts.nufft_eps,
             )
-            # This is γ_c π/2.
-            gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
-            return (v_tau * gamma_c**2).sum(-1).mean(-2)
+            gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
+            return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
@@ -355,6 +354,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         grid,
         opts.surf_batch_size,
     )
+    assert out.ndim == 1
     data["Gamma_c Velasco"] = (
         grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
     )

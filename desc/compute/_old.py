@@ -67,7 +67,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
     opts = Options.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
@@ -90,6 +90,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         grid,
         opts.surf_batch_size,
     )
+    assert out.ndim == 1
     data["old effective ripple 3/2"] = (
         (B0 / data["<|grad(rho)|>"]) ** 2
         * scalar
@@ -186,7 +187,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
     opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
@@ -201,8 +202,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(
+        gamma_c_pi_over_2 = jnp.arctan(
             safediv(
                 radial_drift,
                 poloidal_drift
@@ -210,11 +210,12 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             )
         )
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2) * weight / pitch_inv**2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
     out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, opts.surf_batch_size)
+    assert out.ndim == 1
     data["old Gamma_c"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
@@ -255,11 +256,8 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    # TODO: for this old stuff, this is better as eta = -1; but don't want
-    #       to change in this PR, as test compute everything then has to
-    #       be regenerated.
-    opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def _poloidal_drift_secular(data, B, pitch):
         return safediv(
@@ -278,10 +276,9 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             ["cvdrift0", "gbdrift"],
             num_well=num_well,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+        gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2) * weight / pitch_inv**2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
@@ -292,6 +289,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         grid,
         opts.surf_batch_size,
     )
+    assert out.ndim == 1
     data["old Gamma_c Velasco"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )

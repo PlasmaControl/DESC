@@ -222,7 +222,7 @@ for i, free_param in enumerate(free_parameter_values):
     data = np.load(savez_path)
     idx0 = n_rho * n_theta * n_zeta
     xi = data["xi"]
-    xi_r = xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1) # reshape to (n_zeta, n_rho, n_theta)
+    xi_r = xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1).flatten() # reshape to (n_zeta, n_rho, n_theta)
     lambda_min = data["lambda_min"]
     data.close()
     print("loaded low-res eigenfunction and lambda_min from previous run")

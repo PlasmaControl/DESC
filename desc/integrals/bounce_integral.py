@@ -231,15 +231,17 @@ class Bounce2D(_Bounce):
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
-        Default is single field line. To compute a surface average
-        on a rational surface, it is necessary to average over multiple
-        field lines until the surface is covered sufficiently.
+        Default is single field line.
+        On irrational magnetic surfaces, it is sufficient to integrate along a
+        single field line. On a rational or near-rational surface in
+        non-axisymmetric configurations, it is necessary to integrate along
+        multiple field lines until the surface is covered sufficiently.
     num_field_periods : int
         Number of field periods to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
+        In axisymmetric configurations, integration along the field line for a
+        single poloidal transit between two global maxima of B is sufficient for
+        convergence. For a 3D configuration, the magnetic surface should be covered
+        sufficiently.
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -1737,16 +1739,18 @@ class Options(NamedTuple):
         "alpha": """jnp.ndarray :
             Shape (num alpha, ).
             Starting field line poloidal labels.
-            Default is single field line. To compute a surface average
-            on a rational surface, it is necessary to average over multiple
-            field lines until the surface is covered sufficiently.
+            Default is single field line.
+            On irrational magnetic surfaces, it is sufficient to integrate along a
+            single field line. On a rational or near-rational surface in
+            non-axisymmetric configurations, it is necessary to integrate along
+            multiple field lines until the surface is covered sufficiently.
             """,
         "num_field_periods": """int :
             Number of field periods to follow field line.
-            In an axisymmetric device, field line integration over a single poloidal
-            transit is sufficient to capture a surface average. For a 3D
-            configuration, more transits will approximate surface averages on an
-            irrational magnetic surface better, with diminishing returns.
+            In axisymmetric configurations, integration along the field line for a
+            single poloidal transit between two global maxima of B is sufficient for
+            convergence. For a 3D configuration, the magnetic surface should be covered
+            sufficiently.
             """,
         "num_well": """int :
             Maximum number of wells to detect for each pitch and field line.
@@ -1837,9 +1841,9 @@ class Options(NamedTuple):
         *,
         alpha=None,
         loop=False,
-        nufft_eps=1e-6,
+        nufft_eps=None,
         num_field_periods=20,
-        num_pitch=51,
+        num_pitch=None,
         num_quad=32,
         num_well=None,
         pitch_batch_size=None,
@@ -1867,10 +1871,13 @@ class Options(NamedTuple):
             msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
         )
 
+        if eta == 1:
+            nufft_eps = setdefault(nufft_eps, 1e-6)
+            num_pitch = setdefault(num_pitch, 51)
+        else:
+            nufft_eps = setdefault(nufft_eps, 1e-7)
+            num_pitch = setdefault(num_pitch, 65)
         nufft_eps = float(nufft_eps)
-        if eta != 1:
-            nufft_eps = min(nufft_eps, 1e-7)
-            num_pitch = max(num_pitch, 65)
 
         if Y_B is None:
             Y_B = Options._guess_Y_B(grid)

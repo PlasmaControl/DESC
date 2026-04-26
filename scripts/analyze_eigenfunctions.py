@@ -219,36 +219,14 @@ for i, free_param in enumerate(free_parameter_values):
     X = np.load(X_path)
     data = np.load(savez_path)
     idx0 = n_rho * n_theta * n_zeta
-    xi_r = data["xi"][:idx0]
+    #xi = data["xi"]
+    xi_r = xi[:idx0]
     lambda_min = data["lambda_min"]
     data.close()
     print("loaded low-res eigenfunction and lambda_min from previous run")
 
     # add boundaries back to the low-res eigenfunction for interpolation later
-    xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
-
-    # Save nodes for interpolation
-    rho_low = rho
-    theta_low = theta
-    zeta_low = zeta
-
-    # save plots of the solved eigenfunction at this resolution
-    print("saving solved-eigenfunction plots")
-    save_eigenfunction_plots(
-        plot_path,
-        xi_rho_low,
-        xi_theta_low,
-        xi_zeta_low,
-        rho,
-        theta,
-        rho_iota1,
-        title_base,
-        f"solved_{save_tag_res}",
-    )
-
-    # add the final lambda_min to the results list for this iota_0
-    results_lambda_min[i] = lambda_min
-
+    #xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
     coeffs = transform.fit(xi_r).reshape(basis.L + 1, 2 * basis.M + 1).mean(axis=0)
     modes[i, :] = coeffs
         

@@ -84,7 +84,7 @@ modes = np.zeros((alpha_values.shape[0], 2 * M_basis + 1))
 # ── Grid setup ────────────────────────────────────────────────────────────────
 pest_grid = LinearGrid(rho=n_rho, theta=n_theta, zeta=n_zeta, sym=False)
 basis = ChebyshevDoubleFourierBasis(L=pest_grid.L - 1, M = M_basis, N=0)
-transform = Transform(pest_grid, basis)
+transform = Transform(pest_grid, basis, build_pinv=True)
 
 for i, free_param in enumerate(free_parameter_values):
     if power_series:

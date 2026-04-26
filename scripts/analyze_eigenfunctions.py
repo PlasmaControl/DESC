@@ -82,7 +82,9 @@ M_basis = 3
 modes = np.zeros((alpha_values.shape[0], M_basis + 1))
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
-pest_grid = LinearGrid(rho=n_rho, theta=n_theta, zeta=n_zeta, sym=False)
+diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
+pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=False)
+
 basis = ChebyshevDoubleFourierBasis(L=pest_grid.L - 1, M = M_basis, N=0)
 transform = Transform(pest_grid, basis, build_pinv=True)
 
@@ -220,7 +222,7 @@ for i, free_param in enumerate(free_parameter_values):
     data = np.load(savez_path)
     idx0 = n_rho * n_theta * n_zeta
     xi = data["xi"]
-    xi_r = xi[:idx0]
+    xi_r = xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1) # reshape to (n_zeta, n_rho, n_theta)
     lambda_min = data["lambda_min"]
     data.close()
     print("loaded low-res eigenfunction and lambda_min from previous run")

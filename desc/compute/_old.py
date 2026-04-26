@@ -67,7 +67,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
     opts = Options.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
@@ -186,7 +186,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
     opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
@@ -255,11 +255,8 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    # TODO: for this old stuff, this is better as eta = -1; but don't want
-    #       to change in this PR, as test compute everything then has to
-    #       be regenerated.
-    opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
-    num_well = kwargs.pop("num_well", -1)
+    opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def _poloidal_drift_secular(data, B, pitch):
         return safediv(

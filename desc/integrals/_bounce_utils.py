@@ -122,6 +122,35 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     return (z1, z2, mask) if return_mask else (z1, z2)
 
 
+def _coeffs(o, jvp=False):
+    """Returns (t, dt_dz) and (B ?, dB_dz, dB_dt)."""
+    # shape is (2, ρ ?, α, X, Y)
+    t = jnp.stack(
+        [
+            o._theta.cheb,
+            chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+        ]
+    )
+    B = []
+    if not jvp:
+        B.append(o._c["|B|"])
+    B.append(o._c["|B|"] * (1j * o._modes_z)[:, None])
+    B.append(o._c["|B|"] * (1j * o._modes_t))
+    # shape is (ρ ?, c=3 or 2, z modes, t modes)
+    B = jnp.concatenate(B, -3)
+    return t, B
+
+
+def _safe_update(mask, old, update, max_update=1e-1):
+    """Returns old - update where intervals are preserved and update < max_update."""
+    new = old - update
+    return jnp.where(
+        mask & (new[0] < new[1]) & (jnp.abs(update) < max_update),
+        new,
+        old,
+    )
+
+
 def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
     """Newton step using maps used in the quadrature.
 
@@ -150,57 +179,58 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
         Shape (num ρ, num α, num pitch, num well).
 
     """
-    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+    t, B = _coeffs(o)
 
-    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
-    t, dt_dz = o._theta.eval1d(
-        z[None],
-        jnp.stack(
-            [
-                o._theta.cheb,
-                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
-            ]
-        ),
+    z = jnp.stack((z1, z2))
+    # calling this method with shapes    (1,  b=2, ρ?,α,   λ, w)
+    #                                    (2,    1, ρ?,α,   1, X, Y).
+    t, dt_dz = o._theta.eval1d(z[None], t[:, None, ..., None, :, :])
+    # shapes match z, i.e. (b, ρ ?, α, λ, w)
+
+    if nufft_eps < 1e-14:
+        z_eff = z if o._num_z > 1 else jnp.zeros((1,) * z.ndim)
+        B, dB_dz, dB_dt = jnp.einsum(
+            "...czt, b...apwz, b...apwt -> cb...apw",
+            B,
+            jnp.exp(1j * o._modes_z * z_eff[..., None]),
+            jnp.exp(1j * o._modes_t * t[..., None]),
+            optimize=[(0, 1), (0, 1)],
+        ).real
+    else:
+        B, dB_dz, dB_dt = _acrobatics(z, t, B, o._NFP, nufft_eps, mask)
+
+    dz = (B - pitch_inv[..., None]) / (dB_dz + dB_dt * dt_dz)
+    del B, dB_dz, dB_dt, t, dt_dz
+
+    return _safe_update(mask, z, dz)
+
+
+def _acrobatics(z, t, c, NFP, eps, mask):
+    # Some reshape acrobatics required due to frankenstein vectorization of jax-finufft.
+    t = t.swapaxes(0, -4)
+    swapped_shape = t.shape
+    t = flatten_mat(t, 4)  # shape is (ρ, points per ρ surface)
+    #                         or just (   points per ρ surface)
+    return (
+        nufft2d2r(
+            flatten_mat(z.swapaxes(0, -4), 4),
+            t,
+            c,
+            (0, 2 * jnp.pi / NFP),
+            vec=True,
+            eps=eps,
+            mask=(
+                None
+                if _JF_BUG
+                else flatten_mat(
+                    jnp.broadcast_to(mask[None], (2,) + mask.shape).swapaxes(0, -4), 4
+                )
+            ),
+        )
+        .swapaxes(0, -2)  # so that first axis splits into e.g. B, dB_dz, dB_dt
+        .reshape((-1,) + swapped_shape)  # then shape is (-1, ρ ?, b, α, λ, w)
+        .swapaxes(1, -4)  # recover shape (-1, b, ρ ?, α, λ, w)
     )
-    dt_dz = dt_dz.reshape(shape)
-    t = flatten_mat(t)
-    z = flatten_mat(z)
-
-    B = nufft2d2r(
-        z,
-        t,
-        jnp.concatenate(
-            [
-                o._c["|B|"],
-                o._c["|B|"] * (1j * o._modes_z)[:, None],
-                o._c["|B|"] * (1j * o._modes_t),
-            ],
-            -3,
-        ),
-        (0, 2 * jnp.pi / o._NFP),
-        vec=True,
-        eps=nufft_eps,
-        mask=(
-            None
-            if _JF_BUG
-            else flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4)
-        ),
-    )
-    B, dB_dz, dB_dt = (
-        B.reshape(3, *shape)
-        if B.ndim == 2
-        # reshape before swap to avoid memory copy
-        else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
-    )
-    z = z.reshape(shape)
-
-    dz = (B - pitch_inv[..., None, :, None]) / (dB_dz + dB_dt * dt_dz)
-    Z = z - dz
-    mask = mask & (Z[..., 0, :, :] < Z[..., 1, :, :])  # Deny interval inversion.
-    mask = mask[..., None, :, :] & (jnp.abs(dz) < 1e-1)  # Deny large updates.
-    z = jnp.where(mask, Z, z)
-
-    return z[..., 0, :, :], z[..., 1, :, :]
 
 
 @partial(jax.custom_jvp, nondiff_argnums=(2,))
@@ -243,55 +273,47 @@ def regular_points_jvp(num_well, primals, tangents):
     o, p = primals
     do, dp = tangents
 
-    z1, z2 = regular_points(o, p, num_well)
+    z = regular_points(o, p, num_well)
 
-    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
-
-    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
-    t, dt_dz = o._theta.eval1d(
-        z[None],
-        jnp.stack(
-            [
-                o._theta.cheb,
-                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
-            ]
-        ),
-    )
-    dt_do = o._theta.eval1d(z, do._theta.cheb).reshape(shape)
-    dt_dz = dt_dz.reshape(shape)
-    t = flatten_mat(t)
-    z = flatten_mat(z)
-
-    mask = (z1 < z2)[..., None, :, :]
-
+    mask = z[0] < z[1]
     nufft_eps = min(o._nufft_eps, 1e-10)
-    dB_dz = nufft2d2r(
-        z,
-        t,
-        jnp.concatenate(
-            [o._c["|B|"] * (1j * o._modes_z)[:, None], o._c["|B|"] * (1j * o._modes_t)],
-            -3,
-        ),
-        (0, 2 * jnp.pi / o._NFP),
-        vec=True,
-        eps=nufft_eps,
-        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
-    )
-    dB_do = nufft2d2r(
-        z,
-        t,
-        do._c["|B|"].squeeze(-3),
-        (0, 2 * jnp.pi / o._NFP),
-        eps=nufft_eps,
-        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
-    ).reshape(shape)
+    t, dB_dz = _coeffs(o, jvp=True)
 
-    dB_dz, dB_dt = (
-        dB_dz.reshape(2, *shape)
-        if dB_dz.ndim == 2
-        # reshape before swap to avoid memory copy
-        else dB_dz.reshape(shape[0], 2, *shape[1:]).swapaxes(0, 1)
-    )
+    # calling this method with shapes    (1,  b=2, ρ?,α,   λ, w)
+    #                                    (2,    1, ρ?,α,   1, X, Y).
+    t, dt_dz = o._theta.eval1d(z[None], t[:, None, ..., None, :, :])
+    dt_do = o._theta.eval1d(z, do._theta.cheb[None, ..., None, :, :])
+    # shapes match z, i.e. (b, ρ ?, α, λ, w)
+
+    if nufft_eps < 1e-14:
+
+        z_eff = jnp.exp(
+            1j
+            * o._modes_z
+            * (z if o._num_z > 1 else jnp.zeros((1,) * z.ndim))[..., None]
+        )
+        t = jnp.exp(1j * o._modes_t * t[..., None])
+
+        dB_dz, dB_dt = jnp.einsum(
+            "...czt, b...apwz, b...apwt -> cb...apw",
+            dB_dz,
+            z_eff,
+            t,
+            optimize=[(0, 1), (0, 1)],
+        ).real
+
+        dB_do = jnp.einsum(
+            "...zt, b...apwz, b...apwt -> b...apw",
+            do._c["|B|"].squeeze(-3),
+            z_eff,
+            t,
+            optimize=[(0, 1), (0, 1)],
+        ).real
+
+        del z_eff, t
+    else:
+        dB_dz, dB_dt = _acrobatics(z, t, dB_dz, o._NFP, nufft_eps, mask)
+        (dB_do,) = _acrobatics(z, t, do._c["|B|"], o._NFP, nufft_eps, mask)
 
     # chain rule to move from (∂/∂ζ)|ρ,θ to (∂/∂ζ)|ρ,a
     dB_dz += dB_dt * dt_dz
@@ -302,9 +324,9 @@ def regular_points_jvp(num_well, primals, tangents):
         dB_dz,
         dB_dz + jnp.copysign(_eps, dB_dz.real),
     )
-    dz12 = jnp.where(mask, (dp[..., None, :, None] - dB_do) / dB_dz, 0.0)
+    dz = jnp.where(mask, (dp[..., None] - dB_do) / dB_dz, 0.0)
 
-    return (z1, z2), (dz12[..., 0, :, :], dz12[..., 1, :, :])
+    return z, dz
 
 
 def set_default_plot_kwargs(kwargs, l=None, m=None):

@@ -318,21 +318,23 @@ def fft_grid_data(p):
     rho = np.linspace(1e-2, 1, 10)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
+    nufft_eps = 1e-10
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta,
         num_field_periods=25,
         num_well=100,
-        nufft_eps=1e-10,
     )
-    data = eq.compute(fft_names, grid, **kwargs)
+    data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)
     for name in fft_names:
         assert data[name].ndim == 1
 
     # check vectorization too
     d = data.copy()
     del d["Gamma_c"]
-    d = eq.compute("Gamma_c", grid, data=d, surf_batch_size=2, **kwargs)
+    d = eq.compute(
+        "Gamma_c", grid, data=d, surf_batch_size=2, nufft_eps=nufft_eps, **kwargs
+    )
     np.testing.assert_allclose(
         d["Gamma_c"],
         data["Gamma_c"],
@@ -342,15 +344,11 @@ def fft_grid_data(p):
     )
     # check no nufft
     del d["Gamma_c"]
-    kwargs["nufft_eps"] = 0.0
-    d = eq.compute("Gamma_c", grid, data=d, **kwargs)
+    d = eq.compute("Gamma_c", grid, data=d, nufft_eps=0.0, **kwargs)
     np.testing.assert_allclose(
         d["Gamma_c"],
         data["Gamma_c"],
-        # This is large since no nuffts + spline for bounce points
-        # are innaccurate due to lack of Newton step after finding bounce point
-        # approximation with splines.
-        rtol=0.2,
+        rtol=np.sqrt(nufft_eps) * 8,
         err_msg="Gamma_c no nufft",
     )
 

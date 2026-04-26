@@ -4127,15 +4127,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε¹ᐧ⁵) error in integrals with v_||. For the
-        # gradient it is probably O(ε) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.006)
+        np.testing.assert_allclose(g, g_0, atol=1e-6)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4154,15 +4146,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε⁰ᐧ⁵) error in integrals with 1/v_||. For the gradient
-        # it is probably O(ε⁰ᐧ³³) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.09)
+        np.testing.assert_allclose(g, g_0, atol=2e-5)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

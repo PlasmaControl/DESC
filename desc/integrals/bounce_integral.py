@@ -663,13 +663,7 @@ class Bounce2D(_Bounce):
             z2 = move(z2)
             return z1, z2
 
-        pitch_inv = broadcast_for_bounce(pitch_inv)
-        if self._nufft_eps < 1e-14:
-            # FIXME: Newton update has only been implemented for nuffts; contributions
-            # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
-            return bounce_points(pitch_inv, self._c["knots"], self._B, num_well)
-
-        return regular_points(self, pitch_inv, num_well)
+        return regular_points(self, broadcast_for_bounce(pitch_inv), num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -849,7 +843,7 @@ class Bounce2D(_Bounce):
         return result[0] if len(result) == 1 else result
 
     def _nufft(self, x, z1, z2, data, loop, eps, pitch_inv):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
         t = flatten_mat(self._theta.eval1d(z, loop=loop))
@@ -885,7 +879,7 @@ class Bounce2D(_Bounce):
         return data
 
     def _nummt(self, x, z1, z2, data, loop):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
         z = flatten_mat(zeta, 3)
@@ -1591,7 +1585,7 @@ class Bounce1D(_Bounce):
 
         pitch = broadcast_for_bounce(1 / pitch_inv)[..., None, None]
 
-        shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
+        shape = z1.shape + (x.size,)  # (..., num pitch, num well, num quad)
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
 

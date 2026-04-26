@@ -1612,15 +1612,22 @@ class TestBounce2D:
             grid, data, angle, alpha=alpha, num_field_periods=38, check=True
         )
         points = bounce.points(pitch_inv)
-        z1, z2 = _newton(
-            bounce, pitch_inv[:, None], *points, points[0] < points[1], 1e-10
-        )
-        np.testing.assert_allclose(points[0], z1, rtol=5e-6)
-        np.testing.assert_allclose(points[1], z2, rtol=5e-6)
+        TestBounce2D._check_newton(bounce, pitch_inv, points)
 
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
+
+    @staticmethod
+    def _check_newton(bounce, pitch_inv, p):
+        mmt = _newton(bounce, pitch_inv[:, None], *p, p[0] < p[1], 0.0)
+        np.testing.assert_allclose(p, mmt, rtol=1e-5)
+
+        nft = _newton(bounce, pitch_inv[:, None], *p, p[0] < p[1], 1e-10)
+        mmt = _newton(bounce, pitch_inv[:, None], *mmt, mmt[0] < mmt[1], 0.0)
+        np.testing.assert_allclose(nft, mmt, rtol=5e-8)
+
+        bounce.check_points(mmt, pitch_inv, plot=False)
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):

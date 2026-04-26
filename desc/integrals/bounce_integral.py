@@ -854,19 +854,18 @@ class Bounce2D(_Bounce):
     def _nufft(self, x, z1, z2, data, loop, eps, pitch_inv):
         shape = z1.shape + (x.size,)
 
-        z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
-        t = self._theta.eval1d(z, loop=loop)
-        if is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries):
-            B = self._B.eval1d(z, loop=loop).reshape(shape)
-
         keys = list(data.keys())
         keys.append("B^zeta")
         c = list(data.values())
         c.append(self._c["B^zeta"])
-        if not is_chebyshev:
+        if not (is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries)):
             c.append(self._c["|B|"])
             keys.append("|B|")
 
+        z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
+        t = self._theta.eval1d(z, loop=loop)
+        if is_chebyshev:
+            B = self._B.eval1d(z, loop=loop).reshape(shape)
         t = flatten_mat(t)
         z = flatten_mat(z)
         # t and z have shape (num rho surfaces, num points on each surface)

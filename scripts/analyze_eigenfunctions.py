@@ -82,7 +82,7 @@ M_basis = 3
 modes = np.zeros((alpha_values.shape[0], 2 * M_basis + 1))
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
-pest_grid = LinearGrid(rho=1.0, theta=n_theta, zeta=n_zeta, sym=False)
+pest_grid = LinearGrid(rho=n_rho, theta=n_theta, zeta=n_zeta, sym=False)
 basis = ChebyshevDoubleFourierBasis(L=pest_grid.L - 1, M = M_basis, N=0)
 transform = Transform(pest_grid, basis)
 

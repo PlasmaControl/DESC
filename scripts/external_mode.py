@@ -54,7 +54,13 @@ if power_series:
         free_parameter_values, sorted=True
     )  # Remove duplicates
 else:
-    alpha_values = np.hstack([np.linspace(0.0, 1.0, 20, endpoint=False), np.linspace(0.95, 1.0, 10, endpoint=False)])
+    alpha_values = np.hstack(
+        [   
+            np.linspace(-2, 0.0, 20, endpoint=False),
+            np.linspace(0.0, 1.0, 20, endpoint=False),
+            np.linspace(0.95, 1.0, 10, endpoint=False),
+        ]
+    )
     free_parameter_values = alpha_values
 
 results_lambda_min = np.zeros_like(free_parameter_values)
@@ -372,7 +378,7 @@ else:
     ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
     ax.set_title(
         r"Stability to free-boundary modes vs $1/\iota_a$ with" + "\n"
-        "$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$",
+        r"$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$",
         fontsize=18,
     )
     ax.tick_params(labelsize=15)

@@ -58,7 +58,13 @@ if power_series:
         free_parameter_values, sorted=True
     )  # Remove duplicates
 else:
-    alpha_values = np.hstack([np.linspace(0.0, 1.0, 20, endpoint=False), np.linspace(0.95, 1.0, 10, endpoint=False)])
+    alpha_values = np.hstack(
+        [   
+            np.linspace(-2, 0.0, 20, endpoint=False),
+            np.linspace(0.0, 1.0, 20, endpoint=False),
+            np.linspace(0.95, 1.0, 10, endpoint=False),
+        ]
+    )
     alpha_values = np.unique(alpha_values, sorted=True)  # Remove duplicates
     free_parameter_values = alpha_values
 
@@ -85,7 +91,7 @@ modes = np.zeros((alpha_values.shape[0], M_basis + 1))
 diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 pest_grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=False)
 
-basis = ChebyshevDoubleFourierBasis(L=pest_grid.L - 1, M = M_basis, N=0)
+basis = ChebyshevDoubleFourierBasis(L=pest_grid.L - 1, M=M_basis, N=0)
 transform = Transform(pest_grid, basis, build_pinv=True)
 
 for i, free_param in enumerate(free_parameter_values):
@@ -187,7 +193,6 @@ for i, free_param in enumerate(free_parameter_values):
     X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
     savez_path = save_path + f"{save_tag_res}.npz"
 
-
     # Map PEST angles (theta_PEST, zeta) → rtz native angles
     rho = np.array([1.0])
     theta = pest_grid.unique_theta
@@ -214,7 +219,7 @@ for i, free_param in enumerate(free_parameter_values):
         .transpose(1, 0, 2)
         .reshape(n_surf, 3)
     )
-    
+
     # produce diffmats and grid nodes for the current resolution
     diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
 
@@ -222,7 +227,9 @@ for i, free_param in enumerate(free_parameter_values):
     data = np.load(savez_path)
     idx0 = n_rho * n_theta * n_zeta
     xi = data["xi"]
-    xi_r = xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1).flatten() # reshape to (n_zeta, n_rho, n_theta)
+    xi_r = (
+        xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1).flatten()
+    )  # reshape to (n_zeta, n_rho, n_theta)
     lambda_min = data["lambda_min"]
     data.close()
     print("loaded low-res eigenfunction and lambda_min from previous run")
@@ -242,23 +249,23 @@ for i, free_param in enumerate(free_parameter_values):
     )
 
     coeffs = transform.fit(xi_r)
-    coeffs = np.abs(coeffs)**2
+    coeffs = np.abs(coeffs) ** 2
     coeffs = coeffs.reshape(basis.L + 1, 2 * basis.M + 1)
     coeffs = coeffs.sum(axis=0)
     print(coeffs)
-    coeffs_pos = coeffs[-basis.M:]
-    coeffs_neg = coeffs[:basis.M][::-1]
+    coeffs_pos = coeffs[-basis.M :]
+    coeffs_neg = coeffs[: basis.M][::-1]
     print(coeffs_pos, coeffs_neg, coeffs[basis.M])
     coeffs = np.hstack([coeffs[basis.M], coeffs_neg + coeffs_pos])
-    coeffs = coeffs/coeffs.sum()  # Normalize mode energies
+    coeffs = coeffs / coeffs.sum()  # Normalize mode energies
     coeffs = np.sqrt(coeffs)
     modes[i, :] = coeffs
-        
+
 
 # ── Save summary ──────────────────────────────────────────────────────────────
 results_lambda_min = np.array(results_lambda_min)
 
-fig, ax = plt.subplots(figsize=(7, 5))
+fig, ax = plt.subplots(figsize=(10, 7))
 if power_series:
     np.savez(
         save_path + "iota_scan_results.npz",
@@ -298,35 +305,38 @@ else:
         alpha=free_parameter_values,
         modes=modes,
     )
+
     # ── Lambda vs iota_a summary plot ────────────────────────────────────────────
     ax.axhline(0, color="gray", lw=0.8, ls="--")
-    ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1$")
-    ax.axvline(2, color="gray", lw=0.8, ls="--", label=r"$\iota_a = 1/2$")
+    ax.axvline(1, color="gray", lw=0.8, ls="--")  # , label=r"$\iota_a = 1$")
+    ax.axvline(2, color="gray", lw=0.8, ls="--")  # , label=r"$\iota_a = 1/2$")
 
-    iota_a = (iota_0 / (alpha**2)) * (
-                alpha + (1 - alpha) * np.log(1 - alpha)
-            )
+    iota_a = (1 / (alpha**2)) * (alpha + (1 - alpha) * np.log(1 - alpha))
     mask = (modes > 1e-3).any(axis=0)
     ax.plot(
-        1/iota_a,
+        1 / iota_a,
         modes[:, mask],
         linestyle="-",
         marker=".",
         lw=2,
         ms=7,
-        label=[f"mode {m}" for m in np.arange(0, M_basis+1)[mask]]
+        label=[f"m={m}" for m in np.arange(0, M_basis + 1)[mask]],
     )
     ax.set_xlabel(r"1/$\iota_a$", fontsize=14)
-    ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+    ax.set_ylabel(
+        r"Fourier coefficient for mode m, rms over radial coefficients", fontsize=14
+    )
     ax.set_title(
-        r"Fourier decomposition of least stable eigenfunction as a function of $\alpha$ for" + "\n"
+        r"Fourier decomposition of $\xi^\rho$ as a function of $1/\iota_a$ for" + "\n"
         r"$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$",
         fontsize=18,
     )
     ax.tick_params(labelsize=15)
     ax.legend(fontsize=18)
+
 fig.tight_layout()
-fig.savefig(plot_path + f"power_series_{power_series}_external_modes_modenum_vs_iota0.png", dpi=150)
+fig.savefig(
+    plot_path + f"power_series_{power_series}_external_modes_modenum_vs_iota0.png",
+    dpi=150,
+)
 plt.show()
-
-

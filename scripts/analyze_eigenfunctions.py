@@ -79,7 +79,7 @@ else:
 
 
 M_basis = 3
-modes = np.zeros((alpha_values.shape[0], 2 * M_basis + 1))
+modes = np.zeros((alpha_values.shape[0], M_basis + 1))
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
 pest_grid = LinearGrid(rho=n_rho, theta=n_theta, zeta=n_zeta, sym=False)
@@ -227,7 +227,12 @@ for i, free_param in enumerate(free_parameter_values):
 
     # add boundaries back to the low-res eigenfunction for interpolation later
     #xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
-    coeffs = transform.fit(xi_r).reshape(basis.L + 1, 2 * basis.M + 1).mean(axis=0)
+    coeffs = ((transform.fit(xi_r).reshape(basis.L + 1, 2 * basis.M + 1))**2).sum(axis=0)
+    coeffs_pos = coeffs[-basis.M:]
+    coeffs_neg = coeffs[:basis.M][::-1]
+    coeffs = np.hstack([coeffs[0], coeffs_neg + coeffs_pos])
+    coeffs = coeffs//coeffs.sum()  # Normalize mode energies
+    coeffs = np.sqrt(coeffs)
     modes[i, :] = coeffs
         
 
@@ -282,15 +287,15 @@ else:
     iota_a = (iota_0 / (alpha**2)) * (
                 alpha + (1 - alpha) * np.log(1 - alpha)
             )
+    mask = (modes > 1e-3).any(axis=0)
     ax.plot(
         1/iota_a,
-        modes,
+        modes[:, mask],
         linestyle="-",
         marker=".",
-        color="steelblue",
         lw=2,
         ms=7,
-        label=[f"mode {m}" for m in basis.modes[basis.unique_M_idx][:, 1]]
+        label=[f"mode {m}" for m in np.arange(0, M_basis+1)[mask]]
     )
     ax.set_xlabel(r"1/$\iota_a$", fontsize=14)
     ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)

@@ -219,7 +219,7 @@ for i, free_param in enumerate(free_parameter_values):
     X = np.load(X_path)
     data = np.load(savez_path)
     idx0 = n_rho * n_theta * n_zeta
-    #xi = data["xi"]
+    xi = data["xi"]
     xi_r = xi[:idx0]
     lambda_min = data["lambda_min"]
     data.close()

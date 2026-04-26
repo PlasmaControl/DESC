@@ -28,7 +28,7 @@ n_zeta = 2 * N
 n_surf = n_theta * n_zeta
 R0 = 4
 a = 1
-elongation = 0.25
+elongation = 0.2
 
 eq_tag = f"R0_{R0}_a_{a}_elongation_{elongation}"
 eq_name = "Rotating ellipse"
@@ -241,7 +241,7 @@ for k, frac in enumerate(delta_h_fracs):
     W_V_vals[k] = -float(Bn_k @ full_matrix @ Bn_k)
 
     W_V_true_vals[k] = compute_external_coil_energy(
-        coil_k, R0, a - elongation, r_max_factor=10000, L=2**13, M_quad=2**13, N=5000,
+        coil_k, R0, a - elongation, r_max_factor=10000, L=2**14, M_quad=2**13, N=20000,
     )
     print(
         f"  Δh/a = {frac:.3f}  W_V = {W_V_vals[k]:.4e}  W_V_true = {W_V_true_vals[k]:.4e}"

@@ -48,8 +48,8 @@ os.makedirs(plot_path, exist_ok=True)
 
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
-power_series = False
-
+power_series = True
+fixed_boundary = True
 if power_series:
     free_parameter_values = np.hstack(
         [np.linspace(0.8, 1.25, 20), np.linspace(0.8, 1.25, 46)]
@@ -131,8 +131,9 @@ for i, free_param in enumerate(free_parameter_values):
         f"axisym_{axisym}_NFP_{NFP}"
         f"_p_{'_'.join(p_coeffs.astype(str))}"
         f"_{eq_name}"
-        f"_external_mode_n_{n_mode_axisym}"
     )
+    if not fixed_boundary:
+        save_tag += f"_external_mode_n_{n_mode_axisym}"
 
     if from_scratch:
         save_name = f"equilibrium_{save_tag}.h5"
@@ -173,21 +174,8 @@ for i, free_param in enumerate(free_parameter_values):
             eq.save(save_path + save_name)
             print("equilibrium solved")
 
-    # ι=1 surface location: ι(ρ) = ι₀ + 2·iota_coeffs[1]·ρ² = 1
-    rho_iota1 = None
-    title_base = (
-        rf"Free-boundary eigenmode for " + "\n"
-        rf"$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$"
-        rf" with $\alpha= {alpha:.3f}$"
-    )
-
     print("making input grid and diffmats")
 
-    phi_save_name = f"{save_tag}_M_{M}_N_{N}_pseudospectral_phi_matrix.npy"
-
-    print(
-        f"\n--- Solving at res: n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta} ---"
-    )
     # paths for saving eigenfunction and related data
     save_tag_res = f"{save_tag}_nrho_{n_rho}_ntheta_{n_theta}_nzeta_{n_zeta}"
     X_path = save_path + f"low_res_eigenfunction_{save_tag_res}.npy"
@@ -212,13 +200,6 @@ for i, free_param in enumerate(free_parameter_values):
         tol=1e-12,
         maxiter=50,
     )
-    # BIEST surface grid: zeta-outermost, theta-fastest
-    surf_nodes = (
-        np.array(rtz_nodes)
-        .reshape(n_theta, n_zeta, 3)
-        .transpose(1, 0, 2)
-        .reshape(n_surf, 3)
-    )
 
     # produce diffmats and grid nodes for the current resolution
     diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)
@@ -234,30 +215,14 @@ for i, free_param in enumerate(free_parameter_values):
     data.close()
     print("loaded low-res eigenfunction and lambda_min from previous run")
 
-    # add boundaries back to the low-res eigenfunction for interpolation later
-    xi_rho_low, xi_theta_low, xi_zeta_low = add_bc(xi, n_rho, n_theta, n_zeta)
-    save_eigenfunction_plots(
-        plot_path,
-        xi_rho_low,
-        xi_theta_low,
-        xi_zeta_low,
-        rho,
-        theta,
-        rho_iota1,
-        title_base,
-        f"solved_{save_tag_res}",
-    )
-
     coeffs = transform.fit(xi_r)
     coeffs = np.abs(coeffs) ** 2
     coeffs = coeffs.reshape(basis.L + 1, 2 * basis.M + 1)
     coeffs = coeffs.sum(axis=0)
-    print(coeffs)
     coeffs_pos = coeffs[-basis.M :]
     coeffs_neg = coeffs[: basis.M][::-1]
-    print(coeffs_pos, coeffs_neg, coeffs[basis.M])
     coeffs = np.hstack([coeffs[basis.M], coeffs_neg + coeffs_pos])
-    coeffs = coeffs / coeffs.sum()  # Normalize mode energies
+    coeffs = coeffs / coeffs.sum()  # Normalize mode coefficients
     coeffs = np.sqrt(coeffs)
     modes[i, :] = coeffs
 
@@ -266,18 +231,26 @@ for i, free_param in enumerate(free_parameter_values):
 results_lambda_min = np.array(results_lambda_min)
 
 fig, ax = plt.subplots(figsize=(10, 7))
+
+mask = (modes > 1e-3).any(axis=0)
+
 if power_series:
+    if fixed_boundary:
+        savez_name = "fixed_mode_results.npz"
+    else:
+        savez_name = "free_mode_results.npz"
     np.savez(
-        save_path + "iota_scan_results.npz",
-        iota_on_axis=free_parameter_values,
-        lambda_min=results_lambda_min,
+        save_path + savez_name,
+        iota_0=free_parameter_values,
+        modes=modes,
     )
+
     # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
     ax.axhline(0, color="gray", lw=0.8, ls="--")
     ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
     ax.plot(
         free_parameter_values,
-        results_lambda_min,
+        modes[mask],
         linestyle="-",
         marker=".",
         color="steelblue",
@@ -285,18 +258,13 @@ if power_series:
         ms=7,
     )
     ax.set_xlabel(r"$\iota_0$", fontsize=14)
-    ax.set_ylabel(r"$\lambda_{\min}$", fontsize=14)
+
+    name = "fixed boundary" if fixed_boundary else "free boundary"
     ax.set_title(
-        r"Stability eigenvalue vs $\iota_0$" + "\n"
+        rf"Fourier decomposition of {name} eigenmode vs $\iota_0$" + "\n"
         f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
         fontsize=12,
     )
-    ax.tick_params(labelsize=12)
-    ax.legend(fontsize=11)
-    fig.tight_layout()
-    fig.savefig(plot_path + "lambda_vs_iota0.png", dpi=150)
-    plt.show()
-    print(f"Lambda plot saved to {plot_path}lambda_vs_iota0.png")
 
 else:
     alpha = free_parameter_values
@@ -312,7 +280,7 @@ else:
     ax.axvline(2, color="gray", lw=0.8, ls="--")  # , label=r"$\iota_a = 1/2$")
 
     iota_a = (1 / (alpha**2)) * (alpha + (1 - alpha) * np.log(1 - alpha))
-    mask = (modes > 1e-3).any(axis=0)
+    
     ax.plot(
         1 / iota_a,
         modes[:, mask],
@@ -323,17 +291,17 @@ else:
         label=[f"m={m}" for m in np.arange(0, M_basis + 1)[mask]],
     )
     ax.set_xlabel(r"1/$\iota_a$", fontsize=14)
-    ax.set_ylabel(
-        r"Fourier coefficient for mode m, rms over radial coefficients", fontsize=14
-    )
+
     ax.set_title(
         r"Fourier decomposition of $\xi^\rho$ as a function of $1/\iota_a$ for" + "\n"
         r"$\iota(\rho) = (1 / (\alpha^2\rho^2))[\alpha \rho^2 + (1 - \alpha)\log(1 - \alpha \rho^2)]$",
         fontsize=18,
     )
-    ax.tick_params(labelsize=15)
-    ax.legend(fontsize=18)
-
+ax.tick_params(labelsize=15)
+ax.legend(fontsize=18)
+ax.set_ylabel(
+    r"Fourier coefficient for mode m, rms over radial coefficients", fontsize=14
+)
 fig.tight_layout()
 fig.savefig(
     plot_path + f"power_series_{power_series}_external_modes_modenum_vs_iota0.png",

@@ -85,7 +85,7 @@ else:
 
 
 M_basis = 3
-modes = np.zeros((alpha_values.shape[0], M_basis + 1))
+modes = np.zeros((free_parameter_values.shape[0], M_basis + 1))
 
 # ── Grid setup ────────────────────────────────────────────────────────────────
 diffmat, rho, theta, zeta = nodes_and_diffmats(n_rho, n_theta, n_zeta, NFP)

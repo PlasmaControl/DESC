@@ -49,7 +49,7 @@ os.makedirs(plot_path, exist_ok=True)
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
 power_series = True
-fixed_boundary = True
+fixed_boundary = False
 if power_series:
     free_parameter_values = np.hstack(
         [np.linspace(0.8, 1.25, 20), np.linspace(0.8, 1.25, 46)]
@@ -255,9 +255,9 @@ if power_series:
         modes[:, mask],
         linestyle="-",
         marker=".",
-        color="steelblue",
         lw=2,
         ms=7,
+        label=[f"m={m}" for m in np.arange(0, M_basis + 1)[mask]],
     )
     ax.set_xlabel(r"$\iota_0$", fontsize=14)
 
@@ -265,7 +265,7 @@ if power_series:
     ax.set_title(
         rf"Fourier decomposition of {name} eigenmode vs $\iota_0$" + "\n"
         f"$\\iota(\\rho) = \\iota_0 - {np.abs(iota_coeffs[-1])}\\rho^2$",
-        fontsize=12,
+        fontsize=18,
     )
 
 else:

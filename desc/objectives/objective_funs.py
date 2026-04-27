@@ -367,7 +367,8 @@ class ObjectiveFunction(IOAble):
                 UserWarning,
                 "At least 1 sub-objective has use_jit=False. Setting "
                 "use_jit=False for the whole ObjectiveFunction. "
-                f"Sub-objective use_jit values: {use_jits}",
+                "Sub-objectives with use_jit=False: "
+                f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
             )
             self._use_jit = False
 

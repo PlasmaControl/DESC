@@ -49,7 +49,7 @@ os.makedirs(plot_path, exist_ok=True)
 # Quadratic iota profile: iota(rho) = iota_0 - 0.05*rho^2
 # => d^2 iota / d rho^2 = -0.1 (decreasing, as requested)
 power_series = True
-fixed_boundary = False
+fixed_boundary = True
 if power_series:
     free_parameter_values = np.hstack(
         [np.linspace(0.8, 1.25, 20), np.linspace(0.8, 1.25, 46)]
@@ -213,9 +213,8 @@ for i, free_param in enumerate(free_parameter_values):
     xi_r = (
         xi[:idx0].reshape((n_rho, n_theta, n_zeta)).transpose(2, 0, 1).flatten()
     )  # reshape to (n_zeta, n_rho, n_theta)
-    lambda_min = data["lambda_min"]
+    results_lambda_min[i] = data["lambda_min"]
     data.close()
-    print("loaded low-res eigenfunction and lambda_min from previous run")
 
     coeffs = transform.fit(xi_r)
     coeffs = np.abs(coeffs) ** 2
@@ -245,6 +244,7 @@ if power_series:
         save_path + savez_name,
         iota_0=free_parameter_values,
         modes=modes,
+        lambda_min=results_lambda_min,
     )
 
     # ── Lambda vs iota_0 summary plot ────────────────────────────────────────────
@@ -274,6 +274,7 @@ else:
         save_path + "alpha_mode_results.npz",
         alpha=free_parameter_values,
         modes=modes,
+        lambda_min=results_lambda_min,
     )
 
     # ── Lambda vs iota_a summary plot ────────────────────────────────────────────

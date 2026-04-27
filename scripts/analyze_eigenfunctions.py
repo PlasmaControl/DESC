@@ -77,12 +77,14 @@ N = 0
 
 # Real space grid resolution for the eigenvalue solve
 n_rho = 24
-n_theta = 2 * M
+if fixed_boundary:
+    n_theta = 36
+else:
+    n_theta = 2 * M
 if axisym:
     n_zeta = 1
 else:
     n_zeta = 2 * N
-
 
 M_basis = 3
 modes = np.zeros((free_parameter_values.shape[0], M_basis + 1))

@@ -252,7 +252,7 @@ if power_series:
     ax.axvline(1, color="gray", lw=0.8, ls="--", label=r"$\iota_0 = 1$")
     ax.plot(
         free_parameter_values,
-        modes[mask],
+        modes[:, mask],
         linestyle="-",
         marker=".",
         color="steelblue",

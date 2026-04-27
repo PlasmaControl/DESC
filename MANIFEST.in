@@ -1,3 +1,6 @@
 include versioneer.py
 include desc/_version.py
 include desc/examples/*.h5
+
+include LICENSE README.rst pyproject.toml setup.py setup.cfg requirements.txt
+global-exclude __pycache__ *.py[cod] .venv

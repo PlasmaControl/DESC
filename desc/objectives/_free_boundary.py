@@ -255,18 +255,17 @@ class VacuumBoundaryError(_Objective):
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, fse, f0se=None, args=None, args0=None, **kwargs):
+    def print_value(self, args, args0=None, fse=None, f0se=None, **kwargs):
         """Print the value of the objective and return a dict of values."""
         out = {}
-        has_f0 = f0se is not None
-        # this objective is really 2 residuals concatenated so its helpful to
-        # print them individually. Recover unscaled from scaled error.
-        if self.bounds is not None:
+        has_f0 = f0se is not None or args0 is not None
+        # Recover unscaled if possible, compute otherwise.
+        if self.bounds is not None or fse is None:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         else:
             f = self._unshift(self._unscale(fse, **kwargs))
-            f0 = self._unshift(self._unscale(f0se, **kwargs)) if has_f0 else f
+            f0 = self._unshift(self._unscale(f0se, **kwargs)) if f0se is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -277,6 +276,8 @@ class VacuumBoundaryError(_Objective):
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
+        # this objective is really 2 residuals concatenated so its helpful to
+        # print them individually.
         def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, units):
 
             print(
@@ -791,18 +792,17 @@ class BoundaryError(_Objective):
         else:
             return jnp.concatenate([Bn_err, Bsq_err])
 
-    def print_value(self, fse, f0se=None, args=None, args0=None, **kwargs):
+    def print_value(self, args, args0=None, fse=None, f0se=None, **kwargs):
         """Print the value of the objective and return a dict of values."""
         out = {}
-        has_f0 = f0se is not None
-        # this objective is really 3 residuals concatenated so its helpful to
-        # print them individually. Recover unscaled from scaled error.
-        if self.bounds is not None:
+        has_f0 = f0se is not None or args0 is not None
+        # Recover unscaled if possible, compute otherwise.
+        if self.bounds is not None or fse is None:
             f = self.compute_unscaled(*args, **kwargs)
             f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         else:
             f = self._unshift(self._unscale(fse, **kwargs))
-            f0 = self._unshift(self._unscale(f0se, **kwargs)) if has_f0 else f
+            f0 = self._unshift(self._unscale(f0se, **kwargs)) if f0se is not None else f
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -813,6 +813,8 @@ class BoundaryError(_Objective):
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
 
+        # this objective is really 3 residuals concatenated so its helpful to
+        # print them individually.
         def _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit):
 
             print(

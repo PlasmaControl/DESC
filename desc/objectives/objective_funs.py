@@ -669,7 +669,9 @@ class ObjectiveFunction(IOAble):
             else:
                 f0i = None
             offset += dim
-            outi = obj.print_value(fi, f0i, args=par, args0=par0, constants=const)
+            outi = obj.print_value(
+                args=par, args0=par0, fse=fi, fse0=f0i, constants=const
+            )
             if obj._print_value_fmt in out:
                 out[obj._print_value_fmt].append(outi)
             else:
@@ -1525,34 +1527,28 @@ class _Objective(IOAble, ABC):
         return self._jvp(v, x, constants, "unscaled")
 
     def print_value(  # noqa: C901
-        self, fse, f0se=None, args=None, args0=None, **kwargs
+        self, args, args0=None, fse=None, f0se=None, **kwargs
     ):
         """Print the value of the objective and return a dict of values.
 
         Parameters
         ----------
-        fse : ndarray
+        args : tuple
+            Parameters for this objective.
+        args0 : tuple, optional
+            Initial parameters.
+        fse : ndarray, optional
             Pre-computed scaled error (output of compute_scaled_error) for this
             objective. Used to recover unscaled values without recompilation for
             target-based objectives. If objective is bounded, recomputes unscaled
             values at the cost of (possible) recompilation.
         f0se : ndarray, optional
             Pre-computed scaled error for the initial state.
-        args : tuple, optional
-            Parameters for this objective. Required for bounds-based objectives
-            where the scaled error inversion is not possible.
-        args0 : tuple, optional
-            Initial parameters. Required for bounds-based objectives.
         """
         out = {}
-        has_f0 = f0se is not None
+        has_f0 = f0se is not None or args0 is not None
 
         if self.bounds is not None:
-            errorif(
-                args is None,
-                ValueError,
-                "args must be provided for bounded objectives to print values.",
-            )
             # Bounds shift is not invertible, so compute unscaled from params
             f_unscaled = self.compute_unscaled(*args, **kwargs)
             f_shifted = self._shift(f_unscaled)
@@ -1568,11 +1564,15 @@ class _Objective(IOAble, ABC):
                 f0_unscaled = f_unscaled
                 f0_shifted = f_shifted
         else:
-            # Reverse scaling from pre-computed scaled error
-            # _scale(_shift(f_unscaled)) = fse
-            f_shifted = self._unscale(fse, **kwargs)
-            f_unscaled = self._unshift(f_shifted)
-            if has_f0:
+            if fse is not None:
+                # Reverse scaling from pre-computed scaled error
+                # _scale(_shift(f_unscaled)) = fse
+                f_shifted = self._unscale(fse, **kwargs)
+                f_unscaled = self._unshift(f_shifted)
+            else:
+                f_unscaled = self.compute_unscaled(*args, **kwargs)
+                f_shifted = self._shift(f_unscaled)
+            if f0se is not None:
                 f0_shifted = self._unscale(f0se, **kwargs)
                 f0_unscaled = self._unshift(f0_shifted)
             else:

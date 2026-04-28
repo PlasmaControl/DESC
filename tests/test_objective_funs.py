@@ -2551,19 +2551,26 @@ def test_profile_objective_print(capsys):
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
     pre_width = len("Maximum ")
 
-    def test(obj, values, print_init=False, normalize=False):
+    def test(obj, values, print_init=False, normalize=False, pass_f=False):
         par = obj.xs(eq)
-        f_scaled = obj.compute_scaled_error(*par)
+        if pass_f:
+            fse = obj.compute_scaled_error(*par)
         if print_init:
             # print the initial value too. For this test, it is the
             # same as the final value
-            obj.print_value(f_scaled, f_scaled, args=par, args0=par)
+            if not pass_f:
+                obj.print_value(args=par, args0=par)
+            else:
+                obj.print_value(args=par, args0=par, fse=fse, fse0=fse)
             print_fmt = (
                 f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                 + "{:10.3e}  -->  {:10.3e} "
             )
         else:
-            obj.print_value(f_scaled, args=par)
+            if not pass_f:
+                obj.print_value(args=par)
+            else:
+                obj.print_value(args=par, fse=fse)
             print_fmt = f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
         out = capsys.readouterr()
 
@@ -2617,10 +2624,12 @@ def test_profile_objective_print(capsys):
     obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, shear)
+    test(obj, shear, pass_f=True)
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, curr, print_init=True, normalize=True)
+    test(obj, curr, print_init=True, normalize=True, pass_f=True)
     pres = eq.compute("p", grid=grid)["p"]
     obj = Pressure(eq=eq, target=1, grid=grid)
     obj.build()
@@ -2632,10 +2641,15 @@ def test_plasma_vessel_distance_print(capsys):
     """Test that the PlasmaVesselDistance objective prints correctly."""
     pre_width = len("Maximum ")
 
-    def test(obj, eq, surface, d, print_init=False):
+    def test(obj, eq, surface, d, print_init=False, pass_f=False):
         if print_init:
             if isinstance(obj, ObjectiveFunction):
-                obj.print_value(obj.x(eq, surface), obj.x(eq, surface))
+                par = obj.x(eq, surface)
+                if not pass_f:
+                    obj.print_value(par, args0=par)
+                else:
+                    fse = obj.compute_scaled_error(par)
+                    obj.print_value(par, args0=par, fse=fse, fse0=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2644,8 +2658,11 @@ def test_plasma_vessel_distance_print(capsys):
                 norm = obj.objectives[0].normalization
             else:
                 par = obj.xs(eq, surface)
-                f_scaled = obj.compute_scaled_error(*par)
-                obj.print_value(f_scaled, f_scaled, args=par, args0=par)
+                if not pass_f:
+                    obj.print_value(args=par, args0=par)
+                else:
+                    fse = obj.compute_scaled_error(*par)
+                    obj.print_value(args=par, args0=par, fse=fse, fse0=fse)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2654,7 +2671,12 @@ def test_plasma_vessel_distance_print(capsys):
                 norm = obj.normalization
         else:
             if isinstance(obj, ObjectiveFunction):
-                obj.print_value(obj.x(eq, surface))
+                par = obj.x(eq, surface)
+                if not pass_f:
+                    obj.print_value(par)
+                else:
+                    fse = obj.compute_scaled_error(par)
+                    obj.print_value(par, fse=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e} "
@@ -2663,8 +2685,11 @@ def test_plasma_vessel_distance_print(capsys):
                 norm = obj.objectives[0].normalization
             else:
                 par = obj.xs(eq, surface)
-                f_scaled = obj.compute_scaled_error(*par)
-                obj.print_value(f_scaled, args=par)
+                if not pass_f:
+                    obj.print_value(args=par)
+                else:
+                    fse = obj.compute_scaled_error(*par)
+                    obj.print_value(args=par, fse=fse)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}" + "{:10.3e} "
                 )
@@ -2736,7 +2761,9 @@ def test_plasma_vessel_distance_print(capsys):
     d = obj.compute_unscaled(*obj.xs(eq, surface))
     np.testing.assert_allclose(d, a_s - a_p)
     test(obj, eq, surface, d)
+    test(obj, eq, surface, d, pass_f=True)
     test(obj, eq, surface, d, print_init=True)
+    test(obj, eq, surface, d, print_init=True, pass_f=True)
 
     obj = ObjectiveFunction(
         PlasmaVesselDistance(
@@ -2746,7 +2773,9 @@ def test_plasma_vessel_distance_print(capsys):
     obj.build(verbose=0)
     d = obj.compute_unscaled(obj.x(eq, surface))
     test(obj, eq, surface, d)
+    test(obj, eq, surface, d, pass_f=True)
     test(obj, eq, surface, d, print_init=True)
+    test(obj, eq, surface, d, print_init=True, pass_f=True)
 
 
 @pytest.mark.unit
@@ -2765,8 +2794,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    f_scaled = obj.compute_scaled_error(*par)
-    obj.print_value(f_scaled, args=par)
+    obj.print_value(args=par)
     out = capsys.readouterr()
     pre_width = len("Maximum absolute ")
 
@@ -2843,8 +2871,7 @@ def test_boundary_error_print(capsys):
     n = len(f) // 2
     f1 = f[:n]
     f2 = f[n:]
-    f_scaled = obj.compute_scaled_error(*par)
-    obj.print_value(f_scaled, args=par)
+    obj.print_value(args=par)
     out = capsys.readouterr()
 
     corr_out = str(
@@ -2922,8 +2949,7 @@ def test_boundary_error_print(capsys):
     f1 = f[:n]
     f2 = f[n : 2 * n]
     f3 = f[2 * n :]
-    f_scaled = obj.compute_scaled_error(*par)
-    obj.print_value(f_scaled, args=par)
+    obj.print_value(args=par)
     out = capsys.readouterr()
 
     corr_out = str(

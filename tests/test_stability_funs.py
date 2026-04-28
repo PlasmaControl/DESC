@@ -278,9 +278,7 @@ def test_mercier_print(capsys):
     mercier_obj = MercierStability(eq=eq, grid=grid)
     mercier_obj.build()
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
-    par = mercier_obj.xs(eq)
-    f_scaled = mercier_obj.compute_scaled_error(*par)
-    mercier_obj.print_value(f_scaled, args=par)
+    mercier_obj.print_value(mercier_obj.xs(eq))
     out = capsys.readouterr()
     pre_width = len("Maximum ")
 
@@ -332,9 +330,7 @@ def test_magwell_print(capsys):
     f = obj.compute(*obj.xs(eq))
     np.testing.assert_allclose(f, magwell)
 
-    par = obj.xs(eq)
-    f_scaled = obj.compute_scaled_error(*par)
-    obj.print_value(f_scaled, args=par)
+    obj.print_value(obj.xs(eq))
     out = capsys.readouterr()
     pre_width = len("Maximum ")
 

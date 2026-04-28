@@ -1609,8 +1609,10 @@ class _Objective(IOAble, ABC):
             if has_f0:
                 out["f0"] = f0s
             if self._normalize and self._units != "(dimensionless)":
-                fs_norm = fse.squeeze()
-                f0s_norm = (f0se if has_f0 else fse).squeeze()
+                _fse = self._scale(f_shifted, **kwargs)
+                _f0se = self._scale(f0_shifted, **kwargs)
+                fs_norm = _fse.squeeze()
+                f0s_norm = _f0se.squeeze()
                 print(print_value_fmt.format(f0s_norm, fs_norm) + "(normalized error)")
                 out["f_norm"] = fs_norm
                 if has_f0:

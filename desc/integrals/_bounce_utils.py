@@ -36,10 +36,10 @@ from desc.integrals._interp_utils import (
 from desc.integrals.quad_utils import bijection_from_disc
 from desc.utils import atleast_nd, flatten_mat, setdefault
 
-_sentinel = -1e5
 
-
-def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
+def _bounce_points(
+    pitch_inv, knots, B, num_well=-1, *, sentinel=-1.0, return_mask=False
+):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -68,6 +68,10 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
+    sentinel : float
+        Sentinel value which should be less ζ coordinate of all bounce points,
+        which can be guaranteed by choosing branch cut for α appropriately.
+        Default is -1.
     return_mask : bool
         Whether to return the mask ``z1<z2``. Default is ``False``.
 
@@ -110,11 +114,11 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
 
     # Transform out of local power basis expansion.
     intersect = flatten_mat(intersect + knots[:-1, None])
-    z1 = take_mask(intersect, z1, size=num_well, fill_value=_sentinel)
-    z2 = take_mask(intersect, z2, size=num_well, fill_value=_sentinel)
+    z1 = take_mask(intersect, z1, size=num_well, fill_value=sentinel)
+    z2 = take_mask(intersect, z2, size=num_well, fill_value=sentinel)
     del intersect
 
-    mask = (z1 > _sentinel) & (z2 > _sentinel)
+    mask = (z1 > sentinel) & (z2 > sentinel)
     # Set to zero so integration is over set of measure zero
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
@@ -122,41 +126,13 @@ def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     return (z1, z2, mask) if return_mask else (z1, z2)
 
 
-def _coeffs(o, jvp=False):
-    """Returns (t, dt_dz) and (B ?, dB_dz, dB_dt)."""
-    # shape is (2, ρ ?, α, X, Y)
-    t = jnp.stack(
-        [
-            o._theta.cheb,
-            chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
-        ]
-    )
-    B = []
-    if not jvp:
-        B.append(o._c["|B|"])
-    B.append(o._c["|B|"] * (1j * o._modes_z)[:, None])
-    B.append(o._c["|B|"] * (1j * o._modes_t))
-    # shape is (ρ ?, c=3 or 2, z modes, t modes)
-    B = jnp.concatenate(B, -3)
-    return t, B
+def _halley(o, pitch_inv, z, mask, nufft_eps, diagnostic=0):
+    """Solve for the bounce points using the maps used in quadrature.
 
+    Halley (Schröder second kind) irrational step.
 
-def _safe_update(mask, old, update, max_update=1e-1):
-    """Returns old - update where intervals are preserved and update < max_update."""
-    new = old - update
-    return jnp.where(
-        mask & (new[0] < new[1]) & (jnp.abs(update) < max_update),
-        new,
-        old,
-    )
-
-
-def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
-    """Newton step using maps used in the quadrature.
-
-    An error of ε in a bounce point manifests
-      * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
-      * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+    The bounce parameters Y_B and Y should be high enough that
+    initial guess is in basin of attraction for Halley step.
 
     Parameters
     ----------
@@ -164,32 +140,37 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
         Object instance.
     pitch_inv : jnp.ndarray
         Shape broadcasts with (num ρ, num α, num pitch).
-    z1, z2 : tuple[jnp.ndarray]
-        Shape (num ρ, num α, num pitch, num well).
+    z: jnp.ndarray
+        Shape (2, num ρ ?, num α, num pitch, num well).
+        Bounce points.
     mask : jnp.ndarray
-        Shape (num ρ, num α, num pitch, num well).
+        Shape (num ρ ?, num α, num pitch, num well).
         Subset of points to refine.
     nufft_eps : float
-        Desired error ε of the returned bounce points.
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+
         Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
+    diagnostic : int
+        Positive integer denoting iteration step to print.
 
     Returns
     -------
-    z1, z2 : tuple[jnp.ndarray]
-        Shape (num ρ, num α, num pitch, num well).
+    z : jnp.ndarray
+        Shape (2, num ρ ?, num α, num pitch, num well).
 
     """
-    t, B = _coeffs(o)
+    t, B = _halley_coefficients(o)
 
-    z = jnp.stack((z1, z2))
     # calling this method with shapes    (1,  b=2, ρ?,α,   λ, w)
-    #                                    (2,    1, ρ?,α,   1, X, Y).
-    t, dt_dz = o._theta.eval1d(z[None], t[:, None, ..., None, :, :])
+    #                                    (3,    1, ρ?,α,   1, X, Y).
+    t, dt, dt2 = o._theta.eval1d(z[None], t[:, None, ..., None, :, :])
     # shapes match z, i.e. (b, ρ ?, α, λ, w)
 
-    if nufft_eps < 1e-14:
+    if no_nufft(nufft_eps):
+        # Halley step is free compared to recomputing the basis.
         z_eff = z if o._num_z > 1 else jnp.zeros((1,) * z.ndim)
-        B, dB_dz, dB_dt = jnp.einsum(
+        dB_dz, dB_dt, B, dB_dz2, dB_dzdt, dB_dt2 = jnp.einsum(
             "...czt, b...apwz, b...apwt -> cb...apw",
             B,
             jnp.exp(1j * o._modes_z * z_eff[..., None]),
@@ -197,12 +178,83 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
             optimize=[(0, 1), (0, 1)],
         ).real
     else:
-        B, dB_dz, dB_dt = _acrobatics(z, t, B, o._NFP, nufft_eps, mask)
+        dB_dz, dB_dt, B, dB_dz2, dB_dzdt, dB_dt2 = _acrobatics(
+            z, t, B, o._NFP, nufft_eps, mask
+        )
 
-    dz = (B - pitch_inv[..., None]) / (dB_dz + dB_dt * dt_dz)
-    del B, dB_dz, dB_dt, t, dt_dz
+    f = B - pitch_inv[..., None]
+    df = dB_dz + dB_dt * dt
+    df2 = dB_dz2 + 2 * dB_dzdt * dt + dB_dt2 * dt**2 + dB_dt * dt2
+    df2 = df**2 - 2 * f * df2
+    update = 2 * f / (df + jnp.sign(df) * jnp.sqrt(jnp.where(df2 > 0, df2, df**2)))
 
-    return _safe_update(mask, z, dz)
+    del f, df, df2, dB_dz, dB_dt, B, dB_dz2, dB_dzdt, dB_dt2, t, dt, dt2
+
+    if diagnostic:
+        jax.debug.print(
+            "After {iteration:1d} iteration(s) | "
+            "ζ₁₂(w) error mean = {:5.0e} | std. dev. = {:5.0e} | max = {:5.0e}",
+            jnp.abs(update).mean(where=mask),
+            jnp.abs(update).std(where=mask),
+            jnp.abs(update).max(where=mask, initial=-jnp.inf),
+            iteration=diagnostic - 1,
+            ordered=True,
+        )
+
+    return _safe_update(mask, z, update, FENCE=2 * jnp.pi / o._NFP)
+
+
+def _safe_update(mask, old, update, FENCE):
+    """Returns old - update where intervals are preserved and update < FENCE."""
+    new = old - update
+    return jnp.where(
+        mask & (new[0] < new[1]) & (jnp.abs(update) < FENCE),
+        new,
+        old,
+    )
+
+
+def _halley_coefficients(o, jvp=False):
+    """Returns coefficient arrays for the nonlinear solve.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    jvp : bool
+        Whether to return only the coefficients needed for the jvp.
+
+    Returns
+    -------
+    t, B : tuple[jnp.ndarray]
+        Coefficient arrays.
+        t, dt, dt2
+        dB_dz, dB_dt, B, dB_dz2, dB_dzdt, dB_dt2
+
+    """
+    t = [
+        o._theta.cheb,
+        chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+    ]
+    B = [
+        o._c["|B|"] * (1j * o._modes_z)[:, None],
+        o._c["|B|"] * (1j * o._modes_t),
+    ]
+
+    if not jvp:
+        B += [
+            o._c["|B|"],
+            o._c["|B|"] * (-o._modes_z**2)[:, None],
+            o._c["|B|"] * (-o._modes_z[:, None] * o._modes_t),
+            o._c["|B|"] * (-o._modes_t**2),
+        ]
+        t.append(chebder(t[1], scl=o._NFP / jnp.pi, axis=-1, keepdims=True))
+
+    # shape is (# of funs e.g. 2 or 3, ρ ?, α, X, Y)
+    t = jnp.stack(t)
+    # shape is (ρ ?, # of funs, z modes, t modes)
+    B = jnp.concatenate(B, -3)
+    return t, B
 
 
 def _acrobatics(z, t, c, NFP, eps, mask):
@@ -227,15 +279,15 @@ def _acrobatics(z, t, c, NFP, eps, mask):
                 )
             ),
         )
-        .swapaxes(0, -2)  # so that first axis splits into e.g. B, dB_dz, dB_dt
+        .swapaxes(0, -2)  # so that first axis splits into e.g. dB_dz, dB_dt, B
         .reshape((-1,) + swapped_shape)  # then shape is (-1, ρ ?, b, α, λ, w)
         .swapaxes(1, -4)  # recover shape (-1, b, ρ ?, α, λ, w)
     )
 
 
 @partial(jax.custom_jvp, nondiff_argnums=(2,))
-def regular_points(o, pitch_inv, num_well):
-    """Bounce points then Newton, with regularized jvp.
+def bounce_points(o, pitch_inv, num_well):
+    """Bounce points then iterative solve, with regularized ift jvp.
 
     Parameters
     ----------
@@ -247,16 +299,17 @@ def regular_points(o, pitch_inv, num_well):
         The usual suspect.
 
     """
-    return _newton(
-        o,
-        pitch_inv,
-        *bounce_points(pitch_inv, o._c["knots"], o._B, num_well, True),
-        min(o._nufft_eps, 1e-10),
+    *z, mask = _bounce_points(
+        pitch_inv, o._c["knots"], o._B, num_well, return_mask=True
+    )
+    z = jnp.stack(z)
+    return _halley(
+        o, pitch_inv, z, mask, nufft_eps=min(o._nufft_eps, 1e-10), diagnostic=0
     )
 
 
-@regular_points.defjvp
-def regular_points_jvp(num_well, primals, tangents):
+@bounce_points.defjvp
+def bounce_points_jvp(num_well, primals, tangents):
     """Implicit function theorem with regularization.
 
     Regularization used to smooth the discretized system so that it recognizes
@@ -265,7 +318,7 @@ def regular_points_jvp(num_well, primals, tangents):
 
     References
     ----------
-    See supplementary information in DESC/publications/unalmis2025.
+    See supplementary information in publications/unalmis2025.
 
     """
     # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
@@ -273,11 +326,11 @@ def regular_points_jvp(num_well, primals, tangents):
     o, p = primals
     do, dp = tangents
 
-    z = regular_points(o, p, num_well)
+    z = bounce_points(o, p, num_well)
 
     mask = z[0] < z[1]
     nufft_eps = min(o._nufft_eps, 1e-10)
-    t, dB_dz = _coeffs(o, jvp=True)
+    t, dB_dz = _halley_coefficients(o, jvp=True)
 
     # calling this method with shapes    (1,  b=2, ρ?,α,   λ, w)
     #                                    (2,    1, ρ?,α,   1, X, Y).
@@ -285,8 +338,7 @@ def regular_points_jvp(num_well, primals, tangents):
     dt_do = o._theta.eval1d(z, do._theta.cheb[None, ..., None, :, :])
     # shapes match z, i.e. (b, ρ ?, α, λ, w)
 
-    if nufft_eps < 1e-14:
-
+    if no_nufft(nufft_eps):
         z_eff = jnp.exp(
             1j
             * o._modes_z
@@ -301,7 +353,6 @@ def regular_points_jvp(num_well, primals, tangents):
             t,
             optimize=[(0, 1), (0, 1)],
         ).real
-
         dB_do = jnp.einsum(
             "...zt, b...apwz, b...apwt -> b...apw",
             do._c["|B|"].squeeze(-3),
@@ -361,7 +412,6 @@ def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
         "Second to last axis does not enumerate polynomials of spline. "
         f"Spline shape {B.shape}. Knots shape {knots.shape}."
     )
-    assert knots[0] > _sentinel, "Reduce sentinel in desc/integrals/_bounce_utils.py."
 
     z1 = atleast_nd(4, z1)
     z2 = atleast_nd(4, z2)
@@ -998,7 +1048,7 @@ def fast_cubic_spline(
     t = idct_mmt(x, theta.cheb[..., None, :], vander=vander_t)
     assert t.shape == (*lines, num_field_periods, Y)
 
-    if nufft_eps < 1e-14 or f.shape[-1] <= 16:
+    if no_nufft(nufft_eps) or f.shape[-1] <= 16:
         f = f[..., None, None, :, :]
         f = irfft_mmt_pos(t, f, n=jnp.nan, modes=modes_t)
         assert f.shape == t.shape
@@ -1097,3 +1147,8 @@ def truncate_rule(Y):
 
     """
     return max(1, 7 * Y // 8)
+
+
+def no_nufft(nufft_eps):
+    """True if nuffts should not be used."""
+    return nufft_eps < 1e-14

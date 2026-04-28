@@ -161,8 +161,8 @@ doc_bounce = """
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         If the option ``spline`` is ``True``, the bounce points are found with
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
+        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with exponential accuracy in this parameter.
         A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests

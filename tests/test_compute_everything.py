@@ -310,7 +310,7 @@ def fft_grid_data(p):
     if p != "desc.equilibrium.equilibrium.Equilibrium":
         return {}
 
-    # TODO: can automate this later to add omngeneity, boozer transform, etc.
+    # TODO: can automate this later to add omnigeneity, boozer transform, etc.
     fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco"]
 
     eq = get("W7-X")
@@ -320,7 +320,7 @@ def fft_grid_data(p):
 
     nufft_eps = 1e-10
     kwargs = dict(
-        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
+        angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta,
         num_field_periods=25,
         num_well=100,
@@ -342,15 +342,17 @@ def fft_grid_data(p):
     )
     # check no nufft
     del d["Gamma_c"]
-    d = eq.compute("Gamma_c", grid, data=d, nufft_eps=0.0, **kwargs)
+    data["Gamma_c no nufft"] = eq.compute(
+        "Gamma_c", grid, data=d, nufft_eps=0.0, **kwargs
+    )["Gamma_c"]
     np.testing.assert_allclose(
-        d["Gamma_c"],
         data["Gamma_c"],
-        rtol=np.sqrt(nufft_eps) * 8,
+        data["Gamma_c no nufft"],
+        rtol=5e-5,
         err_msg="Gamma_c no nufft",
     )
 
-    data = apply(data, grid.compress, fft_names)
+    data = apply(data, grid.compress, fft_names + ["Gamma_c no nufft"])
     return data
 
 

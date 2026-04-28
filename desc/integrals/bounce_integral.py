@@ -29,7 +29,8 @@ from desc.batching import batch_map
 from desc.derivatives import sparse_pullback
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    _sentinel,
+    _bounce_points,
+    _halley,
     argmin,
     bounce_points,
     broadcast_for_bounce,
@@ -40,8 +41,8 @@ from desc.integrals._bounce_utils import (
     get_mins,
     mmt_for_bounce,
     move,
+    no_nufft,
     plot_ppoly,
-    regular_points,
     set_default_plot_kwargs,
     theta_on_fieldlines,
     truncate_rule,
@@ -221,9 +222,9 @@ class Bounce2D(_Bounce):
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         If the option ``spline`` is ``True``, the bounce points are found with
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
-        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with exponential accuracy in this
+        parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -653,16 +654,24 @@ class Bounce2D(_Bounce):
             )
 
         if isinstance(self._B, PiecewiseChebyshevSeries):
-            # We skip Newton stepping since we use this Chebyshev interpolation of |B|
-            # to compute v_∥ rather than the original Fourier series. This is because
-            # we found the points exactly for the Chebyshev interpolation, which is
-            # exponentially accurate. By using the exact points, we increase
-            # correlation in discretization error in a neighborhood of any given point
-            # in the optimization landscape, and hence remove noise from optimization
-            # derivatives. For example, by using Chebyshev |B| to compute v_∥ instead,
-            # the difference between the auto derivative and a 4 point finite
-            # difference stencil at the optimal step size of 10⁻⁸ is reduced from
-            # 10³ to 10⁻⁶ for Γ_c (which has the singular weight 1/v_∥).
+            # We skip Halley stepping since we use this Chebyshev series of |B|
+            # to compute v_∥ rather than the original Fourier series. We do this
+            # because we found the points exactly for the Chebyshev series.
+            # Since the Chebyshev series is exponentially accurate, we retain
+            # exponential accuracy in the bounce integrals when we compute v_∥ with it;
+            # in particular, this holds even if our choice of resolution for the
+            # Chebyshev series does not fully reconstruct the true function.
+            # If we instead computed v_∥ from the original Fourier series, we would
+            # need to make sure that the roots of the Chebyshev series match the
+            # Fourier series', which is akin to a stiffness condition between Y_B
+            # and the grid resolution for the FFTs in (θ, ζ).
+            # Accurate roots needed to also increase the correlation in the
+            # discretization error in a neighborhood of any given point in the
+            # optimization landscape. See supplement in publications/unalmis2025.
+            # Experimentally, we find that the difference between the automatic
+            # derivative and a 4 point finite difference stencil at the optimal step
+            # size of 10⁻⁸ is reduced from 10³ to 10⁻⁶ for Γ_c
+            # (which has the singular weight 1/v_∥).
             z1, z2 = self._B.intersect1d(
                 self._swap_axes(pitch_inv), num_intersect=num_well, eps=_eps
             )
@@ -670,9 +679,9 @@ class Bounce2D(_Bounce):
             z2 = move(z2)
             return z1, z2
 
-        # We use the original Fourier series |B| to compute v_∥, so a Newton step
+        # We use the original Fourier series |B| to compute v_∥, so a Halley step
         # is done using the roots of the spline as the initial guess.
-        return regular_points(self, broadcast_for_bounce(pitch_inv), num_well)
+        return bounce_points(self, broadcast_for_bounce(pitch_inv), num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -704,14 +713,25 @@ class Bounce2D(_Bounce):
         """
         kwargs = set_default_plot_kwargs(kwargs)
         if isinstance(self._B, PiecewiseChebyshevSeries):
-            z1, z2 = points
             return self._B.check_intersect1d(
-                move(z1, False),
-                move(z2, False),
+                move(points[0], False),
+                move(points[1], False),
                 self._swap_axes(pitch_inv),
                 plot=plot,
                 **kwargs,
             )
+
+        pitch_inv = broadcast_for_bounce(pitch_inv)
+
+        print("Error statistics for the given bounce points:")
+        _halley(
+            self,
+            pitch_inv,
+            points,
+            mask=points[0] < points[1],
+            nufft_eps=0.0,
+            diagnostic=2,
+        )
         return check_bounce_points(
             *points,
             pitch_inv,
@@ -823,7 +843,7 @@ class Bounce2D(_Bounce):
         elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, :, None, None]
 
-        if nufft_eps < 1e-14:
+        if no_nufft(nufft_eps):
             data = self._nummt(x, *points, data, loop)
         else:
             data = self._nufft(x, *points, data, loop, nufft_eps, pitch_inv)
@@ -964,7 +984,7 @@ class Bounce2D(_Bounce):
         )
         t = self._theta.eval1d(mins)
 
-        if nufft_eps < 1e-14:
+        if no_nufft(nufft_eps):
             f = irfft2_mmt_pos(
                 mins,
                 t,
@@ -1095,7 +1115,7 @@ class Bounce2D(_Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._c["knots"], B)
+            kwargs["z1"], kwargs["z2"] = _bounce_points(pitch_inv, self._c["knots"], B)
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1274,10 +1294,7 @@ class Bounce1D(_Bounce):
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
-        as knots to construct splines. A reference knot density is 100 knots per
-        toroidal transit. Also, the minimum value of the zeta coordinate must be
-        greater than the sentinel value of ``-1e5``. If this requirement is limiting
-        make a GitHub issue requesting to lower this value.
+        as knots to construct splines.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce1D.required_names``.
@@ -1297,9 +1314,12 @@ class Bounce1D(_Bounce):
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
     """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
+    _sentinel: float = eqx.field(static=True)
+    """Sentinel value for which all ζ coordinates in grid must exceed."""
+
     _quad: tuple[jax.Array]
     _data: dict[str, jax.Array]
-    _zeta: jax.Array
+    _knots: jax.Array
     _B: jax.Array
 
     def __init__(
@@ -1310,6 +1330,7 @@ class Bounce1D(_Bounce):
         *,
         automorphism=None,
         check=False,
+        sentinel=-1e-5,
         **kwargs,
     ):
         """Returns an object to compute bounce integrals."""
@@ -1338,10 +1359,14 @@ class Bounce1D(_Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        self._zeta = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
+        self._knots = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
+        self._sentinel = sentinel
+        if check:
+            assert self._knots.min() > sentinel
+
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
-                x=self._zeta,
+                x=self._knots,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
@@ -1467,8 +1492,12 @@ class Bounce1D(_Bounce):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(
-            broadcast_for_bounce(pitch_inv), self._zeta, self._B, num_well
+        return _bounce_points(
+            broadcast_for_bounce(pitch_inv),
+            self._knots,
+            self._B,
+            num_well,
+            sentinel=self._sentinel,
         )
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1499,7 +1528,13 @@ class Bounce1D(_Bounce):
 
         """
         return check_bounce_points(
-            *points, pitch_inv, self._zeta, self._B, plot=plot, **kwargs
+            *points,
+            pitch_inv,
+            self._knots,
+            self._B,
+            plot=plot,
+            sentinel=self._sentinel,
+            **kwargs,
         )
 
     def integrate(
@@ -1593,18 +1628,18 @@ class Bounce1D(_Bounce):
 
         b_sup_z = interp1d_Hermite_vec(
             z,
-            self._zeta,
+            self._knots,
             self._data["|b^zeta|"],
             self._data["|b^zeta|_z|r,a"],
         ).reshape(shape)
         B = interp1d_Hermite_vec(
             z,
-            self._zeta,
+            self._knots,
             self._data["|B|"],
             self._data["|B|_z|r,a"],
         ).reshape(shape)
         data = {
-            k: interp1d_vec(z, self._zeta, v, method=method).reshape(shape)
+            k: interp1d_vec(z, self._knots, v, method=method).reshape(shape)
             for k, v in data.items()
         }
 
@@ -1663,9 +1698,9 @@ class Bounce1D(_Bounce):
         # We set fill value to sentinel since all bounce points are at
         # ζ > sentinel (as documented in Bounce1D docstring); and
         # therefore, junk values in B_mins cannot be selected in argmin.
-        mins, B_mins = get_mins(self._zeta, self._B, fill_value=_sentinel)
+        mins, B_mins = get_mins(self._knots, self._B, fill_value=self._sentinel)
         return argmin(
-            *points, interp1d_vec(mins, self._zeta, f, method=method), mins, B_mins
+            *points, interp1d_vec(mins, self._knots, f, method=method), mins, B_mins
         )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
@@ -1689,6 +1724,8 @@ class Bounce1D(_Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
+        kwargs = set_default_plot_kwargs(kwargs, l, m)
+
         B = self._B
         if B.ndim == 4:
             B = B[l]
@@ -1699,12 +1736,11 @@ class Bounce1D(_Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._zeta, B)
+            kwargs["z1"], kwargs["z2"] = _bounce_points(
+                pitch_inv, self._knots, B, sentinel=self._sentinel
+            )
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(
-            PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)
-        )
-        return fig, ax
+        return plot_ppoly(PPoly(B.T, self._knots), **kwargs)
 
 
 class Options(NamedTuple):
@@ -1724,9 +1760,9 @@ class Options(NamedTuple):
         "Y_B": """int :
             Desired resolution for algorithm to compute bounce points.
             If the option ``spline`` is ``True``, the bounce points are found with
-            8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-            then the bounce points are found with spectral accuracy in this parameter.
-            A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+            12th order accuracy in this parameter. If the option ``spline`` is
+            ``False``, then the bounce points are found with exponential accuracy in
+            this parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
             An error of ε in a bounce point manifests
             𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and

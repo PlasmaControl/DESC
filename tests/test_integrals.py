@@ -34,12 +34,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _newton,
-    bounce_points,
-    check_bounce_points,
-    get_mins,
-)
+from desc.integrals._bounce_utils import _bounce_points, check_bounce_points, get_mins
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -732,7 +727,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -748,7 +743,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -767,7 +762,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -792,7 +787,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -813,7 +808,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
+        z1, z2 = _bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, sentinel=start)
         check_bounce_points(
             z1,
             z2,
@@ -845,7 +840,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1612,22 +1607,10 @@ class TestBounce2D:
             grid, data, angle, alpha=alpha, num_field_periods=38, check=True
         )
         points = bounce.points(pitch_inv)
-        TestBounce2D._check_newton(bounce, pitch_inv, points)
 
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
-
-    @staticmethod
-    def _check_newton(bounce, pitch_inv, p):
-        mmt = _newton(bounce, pitch_inv[:, None], *p, p[0] < p[1], 0.0)
-        np.testing.assert_allclose(p, mmt, rtol=1e-5)
-
-        nft = _newton(bounce, pitch_inv[:, None], *p, p[0] < p[1], 1e-10)
-        mmt = _newton(bounce, pitch_inv[:, None], *mmt, mmt[0] < mmt[1], 0.0)
-        np.testing.assert_allclose(nft, mmt, rtol=5e-8)
-
-        bounce.check_points(mmt, pitch_inv, plot=False)
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):

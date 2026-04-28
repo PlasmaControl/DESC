@@ -144,6 +144,34 @@ class TestFmin:
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
     @pytest.mark.unit
+    def test_convex_full_hess_dogleg_state(self):
+        """Test minimizing convex stateful test function using dogleg method."""
+        # to test state we just use state to keep track of number of times
+        # the state gets updated, which should be the number of iterations + 1
+        x0 = np.ones(2)
+
+        state_fun = lambda x, *args, state: (scalar_fun(x, *args), state + 1)
+        state_grad = Derivative(state_fun, mode="grad", has_aux=True)
+        state_hess = Derivative(state_fun, mode="hess", has_aux=True)
+
+        out = fmintr(
+            state_fun,
+            x0,
+            state_grad,
+            state_hess,
+            verbose=3,
+            x_scale="hess",
+            ftol=0,
+            xtol=0,
+            gtol=1e-10,
+            options={"tr_method": "dogleg"},
+            has_state=True,
+            init_state=0,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+        assert out["state"] == out["nit"] + 1
+
+    @pytest.mark.unit
     def test_convex_full_hess_subspace(self):
         """Test minimizing rosenbrock function using subspace method with full hess."""
         x0 = np.ones(2)
@@ -300,6 +328,41 @@ class TestSGD:
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
     @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "method",
+        [
+            # some of the optax optimizers
+            "optax-adam",
+            "optax-adamax",
+            "optax-lbfgs",
+            "optax-rmsprop",
+            "optax-sgd",
+        ],
+    )
+    def test_optax_convex_state(self, method):
+        """Test minimizing stateful convex test function using optax."""
+        x0 = np.ones(2)
+
+        state_fun = lambda x, *args, state: (scalar_fun(x, *args), state + 1)
+        state_grad = Derivative(state_fun, mode="grad", has_aux=True)
+
+        out = sgd(
+            state_fun,
+            x0,
+            state_grad,
+            method=method,
+            verbose=3,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+            maxiter=2000,
+            has_state=True,
+            init_state=0,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+        assert out["state"] == out["nit"] + 1  # we eval f after accepting step
+
+    @pytest.mark.unit
     def test_optax_custom(self):
         """Test custom optax optimizers work."""
         eq = desc.examples.get("DSHAPE")
@@ -386,6 +449,35 @@ class TestLSQTR:
             },
         )
         np.testing.assert_allclose(out["x"], p)
+
+    @pytest.mark.unit
+    def test_lsqtr_exact_state(self):
+        """Test minimizing stateful least squares function using exact trust region."""
+        p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+        x = np.linspace(-1, 1, 100)
+        y = vector_fun(x, p)
+
+        def res(p):
+            return vector_fun(x, p) - y
+
+        state_fun = lambda x, *args, state: (res(x, *args), state + 1)
+        state_jac = Derivative(state_fun, mode="fwd", has_aux=True)
+
+        rando = default_rng(seed=0)
+        p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+
+        out = lsqtr(
+            state_fun,
+            p0,
+            state_jac,
+            verbose=3,
+            x_scale=1,
+            options={},
+            has_state=True,
+            init_state=0,
+        )
+        np.testing.assert_allclose(out["x"], p)
+        assert out["state"] == out["nit"] + 1
 
 
 @pytest.mark.unit
@@ -956,9 +1048,17 @@ def test_auglag():
         y = vecfun(x)
         return 1 / 2 * jnp.dot(y, y)
 
+    # we use different states for the objective and constraint. The objective state
+    # counts up by 1s, constraint state counts down by 2s
+
+    state_fun = lambda x, *args, state: (fun(x, *args), state + 1)
+    state_grad = jit(Derivative(state_fun, mode="grad", has_aux=True))
+    state_hess = jit(Derivative(state_fun, mode="hess", has_aux=True))
+    state_vecfun = lambda x, *args, state: (vecfun(x, *args), state + 1)
+    state_jac = jit(Derivative(state_vecfun, mode="fwd", has_aux=True))
+
     grad = jit(Derivative(fun, mode="grad"))
     hess = jit(Derivative(fun, mode="hess"))
-    jac = jit(Derivative(vecfun, mode="fwd"))
 
     @jit
     def con(x):
@@ -970,16 +1070,29 @@ def test_auglag():
     conjac = jit(Derivative(con, mode="fwd"))
     conhess = jit(Derivative(lambda x, v: v @ con(x), mode="hess"))
 
+    state_con = lambda x, *args, state: (con(x, *args), state - 2)
+    state_conjac = jit(Derivative(state_con, mode="fwd"))
+    state_conhess = jit(
+        Derivative(
+            lambda x, v, state: (v @ state_con(x, state=state)[0], state),
+            mode="hess",
+            has_aux=True,
+        )
+    )
+
     constraint = NonlinearConstraint(con, -np.inf, 0, conjac, conhess)
+    state_constraint = NonlinearConstraint(
+        state_con, -np.inf, 0, state_conjac, state_conhess
+    )
     x0 = rng.random(n)
 
     out1 = fmin_auglag(
-        fun,
+        state_fun,
         x0,
-        grad,
-        hess=hess,
+        state_grad,
+        hess=state_hess,
         bounds=(-jnp.inf, jnp.inf),
-        constraint=constraint,
+        constraint=state_constraint,
         args=(),
         x_scale="auto",
         ftol=0,
@@ -989,12 +1102,18 @@ def test_auglag():
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares"},
+        fun_has_state=True,
+        con_has_state=True,
+        fun_init_state=0,
+        con_init_state=0,
     )
     print(out1["active_mask"])
+    assert out1["fun_state"] == out1["nit"] + 1
+    assert out1["con_state"] == -2 * (out1["nit"] + 1)
     out2 = lsq_auglag(
-        vecfun,
+        state_vecfun,
         x0,
-        jac,
+        state_jac,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint,
         args=(),
@@ -1006,7 +1125,10 @@ def test_auglag():
         verbose=3,
         maxiter=None,
         options={"initial_multipliers": "least_squares", "tr_method": "cho"},
+        fun_has_state=True,
+        fun_init_state=0,
     )
+    assert out2["fun_state"] == out2["nit"] + 1
 
     out3 = minimize(
         fun,

@@ -25,6 +25,7 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
     solve_triangular_regularized,
+    wrap_stateless_fun,
 )
 
 
@@ -42,6 +43,8 @@ def lsqtr(  # noqa: C901
     maxiter=None,
     callback=None,
     options=None,
+    has_state=False,
+    init_state=None,
 ):
     """Solve a least squares problem using a (quasi)-Newton trust region method.
 
@@ -142,6 +145,13 @@ def lsqtr(  # noqa: C901
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
+    has_state : bool
+        If True, `fun` and `jac` are assumed to have a signature of the form
+        fun(x, *args, state=state) -> array, state. State will be updated on each
+        accepted step.
+    init_state : Any
+        Initial value for state. Only used if `has_state=True`.
+
     Returns
     -------
     res : OptimizeResult
@@ -163,6 +173,9 @@ def lsqtr(  # noqa: C901
         ValueError,
         "x_scale should be one of 'jac', 'auto' or array-like, got {}".format(x_scale),
     )
+    if not has_state:
+        fun = wrap_stateless_fun(fun)
+        jac = wrap_stateless_fun(jac)
 
     nfev = 0
     njev = 0
@@ -175,12 +188,13 @@ def lsqtr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x, *args)
+    f, state = fun(x, *args, state=init_state)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
     # jax.pure_callback and gets stuck due to async dispatch
-    J = jac(x, *args).block_until_ready()
+    J, _ = jac(x, *args, state=state)
+    J = J.block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -354,7 +368,7 @@ def lsqtr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new, *args)
+            f_new, state_new = fun(x_new, *args, state=state)
             nfev += 1
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
@@ -403,8 +417,9 @@ def lsqtr(  # noqa: C901
             x = x_new
             allx.append(x)
             f = f_new
+            state = state_new
             cost = cost_new
-            J = jac(x, *args)
+            J, _ = jac(x, *args, state=state)
             njev += 1
             g = jnp.dot(J.T, f)
 
@@ -466,6 +481,7 @@ def lsqtr(  # noqa: C901
         active_mask=active_mask,
         allx=allx,
         alltr=alltr,
+        state=state,
     )
     if verbose > 0:
         if result["success"]:

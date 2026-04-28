@@ -1,5 +1,8 @@
 """Function for minimizing a scalar function of multiple variables."""
 
+from typing import Any, Callable
+
+import equinox as eqx
 import optax
 from scipy.optimize import OptimizeResult
 
@@ -11,7 +14,17 @@ from .utils import (
     check_termination,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    wrap_stateless_fun,
 )
+
+
+class _HashableFunctionWithState(eqx.Module):
+    fun: Callable
+    state: Any
+
+    def __call__(self, x, *args):
+        # don't return new state for line search
+        return self.fun(x, *args, state=self.state)[0]
 
 
 def sgd(  # noqa: C901
@@ -28,6 +41,8 @@ def sgd(  # noqa: C901
     maxiter=None,
     callback=None,
     options=None,
+    has_state=False,
+    init_state=None,
 ):
     r"""Minimize a scalar function using one of stochastic gradient descent methods.
 
@@ -109,6 +124,12 @@ def sgd(  # noqa: C901
 
         For optax optimizers, hyperparameters specific to the chosen optimizer
         must be passed via the `optax-options` key of `options` dictionary.
+    has_state : bool
+        If True, `fun`, `grad` and `hess` are assumed to have a signature of the form
+        fun(x, *args, state=state) -> array, state. State will be updated on each
+        accepted step.
+    init_state : Any
+        Initial value for state. Only used if `has_state=True`.
 
     Returns
     -------
@@ -163,17 +184,22 @@ def sgd(  # noqa: C901
         x_scale = 1.0
 
     options = {} if options is None else options
+    if not has_state:
+        fun = wrap_stateless_fun(fun)
+        grad = wrap_stateless_fun(grad)
+
     nfev = 0
     ngev = 0
     iteration = 0
 
     N = x0.size
     x = x0.copy()
-    f = fun(x, *args)
+    f, state = fun(x, *args, state=init_state)
     nfev += 1
     # Scaled state xs = x / x_scale
     # Scaled gradient df/dxs = df/dx * dx/dxs = df/dx * x_scale
-    gs = grad(x, *args) * x_scale
+    gs, _ = grad(x, *args, state=state)
+    gs *= x_scale
     ngev += 1
     # scaled and unscaled norms
     g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
@@ -247,8 +273,6 @@ def sgd(  # noqa: C901
     if method != "optax-custom":
         optax_method = getattr(optax, method.replace("optax-", ""))(**method_options)
     opt_state = optax_method.init(x)
-    # necessary for linesearch
-    optax_fun = lambda xs, *args: fun(xs * x_scale, *args)
 
     while True:
         success, message = check_termination(
@@ -269,15 +293,19 @@ def sgd(  # noqa: C901
         if success is not None:
             break
 
+        # need to close over current state since optax doesn't know about state.
+        # This is fine since we only update the state after successful steps.
+        optax_fun = _HashableFunctionWithState(fun, state)
         dxs, opt_state = optax_method.update(
             gs, opt_state, x / x_scale, value=f, grad=gs, value_fn=optax_fun
         )
         dx = dxs * x_scale
         x = x + dx
-        gs = grad(x, *args) * x_scale
+        fnew, state = fun(x, *args, state=state)
+        gs, _ = grad(x, *args, state=state)
+        gs *= x_scale
         g_norm = jnp.linalg.norm(gs / x_scale, ord=2)
         step_norm = jnp.linalg.norm(dx, ord=2)
-        fnew = fun(x, *args)
         df = f - fnew
         df_norm = jnp.abs(df)
         x_norm = jnp.linalg.norm(x, ord=2)
@@ -305,6 +333,7 @@ def sgd(  # noqa: C901
         nit=iteration,
         message=message,
         allx=allx,
+        state=state,
     )
     if verbose > 0:
         if result["success"]:

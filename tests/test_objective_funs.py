@@ -2624,11 +2624,17 @@ def test_profile_objective_print(capsys):
     obj = Shear(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, shear)
+    shear = eq.compute("shear", grid=grid)["shear"]
+    obj = Shear(eq=eq, target=1, grid=grid)
+    obj.build()
     test(obj, shear, pass_f=True)
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
     obj.build()
     test(obj, curr, print_init=True, normalize=True)
+    curr = eq.compute("current", grid=grid)["current"]
+    obj = ToroidalCurrent(eq=eq, target=1, grid=grid)
+    obj.build()
     test(obj, curr, print_init=True, normalize=True, pass_f=True)
     pres = eq.compute("p", grid=grid)["p"]
     obj = Pressure(eq=eq, target=1, grid=grid)

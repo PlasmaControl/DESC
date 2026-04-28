@@ -593,7 +593,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, x0=None, fse=None, f0se=None, constants=None):
+    def print_value(self, x, x0=None, constants=None, fse=None, f0se=None):
         """Print the value(s) of the objective.
 
         Parameters
@@ -602,14 +602,14 @@ class ObjectiveFunction(IOAble):
             State vector.
         x0 : ndarray, optional
             Initial state vector before optimization.
+        constants : list
+            Constant parameters passed to sub-objectives.
         fse : ndarray, optional
             Output of self.compute_scaled_error(x), if available
             through last iteration of the optimization.
         f0se : ndarray, optional
             Output of self.compute_scaled_error(x0), if available
             through first iteration of the optimization.
-        constants : list
-            Constant parameters passed to sub-objectives.
 
         Returns
         -------

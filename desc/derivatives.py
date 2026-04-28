@@ -26,7 +26,7 @@ class _Derivative(ABC):
     """
 
     @abstractmethod
-    def __init__(self, fun, argnum=0, mode=None, **kwargs):
+    def __init__(self, fun, argnum=0, mode=None, has_aux=False, **kwargs):
         pass
 
     @abstractmethod
@@ -118,6 +118,13 @@ class AutoDiffDerivative(_Derivative):
         ``'hess'`` (Hessian of a scalar function),
         or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
+    chunk_size : int
+        Will calculate the Jacobian
+        ``chunk_size`` columns at a time, instead of all at once.
+    has_aux : bool
+        Indicates whether fun returns a pair where the first element is considered
+        the output of the mathematical function to be differentiated and the second
+        element is auxiliary data. Default False.
 
     Raises
     ------
@@ -125,11 +132,14 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(self, fun, argnum=0, mode="fwd", chunk_size=None, **kwargs):
+    def __init__(
+        self, fun, argnum=0, mode="fwd", chunk_size=None, has_aux=False, **kwargs
+    ):
 
         self._fun = fun
         self._argnum = argnum
         self._chunk_size = chunk_size
+        self._has_aux = has_aux
         self._set_mode(mode)
 
     def compute(self, *args, **kwargs):
@@ -152,7 +162,7 @@ class AutoDiffDerivative(_Derivative):
         return self._compute(*args, **kwargs)
 
     @classmethod
-    def compute_vjp(cls, fun, argnum, v, *args, **kwargs):
+    def compute_vjp(cls, fun, argnum, v, *args, has_aux=False, **kwargs):
         """Compute v.T * df/dx.
 
         Parameters
@@ -178,12 +188,15 @@ class AutoDiffDerivative(_Derivative):
         _ = kwargs.pop("rel_step", None)  # unused by autodiff
 
         def _fun(*args):
+            if has_aux:
+                f, aux = fun(*args, **kwargs)
+                return v.T @ f, aux
             return v.T @ fun(*args, **kwargs)
 
-        return jax.grad(_fun, argnum)(*args)
+        return jax.grad(_fun, argnum, has_aux=has_aux)(*args)
 
     @classmethod
-    def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
+    def compute_jvp(cls, fun, argnum, v, *args, has_aux=False, **kwargs):
         """Compute df/dx*v.
 
         Parameters
@@ -215,11 +228,16 @@ class AutoDiffDerivative(_Derivative):
                 _args[i] = xi
             return fun(*_args, **kwargs)
 
-        y, u = jax.jvp(_fun, tuple(args[i] for i in argnum), v)
-        return u
+        out = jax.jvp(_fun, tuple(args[i] for i in argnum), v, has_aux=has_aux)
+        # out is either y, u or y, u, aux. We only want u and aux if present
+        if len(out) == 2:
+            return out[1]  # don't want to return a tuple if no aux
+        return out[1:]  # slice out y
 
     @classmethod
-    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
+    def compute_jvp2(
+        cls, fun, argnum1, argnum2, v1, v2, *args, has_aux=False, **kwargs
+    ):
         """Compute d^2f/dx^2*v1*v2.
 
         Parameters
@@ -255,14 +273,18 @@ class AutoDiffDerivative(_Derivative):
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        dfdx = lambda dx1, *args: cls.compute_jvp(
+            fun, argnum1, dx1, *args, has_aux=has_aux, **kwargs
+        )
         d2fdx2 = lambda dx1, dx2: cls.compute_jvp(
-            dfdx, argnum2, dx2, dx1, *args, **kwargs
+            dfdx, argnum2, dx2, dx1, *args, has_aux=has_aux, **kwargs
         )
         return d2fdx2(v1, v2)
 
     @classmethod
-    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args, **kwargs):
+    def compute_jvp3(
+        cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args, has_aux=False, **kwargs
+    ):
         """Compute d^3f/dx^3*v1*v2*v3.
 
         Parameters
@@ -305,17 +327,21 @@ class AutoDiffDerivative(_Derivative):
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        dfdx = lambda dx1, *args: cls.compute_jvp(
+            fun, argnum1, dx1, *args, has_aux=has_aux, **kwargs
+        )
         d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(
-            dfdx, argnum2, dx2, dx1, *args, **kwargs
+            dfdx, argnum2, dx2, dx1, *args, has_aux=has_aux, **kwargs
         )
         d3fdx3 = lambda dx1, dx2, dx3: cls.compute_jvp(
-            d2fdx2, argnum3, dx3, dx2, dx1, *args, **kwargs
+            d2fdx2, argnum3, dx3, dx2, dx1, *args, has_aux=has_aux, **kwargs
         )
         return d3fdx3(v1, v2, v3)
 
     def _compute_jvp(self, v, *args, **kwargs):
-        return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
+        return self.compute_jvp(
+            self._fun, self.argnum, v, *args, has_aux=self._has_aux, **kwargs
+        )
 
     def _set_mode(self, mode) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
@@ -324,18 +350,30 @@ class AutoDiffDerivative(_Derivative):
         self._mode = mode
         if self._mode == "fwd":
             self._compute = jacfwd_chunked(
-                self._fun, self._argnum, chunk_size=self._chunk_size
+                self._fun,
+                self._argnum,
+                has_aux=self._has_aux,
+                chunk_size=self._chunk_size,
             )
         elif self._mode == "rev":
             self._compute = jacrev_chunked(
-                self._fun, self._argnum, chunk_size=self._chunk_size
+                self._fun,
+                self._argnum,
+                has_aux=self._has_aux,
+                chunk_size=self._chunk_size,
             )
         elif self._mode == "grad":
-            self._compute = jax.grad(self._fun, self._argnum)
+            self._compute = jax.grad(self._fun, self._argnum, has_aux=self._has_aux)
         elif self._mode == "hess":
             self._compute = jacfwd_chunked(
-                jacrev_chunked(self._fun, self._argnum, chunk_size=self._chunk_size),
+                jacrev_chunked(
+                    self._fun,
+                    self._argnum,
+                    has_aux=self._has_aux,
+                    chunk_size=self._chunk_size,
+                ),
                 self._argnum,
+                has_aux=self._has_aux,
                 chunk_size=self._chunk_size,
             )
         elif self._mode == "jvp":

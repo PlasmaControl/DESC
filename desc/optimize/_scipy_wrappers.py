@@ -466,7 +466,7 @@ def _optimize_scipy_least_squares(  # noqa: C901
         result["njev"] = len(jac_allx)
         result["nit"] = len(jac_allx)
         result["fse"] = result["fun"]
-        result["fse0"] = fun_allf[0]
+        result["f0se"] = fun_allf[0]
     except StopIteration:
         x = jac_allx[-1]
         f = f_where_x(x, fun_allx, fun_allf, dim=1)
@@ -488,7 +488,7 @@ def _optimize_scipy_least_squares(  # noqa: C901
             allx=jac_allx,
         )
         result["fse"] = f
-        result["fse0"] = fun_allf[0]
+        result["f0se"] = fun_allf[0]
 
     if verbose > 0:
         if result["success"]:

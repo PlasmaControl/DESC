@@ -2561,7 +2561,7 @@ def test_profile_objective_print(capsys):
             if not pass_f:
                 obj.print_value(args=par, args0=par)
             else:
-                obj.print_value(args=par, args0=par, fse=fse, fse0=fse)
+                obj.print_value(args=par, args0=par, fse=fse, f0se=fse)
             print_fmt = (
                 f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                 + "{:10.3e}  -->  {:10.3e} "
@@ -2644,12 +2644,12 @@ def test_plasma_vessel_distance_print(capsys):
     def test(obj, eq, surface, d, print_init=False, pass_f=False):
         if print_init:
             if isinstance(obj, ObjectiveFunction):
-                par = obj.x(eq, surface)
+                x = obj.x(eq, surface)
                 if not pass_f:
-                    obj.print_value(par, args0=par)
+                    obj.print_value(x, x0=x)
                 else:
-                    fse = obj.compute_scaled_error(par)
-                    obj.print_value(par, args0=par, fse=fse, fse0=fse)
+                    fse = obj.compute_scaled_error(x)
+                    obj.print_value(x, x0=x, fse=fse, f0se=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2662,7 +2662,7 @@ def test_plasma_vessel_distance_print(capsys):
                     obj.print_value(args=par, args0=par)
                 else:
                     fse = obj.compute_scaled_error(*par)
-                    obj.print_value(args=par, args0=par, fse=fse, fse0=fse)
+                    obj.print_value(args=par, args0=par, fse=fse, f0se=fse)
                 print_fmt = (
                     f"{obj._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
@@ -2671,12 +2671,12 @@ def test_plasma_vessel_distance_print(capsys):
                 norm = obj.normalization
         else:
             if isinstance(obj, ObjectiveFunction):
-                par = obj.x(eq, surface)
+                x = obj.x(eq, surface)
                 if not pass_f:
-                    obj.print_value(par)
+                    obj.print_value(x)
                 else:
-                    fse = obj.compute_scaled_error(par)
-                    obj.print_value(par, fse=fse)
+                    fse = obj.compute_scaled_error(x)
+                    obj.print_value(x, fse=fse)
                 print_fmt = (
                     f"{obj.objectives[0]._print_value_fmt:<{PRINT_WIDTH-pre_width}}"  # noqa: E501
                     + "{:10.3e} "

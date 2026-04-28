@@ -593,7 +593,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, x0=None, fse=None, fse0=None, constants=None):
+    def print_value(self, x, x0=None, fse=None, f0se=None, constants=None):
         """Print the value(s) of the objective.
 
         Parameters
@@ -605,7 +605,7 @@ class ObjectiveFunction(IOAble):
         fse : ndarray, optional
             Output of self.compute_scaled_error(x), if available
             through last iteration of the optimization.
-        fse0 : ndarray, optional
+        f0se : ndarray, optional
             Output of self.compute_scaled_error(x0), if available
             through first iteration of the optimization.
         constants : list
@@ -628,8 +628,8 @@ class ObjectiveFunction(IOAble):
             f_full = self.compute_scaled_error(x, constants=constants)
         f = jnp.sum(f_full**2) / 2  # compute_scalar
         if x0 is not None:
-            if fse0 is not None:
-                f0_full = fse0
+            if f0se is not None:
+                f0_full = f0se
             else:
                 f0_full = self.compute_scaled_error(x0, constants=constants)
             f0 = jnp.sum(f0_full**2) / 2
@@ -670,7 +670,7 @@ class ObjectiveFunction(IOAble):
                 f0i = None
             offset += dim
             outi = obj.print_value(
-                args=par, args0=par0, fse=fi, fse0=f0i, constants=const
+                args=par, args0=par0, fse=fi, f0se=f0i, constants=const
             )
             if obj._print_value_fmt in out:
                 out[obj._print_value_fmt].append(outi)

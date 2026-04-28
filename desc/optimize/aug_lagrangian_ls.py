@@ -625,7 +625,7 @@ def lsq_auglag(  # noqa: C901
         alltr=alltr,
     )
     result["fse"] = f
-    result["fse0"] = f0
+    result["f0se"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

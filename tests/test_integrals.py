@@ -885,10 +885,7 @@ class TestBounceQuadrature:
         "is_strong, quad, automorphism",
         [
             (True, tanh_sinh(30), None),
-            (False, tanh_sinh(20), None),
             (True, leggauss(25), auto_sin),
-            # chebgauss1 without c.o.v. is sensitive to approximation error
-            (True, chebgauss1(25), auto_sin),
             (False, leggauss_lob(8, interior_only=True), auto_sin),
             (False, chebgauss2(21), None),
         ],

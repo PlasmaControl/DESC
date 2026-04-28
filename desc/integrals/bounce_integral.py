@@ -1308,19 +1308,20 @@ class Bounce1D(_Bounce):
         automorphism will affect the performance of the quadrature.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
+    sentinel : float
+        A number which is less than all ζ coordinates in the grid.
+        Default is ``-1e5``.
 
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
     """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
-    _sentinel: float = eqx.field(static=True)
-    """Sentinel value for which all ζ coordinates in grid must exceed."""
-
     _quad: tuple[jax.Array]
     _data: dict[str, jax.Array]
     _knots: jax.Array
     _B: jax.Array
+    _sentinel: float = eqx.field(static=True)
 
     def __init__(
         self,
@@ -1330,7 +1331,7 @@ class Bounce1D(_Bounce):
         *,
         automorphism=None,
         check=False,
-        sentinel=-1e-5,
+        sentinel=-1e5,
         **kwargs,
     ):
         """Returns an object to compute bounce integrals."""

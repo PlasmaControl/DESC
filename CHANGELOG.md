@@ -13,6 +13,7 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes bug in FixNearAxis constraints when L>M, where it would not fully fix the equilibrium behavior to the NAE.
 
 Performance Improvements
 
@@ -30,7 +31,6 @@ v0.17.1
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
-
 
 v0.17.0
 -------

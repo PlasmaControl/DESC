@@ -5,6 +5,7 @@ import pytest
 
 from desc.backend import jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
+from desc.objectives.nae_utils import general_connection_zernike_to_monomials
 from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, safenormalize
 
 
@@ -260,3 +261,31 @@ def test_safenormalize():
 
     np.testing.assert_allclose(a_norm, a_safenorm)
     np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=1), 1)
+
+
+@pytest.mark.unit
+def test_general_connection_zernike_to_monomials():
+    """Test weights against known NAE weight patterns.
+
+    The hard-coded patterns which used to be in nae_utils (1st and 2nd order) are
+    special cases of the formula. We verify these against the general formula.
+    """
+    # l=1, m=1 (odd): weights 1, -2, 3, ...  (matches -(-1)^k * k pattern)
+    L_vals, w = general_connection_zernike_to_monomials(1, 1, 5)
+    np.testing.assert_array_equal(L_vals, [1, 3, 5])
+    np.testing.assert_allclose(w, [1, -2, 3])
+
+    # l=2, m=2 (even): weights 1, -3, 6, ...  (matches -(-1)^k * k(k+1)/2 pattern)
+    L_vals, w = general_connection_zernike_to_monomials(2, 2, 6)
+    np.testing.assert_array_equal(L_vals, [2, 4, 6])
+    np.testing.assert_allclose(w, [1, -3, 6])
+
+    # l=2, m=0 (even): weights 2, -6, 12, ...  (matches -(-1)^k * k(k+1) pattern)
+    L_vals, w = general_connection_zernike_to_monomials(2, 0, 6)
+    np.testing.assert_array_equal(L_vals, [2, 4, 6])
+    np.testing.assert_allclose(w, [2, -6, 12])
+
+    # negative m should give same weights as positive m (formula uses |m|)
+    _, w_pos = general_connection_zernike_to_monomials(1, 1, 5)
+    _, w_neg = general_connection_zernike_to_monomials(1, -1, 5)
+    np.testing.assert_allclose(w_pos, w_neg)

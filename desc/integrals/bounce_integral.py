@@ -207,7 +207,8 @@ class Bounce2D(Bounce):
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline`` option is 100.
+        A reference value for the ``spline`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -630,7 +631,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def compute_theta(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,
@@ -649,7 +650,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def angle(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,

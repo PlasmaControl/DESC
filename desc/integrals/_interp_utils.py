@@ -261,7 +261,7 @@ _root_companion = jnp.vectorize(
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
+@partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
     k=0.0,

@@ -163,9 +163,9 @@ doc_bounce = """
         A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         If the option ``spline`` is ``True``, the bounce points are found with
-        𝒪(ε¹²) error where ε = Y_B⁻¹. In this case, the final error will be of order
-        𝒪(ε¹⁸) in bounce integrals with (v_∥)¹ and
-        𝒪(ε⁶)  in bounce integrals with (v_∥)⁻¹.
+        𝒪(Y_B⁻¹²) error. In this case, the final error will be of order
+        𝒪(Y_B⁻¹⁸) in bounce integrals with (v_∥)¹ and
+        𝒪(Y_B⁻⁶)  in bounce integrals with (v_∥)⁻¹.
 
         If the option ``spline`` is ``False``, the bounce points are found such
         that the bounce integrals have exponential accuracy in this parameter.

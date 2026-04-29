@@ -751,7 +751,7 @@ class Bounce2D(_Bounce):
         points=None,
         *,
         num_well=None,
-        nufft_eps=None,
+        nufft_eps=-1.0,
         loop=False,
         quad=None,
         check=False,
@@ -822,7 +822,8 @@ class Bounce2D(_Bounce):
             and pitch value.
 
         """
-        nufft_eps = setdefault(nufft_eps, self._nufft_eps)
+        if nufft_eps < 0:
+            nufft_eps = self._nufft_eps
         x, w = setdefault(quad, self._quad)
 
         if not isinstance(integrand, (list, tuple)):
@@ -934,7 +935,7 @@ class Bounce2D(_Bounce):
         data["zeta"] = zeta
         return data
 
-    def interp_to_argmin(self, f, points, *, nufft_eps=None, **kwargs):
+    def interp_to_argmin(self, f, points, *, nufft_eps=-1.0, **kwargs):
         """Interpolate ``f`` to the deepest point in magnetic well w.
 
         Interpolate f to the argmin of the magnetic field
@@ -969,7 +970,8 @@ class Bounce2D(_Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        nufft_eps = setdefault(nufft_eps, self._nufft_eps)
+        if nufft_eps < 0:
+            nufft_eps = self._nufft_eps
         f = _fourier_if_real(f)
 
         num_mins = kwargs.get("num_mins", -1)
@@ -1879,7 +1881,7 @@ class Options(NamedTuple):
         *,
         alpha=None,
         loop=False,
-        nufft_eps=None,
+        nufft_eps=-1.0,
         num_field_periods=20,
         num_pitch=None,
         num_quad=32,
@@ -1910,10 +1912,10 @@ class Options(NamedTuple):
         )
 
         if eta == 1:
-            nufft_eps = setdefault(nufft_eps, 1e-6)
+            nufft_eps = 1e-6 if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 51)
         else:
-            nufft_eps = setdefault(nufft_eps, 1e-7)
+            nufft_eps = 1e-7 if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 65)
         nufft_eps = float(nufft_eps)
 

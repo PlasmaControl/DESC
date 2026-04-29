@@ -265,7 +265,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         angle,
         grid,
         surf_batch_size=1,
-        sparse=False,
+        sparse=False,  # don't know of any applications that differentiate anyway
     )
     return data
 

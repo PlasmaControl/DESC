@@ -208,8 +208,6 @@ class Bounce2D(_Bounce):
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
         Determines the flux surfaces to compute on and resolution of FFTs.
-        The ζ coordinates (the unique values prior to taking the tensor-product)
-        must be strictly increasing.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce2D.required_names``.
@@ -221,14 +219,15 @@ class Bounce2D(_Bounce):
         Angle returned by ``Bounce2D.angle``.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        If the option ``spline`` is ``True``, the bounce points are found with
-        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with exponential accuracy in this
-        parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
-        An error of ε in a bounce point manifests
-        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
-        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        𝒪(ε¹²) error where ε = Y_B⁻¹. In this case, the final error will be of order
+        𝒪(ε¹⁸) in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁶)  in bounce integrals with (v_∥)⁻¹.
+
+        If the option ``spline`` is ``False``, the bounce points are found such
+        that the bounce integrals have exponential accuracy in this parameter.
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
@@ -436,6 +435,8 @@ class Bounce2D(_Bounce):
         ----------
         grid : Grid
             Tensor-product grid in (ρ, θ, ζ).
+            The ζ coordinates (the unique values prior to taking the tensor-product)
+            must be strictly increasing.
         f : jnp.ndarray
             Data evaluated on grid.
 
@@ -750,7 +751,7 @@ class Bounce2D(_Bounce):
         points=None,
         *,
         num_well=None,
-        nufft_eps=1e-6,
+        nufft_eps=None,
         loop=False,
         quad=None,
         check=False,
@@ -821,6 +822,7 @@ class Bounce2D(_Bounce):
             and pitch value.
 
         """
+        nufft_eps = setdefault(nufft_eps, self._nufft_eps)
         x, w = setdefault(quad, self._quad)
 
         if not isinstance(integrand, (list, tuple)):
@@ -1292,9 +1294,8 @@ class Bounce1D(_Bounce):
     ----------
     grid : Grid
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
-        The ζ coordinates (the unique values prior to taking the tensor-product)
-        must be strictly increasing and preferably uniformly spaced. These are used
-        as knots to construct splines.
+        The ζ coordinates are preferably uniformly spaced as they are the
+        knots for the spline interpolation.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce1D.required_names``.
@@ -1442,6 +1443,8 @@ class Bounce1D(_Bounce):
         ----------
         grid : Grid
             Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
+            The ζ coordinates (the unique values prior to taking the tensor-product)
+            must be strictly increasing.
         f : jnp.ndarray
             Data evaluated on grid.
 
@@ -1760,14 +1763,15 @@ class Options(NamedTuple):
             """,
         "Y_B": """int :
             Desired resolution for algorithm to compute bounce points.
-            If the option ``spline`` is ``True``, the bounce points are found with
-            12th order accuracy in this parameter. If the option ``spline`` is
-            ``False``, then the bounce points are found with exponential accuracy in
-            this parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+            A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
-            An error of ε in a bounce point manifests
-            𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
-            𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+            If the option ``spline`` is ``True``, the bounce points are found with
+            𝒪(ε¹²) error where ε = Y_B⁻¹. In this case, the final error will be of order
+            𝒪(ε¹⁸) in bounce integrals with (v_∥)¹ and
+            𝒪(ε⁶)  in bounce integrals with (v_∥)⁻¹.
+
+            If the option ``spline`` is ``False``, the bounce points are found such
+            that the bounce integrals have exponential accuracy in this parameter.
             """,
         "alpha": """jnp.ndarray :
             Shape (num alpha, ).

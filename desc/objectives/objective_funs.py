@@ -160,14 +160,15 @@ doc_bounce = """
         Default is 32.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        If the option ``spline`` is ``True``, the bounce points are found with
-        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with exponential accuracy in this parameter.
         A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
-        An error of ε in a bounce point manifests
-        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
-        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        𝒪(ε¹²) error where ε = Y_B⁻¹. In this case, the final error will be of order
+        𝒪(ε¹⁸) in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁶)  in bounce integrals with (v_∥)⁻¹.
+
+        If the option ``spline`` is ``False``, the bounce points are found such
+        that the bounce integrals have exponential accuracy in this parameter.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.

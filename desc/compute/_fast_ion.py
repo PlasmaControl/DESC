@@ -158,16 +158,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
-                nufft_eps=opts.nufft_eps,
             )
             gamma_c_pi_over_2 = jnp.arctan(
                 safediv(
                     radial_drift,
                     poloidal_drift
                     * bounce.interp_to_argmin(
-                        data["|grad(rho)|*|e_alpha|r,p|"],
-                        points,
-                        nufft_eps=opts.nufft_eps,
+                        data["|grad(rho)|*|e_alpha|r,p|"], points
                     ),
                 )
             )
@@ -251,21 +248,24 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
-            nufft_eps=opts.nufft_eps,
             loop=opts.loop,
         )
         return (2 / jnp.pi) * jnp.arctan(
             safediv(
                 radial_drift,
                 poloidal_drift
-                * bounce.interp_to_argmin(
-                    data["|grad(rho)|*|e_alpha|r,p|"], points, nufft_eps=opts.nufft_eps
-                ),
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         ).sum(-1)
 
     data["gamma_c"] = Bounce2D.batch(
-        gamma_c0, _gamma_c_data(data), data, angle, grid, 1, False
+        gamma_c0,
+        _gamma_c_data(data),
+        data,
+        angle,
+        grid,
+        surf_batch_size=1,
+        sparse=False,
     )
     return data
 
@@ -329,7 +329,6 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],
                 num_well=opts.num_well,
-                nufft_eps=opts.nufft_eps,
             )
             gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
             return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)

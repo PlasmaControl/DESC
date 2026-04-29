@@ -934,7 +934,7 @@ class Bounce2D(_Bounce):
         data["zeta"] = zeta
         return data
 
-    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
+    def interp_to_argmin(self, f, points, *, nufft_eps=None, **kwargs):
         """Interpolate ``f`` to the deepest point in magnetic well w.
 
         Interpolate f to the argmin of the magnetic field
@@ -969,6 +969,7 @@ class Bounce2D(_Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
+        nufft_eps = setdefault(nufft_eps, self._nufft_eps)
         f = _fourier_if_real(f)
 
         num_mins = kwargs.get("num_mins", -1)

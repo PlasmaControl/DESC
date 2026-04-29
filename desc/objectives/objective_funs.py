@@ -161,8 +161,8 @@ doc_bounce = """
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         If the option ``spline`` is ``True``, the bounce points are found with
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
+        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with exponential accuracy in this parameter.
         A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
@@ -171,15 +171,17 @@ doc_bounce = """
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
-        Default is single field line. To compute a surface average
-        on a rational surface, it is necessary to average over multiple
-        field lines until the surface is covered sufficiently.
+        Default is single field line.
+        On irrational magnetic surfaces, it is sufficient to integrate along a
+        single field line. On a rational or near-rational surface in
+        non-axisymmetric configurations, it is necessary to integrate along
+        multiple field lines until the surface is covered sufficiently.
     num_field_periods : int
         Number of field periods to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
+        In axisymmetric configurations, integration along the field line for a
+        single poloidal transit between two global maxima of B is sufficient for
+        convergence. For a 3D configuration, the magnetic surface should be covered
+        sufficiently.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``-1`` will detect all wells but due to current limitations in

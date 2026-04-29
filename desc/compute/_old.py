@@ -6,18 +6,9 @@ They are kept for verification and correctness testing.
 
 from functools import partial
 
-from orthax.legendre import leggauss
-
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D, Options
-from ..integrals.quad_utils import (
-    automorphism_sin,
-    chebgauss2,
-    get_quadrature,
-    grad_automorphism_sin,
-    simpson2,
-)
 from ..utils import safediv
 from ._fast_ion import (
     _gamma_c_data,
@@ -75,19 +66,14 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    num_well = kwargs.get("num_well", None)
-    pitch_quad = simpson2(kwargs.get("num_pitch", 51))
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
-    )
+    opts = Options.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad)
-        I_1, I_2 = bounce.integrate(
+        I_1, I_2 = Bounce1D(grid, data, opts.quad).integrate(
             [_dI_1, _dI_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
         )
         return jnp.sum(
@@ -102,8 +88,9 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
         data,
         grid,
-        surf_batch_size,
+        opts.surf_batch_size,
     )
+    assert out.ndim == 1
     data["old effective ripple 3/2"] = (
         (B0 / data["<|grad(rho)|>"]) ** 2
         * scalar
@@ -199,23 +186,14 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    pitch_quad = simpson2(kwargs.get("num_pitch", 65))
-    num_well = kwargs.get("num_well", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
+    opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad)
+        bounce = Bounce1D(grid, data, opts.quad)
         points = bounce.points(pitch_inv, num_well)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
             [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
@@ -224,8 +202,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(
+        gamma_c_pi_over_2 = jnp.arctan(
             safediv(
                 radial_drift,
                 poloidal_drift
@@ -233,11 +210,12 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             )
         )
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2) * weight / pitch_inv**2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
-    out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, surf_batch_size)
+    out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, opts.surf_batch_size)
+    assert out.ndim == 1
     data["old Gamma_c"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
@@ -275,26 +253,11 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
         https://doi.org/10.1088/1741-4326/ac2994.
 
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    num_well = kwargs.get("num_well", None)
-    pitch_quad = simpson2(kwargs.get("num_pitch", 65))
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
+    opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def _poloidal_drift_secular(data, B, pitch):
         return safediv(
@@ -304,20 +267,18 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
 
     def Gamma_c(data):
         pitch_inv, weight = Bounce1D.pitch_quad(
-            data["min_tz |B|"], data["max_tz |B|"], pitch_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
-        bounce = Bounce1D(grid, data, quad)
-        v_tau, radial_drift, poloidal_drift = bounce.integrate(
+        v_tau, radial_drift, poloidal_drift = Bounce1D(grid, data, opts.quad).integrate(
             [_v_tau, _radial_drift_2, _poloidal_drift_secular],
             pitch_inv,
             data,
             ["cvdrift0", "gbdrift"],
             num_well=num_well,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+        gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2) * weight / pitch_inv**2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
@@ -326,8 +287,9 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
         data,
         grid,
-        surf_batch_size,
+        opts.surf_batch_size,
     )
+    assert out.ndim == 1
     data["old Gamma_c Velasco"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )

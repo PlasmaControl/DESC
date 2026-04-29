@@ -29,7 +29,8 @@ from desc.batching import batch_map
 from desc.derivatives import sparse_pullback
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
-    _sentinel,
+    _bounce_points,
+    _halley,
     argmin,
     bounce_points,
     broadcast_for_bounce,
@@ -40,8 +41,8 @@ from desc.integrals._bounce_utils import (
     get_mins,
     mmt_for_bounce,
     move,
+    no_nufft,
     plot_ppoly,
-    regular_points,
     set_default_plot_kwargs,
     theta_on_fieldlines,
     truncate_rule,
@@ -221,9 +222,9 @@ class Bounce2D(_Bounce):
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
         If the option ``spline`` is ``True``, the bounce points are found with
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
-        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+        12th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with exponential accuracy in this
+        parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -231,15 +232,17 @@ class Bounce2D(_Bounce):
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels.
-        Default is single field line. To compute a surface average
-        on a rational surface, it is necessary to average over multiple
-        field lines until the surface is covered sufficiently.
+        Default is single field line.
+        On irrational magnetic surfaces, it is sufficient to integrate along a
+        single field line. On a rational or near-rational surface in
+        non-axisymmetric configurations, it is necessary to integrate along
+        multiple field lines until the surface is covered sufficiently.
     num_field_periods : int
         Number of field periods to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
+        In axisymmetric configurations, integration along the field line for a
+        single poloidal transit between two global maxima of B is sufficient for
+        convergence. For a 3D configuration, the magnetic surface should be covered
+        sufficiently.
     quad : tuple[jnp.ndarray]
         Quadrature points xₖ and weights wₖ for the approximation of an
         integral ∫₋₁¹ g(x) dx = ∑ₖ wₖ g(xₖ). Default is 32 points.
@@ -329,9 +332,7 @@ class Bounce2D(_Bounce):
 
         angle = parse_argname_change(angle, kwargs, "theta", "angle")
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
-        if alpha is None:
-            alpha = jnp.zeros(1)
-        iota, alpha = jnp.atleast_1d(iota, alpha)
+        iota, alpha = jnp.atleast_1d(iota, jnp.zeros(1) if alpha is None else alpha)
         self._theta = theta_on_fieldlines(
             angle, iota, alpha, num_field_periods, grid.NFP
         )
@@ -653,7 +654,24 @@ class Bounce2D(_Bounce):
             )
 
         if isinstance(self._B, PiecewiseChebyshevSeries):
-            # Skip Newton update since these points are exponentially accurate.
+            # We skip Halley stepping since we use this Chebyshev series of |B|
+            # to compute v_∥ rather than the original Fourier series. We do this
+            # because we found the points exactly for the Chebyshev series.
+            # Since the Chebyshev series is exponentially accurate, we retain
+            # exponential accuracy in the bounce integrals when we compute v_∥ with it;
+            # in particular, this holds even if our choice of resolution for the
+            # Chebyshev series does not fully reconstruct the true function.
+            # If we instead computed v_∥ from the original Fourier series, we would
+            # need to make sure that the roots of the Chebyshev series match the
+            # Fourier series', which is akin to a stiffness condition between Y_B
+            # and the grid resolution for the FFTs in (θ, ζ).
+            # Accurate roots needed to also increase the correlation in the
+            # discretization error in a neighborhood of any given point in the
+            # optimization landscape. See supplement in publications/unalmis2025.
+            # Experimentally, we find that the difference between the automatic
+            # derivative and a 4 point finite difference stencil at the optimal step
+            # size of 10⁻⁸ is reduced from 10³ to 10⁻⁶ for Γ_c
+            # (which has the singular weight 1/v_∥).
             z1, z2 = self._B.intersect1d(
                 self._swap_axes(pitch_inv), num_intersect=num_well, eps=_eps
             )
@@ -661,13 +679,9 @@ class Bounce2D(_Bounce):
             z2 = move(z2)
             return z1, z2
 
-        pitch_inv = broadcast_for_bounce(pitch_inv)
-        if self._nufft_eps < 1e-14:
-            # FIXME: Newton update has only been implemented for nuffts; contributions
-            # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
-            return bounce_points(pitch_inv, self._c["knots"], self._B, num_well)
-
-        return regular_points(self, pitch_inv, num_well)
+        # We use the original Fourier series |B| to compute v_∥, so a Halley step
+        # is done using the roots of the spline as the initial guess.
+        return bounce_points(self, broadcast_for_bounce(pitch_inv), num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -699,14 +713,25 @@ class Bounce2D(_Bounce):
         """
         kwargs = set_default_plot_kwargs(kwargs)
         if isinstance(self._B, PiecewiseChebyshevSeries):
-            z1, z2 = points
             return self._B.check_intersect1d(
-                move(z1, False),
-                move(z2, False),
+                move(points[0], False),
+                move(points[1], False),
                 self._swap_axes(pitch_inv),
                 plot=plot,
                 **kwargs,
             )
+
+        pitch_inv = broadcast_for_bounce(pitch_inv)
+
+        print("Error statistics for the given bounce points:")
+        _halley(
+            self,
+            pitch_inv,
+            points,
+            mask=points[0] < points[1],
+            nufft_eps=0.0,
+            diagnostic=2,
+        )
         return check_bounce_points(
             *points,
             pitch_inv,
@@ -818,7 +843,7 @@ class Bounce2D(_Bounce):
         elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, :, None, None]
 
-        if nufft_eps < 1e-14:
+        if no_nufft(nufft_eps):
             data = self._nummt(x, *points, data, loop)
         else:
             data = self._nufft(x, *points, data, loop, nufft_eps, pitch_inv)
@@ -847,57 +872,54 @@ class Bounce2D(_Bounce):
         return result[0] if len(result) == 1 else result
 
     def _nufft(self, x, z1, z2, data, loop, eps, pitch_inv):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
+
+        keys = list(data.keys())
+        keys.append("B^zeta")
+        c = list(data.values())
+        c.append(self._c["B^zeta"])
+        if not (is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries)):
+            c.append(self._c["|B|"])
+            keys.append("|B|")
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
-        t = flatten_mat(self._theta.eval1d(z, loop=loop))
+        t = self._theta.eval1d(z, loop=loop)
+        if is_chebyshev:
+            B = self._B.eval1d(z, loop=loop).reshape(shape)
+        t = flatten_mat(t)
         z = flatten_mat(z)
         # t and z have shape (num rho surfaces, num points on each surface)
         #            or just (                  num points on each surface).
-
         if _JF_BUG:
             mask = fill_value = None
         else:
             mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
             fill_value = 0.5 * jnp.min(pitch_inv)
-
         c = nufft2d2r(
             z,
             t,
-            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
+            jnp.concatenate(c, -3),
             (0, 2 * jnp.pi / self._NFP),
             vec=True,
             eps=eps,
             mask=mask,
             fill_value=fill_value,
         )
-        c = (
-            c.reshape(len(data) + 2, *shape)
-            if c.ndim == 2
-            # reshape before swap to avoid memory copy
-            else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
-        )
+        c = c.swapaxes(0, -2).reshape((-1,) + shape)
 
-        data = dict(zip([*data.keys(), "B^zeta", "|B|"], c))
+        data = dict(zip(keys, c))
+        if is_chebyshev:
+            data["|B|"] = B
         data["zeta"] = z.reshape(shape)
         return data
 
     def _nummt(self, x, z1, z2, data, loop):
-        shape = (*z1.shape, x.size)
+        shape = z1.shape + (x.size,)
 
         zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
         z = flatten_mat(zeta, 3)
         t = self._theta.eval1d(z, loop=loop).reshape(*shape, 1)
-
-        if isinstance(self._B, PiecewiseChebyshevSeries):
-            # Using the same |B| that gave bounce points increases correlation
-            # in discretization error in an open neighborhood around the
-            # current point in the optimization landscape, and hence removes
-            # noise from optimization derivatives. For example, the difference
-            # between the auto derivative and a 4 point finite difference
-            # stencil at the optimal step size is reduced from 10³ to 10⁻⁶ for
-            # Γ_c (which has the singular weight 1/v_∥).
-            # Also uses less memory due to the dimension reduction.
+        if is_chebyshev := isinstance(self._B, PiecewiseChebyshevSeries):
             B = self._B.eval1d(z, loop=loop).reshape(shape)
 
         z = zeta[..., None] if self._num_z > 1 else jnp.zeros((1,) * (zeta.ndim + 1))
@@ -906,12 +928,8 @@ class Bounce2D(_Bounce):
 
         data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
         data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
-        if isinstance(self._B, PiecewiseChebyshevSeries):
-            data["|B|"] = B
-        else:
-            data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        data["|B|"] = B if is_chebyshev else mmt_for_bounce(z, t, self._c["|B|"])
         data["zeta"] = zeta
-
         return data
 
     def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, **kwargs):
@@ -966,7 +984,7 @@ class Bounce2D(_Bounce):
         )
         t = self._theta.eval1d(mins)
 
-        if nufft_eps < 1e-14:
+        if no_nufft(nufft_eps):
             f = irfft2_mmt_pos(
                 mins,
                 t,
@@ -1097,7 +1115,7 @@ class Bounce2D(_Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._c["knots"], B)
+            kwargs["z1"], kwargs["z2"] = _bounce_points(pitch_inv, self._c["knots"], B)
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1276,10 +1294,7 @@ class Bounce1D(_Bounce):
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
-        as knots to construct splines. A reference knot density is 100 knots per
-        toroidal transit. Also, the minimum value of the zeta coordinate must be
-        greater than the sentinel value of ``-1e5``. If this requirement is limiting
-        make a GitHub issue requesting to lower this value.
+        as knots to construct splines.
     data : dict[str, jnp.ndarray]
         Data evaluated on ``grid``.
         Must include names in ``Bounce1D.required_names``.
@@ -1293,6 +1308,9 @@ class Bounce1D(_Bounce):
         automorphism will affect the performance of the quadrature.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
+    sentinel : float
+        A number which is less than all ζ coordinates in the grid.
+        Default is ``-1e5``.
 
     """
 
@@ -1301,8 +1319,9 @@ class Bounce1D(_Bounce):
 
     _quad: tuple[jax.Array]
     _data: dict[str, jax.Array]
-    _zeta: jax.Array
+    _knots: jax.Array
     _B: jax.Array
+    _sentinel: float = eqx.field(static=True)
 
     def __init__(
         self,
@@ -1312,6 +1331,7 @@ class Bounce1D(_Bounce):
         *,
         automorphism=None,
         check=False,
+        sentinel=-1e5,
         **kwargs,
     ):
         """Returns an object to compute bounce integrals."""
@@ -1340,10 +1360,14 @@ class Bounce1D(_Bounce):
             for name in self._data:
                 self._data[name] = Bounce1D.reshape(grid, self._data[name])
 
-        self._zeta = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
+        self._knots = jnp.asarray(grid.compress(grid.nodes[:, 2], surface_label="zeta"))
+        self._sentinel = sentinel
+        if check:
+            assert self._knots.min() > sentinel
+
         self._B = jnp.moveaxis(
             CubicHermiteSpline(
-                x=self._zeta,
+                x=self._knots,
                 y=self._data["|B|"],
                 dydx=self._data["|B|_z|r,a"],
                 axis=-1,
@@ -1469,8 +1493,12 @@ class Bounce1D(_Bounce):
             line and pitch, is padded with zero.
 
         """
-        return bounce_points(
-            broadcast_for_bounce(pitch_inv), self._zeta, self._B, num_well
+        return _bounce_points(
+            broadcast_for_bounce(pitch_inv),
+            self._knots,
+            self._B,
+            num_well,
+            sentinel=self._sentinel,
         )
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
@@ -1501,7 +1529,13 @@ class Bounce1D(_Bounce):
 
         """
         return check_bounce_points(
-            *points, pitch_inv, self._zeta, self._B, plot=plot, **kwargs
+            *points,
+            pitch_inv,
+            self._knots,
+            self._B,
+            plot=plot,
+            sentinel=self._sentinel,
+            **kwargs,
         )
 
     def integrate(
@@ -1589,24 +1623,24 @@ class Bounce1D(_Bounce):
 
         pitch = broadcast_for_bounce(1 / pitch_inv)[..., None, None]
 
-        shape = (*z1.shape, x.size)  # (..., num pitch, num well, num quad)
+        shape = z1.shape + (x.size,)  # (..., num pitch, num well, num quad)
 
         z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
 
         b_sup_z = interp1d_Hermite_vec(
             z,
-            self._zeta,
+            self._knots,
             self._data["|b^zeta|"],
             self._data["|b^zeta|_z|r,a"],
         ).reshape(shape)
         B = interp1d_Hermite_vec(
             z,
-            self._zeta,
+            self._knots,
             self._data["|B|"],
             self._data["|B|_z|r,a"],
         ).reshape(shape)
         data = {
-            k: interp1d_vec(z, self._zeta, v, method=method).reshape(shape)
+            k: interp1d_vec(z, self._knots, v, method=method).reshape(shape)
             for k, v in data.items()
         }
 
@@ -1665,9 +1699,9 @@ class Bounce1D(_Bounce):
         # We set fill value to sentinel since all bounce points are at
         # ζ > sentinel (as documented in Bounce1D docstring); and
         # therefore, junk values in B_mins cannot be selected in argmin.
-        mins, B_mins = get_mins(self._zeta, self._B, fill_value=_sentinel)
+        mins, B_mins = get_mins(self._knots, self._B, fill_value=self._sentinel)
         return argmin(
-            *points, interp1d_vec(mins, self._zeta, f, method=method), mins, B_mins
+            *points, interp1d_vec(mins, self._knots, f, method=method), mins, B_mins
         )
 
     def plot(self, l, m, pitch_inv=None, **kwargs):
@@ -1691,6 +1725,8 @@ class Bounce1D(_Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
+        kwargs = set_default_plot_kwargs(kwargs, l, m)
+
         B = self._B
         if B.ndim == 4:
             B = B[l]
@@ -1701,12 +1737,11 @@ class Bounce1D(_Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._zeta, B)
+            kwargs["z1"], kwargs["z2"] = _bounce_points(
+                pitch_inv, self._knots, B, sentinel=self._sentinel
+            )
             kwargs["k"] = pitch_inv
-        fig, ax = plot_ppoly(
-            PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)
-        )
-        return fig, ax
+        return plot_ppoly(PPoly(B.T, self._knots), **kwargs)
 
 
 class Options(NamedTuple):
@@ -1726,9 +1761,9 @@ class Options(NamedTuple):
         "Y_B": """int :
             Desired resolution for algorithm to compute bounce points.
             If the option ``spline`` is ``True``, the bounce points are found with
-            8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-            then the bounce points are found with spectral accuracy in this parameter.
-            A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
+            12th order accuracy in this parameter. If the option ``spline`` is
+            ``False``, then the bounce points are found with exponential accuracy in
+            this parameter. A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
             An error of ε in a bounce point manifests
             𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -1737,16 +1772,18 @@ class Options(NamedTuple):
         "alpha": """jnp.ndarray :
             Shape (num alpha, ).
             Starting field line poloidal labels.
-            Default is single field line. To compute a surface average
-            on a rational surface, it is necessary to average over multiple
-            field lines until the surface is covered sufficiently.
+            Default is single field line.
+            On irrational magnetic surfaces, it is sufficient to integrate along a
+            single field line. On a rational or near-rational surface in
+            non-axisymmetric configurations, it is necessary to integrate along
+            multiple field lines until the surface is covered sufficiently.
             """,
         "num_field_periods": """int :
             Number of field periods to follow field line.
-            In an axisymmetric device, field line integration over a single poloidal
-            transit is sufficient to capture a surface average. For a 3D
-            configuration, more transits will approximate surface averages on an
-            irrational magnetic surface better, with diminishing returns.
+            In axisymmetric configurations, integration along the field line for a
+            single poloidal transit between two global maxima of B is sufficient for
+            convergence. For a 3D configuration, the magnetic surface should be covered
+            sufficiently.
             """,
         "num_well": """int :
             Maximum number of wells to detect for each pitch and field line.
@@ -1837,9 +1874,9 @@ class Options(NamedTuple):
         *,
         alpha=None,
         loop=False,
-        nufft_eps=1e-6,
+        nufft_eps=None,
         num_field_periods=20,
-        num_pitch=51,
+        num_pitch=None,
         num_quad=32,
         num_well=None,
         pitch_batch_size=None,
@@ -1867,10 +1904,13 @@ class Options(NamedTuple):
             msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
         )
 
+        if eta == 1:
+            nufft_eps = setdefault(nufft_eps, 1e-6)
+            num_pitch = setdefault(num_pitch, 51)
+        else:
+            nufft_eps = setdefault(nufft_eps, 1e-7)
+            num_pitch = setdefault(num_pitch, 65)
         nufft_eps = float(nufft_eps)
-        if eta != 1:
-            nufft_eps = min(nufft_eps, 1e-7)
-            num_pitch = max(num_pitch, 65)
 
         if Y_B is None:
             Y_B = Options._guess_Y_B(grid)

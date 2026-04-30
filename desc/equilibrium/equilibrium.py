@@ -73,6 +73,7 @@ _kinetic_profile_names = [
     "_electron_temperature",
     "_electron_density",
     "_ion_temperature",
+    "_ion_density",
     "_atomic_number",
 ]
 
@@ -1939,6 +1940,16 @@ class Equilibrium(IOAble, Optimizable):
         self._ion_density = parse_profile(new, "ion density")
         self._ion_density = ensure_consistent_profile_eq_resolution(
             self._ion_density, self, name="ion density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter

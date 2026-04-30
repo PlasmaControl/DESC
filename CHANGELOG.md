@@ -9,7 +9,6 @@ New Features
 - Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
-- Adds ``print_summary`` key to ``options`` dictionary of the optimizers. If ``options["print_summary"]=False``, the objectives' before/after values won't be printed at the end of the optimization, and the ``result`` dictionary returned by the optimizer won't have ``Objective values`` key in it. For bounded objectives and scalar optimizers, setting ``options["print_summary"]=False`` can save users from additional objective evaluations.
 
 Bug Fixes
 

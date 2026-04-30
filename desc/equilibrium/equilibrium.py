@@ -382,8 +382,7 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.electron_density = parse_profile(electron_density, "electron density")
         self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
-        if ion_density is not None:
-            self.ion_density = parse_profile(ion_density, "ion density")
+        self.ion_density = parse_profile(ion_density, "ion density")
         self.atomic_number = parse_profile(atomic_number, "atomic number")
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")

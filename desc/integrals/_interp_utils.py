@@ -319,33 +319,51 @@ def polyroot_vec(
     """
     if eps < 0:
         eps = _root_eps()
-
+    get_only_real_roots = not (a_min is None and a_max is None)
     degree = c.shape[-1] - 1
     distinct = distinct and (degree > 1)
 
-    # The analytical formulae in numerical.recipes/book.html, page 228
-    # are not backwards stable. They can generate fake root with O(1) residual,
-    # so we use eigenvalue solve on local power basis companion matrix.
-    r = _root_companion(_subtract_last(c, k))
+    if degree <= 3 and get_only_real_roots and jnp.isrealobj(c) and jnp.isrealobj(k):
+        backward_stable = degree < 3
 
-    if get_only_real_roots := not (a_min is None and a_max is None):
+        c = jnp.moveaxis(c, -1, 0)
+        r = {1: _root_linear, 2: _root_quadratic, 3: _root_cubic}[degree](
+            *c[:-1], c[-1] - k
+        )
+        r = jnp.moveaxis(r, 0, -1)
+        c = jnp.moveaxis(c, 0, -1)
+    else:
+        backward_stable = True
+
+        r = _root_companion(_subtract_last(c, k))
         # If the complex part is too big, then these would not be real roots of
         # a nearby perturbed problem, so we set to nan so that they are not
         # classified as candidates after the correction step.
-        r = jnp.where(jnp.abs(r.imag) <= eps**0.5, r.real, jnp.nan)
+        if get_only_real_roots:
+            r = jnp.where(
+                jnp.abs(r.imag) <= eps**0.5,
+                r.real,
+                jnp.nan,
+            )
 
-    # Schröder first kind correction maps the roots of the perturbed problem
-    # back to the roots of the original problem.
-    k = jnp.expand_dims(k, -1)
-    p0 = poly_val(x=r, c=c[..., None, :]) - k
-    p1 = poly_val(x=r, c=c[..., None, :], der=True)
-    p2 = poly_val(x=r, c=c[..., None, :-1] * jnp.arange(degree, 0, -1), der=True)
-    candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
-    r = jnp.where(
-        jnp.abs(poly_val(x=candidate, c=c[..., None, :]) - k) < jnp.abs(p0),
-        candidate,
-        r,
-    )
+    # Schröder first kind correction to push the roots of the perturbed problem
+    # toward roots of the original problem.
+    if degree > 1:
+        k = jnp.expand_dims(k, -1)
+        c = c[..., None, :]
+        p0 = poly_val(x=r, c=c) - k
+        p1 = poly_val(x=r, c=c, der=True)
+        p2 = poly_val(x=r, c=c[..., :-1] * jnp.arange(degree, 0, -1), der=True)
+        candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
+        p0 = jnp.abs(p0)  # residual
+        p0_new = jnp.abs(poly_val(x=candidate, c=c) - k)
+        r = jnp.where(p0_new < p0, candidate, r)
+        if not backward_stable:
+            r = jnp.where(
+                jnp.minimum(p0_new, p0) <= eps**0.5,
+                r,
+                jnp.nan,
+            )
 
     if distinct:
         # Then we need to ensure the return roots have a consistent multiplicity,
@@ -359,7 +377,7 @@ def polyroot_vec(
         # algorithms which assume continuity (intermediate value theorem) of the
         # underlying function will be misled.
         r = jnp.where(
-            jnp.abs(poly_val(x=r, c=c[..., None, :], der=True)) > eps,
+            jnp.abs(poly_val(x=r, c=c, der=True)) > eps,
             r,
             sentinel,
         )
@@ -367,7 +385,11 @@ def polyroot_vec(
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
-        r = jnp.where((a_min <= r) & (r <= a_max), r, sentinel)
+        r = jnp.where(
+            (a_min <= r) & (r <= a_max),
+            r,
+            sentinel,
+        )
 
     if sort or distinct:
         r = jnp.sort(r, stable=False)
@@ -413,6 +435,62 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
         (jnp.expand_dims(dk, -1) - poly_val(x=r, c=dc[..., None, :])) / dc_dr,
     )
     return r, dr
+
+
+def _irreducible(Q, R, b):
+    # Three irrational real roots.
+    theta = jnp.arccos(R / jnp.sqrt(Q**3))
+    return (
+        -2
+        * jnp.sqrt(Q)
+        * jnp.stack(
+            [
+                jnp.cos(theta / 3),
+                jnp.cos((theta + 2 * jnp.pi) / 3),
+                jnp.cos((theta - 2 * jnp.pi) / 3),
+            ]
+        )
+        - b / 3
+    )
+
+
+def _reducible(Q, R, b):
+    # One real and two complex roots.
+    A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
+    B = Q / A
+    r = ((A + B) - b / 3)[None]
+    r = jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (2, *r.shape[1:]))))
+    return r
+
+
+def _root_cubic(a, b, c, d):
+    """Return real cubic root assuming real coefficients.
+
+    Uses numerical.recipes/book.html, page 228, which is not backwards stable.
+    This can generate fake root with O(1) residual, so post-processing is needed.
+    Advantage is it is much more performant than eigenvalue solve, especially
+    when d is higher dimensional than a, b, c.
+    """
+    b = b / a
+    c = c / a
+    Q = (b**2 - 3 * c) / 9
+    R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
+    return jnp.where(R**2 < Q**3, _irreducible(jnp.abs(Q), R, b), _reducible(Q, R, b))
+
+
+def _root_quadratic(a, b, c):
+    """Return real quadratic root assuming real coefficients."""
+    # numerical.recipes/book.html, page 227
+    discriminant = b**2 - 4 * a * c
+    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
+    r1 = jnp.where(discriminant >= 0, q / a, jnp.nan)
+    r2 = jnp.where(discriminant >= 0, c / q, jnp.nan)
+    return jnp.stack([r1, r2])
+
+
+def _root_linear(a, b, sentinel):
+    """Return real linear root assuming real coefficients."""
+    return (-b / a)[None]
 
 
 # TODO: replace the inner loop in orthax with this

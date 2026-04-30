@@ -1550,36 +1550,30 @@ class _Objective(IOAble, ABC):
         out = {}
         has_f0 = f0se is not None or args0 is not None
 
-        if self.bounds is not None:
+        if self.bounds is not None or fse is None:
             # Bounds shift is not invertible, so compute unscaled from params
             f_unscaled = self.compute_unscaled(*args, **kwargs)
             f_shifted = self._shift(f_unscaled)
-            if has_f0:
-                errorif(
-                    args0 is None,
-                    ValueError,
-                    "args0 must be provided for bounded objectives to print values.",
-                )
-                f0_unscaled = self.compute_unscaled(*args0, **kwargs)
-                f0_shifted = self._shift(f0_unscaled)
-            else:
-                f0_unscaled = f_unscaled
-                f0_shifted = f_shifted
         else:
-            if fse is not None:
-                # Reverse scaling from pre-computed scaled error
-                # _scale(_shift(f_unscaled)) = fse
-                f_shifted = self._unscale(fse, **kwargs)
-                f_unscaled = self._unshift(f_shifted)
-            else:
-                f_unscaled = self.compute_unscaled(*args, **kwargs)
-                f_shifted = self._shift(f_unscaled)
-            if f0se is not None:
-                f0_shifted = self._unscale(f0se, **kwargs)
-                f0_unscaled = self._unshift(f0_shifted)
-            else:
-                f0_shifted = f_shifted
-                f0_unscaled = f_unscaled
+            # Reverse scaling from pre-computed scaled error
+            # _scale(_shift(f_unscaled)) = fse
+            f_shifted = self._unscale(fse, **kwargs)
+            f_unscaled = self._unshift(f_shifted)
+
+        if not has_f0:
+            f0_unscaled = f_unscaled
+            f0_shifted = f_shifted
+        elif self.bounds is not None or f0se is None:
+            errorif(
+                args0 is None,
+                ValueError,
+                "args0 must be provided if objective is bounded.",
+            )
+            f0_unscaled = self.compute_unscaled(*args0, **kwargs)
+            f0_shifted = self._shift(f0_unscaled)
+        else:
+            f0_shifted = self._unscale(f0se, **kwargs)
+            f0_unscaled = self._unshift(f0_shifted)
 
         if has_f0:
             print_value_fmt = (

@@ -1310,7 +1310,23 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-@functools.partial(jit, static_argnames=["op"])
+def jit_if_possible(func):
+    """Jit a function if use_jit."""
+    jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # first arg has to be ObjectiveFunction
+        obj = args[0]
+        if getattr(obj, "_use_jit", False):
+            return jitted_func(*args, **kwargs)
+        else:
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
+@jit_if_possible
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
@@ -1333,7 +1349,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     return vtf.T @ (sfi * (uf.T @ Fc))
 
 
-@functools.partial(jit, static_argnames=["op"])
+@jit_if_possible
 def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # Note: This function is not vectorized and takes the full set of tangents, and
     # returns a matrix.

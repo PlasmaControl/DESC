@@ -259,30 +259,6 @@ class TestPolyUtils:
                     err_msg=f"Eigenvalue branch of polyroot_vec failed at {i, *idx}.",
                 )
 
-        # Now test analytic formula branch, Ensure it filters distinct roots,
-        # and ensure zero coefficients don't bust computation due to singularities
-        # in analytic formulae which are not present in iterative eigenvalue scheme.
-        c = np.array(
-            [
-                [1, 0, 0, 0],
-                [0, 1, 0, 0],
-                [0, 0, 1, 0],
-                [0, 0, 0, 1],
-                [1, -1, -8, 12],
-                [1, -6, 11, -6],
-                [0, -6, 11, -2],
-            ]
-        )
-        r = polyroot_vec(c, sort=True, distinct=True)
-        for j in range(c.shape[0]):
-            root = r[j][~np.isnan(r[j])]
-            unique_root = np.unique(np.roots(c[j]))
-            assert root.size == unique_root.size
-            np.testing.assert_allclose(
-                root,
-                unique_root,
-                err_msg=f"Analytic branch of polyroot_vec failed at {j}.",
-            )
         c = np.array([0, 1, -1, -8, 12])
         r = polyroot_vec(c, sort=True, distinct=True)
         r = r[~np.isnan(r)]

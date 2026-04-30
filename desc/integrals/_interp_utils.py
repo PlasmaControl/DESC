@@ -257,18 +257,15 @@ def _subtract_last(c, k):
     )
 
 
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    return jnp.where(mask, sentinel, r)
-
-
 _root_companion = jnp.vectorize(
     partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
 )
-_eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
+
+
+def _root_eps():
+    # Safer to make this a callable since output depends on whether
+    # double precision is enabled before it is called.
+    return max(jnp.finfo(jnp.array(1.0).dtype).eps, 1e-11)
 
 
 @partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
@@ -279,7 +276,7 @@ def polyroot_vec(
     a_max=None,
     sort=False,
     sentinel=jnp.nan,
-    eps=_eps,
+    eps=-1.0,
     distinct=False,
 ):
     """Roots of polynomial with given coefficients.
@@ -320,44 +317,67 @@ def polyroot_vec(
         The roots of the polynomial, iterated over the last axis.
 
     """
-    get_only_real_roots = not (a_min is None and a_max is None)
-    num_coef = c.shape[-1]
-    distinct = distinct and num_coef > 2
-    func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
+    if eps < 0:
+        eps = _root_eps()
 
-    if (
-        num_coef in func
-        and get_only_real_roots
-        and jnp.isrealobj(c)
-        and jnp.isrealobj(k)
-    ):
-        # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts. Also consumes less memory.
-        c = jnp.moveaxis(c, -1, 0)
-        r = func[num_coef](*c[:-1], c[-1] - k, sentinel, eps, distinct)
-        if num_coef == 2:
-            r = r[jnp.newaxis]
-        r = jnp.moveaxis(r, 0, -1)
+    degree = c.shape[-1] - 1
+    distinct = distinct and (degree > 1)
 
-        # We already filtered distinct roots for quadratics.
-        distinct = distinct and num_coef > 3
-    else:
-        r = _root_companion(_subtract_last(c, k))
+    # The analytical formulae in numerical.recipes/book.html, page 228
+    # are not backwards stable. They can generate fake root with O(1) residual,
+    # so we use eigenvalue solve on local power basis companion matrix.
+    r = _root_companion(_subtract_last(c, k))
+
+    if get_only_real_roots := not (a_min is None and a_max is None):
+        # If the complex part is too big, then these would not be real roots of
+        # a nearby perturbed problem, so we set to nan so that they are not
+        # classified as candidates after the correction step.
+        r = jnp.where(jnp.abs(r.imag) <= eps**0.5, r.real, jnp.nan)
+
+    # Schröder first kind correction maps the roots of the perturbed problem
+    # back to the roots of the original problem.
+    k = jnp.expand_dims(k, -1)
+    p0 = poly_val(x=r, c=c[..., None, :]) - k
+    p1 = poly_val(x=r, c=c[..., None, :], der=True)
+    p2 = poly_val(x=r, c=c[..., None, :-1] * jnp.arange(degree, 0, -1), der=True)
+    candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
+    r = jnp.where(
+        jnp.abs(poly_val(x=candidate, c=c[..., None, :]) - k) < jnp.abs(p0),
+        candidate,
+        r,
+    )
+
+    if distinct:
+        # Then we need to ensure the return roots have a consistent multiplicity,
+        # so we discard roots within a few machine precision of extrema. This is
+        # mathematically justified as they could just as well have not been detected
+        # in the nearby perturbed problem. Application purpose is that,
+        # if we return only one root at a given extrema (e.g. if we only found one
+        # since the root of the perturbed problem was single multiplicity) and return
+        # multiple roots for another extrema (e.g. if we found 2 or 3 in the nearby
+        # perturbed problem which were merged by the correction step), then downstream
+        # algorithms which assume continuity (intermediate value theorem) of the
+        # underlying function will be misled.
+        r = jnp.where(
+            jnp.abs(poly_val(x=r, c=c[..., None, :], der=True)) > eps,
+            r,
+            sentinel,
+        )
 
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
-        r = jnp.where(
-            (jnp.abs(r.imag) <= eps) & (a_min <= r.real) & (r.real <= a_max),
-            r.real,
-            sentinel,
-        )
+        r = jnp.where((a_min <= r) & (r <= a_max), r, sentinel)
 
     if sort or distinct:
-        r = jnp.sort(r, axis=-1)
+        r = jnp.sort(r, stable=False)
     if distinct:
-        r = _filter_distinct(r, sentinel, eps)
-    assert r.shape[-1] == num_coef - 1
+        r = jnp.where(
+            jnp.isclose(jnp.diff(r, prepend=sentinel), 0.0, atol=eps),
+            sentinel,
+            r,
+        )
+    assert r.shape[-1] == degree
     return r
 
 
@@ -377,6 +397,8 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
     c, k, a_min, a_max = primals
     dc, dk, _, _ = tangents
 
+    if eps < 0:
+        eps = _root_eps()
     r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
 
     dc_dr = poly_val(x=r, c=c[..., None, :], der=True)
@@ -391,85 +413,6 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
         (jnp.expand_dims(dk, -1) - poly_val(x=r, c=dc[..., None, :])) / dc_dr,
     )
     return r, dr
-
-
-def _root_cubic(a, b, c, d, sentinel, eps, distinct):
-    """Return real cubic root assuming real coefficients."""
-    # numerical.recipes/book.html, page 228
-
-    def irreducible(Q, R, b):
-        # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(Q**3))
-        return (
-            -2
-            * jnp.sqrt(Q)
-            * jnp.stack(
-                [
-                    jnp.cos(theta / 3),
-                    jnp.cos((theta + 2 * jnp.pi) / 3),
-                    jnp.cos((theta - 2 * jnp.pi) / 3),
-                ]
-            )
-            - b / 3
-        )
-
-    def reducible(Q, R, b):
-        # One real and two complex roots.
-        A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
-        B = Q / A
-        r1 = (A + B) - b / 3
-        return _concat_sentinel(r1[jnp.newaxis], sentinel, num=2)
-
-    def root(b, c, d):
-        b = b / a
-        c = c / a
-        Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
-        return jnp.where(
-            R**2 < Q**3,
-            irreducible(jnp.abs(Q), R, b),
-            reducible(Q, R, b),
-        )
-
-    return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for double precision.
-        jnp.abs(a) <= eps,
-        _concat_sentinel(
-            _root_quadratic(b, c, d, sentinel, eps, distinct),
-            sentinel,
-        ),
-        root(b, c, d),
-    )
-
-
-def _root_quadratic(a, b, c, sentinel, eps, distinct):
-    """Return real quadratic root assuming real coefficients."""
-    # numerical.recipes/book.html, page 227
-
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(
-        discriminant < 0,
-        sentinel,
-        jnp.where(a == 0, _root_linear(b, c, sentinel, eps), q / a),
-    )
-    r2 = jnp.where(
-        # more robust to remove repeated roots with discriminant
-        (discriminant < 0) | (distinct & (discriminant <= eps)),
-        sentinel,
-        c / q,
-    )
-    return jnp.stack([r1, r2])
-
-
-def _root_linear(a, b, sentinel, eps, distinct=False):
-    """Return real linear root assuming real coefficients."""
-    return jnp.where((a == 0) & (jnp.abs(b) <= eps), 0.0, -b / a)
-
-
-def _concat_sentinel(r, sentinel, num=1):
-    """Concatenate ``sentinel`` ``num`` times to ``r`` on first axis."""
-    return jnp.concatenate((r, jnp.broadcast_to(sentinel, (num, *r.shape[1:]))))
 
 
 # TODO: replace the inner loop in orthax with this

@@ -453,6 +453,19 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+
+        use_jits = [obj._use_jit for obj in self.objectives]
+        if not all(use_jits):
+            warnif(
+                self._use_jit,
+                UserWarning,
+                "At least 1 sub-objective has use_jit=False. Setting "
+                "use_jit=False for the whole ObjectiveFunction. "
+                "Sub-objectives with use_jit=False: "
+                f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
+            )
+            self._use_jit = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -514,23 +527,24 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            avail_mem = desc_config.get("avail_mem")
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = None
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = None
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not self.use_jit:
+        if not self._use_jit:
             self._unjit()
 
         self._built = True
@@ -580,6 +594,20 @@ class ObjectiveFunction(IOAble):
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
         self._flatten = _ThingFlattener(len(flat_), treedef_)
 
+    def _compute_op(self, x, constants=None, op="compute_unscaled"):
+        """Helper function to compute various operations."""
+        if constants is None:
+            constants = self.constants
+        params = self.unpack_state(x)
+        assert len(params) == len(constants) == len(self.objectives)
+        f = jnp.concatenate(
+            [
+                getattr(obj, op)(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
+            ]
+        )
+        return f
+
     @jit
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -597,17 +625,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_unscaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled(self, x, constants=None):
@@ -626,17 +645,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled_error(self, x, constants=None):
@@ -655,17 +665,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled_error"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scalar(self, x, constants=None):
@@ -751,6 +752,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt] = [outi]
         return out
 
+    @functools.partial(jit, static_argnames="per_objective")
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
@@ -780,8 +782,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
@@ -796,6 +797,7 @@ class ObjectiveFunction(IOAble):
             ]
         return params
 
+    @jit
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO (#1392): also check resolution of the things etc?
@@ -853,14 +855,14 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
+        if constants is None:
+            constants = self.constants
         v = ensure_tuple(v)
         if len(v) > 1:
             # using blocked for higher order derivatives is a pain, and only really
             # is needed for perturbations. Just pass that to jvp_batched for now
             return self._jvp_batched(v, x, constants, op)
 
-        if constants is None:
-            constants = self.constants
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
         vs = jnp.split(v[0], xs_splits, axis=-1)

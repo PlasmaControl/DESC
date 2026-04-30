@@ -1528,6 +1528,35 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "unscaled")
 
+    def _get_values_to_print(self, args, args0=None, fse=None, f0se=None, **kwargs):
+        """Resolve unscaled and shifted values for print_value."""
+        has_f0 = f0se is not None or args0 is not None
+
+        if self.bounds is not None or fse is None:
+            f_unscaled = self.compute_unscaled(*args, **kwargs)
+            f_shifted = self._shift(f_unscaled)
+        else:
+            # _scale(_shift(f_unscaled)) = fse
+            f_shifted = self._unscale(fse, **kwargs)
+            f_unscaled = self._unshift(f_shifted)
+
+        if not has_f0:
+            f0_unscaled = f_unscaled
+            f0_shifted = f_shifted
+        elif self.bounds is not None or f0se is None:
+            errorif(
+                args0 is None,
+                ValueError,
+                "args0 must be provided if objective is bounded.",
+            )
+            f0_unscaled = self.compute_unscaled(*args0, **kwargs)
+            f0_shifted = self._shift(f0_unscaled)
+        else:
+            f0_shifted = self._unscale(f0se, **kwargs)
+            f0_unscaled = self._unshift(f0_shifted)
+
+        return f_unscaled, f_shifted, f0_unscaled, f0_shifted, has_f0
+
     def print_value(  # noqa: C901
         self, args, args0=None, fse=None, f0se=None, **kwargs
     ):
@@ -1548,32 +1577,9 @@ class _Objective(IOAble, ABC):
             Pre-computed scaled error for the initial state.
         """
         out = {}
-        has_f0 = f0se is not None or args0 is not None
-
-        if self.bounds is not None or fse is None:
-            # Bounds shift is not invertible, so compute unscaled from params
-            f_unscaled = self.compute_unscaled(*args, **kwargs)
-            f_shifted = self._shift(f_unscaled)
-        else:
-            # Reverse scaling from pre-computed scaled error
-            # _scale(_shift(f_unscaled)) = fse
-            f_shifted = self._unscale(fse, **kwargs)
-            f_unscaled = self._unshift(f_shifted)
-
-        if not has_f0:
-            f0_unscaled = f_unscaled
-            f0_shifted = f_shifted
-        elif self.bounds is not None or f0se is None:
-            errorif(
-                args0 is None,
-                ValueError,
-                "args0 must be provided if objective is bounded.",
-            )
-            f0_unscaled = self.compute_unscaled(*args0, **kwargs)
-            f0_shifted = self._shift(f0_unscaled)
-        else:
-            f0_shifted = self._unscale(f0se, **kwargs)
-            f0_unscaled = self._unshift(f0_shifted)
+        f_unscaled, f_shifted, f0_unscaled, f0_shifted, has_f0 = (
+            self._get_values_to_print(args, args0, fse, f0se, **kwargs)
+        )
 
         if has_f0:
             print_value_fmt = (

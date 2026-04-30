@@ -258,14 +258,9 @@ class VacuumBoundaryError(_Objective):
     def print_value(self, args, args0=None, fse=None, f0se=None, **kwargs):
         """Print the value of the objective and return a dict of values."""
         out = {}
-        has_f0 = f0se is not None or args0 is not None
-        # Recover unscaled if possible, compute otherwise.
-        if self.bounds is not None or fse is None:
-            f = self.compute_unscaled(*args, **kwargs)
-            f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
-        else:
-            f = self._unshift(self._unscale(fse, **kwargs))
-            f0 = self._unshift(self._unscale(f0se, **kwargs)) if f0se is not None else f
+        f, _, f0, _, has_f0 = self._get_values_to_print(
+            args, args0, fse, f0se, **kwargs
+        )
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:
@@ -795,14 +790,9 @@ class BoundaryError(_Objective):
     def print_value(self, args, args0=None, fse=None, f0se=None, **kwargs):
         """Print the value of the objective and return a dict of values."""
         out = {}
-        has_f0 = f0se is not None or args0 is not None
-        # Recover unscaled if possible, compute otherwise.
-        if self.bounds is not None or fse is None:
-            f = self.compute_unscaled(*args, **kwargs)
-            f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
-        else:
-            f = self._unshift(self._unscale(fse, **kwargs))
-            f0 = self._unshift(self._unscale(f0se, **kwargs)) if f0se is not None else f
+        f, _, f0, _, has_f0 = self._get_values_to_print(
+            args, args0, fse, f0se, **kwargs
+        )
         # try to do weighted mean if possible
         constants = kwargs.get("constants", self.constants)
         if constants is None:

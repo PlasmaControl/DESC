@@ -457,11 +457,10 @@ def _irreducible(Q, R, b):
 
 def _reducible(Q, R, b):
     # One real and two complex roots.
-    A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
-    B = Q / A
+    A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(R**2 - Q**3))
+    B = jnp.where(A == 0.0, 0.0, Q / A)
     r = ((A + B) - b / 3)[None]
-    r = jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (2, *r.shape[1:]))))
-    return r
+    return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (2, *r.shape[1:]))))
 
 
 def _root_cubic(a, b, c, d):
@@ -476,17 +475,14 @@ def _root_cubic(a, b, c, d):
     c = c / a
     Q = (b**2 - 3 * c) / 9
     R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
-    return jnp.where(R**2 < Q**3, _irreducible(jnp.abs(Q), R, b), _reducible(Q, R, b))
+    return jnp.where(R**2 < Q**3, _irreducible(Q, R, b), _reducible(Q, R, b))
 
 
 def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(discriminant >= 0, q / a, jnp.nan)
-    r2 = jnp.where(discriminant >= 0, c / q, jnp.nan)
-    return jnp.stack([r1, r2])
+    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(b**2 - 4 * a * c))
+    return jnp.stack([q / a, c / q])
 
 
 def _root_linear(a, b):

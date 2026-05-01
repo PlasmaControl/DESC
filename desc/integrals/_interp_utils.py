@@ -355,37 +355,55 @@ def polyroot_vec(
         p1 = poly_val(x=r, c=c, der=True)
         p2 = poly_val(x=r, c=c[..., :-1] * jnp.arange(degree, 0, -1), der=True)
         candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
-        p0 = jnp.abs(p0)  # residual
-        p0_new = jnp.abs(poly_val(x=candidate, c=c) - k)
-        r = jnp.where(p0_new < p0, candidate, r)
+
+        residual = jnp.abs(p0)
+        residual_new = jnp.abs(poly_val(x=candidate, c=c) - k)
+        r = jnp.where(residual_new < residual, candidate, r)
+
+        residual = jnp.minimum(residual_new, residual)
         if not backward_stable:
-            r = jnp.where(
-                jnp.minimum(p0_new, p0) <= eps**0.5,
-                r,
-                jnp.nan,
-            )
-        del p0, p1, p2, candidate, p0_new
+            r = jnp.where(residual <= eps**0.5, r, jnp.nan)
+
+        del p0, p1, p2, candidate, residual_new
 
     if distinct:
-        # Then we need to ensure the returned roots have a consistent multiplicity,
-        # so we discard roots within a few machine precision of extrema. This is
-        # mathematically justified as they could just as well have not been detected
-        # in the nearby perturbed problem. Application purpose is that,
-        # if we return only one root at a given extrema (e.g. if we only found one
-        # since the root of the perturbed problem was single multiplicity) and return
-        # multiple roots for another extrema (e.g. if we found 2 or 3 in the nearby
-        # perturbed problem which were merged by the correction step), then downstream
-        # algorithms which assume continuity (intermediate value theorem) of the
-        # underlying function will be misled.
+        # Then we need to ensure the returned roots have a consistent multiplicity.
+        #
+        # The correction above can merge roots that were artificially split due to
+        # conditioning issues (e.g. if multiple reds or greens are adjacent).
+        # The final block of this function sweeps through the roots and discards
+        # duplicates that lie within ε of each other.
+        #
+        # The purpose of returning only distinct roots is that downstream algorithms
+        # assume continuity of the underlying function. If we return an ordering of
+        # distinct roots where the derivative does not change sign between adjacent
+        # roots, this violates the behavior implied by the intermediate value theorem
+        # and can mislead such algorithms.
+        #
+        # There is an edge case when the roots are near a tangent crossing. A computed
+        # pair of roots may lie on opposite sides of a minimum within ε of each other.
+        # One should either retain both roots as distinct or discard both as justified
+        # by the fact that in a nearby perturbed problem neither point would be a root.
+        # The best choice is the latter, since it is possible the full pair was not
+        # detected in the first place due to the poor condition number, and to ensure
+        # the duplicate removal sweep does not mistakenly discard only one element
+        # of the pair.
+        #
+        # To detect such cases, we note that near a multiplicity m > 1 root, the
+        # residual of the derivative is of order ε^(m-1) where ε is the distance
+        # from the root to the tangent extrema. So we discard roots when the derivative
+        # residual is sufficiently small near the root.
         r = jnp.where(
+            # There is probably a way to make this comparison more robust,
+            # but we do not appear to have issues in practice.
             jnp.abs(poly_val(x=r, c=c, der=True)) > eps,
             r,
             sentinel,
         )
 
     if get_only_real_roots:
-        a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
-        a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
+        a_min = -jnp.inf if a_min is None else jnp.expand_dims(a_min, -1)
+        a_max = +jnp.inf if a_max is None else jnp.expand_dims(a_max, -1)
         r = jnp.where(
             (a_min <= r.real) & (r.real <= a_max),
             r.real,
@@ -463,6 +481,14 @@ def _reducible(Q, R, b):
     return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (2, *r.shape[1:]))))
 
 
+def _cubic(a, b, c, d):
+    b = b / a
+    c = c / a
+    Q = (b**2 - 3 * c) / 9
+    R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
+    return jnp.where(R**2 < Q**3, _irreducible(Q, R, b), _reducible(Q, R, b))
+
+
 def _root_cubic(a, b, c, d):
     """Return real cubic root assuming real coefficients.
 
@@ -471,23 +497,33 @@ def _root_cubic(a, b, c, d):
     Advantage is it is much more performant than eigenvalue solve, especially
     when d is higher dimensional than a, b, c.
     """
-    b = b / a
-    c = c / a
-    Q = (b**2 - 3 * c) / 9
-    R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
-    return jnp.where(R**2 < Q**3, _irreducible(Q, R, b), _reducible(Q, R, b))
+    return jnp.where(
+        a == 0.0,
+        _concat_nan(_root_quadratic(b, c, d)),
+        _cubic(a, b, c, d),
+    )
 
 
 def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
     q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(b**2 - 4 * a * c))
-    return jnp.stack([q / a, c / q])
+    return jnp.stack(
+        [
+            jnp.where(a == 0.0, _root_linear(b, c).squeeze(0), q / a),
+            c / q,
+        ]
+    )
 
 
 def _root_linear(a, b):
     """Return real linear root assuming real coefficients."""
     return (-b / a)[None]
+
+
+def _concat_nan(r, num=1):
+    """Concatenate nan ``num`` times to ``r`` on first axis."""
+    return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (num,) + r.shape[1:])))
 
 
 # TODO: replace the inner loop in orthax with this

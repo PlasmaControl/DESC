@@ -259,6 +259,60 @@ class TestPolyUtils:
                     err_msg=f"Eigenvalue branch of polyroot_vec failed at {i, *idx}.",
                 )
 
+        c = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 1, 0],
+                [0, 0, 0, 1],
+                [1, -1, -8, 12],
+                [1, -6, 11, -6],
+                [0, -6, 11, -2],
+            ]
+        )
+        single_multipliciy_roots = np.array(
+            [
+                0,
+                -3,
+                1,
+                2,
+                3,
+                (11 - np.sqrt(73)) / 12,
+                (11 + np.sqrt(73)) / 12,
+            ]
+        )
+        r = polyroot_vec(c, a_min=-np.inf, a_max=np.inf, sort=True, distinct=True)
+        np.testing.assert_allclose(
+            r[~np.isnan(r)],
+            single_multipliciy_roots,
+            rtol=0,
+            atol=1e-11,
+            err_msg="analytical branch",
+        )
+
+        # zero pad to see if companion matrix branch works too
+        c = np.concatenate([np.zeros((c.shape[0], 1)), c], axis=-1)
+        r = polyroot_vec(c, a_min=-np.inf, a_max=np.inf, sort=True, distinct=True)
+        np.testing.assert_allclose(
+            r[~np.isnan(r)],
+            np.array(
+                [
+                    0,
+                    -3,
+                    2,  # double root, but fine as long as it found both
+                    2,  # double root, but fine as long as it found both
+                    1,
+                    2,
+                    3,
+                    (11 - np.sqrt(73)) / 12,
+                    (11 + np.sqrt(73)) / 12,
+                ]
+            ),
+            rtol=0,
+            atol=1e-8,
+            err_msg="companion branch",
+        )
+
         c = np.array([0, 1, -1, -8, 12])
         r = polyroot_vec(c, sort=True, distinct=True)
         r = r[~np.isnan(r)]

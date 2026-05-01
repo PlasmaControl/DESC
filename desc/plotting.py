@@ -2765,26 +2765,25 @@ def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
         x = float(dipole.x)
         y = float(dipole.y)
         z = float(dipole.z)
-        m = np.array(dipole.m_xyz)
-        sphere = pv.Sphere(radius=0.005, center=(x, y, z), theta_resolution=15, phi_resolution=12)
-        plotter.add_mesh(
-            sphere,
-            #show_edges=show_edges,
-            label=dipole.name or f"Dipole[{i}]"
-        )
+        rho = dipole.rho
+        m = np.array(dipole.m_xyz) * rho
+        if (rho==1.0):
+            arrowcolor='red'
+        else:
+            arrowcolor='blue'
         
         start = np.array([x, y, z])
-        direction = m / 40
+        end = m / 40
         
-        line_points = np.array([start, start + direction])
-        line = pv.Line(line_points[0], line_points[1])
+        line = pv.Line(start, start+end)
         plotter.add_mesh(
             line,
             line_width=2,
+            color=arrowcolor,
             label=f"Arrow[{i}]"
         )
         
-        cone_start = start + direction
+        cone_start = start + end
         cone_direction = m / np.linalg.norm(m)
         arrow = pv.Arrow(
             start=cone_start,
@@ -2792,10 +2791,10 @@ def plot_dipoles(dipoles, plotter=None, return_data=False, **kwargs):
             scale=0.01,
             tip_length=0.5,
             tip_radius=0.2,
-            shaft_radius=0.05
+            shaft_radius=0.05,
         )
         plotter.add_mesh(
-            arrow
+            arrow, color=arrowcolor
         )
     
     plotter.add_axes(

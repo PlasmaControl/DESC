@@ -10,6 +10,8 @@ New Features
 - Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
+- Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
+  If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
 
 Bug Fixes
 

@@ -412,6 +412,8 @@ def polyroot_vec(
             r.real,
             sentinel,
         )
+    elif not distinct and not jnp.isnan(sentinel):
+        r = jnp.where(jnp.isfinite(r), r, sentinel)
 
     if sort or distinct:
         r = jnp.sort(r, stable=False)

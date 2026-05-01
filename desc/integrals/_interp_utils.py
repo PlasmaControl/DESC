@@ -482,8 +482,7 @@ def _reducible(Q, R, b):
     # One real and two complex roots.
     A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(R**2 - Q**3))
     B = jnp.where(A == 0.0, 0.0, Q / A)
-    r = ((A + B) - b / 3)[None]
-    return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (2, *r.shape[1:]))))
+    return _concat_nan(((A + B) - b / 3)[None], num=2)
 
 
 def _cubic(a, b, c, d):

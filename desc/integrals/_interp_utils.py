@@ -360,11 +360,14 @@ def polyroot_vec(
         residual_new = jnp.abs(poly_val(x=candidate, c=c) - k)
         r = jnp.where(residual_new < residual, candidate, r)
 
-        residual = jnp.minimum(residual_new, residual)
         if not backward_stable:
-            r = jnp.where(residual <= eps**0.5, r, jnp.nan)
+            r = jnp.where(
+                jnp.minimum(residual_new, residual) <= eps**0.5,
+                r,
+                jnp.nan,
+            )
 
-        del p0, p1, p2, candidate, residual_new
+        del p0, p1, p2, candidate, residual, residual_new
 
     if distinct:
         # Then we need to ensure the returned roots have a consistent multiplicity.

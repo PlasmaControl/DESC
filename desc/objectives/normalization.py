@@ -58,8 +58,11 @@ def compute_scaling_factors(thing):
                 ]
             ]
         )
-        if thing.electron_density is not None and thing.ion_density is not None:
-            scales["n"] = np.mean([thing.electron_density(0), thing.ion_density(0)])
+        if thing.electron_density is not None:
+            if thing.ion_density is not None:
+                scales["n"] = np.mean([thing.electron_density(0), thing.ion_density(0)])
+            else:
+                scales["n"] = thing.electron_density(0)
         if thing.electron_temperature is not None and thing.ion_temperature is not None:
             scales["T"] = np.mean(
                 [thing.electron_temperature(0), thing.ion_temperature(0)]

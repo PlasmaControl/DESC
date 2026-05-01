@@ -16,6 +16,7 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 
 Performance Improvements
 

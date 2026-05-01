@@ -364,9 +364,10 @@ def polyroot_vec(
                 r,
                 jnp.nan,
             )
+        del p0, p1, p2, candidate, p0_new
 
     if distinct:
-        # Then we need to ensure the return roots have a consistent multiplicity,
+        # Then we need to ensure the returned roots have a consistent multiplicity,
         # so we discard roots within a few machine precision of extrema. This is
         # mathematically justified as they could just as well have not been detected
         # in the nearby perturbed problem. Application purpose is that,

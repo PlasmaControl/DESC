@@ -11,10 +11,13 @@ New Features
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
 - Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number.
+- Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
+  If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
 
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 
 Performance Improvements
 

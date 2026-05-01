@@ -489,7 +489,7 @@ def _root_quadratic(a, b, c):
     return jnp.stack([r1, r2])
 
 
-def _root_linear(a, b, sentinel):
+def _root_linear(a, b):
     """Return real linear root assuming real coefficients."""
     return (-b / a)[None]
 

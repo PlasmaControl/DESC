@@ -387,8 +387,8 @@ def polyroot_vec(
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            (a_min <= r) & (r <= a_max),
-            r,
+            (a_min <= r.real) & (r.real <= a_max),
+            r.real,
             sentinel,
         )
 

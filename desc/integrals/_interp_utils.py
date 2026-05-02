@@ -288,13 +288,12 @@ def _distinct_roots(r, c, eps, keep_extrema=True):
     roots, this violates the behavior implied by intermediate value theorem.
     """
     # Due to numerics and condition numbers, roots of multipliciy m > 1
-    # may not be at the same spot. Moreover, single multiplicity roots may
-    # split into double roots (even for simple funcion like p: x mapsto x).
-    # To preserve above invariant, we discard duplicate roots that lie
-    # within ε of each other if the derivative at those points has the same sign.
+    # may not be at the same spot. To preserve above invariant, we discard
+    # duplicate roots that lie within ε of each other if the derivative at
+    # those points has the same sign.
 
     p = poly_val(r, c=c[..., None, :], der=1)
-    is_multiple_root = jnp.abs(p) <= eps
+    # is_multiple_root = jnp.abs(p) <= eps  # noqa: E800
     p = jnp.sign(p)
 
     same_sign = p == jnp.roll(p, shift=1, axis=-1)
@@ -305,9 +304,9 @@ def _distinct_roots(r, c, eps, keep_extrema=True):
     bad_pair_right_member = same_sign & is_close
     bad_pair_left__member = (
         jnp.roll(bad_pair_right_member, shift=-1, axis=-1).at[..., -1].set(False)
-    )
+    )  #  & is_multiple_root   # noqa: E800
     r = jnp.where(
-        bad_pair_right_member | (bad_pair_left__member & is_multiple_root),
+        bad_pair_right_member | bad_pair_left__member,
         jnp.nan,
         r,
     )
@@ -493,6 +492,7 @@ def _reducible(Q, R, b):
     return jnp.stack(
         [
             x - b / 3,
+            # these can yield true real roots for A near B
             -0.5 * x - b / 3 + y,
             -0.5 * x - b / 3 - y,
         ]
@@ -526,12 +526,8 @@ def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
     q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(b**2 - 4 * a * c))
-    return jnp.stack(
-        [
-            jnp.where(a == 0.0, _root_linear(b, c).squeeze(0), q / a),
-            c / q,
-        ]
-    )
+    # second branch generalizes linear root
+    return jnp.stack([q / a, c / q])
 
 
 def _root_linear(a, b):

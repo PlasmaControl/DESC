@@ -292,9 +292,7 @@ def _distinct_roots(r, c, eps, keep_extrema=True):
     # duplicate roots that lie within ε of each other if the derivative at
     # those points has the same sign.
 
-    p = poly_val(r, c=c[..., None, :], der=1)
-    # is_multiple_root = jnp.abs(p) <= eps  # noqa: E800
-    p = jnp.sign(p)
+    p = jnp.sign(poly_val(r, c=c[..., None, :], der=1))
 
     same_sign = p == jnp.roll(p, shift=1, axis=-1)
     if keep_extrema:
@@ -302,11 +300,9 @@ def _distinct_roots(r, c, eps, keep_extrema=True):
     is_close = jnp.abs(jnp.diff(r, prepend=jnp.nan)) <= eps
 
     bad_pair_right_member = same_sign & is_close
-    bad_pair_left__member = (
-        jnp.roll(bad_pair_right_member, shift=-1, axis=-1).at[..., -1].set(False)
-    )  #  & is_multiple_root   # noqa: E800
+    bad_pair_left__member = jnp.roll(bad_pair_right_member, shift=-1, axis=-1)
     r = jnp.where(
-        bad_pair_right_member | bad_pair_left__member,
+        bad_pair_left__member | bad_pair_right_member,
         jnp.nan,
         r,
     )

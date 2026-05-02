@@ -395,6 +395,7 @@ def polyroot_vec(
     else:
         backward_stable = True
         r = _root_companion(_subtract_last(c, k))
+    assert r.shape[-1] == degree
 
     # If the complex part is too big, then these would not be real roots of
     # a nearby perturbed problem, so we set to nan so that they are not
@@ -413,7 +414,6 @@ def polyroot_vec(
             backward_stable,
             eps**0.5,
         )
-
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else jnp.expand_dims(a_min, -1)
         a_max = +jnp.inf if a_max is None else jnp.expand_dims(a_max, -1)

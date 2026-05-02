@@ -152,6 +152,37 @@ class QuadcoilProxy(_Objective):
         Default = None.
     """
 
+    # ----- Setting and registering keyword arguments -----
+    _static_attrs = _Objective._static_attrs + [
+        # External-coils related
+        "_enable_net_current_plasma",
+        "_eq_fixed",
+        "_field_fixed",
+        "_bs_chunk_size",
+        # Basics
+        "_deriv_mode",
+        "_verbose",
+        # Free-boundary-related
+        "_bplasma_chunk_size",
+        "_vacuum",
+        # QUADCOIL-related
+        "metric_name",
+        "nfp",
+        "stellsym",
+        "_plasma_M_theta",
+        "_plasma_N_phi",
+        "_quadcoil_for_diff",
+        "_quadcoil_values",
+        "_Bnormal_shape",
+        # VMEC <=> DESC
+        "_surf_R_A",
+        "_surf_R_c_indices",
+        "_surf_R_s_indices",
+        "_surf_Z_A",
+        "_surf_Z_c_indices",
+        "_surf_Z_s_indices",
+    ]
+
     # Most of the documentation is shared among all objectives, so we just
     # inherit the docstring from the base class and add a few details specific
     # to this objective.
@@ -417,37 +448,6 @@ class QuadcoilProxy(_Objective):
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)
         self._quadcoil_values = jit(_quadcoil_values)
-        # ----- Setting and registering keyword arguments -----
-        self._static_attrs = _Objective._static_attrs + [
-            # External-coils related
-            "_enable_net_current_plasma",
-            "_eq_fixed",
-            "_field_fixed",
-            "_bs_chunk_size",
-            # Basics
-            "_static_attrs",
-            "_deriv_mode",
-            "_verbose",
-            # Free-boundary-related
-            "_bplasma_chunk_size",
-            "_vacuum",
-            # QUADCOIL-related
-            "metric_name",
-            "nfp",
-            "stellsym",
-            "_plasma_M_theta",
-            "_plasma_N_phi",
-            "_quadcoil_for_diff",
-            "_quadcoil_values",
-            "_Bnormal_shape",
-            # VMEC <=> DESC
-            "_surf_R_A",
-            "_surf_R_c_indices",
-            "_surf_R_s_indices",
-            "_surf_Z_A",
-            "_surf_Z_c_indices",
-            "_surf_Z_s_indices",
-        ]
 
         # ----- Superclass -----
         super().__init__(

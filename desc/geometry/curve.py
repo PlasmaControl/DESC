@@ -651,7 +651,7 @@ class FourierXYZCurve(Curve):
             from simsopt.geo import CurveXYZFourier
         except ModuleNotFoundError:
             raise ModuleNotFoundError(
-                "desc.geometry.from_simsopt requires a " "simsopt installation"
+                "desc.geometry.from_simsopt requires simsopt package."
             )
         if not isinstance(curve_simsopt, CurveXYZFourier):
             raise AttributeError("The imput curve must be a Simsopt CurveXYZFourier")

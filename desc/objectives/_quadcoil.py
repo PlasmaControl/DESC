@@ -294,9 +294,8 @@ class QuadcoilProxy(_Objective):
         redundant_arg_names = set(overridden_argnames) & quadcoil_kwargs.keys()
         if redundant_arg_names:
             warnings.warn(
-                "Redundant arguments detected: "
-                + str(redundant_arg_names)
-                + ". These arguments are extracted from the equilibrium, "
+                f"Redundant arguments detected: {redundant_arg_names}. "
+                "These arguments are extracted from the equilibrium, "
                 "or specified by other parameters. The provided values "
                 "will be discarded."
             )
@@ -307,30 +306,18 @@ class QuadcoilProxy(_Objective):
         # we set them here. This is necessary because we are calling quadcoil
         # through quadcoil.io.quadcoil_for_diff, which cannot see their default
         # values in quadcoil.quadcoil.
-        if "net_toroidal_current_amperes" in quadcoil_kwargs.keys():
-            self.net_toroidal_current_amperes = quadcoil_kwargs.pop(
-                "net_toroidal_current_amperes"
-            )
-        else:
-            self.net_toroidal_current_amperes = 0.0
-        if "plasma_coil_distance" in quadcoil_kwargs.keys():
-            # A sign flip is necessary here since simsopt and DESC surfaces
-            # have different handedness. QUADCOIL uses the simsopt convention.
-            self.plasma_coil_distance = -quadcoil_kwargs.pop("plasma_coil_distance")
-        else:
-            self.plasma_coil_distance = None
-        if "winding_dofs" in quadcoil_kwargs.keys():
-            self.winding_dofs = quadcoil_kwargs.pop("winding_dofs")
-        else:
-            self.winding_dofs = None
-        if "objective_weight" in quadcoil_kwargs.keys():
-            self.objective_weight = quadcoil_kwargs.pop("objective_weight")
-        else:
-            self.objective_weight = None
-        if "constraint_value" in quadcoil_kwargs.keys():
-            self.constraint_value = quadcoil_kwargs.pop("constraint_value")
-        else:
-            self.constraint_value = jnp.array([])
+        self.net_toroidal_current_amperes = quadcoil_kwargs.pop(
+            "net_toroidal_current_amperes", 0.0
+        )
+        # A sign flip is necessary here since simsopt and DESC surfaces
+        # have different handedness. QUADCOIL uses the simsopt convention.
+        _plasma_coil_distance = quadcoil_kwargs.pop("plasma_coil_distance", None)
+        self.plasma_coil_distance = (
+            -_plasma_coil_distance if _plasma_coil_distance is not None else None
+        )
+        self.winding_dofs = quadcoil_kwargs.pop("winding_dofs", None)
+        self.objective_weight = quadcoil_kwargs.pop("objective_weight", None)
+        self.constraint_value = quadcoil_kwargs.pop("constraint_value", jnp.array([]))
 
         # ----- Setting attributes -----
         self.metric_name = metric_name
@@ -344,25 +331,15 @@ class QuadcoilProxy(_Objective):
             plasma_M_theta = eq.M_grid
         elif plasma_M_theta <= eq.M_grid:
             warnings.warn(
-                "plasma_M_theta = "
-                + str(plasma_M_theta)
-                + " <= "
-                + "eq.M_grid = "
-                + str(eq.M_grid)
-                + ". "
-                + "An interpolation truncation warning may appear."
+                f"plasma_M_theta = {plasma_M_theta} <= eq.M_grid = {eq.M_grid}. "
+                "An interpolation truncation warning may appear."
             )
         if not plasma_N_phi:
             plasma_N_phi = eq.N_grid
         elif plasma_N_phi <= eq.N_grid:
             warnings.warn(
-                "plasma_N_phi = "
-                + str(plasma_N_phi)
-                + " <= "
-                + "eq.N_grid = "
-                + str(eq.N_grid)
-                + ". "
-                + "An interpolation truncation warning may appear."
+                f"plasma_N_phi = {plasma_N_phi} <= eq.N_grid = {eq.N_grid}. "
+                "An interpolation truncation warning may appear."
             )
         self._plasma_M_theta = plasma_M_theta
         self._plasma_N_phi = plasma_N_phi
@@ -901,5 +878,5 @@ class QuadcoilProxy(_Objective):
             # N is already in filtered
             name="QUADCOIL Proxy Output",
             check_orientation=True,
-            **filtered
+            **filtered,
         )

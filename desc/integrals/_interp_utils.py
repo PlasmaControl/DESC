@@ -3,6 +3,7 @@
 import warnings
 from functools import partial
 
+import numpy as np
 from interpax import interp1d
 
 try:
@@ -197,7 +198,7 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
-def poly_val(*, x, c, der=False):
+def poly_val(x, *, c, der=0):
     """Evaluate polynomial ``c`` at the points ``x``.
 
     Parameters
@@ -208,8 +209,8 @@ def poly_val(*, x, c, der=False):
         Last axis should store coefficients of a polynomial. For a polynomial given by
         ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
         ``c[...,n-i]``.
-    der : bool
-        Whether to evaluate the derivative instead.
+    der : int
+        Derivative to evaluate.
 
     Returns
     -------
@@ -227,17 +228,27 @@ def poly_val(*, x, c, der=False):
 
     """
     if c.shape[-1] == 4:
-        if der:
+        if der == 0:
+            return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        if der == 1:
             return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
-        return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        if der == 2:
+            return 6 * c[..., 0] * x + 2 * c[..., 1]
 
     if c.shape[-1] == 3:
-        if der:
+        if der == 0:
+            return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+        if der == 1:
             return 2 * c[..., 0] * x + c[..., 1]
-        return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+        if der == 2:
+            return 2 * c[..., 0]
 
-    if der:
+    assert 0 <= der <= 2
+    if der >= 1:
         c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+    if der >= 2:
+        c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+
     return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
@@ -268,6 +279,62 @@ def _root_eps():
     return max(jnp.finfo(jnp.array(1.0).dtype).eps, 1e-11)
 
 
+def _distinct_roots(r, c, eps, keep_extrema=True):
+    """Returns the distinct roots given sorted roots.
+
+    When we return distinct roots we preserve continuity invariants.
+    For example, if we return an ordering of distinct roots where the
+    derivative is nonzero there and does not change sign between adjacent
+    roots, this violates the behavior implied by intermediate value theorem.
+    """
+    # Due to numerics and condition numbers, roots of multipliciy m > 1
+    # may not be at the same spot. Moreover, single multiplicity roots may
+    # split into double roots (even for simple funcion like p: x mapsto x).
+    # To preserve above invariant, we discard duplicate roots that lie
+    # within ε of each other if the derivative at those points has the same sign.
+
+    p = poly_val(r, c=c[..., None, :], der=1)
+    is_multiple_root = jnp.abs(p) <= eps
+    p = jnp.sign(p)
+
+    same_sign = p == jnp.roll(p, shift=1, axis=-1)
+    if keep_extrema:
+        same_sign &= p != 0
+    is_close = jnp.abs(jnp.diff(r, prepend=jnp.nan)) <= eps
+
+    bad_pair_right_member = same_sign & is_close
+    bad_pair_left__member = (
+        jnp.roll(bad_pair_right_member, shift=-1, axis=-1).at[..., -1].set(False)
+    )
+    r = jnp.where(
+        bad_pair_right_member | (bad_pair_left__member & is_multiple_root),
+        jnp.nan,
+        r,
+    )
+    return r
+
+
+def _correction_step(r, c, k, backward_stable, eps):
+    # Schröder first kind correction.
+    p0 = poly_val(r, c=c) - k
+    p1 = poly_val(r, c=c, der=1)
+    p2 = poly_val(r, c=c, der=2)
+    candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
+
+    res_old = jnp.abs(p0)
+    res_new = jnp.abs(poly_val(candidate, c=c) - k)
+    r = jnp.where(res_new < res_old, candidate, r)
+
+    if not backward_stable:
+        r = jnp.where(
+            (res_old <= eps) | (res_new <= eps),
+            r,
+            jnp.nan,
+        )
+
+    return r
+
+
 @partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
@@ -290,20 +357,14 @@ def polyroot_vec(
     k : jnp.ndarray
         Shape (..., *c.shape[:-1]).
         Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
-    a_min : jnp.ndarray
+    a_min, a_max : jnp.ndarray
         Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots are returned, otherwise returns all complex roots.
-    a_max : jnp.ndarray
-        Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
+        If given returns roots in the interval [``a_min``, ``a_max``).
         If specified only real roots are returned, otherwise returns all complex roots.
     sort : bool
         Whether to sort the roots.
     sentinel : float
         Value with which to pad array in place of filtered elements.
-        Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while avoiding ``nan`` gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
@@ -319,13 +380,12 @@ def polyroot_vec(
     """
     if eps < 0:
         eps = _root_eps()
+
     get_only_real_roots = not (a_min is None and a_max is None)
     degree = c.shape[-1] - 1
-    distinct = distinct and (degree > 1)
 
     if degree <= 3 and get_only_real_roots and jnp.isrealobj(c) and jnp.isrealobj(k):
         backward_stable = degree < 3
-
         c = jnp.moveaxis(c, -1, 0)
         r = {1: _root_linear, 2: _root_quadratic, 3: _root_cubic}[degree](
             *c[:-1], c[-1] - k
@@ -334,95 +394,43 @@ def polyroot_vec(
         c = jnp.moveaxis(c, 0, -1)
     else:
         backward_stable = True
-
         r = _root_companion(_subtract_last(c, k))
-        # If the complex part is too big, then these would not be real roots of
-        # a nearby perturbed problem, so we set to nan so that they are not
-        # classified as candidates after the correction step.
-        if get_only_real_roots:
-            r = jnp.where(
-                jnp.abs(r.imag) <= eps**0.5,
-                r.real,
-                jnp.nan,
-            )
 
-    # Schröder first kind correction to push the roots of the perturbed problem
-    # toward roots of the original problem.
-    if degree > 1:
-        k = jnp.expand_dims(k, -1)
-        c = c[..., None, :]
-        p0 = poly_val(x=r, c=c) - k
-        p1 = poly_val(x=r, c=c, der=True)
-        p2 = poly_val(x=r, c=c[..., :-1] * jnp.arange(degree, 0, -1), der=True)
-        candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
-
-        residual = jnp.abs(p0)
-        residual_new = jnp.abs(poly_val(x=candidate, c=c) - k)
-        r = jnp.where(residual_new < residual, candidate, r)
-
-        if not backward_stable:
-            r = jnp.where(
-                jnp.minimum(residual_new, residual) <= eps**0.5,
-                r,
-                jnp.nan,
-            )
-
-        del p0, p1, p2, candidate, residual, residual_new
-
-    if distinct:
-        # Then we need to ensure the returned roots have a consistent multiplicity.
-        #
-        # The correction above can merge roots that were artificially split due to
-        # conditioning issues (e.g. if multiple reds or greens are adjacent).
-        # The final block of this function sweeps through the roots and discards
-        # duplicates that lie within ε of each other.
-        #
-        # The purpose of returning only distinct roots is that downstream algorithms
-        # assume continuity of the underlying function. If we return an ordering of
-        # distinct roots where the derivative does not change sign between adjacent
-        # roots, this violates the behavior implied by the intermediate value theorem
-        # and can mislead such algorithms.
-        #
-        # There is an edge case when the roots are near a tangent crossing. A computed
-        # pair of roots may lie on opposite sides of a minimum within ε of each other.
-        # One should either retain both roots as distinct or discard both as justified
-        # by the fact that in a nearby perturbed problem neither point would be a root.
-        # The best choice is the latter, since it is possible the full pair was not
-        # detected in the first place due to the poor condition number, and to ensure
-        # the duplicate removal sweep does not mistakenly discard only one element
-        # of the pair.
-        #
-        # To detect such cases, we note that near a multiplicity m > 1 root, the
-        # residual of the derivative is of order ε^(m-1) where ε is the distance
-        # from the root to the tangent extrema. So we discard roots when the derivative
-        # residual is sufficiently small near the root.
+    # If the complex part is too big, then these would not be real roots of
+    # a nearby perturbed problem, so we set to nan so that they are not
+    # classified as candidates after the correction step.
+    if get_only_real_roots:
         r = jnp.where(
-            # There is probably a way to make this comparison more robust,
-            # but we do not appear to have issues in practice.
-            jnp.abs(poly_val(x=r, c=c, der=True)) > eps,
+            jnp.abs(r.imag) <= eps**0.5,
+            r.real,
+            jnp.nan,
+        )
+    if degree > 1:
+        r = _correction_step(
             r,
-            sentinel,
+            c[..., None, :],
+            jnp.expand_dims(k, -1),
+            backward_stable,
+            eps**0.5,
         )
 
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else jnp.expand_dims(a_min, -1)
         a_max = +jnp.inf if a_max is None else jnp.expand_dims(a_max, -1)
         r = jnp.where(
-            (a_min <= r.real) & (r.real <= a_max),
+            (a_min <= r.real) & (r.real < a_max),
             r.real,
-            sentinel,
+            jnp.nan,
         )
-    elif not distinct and not jnp.isnan(sentinel):
-        r = jnp.where(jnp.isfinite(r), r, sentinel)
 
+    distinct = distinct and (degree > 1)
     if sort or distinct:
         r = jnp.sort(r, stable=False)
     if distinct:
-        r = jnp.where(
-            jnp.isclose(jnp.diff(r, prepend=sentinel), 0.0, atol=eps),
-            sentinel,
-            r,
-        )
+        r = _distinct_roots(r, c, eps)
+    if not np.isnan(sentinel):
+        r = jnp.where(jnp.isfinite(r), r, sentinel)
+
     assert r.shape[-1] == degree
     return r
 
@@ -447,7 +455,7 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
         eps = _root_eps()
     r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
 
-    dc_dr = poly_val(x=r, c=c[..., None, :], der=True)
+    dc_dr = poly_val(r, c=c[..., None, :], der=1)
     dc_dr = jnp.where(
         jnp.abs(dc_dr) > eps,
         dc_dr,
@@ -456,13 +464,12 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
     dr = jnp.where(
         r == sentinel,
         0.0,
-        (jnp.expand_dims(dk, -1) - poly_val(x=r, c=dc[..., None, :])) / dc_dr,
+        (jnp.expand_dims(dk, -1) - poly_val(r, c=dc[..., None, :])) / dc_dr,
     )
     return r, dr
 
 
 def _irreducible(Q, R, b):
-    # Three irrational real roots.
     theta = jnp.arccos(R / jnp.sqrt(Q**3))
     return (
         -2
@@ -479,10 +486,17 @@ def _irreducible(Q, R, b):
 
 
 def _reducible(Q, R, b):
-    # One real and two complex roots.
     A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(R**2 - Q**3))
     B = jnp.where(A == 0.0, 0.0, Q / A)
-    return _concat_nan(((A + B) - b / 3)[None], num=2)
+    x = A + B
+    y = (0.5j * 3**0.5) * (A - B)
+    return jnp.stack(
+        [
+            x - b / 3,
+            -0.5 * x - b / 3 + y,
+            -0.5 * x - b / 3 - y,
+        ]
+    )
 
 
 def _cubic(a, b, c, d):

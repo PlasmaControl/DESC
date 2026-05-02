@@ -105,7 +105,7 @@ def _bounce_points(
     )
     assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
-    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=True)))
+    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=1)))
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
@@ -703,9 +703,8 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
         sentinel=0.0,
-        distinct=False,
     )
-    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=True) > 0) & (mins > 0))
+    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=1) > 0) & (mins > 0))
     mins = flatten_mat(
         jnp.stack(
             [

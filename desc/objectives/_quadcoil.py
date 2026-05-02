@@ -93,7 +93,7 @@ class QuadcoilProxy(_Objective):
             metric_name,
             value_only,
             verbose,
-    plasma_M_theta : int, optional, default=eq.M_grid
+    plasma_M_theta : int, optional
         The plasma poloidal quadrature resolution. Determines the
         resolution of QUADCOIL plasma surface integrals and point-wise
         functions.
@@ -102,65 +102,54 @@ class QuadcoilProxy(_Objective):
         sure that the grid points in DESC B calculations line up exactly
         with the QUADCOIL grids.
         Values lower than eq.M_grid will trigger interpolation truncation
-        warnings.
-    plasma_N_phi : int, optional, default=eq.N_grid
-        The plasma toroidal quadrature resolution.
-    metric_name : str or tuple of str, default="f_obj"
+        warnings. Default = eq.M_grid.
+    plasma_N_phi : int, optional
+        The plasma toroidal quadrature resolution. Default = eq.N_grid.
+    metric_name : str or tuple of str
         The coil property(ies) to measure as the value of the proxy.
-        Uses the normalized QUADCOIL objective by default.
         We strongly advise using the default value to ensure accurate adjoint
-        differentiation.
-    metric_target : scalar or ndarray, default=0.0
+        differentiation. Default = "f_obj", which uses the normalized QUADCOIL
+        objective.
+    metric_target : scalar or ndarray
         In addition to target, bounds and weight,
         The QUADCOIL proxy objective allows the user to set weights and
         targets for each objective terms individually besides using ``target``
         and ``bounds`` that comes with other DESC objectives.
-        Targets of each property. 0 by default.
-    metric_weight : scalar or ndarray, default=1.0
-        Weights of each property. 1 by default.
-    vacuum : bool, optional, default=False
+        Targets of each property. Default = 0.0.
+    metric_weight : scalar or ndarray
+        Weights of each property. Default = 1.0.
+    vacuum : bool, optional
         Whether to enable Bnormal contributions from plasma current.
-    verbose : int, optional, default=0
-        Whether to enable verbose output.
-    source_grid : Grid, optional, default=None
+        Default = False.
+    verbose : int, optional
+        Whether to enable verbose output. Default = 0.
+    source_grid : Grid, optional
         Grid for evaluating vacuum casing and the required net poloidal coil
-        current. By default, a ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    field : list or CoilSet, optional, default=[]
+        current. Default = None, which uses a
+        ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    field : list or CoilSet, optional
         Other coils to use in combinations with the winding surface.
         Can be optimized. For combined filament-dipole modeling/optimization.
-    field_grid : Grid, optional, default=None:
-        The grid for ``field``.
-    enable_net_current_plasma : bool, optional, default=True,
-        Whether to enable a net poloidal current in the winding surface. ``True``
-        by default.
-    eq_fixed : bool, optional, default=False
-        Whether to fix ``eq``, or make it optimizable degrees of freedom. ``False``
-        by default for quasi-single-stage optimization.
-    field_fixed : bool, optional, default=False
-        Whether to fix ``field``, or make it optimizable degrees of freedom. ``True``
-        by default for quasi-single-stage dipole/PM optimization with known
+        Default = [].
+    field_grid : Grid, optional
+        The grid for ``field``. Default = None.
+    enable_net_current_plasma : bool, optional
+        Whether to enable a net poloidal current in the winding surface.
+        Default = True.
+    eq_fixed : bool, optional
+        Whether to fix ``eq``, or make it optimizable degrees of freedom.
+        Default = False for quasi-single-stage optimization.
+    field_fixed : bool, optional
+        Whether to fix ``field``, or make it optimizable degrees of freedom.
+        Default = False for quasi-single-stage dipole/PM optimization with known
         filament coils.
     B_plasma_chunk_size : int or None
         Size to split singular integral computation for B_plasma into chunks.
         If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``bs_chunk_size``.
-    bs_chunk_size : int, optional, default=None
+        then supply ``None``. Default = ``bs_chunk_size``.
+    bs_chunk_size : int, optional
         Size to split Biot-Savart computation into chunks of evaluation points.
-
-    Attributes
-    ----------
-    metric_target : tuple
-        (Traced) targets for each objectives.
-    metric_weight : tuple
-        (Traced) weights for each objectives.
-    _plasma_M_theta : int
-        (static) The plasma poloidal quadrature resolution.
-    _plasma_N_phi : int
-        (static) The plasma toroidal quadrature resolution.
-    _static_attrs : list
-        (Static) : a list of all static variables. Generated based on
-        ``quadcoil.QUADCOIL_STATIC_ARGNAMES`` and ``quadcoil_kwargs.keys()``.
-        For use in the superclass.
+        Default = None.
     """
 
     # Most of the documentation is shared among all objectives, so we just
@@ -658,7 +647,7 @@ class QuadcoilProxy(_Objective):
         """Computes the scalar value of the QUADCOIL proxy.
 
         Computes the scalar value of the QUADCOIL proxy. A wrapper for
-        ``compute_full``.
+        ``solve_quadcoil``.
 
         Parameters
         ----------
@@ -682,7 +671,7 @@ class QuadcoilProxy(_Objective):
 
         Takes the same parameters as compute, but can either output the
         full quadcoil results, or do what compute() is supposed to do.
-        compute() is a wrapper for compute_full.
+        compute() is a wrapper for solve_quadcoil.
 
         Parameters
         ----------

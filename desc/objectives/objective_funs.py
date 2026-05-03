@@ -586,16 +586,24 @@ class ObjectiveFunction(IOAble):
         use_jit_wrapper = self._use_jit
         if use_jit is not None:
             self._use_jit = use_jit
-            # use_jit_wrapper is used to determine if we jit the ObjectiveFunction
-            # methods. If we are using multiple GPUs, we don't want to jit them.
-            use_jit_wrapper = use_jit
 
+        use_jits = [obj._use_jit for obj in self.objectives]
+        if not all(use_jits):
+            warnif(
+                self._use_jit,
+                UserWarning,
+                "At least 1 sub-objective has use_jit=False. Setting "
+                "use_jit=False for the whole ObjectiveFunction. "
+                "Sub-objectives with use_jit=False: "
+                f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
+            )
+            self._use_jit = False
+        
         device_ids = [obj._device_id for obj in self._objectives]
         is_multi_device = len(set(device_ids)) > 1
-        # we must be able to jit, if the device ids are the same?
         if self._is_mpi and is_multi_device:
-            use_jit_wrapper = False
-
+            self._use_jit = False
+            
         timer = Timer()
         timer.start("Objective build")
 
@@ -690,11 +698,7 @@ class ObjectiveFunction(IOAble):
             if len(set(chunk_sizes)) > 1:
                 # blocked mode should never use this chunk size if there
                 # are multiple sub-objectives with different chunk sizes
-                self._jac_chunk_size = (
-                    "ObjectiveFunction is using `blocked` mode, you shouldn't "
-                    "try to use this jac_chunk_size. Instead use the sub-objective's "
-                    "`jac_chunk_size`."
-                )
+                self._jac_chunk_size = None
             else:
                 # if there is only one objective i.e. wrapped ForceBalance in
                 # ProximalProjection or only one value of jac_chunk_size, we can
@@ -727,7 +731,7 @@ class ObjectiveFunction(IOAble):
                     )
                 print("-" * 60)
 
-        if not use_jit_wrapper:
+        if not self._use_jit:
             self._unjit()
 
         self._built = True
@@ -1016,6 +1020,7 @@ class ObjectiveFunction(IOAble):
             ]
         return params
 
+    @jit
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO (#1392): also check resolution of the things etc?
@@ -1092,8 +1097,9 @@ class ObjectiveFunction(IOAble):
             return self._jvp_batched(v, x, constants, op)
 
         if not self._is_mpi:
-            xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
-            vs = jnp.split(v[0], np.cumsum([t.dim_x for t in self.things]), axis=-1)
+            xs_splits = np.cumsum([t.dim_x for t in self.things])
+            xs = jnp.split(x, xs_splits)
+            vs = jnp.split(v[0], xs_splits, axis=-1)
             J = []
             assert len(self.objectives) == len(self.constants)
             # basic idea is we compute the jacobian of each objective wrt each thing
@@ -1106,7 +1112,8 @@ class ObjectiveFunction(IOAble):
                 vi = [vs[i] for i in thing_idx]
                 Ji_ = getattr(obj, "jvp_" + op)(vi, xi, constants=const)
                 J += [Ji_]
-
+            # this is the transpose of the jvp when v is a matrix, for consistency with
+            # jvp_batched
             return jnp.hstack(J)
         else:
             if self.rank == 0:

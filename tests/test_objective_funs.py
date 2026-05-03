@@ -4585,3 +4585,38 @@ def test_coil_objective_setter(DummyMixedCoilSet):
     obj.bounds = None
     obj.target = target
     np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)
+
+
+@pytest.mark.unit
+def test_objective_use_jit():
+    """Test that use_jit is passed correctly to sub-objectives."""
+
+    class DummyObj(_Objective):
+        def __init__(self, eq):
+            super().__init__(things=eq)
+
+        def build(self, use_jit, verbose=3):
+            self._dim_f = 1
+            super().build(use_jit=use_jit, verbose=verbose)
+
+        def compute(self, params, constants=None):
+            R = params["R_lmn"][0]
+            return R * 2 if R > 0 else R * 3
+
+    eq = get("DSHAPE")
+
+    obj1 = DummyObj(eq)
+    obj1.build(use_jit=False)
+    obj = ObjectiveFunction(obj1)
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj.build(use_jit=True)
+
+    rs = [-2, 4]
+    for r in rs:
+        eq.R_lmn[0] = r
+        f = obj.compute_scalar(obj.x(eq))
+        g = obj.grad(obj.x(eq))
+
+        assert f == 2 * r**2 if r > 0 else 9 * r**2 / 2
+        assert g[0] == 4 * r if r > 0 else 9 * r
+        assert np.all(g[1:] == 0)

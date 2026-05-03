@@ -583,7 +583,6 @@ class ObjectiveFunction(IOAble):
             Level of output.
 
         """
-        use_jit_wrapper = self._use_jit
         if use_jit is not None:
             self._use_jit = use_jit
 
@@ -598,12 +597,12 @@ class ObjectiveFunction(IOAble):
                 f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
             )
             self._use_jit = False
-        
+
         device_ids = [obj._device_id for obj in self._objectives]
         is_multi_device = len(set(device_ids)) > 1
         if self._is_mpi and is_multi_device:
             self._use_jit = False
-            
+
         timer = Timer()
         timer.start("Objective build")
 

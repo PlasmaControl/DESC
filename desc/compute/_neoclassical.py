@@ -93,6 +93,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     angle = parse_argname_change(
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
+    # TODO: in future don't close over grid so that sharding works
     grid = transforms["grid"]
     opts = Options.guess(1, grid, **kwargs)
 
@@ -106,7 +107,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
                 data,
                 ["|grad(rho)|*kappa_g"],
                 num_well=opts.num_well,
-                nufft_eps=opts.nufft_eps,
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 

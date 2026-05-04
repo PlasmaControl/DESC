@@ -1381,7 +1381,7 @@ class _Objective(IOAble, ABC):
         """Reverse of _scale."""
         constants = kwargs.get("constants", self.constants)
         if constants is None:
-            w = jnp.ones_like(f_scaled)
+            w = 1
         else:
             w = constants["quad_weights"]
         return f_scaled * self.normalization / (w * self.weight)

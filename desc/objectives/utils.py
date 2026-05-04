@@ -161,7 +161,9 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     for con in constraint.objectives:
         # get portion of the error corresponding to this constraint
         dim = con.dim_f
-        y1 = f[offset : offset + dim] * np.asarray(con.normalization / con.weight)
+        y1 = con._unshift(con._unscale(f[offset : offset + dim]))
+        y2 = con.target
+        y1, y2 = np.broadcast_arrays(y1, y2)
         offset += dim
 
         # If the error is very large, likely want to error out as
@@ -169,7 +171,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         # round-off errors.
         np.testing.assert_allclose(
             y1,
-            0,
+            y2,
             atol=1e-6,
             rtol=1e-1,
             err_msg="Incompatible constraints detected, cannot satisfy constraint "
@@ -185,7 +187,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         try:
             np.testing.assert_allclose(
                 y1,
-                0,
+                y2,
                 atol=atol,
                 rtol=rtol,
                 err_msg="Incompatible constraints detected, cannot satisfy constraint "

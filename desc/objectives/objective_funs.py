@@ -141,6 +141,95 @@ docs = {
     "device_id": doc_device_id,
 }
 
+doc_bounce = """
+    Notes
+    -----
+    Consider using an optimizer that uses a scalar output loss function
+    to improve performance before reducing ``jac_chunk_size``.
+
+    Developer notes: Performance will improve significantly by resolving GitHub issues:
+      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+      * ``1034`` Optimizers/objectives with auxiliary output
+      * ``2168`` Sparse cotangent pullbacks
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
+        Determines the flux surfaces to compute on and resolution of FFTs.
+        Default grid samples the boundary surface at ρ=1.
+    X : int
+        Poloidal Fourier grid resolution to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y : int
+        Toroidal Chebyshev grid resolution over a single field period
+        to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+    alpha : jnp.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``-1`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
+        toroidal Fourier resolution of B, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
+    pitch_batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    spline : bool
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
+    """.rstrip()
+
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably
 # be some errors since 3.13 changed how tabs are handled in docstrings. This can be

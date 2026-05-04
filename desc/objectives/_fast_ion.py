@@ -8,15 +8,14 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.integrals.bounce_integral import Bounce2D
-from desc.utils import parse_argname_change, setdefault, warnif
+from desc.utils import setdefault, warnif
 
 from ..integrals.quad_utils import (
     automorphism_sin,
     get_quadrature,
     grad_automorphism_sin,
 )
-from ._neoclassical import _bounce_overwrite
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import _Objective, collect_docs, doc_bounce
 from .utils import _parse_callable_target_bounds
 
 
@@ -50,87 +49,15 @@ class GammaC(_Objective):
     [3] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
         and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
 
-    Notes
-    -----
-    Performance will improve significantly by resolving these GitHub issues.
-      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
-      * ``1034`` Optimizers/objectives with auxiliary output
+    """
 
-    Parameters
-    ----------
-    eq : Equilibrium
-        ``Equilibrium`` to be optimized.
-    grid : Grid
-        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
-        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
-        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
-        Determines the flux surfaces to compute on and resolution of FFTs.
-        Default grid samples the boundary surface at ρ=1.
-    X : int
-        Poloidal Fourier grid resolution to interpolate the angle.
-        Preferably rounded down to power of 2.
-    Y : int
-        Toroidal Chebyshev grid resolution over a single field period
-        to interpolate the angle.
-        Preferably rounded down to power of 2.
-    Y_B : int
-        Desired resolution for algorithm to compute bounce points.
-        The bounce points are found with 8th order accuracy in this parameter.
-        A reference value is 100.
-
-        An error of ε in a bounce point manifests
-        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
-        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
-    alpha : jnp.ndarray
-        Shape (num alpha, ).
-        Starting field line poloidal labels.
-        Default is single field line. To compute a surface average
-        on a rational surface, it is necessary to average over multiple
-        field lines until the surface is covered sufficiently.
-    num_transit : int
-        Number of toroidal transits to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
-    num_well : int
-        Maximum number of wells to detect for each pitch and field line.
-        Giving ``-1`` will detect all wells but due to current limitations in
-        JAX this will have worse performance.
-        Specifying a number that tightly upper bounds the number of wells will
-        increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
-        toroidal Fourier resolution of B, respectively, in straight-field line
-        PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
-        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
-        are useful to select a reasonable value.
-
-        This is the most important parameter to specify for performance.
-    num_quad : int
-        Resolution for quadrature of bounce integrals. Default is 32.
-    num_pitch : int
-        Resolution for quadrature over velocity coordinate. Default is 65.
-    pitch_batch_size : int
-        Number of pitch values with which to compute simultaneously.
-        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
-        Default is ``num_pitch``.
-    surf_batch_size : int
-        Number of flux surfaces with which to compute simultaneously.
-        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
-        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
-    nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-    use_bounce1d : bool
-        Set to ``True`` to use ``Bounce1D`` instead of ``Bounce2D``,
-        basically replacing some pseudo-spectral methods with local splines.
-        This can be efficient if ``num_transit`` and ``alpha.size`` are small,
-        depending on hardware and hardware features used by the JIT compiler.
-        If ``True``, then parameters ``X``, ``Y``, ``nufft_eps`` are ignored.
+    __doc__ = (
+        __doc__.rstrip()
+        + doc_bounce
+        + """
     Nemov : bool
         Whether to use the Γ_c as defined by Nemov et al. or Velasco et al.
-        Default is Nemov. Set to ``False`` to use Velascos's.
+        Default is Nemov. Set to ``False`` to use Velasco's.
 
         Nemov's Γ_c converges to a finite nonzero value in the infinity limit
         of the number of toroidal transits. Velasco's expression has a secular
@@ -139,15 +66,13 @@ class GammaC(_Objective):
         integrals. At finite resolution, an optimization using Velasco's metric
         may need to be evaluated by measuring decrease in Γ_c at a fixed number
         of toroidal transits.
-
-    """
-
-    __doc__ = __doc__.rstrip() + collect_docs(
-        target_default="``target=0``.",
-        bounds_default="``target=0``.",
-        normalize_detail=" Note: Has no effect for this objective.",
-        normalize_target_detail=" Note: Has no effect for this objective.",
-        overwrite=_bounce_overwrite,
+        """.rstrip()
+        + collect_docs(
+            target_default="``target=0``.",
+            bounds_default="``target=0``.",
+            normalize_detail=" Note: Has no effect for this objective.",
+            normalize_target_detail=" Note: Has no effect for this objective.",
+        )
     )
 
     _static_attrs = _Objective._static_attrs + [
@@ -175,7 +100,7 @@ class GammaC(_Objective):
         jac_chunk_size=None,
         name="Gamma_c",
         grid=None,
-        X=16,
+        X=32,
         Y=32,
         Y_B=None,
         alpha=jnp.array([0.0]),
@@ -186,6 +111,7 @@ class GammaC(_Objective):
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=1e-7,
+        spline=True,
         use_bounce1d=False,
         Nemov=True,
         device_id=0,
@@ -205,9 +131,7 @@ class GammaC(_Objective):
         if target is None and bounds is None:
             target = 0.0
 
-        self._use_bounce1d = parse_argname_change(
-            use_bounce1d, kwargs, "spline", "use_bounce1d"
-        )
+        self._use_bounce1d = use_bounce1d
         self._grid = grid
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
@@ -221,12 +145,14 @@ class GammaC(_Objective):
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
+            "spline": spline,
         }
         if use_bounce1d:
             self._hyperparam.pop("X")
             self._hyperparam.pop("Y")
             self._hyperparam.pop("pitch_batch_size")
             self._hyperparam.pop("nufft_eps")
+            self._hyperparam.pop("spline")
 
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 
@@ -258,7 +184,7 @@ class GammaC(_Objective):
         if self._use_bounce1d:
             return self._build_bounce1d(use_jit, verbose)
 
-        Bounce2D._objective_build(
+        Bounce2D._build(
             self, names=self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
         )
         super().build(use_jit=use_jit, verbose=verbose)

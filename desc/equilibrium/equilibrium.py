@@ -946,6 +946,8 @@ class Equilibrium(IOAble, Optimizable):
                 inbasis=[inbasis[char] for char in grid.coordinates],
                 outbasis=("rho", "theta", "zeta"),
                 period=grid.period,
+                tol=kwargs.pop("tol", 1e-6),
+                maxiter=kwargs.pop("maxiter", 30),
             )
             grid = Grid(
                 nodes=rtz_nodes,

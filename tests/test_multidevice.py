@@ -378,6 +378,11 @@ def test_multidevice_objective_build():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj1.build()
 
+    # reset objectives
+    for o in [objective1, objective2, objective3]:
+        o._built = False
+        o._use_jit = True
+
     # this one is single device, and grids have different sizes
     obj2 = ObjectiveFunction([objective1, objective4])
     obj2.build()

@@ -320,7 +320,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
-    profiles=["atomic_number"],
+    profiles=[],
     coordinates="r",
     data=[
         "trapped fraction",

@@ -4153,7 +4153,15 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-6)
+        # This test needs high tolerance because the no nuffts + spline
+        # method for bounce points doesn't do a Newton step. Recall
+        # an O(ε) error in the spline approximation of bounce point
+        # yields O(ε¹ᐧ⁵) error in integrals with v_||. For the
+        # gradient it is probably O(ε) in general, but you'd need to work this out
+        # from the supplementary information.
+        # TODO: Reduce tolerance after someone implements the Newton step.
+        #       (When we used to do the Newton step the atol could be 1e-6).
+        np.testing.assert_allclose(g, g_0, atol=0.0025)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
@@ -4175,18 +4183,19 @@ class TestObjectiveNaNGrad:
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        # this needs 5e-11 for eps to pass when jax_finufft==1.3.0
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=5e-11)
-        )
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # these are generally sensitive to nufft_eps because
-        # we are not using enough resolution in other parameters
-        # in this test to nullify the singularities
-        # TODO: Do we want to keep this test then if it is so sensitive?
-        np.testing.assert_allclose(g, g_0, atol=2e-6, rtol=3e-4)
+        # This test needs high tolerance because the no nuffts + spline
+        # method for bounce points doesn't do a Newton step. Recall
+        # an O(ε) error in the spline approximation of bounce point
+        # yields O(ε⁰ᐧ⁵) error in integrals with 1/v_||. For the gradient
+        # it is probably O(ε⁰ᐧ³³) in general, but you'd need to work this out
+        # from the supplementary information.
+        # TODO: Reduce tolerance after someone implements the Newton step.
+        #       (When we used to do the Newton step the atol could be 1e-6).
+        np.testing.assert_allclose(g, g_0, atol=0.042)
 
         obj = ObjectiveFunction(
             _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)

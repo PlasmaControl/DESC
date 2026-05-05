@@ -1562,8 +1562,8 @@ class CoilArclengthVariance(_CoilObjective):
         f : float or array of floats
             Coil arclength variance.
         """
-        constants = self._get_deprecated_constants(constants)
         data = super().compute(params, constants=constants)
+        constants = self._get_deprecated_constants(constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
         return (out * constants["mask"])[self._coilset_tree["coilset_mask"]]

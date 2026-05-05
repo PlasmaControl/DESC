@@ -1371,7 +1371,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
     # some naming differences to account for ProximalProjection.
     out = []
-    for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+    for k, obj in enumerate(objective.objectives):
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]
@@ -1382,10 +1382,10 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             # obj might not allow fwd mode, so compute full rev mode jacobian
             # and do matmul manually. This is slightly inefficient, but usually
             # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+            Ji = getattr(obj, "jac_" + op)(*xi)
             outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
             out.append(outi)
         else:
-            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
+            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi).T
             out.append(outi)
     return jnp.concatenate(out).T

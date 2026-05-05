@@ -665,9 +665,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives. If using
-            multiple GPUs, instead of jitting the ObjectiveFunction, the sub-objectives
-            will be jitted individually.
+            Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
 
@@ -687,6 +685,7 @@ class ObjectiveFunction(IOAble):
             )
             self._use_jit = False
 
+        # under jit, we cannot use different devices, unjit to allow for that
         device_ids = [obj._device_id for obj in self._objectives]
         is_multi_device = len(set(device_ids)) > 1
         if self._is_mpi and is_multi_device:
@@ -775,9 +774,9 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
-            mem_avail = desc_config["avail_mems"][0]  # in GB
+            avail_mem = desc_config["avail_mems"][0]  # in GB
             max_chunk_size = round(
-                (mem_avail / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
+                (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
 

@@ -476,6 +476,7 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
     profiles=["pressure"],
     coordinates="r",
     data=["ne", "ni", "Te", "Ti"],
+    aliases=["pressure"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
     if profiles["pressure"] is not None:

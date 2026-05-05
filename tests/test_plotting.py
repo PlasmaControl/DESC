@@ -7,13 +7,16 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
+    ZernikePolynomial,
 )
 from desc.coils import CoilSet, FourierXYZCoil, MixedCoilSet
-from desc.compute import data_index, xyz2rpz
+from desc.compute import data_index
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -24,6 +27,11 @@ from desc.magnetic_fields import (
     PoloidalMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
+)
+from desc.particles import (
+    ManualParticleInitializerFlux,
+    ManualParticleInitializerLab,
+    VacuumGuidingCenterTrajectory,
 )
 from desc.plotting import (
     plot_1d,
@@ -39,14 +47,16 @@ from desc.plotting import (
     plot_comparison,
     plot_field_lines,
     plot_fsa,
+    plot_gammac,
     plot_grid,
     plot_logo,
+    plot_particle_trajectories,
     plot_qs_error,
     plot_section,
     plot_surfaces,
     poincare_plot,
 )
-from desc.utils import isalmostequal
+from desc.utils import isalmostequal, xyz2rpz
 
 tol_1d = 4.5
 tol_2d = 10
@@ -145,6 +155,15 @@ class TestPlot1D:
         fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
         return fig
 
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_plot_1d_normalized(self):
+        """Test plotting normalized flux surface average <|B|> on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_1d(eq, "<|B|>", log=True, normalize="<|B|>_vol")
+        ax.set_ylim([9e-1, 1.1e0])
+        return fig
+
 
 class TestPlot2D:
     """Tests for plot_2d."""
@@ -220,10 +239,23 @@ class TestPlot2D:
         grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
         eq = get("DSHAPE_CURRENT")
         fig, ax, data = plot_2d(
-            eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+            eq, "|F|_normalized", figsize=(4, 4), return_data=True, grid=grid
         )
-        for string in ["|F|", "theta", "zeta"]:
+        for string in ["|F|_normalized", "theta", "zeta"]:
             assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_2d_deprecated(self):
+        """Test deprecated 2d plot of normalized force."""
+        grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_2d(eq, "|F|", norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_2d(eq, "|F|", figsize=(4, 4), norm_F=True, grid=grid)
         return fig
 
     @pytest.mark.unit
@@ -263,6 +295,26 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
+
+    @pytest.mark.unit
+    def test_3d_tz_normalized(self):
+        """Test 3d plot of normalized force on interior surface."""
+        eq = get("DSHAPE_CURRENT")
+        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        fig, data = plot_3d(
+            eq,
+            "|F|",
+            log=True,
+            grid=grid,
+            return_data=True,
+            normalize="<|grad(p)|>_vol",
+        )
+        assert "X" in data.keys()
+        assert "Y" in data.keys()
+        assert "Z" in data.keys()
+
+        assert "|F|" in data.keys()
+        assert "normalization" in data.keys()
 
     @pytest.mark.unit
     def test_3d_rz(self):
@@ -401,10 +453,22 @@ class TestPlotFSA:
     def test_fsa_F_normalized(self):
         """Test plotting flux surface average normalized force error on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_fsa(
-            eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol"
-        )
+        fig, ax = plot_fsa(eq, "|F|", log=True, normalize="<|grad(p)|>_vol")
         ax.set_ylim([1e-6, 1e-3])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_fsa_F_normalized_deprecated(self):
+        """Test plotting deprecated fsa normalized force error on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_fsa(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
         return fig
 
 
@@ -454,7 +518,22 @@ class TestPlotSection:
     def test_plot_normF_section(self):
         """Test Poincare section plot of normalized force on log scale."""
         eq = get("DSHAPE_CURRENT")
-        fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
+        fig, ax = plot_section(eq, "|F|_normalized", log=True)
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_normF_section_deprecated(self):
+        """Test old section plot of normalized force on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        with pytest.raises((ValueError, FutureWarning)):
+            _, _ = plot_section(
+                eq, "|F|", log=True, norm_F=True, normalize="<|grad(|B|^2)|/2mu0>_vol"
+            )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            fig, ax = plot_section(eq, "|F|", log=True, norm_F=True)
+
         return fig
 
 
@@ -666,6 +745,34 @@ class TestPlotBasis:
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    def test_plot_basis_chebyshevpoly(self):
+        """Test plotting Chebyshev polynomial."""
+        basis = ChebyshevPolynomial(L=6)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly(self):
+        """Test plotting zernike polynomial."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_zernikepoly_derivative(self):
+        """Test plotting zernike polynomial derivative."""
+        basis = ZernikePolynomial(L=6, M=4)
+        fig, ax = plot_basis(basis, derivative=[2, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
@@ -691,6 +798,26 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_fourierzernike_derivative(self):
+        """Test plotting fourier-zernike basis derivative."""
+        basis = FourierZernikeBasis(L=8, M=3, N=2)
+        fig, ax = plot_basis(basis, derivative=[1, 0, 0])
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
+    def test_plot_basis_chebyshevdoublefourier(self):
+        """Test plotting chebyshev-double fourier basis."""
+        basis = ChebyshevDoubleFourierBasis(L=8, M=3, N=2)
         fig, ax, data = plot_basis(basis, return_data=True)
         for string in ["amplitude", "l", "rho", "m", "theta"]:
             assert string in data.keys()
@@ -968,6 +1095,15 @@ def test_plot_poincare():
     return fig
 
 
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+@pytest.mark.unit
+def test_plot_gammac():
+    """Test plotting gamma_c."""
+    eq = get("W7-X")
+    fig, ax = plot_gammac(eq, rho=0.5)
+    return fig
+
+
 @pytest.mark.unit
 def test_plot_field_lines():
     """Test plotting field lines."""
@@ -988,7 +1124,7 @@ def test_plot_field_lines():
         nphi_per_transit=100,
         ntransit=2,
         endpoint=True,
-        chunk_size=10,
+        bs_chunk_size=10,
     )
 
 
@@ -1020,6 +1156,8 @@ def test_plot_field_lines_reversed():
         fig=fig,
         color="red",
         lw=10,
+        # test that passing options as dict works
+        options={"throw": True, "made_jump": None},
     )
     x1 = data1["X"][0]
     y1 = data1["Y"][0]
@@ -1031,3 +1169,35 @@ def test_plot_field_lines_reversed():
     assert np.allclose(x1, np.flip(x2), atol=1e-7)
     assert np.allclose(y1, np.flip(y2), atol=1e-7)
     assert np.allclose(z1, np.flip(z2), atol=1e-7)
+
+
+@pytest.mark.unit
+def test_plot_particle_trajectories():
+    """Test plotting particle trajectories."""
+    R0 = 1.0
+    field = ToroidalMagneticField(1.0, 3.0)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    ts = np.linspace(0, 1e-6, 100)
+    _, data = plot_particle_trajectories(field, model, particles, ts, return_data=True)
+
+    assert all(data["R"][0] == R0)
+
+
+@pytest.mark.unit
+def test_plot_particle_trajectories_vacuum_eq():
+    """Test plotting particle trajectories using vacuum eq."""
+    # eq doesn't have iota profile
+    # plotting function will automatically compute iota and pass to
+    # the trace_particles function
+    eq = get("precise_QA")
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    particles = ManualParticleInitializerFlux(
+        rho0=0.5, theta0=0, zeta0=0, xi0=0.7, E=1e1
+    )
+    _, data = plot_particle_trajectories(
+        eq, model, particles, ts=np.linspace(0, 1e-8, 10), return_data=True
+    )
+
+    assert "rho" in data
+    assert "theta" in data

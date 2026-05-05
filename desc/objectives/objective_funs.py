@@ -12,6 +12,7 @@ from desc.backend import (
     jit,
     jnp,
     tree_flatten,
+    tree_leaves,
     tree_map,
     tree_unflatten,
     use_jax,
@@ -59,7 +60,7 @@ doc_normalize_target = """
         this should also be set to ``True``.
 """
 doc_loss_function = """
-    loss_function : {None, 'mean', 'min', 'max'}, optional
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
         Loss function to apply to the objective values once computed. This loss function
         is called on the raw compute value, before any shifting, scaling, or
         normalization.
@@ -94,6 +95,31 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_target_coil = """
+    target : float, list, optional
+        Target values for the coil objective.
+        If a float, target is applied to all coils.
+        If a list, must have the same structure as coil.
+"""
+doc_weight_coil = """
+    weight : float, list, optional
+        Weight values for the coil objective.
+        If a float, weight is applied to all coils.
+        If a list, must have the same structure as coil.
+        Set weights to zero to exclude coils from the objective.
+"""
+doc_bounds_coil = """
+    bounds : tuple of {float, list}, optional
+        Lower and upper bounds on the objective. Overrides ``target``.
+        Bounds given as floats are applied to all coils.
+        Bounds given as lists must have the same structure as coil.
+"""
+doc_loss_function_coil = """
+    loss_function : {None, 'mean', 'min', 'max','sum'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization. Operates over all coils, not each individual coil.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -105,6 +131,95 @@ docs = {
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
 }
+
+doc_bounce = """
+    Notes
+    -----
+    Consider using an optimizer that uses a scalar output loss function
+    to improve performance before reducing ``jac_chunk_size``.
+
+    Developer notes: Performance will improve significantly by resolving GitHub issues:
+      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+      * ``1034`` Optimizers/objectives with auxiliary output
+      * ``2168`` Sparse cotangent pullbacks
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
+        Determines the flux surfaces to compute on and resolution of FFTs.
+        Default grid samples the boundary surface at ρ=1.
+    X : int
+        Poloidal Fourier grid resolution to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y : int
+        Toroidal Chebyshev grid resolution over a single field period
+        to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+    alpha : jnp.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``-1`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
+        toroidal Fourier resolution of B, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
+    pitch_batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    spline : bool
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
+    """.rstrip()
 
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably
@@ -140,8 +255,8 @@ def collect_docs(
     loss_detail : str, optional
         Additional information about the ``loss`` function.
     coil : bool, optional
-        Whether the objective is a coil objective. If ``True``, adds extra docs
-        to ``target`` and ``loss_function``.
+        Whether the objective is a coil objective. If ``True``, updates docs
+        of ``target``, ``weight``, ``bounds``, and ``loss_function``.
 
     Returns
     -------
@@ -150,43 +265,48 @@ def collect_docs(
 
     """
     doc_params = ""
-    for key in docs.keys():
+
+    # Copy to allow for objective-specific updates to docs
+    docs_obj = docs.copy()
+    if coil:
+        docs_obj["target"] = doc_target_coil
+        docs_obj["bounds"] = doc_bounds_coil
+        docs_obj["weight"] = doc_weight_coil
+        docs_obj["loss_function"] = doc_loss_function_coil
+
+    for key in docs_obj.keys():
         if overwrite is not None and key in overwrite.keys():
             doc_params += overwrite[key].rstrip()
         else:
             if key == "target":
                 target = ""
-                if coil:
-                    target += (
-                        "If array, it has to be flattened according to the "
-                        + "number of inputs."
-                    )
                 if target_default != "":
-                    target = target + " Defaults to " + target_default
-                doc_params += docs[key].rstrip() + target
+                    target += " Defaults to " + target_default
+                doc_params += docs_obj[key].rstrip() + target
             elif key == "bounds" and bounds_default != "":
                 doc_params = (
-                    doc_params + docs[key].rstrip() + " Defaults to " + bounds_default
+                    doc_params
+                    + docs_obj[key].rstrip()
+                    + " Defaults to "
+                    + bounds_default
                 )
             elif key == "loss_function":
                 loss = ""
-                if coil:
-                    loss = " Operates over all coils, not each individual coil."
                 if loss_detail is not None:
                     loss += loss_detail
-                doc_params += docs[key].rstrip() + loss
+                doc_params += docs_obj[key].rstrip() + loss
             elif key == "normalize":
                 norm = ""
                 if normalize_detail is not None:
                     norm += normalize_detail
-                doc_params += docs[key].rstrip() + norm
+                doc_params += docs_obj[key].rstrip() + norm
             elif key == "normalize_target":
                 norm_target = ""
                 if normalize_target_detail is not None:
                     norm_target = normalize_target_detail
-                doc_params += docs[key].rstrip() + norm_target
+                doc_params += docs_obj[key].rstrip() + norm_target
             else:
-                doc_params += docs[key].rstrip()
+                doc_params += docs_obj[key].rstrip()
 
     return doc_params
 
@@ -232,7 +352,24 @@ class ObjectiveFunction(IOAble):
 
     """
 
-    _io_attrs_ = ["_objectives"]
+    _io_attrs_ = [
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_objectives",
+        "_use_jit",
+    ]
+    _static_attrs = [
+        "_built",
+        "_compile_mode",
+        "_compiled",
+        "_deriv_mode",
+        "_jac_chunk_size",
+        "_name",
+        "_things_per_objective_idx",
+        "_use_jit",
+        "_static_attrs",
+    ]
 
     def __init__(
         self,
@@ -293,6 +430,8 @@ class ObjectiveFunction(IOAble):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -310,6 +449,19 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+
+        use_jits = [obj._use_jit for obj in self.objectives]
+        if not all(use_jits):
+            warnif(
+                self._use_jit,
+                UserWarning,
+                "At least 1 sub-objective has use_jit=False. Setting "
+                "use_jit=False for the whole ObjectiveFunction. "
+                "Sub-objectives with use_jit=False: "
+                f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
+            )
+            self._use_jit = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -371,23 +523,24 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            avail_mem = desc_config.get("avail_mem")
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = None
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = None
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not self.use_jit:
+        if not self._use_jit:
             self._unjit()
 
         self._built = True
@@ -424,7 +577,7 @@ class ObjectiveFunction(IOAble):
         flat_, treedef_ = tree_flatten(
             things_per_objective, is_leaf=lambda x: isinstance(x, Optimizable)
         )
-        unique_, inds_ = unique_list(flat_)
+        unique_, inds_, _ = unique_list(flat_)
 
         # this is needed to know which "thing" goes with which sub-objective,
         # ie objectives[i].things == [things[k] for k in things_per_objective_idx[i]]
@@ -436,6 +589,20 @@ class ObjectiveFunction(IOAble):
 
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
         self._flatten = _ThingFlattener(len(flat_), treedef_)
+
+    def _compute_op(self, x, constants=None, op="compute_unscaled"):
+        """Helper function to compute various operations."""
+        if constants is None:
+            constants = self.constants
+        params = self.unpack_state(x)
+        assert len(params) == len(constants) == len(self.objectives)
+        f = jnp.concatenate(
+            [
+                getattr(obj, op)(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
+            ]
+        )
+        return f
 
     @jit
     def compute_unscaled(self, x):
@@ -452,12 +619,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        assert len(params) == len(self.objectives)
-        f = jnp.concatenate(
-            [obj.compute_unscaled(*par) for par, obj in zip(params, self.objectives)]
-        )
-        return f
+        op = "compute_unscaled"
+        return self._compute_op(x, op=op)
 
     @jit
     def compute_scaled(self, x):
@@ -474,12 +637,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        assert len(params) == len(self.objectives)
-        f = jnp.concatenate(
-            [obj.compute_scaled(*par) for par, obj in zip(params, self.objectives)]
-        )
-        return f
+        op = "compute_scaled"
+        return self._compute_op(x, op=op)
 
     @jit
     def compute_scaled_error(self, x):
@@ -496,15 +655,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        assert len(params) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par)
-                for par, obj in zip(params, self.objectives)
-            ]
-        )
-        return f
+        op = "compute_scaled_error"
+        return self._compute_op(x, op=op)
 
     @jit
     def compute_scalar(self, x):
@@ -580,6 +732,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt] = [outi]
         return out
 
+    @functools.partial(jit, static_argnames="per_objective")
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
@@ -609,8 +762,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
@@ -625,6 +777,7 @@ class ObjectiveFunction(IOAble):
             ]
         return params
 
+    @jit
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO (#1392): also check resolution of the things etc?
@@ -998,14 +1151,32 @@ class _Objective(IOAble, ABC):
     _units = "(Unknown)"
     _equilibrium = False
     _io_attrs_ = [
-        "_target",
         "_bounds",
-        "_weight",
+        "_deriv_mode",
         "_name",
         "_normalize",
         "_normalize_target",
         "_normalization",
+        "_target",
+        "_weight",
+    ]
+    _static_attrs = [
+        "_built",
+        "_coordinates",
+        "_data_keys",
         "_deriv_mode",
+        "_dim_f",
+        "_equilibrium",
+        "_jac_chunk_size",
+        "_linear",
+        "_loss_function",
+        "_name",
+        "_normalize",
+        "_normalize_target",
+        "_print_value_fmt",
+        "_scalar",
+        "_units",
+        "_static_attrs",
     ]
 
     def __init__(
@@ -1023,12 +1194,12 @@ class _Objective(IOAble, ABC):
     ):
         if self._scalar:
             assert self._coordinates == ""
-        assert np.all(np.asarray(weight) > 0)
+        assert np.all(np.asarray(tree_leaves(weight)) >= 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
-        assert loss_function in [None, "mean", "min", "max"]
+        assert loss_function in [None, "mean", "min", "max", "sum"]
         assert deriv_mode in {"auto", "fwd", "rev"}
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
@@ -1048,6 +1219,7 @@ class _Objective(IOAble, ABC):
             "mean": jnp.mean,
             "max": jnp.max,
             "min": jnp.min,
+            "sum": jnp.sum,
             None: None,
         }[loss_function]
 
@@ -1087,6 +1259,8 @@ class _Objective(IOAble, ABC):
                 setattr(
                     self, method, functools.partial(getattr(self, method)._fun, self)
                 )
+                if method not in self._static_attrs:
+                    self._static_attrs += [method]
             except AttributeError:
                 pass
 
@@ -1636,5 +1810,5 @@ class _ThingFlattener(IOAble):
         )
         assert treedef == self.treedef
         assert len(flat) == self.length
-        unique, _ = unique_list(flat)
+        unique, _, _ = unique_list(flat)
         return unique

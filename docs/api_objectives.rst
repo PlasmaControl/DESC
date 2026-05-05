@@ -96,6 +96,7 @@ Stability
 
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
+    desc.objectives.BallooningStability
 
 
 Free boundary / Single stage optimization
@@ -148,6 +149,17 @@ Profiles
     desc.objectives.BootstrapRedlConsistency
 
 
+Power Balance
+-------------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.FusionPower
+    desc.objectives.HeatingPowerISS04
+
+
 Fixing degrees of freedom
 -------------------------
 .. autosummary::
@@ -176,6 +188,7 @@ Fixing degrees of freedom
     desc.objectives.FixCoilCurrent
     desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
+    desc.objectives.ShareParameters
 
 
 User defined objectives
@@ -185,10 +198,11 @@ User defined objectives
     :recursive:
     :template: class.rst
 
-
+    desc.objectives.ExternalObjective
     desc.objectives.GenericObjective
     desc.objectives.ObjectiveFromUser
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.DeflationOperator
 
 
 Utilities for getting common groups of constraints

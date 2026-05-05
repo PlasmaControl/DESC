@@ -1,11 +1,9 @@
 """Functions and methods for saving and loading equilibria and other objects."""
 
 import copy
-import functools
 import os
 import pickle
 import pydoc
-import types
 from abc import ABC, ABCMeta
 
 import h5py
@@ -62,7 +60,7 @@ def load(load_from, file_format=None):
                 cls_name = f["__class__"][()].decode("utf-8")
                 cls = pydoc.locate(cls_name)
                 obj = cls.__new__(cls)
-                reader = reader_factory(load_from, file_format)
+                reader = reader_factory(f, file_format)
                 reader.read_obj(obj)
                 reader.close()
             else:
@@ -77,20 +75,6 @@ def load(load_from, file_format=None):
     if hasattr(obj, "_set_up"):
         obj._set_up()
     return obj
-
-
-def _unjittable(x):
-    # strings and functions can't be args to jitted functions, and ints/bools are pretty
-    # much always flags or array sizes which also need to be a compile time constant
-    if isinstance(x, (list, tuple)):
-        return all([_unjittable(y) or y is None for y in x])
-    if isinstance(x, dict):
-        return all([_unjittable(y) or y is None for y in x.values()])
-    if hasattr(x, "dtype") and np.ndim(x) == 0:
-        return np.issubdtype(x.dtype, np.bool_) or np.issubdtype(x.dtype, np.int_)
-    return isinstance(
-        x, (str, types.FunctionType, functools.partial, bool, int, np.int_)
-    )
 
 
 def _make_hashable(x):
@@ -138,18 +122,10 @@ class _AutoRegisterPytree(type):
             children = {}
             aux_data = []
 
-            # this allows classes to override the default static/dynamic stuff
-            # if they need certain floats to be static or ints to by dynamic etc.
             static_attrs = getattr(obj, "_static_attrs", [])
-            dynamic_attrs = getattr(obj, "_dynamic_attrs", [])
-            assert set(static_attrs).isdisjoint(set(dynamic_attrs))
 
             for key, val in obj.__dict__.items():
                 if key in static_attrs:
-                    aux_data += [(key, _make_hashable(val))]
-                elif key in dynamic_attrs:
-                    children[key] = val
-                elif _unjittable(val):
                     aux_data += [(key, _make_hashable(val))]
                 else:
                     children[key] = val

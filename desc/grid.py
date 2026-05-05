@@ -48,6 +48,21 @@ class _Grid(IOAble, ABC):
         "_fft_toroidal",
     ]
 
+    _static_attrs = [
+        "_endpoint",
+        "_can_fft2",
+        "_coordinates",
+        "_fft_poloidal",
+        "_fft_toroidal",
+        "_is_meshgrid",
+        "_L",
+        "_M",
+        "_N",
+        "_NFP",
+        "_node_pattern",
+        "_sym",
+    ]
+
     @abstractmethod
     def _create_nodes(self, *args, **kwargs):
         """Allow for custom node creation."""
@@ -695,11 +710,11 @@ class _Grid(IOAble, ABC):
             shape += (-1,)
         x = x.reshape(shape, order="F")
         # swap to change shape from trz/arz to rtz/raz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         return x
 
     def meshgrid_flatten(self, x, order):
@@ -746,9 +761,9 @@ class _Grid(IOAble, ABC):
         newax = tuple(order.index(c) for c in self.coordinates)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         # swap to change shape from rtz/raz to trz/arz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
 
         shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
         if vec:
@@ -902,7 +917,7 @@ class Grid(_Grid):
         ----------
         nodes : list of ndarray
             Three arrays, one for each coordinate.
-            Sorted unique values of each coordinate.
+            Unique values of each coordinate sorted in increasing order.
         spacing : list of ndarray
             Three arrays, one for each coordinate.
             Weights for integration. Defaults to a midpoint rule.
@@ -1192,10 +1207,10 @@ class LinearGrid(_Grid):
             node spacing, based on local volume around the node
 
         """
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         # TODO:
         #  https://github.com/PlasmaControl/DESC/pull/1204#pullrequestreview-2246771337
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
         axis = bool(axis)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
@@ -1319,6 +1334,10 @@ class LinearGrid(_Grid):
             # if custom zeta used usually safe to assume its non-uniform so no fft
             self._fft_toroidal = not endpoint
         elif zeta is not None:
+            errorif(
+                np.any(np.asarray(zeta) > zeta_period),
+                msg="LinearGrid should be defined on 1 field period.",
+            )
             z, dz = _periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
             dz = dz * NFP
             if z[0] == 0 and z[-1] == zeta_period:

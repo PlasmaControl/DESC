@@ -20,8 +20,7 @@ from desc.coils import (
     initialize_modular_coils,
     initialize_saddle_coils,
 )
-from desc.compute import get_params, get_transforms, rpz2xyz, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -29,7 +28,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 from desc.objectives import LinkingCurrentConsistency
-from desc.utils import dot
+from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
 
 class TestCoil:

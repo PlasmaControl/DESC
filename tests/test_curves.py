@@ -342,6 +342,14 @@ class TestFourierRZCurve:
         assert c.R_basis.sym is False
         assert c.Z_basis.sym is False
 
+    @pytest.mark.unit
+    def test_from_values_np(self):
+        """Test that from_values works when numpy array passed."""
+        phis = np.linspace(0, 2 * np.pi, 4)
+        coords = np.vstack([np.cos(phis), phis, np.zeros_like(phis)]).T
+        c = FourierRZCurve.from_values(coords, N=1)
+        np.testing.assert_allclose(c.R_n[c.R_basis.get_idx(N=1)], 1.0)
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

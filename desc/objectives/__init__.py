@@ -29,6 +29,7 @@ from ._equilibrium import (
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import (
+    DeflationOperator,
     ExternalObjective,
     GenericObjective,
     LinearObjectiveFromUser,
@@ -101,5 +102,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

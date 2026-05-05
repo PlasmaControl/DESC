@@ -3,14 +3,19 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from diffrax import Dopri5
+from diffrax import (
+    Dopri5,
+    Event,
+    PIDController,
+    RecursiveCheckpointAdjoint,
+    SaveAt,
+    Tsit5,
+)
 from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 from desc.compute.utils import get_params, get_transforms
-from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid
@@ -31,9 +36,12 @@ from desc.magnetic_fields import (
     read_BNORM_file,
     solve_regularized_surface_current,
 )
+from desc.magnetic_fields._core import _field_line_integrate
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
-from desc.utils import dot
+from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+
+from .utils import FiniteDiffDerivative as Derivative
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -1067,6 +1075,12 @@ class TestMagneticFields:
         field2 = SplineMagneticField.from_field(
             field1, R, p, Z, source_grid=LinearGrid(N=1)
         )
+        # test the logic when compute_vector_potential returns a ValueError
+        _ = SplineMagneticField.from_field(field2, R, p, Z, source_grid=LinearGrid(N=1))
+        # test NFP warning
+        with pytest.warns(UserWarning):
+            # user warning because NFP != field.NFP
+            _ = SplineMagneticField.from_field(field1, R, p, Z, NFP=3)
 
         np.testing.assert_allclose(
             field1([1.0, 1.0, 1.0]), field2([1.0, 1.0, 1.0]), rtol=1e-2, atol=1e-2
@@ -1199,25 +1213,114 @@ class TestMagneticFields:
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
-    def test_field_line_integrate_jax_transforms(self):
-        """Test field line integration JAX transformable."""
+    def test_field_line_integrate_jax_transforms(self, capsys):
+        """Test field line integration is JAX transformable."""
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)
-        r0 = [10.001]
-        z0 = [0.0]
-        phis = [0, 2 * np.pi]
+        r0 = np.array([10.001])
+        z0 = np.array([0.0])
+        phis = np.array([0, 2 * np.pi])
+
+        def default_terminating_event(t, y, args, **kwargs):
+            return jnp.logical_or(y[0] < 0, y[0] > np.inf)
+
+        # close over unhashable objects
+        solver = Tsit5()
+        saveat = SaveAt(ts=phis)
+        stepsize_controller = PIDController(rtol=1e-6, atol=1e-6)
+        event = Event(default_terminating_event)
+        adjoint = RecursiveCheckpointAdjoint()
+
+        def fun0(
+            r0,
+            z0,
+            phis,
+            field,
+            params,
+            source_grid,
+            max_steps,
+            min_step_size,
+            chunk_size,
+            options,
+        ):
+            return _field_line_integrate(
+                r0,
+                z0,
+                phis=phis,
+                field=field,
+                params=params,
+                source_grid=source_grid,
+                solver=solver,
+                max_steps=max_steps,
+                min_step_size=min_step_size,
+                saveat=saveat,
+                stepsize_controller=stepsize_controller,
+                event=event,
+                adjoint=adjoint,
+                chunk_size=chunk_size,
+                bs_chunk_size=None,
+                options=options,
+                return_aux=False,
+            )
+
         # check if it is jittable
-        r, z = jit(field_line_integrate)(r0, z0, phis, field)
+        r, z = jit(fun0, static_argnames="max_steps")(
+            r0,
+            z0,
+            phis,
+            field=field,
+            params=None,
+            source_grid=None,
+            max_steps=1000,
+            min_step_size=1e-8,
+            chunk_size=None,
+            options={},
+        )
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
 
+        # make sure that the function is not recompiled
+        with jax.log_compiles():
+            r, z = jit(fun0, static_argnames="max_steps")(
+                np.array([10.002]),
+                z0,
+                phis,
+                field=field,
+                params=None,
+                source_grid=None,
+                max_steps=1000,
+                min_step_size=1e-8,
+                chunk_size=None,
+                options={},
+            )
+
+        out = capsys.readouterr()
+        assert out.out == ""
         # check the grad works
         # For toroidal field, r doesn't change with integration f(r) = r
         # so the derivative of the field line with respect to r should be 1
         fieldT = ToroidalMagneticField(2, 10)
 
         def fun(r0):
-            r0 = [r0]
-            r, _ = field_line_integrate(r0, z0, phis, fieldT)
+            r0 = jnp.array([r0])
+            r, _ = _field_line_integrate(
+                r0,
+                z0,
+                phis=phis,
+                field=fieldT,
+                params=None,
+                source_grid=None,
+                solver=solver,
+                max_steps=1000,
+                min_step_size=1e-8,
+                saveat=saveat,
+                stepsize_controller=stepsize_controller,
+                event=event,
+                adjoint=adjoint,
+                chunk_size=None,
+                bs_chunk_size=None,
+                options={},
+                return_aux=False,
+            )
             return jnp.squeeze(r[-1])
 
         df_dr = jax.grad(jit(fun))(10.1)
@@ -1401,7 +1504,7 @@ class TestMagneticFields:
     def test_omnigenous_field_change_resolution_B(self):
         """Test OmnigenousField.change_resolution() of the B_lm parameters."""
         L_B_old = 1
-        L_B_new = 2
+        L_B_new = 3
         M_B_old = 3
         M_B_new = 6
         NFP = 4
@@ -1428,6 +1531,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)  # Issue #2189
 
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):

@@ -27,6 +27,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
         If set to ``'auto'``, the scale is determined from the initial state vector.
+        This can be passed through optimizer options as
+        solve_options["linear_constraint_options"]["x_scale"].
 
     Returns
     -------
@@ -120,6 +122,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
 
     # compute x_scale if not provided
     # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
+    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
     if x_scale == "auto":
         x_scale = objective.x(*objective.things)
     errorif(

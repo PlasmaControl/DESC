@@ -7,13 +7,23 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.compute import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
-from desc.compute.geom_utils import rotation_matrix
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
-from desc.utils import check_nonnegint, check_posint, copy_coeffs, errorif, warnif
+from desc.utils import (
+    check_nonnegint,
+    check_posint,
+    copy_coeffs,
+    errorif,
+    get_ess_scale,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    warnif,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 from .core import Curve
 
@@ -55,7 +65,7 @@ class FourierRZCurve(Curve):
         "_NFP",
     ]
 
-    _static_attrs = ["_R_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + ["_sym", "_NFP", "_R_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -270,6 +280,7 @@ class FourierRZCurve(Curve):
             New representation of the curve parameterized by Fourier series for R,Z.
 
         """
+        coords = jnp.atleast_2d(coords)
         if basis == "rpz":
             coords_rpz = coords
             coords_xyz = rpz2xyz(coords)
@@ -323,6 +334,35 @@ class FourierRZCurve(Curve):
             name=name,
         )
 
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"R_n": self.R_basis.modes, "Z_n": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
+
 
 def _unclose_curve(X, Y, Z):
     if (
@@ -365,7 +405,7 @@ class FourierXYZCurve(Curve):
         "_Z_basis",
     ]
 
-    _static_attrs = ["_X_basis", "_Y_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + ["_X_basis", "_Y_basis", "_Z_basis"]
 
     def __init__(
         self,
@@ -591,6 +631,39 @@ class FourierXYZCurve(Curve):
             X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
         )
 
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {
+            "X_n": self.X_basis.modes,
+            "Y_n": self.Y_basis.modes,
+            "Z_n": self.Z_basis.modes,
+        }
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
+
 
 class FourierPlanarCurve(Curve):
     """Curve that lies in a plane.
@@ -618,7 +691,7 @@ class FourierPlanarCurve(Curve):
 
     _io_attrs_ = Curve._io_attrs_ + ["_r_n", "_center", "_normal", "_r_basis", "_basis"]
 
-    _static_attrs = ["_r_basis", "_basis"]
+    _static_attrs = Curve._static_attrs + ["_basis", "_r_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.
@@ -906,6 +979,35 @@ class FourierPlanarCurve(Curve):
             name=name,
         )
 
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"r_n": self.r_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
+
 
 class FourierXYCurve(Curve):
     """Curve that lies in a plane.
@@ -942,6 +1044,7 @@ class FourierXYCurve(Curve):
         "_Y_basis",
         "_basis",
     ]
+    _static_attrs = Curve._static_attrs + ["_basis", "_X_basis", "_Y_basis"]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
     # Curve is computed in reference frame, then displaced/rotated to the desired frame.
@@ -1281,6 +1384,35 @@ class FourierXYCurve(Curve):
             name=name,
         )
 
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"X_n": self.X_basis.modes, "Y_n": self.Y_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+
+        return scales
+
 
 class SplineXYZCurve(Curve):
     """Curve parameterized by spline knots in X,Y,Z.
@@ -1318,6 +1450,8 @@ class SplineXYZCurve(Curve):
     """
 
     _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_knots", "_method"]
+
+    _static_attrs = Curve._static_attrs + ["_method"]
 
     def __init__(
         self,

@@ -17,10 +17,10 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -48,11 +48,11 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.9.2
+          pip install matplotlib==3.10.8
 
       - name: Cache Python environment
         id: cache-env
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

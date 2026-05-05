@@ -22,15 +22,15 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.11']
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Filter changes
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             has_changes:
@@ -46,7 +46,7 @@ jobs:
         run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -60,7 +60,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
@@ -73,7 +73,7 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.9.2
+          pip install matplotlib==3.10.8
 
       - name: Set Swap Space
         if: env.has_changes == 'true'
@@ -110,7 +110,7 @@ jobs:
 
       - name: save coverage file and plot comparison results
         if: always() && env.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression_test_artifact-${{ matrix.python-version }}-${{ matrix.group }}
           path: |
@@ -121,7 +121,7 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           name: codecov-umbrella
           files: ./cov.xml

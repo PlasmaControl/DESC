@@ -211,10 +211,10 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            lambda x, *c: constraint.compute_scaled(x, c[1]),
+            lambda x, *c: constraint.compute_scaled(x),
             lb,
             ub,
-            lambda x, *c: constraint.jac_scaled(x, c[1]),
+            lambda x, *c: constraint.jac_scaled(x),
         )
     else:
         constraint_wrapped = None

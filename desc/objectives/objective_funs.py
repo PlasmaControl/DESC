@@ -1743,7 +1743,7 @@ class _Objective(IOAble, ABC):
     def _get_deprecated_constants(self, constants=None):
         """Return constants and thraw deprecation warning."""
         if constants is None:
-            constants = self._constants
+            constants = self.constants
         else:
             warnif(
                 True,

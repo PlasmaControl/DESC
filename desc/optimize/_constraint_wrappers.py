@@ -19,7 +19,7 @@ from desc.objectives.utils import (
     factorize_linear_constraints,
     remove_fixed_parameters,
 )
-from desc.utils import Timer, errorif, get_instance
+from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
 from .utils import f_where_x
 
@@ -260,169 +260,196 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
         self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
 
-    def compute_unscaled(self, x_reduced):
+    def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
+
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_unscaled(x)
+        f = self._objective.compute_unscaled(x, constants)
         return f
 
-    def compute_scaled(self, x_reduced):
+    def compute_scaled(self, x_reduced, constants=None):
         """Compute the objective function and apply weighting / normalization.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
+
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_scaled(x)
+        f = self._objective.compute_scaled(x, constants)
         return f
 
-    def compute_scaled_error(self, x_reduced):
+    def compute_scaled_error(self, x_reduced, constants=None):
         """Compute the objective function and apply weighting / bounds.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
+
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute_scaled_error(x)
+        f = self._objective.compute_scaled_error(x, constants)
         return f
 
-    def compute_scalar(self, x_reduced):
+    def compute_scalar(self, x_reduced, constants=None):
         """Compute the scalar form of the objective function.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : float
             Objective function value.
+
         """
         x = self.recover(x_reduced)
-        return self._objective.compute_scalar(x)
+        return self._objective.compute_scalar(x, constants)
 
-    def grad(self, x_reduced):
+    def grad(self, x_reduced, constants=None):
         """Compute gradient of self.compute_scalar.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         g : ndarray
             gradient vector.
+
         """
         x = self.recover(x_reduced)
-        df = self._objective.grad(x)
+        df = self._objective.grad(x, constants)
         return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
-    def hess(self, x_reduced):
+    def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         H : ndarray
             Hessian matrix.
+
         """
         x = self.recover(x_reduced)
-        df = self._objective.hess(x)
+        df = self._objective.hess(x, constants)
         return (
             (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
             @ df[self._unfixed_idx, :][:, self._unfixed_idx]
             @ (self._Z * self._D[self._unfixed_idx, None])
         )
 
-    def _jac(self, x_reduced, op="scaled"):
+    def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
         v = self._feasible_tangents
-        df = getattr(self._objective, "jvp_" + op)(v.T, x)
+        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
         return df.T
 
-    def jac_scaled(self, x_reduced):
+    def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_scaled.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
-        """
-        return self._jac(x_reduced, "scaled")
 
-    def jac_scaled_error(self, x_reduced):
+        """
+        return self._jac(x_reduced, constants, "scaled")
+
+    def jac_scaled_error(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_scaled_error.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
-        """
-        return self._jac(x_reduced, "scaled_error")
 
-    def jac_unscaled(self, x_reduced):
+        """
+        return self._jac(x_reduced, constants, "scaled_error")
+
+    def jac_unscaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_unscaled.
 
         Parameters
         ----------
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
-        """
-        return self._jac(x_reduced, "unscaled")
 
-    def _jvp(self, v, x_reduced, op="jvp_scaled"):
+        """
+        return self._jac(x_reduced, constants, "unscaled")
+
+    def _jvp(self, v, x_reduced, constants=None, op="jvp_scaled"):
         x = self.recover(x_reduced)
         v = self._feasible_tangents @ v
-        df = getattr(self._objective, op)(v, x)
+        df = getattr(self._objective, op)(v, x, constants)
         return df
 
-    def jvp_scaled(self, v, x_reduced):
+    def jvp_scaled(self, v, x_reduced, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
         Parameters
@@ -431,10 +458,13 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vectors to right-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
-        """
-        return self._jvp(v, x_reduced, "jvp_scaled")
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
-    def jvp_scaled_error(self, v, x_reduced):
+        """
+        return self._jvp(v, x_reduced, constants, "jvp_scaled")
+
+    def jvp_scaled_error(self, v, x_reduced, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
         Parameters
@@ -443,10 +473,13 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vectors to right-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
-        """
-        return self._jvp(v, x_reduced, "jvp_scaled_error")
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
-    def jvp_unscaled(self, v, x_reduced):
+        """
+        return self._jvp(v, x_reduced, constants, "jvp_scaled_error")
+
+    def jvp_unscaled(self, v, x_reduced, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 
         Parameters
@@ -455,15 +488,18 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vectors to right-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
-        """
-        return self._jvp(v, x_reduced, "jvp_unscaled")
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
-    def _vjp(self, v, x_reduced, op="vjp_scaled"):
+        """
+        return self._jvp(v, x_reduced, constants, "jvp_unscaled")
+
+    def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
-        df = getattr(self._objective, op)(v, x)
+        df = getattr(self._objective, op)(v, x, constants)
         return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
-    def vjp_scaled(self, v, x_reduced):
+    def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
 
         Parameters
@@ -472,10 +508,13 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vector to left-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
-        """
-        return self._vjp(v, x_reduced, "vjp_scaled")
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
-    def vjp_scaled_error(self, v, x_reduced):
+        """
+        return self._vjp(v, x_reduced, constants, "vjp_scaled")
+
+    def vjp_scaled_error(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled_error.
 
         Parameters
@@ -484,10 +523,13 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vector to left-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
-        """
-        return self._vjp(v, x_reduced, "vjp_scaled_error")
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
-    def vjp_unscaled(self, v, x_reduced):
+        """
+        return self._vjp(v, x_reduced, constants, "vjp_scaled_error")
+
+    def vjp_unscaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_unscaled.
 
         Parameters
@@ -496,8 +538,11 @@ class LinearConstraintProjection(ObjectiveFunction):
             Vector to left-multiply the Jacobian by.
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
         """
-        return self._vjp(v, x_reduced, "vjp_unscaled")
+        return self._vjp(v, x_reduced, constants, "vjp_unscaled")
 
     def __getattr__(self, name):
         """For other attributes we defer to the base objective."""
@@ -915,82 +960,100 @@ class ProximalProjection(ObjectiveFunction):
 
         return xopt, xeq
 
-    def compute_scaled(self, x):
+    def compute_scaled(self, x, constants=None):
         """Compute the objective function and apply weights/normalization.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
-        """
-        xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_scaled(xopt)
 
-    def compute_scaled_error(self, x):
+        """
+        constants = setdefault(constants, [None, None])
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled(xopt, constants[0])
+
+    def compute_scaled_error(self, x, constants=None):
         """Compute the error between target and objective and apply weights etc.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
-        """
-        xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_scaled_error(xopt)
 
-    def compute_scalar(self, x):
+        """
+        constants = setdefault(constants, [None, None])
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled_error(xopt, constants[0])
+
+    def compute_scalar(self, x, constants=None):
         """Compute the sum of squares error.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : float
             Objective function scalar value.
+
         """
-        f = jnp.sum(self.compute_scaled_error(x) ** 2) / 2
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def compute_unscaled(self, x):
+    def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Objective function value(s).
-        """
-        xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute_unscaled(xopt)
 
-    def grad(self, x):
+        """
+        constants = setdefault(constants, [None, None])
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_unscaled(xopt, constants[0])
+
+    def grad(self, x, constants=None):
         """Compute gradient of self.compute_scalar.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         g : ndarray
             gradient vector.
+
         """
         # We are looking for the gradient of L = 0.5 * G.T @ G
         # Then, the gradient is ∇L = G.T @ J_of_G
@@ -1002,7 +1065,7 @@ class ProximalProjection(ObjectiveFunction):
         # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
         # We get the part in [] using the _get_tangent method.
         v = jnp.eye(x.shape[0])
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
         tangents = batched_vectorize(
@@ -1014,7 +1077,7 @@ class ProximalProjection(ObjectiveFunction):
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
         return tangents @ g_vjp
 
-    def hess(self, x):
+    def hess(self, x, constants=None):
         """Compute Hessian of self.compute_scalar.
 
         Uses the "small residual approximation" where the Hessian is replaced by
@@ -1024,54 +1087,65 @@ class ProximalProjection(ObjectiveFunction):
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         H : ndarray
             Hessian matrix.
+
         """
-        J = self.jac_scaled_error(x)
+        J = self.jac_scaled_error(x, constants)
         return J.T @ J
 
-    def jac_scaled(self, x):
+    def jac_scaled(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_scaled(v, x).T
+        return self.jvp_scaled(v, x, constants).T
 
-    def jac_scaled_error(self, x):
+    def jac_scaled_error(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled_error.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_scaled_error(v, x).T
+        return self.jvp_scaled_error(v, x, constants).T
 
-    def jac_unscaled(self, x):
+    def jac_unscaled(self, x, constants=None):
         """Compute Jacobian of self.compute_unscaled.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1079,9 +1153,9 @@ class ProximalProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         v = jnp.eye(x.shape[0])
-        return self.jvp_unscaled(v, x).T
+        return self.jvp_unscaled(v, x, constants).T
 
-    def jvp_scaled(self, v, x):
+    def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
 
         Parameters
@@ -1091,11 +1165,14 @@ class ProximalProjection(ObjectiveFunction):
             This method only works for first order jvps.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
         """
         op = "scaled"
-        return self._jvp(v, x, op)
+        return self._jvp(v, x, constants, op)
 
-    def jvp_scaled_error(self, v, x):
+    def jvp_scaled_error(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled_error.
 
         Parameters
@@ -1105,11 +1182,14 @@ class ProximalProjection(ObjectiveFunction):
             This method only works for first order jvps.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
         """
         op = "scaled_error"
-        return self._jvp(v, x, op)
+        return self._jvp(v, x, constants, op)
 
-    def jvp_unscaled(self, v, x):
+    def jvp_unscaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_unscaled.
 
         Parameters
@@ -1119,11 +1199,14 @@ class ProximalProjection(ObjectiveFunction):
             This method only works for first order jvps.
         x : ndarray
             Optimization variables.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
         """
         op = "unscaled"
-        return self._jvp(v, x, op)
+        return self._jvp(v, x, constants, op)
 
-    def _jvp(self, v, x, op="scaled_error"):
+    def _jvp(self, v, x, constants=None, op="scaled_error"):
         # The goal is to compute the Jacobian of the objective function with respect to
         # the optimization variables (c). Before taking the Jacobian, we update the
         # equilibrium such that
@@ -1140,11 +1223,12 @@ class ProximalProjection(ObjectiveFunction):
         # First we will compute the tangent direction (see _get_tangent for details),
         # then we will compute the Jacobian.
         v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, op=op)
+        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
         tangents = batched_vectorize(
             jvpfun,
             signature="(n)->(k)",
@@ -1153,7 +1237,7 @@ class ProximalProjection(ObjectiveFunction):
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
-            return getattr(self._objective, "jvp_" + op)(tangents, xg)
+            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             return _proximal_jvp_blocked_pure(
                 self._objective,
@@ -1162,7 +1246,7 @@ class ProximalProjection(ObjectiveFunction):
                 op,
             )
 
-    def _get_tangent(self, v, xf, op):
+    def _get_tangent(self, v, xf, constants, op):
         # Note: This function is vectorized over v. So, v is expected to be 1D array
         # of size self.dim_x.
 
@@ -1173,6 +1257,7 @@ class ProximalProjection(ObjectiveFunction):
         dfdc = _proximal_jvp_f_pure(
             self._constraint,
             xf,
+            constants[1],
             vs[self._eq_idx],
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
@@ -1208,6 +1293,19 @@ class ProximalProjection(ObjectiveFunction):
         tangent = dxdcv - self._feasible_tangents @ dfdc
         return tangent
 
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        warnif(
+            True,
+            DeprecationWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as obj._constants.",
+        )
+        return [self._objective.constants, self._constraint.constants]
+
     def __getattr__(self, name):
         """For other attributes we defer to the base objective."""
         return getattr(self._objective, name)
@@ -1237,21 +1335,21 @@ def jit_if_possible(func):
 
 
 @jit_if_possible
-def _proximal_jvp_f_pure(constraint, xf, dc, eq_feasible_tangents, dxdc, op):
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
     # of same size as full equilibrium state vector. This function returns a 1D array.
 
     # here we are forming (dF/dx)^-1 @ dF/dc
     # where Fxh is dF/dx and Fc is dF/dc
-    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf).T
+    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants).T
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
     # For example, if we want the derivative wrt Rb_023, we should take the derivative
     # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
     # for the relation between Rb_lmn and R_lmn.
-    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf)
+    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
@@ -1273,7 +1371,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
     # some naming differences to account for ProximalProjection.
     out = []
-    for k, obj in enumerate(objective.objectives):
+    for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]
@@ -1284,10 +1382,10 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             # obj might not allow fwd mode, so compute full rev mode jacobian
             # and do matmul manually. This is slightly inefficient, but usually
             # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-            Ji = getattr(obj, "jac_" + op)(*xi)
+            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
             outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
             out.append(outi)
         else:
-            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi).T
+            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
             out.append(outi)
     return jnp.concatenate(out).T

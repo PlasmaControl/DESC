@@ -50,13 +50,13 @@ def sgd(  # noqa: C901
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x)-> float
+        objective to be minimized. Should have a signature like fun(x,*args)-> float
     x0 : array-like
         initial guess
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     args : tuple
-        additional arguments passed to fun and grad (not used)
+        additional arguments passed to fun and grad
     method : str
         Name of the method to use. Available options are `'sgd'`.
         Additionally, ``optax`` optimizers can be used by specifying the method as
@@ -93,9 +93,10 @@ def sgd(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk) -> bool``
+            ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. If callback returns True
+        where ``xk`` is the current parameter vector. and ``args``
+        are the same arguments passed to fun and grad. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings
@@ -290,7 +291,7 @@ def sgd(  # noqa: C901
         if verbose > 1:
             print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
-        if callback(jnp.copy(x)):
+        if callback(jnp.copy(x), *args):
             success, message = False, STATUS_MESSAGES["callback"]
 
     result = OptimizeResult(

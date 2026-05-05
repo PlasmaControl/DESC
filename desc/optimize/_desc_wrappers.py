@@ -111,16 +111,18 @@ def _optimize_desc_aug_lagrangian(
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
-    hess = objective.hess if "bfgs" not in method else "bfgs"
+    # local lambdas to handle constants from both objective and constraint
+    hess = (lambda x, *c: objective.hess(x)) if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x),
         )
+        # TODO (#1394): can't pass constants dict into vjp for now
         constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
     else:
         constraint_wrapped = None
@@ -132,7 +134,7 @@ def _optimize_desc_aug_lagrangian(
         hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=None,
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -209,10 +211,10 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            constraint.compute_scaled,
+            lambda x, *c: constraint.compute_scaled(x, c[1]),
             lb,
             ub,
-            constraint.jac_scaled,
+            lambda x, *c: constraint.jac_scaled(x, c[1]),
         )
     else:
         constraint_wrapped = None
@@ -223,7 +225,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
         jac=objective.jac_scaled_error,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=None,
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -304,7 +306,7 @@ def _optimize_desc_least_squares(
         objective.compute_scaled_error,
         x0=x0,
         jac=objective.jac_scaled_error,
-        args=None,
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -483,7 +485,7 @@ def _optimize_desc_stochastic(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        args=None,
+        args=(),
         method=method,
         x_scale=x_scale,
         ftol=stoptol["ftol"],

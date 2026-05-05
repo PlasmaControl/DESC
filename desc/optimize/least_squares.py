@@ -48,7 +48,7 @@ def lsqtr(  # noqa: C901
     Parameters
     ----------
     fun : callable
-        objective to be minimized. Should have a signature like fun(x)-> 1d array
+        objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
     x0 : array-like
         initial guess
     jac : callable:
@@ -59,7 +59,7 @@ def lsqtr(  # noqa: C901
         bound will be the same for all variables. Use np.inf with an appropriate sign
         to disable bounds on all or some variables.
     args : tuple
-        additional arguments passed to fun, grad, and jac (not used)
+        additional arguments passed to fun, grad, and jac
     x_scale : array_like or ``'jac'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -93,9 +93,10 @@ def lsqtr(  # noqa: C901
         Called after each iteration. Should be a callable with
         the signature:
 
-            ``callback(xk) -> bool``
+            ``callback(xk, *args) -> bool``
 
-        where ``xk`` is the current parameter vector. If callback returns True
+        where ``xk`` is the current parameter vector, and ``args``
+        are the same arguments passed to fun and jac. If callback returns True
         the algorithm execution is terminated.
     options : dict, optional
         dictionary of optional keyword arguments to override default solver settings.
@@ -174,12 +175,12 @@ def lsqtr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x)
+    f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
     # jax.pure_callback and gets stuck due to async dispatch
-    J = jac(x).block_until_ready()
+    J = jac(x, *args).block_until_ready()
     njev += 1
     g = jnp.dot(J.T, f)
 
@@ -353,7 +354,7 @@ def lsqtr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new)
+            f_new = fun(x_new, *args)
             nfev += 1
 
             cost_new = 0.5 * jnp.dot(f_new, f_new)
@@ -403,7 +404,7 @@ def lsqtr(  # noqa: C901
             allx.append(x)
             f = f_new
             cost = cost_new
-            J = jac(x)
+            J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)
 
@@ -432,7 +433,7 @@ def lsqtr(  # noqa: C901
             if g_norm < gtol:
                 success, message = True, STATUS_MESSAGES["gtol"] + f" ({gtol=:.2e})"
 
-            if callback(jnp.copy(x)):
+            if callback(jnp.copy(x), *args):
                 success, message = False, STATUS_MESSAGES["callback"]
 
         else:

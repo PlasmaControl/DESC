@@ -1298,7 +1298,7 @@ class ProximalProjection(ObjectiveFunction):
         """list: constant parameters for each sub-objective."""
         warnif(
             True,
-            DeprecationWarning,
+            FutureWarning,
             "constants is deprecated and will be removed in a future "
             "release. Users should not include constants in the arguments "
             "of their objective compute methods. Instead declare all the "

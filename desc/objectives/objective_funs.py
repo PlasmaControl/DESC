@@ -1049,31 +1049,31 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "bfgs", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scalar(x, self.constants).block_until_ready()
+            _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Gradient compilation time")
-            _ = self.grad(x, self.constants).block_until_ready()
+            _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
         if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
-            _ = self.hess(x, self.constants).block_until_ready()
+            _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -1086,11 +1086,11 @@ class ObjectiveFunction(IOAble):
     def _get_deprecated_constants(self, constants=None):
         """Return constants and thraw deprecation warning."""
         if constants is None:
-            constants = self.constants
+            constants = [None] * len(self.constants)
         else:
             warnif(
-                True,
-                DeprecationWarning,
+                not all(c is None for c in constants),
+                FutureWarning,
                 "constants is deprecated and will be removed in a future "
                 "release. Users should not include constants in the arguments "
                 "of their objective compute methods. Instead declare all the "
@@ -1747,7 +1747,7 @@ class _Objective(IOAble, ABC):
         else:
             warnif(
                 True,
-                DeprecationWarning,
+                FutureWarning,
                 "constants is deprecated and will be removed in a future "
                 "release. Users should not include constants in the arguments "
                 "of their objective compute methods. Instead declare all the "

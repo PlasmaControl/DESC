@@ -4629,3 +4629,19 @@ def test_objective_use_jit():
         assert f == 2 * r**2 if r > 0 else 9 * r**2 / 2
         assert g[0] == 4 * r if r > 0 else 9 * r
         assert np.all(g[1:] == 0)
+
+
+@pytest.mark.unit
+def test_deprecated_constants():
+    """Test that using deprecated constants raises a warning."""
+    eq = get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=1, M=1, L_grid=2, M_grid=2)
+    obj = ForceBalance(eq)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(*obj.xs(), constants=obj.constants)
+    obj = ObjectiveFunction(obj)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(obj.x(), constants=obj.constants)

@@ -258,6 +258,9 @@ class BootstrapRedlConsistency(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -265,17 +268,7 @@ class BootstrapRedlConsistency(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

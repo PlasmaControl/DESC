@@ -160,6 +160,9 @@ class EffectiveRipple(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
             ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``. (Deprecated)
 
         Returns
         -------
@@ -167,20 +170,11 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
+        constants = self._get_deprecated_constants(constants)
+
         if self._use_bounce1d:
             return self._compute_bounce1d(params, constants)
 
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
         eq = self.things[0]
 
         data = compute_fun(
@@ -258,17 +252,6 @@ class EffectiveRipple(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_bounce1d(self, params, constants=None):
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
         eq = self.things[0]
 
         data = compute_fun(

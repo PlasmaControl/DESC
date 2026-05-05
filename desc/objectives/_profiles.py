@@ -137,23 +137,17 @@ class Pressure(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : ndarray
             Computed quantity.
+
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -288,6 +282,9 @@ class RotationalTransform(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -295,17 +292,7 @@ class RotationalTransform(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -440,6 +427,9 @@ class Shear(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -447,17 +437,7 @@ class Shear(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -592,6 +572,9 @@ class ToroidalCurrent(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -599,17 +582,7 @@ class ToroidalCurrent(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

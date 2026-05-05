@@ -268,6 +268,9 @@ class _CoilObjective(_Objective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -275,17 +278,7 @@ class _CoilObjective(_Objective):
             Coil objective value(s).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
 
         coil = self.things[0]
         data = coil.compute(
@@ -427,6 +420,9 @@ class CoilLength(_CoilObjective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -434,7 +430,7 @@ class CoilLength(_CoilObjective):
             Coil length.
 
         """
-        data = super().compute(params)
+        data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
         return out[self._coilset_tree["coilset_mask"]]
@@ -526,6 +522,9 @@ class CoilCurvature(_CoilObjective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -533,7 +532,7 @@ class CoilCurvature(_CoilObjective):
             1D array of coil curvature values.
 
         """
-        data = super().compute(params)
+        data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
         return out[self._coilset_tree["coilset_mask"]]
@@ -623,6 +622,9 @@ class CoilTorsion(_CoilObjective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -630,7 +632,7 @@ class CoilTorsion(_CoilObjective):
             Coil torsion.
 
         """
-        data = super().compute(params)
+        data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
         return out[self._coilset_tree["coilset_mask"]]
@@ -727,13 +729,16 @@ class CoilCurrentLength(CoilLength):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
         f : array of floats
 
         """
-        lengths = super().compute(params)
+        lengths = super().compute(params, constants=constants)
         params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
         currents = jnp.concatenate([param["current"] for param in params])
         out = jnp.atleast_1d(lengths * currents[self._coilset_tree["coilset_mask"]])
@@ -823,6 +828,9 @@ class CoilIntegratedCurvature(_CoilObjective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -830,7 +838,7 @@ class CoilIntegratedCurvature(_CoilObjective):
             Integrated curvature.
 
         """
-        data = super().compute(params)
+        data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array(
             [
@@ -972,6 +980,9 @@ class CoilSetMinDistance(_Objective):
         ----------
         params : dict
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -979,17 +990,7 @@ class CoilSetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )  # pts.shape = (num_coils, num_nodes, 3)
@@ -1253,6 +1254,9 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Dictionary of equilibrium or surface degrees of freedom,
             eg ``Equilibrium.params_dict``
             Only required if ``self._eq_fixed = False``.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -1260,17 +1264,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Minimum/maximum distance from coil to surface for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             coils_params = params_1
         elif self._coils_fixed:
@@ -1559,24 +1553,17 @@ class CoilArclengthVariance(_CoilObjective):
         ----------
         params : dict
             Dictionary of the coil's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self._constants. (Deprecated)
 
         Returns
         -------
         f : float or array of floats
             Coil arclength variance.
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
-        data = super().compute(params)
+        constants = self._get_deprecated_constants(constants)
+        data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
         return (out * constants["mask"])[self._coilset_tree["coilset_mask"]]
@@ -1783,6 +1770,9 @@ class QuadraticFlux(_Objective):
         ----------
         field_params : dict
             Dictionary of the external field's degrees of freedom.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1790,17 +1780,7 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
@@ -1991,6 +1971,9 @@ class SurfaceQuadraticFlux(_Objective):
         params_2 : dict
             Dictionary of the external field's degrees of freedom, only provided if
             if field_fixed=False.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1998,17 +1981,7 @@ class SurfaceQuadraticFlux(_Objective):
             Bnorm on the QFM surface from the external field
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._field_fixed else None
         surf_params = params_1
 
@@ -2267,6 +2240,9 @@ class ToroidalFlux(_Objective):
             degrees of freedom if qfm_surface=True.
         params_2 : dict
             Dictionary of the external field's degrees of freedom, if qfm_surface=True.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2274,17 +2250,7 @@ class ToroidalFlux(_Objective):
             Toroidal flux from coils and external field
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
@@ -2500,6 +2466,9 @@ class LinkingCurrentConsistency(_Objective):
         eq_params : dict
             Dictionary of equilibrium degrees of freedom, eg ``Equilibrium.params_dict``
             Only required if eq_fixed=False.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -2507,17 +2476,7 @@ class LinkingCurrentConsistency(_Objective):
             Linking current error.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             eq_linking_current = constants["eq_linking_current"]
         else:
@@ -2635,6 +2594,9 @@ class CoilSetLinkingNumber(_Objective):
         ----------
         params : dict
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -2644,17 +2606,7 @@ class CoilSetLinkingNumber(_Objective):
             number of coils linked with that coil.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         link = constants["coilset"]._compute_linking_number(
             params=params, grid=constants["grid"]
         )
@@ -2869,6 +2821,9 @@ class SurfaceCurrentRegularization(_Objective):
         surface_params : dict
             Dictionary of surface degrees of freedom,
             eg FourierCurrentPotential.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2876,17 +2831,7 @@ class SurfaceCurrentRegularization(_Objective):
             The surface current density magnitude on the source surface.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
 
         surface_data = compute_fun(
             self._surface_current_field,

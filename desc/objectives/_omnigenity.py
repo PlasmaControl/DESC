@@ -163,6 +163,9 @@ class QuasisymmetryBoozer(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -170,17 +173,7 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -338,6 +331,9 @@ class QuasisymmetryTwoTerm(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -345,17 +341,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -487,6 +473,9 @@ class QuasisymmetryTripleProduct(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -494,17 +483,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -764,7 +743,7 @@ class Omnigenity(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, params_1=None, params_2=None, constants=None):
         """Compute omnigenity errors.
 
         Parameters
@@ -776,6 +755,9 @@ class Omnigenity(_Objective):
         params_2 : dict
             If eq_fixed=False and field_fixed=False, dictionary of field degrees of
             freedom, eg OmnigenousField.params_dict. Otherwise None.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -783,17 +765,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
 
         # sort parameters
         if self._eq_fixed:
@@ -980,6 +952,9 @@ class Isodynamicity(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -987,17 +962,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

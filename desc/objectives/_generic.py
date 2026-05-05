@@ -24,7 +24,6 @@ from desc.utils import (
     jaxify,
     parse_argname_change,
     setdefault,
-    warnif,
 )
 
 from .linear_objectives import _FixedObjective
@@ -192,6 +191,8 @@ class ExternalObjective(_Objective):
         ----------
         params : list of dict
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
+        constants : dict
+            Unused by this Objective. (Deprecated)
 
         Returns
         -------
@@ -346,6 +347,9 @@ class GenericObjective(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc.
+            Defaults to self.constants. (Deprecated)
 
         Returns
         -------
@@ -353,17 +357,7 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self._p,
             self.f,
@@ -480,6 +474,9 @@ class LinearObjectiveFromUser(_FixedObjective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg thing.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -663,6 +660,9 @@ class ObjectiveFromUser(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -670,17 +670,7 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self._p,
             self._data_keys,
@@ -963,7 +953,7 @@ class DeflationOperator(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------

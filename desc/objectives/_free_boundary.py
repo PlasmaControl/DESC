@@ -211,6 +211,9 @@ class VacuumBoundaryError(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -221,17 +224,7 @@ class VacuumBoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -269,10 +262,11 @@ class VacuumBoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        if not hasattr(self, "_constants"):
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
             w = jnp.ones_like(f)
         else:
-            w = self._constants["quad_weights"]
+            w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
@@ -688,6 +682,9 @@ class BoundaryError(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -699,17 +696,7 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -805,10 +792,11 @@ class BoundaryError(_Objective):
         f = self.compute_unscaled(*args, **kwargs)
         f0 = self.compute_unscaled(*args0, **kwargs) if args0 is not None else f
         # try to do weighted mean if possible
-        if not hasattr(self, "_constants"):
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
             w = jnp.ones_like(f)
         else:
-            w = self._constants["quad_weights"]
+            w = constants["quad_weights"]
 
         abserr = jnp.all(self.target == 0)
         pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
@@ -1054,6 +1042,9 @@ class BoundaryErrorNESTOR(_Objective):
         ----------
         params : dict
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1061,17 +1052,7 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary magnetic pressure error (T^2*m^2).
 
         """
-        if constants is None:
-            constants = self._constants
-        else:
-            warnif(
-                True,
-                DeprecationWarning,
-                "constants is deprecated and will be removed in a future "
-                "release. Users should not include constants in the arguments "
-                "of their objective compute methods. Instead declare all the "
-                "constants in the build method and use as self._constants.",
-            )
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

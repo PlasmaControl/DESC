@@ -43,6 +43,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    AxisTorsion,
     BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
@@ -874,6 +875,23 @@ class TestObjectiveFunction:
 
         # simple test: NCSX should have higher mean absolute curvature than DSHAPE
         assert K1.mean() < K2.mean()
+
+    @pytest.mark.unit
+    def test_axis_torsion(self):
+        """Test for magnetic axis torsion objective function."""
+        eq = Equilibrium()
+        obj = AxisTorsion(eq=eq, normalize=False)
+        obj.build()
+        tau = obj.compute_unscaled(*obj.xs(eq))
+        np.testing.assert_allclose(tau, 0, atol=1e-12)
+
+        eq = get("NCSX")
+        grid = LinearGrid(N=2 * eq.N + 5, NFP=eq.NFP, sym=eq.sym)
+        obj = AxisTorsion(eq=eq, grid=grid, normalize=False)
+        obj.build()
+        tau_obj = obj.compute_unscaled(*obj.xs(eq))
+        tau_axis = eq.axis.compute("torsion", grid=grid)["torsion"]
+        np.testing.assert_allclose(tau_obj, tau_axis)
 
     @pytest.mark.unit
     def test_field_scale_length(self):

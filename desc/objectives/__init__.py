@@ -3,11 +3,11 @@
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,
+    CoilBounds,
     CoilCurrentLength,
     CoilCurvature,
     CoilIntegratedCurvature,
     CoilLength,
-    CoilBounds,
     CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
@@ -16,8 +16,8 @@ from ._coils import (
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
-    SurfaceQuadraticFlux,
     SurfaceMatch,
+    SurfaceQuadraticFlux,
     ToroidalFlux,
 )
 from ._equilibrium import (
@@ -38,6 +38,7 @@ from ._generic import (
 )
 from ._geometry import (
     AspectRatio,
+    AxisTorsion,
     BScaleLength,
     Elongation,
     GoodCoordinates,

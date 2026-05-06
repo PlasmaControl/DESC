@@ -197,6 +197,7 @@ Objective Functions
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.AxisTorsion
     desc.objectives.BallooningStability
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError

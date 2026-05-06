@@ -4,6 +4,8 @@
 version: 2
 updates:
   - package-ecosystem: "pip"
+  # This workflow should use the python version specified in
+  # .python-version file.
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
@@ -27,7 +29,6 @@ updates:
       minor_packages:
         patterns:
           - "colorama"
-          - "nvgpu"
           - "psutil"
           - "pylatexenc"
           - "termcolor"
@@ -36,8 +37,10 @@ updates:
           - "jax"
           - "diffrax"
           - "interpax"
+          - "interpax_fft"
           - "orthax"
           - "quadax"
+          - "jax-finufft"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

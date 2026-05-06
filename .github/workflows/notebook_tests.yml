@@ -30,7 +30,7 @@ jobs:
 
       - name: Filter changes
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             has_changes:
@@ -74,7 +74,7 @@ jobs:
           source .venv-${{ env.version }}/bin/activate
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
-          pip install matplotlib==3.9.2
+          pip install matplotlib==3.10.8
 
       - name: Action Details
         if: env.has_changes == 'true'

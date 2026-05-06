@@ -102,6 +102,10 @@ def _optimize_scipy_minimize(  # noqa: C901
     options = {} if options is None else options
     options.setdefault("maxiter", stoptol["maxiter"])
     options.setdefault("disp", False)
+    if method == "scipy-l-bfgs-b":
+        # disp deprecated in scipy>=1.16.0 for this method and
+        # has no effect anyways, so safe to remove
+        options.pop("disp")
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
     # don't call hess if the method is approximating the hessian, since we probably
     # are avoiding it due to it being expensive

@@ -131,6 +131,95 @@ docs = {
     "jac_chunk_size": doc_jac_chunk_size,
 }
 
+doc_bounce = """
+    Notes
+    -----
+    Consider using an optimizer that uses a scalar output loss function
+    to improve performance before reducing ``jac_chunk_size``.
+
+    Developer notes: Performance will improve significantly by resolving GitHub issues:
+      * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
+      * ``1034`` Optimizers/objectives with auxiliary output
+      * ``2168`` Sparse cotangent pullbacks
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+        Number of poloidal and toroidal nodes preferably rounded down to powers of two.
+        Determines the flux surfaces to compute on and resolution of FFTs.
+        Default grid samples the boundary surface at ρ=1.
+    X : int
+        Poloidal Fourier grid resolution to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y : int
+        Toroidal Chebyshev grid resolution over a single field period
+        to interpolate the angle.
+        Preferably rounded down to power of 2.
+        Default is 32.
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
+        then the bounce points are found with spectral accuracy in this parameter.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
+
+        An error of ε in a bounce point manifests
+        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
+        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+    alpha : jnp.ndarray
+        Shape (num alpha, ).
+        Starting field line poloidal labels.
+        Default is single field line. To compute a surface average
+        on a rational surface, it is necessary to average over multiple
+        field lines until the surface is covered sufficiently.
+    num_transit : int
+        Number of toroidal transits to follow field line.
+        In an axisymmetric device, field line integration over a single poloidal
+        transit is sufficient to capture a surface average. For a 3D
+        configuration, more transits will approximate surface averages on an
+        irrational magnetic surface better, with diminishing returns.
+    num_well : int
+        Maximum number of wells to detect for each pitch and field line.
+        Giving ``-1`` will detect all wells but due to current limitations in
+        JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
+        toroidal Fourier resolution of B, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
+        are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
+    num_quad : int
+        Resolution for quadrature of bounce integrals. Default is 32.
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
+    pitch_batch_size : int
+        Number of pitch values with which to compute simultaneously.
+        If given ``None``, then ``pitch_batch_size`` is ``num_pitch``.
+        Default is ``num_pitch``.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+        If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
+        Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    nufft_eps : float
+        Precision requested for interpolation with non-uniform fast Fourier
+        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+    spline : bool
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
+    """.rstrip()
+
 
 # Note: If we ever switch to Python 3.13 for building the docs, there will probably
 # be some errors since 3.13 changed how tabs are handled in docstrings. This can be
@@ -359,6 +448,19 @@ class ObjectiveFunction(IOAble):
         """
         if use_jit is not None:
             self._use_jit = use_jit
+
+        use_jits = [obj._use_jit for obj in self.objectives]
+        if not all(use_jits):
+            warnif(
+                self._use_jit,
+                UserWarning,
+                "At least 1 sub-objective has use_jit=False. Setting "
+                "use_jit=False for the whole ObjectiveFunction. "
+                "Sub-objectives with use_jit=False: "
+                f"{[o.__class__.__name__ for o in self.objectives if not o._use_jit]}",
+            )
+            self._use_jit = False
+
         timer = Timer()
         timer.start("Objective build")
 
@@ -420,23 +522,24 @@ class ObjectiveFunction(IOAble):
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
             estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            avail_mem = desc_config.get("avail_mem")
             max_chunk_size = round(
-                (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)
-                / 0.85
-                * self.dim_x
+                (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )
             self._jac_chunk_size = max([1, max_chunk_size])
-        if self._deriv_mode == "blocked" and len(self.objectives) > 1:
-            # blocked mode should never use this chunk size if there
-            # are multiple sub-objectives
-            self._jac_chunk_size = None
-        elif self._deriv_mode == "blocked" and len(self.objectives) == 1:
-            # if there is only one objective i.e. wrapped ForceBalance in
-            # ProximalProjection, we can use the chunk size of
-            # that objective as if this is batched mode
-            self._jac_chunk_size = self.objectives[0]._jac_chunk_size
+        if self._deriv_mode == "blocked":
+            chunk_sizes = [obj._jac_chunk_size for obj in self.objectives]
+            if len(set(chunk_sizes)) > 1:
+                # blocked mode should never use this chunk size if there
+                # are multiple sub-objectives with different chunk sizes
+                self._jac_chunk_size = None
+            else:
+                # if there is only one objective i.e. wrapped ForceBalance in
+                # ProximalProjection or only one value of jac_chunk_size, we can
+                # use the chunk size of the first objective
+                self._jac_chunk_size = self.objectives[0]._jac_chunk_size
 
-        if not self.use_jit:
+        if not self._use_jit:
             self._unjit()
 
         self._built = True
@@ -486,6 +589,20 @@ class ObjectiveFunction(IOAble):
         self._unflatten = _ThingUnflattener(len(unique_), inds_, treedef_)
         self._flatten = _ThingFlattener(len(flat_), treedef_)
 
+    def _compute_op(self, x, constants=None, op="compute_unscaled"):
+        """Helper function to compute various operations."""
+        if constants is None:
+            constants = self.constants
+        params = self.unpack_state(x)
+        assert len(params) == len(constants) == len(self.objectives)
+        f = jnp.concatenate(
+            [
+                getattr(obj, op)(*par, constants=const)
+                for par, obj, const in zip(params, self.objectives, constants)
+            ]
+        )
+        return f
+
     @jit
     def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
@@ -503,17 +620,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_unscaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_unscaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled(self, x, constants=None):
@@ -532,17 +640,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scaled_error(self, x, constants=None):
@@ -561,17 +660,8 @@ class ObjectiveFunction(IOAble):
             Objective function value(s).
 
         """
-        params = self.unpack_state(x)
-        if constants is None:
-            constants = self.constants
-        assert len(params) == len(constants) == len(self.objectives)
-        f = jnp.concatenate(
-            [
-                obj.compute_scaled_error(*par, constants=const)
-                for par, obj, const in zip(params, self.objectives, constants)
-            ]
-        )
-        return f
+        op = "compute_scaled_error"
+        return self._compute_op(x, constants=constants, op=op)
 
     @jit
     def compute_scalar(self, x, constants=None):
@@ -657,6 +747,7 @@ class ObjectiveFunction(IOAble):
                     out[obj._print_value_fmt] = [outi]
         return out
 
+    @functools.partial(jit, static_argnames="per_objective")
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
 
@@ -686,8 +777,7 @@ class ObjectiveFunction(IOAble):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs_splits = np.cumsum([t.dim_x for t in self.things])
-        xs = jnp.split(x, xs_splits)
+        xs = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
         xs = xs[: len(self.things)]  # jnp.split returns an empty array at the end
         assert len(xs) == len(self.things)
         params = [t.unpack_params(xi) for t, xi in zip(self.things, xs)]
@@ -702,6 +792,7 @@ class ObjectiveFunction(IOAble):
             ]
         return params
 
+    @jit
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things."""
         # TODO (#1392): also check resolution of the things etc?
@@ -759,14 +850,14 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
+        if constants is None:
+            constants = self.constants
         v = ensure_tuple(v)
         if len(v) > 1:
             # using blocked for higher order derivatives is a pain, and only really
             # is needed for perturbations. Just pass that to jvp_batched for now
             return self._jvp_batched(v, x, constants, op)
 
-        if constants is None:
-            constants = self.constants
         xs_splits = np.cumsum([t.dim_x for t in self.things])
         xs = jnp.split(x, xs_splits)
         vs = jnp.split(v[0], xs_splits, axis=-1)

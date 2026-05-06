@@ -1236,7 +1236,7 @@ class AxisTorsion(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["torsion"]
+        return jnp.abs(data["torsion"]).ravel()
 
 
 class BScaleLength(_Objective):

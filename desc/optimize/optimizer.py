@@ -621,17 +621,13 @@ def _maybe_wrap_nonlinear_constraints(
             )
         return objective, nonlinear_constraints
     if wrapper is None and not optimizers[method]["equality_constraints"]:
-        warnings.warn(
-            FutureWarning(
-                f"""
+        warnings.warn(FutureWarning(f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
                 In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
-                """
-            )
-        )
+                """))
         wrapper = "proximal"
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})

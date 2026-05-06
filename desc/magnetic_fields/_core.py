@@ -40,6 +40,7 @@ from desc.utils import (
     dot,
     errorif,
     flatten_list,
+    get_ess_scale,
     rpz2xyz,
     rpz2xyz_vec,
     safediv,
@@ -2991,15 +2992,15 @@ class OmnigenousField(Optimizable, IOAble):
         self._N_x = setdefault(N_x, self.N_x)
 
         # change well parameters and basis
-        rho = (  # Chebyshev-Gauss-Lobatto nodes
-            1 - np.cos(np.arange(old_L_B // 2, old_L_B + 1, 1) * np.pi / old_L_B)
-        ) / 2
+        # Chebyshev-Gauss-Lobatto nodes for radial interpolation
+        rho = (1 - np.cos(np.arange(old_L_B + 1) * np.pi / old_L_B)) / 2
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
         transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
+        # linearly spaced nodes for eta interpolation
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
         eta_new = np.linspace(0, jnp.pi / 2, num=self.M_B)
 
@@ -3104,6 +3105,37 @@ class OmnigenousField(Optimizable, IOAble):
             **kwargs,
         )
         return data
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"B_lm": self.B_basis.modes, "x_lmn": self.x_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+        # B_lm has spectral radial scaling repeated for each spline knot
+        scales["B_lm"] = np.repeat(scales["B_lm"], self.M_B).flatten()
+
+        return scales
 
     @property
     def NFP(self):

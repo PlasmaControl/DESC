@@ -55,7 +55,7 @@ from desc.utils import (
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import (
-    _map_clebsch_coordinates,
+    _map_poloidal_coordinates,
     get_rtz_grid,
     is_nested,
     map_coordinates,
@@ -68,6 +68,13 @@ from .utils import (
     parse_profile,
     parse_surface,
 )
+
+_kinetic_profile_names = [
+    "_electron_temperature",
+    "_electron_density",
+    "_ion_temperature",
+    "_atomic_number",
+]
 
 
 class Equilibrium(IOAble, Optimizable):
@@ -939,6 +946,8 @@ class Equilibrium(IOAble, Optimizable):
                 inbasis=[inbasis[char] for char in grid.coordinates],
                 outbasis=("rho", "theta", "zeta"),
                 period=grid.period,
+                tol=kwargs.pop("tol", 1e-6),
+                maxiter=kwargs.pop("maxiter", 30),
             )
             grid = Grid(
                 nodes=rtz_nodes,
@@ -1353,23 +1362,30 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     @staticmethod
-    def _map_clebsch_coordinates(
+    def _map_poloidal_coordinates(
         iota,
-        alpha,
+        poloidal,
         zeta,
         L_lmn,
         lmbda,
+        varepsilon=None,
+        inbasis="alpha",
+        outbasis="theta",
         guess=None,
+        *,
         tol=1e-6,
         maxiter=30,
         **kwargs,
     ):
-        return _map_clebsch_coordinates(
+        return _map_poloidal_coordinates(
             iota,
-            alpha,
+            poloidal,
             zeta,
             L_lmn,
             lmbda,
+            varepsilon,
+            inbasis,
+            outbasis,
             guess,
             tol=tol,
             maxiter=maxiter,
@@ -1449,6 +1465,7 @@ class Equilibrium(IOAble, Optimizable):
         rcond=None,
         copy=False,
         tol=1e-9,
+        maxiter=30,
     ):
         """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -1486,6 +1503,8 @@ class Equilibrium(IOAble, Optimizable):
         tol : float
             Tolerance for coordinate mapping.
             Default is ``1e-9``.
+        maxiter : int
+            Maximum number of Newton iterations.
 
         Returns
         -------
@@ -1493,7 +1512,9 @@ class Equilibrium(IOAble, Optimizable):
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
+        return to_sfl(
+            self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol, maxiter=maxiter
+        )
 
     @property
     def surface(self):
@@ -1719,6 +1740,18 @@ class Equilibrium(IOAble, Optimizable):
         self._pressure = ensure_consistent_profile_eq_resolution(
             self._pressure, self, name="pressure"
         )
+        has_kinetic = any(
+            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
+        )  # don't warn if pressure is being set to None
+        warnif(
+            has_kinetic and new is not None,
+            UserWarning,
+            "Pressure profile is being assigned to an "
+            "equilibrium which already has at least one kinetic profile assigned to"
+            " it. The default is to use the equilibrium's assigned pressure profile"
+            " for all computations. It is recommended to remove the unneeded "
+            "profile(s) to avoid unexpected behavior, by setting them to None",
+        )
 
     @optimizable_parameter
     @property
@@ -1771,6 +1804,16 @@ class Equilibrium(IOAble, Optimizable):
             self._electron_temperature, self, name="electron temperature"
         )
 
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron temperature profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
+
     @optimizable_parameter
     @property
     def Te_l(self):
@@ -1800,6 +1843,16 @@ class Equilibrium(IOAble, Optimizable):
         self._electron_density = parse_profile(new, "electron density")
         self._electron_density = ensure_consistent_profile_eq_resolution(
             self._electron_density, self, name="electron density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -1832,6 +1885,15 @@ class Equilibrium(IOAble, Optimizable):
         self._ion_temperature = ensure_consistent_profile_eq_resolution(
             self._ion_temperature, self, name="ion temperature"
         )
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -1860,6 +1922,16 @@ class Equilibrium(IOAble, Optimizable):
         self._atomic_number = parse_profile(new, "atomic number")
         self._atomic_number = ensure_consistent_profile_eq_resolution(
             self._atomic_number, self, name="atomic number"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Atomic number profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter

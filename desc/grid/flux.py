@@ -55,7 +55,7 @@ class AbstractGridFlux(AbstractGrid):
             del self._inverse_theta_idx
         if hasattr(self, "_inverse_poloidal_idx"):
             self._inverse_x1_idx = self._inverse_poloidal_idx
-            del self._inverse_theta_idx
+            del self._inverse_poloidal_idx
         if hasattr(self, "_inverse_zeta_idx"):
             self._inverse_x2_idx = self._inverse_zeta_idx
             del self._inverse_zeta_idx
@@ -591,7 +591,7 @@ class CustomGridFlux(AbstractGridFlux):
         if coordinates[1] == "a":
             period = (np.inf, np.inf, 2 * np.pi / NFP)
         else:
-            period(np.inf, 2 * np.pi, 2 * np.pi / NFP)
+            period = (np.inf, 2 * np.pi, 2 * np.pi / NFP)
 
         x0, x1, x2 = jnp.atleast_1d(*nodes)
         if spacing is None:

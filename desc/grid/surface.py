@@ -211,10 +211,10 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         self._sym = sym
         self._endpoint = bool(endpoint)
         self._is_meshgrid = True
+        # these are default values that may get overwritten in _create_nodes
         self._fft_x1 = False
         self._fft_x2 = False
         self._can_fft2 = not sym and not endpoint
-        # these are just default values that may get overwritten in _create_nodes
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
 

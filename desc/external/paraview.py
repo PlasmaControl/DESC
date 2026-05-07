@@ -47,6 +47,7 @@ def export_surface_to_paraview(
     -------
     mesh : pyvista.StructuredGrid
         Created structured grid object. With this object one can compute more quantities
+        on the grid `LinearGridFlux(rho=rho, theta=Np, zeta=Nt, NFP=1, endpoint=True)`
         and add them to the mesh by `mesh['name'] = value`. Once the mesh is changed,
         the user has to save it again `mesh.save(filename)`.
     """

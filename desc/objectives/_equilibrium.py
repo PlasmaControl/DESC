@@ -4,7 +4,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import AbstractGridFlux, ConcentricGridFlux, QuadratureGridFlux
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif_wrong_grid
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -102,11 +102,7 @@ class ForceBalance(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = [
@@ -263,11 +259,7 @@ class ForceBalanceAnisotropic(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["F_anisotropic", "sqrt(g)"]
@@ -406,11 +398,7 @@ class RadialForceBalance(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
@@ -549,11 +537,7 @@ class HelicalForceBalance(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
@@ -692,11 +676,7 @@ class Energy(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 1
         self._data_keys = ["W"]
@@ -842,11 +822,7 @@ class CurrentDensity(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]

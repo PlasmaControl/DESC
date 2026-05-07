@@ -26,7 +26,7 @@ from desc.grid import (
 )
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif, reflection_matrix, rotation_matrix, warnif
+from desc.utils import errorif_wrong_grid, reflection_matrix, rotation_matrix, warnif
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -130,14 +130,10 @@ class Curve(IOAble, Optimizable, ABC):
             grid = LinearGridCurve(N=2 * self.N * getattr(self, "NFP", 1) + 5)
         elif isinstance(grid, numbers.Integral):
             grid = LinearGridCurve(N=grid)
-        errorif(
-            not isinstance(grid, AbstractGrid),
-            TypeError,
-            msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGrid)
         warnif(
             not isinstance(grid, AbstractGridCurve),
-            DeprecationWarning,
+            FutureWarning,
             msg=f"Type {type(grid)} for argument grid is deprecated, "
             + "an AbstractGridCurve will be required in the future.",
         )
@@ -536,14 +532,10 @@ class Surface(IOAble, Optimizable, ABC):
                 grid = LinearGridToroidalSurface(
                     M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
-            errorif(
-                not isinstance(grid, AbstractGrid),
-                TypeError,
-                msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
-            )
+            errorif_wrong_grid(grid, AbstractGrid)
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                DeprecationWarning,
+                FutureWarning,
                 msg=f"Type {type(grid)} for argument grid is deprecated, "
                 + "an AbstractGridToroidalSurface will be required in the future.",
             )
@@ -553,17 +545,7 @@ class Surface(IOAble, Optimizable, ABC):
                     L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=1
                 )
                 grid._nodes[:, 2] = self.zeta
-            errorif(
-                not isinstance(grid, AbstractGrid),
-                TypeError,
-                msg=f"Grid must be of type AbstractGrid, but got type {type(grid)}.",
-            )
-            errorif(
-                not isinstance(grid, AbstractGridFlux),
-                TypeError,
-                msg="Must pass in an AbstractGridFlux object for argument grid, "
-                + f"but got type {type(grid)}.",
-            )
+            errorif_wrong_grid(grid, AbstractGridFlux)
         else:
             raise NotImplementedError(f"Unknown surface of type {type(self)}.")
 

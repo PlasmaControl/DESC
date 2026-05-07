@@ -6,7 +6,14 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import AbstractGridFlux, LinearGridFlux
-from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
+from desc.utils import (
+    ResolutionWarning,
+    Timer,
+    errorif,
+    errorif_wrong_grid,
+    setdefault,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -114,11 +121,7 @@ class MercierStability(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             ResolutionWarning,
@@ -283,11 +286,7 @@ class MagneticWell(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             ResolutionWarning,

@@ -16,6 +16,7 @@ from desc.utils import (
     Timer,
     copy_rpz_periods,
     errorif,
+    errorif_wrong_grid,
     parse_argname_change,
     rpz2xyz,
     safenorm,
@@ -104,12 +105,7 @@ class AspectRatio(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
-                not isinstance(grid, AbstractGridFlux),
-                ValueError,
-                msg="Grid must be of type AbstractGridFlux, "
-                + f"but got type {type(grid)}.",
-            )
+            errorif_wrong_grid(grid, AbstractGridFlux)
         else:  # FourierRZToroidalSurface
             if self._grid is None:
                 grid = LinearGridToroidalSurface(
@@ -119,7 +115,7 @@ class AspectRatio(_Objective):
                 grid = self._grid
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                DeprecationWarning,
+                FutureWarning,
                 msg=f"Type {type(grid)} for argument grid is deprecated, "
                 + "an AbstractGridToroidalSurface will be required in the future.",
             )
@@ -255,12 +251,7 @@ class Elongation(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
-                not isinstance(grid, AbstractGridFlux),
-                ValueError,
-                msg="Grid must be of type AbstractGridFlux, "
-                + f"but got type {type(grid)}.",
-            )
+            errorif_wrong_grid(grid, AbstractGridFlux)
         else:  # FourierRZToroidalSurface
             if self._grid is None:
                 grid = LinearGridToroidalSurface(
@@ -270,7 +261,7 @@ class Elongation(_Objective):
                 grid = self._grid
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                DeprecationWarning,
+                FutureWarning,
                 msg=f"Type {type(grid)} for argument grid is deprecated, "
                 + "an AbstractGridToroidalSurface will be required in the future.",
             )
@@ -403,12 +394,7 @@ class Volume(_Objective):
                 )
             else:
                 grid = self._grid
-            errorif(
-                not isinstance(grid, AbstractGridFlux),
-                ValueError,
-                msg="Grid must be of type AbstractGridFlux, "
-                + f"but got type {type(grid)}.",
-            )
+            errorif_wrong_grid(grid, AbstractGridFlux)
         else:  # FourierRZToroidalSurface
             if self._grid is None:
                 grid = LinearGridToroidalSurface(
@@ -418,7 +404,7 @@ class Volume(_Objective):
                 grid = self._grid
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
-                DeprecationWarning,
+                FutureWarning,
                 msg=f"Type {type(grid)} for argument grid is deprecated, "
                 + "an AbstractGridToroidalSurface will be required in the future.",
             )
@@ -643,16 +629,11 @@ class PlasmaVesselDistance(_Objective):
             plasma_grid = self._plasma_grid
         warnif(
             not isinstance(surface_grid, AbstractGridToroidalSurface),
-            DeprecationWarning,
+            FutureWarning,
             msg=f"Type {type(surface_grid)} for argument surface_grid is deprecated, "
             + "an AbstractGridToroidalSurface will be required in the future.",
         )
-        errorif(
-            not isinstance(plasma_grid, AbstractGridFlux),
-            ValueError,
-            msg="Grid must be of type AbstractGridFlux, "
-            + f"but got type {type(plasma_grid)}.",
-        )
+        errorif_wrong_grid(plasma_grid, AbstractGridFlux, msg_grid="plasma_grid")
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
             UserWarning,
@@ -941,11 +922,7 @@ class MeanCurvature(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
@@ -1087,11 +1064,7 @@ class PrincipalCurvature(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
@@ -1223,11 +1196,7 @@ class BScaleLength(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
@@ -1362,11 +1331,7 @@ class GoodCoordinates(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = ["sqrt(g)", "g_rr", "rho"]
@@ -1519,12 +1484,7 @@ class MirrorRatio(_Objective):
             )
         else:
             grid = self._grid
-
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_rho
         self._data_keys = ["mirror ratio"]

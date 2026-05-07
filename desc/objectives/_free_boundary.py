@@ -14,6 +14,7 @@ from desc.utils import (
     PRINT_WIDTH,
     Timer,
     errorif,
+    errorif_wrong_grid,
     parse_argname_change,
     setdefault,
     warnif,
@@ -145,13 +146,7 @@ class VacuumBoundaryError(_Objective):
         pres = np.max(np.abs(data["p"]))
         curr = np.max(np.abs(data["current"]))
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
-                type(grid)
-            ),
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux, msg_grid="eval_grid")
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -560,20 +555,8 @@ class BoundaryError(_Objective):
 
         self._use_same_grid = eval_grid.equiv(source_grid)
 
-        errorif(
-            not isinstance(source_grid, AbstractGridFlux),
-            ValueError,
-            msg="source_grid must be of type AbstractGridFlux, but got type {}.".format(
-                type(source_grid)
-            ),
-        )
-        errorif(
-            not isinstance(eval_grid, AbstractGridFlux),
-            ValueError,
-            msg="eval_grid must be of type AbstractGridFlux, but got type {}.".format(
-                type(eval_grid)
-            ),
-        )
+        errorif_wrong_grid(source_grid, AbstractGridFlux, msg_grid="source_grid")
+        errorif_wrong_grid(eval_grid, AbstractGridFlux, msg_grid="eval_grid")
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,

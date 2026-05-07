@@ -3,7 +3,7 @@
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import AbstractGridFlux, QuadratureGridFlux
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, errorif_wrong_grid
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -111,11 +111,7 @@ class FusionPower(_Objective):
             )
         else:
             grid = self._grid
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 1
         self._data_keys = ["P_fusion"]
@@ -280,11 +276,7 @@ class HeatingPowerISS04(_Objective):
             )
         else:
             grid = self._grid
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = 1
         self._data_keys = ["P_ISS04"]

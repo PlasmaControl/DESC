@@ -1254,3 +1254,12 @@ def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
             jnp.exp(-alpha * mode_level) / jnp.exp(-alpha), min_value
         )
     return scales
+
+
+def errorif_wrong_grid(grid, correct, msg_grid="Grid"):
+    """Raise a TypeError if grid is not the correct type."""
+    errorif(
+        not isinstance(grid, correct),
+        TypeError,
+        msg=f"{msg_grid} must be of type {correct}, but got type {type(grid)}.",
+    )

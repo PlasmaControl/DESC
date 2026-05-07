@@ -7,7 +7,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import AbstractGridFlux, LinearGridFlux
-from desc.utils import Timer, errorif, warnif
+from desc.utils import Timer, errorif, errorif_wrong_grid, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
@@ -102,11 +102,7 @@ class QuasisymmetryBoozer(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
         warnif(
             grid.num_theta < 2 * eq.M,
@@ -291,11 +287,7 @@ class QuasisymmetryTwoTerm(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
         warnif(
             (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
             RuntimeWarning,
@@ -453,11 +445,7 @@ class QuasisymmetryTripleProduct(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
@@ -944,11 +932,7 @@ class Isodynamicity(_Objective):
         else:
             grid = self._grid
 
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            ValueError,
-            msg=f"Grid must be of type AbstractGridFlux, but got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]

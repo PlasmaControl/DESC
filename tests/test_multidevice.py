@@ -127,9 +127,9 @@ def test_multidevice_compute():
         )
         obj2.build()
 
-    f1 = obj1.compute_scalar(obj1.x(eq))
     with obj2:
         if rank == 0:
+            f1 = obj1.compute_scalar(obj1.x(eq))
             f2 = obj2.compute_scalar(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 

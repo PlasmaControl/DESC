@@ -426,9 +426,9 @@ class ObjectiveFunction(IOAble):
         device_ids = [obj._device_id for obj in objectives]
         self._is_mpi = len(set(device_ids)) > 1
         if mpi is not None:
-            # for multiple node cases, each process sees 1 CPU, for those cases,
-            # we cannot put objectives to different devices. Instead, we will
-            # run each objective on the given rank.
+            # for multiple node cases, each process sees 1 CPU
+            # for those cases we cannot put objectives on different devices
+            # instead we will run each objective on the given rank
             self._is_mpi = True
             self._rank_per_objective = (
                 rank_per_objective
@@ -514,8 +514,7 @@ class ObjectiveFunction(IOAble):
             "ObjectiveFunction must be parallel to be used as a context manager.",
         )
         # when entering the context manager, we start the worker loop
-        # this will allow the root rank to send messages to the workers
-        # to compute and to stop
+        # this allows the root rank to send messages to the workers to compute and stop
         self._worker_loop()
         return self
 
@@ -524,8 +523,8 @@ class ObjectiveFunction(IOAble):
         # we send a stop message to the workers
         if self.rank == 0:
             # only the root rank can send the stop message
-            # in general, the message contains 3 parts, but for the stop message
-            # we only need the first part
+            # in general the message contains 3 parts
+            # but for the stop message we only need the first part
             message = ("STOP", None, None)
             self.comm.bcast(message, root=0)
         self.running = False
@@ -545,8 +544,8 @@ class ObjectiveFunction(IOAble):
         will then broadcast the results back to the root rank. Once the context manager
         exits, the loop will be terminated by the root rank.
 
-        This way, we can still use MPI parallelization with the ObjectiveFunction, but
-        prevent execution of redundant calculations multiple times on different ranks.
+        Therefore we can use MPI parallelization with the ObjectiveFunction while
+        preventing execution of redundant calculations on different ranks.
         This is very similar to the strategy used in Simsopt.
 
         """
@@ -560,7 +559,7 @@ class ObjectiveFunction(IOAble):
             return jnp.empty(shape, dtype=jnp.float64, device=device)
 
         while self.running:
-            # The message contains 3 parts,
+            # The message contains 3 parts:
             # message[0] is the operation to be performed
             # message[1] is the size of state vector (for compute and jvp's)
             # message[2] is the shape of tangents (for only jvp's)
@@ -685,7 +684,7 @@ class ObjectiveFunction(IOAble):
             )
             self._use_jit = False
 
-        # under jit, we cannot use different devices, unjit to allow for that
+        # cannot use different devices under jit, unjit to allow for that
         device_ids = [obj._device_id for obj in self._objectives]
         is_multi_device = len(set(device_ids)) > 1
         if self._is_mpi and is_multi_device:
@@ -1629,10 +1628,10 @@ class _Objective(IOAble, ABC):
 
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
-        # if we have multiple GPU devices, this will help the data placement
-        # linear objectives have a separate ObjectiveFunction hence cannot make
-        # use of the "with" context manager of the main objective, they should run
-        # on the default device to avoid staling code.
+        # This will help the data placement if we have multiple GPU devices.
+        # Linear objectives have a separate ObjectiveFunction, hence they cannot use the
+        # "with" context manager of the main objective.
+        # They should run on the default device to avoid staling code.
         if (
             desc_config["num_device"] != 1
             and desc_config["kind"] == "gpu"
@@ -1640,8 +1639,7 @@ class _Objective(IOAble, ABC):
         ):
             self._device = jax.devices("gpu")[device_id]
         else:
-            # we won't transfer data for multiple CPUs because their rank should
-            # already have that data.
+            # multiple CPUs should already have the data on their rank
             self._device = None
 
         self._target = target
@@ -2288,10 +2286,9 @@ def jvp_proximal_per_process(x, v, objectives, op):
     J_rank = []
     for idx, obj in enumerate(objectives):
         if obj._deriv_mode == "rev":
-            # obj might not allow fwd mode, so compute full rev mode
-            # jacobian and do matmul manually. This is slightly
-            # inefficient, but usually when rev mode is used,
-            # dim_f <<< dim_x, so its not too bad.
+            # obj might not allow fwd mode, so compute full rev mode Jacobian and do
+            # matmul manually. This is slightly inefficient, but usually with rev mode
+            # dim_f << dim_x so it is not too bad.
             Ji = getattr(obj, "jac_" + op)(*x[idx])
             J_rank.append(
                 jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, v[idx])]).sum(axis=0)

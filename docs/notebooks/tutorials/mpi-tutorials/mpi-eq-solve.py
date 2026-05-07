@@ -14,7 +14,7 @@ from desc import _set_cpu_count, set_device
 kind = "cpu"  # or "gpu"
 num_device = 2
 # ====== Using CPUs ======
-# These will be used for diving the single CPU into multiple virtual CPUs
+# These will be used for dividing the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
 if kind == "cpu":
     # !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!

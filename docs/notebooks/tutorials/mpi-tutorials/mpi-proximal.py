@@ -13,7 +13,7 @@ from desc import _set_cpu_count, set_device
 kind = "cpu"  # or "gpu"
 num_device = 2
 # ====== Using CPUs ======
-# These will be used for diving the single CPU into multiple virtual CPUs
+# These will be used for dividing the single CPU into multiple virtual CPUs
 # such that JAX and XLA thinks there are multiple devices
 if kind == "cpu":
     # !!! If you have multiple CPUs, you shouldn't call `_set_cpu_count` !!!
@@ -114,17 +114,16 @@ if __name__ == "__main__":
         objective.build(verbose=0)
 
     # we will fix some modes as usual
-    k = 1
     R_modes = np.vstack(
         (
             [0, 0, 0],
             eq.surface.R_basis.modes[
-                np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
             ],
         )
     )
     Z_modes = eq.surface.Z_basis.modes[
-        np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
     ]
     constraints = (
         ForceBalance(eq=eq),
@@ -152,9 +151,7 @@ if __name__ == "__main__":
                 optimizer=optimizer,
                 maxiter=3,
                 verbose=3,
-                options={
-                    "initial_trust_ratio": 1.0,
-                },
+                options={"initial_trust_ratio": 1.0},
             )
 
     # if you put a code here, it will be performed on all ranks

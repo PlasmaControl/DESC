@@ -128,7 +128,7 @@ class Equilibrium(IOAble, Optimizable):
         Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
         Default is to assume electrons and ions have the same temperature.
     ion_density : Profile or ndarray shape(k,2) (optional)
-        Electron density (m^-3) profile or array of mode numbers and spectral
+        Ion density (m^-3) profile or array of mode numbers and spectral
         coefficients. If not supplied, ion density will be computed as ni = ne / Zeff.
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral

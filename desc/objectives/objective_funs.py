@@ -1084,7 +1084,7 @@ class ObjectiveFunction(IOAble):
         self._compiled = True
 
     def _get_deprecated_constants(self, constants=None):
-        """Return constants and thraw deprecation warning."""
+        """Return constants and throw deprecation warning."""
         if constants is None:
             constants = [None] * len(self.constants)
         else:
@@ -1741,7 +1741,7 @@ class _Objective(IOAble, ABC):
         return tuple([t.params_dict for t in things])
 
     def _get_deprecated_constants(self, constants=None):
-        """Return constants and thraw deprecation warning."""
+        """Return constants and throw deprecation warning."""
         if constants is None:
             constants = self.constants
         else:

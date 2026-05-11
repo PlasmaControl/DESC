@@ -61,6 +61,11 @@ def compute_scaling_factors(thing):
         if thing.electron_density is not None:
             if thing.ion_density is not None:
                 scales["n"] = np.mean([thing.electron_density(0), thing.ion_density(0)])
+            elif thing.atomic_number is not None:
+                Zeff = thing.atomic_number(0)[0]
+                scales["n"] = float(
+                    (Zeff + 1) / (2 * Zeff) * thing.electron_density(0)[0]
+                )
             else:
                 scales["n"] = thing.electron_density(0)
         if thing.electron_temperature is not None and thing.ion_temperature is not None:

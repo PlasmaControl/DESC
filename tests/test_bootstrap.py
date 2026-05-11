@@ -232,6 +232,7 @@ class TestBootstrapCompute:
         """
         # Make up some arbitrary functions to use for input:
         ne = PowerSeriesProfile(1.0e20 * np.array([1, -0.8]), modes=[0, 4])
+        ni = PowerSeriesProfile(0.9e20 * np.array([1, -0.8]), modes=[0, 4])
         Te = PowerSeriesProfile(25e3 * np.array([1, -0.9]), modes=[0, 2])
         Ti = PowerSeriesProfile(20e3 * np.array([1, -0.9]), modes=[0, 2])
         Zeff = PowerSeriesProfile(np.array([1.5, 0.5]), modes=[0, 2])
@@ -250,6 +251,7 @@ class TestBootstrapCompute:
 
         # Evaluate profiles on the rho grid:
         ne_rho = ne(rho)
+        ni_rho = ni(rho)
         Te_rho = Te(rho)
         Ti_rho = Ti(rho)
         Zeff_rho = Zeff(rho)
@@ -414,10 +416,12 @@ class TestBootstrapCompute:
         profile_data = {
             "rho": rho,
             "ne": ne_rho,
+            "ni": ni_rho,
             "Te": Te_rho,
             "Ti": Ti_rho,
             "Zeff": Zeff_rho,
             "ne_r": ne(rho, dr=1),
+            "ni_r": ni(rho, dr=1),
             "Te_r": Te(rho, dr=1),
             "Ti_r": Ti(rho, dr=1),
         }
@@ -472,6 +476,7 @@ class TestBootstrapCompute:
             target_nu_i_star = 1.0e-5
             # Make up some profiles
             ne = PowerSeriesProfile([1.0e17])
+            ni = PowerSeriesProfile([1.0e17])
             Te = PowerSeriesProfile([1.0e5])
             Ti_over_Te = np.sqrt(
                 4.9 * Zeff * Zeff * target_nu_e_star / (6.921 * target_nu_i_star)
@@ -520,6 +525,7 @@ class TestBootstrapCompute:
             profile_data = {
                 "rho": rho,
                 "ne": ne(rho),
+                "ni": ni(rho),
                 "Te": Te(rho),
                 "Ti": Ti(rho),
                 "Zeff": Zeff_rho,
@@ -610,6 +616,7 @@ class TestBootstrapCompute:
                 target_nu_i_star = target_nu_star
                 # Make up some profiles
                 ne = PowerSeriesProfile([1.0e17], modes=[0])
+                ni = ne * (1 / Zeff)
                 Te = PowerSeriesProfile([1.0e5], modes=[0])
                 Ti_over_Te = np.sqrt(
                     4.9 * Zeff * Zeff * target_nu_e_star / (6.921 * target_nu_i_star)
@@ -657,6 +664,7 @@ class TestBootstrapCompute:
                 profile_data = {
                     "rho": rho,
                     "ne": ne(rho),
+                    "ni": ni(rho),
                     "Te": Te(rho),
                     "Ti": Ti(rho),
                     "Zeff": Zeff_rho,
@@ -776,6 +784,7 @@ class TestBootstrapCompute:
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
         eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile(np.array([1]), modes=[0])
         eq.electron_density = PowerSeriesProfile(
             5.0e20 * np.array([1, -1]), modes=[0, 8]
         )
@@ -926,6 +935,7 @@ class TestBootstrapCompute:
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)[-1]
         eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile(np.array([1]), modes=[0])
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )
@@ -1016,6 +1026,7 @@ class TestBootstrapCompute:
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)[-1]
         eq.pressure = None
+        eq.atomic_number = PowerSeriesProfile(np.array([1]), modes=[0])
         eq.electron_density = PowerSeriesProfile(
             4.13e20 * np.array([1, -1]), modes=[0, 10]
         )

@@ -387,14 +387,19 @@ def _Ti_rr(params, transforms, profiles, data, **kwargs):
     units_long="1 / cubic meters",
     description="Ion density",
     dim=1,
-    params=[],
+    params=["ni_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["ion_density"],
     coordinates="r",
     data=["ne", "Zeff"],
 )
 def _ni(params, transforms, profiles, data, **kwargs):
-    data["ni"] = data["ne"] / data["Zeff"]
+    if profiles["ion_density"] is not None:
+        data["ni"] = profiles["ion_density"].compute(
+            transforms["grid"], params["ni_l"], dr=0
+        )
+    else:
+        data["ni"] = data["ne"] / data["Zeff"]
     return data
 
 
@@ -405,16 +410,21 @@ def _ni(params, transforms, profiles, data, **kwargs):
     units_long="1 / cubic meters",
     description="Ion density, first radial derivative",
     dim=1,
-    params=[],
+    params=["ni_l"],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["ion_density"],
     coordinates="r",
     data=["ne", "ne_r", "Zeff", "Zeff_r"],
 )
 def _ni_r(params, transforms, profiles, data, **kwargs):
-    data["ni_r"] = (data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]) / data[
-        "Zeff"
-    ] ** 2
+    if profiles["ion_density"] is not None:
+        data["ni_r"] = profiles["ion_density"].compute(
+            transforms["grid"], params["ni_l"], dr=1
+        )
+    else:
+        data["ni_r"] = (
+            data["ne_r"] * data["Zeff"] - data["ne"] * data["Zeff_r"]
+        ) / data["Zeff"] ** 2
     return data
 
 

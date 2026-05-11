@@ -24,13 +24,14 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGridCurve, LinearGridFlux
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
+from desc.integrals import Bounce2D
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning, errorif, xyz2rpz, xyz2rpz_vec
+from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
 
 
 def _compare_against_master(
@@ -39,22 +40,19 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
-            if np.isnan(master_data[p][name]).all():
+            if not np.isfinite(master_data[p][name]).all():
                 mean = 1.0
             else:
-                mean = np.nanmean(np.atleast_1d(np.abs(master_data[p][name])))
-                if not np.isfinite(mean):
-                    # since eq grid has nodes on axis, some quantities are infinite
-                    # so just use 1.0 as a scale for the tolerance
-                    print(f"mean(|master data|) of {name} for {p} is not finite.")
-                    mean = 1.0
+                mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
+                err_msg = f"Parameterization: {p}. Name: {name}."
+                assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
                     atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
                     rtol=1e-8,
-                    err_msg=f"Parameterization: {p}. Name: {name}.",
+                    err_msg=err_msg,
                 )
             except AssertionError as e:
                 error = True
@@ -262,6 +260,11 @@ def test_compute_everything():
                 f"Parameterization: {p}. Can't compute "
                 + f"{names - this_branch_data_rpz[p].keys()}."
             )
+
+            # now we get the special grid data
+            this_branch_data_rpz[p].update(fft_grid_data(p))
+            this_branch_data_rpz[p].update(raz_grid_data(p))
+
             # compare data against master branch
             error_rpz, update_master_data_rpz = _compare_against_master(
                 p,
@@ -300,3 +303,75 @@ def test_compute_everything():
             pickle.dump(this_branch_data_rpz, file)
 
     assert not error_rpz
+
+
+def fft_grid_data(p):
+    """Compute fft grid quantities."""
+    if p != "desc.equilibrium.equilibrium.Equilibrium":
+        return {}
+
+    # TODO: can automate this later to add omngeneity, boozer transform, etc.
+    fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco"]
+
+    eq = get("W7-X")
+    # ci and my laptop differ a bunch at rho = 0, so skip that
+    rho = np.linspace(1e-2, 1, 10)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+
+    kwargs = dict(
+        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
+        Y_B=grid.num_zeta * grid.NFP,
+        num_transit=5,
+        num_well=20 * 5,
+        nufft_eps=1e-10,
+    )
+    data = eq.compute(fft_names, grid, **kwargs)
+
+    # check vectorization too
+    d = data.copy()
+    del d["Gamma_c"]
+    d = eq.compute("Gamma_c", grid, data=d, surf_batch_size=2, **kwargs)
+    np.testing.assert_allclose(
+        d["Gamma_c"],
+        data["Gamma_c"],
+        rtol=1e-9,
+        atol=1e-9,
+        err_msg="Gamma_c vectorization",
+    )
+    # check no nufft
+    del d["Gamma_c"]
+    kwargs["nufft_eps"] = 0.0
+    d = eq.compute("Gamma_c", grid, data=d, **kwargs)
+    np.testing.assert_allclose(
+        d["Gamma_c"],
+        data["Gamma_c"],
+        # This is large since no nuffts + spline for bounce points
+        # are innaccurate due to lack of Newton step after finding bounce point
+        # approximation with splines.
+        rtol=0.2,
+        err_msg="Gamma_c no nufft",
+    )
+
+    data = apply(data, grid.compress, fft_names)
+    return data
+
+
+def raz_grid_data(p):
+    """Compute field line grid quantities."""
+    if p != "desc.equilibrium.equilibrium.Equilibrium":
+        return {}
+
+    # TODO: can automate this later to add ballooning etc.
+    raz_names = ["old effective ripple", "old Gamma_c", "old Gamma_c Velasco"]
+
+    eq = get("W7-X")
+    num_transit = 2
+    Y_B = eq.N_grid * 2 * eq.NFP
+    rho = np.linspace(1e-2, 1, 10)
+    alpha = np.array([0])
+    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+
+    data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)
+    data = apply(data, grid.compress, raz_names)
+    return data

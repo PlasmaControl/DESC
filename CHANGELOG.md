@@ -4,11 +4,39 @@ Changelog
 New Features
 
 - Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
+- Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
+- Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
+- Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
+- Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
+- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
+- Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
+    - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
+- Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
+  If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
+
+Bug Fixes
+
+- Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
+
+Performance Improvements
+
+- Reduces import time of `desc` modules.
+    - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
+    - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
+- [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
+- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
+- Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+
+
+v0.17.1
+-------
 
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
-- Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+
+
 
 v0.17.0
 -------

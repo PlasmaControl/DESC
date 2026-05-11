@@ -500,44 +500,29 @@ def test_LinearConstraintProjection_build(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, False, "compute_scaled_error")
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compute_ripple_bounce1d(benchmark):
-    """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, True, "compute_scaled_error")
+    _test_objective_ripple(benchmark, "compute_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, False, "jac_scaled_error")
+    _test_objective_ripple(benchmark, "jac_scaled_error")
 
 
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_grad_ripple_bounce1d(benchmark):
-    """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, True, "jac_scaled_error")
-
-
-def _test_objective_ripple(benchmark, use_bounce1d, method):
+def _test_objective_ripple(benchmark, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 20
+    num_field_periods = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_transit=num_transit,
-                num_well=10 * num_transit,
+                num_field_periods=num_field_periods,
+                num_well=2 * num_field_periods,
                 num_quad=16,
-                Y_B=64,
-                use_bounce1d=use_bounce1d,
+                Y_B=13,
             )
         ]
     )

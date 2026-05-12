@@ -29,7 +29,6 @@ updates:
       minor_packages:
         patterns:
           - "colorama"
-          - "nvgpu"
           - "psutil"
           - "pylatexenc"
           - "termcolor"
@@ -38,8 +37,10 @@ updates:
           - "jax"
           - "diffrax"
           - "interpax"
+          - "interpax_fft"
           - "orthax"
           - "quadax"
+          - "jax-finufft"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -8,7 +8,7 @@ Replaces the slow ``pytest --collect-only`` approach by parsing files with the
 import ast
 import sys
 
-REQUIRED_MARKS = {"unit", "regression", "benchmark", "memory"}
+REQUIRED_MARKS = {"unit", "regression", "benchmark", "memory", "mpi_run", "mpi_setup"}
 
 
 def _pytest_marks(decorators):

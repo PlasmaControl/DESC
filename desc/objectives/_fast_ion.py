@@ -114,6 +114,7 @@ class GammaC(_Objective):
         spline=True,
         use_bounce1d=False,
         Nemov=True,
+        device_id=0,
         **kwargs,
     ):
         try:
@@ -166,6 +167,7 @@ class GammaC(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
         )
 
     def build(self, use_jit=True, verbose=1):

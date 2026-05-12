@@ -6,6 +6,11 @@ New Features
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
+- Adds initial support for multi-device optimization with MPI. This allows to compute derivatives and costs on multiple devices (GPUs/CPUs), and to split memory usage during these operations across devices. See the [documentation](https://desc-docs.readthedocs.io/en/stable/notebooks/tutorials/multi_device.html) for details. Couple important notes:
+    - MPI is not a default dependency of DESC, so, to use MPI functionality, the users should verify their MPI installation themselves.
+    - Using MPI is recommended only for the cases where you get out-of-memory error. If your problem fits to single GPU memory, it's unlikely that MPI will give speed improvement.
+    - MPI is not implemented for matrix decompositions (i.e. QR/SVD/Cholesky) which default optimizer ``lsq-exact`` uses. For the cases where Jacobian doesn't fit to GPU memory, matrix decompositions will be performed on CPU and will be slow. Feel free to open a PR, if you have knowledge on parallel QR/SVD or Cholesky.
+    - CUDA-aware MPI is not supported yet.
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
 - Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
@@ -104,7 +109,6 @@ New Features
 - Adds support for optimization targeting individual coils in a coilset.
   - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
   - Able to set weights to zero, excluding certain coils from the objective.
-
 
 
 Bug Fixes

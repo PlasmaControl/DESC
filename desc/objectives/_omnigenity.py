@@ -503,8 +503,13 @@ class Omnigenity(_Objective):
     Errors are relative to a target field that is perfectly omnigenous,
     and are computed on a collocation grid in (ρ,η,α) coordinates.
 
-    This objective assumes that the collocation point (θ=0,ζ=0) lies on the contour of
-    maximum field strength ||B||=B_max.
+    By default this objective assumes that the collocation point (θ=0,ζ=0) of the
+    equilibrium lies on the contour of maximum field strength ||B||=B_max. The
+    ``B_max_theta_location`` argument relaxes this assumption: the field's (θ=0) point
+    (which corresponds to the field's B_max) is compared against the equilibrium's |B|
+    evaluated at θ = ``B_max_theta_location``.
+
+    A single well in |B| per field period is assumed for this objective.
 
     Parameters
     ----------
@@ -541,6 +546,11 @@ class Omnigenity(_Objective):
         computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
+    B_max_theta_location : float, optional
+        Boozer poloidal angle θ (in radians) at which the equilibrium's |B| attains its
+        maximum. The field's theta_B (which assumes the maximum is at θ=0) is shifted
+        by this value when evaluating the equilibrium's |B| for the comparison.
+        Default = 0.0.
 
     """
 
@@ -580,6 +590,7 @@ class Omnigenity(_Objective):
         field_fixed=False,
         name="omnigenity",
         jac_chunk_size=None,
+        B_max_theta_location=0.0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -593,6 +604,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._B_max_theta_location = B_max_theta_location
         if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
@@ -824,11 +836,13 @@ class Omnigenity(_Objective):
 
         # additional computations that cannot be part of the regular compute API
 
+        B_max_theta_location = self._B_max_theta_location
+
         def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
             nodes = jnp.vstack(
                 (
                     jnp.zeros_like(theta_B),
-                    theta_B,
+                    theta_B + B_max_theta_location,
                     zeta_B,
                 )
             ).T

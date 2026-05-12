@@ -25,6 +25,7 @@ from desc.coils import (
     MixedCoilSet,
     initialize_modular_coils,
 )
+from desc.compat import flip_theta
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -1942,6 +1943,54 @@ class TestObjectiveFunction:
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
         np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
+
+    @pytest.mark.unit
+    def test_omnigenity_flipped_theta(self):
+        """Test omnigenity transform when Bmax is not at theta=0."""
+        surf = FourierRZToroidalSurface.from_qp_model(
+            major_radius=1,
+            aspect_ratio=20,
+            elongation=6,
+            mirror_ratio=0.2,
+            torsion=0.1,
+            NFP=1,
+            sym=True,
+        )
+        eq = Equilibrium(
+            Psi=6e-3,
+            M=4,
+            N=4,
+            surface=surf,
+            iota=PowerSeriesProfile(1, 0, -1),  # ensure diff surfs have diff iota
+        )
+        field = OmnigenousField(
+            L_B=1,
+            M_B=3,
+            L_x=1,
+            M_x=1,
+            N_x=1,
+            NFP=eq.NFP,
+            helicity=(1, 1),
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],
+                    [-0.4, 0.0, 0.6],  # radially varying B
+                ]
+            ).flatten(),
+        )
+        grid1 = LinearGrid(rho=0.5, M=eq.M_grid, N=eq.N_grid)
+        obj1 = Omnigenity(eq=eq, field=field, eq_grid=grid1)
+        obj1.build()
+
+        f1 = obj1.compute(*obj1.xs(eq, field))
+        # now flip where Bmaxn is
+        eq = flip_theta(eq)
+        obj2 = Omnigenity(eq=eq, field=field, eq_grid=grid1, B_max_theta_location=np.pi)
+        obj2.build()
+        f2 = obj2.compute(*obj2.xs(eq, field))
+
+        # values should be exact the same because all we did was re-define theta
+        np.testing.assert_allclose(f1, f2, atol=1e-14)
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):

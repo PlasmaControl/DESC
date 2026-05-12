@@ -368,8 +368,7 @@ class TestSurfaceIntegral:
         # To compute a quantity local to a surface, we can reshape it into zeta
         # surface chunks and compute across the chunks.
         mean = grid.expand(
-            q.reshape((grid.num_zeta, -1)).mean(axis=-1),
-            surface_label="zeta",
+            q.reshape((grid.num_zeta, -1)).mean(axis=-1), surface_label="zeta"
         )
         # number of nodes per surface
         n = grid.num_rho * grid.num_theta

@@ -463,7 +463,7 @@ def surface_averages_map(grid, surface_label="x0", expand_out=True, tol=1e-14):
         if denominator is None:
             # skip integration if constant
             denominator = (
-                (4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi) * sqrt_g
+                (4 * jnp.pi**2 if surface_label == "x0" else 2 * jnp.pi) * sqrt_g
                 if sqrt_g.size == 1
                 else integrate(sqrt_g)
             )
@@ -718,7 +718,7 @@ def surface_min(grid, x, surface_label="x0"):
     """
     surface_label = grid.get_label(surface_label)
 
-    if grid.is_meshgrid and (surface_label == "rho"):
+    if grid.is_meshgrid and (surface_label == "x0"):
         mins = grid.meshgrid_reshape(x, grid.coordinates).min((-2, -1))
     else:
         # The below implementation was benchmarked to be more efficient than

@@ -4491,7 +4491,7 @@ def test_deflation_operator_all_Nones():
         "R",
         surf,
         target=0,
-        grid=LinearGridToroidalSurface(rho=1.0, theta=0.0, zeta=0.0),
+        grid=LinearGridToroidalSurface(theta=0.0, zeta=0.0),
     )
     obj2 = ObjectiveFunction(
         DeflationOperator(

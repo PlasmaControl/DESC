@@ -27,6 +27,7 @@ Performance Improvements
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
 - Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+- ``ObjectiveFunction.print_value`` can now use the previously computed ``compute_scaled_error`` values to print. For bounded objectives, we fall back to computing ``compute_unscaled``. Additionally, ``compute_scaled_error`` and array splitting are used in other parts of the code to prevent recompilation for one-time tasks, which makes initialization faster.
 
 
 v0.17.1

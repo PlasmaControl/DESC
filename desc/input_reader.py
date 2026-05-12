@@ -5,6 +5,7 @@ import io
 import os
 import pathlib
 import re
+import tempfile
 import warnings
 from datetime import datetime
 
@@ -215,7 +216,9 @@ class InputReader:
             isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
-                path = self.input_path + "_desc"
+                basename = os.path.basename(self.input_path) + "_desc"
+                tmpdir = tempfile.mkdtemp()
+                path = os.path.join(tmpdir, basename)
                 InputReader.vmec_to_desc_input(self.input_path, path)
                 print("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)

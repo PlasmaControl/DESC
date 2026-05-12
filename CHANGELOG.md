@@ -34,6 +34,17 @@ v0.17.1
 
 Bug Fixes
 
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary file under `./tmp/`.
+
+v0.17.1
+-------
+
+This patch release updates package dependencies to resolve critical incompatibilities between jax-related libraries. DESC versions 0.16.0 and 0.17.0 contain a known bug when used alongside jax-finufft v1.3.0, and we recommend that users upgrade to DESC version 0.17.1 to ensure environment stability.
+
+If an immediate upgrade is not feasible, the issue can be mitigated by manually downgrading jax-finufft to version 1.2.0.
+
+Bug Fixes
+
 - Fixes incorrect units in the documentation of some curvature variables.
 
 

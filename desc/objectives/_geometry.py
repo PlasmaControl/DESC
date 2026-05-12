@@ -1,10 +1,12 @@
 """Objectives for targeting geometrical quantities."""
 
 import numpy as np
+from scipy.constants import elementary_charge
 
-from desc.backend import jnp, vmap
+from desc.backend import fori_loop, jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.geometry.surface import _constant_offset_surface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
@@ -12,6 +14,7 @@ from desc.utils import (
     errorif,
     parse_argname_change,
     rpz2xyz,
+    rpz2xyz_vec,
     safenorm,
     warnif,
 )
@@ -825,6 +828,451 @@ class PlasmaVesselDistance(_Objective):
             )
         else:  # do hardmin
             return d.min(axis=0) * point_signs
+
+
+class NeutronWallLoading(_Objective):
+    """Compute neutron wall loading (NWL) on a wall surface.
+
+    Computes the neutron wall loading (MW/m²) on a wall surface. If ``surface`` is
+    ``None``, the wall is obtained by offsetting the equilibrium boundary surface by a
+    constant distance in the surface-normal direction. If ``surface`` is provided, it
+    is treated directly as the wall.
+
+    Notes
+    -----
+    - The conformal wall surface is recomputed every evaluation using
+      :func:`desc.geometry.surface._constant_offset_surface` so that the objective
+      remains differentiable with respect to the equilibrium degrees of freedom when
+      using the conformal-wall method.
+    - If ``surface`` is ``None``, the wall surface defaults to a constant-offset
+      surface of
+      ``eq.surface``. In that case the wall varies together with the equilibrium
+      boundary.
+    - The volume integral is performed on ``source_grid``. By default this uses a
+      :class:`~desc.grid.QuadratureGrid`, which is appropriate for volume integrals.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface : Surface, optional
+        Wall surface on which the loading is evaluated. If ``None``, a conformal wall
+        is constructed from ``eq.surface`` using ``offset``.
+    offset : float, optional
+        Constant offset distance (m) used only when ``surface`` is ``None``.
+    source_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate source geometry at.
+        Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
+    surface_grid : Grid, optional
+        Collocation grid containing the nodes to evaluate surface geometry at.
+        Defaults to ``LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)``.
+    fuel : str, optional
+        Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
+    eq_fixed, surface_fixed : bool, optional
+        Whether the eq/surface is fixed or not. If True, the corresponding source
+        or wall-surface data are precomputed, which saves computation during
+        optimization. Both cannot be True. An explicit ``surface`` must be provided
+        unless using the free-eq conformal-wall method ``surface=None``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_data_keys",
+        "_equil_data_keys",
+        "_eq",
+        "_eq_fixed",
+        "_fuel",
+        "_offset",
+        "_surface",
+        "_surface_data_keys",
+        "_surface_fixed",
+        "_surface_from_eq",
+    ]
+
+    _coordinates = "rtz"
+    _units = "(MW/m^2)"
+    _print_value_fmt = "Neutron wall loading: "
+
+    def __init__(
+        self,
+        eq,
+        surface=None,
+        *,
+        offset=0.1,
+        source_grid=None,
+        surface_grid=None,
+        fuel="DT",
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name="neutron wall loading",
+        eq_fixed=False,
+        surface_fixed=False,
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        errorif(
+            fuel not in ["DT"],
+            ValueError,
+            f"fuel must be one of ['DT'], got {fuel}.",
+        )
+        errorif(
+            eq_fixed and surface_fixed, ValueError, "Cannot fix both eq and surface"
+        )
+        errorif(
+            surface is None and eq_fixed and not surface_fixed,
+            ValueError,
+            "An explicit surface must be provided when eq_fixed=True.",
+        )
+        errorif(
+            surface is None and surface_fixed,
+            ValueError,
+            "An explicit surface must be provided when surface_fixed=True.",
+        )
+        self._eq = eq
+        self._surface = eq.surface if surface is None else surface
+        self._surface_from_eq = surface is None
+        self._eq_fixed = eq_fixed
+        self._surface_fixed = surface_fixed
+        self._offset = float(offset)
+        self._source_grid = source_grid
+        self._surface_grid = surface_grid
+        self._fuel = fuel
+        things = []
+        if not eq_fixed:
+            things.append(eq)
+        if not surface_fixed and not self._surface_from_eq:
+            things.append(self._surface)
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def _surface_params_from_eq(self, params, constants):
+        """Compute boundary-surface parameters from equilibrium parameters."""
+        surf_params = self._surface.params_dict.copy()
+        surf_params["R_lmn"] = jnp.dot(constants["A_Rlmn_to_Rb"], params["R_lmn"])
+        surf_params["Z_lmn"] = jnp.dot(constants["A_Zlmn_to_Zb"], params["Z_lmn"])
+        return surf_params
+
+    def _compute_surface_data(self, surface_params, constants):
+        """Compute data on the evaluation wall surface."""
+        if self._surface_from_eq:
+            R_lmn_offset, Z_lmn_offset, _, _ = _constant_offset_surface(
+                self._surface,
+                offset=self._offset,
+                grid=constants["surface_transforms"]["grid"],
+                transforms=constants["offset_fit_transforms"],
+                params=surface_params,
+            )
+            surface_params = surface_params.copy()
+            surface_params["R_lmn"] = R_lmn_offset
+            surface_params["Z_lmn"] = Z_lmn_offset
+
+        return compute_fun(
+            self._surface,
+            self._surface_data_keys,
+            params=surface_params,
+            transforms=constants["surface_transforms"],
+            profiles={},
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._eq_fixed:
+            eq = self._eq
+        else:
+            eq = self.things[0]
+        if self._surface_from_eq or self._surface_fixed:
+            surface = self._surface
+        elif self._eq_fixed:
+            surface = self.things[0]
+        else:
+            surface = self.things[1]
+        errorif(
+            eq.electron_density is None,
+            ValueError,
+            "Equilibrium must have an electron density profile.",
+        )
+        errorif(
+            eq.ion_temperature is None,
+            ValueError,
+            "Equilibrium must have an ion temperature profile.",
+        )
+
+        if self._surface_grid is None:
+            surface_grid = LinearGrid(
+                rho=1.0,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=False,
+            )
+        else:
+            surface_grid = self._surface_grid
+        if self._source_grid is None:
+            source_grid = QuadratureGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+            )
+        else:
+            source_grid = self._source_grid
+        warnif(
+            not np.allclose(surface_grid.nodes[:, 0], 1),
+            UserWarning,
+            "Surface grid includes off-surface pts, should be rho=1.",
+        )
+
+        # stash the grids so compute uses the actual defaults we built above
+        self._source_grid = source_grid
+        self._surface_grid = surface_grid
+
+        self._dim_f = surface_grid.num_nodes
+        self._data_keys = ["NWL"]
+        self._equil_data_keys = [
+            "R",
+            "phi",
+            "Z",
+            "sqrt(g)",
+            "<sigma*nu>",
+            "ni",
+        ]
+        self._surface_data_keys = ["R", "phi", "Z", "n_rho"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        equil_profiles = get_profiles(
+            self._equil_data_keys,
+            obj=eq,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+        equil_transforms = get_transforms(
+            self._equil_data_keys,
+            obj=eq,
+            grid=source_grid,
+            has_axis=source_grid.axis.size,
+        )
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface,
+            grid=surface_grid,
+            has_axis=surface_grid.axis.size,
+        )
+
+        # compute returns points on the grid of the surface (dim_f = surface_grid.num_nodes)
+        # so set quad_weights to the surface grid to avoid it being incorrectly inferred
+        # from the source grid.
+        w = surface_grid.weights
+        w *= jnp.sqrt(surface_grid.num_nodes)
+
+        self._constants = {
+            "equil_profiles": equil_profiles,
+            "equil_transforms": equil_transforms,
+            "quad_weights": w,
+            "surface_transforms": surface_transforms,
+        }
+        if self._surface_from_eq:
+            offset_fit_transforms = get_transforms(
+                keys=["R", "Z"],
+                obj=surface,
+                grid=surface_grid,
+                jitable=True,
+            )
+            offset_fit_transforms["R"].build_pinv()
+            offset_fit_transforms["Z"].build_pinv()
+            self._constants["offset_fit_transforms"] = offset_fit_transforms
+
+            # These let AD connect equilibrium boundary coefficients to the
+            # double-Fourier surface coefficients used by the offset-surface fit.
+            from .linear_objectives import (
+                BoundaryRSelfConsistency,
+                BoundaryZSelfConsistency,
+            )
+
+            obj_bdryR = BoundaryRSelfConsistency(eq=eq)
+            obj_bdryZ = BoundaryZSelfConsistency(eq=eq)
+            obj_bdryR.build()
+            obj_bdryZ.build()
+            self._constants["A_Rlmn_to_Rb"] = jnp.asarray(obj_bdryR._A)
+            self._constants["A_Zlmn_to_Zb"] = jnp.asarray(obj_bdryZ._A)
+        if self._eq_fixed:
+            data_eq = compute_fun(
+                self._eq,
+                self._equil_data_keys,
+                params=self._eq.params_dict,
+                transforms=equil_transforms,
+                profiles=equil_profiles,
+                fuel=self.fuel,
+            )
+            self._constants["data_equil"] = data_eq
+        if self._surface_fixed:
+            surface_data = self._compute_surface_data(
+                self._surface.params_dict,
+                self._constants,
+            )
+            self._constants["surface_data"] = surface_data
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute neutron wall loading.
+
+        Parameters
+        ----------
+        params_1 : dict
+            Dictionary of equilibrium degrees of freedom if ``eq_fixed=False``,
+            else the surface degrees of freedom.
+        params_2 : dict
+            Dictionary of surface degrees of freedom. Only needed if both the
+            equilibrium and the surface are varying independently.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants.
+
+        Returns
+        -------
+        nwl : ndarray, shape(surface_grid.num_nodes,)
+            Neutron wall loading at each surface grid node (MW/m²).
+
+        """
+        if constants is None:
+            constants = self.constants
+
+        if self._eq_fixed:
+            surface_params = params_1
+            source_data = constants["data_equil"]
+        elif self._surface_fixed:
+            eq_params = params_1
+        else:
+            eq_params = params_1
+            surface_params = params_2
+
+        if not self._eq_fixed:
+            source_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._equil_data_keys,
+                params=eq_params,
+                transforms=constants["equil_transforms"],
+                profiles=constants["equil_profiles"],
+                fuel=self.fuel,
+            )
+
+        if self._surface_fixed:
+            surface_data = constants["surface_data"]
+        else:
+            if self._surface_from_eq:
+                surface_params = self._surface_params_from_eq(eq_params, constants)
+            surface_data = self._compute_surface_data(surface_params, constants)
+
+        # Store source data in cylindrical coordinates for NFP rotation.
+        r_source_rpz = jnp.vstack(
+            [source_data["R"], source_data["phi"], source_data["Z"]]
+        ).T
+
+        r_surface = rpz2xyz(
+            jnp.vstack([surface_data["R"], surface_data["phi"], surface_data["Z"]]).T
+        )
+        normal_rhos = rpz2xyz_vec(surface_data["n_rho"], phi=surface_data["phi"])
+
+        # Neutron power density from fusion reactions.
+        #
+        # We need the *spatial* reaction-rate density for the source distribution.
+        # For a 50/50 DT mix, 0.25 * ni^2 * <sigma*nu> gives reactions / m^3 / s.
+        # Multiply by the neutron energy (eV) and elementary charge (J/eV) to get
+        # W / m^3, then convert to MW / m^3.
+        energies = {"DT": 14.06e6}  # eV
+        energy = energies.get(self.fuel)
+
+        reaction_rate_density = (
+            0.25 * source_data["<sigma*nu>"] * source_data["ni"] ** 2
+        )
+        power_density = reaction_rate_density * energy * elementary_charge  # W/m^3
+        power_density *= 1e-6  # MW/m^3
+
+        # Weighted source strengths for the volume integral (MW).
+        source_strength = (
+            power_density * source_data["sqrt(g)"] * self._source_grid.weights
+        ) / self._source_grid.NFP
+
+        phi_increment = 2 * jnp.pi / self._source_grid.NFP
+
+        def nfp_loop(j, nwl):
+            """Accumulate neutron wall loading contributions from each field period."""
+            phi = r_source_rpz[:, 1] + j * phi_increment
+            r_source_rotated_rpz = jnp.vstack(
+                (r_source_rpz[:, 0], phi, r_source_rpz[:, 2])
+            ).T
+            r_source = rpz2xyz(r_source_rotated_rpz)
+
+            diffs = r_surface[:, None, :] - r_source[None, :, :]
+            norms_cubed_inv = 1.0 / (
+                jnp.linalg.norm(diffs, axis=-1, keepdims=True) ** 3
+            )
+            kernel = diffs * norms_cubed_inv
+
+            projection = jnp.einsum("si,sji->sj", normal_rhos, kernel)
+            corrected_projection = jnp.where(projection < 0, 0.0, projection)
+
+            nwl_contribution = (corrected_projection @ source_strength) / (4 * jnp.pi)
+            return nwl + nwl_contribution
+
+        return fori_loop(
+            0,
+            self._source_grid.NFP,
+            nfp_loop,
+            jnp.zeros(r_surface.shape[0]),
+        )
+
+    @property
+    def fuel(self):
+        """str: Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'."""
+        return self._fuel
+
+    @fuel.setter
+    def fuel(self, new):
+        errorif(
+            new not in ["DT"],
+            ValueError,
+            f"fuel must be one of ['DT'], got {new}.",
+        )
+        self._fuel = new
 
 
 class MeanCurvature(_Objective):

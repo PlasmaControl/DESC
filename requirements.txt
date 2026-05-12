@@ -15,7 +15,7 @@ optax < 0.3.0
 orthax < 0.3
 plotly >= 5.16, <= 6.7.0
 psutil <= 7.2.2
-pylatexenc >= 2.0, <= 2.10
+pylatexenc <= 2.10, >= 2.10
 quadax >= 0.2.2, < 0.3
 scikit-image <= 0.26.0
 scipy >= 1.7.0, <= 1.17.1

@@ -61,8 +61,8 @@ def _get_grid_surface(grid, surface_label):
 def line_integrals(
     grid,
     q=jnp.array([1.0]),
-    line_label="poloidal",
-    fix_surface=("rho", 1.0),
+    line_label="x1",
+    fix_surface=("x0", 1.0),
     expand_out=True,
     tol=1e-14,
 ):
@@ -152,7 +152,7 @@ def line_integrals(
 
 
 def surface_integrals(
-    grid, q=jnp.array([1.0]), surface_label="rho", expand_out=True, tol=1e-14
+    grid, q=jnp.array([1.0]), surface_label="x0", expand_out=True, tol=1e-14
 ):
     """Compute a surface integral for each surface in the grid.
 
@@ -193,7 +193,7 @@ def surface_integrals(
     return surface_integrals_map(grid, surface_label, expand_out, tol)(q)
 
 
-def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
+def surface_integrals_map(grid, surface_label="x0", expand_out=True, tol=1e-14):
     """Returns a method to compute any surface integral for each surface in the grid.
 
     Parameters
@@ -220,11 +220,11 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
     """
     surface_label = grid.get_label(surface_label)
     warnif(
-        surface_label == "poloidal" and isinstance(grid, ConcentricGridFlux),
+        surface_label == "x1" and isinstance(grid, ConcentricGridFlux),
         msg="Integrals over constant poloidal surfaces"
         " are poorly defined for ConcentricGridFlux.",
     )
-    if grid.can_fft2 and surface_label == "rho" and hasattr(grid, "num_rho"):
+    if grid.can_fft2 and surface_label == "x0" and hasattr(grid, "num_x0"):
 
         def integrate(q=jnp.array([1.0])):
             q = jnp.atleast_1d(q)
@@ -241,7 +241,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
         unique_size, inverse_idx, spacing, has_endpoint_dupe, has_idx = (
             _get_grid_surface(grid, surface_label)
         )
-        spacing = jnp.prod(spacing, axis=1)
+        spacing = jnp.prod(jnp.where(spacing == 0, 1, spacing), axis=1)  # nonzero prod
 
         if has_idx:
             # The ith row of masks is True only at the indices which correspond to the
@@ -282,7 +282,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True, tol=1e-14)
             )
             # don't try to expand if already expanded
             expand_out = expand_out and has_idx
-            axis = {"rho": 0, "poloidal": 1, "zeta": 2}[surface_label]
+            axis = {"x0": 0, "x1": 1, "x2": 2}[surface_label]
             # Converting nodes from numpy.ndarray to jaxlib.xla_extension.ArrayImpl
             # reduces memory usage by > 400% for the forward computation and Jacobian.
             nodes = jnp.asarray(grid.nodes[:, axis])
@@ -328,7 +328,7 @@ def surface_averages(
     grid,
     q,
     sqrt_g=jnp.array([1.0]),
-    surface_label="rho",
+    surface_label="x0",
     denominator=None,
     expand_out=True,
     tol=1e-14,
@@ -382,7 +382,7 @@ def surface_averages(
     )
 
 
-def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
+def surface_averages_map(grid, surface_label="x0", expand_out=True, tol=1e-14):
     """Returns a method to compute any surface average for each surface in the grid.
 
     Parameters
@@ -480,7 +480,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True, tol=1e-14):
     return _surface_averages
 
 
-def surface_integrals_transform(grid, surface_label="rho"):
+def surface_integrals_transform(grid, surface_label="x0"):
     """Returns a method to compute any integral transform over each surface in grid.
 
     The returned method takes an array input ``q`` and returns an array output.
@@ -566,7 +566,7 @@ def surface_variance(
     q,
     weights=jnp.array([1.0]),
     bias=False,
-    surface_label="rho",
+    surface_label="x0",
     expand_out=True,
     tol=1e-14,
 ):
@@ -673,7 +673,7 @@ def surface_variance(
         return variance
 
 
-def surface_max(grid, x, surface_label="rho"):
+def surface_max(grid, x, surface_label="x0"):
     """Get the max of x for each surface in the grid.
 
     Parameters
@@ -696,7 +696,7 @@ def surface_max(grid, x, surface_label="rho"):
     return -surface_min(grid, -x, surface_label)
 
 
-def surface_min(grid, x, surface_label="rho"):
+def surface_min(grid, x, surface_label="x0"):
     """Get the min of x for each surface in the grid.
 
     Parameters

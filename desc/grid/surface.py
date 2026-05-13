@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.utils import check_nonnegint, check_posint, errorif
 
 from .core import AbstractGrid
-from .utils import periodic_spacing
+from .utils import _create_linear_nodes
 
 
 class AbstractGridToroidalSurface(AbstractGrid):
@@ -238,7 +238,7 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
-    def _create_nodes(  # noqa: C901
+    def _create_nodes(
         self,
         M=None,
         N=None,
@@ -278,131 +278,21 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
             node spacing, based on local volume around the node
 
         """
+        self._M = check_nonnegint(M, "M")
+        self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
         endpoint = bool(endpoint)
         theta_period = self.period[1]
         zeta_period = self.period[2]
 
         # theta
-        if M is not None:
-            self._M = check_nonnegint(M, "M")
-            theta = 2 * (M + 1) if self.sym else 2 * M + 1
-        if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
-            theta = int(theta)
-            if self.sym and theta > 1:
-                # Enforce that no node lies on theta=0 or theta=2π, so that
-                # each node has a symmetric counterpart, and that, for all i,
-                # t[i]-t[i-1] = 2 t[0] = 2 (π - t[last node before π]).
-                # Both conditions necessary to evenly space nodes with constant dt.
-                # This can be done by making (theta + endpoint) an even integer.
-                if (theta + endpoint) % 2 != 0:
-                    theta += 1
-                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
-                t += t[1] / 2
-                # delete theta > π nodes
-                t = t[: np.searchsorted(t, np.pi, side="right")]
-            else:
-                t = np.linspace(0, theta_period, theta, endpoint=endpoint)
-            dt = theta_period / t.size * np.ones_like(t)
-            if (endpoint and not self.sym) and t.size > 1:
-                # increase node weight to account for duplicate node
-                dt *= t.size / (t.size - 1)
-                # scale_weights() will reduce endpoint (dt[0] and dt[-1])
-                # duplicate node weight
-            # if custom theta used usually safe to assume its non-uniform so no fft
-            self._fft_x1 = (not endpoint) and (not self.sym)
-        elif theta is not None:
-            t = np.atleast_1d(theta).astype(float)
-            # enforce periodicity
-            t[t != theta_period] %= theta_period
-            # need to sort to compute correct spacing
-            t = np.sort(t)
-            if self.sym:
-                # cut domain to relevant subdomain: delete theta > π nodes
-                t = t[: np.searchsorted(t, np.pi, side="right")]
-            if t.size > 1:
-                if not self.sym:
-                    dt = periodic_spacing(t, theta_period, jnp=np)[1]
-                    if t[0] == 0 and t[-1] == theta_period:
-                        # periodic_spacing above correctly weights
-                        # the duplicate endpoint node spacing at theta = 0 and 2π
-                        # to be half the weight of the other nodes.
-                        # However, scale_weights() is not aware of this, so we
-                        # counteract the reduction that will be done there.
-                        dt[0] += dt[-1]
-                        dt[-1] = dt[0]
-                else:
-                    dt = np.zeros(t.shape)
-                    dt[1:-1] = t[2:] - t[:-2]
-                    first_positive_idx = np.searchsorted(t, 0, side="right")
-                    # total spacing of nodes at theta=0 should be half the
-                    # distance between first positive node and its
-                    # reflection across the theta=0 line.
-                    dt[0] = t[first_positive_idx]
-                    if first_positive_idx == 0:
-                        # then there are no nodes at theta=0
-                        dt[0] += t[1]
-                    else:
-                        assert dt[0] == dt[first_positive_idx - 1]
-                        # If first_positive_idx != 1,
-                        # then both of those dt should be halved.
-                        # The scale_weights() function will handle this.
-                    first_pi_idx = np.searchsorted(t, np.pi, side="left")
-                    # total spacing of nodes at theta=π should be half the
-                    # distance between first node < π and its
-                    # reflection across the theta=π line.
-                    if first_pi_idx == t.size:
-                        # then there are no nodes at theta=π
-                        dt[-1] = (theta_period - t[-1]) - t[-2]
-                    else:
-                        dt[-1] = (theta_period - t[-1]) - t[first_pi_idx - 1]
-                        assert dt[first_pi_idx] == dt[-1]
-                        # If first_pi_idx != t.size - 1,
-                        # then both of those dt should be halved.
-                        # The scale_weights() function will handle this.
-            else:
-                dt = np.array([theta_period])
-        else:
-            t = np.array(0.0, ndmin=1)
-            dt = theta_period * np.ones_like(t)
-            self._fft_x1 = not self.sym
-
+        t, dt, self._fft_x1 = _create_linear_nodes(
+            M, theta, theta_period, endpoint, sym=self.sym
+        )
         # zeta
-        # note: dz spacing should not depend on NFP
-        # spacing corresponds to a node's weight in an integral --
-        # such as integral = sum(dt * dz * data["B"]) -- not the node's coordinates
-        if N is not None:
-            self._N = check_nonnegint(N, "N")
-            zeta = 2 * N + 1
-        if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
-            zeta = int(zeta)
-            z = np.linspace(0, zeta_period, zeta, endpoint=endpoint)
-            dz = 2 * np.pi / z.size * np.ones_like(z)
-            if endpoint and z.size > 1:
-                # increase node weight to account for duplicate node
-                dz *= z.size / (z.size - 1)
-                # scale_weights() will reduce endpoint (dz[0] and dz[-1])
-                # duplicate node weight
-            # if custom zeta used usually safe to assume its non-uniform so no fft
-            self._fft_x2 = not endpoint
-        elif zeta is not None:
-            errorif(
-                np.any(np.asarray(zeta) > zeta_period),
-                msg="LinearGridFlux should be defined on 1 field period.",
-            )
-            z, dz = periodic_spacing(zeta, zeta_period, sort=True, jnp=np)
-            dz = dz * NFP
-            if z[0] == 0 and z[-1] == zeta_period:
-                # periodic_spacing above correctly weights
-                # the duplicate node spacing at zeta = 0 and 2π/NFP.
-                # However, scale_weights() is not aware of this, so we
-                # counteract the reduction that will be done there.
-                dz[0] += dz[-1]
-                dz[-1] = dz[0]
-        else:
-            z = np.array(0.0, ndmin=1)
-            dz = zeta_period * np.ones_like(z) * NFP
-            self._fft_x2 = True  # trivially true
+        z, dz, self._fft_x2 = _create_linear_nodes(
+            N, zeta, zeta_period, endpoint, NFP=NFP
+        )
 
         self._poloidal_endpoint = (
             t.size > 0
@@ -418,8 +308,8 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         _ = np.zeros(1)
         d_ = np.zeros_like(_)
 
-        # if only one theta or one zeta point, can have endpoint=True
-        # if the other one is a full array
+        # if only one theta or one zeta point, can have endpoint=True if the other
+        # coordinate is a full array
         self._endpoint = (self._poloidal_endpoint or (t.size == 1 and z.size > 1)) and (
             self._toroidal_endpoint or (z.size == 1 and t.size > 1)
         )

@@ -348,6 +348,96 @@ def midpoint_spacing(x, jnp=jnp):
     return dx
 
 
+def _create_linear_nodes(res, x, period, endpoint, NFP=1, sym=False):
+    """Create linear nodes used in LinearGridX._create_nodes() for a coordinate x."""
+    # note: dx spacing should not depend on NFP
+    # spacing corresponds to a node's weight in an integral, not the coordinates
+
+    if res is not None:
+        x = 2 * res + 1
+        x = 2 * (res + 1) if sym else 2 * res + 1
+
+    if np.isscalar(x) and (int(x) == x) and x > 0:
+        x = int(x)
+
+        if sym and x > 1:
+            # Enforce that no node lies on x=0 or x=2π, so that each node has a
+            # symmetric counterpart, and that for all i,
+            # xx[i] - xx[i - 1] = 2 * xx[0] = 2 * (π - xx[last node before π]).
+            # Both conditions are necessary to evenly space nodes with constant dx.
+            # This can be done by making (x + endpoint) an even integer.
+            if (x + endpoint) % 2 != 0:
+                x += 1
+            xx = np.linspace(0, period, x, endpoint=endpoint)
+            xx += xx[1] / 2
+            xx = xx[: np.searchsorted(xx, np.pi, side="right")]  # delete xx > π nodes
+        else:
+            xx = np.linspace(0, period, x, endpoint=endpoint)
+
+        dx = 2 * np.pi / xx.size * np.ones_like(xx)
+        if (endpoint and not sym) and xx.size > 1:
+            # increase node weight to account for duplicate node
+            dx *= xx.size / (xx.size - 1)
+            # scale_weights() will reduce endpoint (dx[0] and dx[-1]) duplicate weights
+        fft = (not endpoint) and (not sym)
+
+    elif x is not None:
+        xx = np.atleast_1d(x).astype(float)
+        xx[xx != period] %= period  # enforce periodicity
+        xx = np.sort(xx)  # need to sort to compute correct spacing
+        if sym:
+            # reduce domain to relevant subdomain: delete x > π nodes
+            xx = xx[: np.searchsorted(xx, np.pi, side="right")]
+
+        if xx.size > 1:
+
+            if sym:
+                # total spacing of nodes at x=0 should be half the distance between
+                # first positive node and its reflection across the x=0 line
+                first_positive_idx = np.searchsorted(xx, 0, side="right")
+                first_pi_idx = np.searchsorted(xx, np.pi, side="left")
+                dx = np.zeros(xx.shape)
+                dx[1:-1] = xx[2:] - xx[:-2]
+                dx[0] = xx[first_positive_idx]
+
+                if first_positive_idx == 0:
+                    dx[0] += xx[1]  # there are no nodes at x=0
+                else:
+                    assert dx[0] == dx[first_positive_idx - 1]
+                    # If first_positive_idx != 1 then both the dx should be halved.
+                    # The scale_weights() function will handle this.
+
+                if first_pi_idx == xx.size:
+                    dx[-1] = (period - xx[-1]) - xx[-2]  # there are no nodes at x=π
+                else:
+                    dx[-1] = (period - xx[-1]) - xx[first_pi_idx - 1]
+                    assert dx[first_pi_idx] == dx[-1]
+                    # If first_pi_idx != xx.size - 1 then both the dx should be halved.
+                    # The scale_weights() function will handle this.
+
+            else:
+                xx, dx = periodic_spacing(x, period, sort=True, jnp=np)
+                dx = dx * NFP
+                if xx[0] == 0 and xx[-1] == period:
+                    # periodic_spacing above already correctly weighted the duplicate
+                    # node spacing at x=0 and x=2π/NFP. However, scale_weights() is not
+                    # aware of this so we counteract the reduction that it will do.
+                    dx[0] += dx[-1]
+                    dx[-1] = dx[0]
+
+        else:
+            dx = np.array([period * NFP])
+
+        fft = False  # usually safe to assume that custom x is non-uniform so no FFT
+
+    else:
+        xx = np.array(0.0, ndmin=1)
+        dx = period * np.ones_like(xx) * NFP
+        fft = not sym
+
+    return xx, dx, fft
+
+
 def _find_rho(iota, iota_vals, tol=1e-14):
     """Find rho values for iota_vals in iota profile."""
     r = np.linspace(0, 1, 1000)

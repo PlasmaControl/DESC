@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.utils import check_nonnegint, check_posint, errorif
 
 from .core import AbstractGrid
-from .utils import periodic_spacing
+from .utils import _create_linear_nodes
 
 
 class AbstractGridCurve(AbstractGrid):
@@ -121,6 +121,7 @@ class LinearGridCurve(AbstractGridCurve):
         self._NFP = check_posint(NFP, "NFP", False)
         self._endpoint = bool(endpoint)
         self._is_meshgrid = True
+        # these are default values that may get overwritten in _create_nodes
         self._fft_x1 = False
         self._fft_x2 = False
         self._can_fft2 = not endpoint
@@ -140,7 +141,7 @@ class LinearGridCurve(AbstractGridCurve):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
-    def _create_nodes(self, N=None, NFP=1, endpoint=False, s=0.0):  # noqa: C901
+    def _create_nodes(self, N=None, NFP=1, endpoint=False, s=0.0):
         """Create grid nodes and weights.
 
         Parameters
@@ -166,45 +167,13 @@ class LinearGridCurve(AbstractGridCurve):
             node spacing, based on local volume around the node
 
         """
+        self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
         endpoint = bool(endpoint)
         s_period = self.period[2]
 
         # curve coordinate s
-        # note: ds spacing should not depend on NFP
-        # spacing corresponds to a node's weight in an integral, not the coordinates
-        if N is not None:
-            self._N = check_nonnegint(N, "N")
-            s = 2 * N + 1
-        if np.isscalar(s) and (int(s) == s) and s > 0:
-            s = int(s)
-            ss = np.linspace(0, s_period, s, endpoint=endpoint)
-            ds = 2 * np.pi / ss.size * np.ones_like(ss)
-            if endpoint and ss.size > 1:
-                # increase node weight to account for duplicate node
-                ds *= ss.size / (ss.size - 1)
-                # scale_weights() will reduce endpoint (ds[0] and ds[-1])
-                # duplicate node weight
-            # if custom s used usually safe to assume its non-uniform so no fft
-            self._fft_x2 = not endpoint
-        elif s is not None:
-            errorif(
-                np.any(np.asarray(s) > s_period),
-                msg="LinearGridCurve should be defined on 1 field period.",
-            )
-            ss, ds = periodic_spacing(s, s_period, sort=True, jnp=np)
-            ds = ds * NFP
-            if ss[0] == 0 and ss[-1] == s_period:
-                # periodic_spacing above correctly weights
-                # the duplicate node spacing at s = 0 and 2π/NFP.
-                # However, scale_weights() is not aware of this, so we
-                # counteract the reduction that will be done there.
-                ds[0] += ds[-1]
-                ds[-1] = ds[0]
-        else:
-            ss = np.array(0.0, ndmin=1)
-            ds = s_period * np.ones_like(ss) * NFP
-            self._fft_x2 = True  # trivially true
+        ss, ds, self._fft_x2 = _create_linear_nodes(N, s, s_period, endpoint, NFP=NFP)
 
         _ = np.zeros(1)
         d_ = np.zeros_like(_)

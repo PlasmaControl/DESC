@@ -8,7 +8,7 @@ from scipy.linalg import null_space
 from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.utils import Timer, warnif
 
 
@@ -546,7 +546,7 @@ def make_boozmn_output(  # noqa: C901
     r_full = np.sqrt(s_full)
     r_half = np.sqrt(s_half)
 
-    grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
+    grid = LinearGridFlux(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, rho=r_half, sym=False)
 
     transforms = get_transforms(
         "|B|_mn_B",
@@ -724,7 +724,7 @@ def make_boozmn_output(  # noqa: C901
     Rmin[:] = np.min(Rs)
 
     # betaxis = beta_vol at the axis?
-    grid_axis = LinearGrid(M=M_booz, N=N_booz, rho=np.array([0.0]), NFP=NFP)
+    grid_axis = LinearGridFlux(M=M_booz, N=N_booz, rho=np.array([0.0]), NFP=NFP)
     data_axis = eq.compute(["p", "<|B|^2>"], grid=grid_axis)
     betaxis = file.createVariable("betaxis_b", np.float64)
     betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
@@ -819,7 +819,7 @@ def make_boozmn_output(  # noqa: C901
     presf = file.createVariable("pres_b", np.float64, ("radius",))
     presf.long_name = "pressure on full mesh"
     presf.units = "Pa"
-    presf[:] = eq.compute("p", grid=LinearGrid(rho=r_full, theta=0, zeta=0))["p"]
+    presf[:] = eq.compute("p", grid=LinearGridFlux(rho=r_full, theta=0, zeta=0))["p"]
 
     beta = file.createVariable("beta_b", np.float64, ("radius",))
     beta.long_name = "2 * mu_0 * pressure / <|B|^2>, on half mesh"
@@ -842,9 +842,9 @@ def make_boozmn_output(  # noqa: C901
     chi.units = "Wb"
     chi[:] = np.linspace(
         0,
-        eq.compute("chi", grid=LinearGrid(L=eq.L_grid, M=M_booz, N=N_booz, NFP=eq.NFP))[
-            "chi"
-        ][-1]
+        eq.compute(
+            "chi", grid=LinearGridFlux(L=eq.L_grid, M=M_booz, N=N_booz, NFP=eq.NFP)
+        )["chi"][-1]
         * 2
         * np.pi,
         surfs,

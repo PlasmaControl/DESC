@@ -5,7 +5,7 @@ from orthax.legendre import leggauss
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.integrals.bounce_integral import Bounce2D
 from desc.utils import setdefault, warnif
@@ -244,7 +244,9 @@ class GammaC(_Objective):
     def _build_bounce1d(self, use_jit=True, verbose=1):
         eq = self.things[0]
         if self._grid is None:
-            self._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            self._grid = LinearGridFlux(
+                M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
         assert self._grid.is_meshgrid and eq.sym == self._grid.sym
 
         Y_B = self._hyperparam.pop("Y_B")

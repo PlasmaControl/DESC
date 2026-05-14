@@ -4,7 +4,7 @@ import warnings
 
 import numpy as np
 
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import CustomGridFlux, LinearGridFlux, QuadratureGridFlux
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
 from desc.utils import errorif, setdefault, warnif
 
@@ -29,7 +29,9 @@ def ensure_positive_jacobian(eq):
             ensure_positive_jacobian(e)
         return eq
 
-    sign = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+    sign = np.sign(
+        eq.compute("sqrt(g)", grid=CustomGridFlux(np.array([[1, 0, 0]])))["sqrt(g)"]
+    )
     errorif(
         sign == 0,
         ValueError,
@@ -63,7 +65,7 @@ def ensure_positive_jacobian(eq):
         eq.surface = eq.get_surface_at(rho=1)
 
         sign = np.sign(
-            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+            eq.compute("sqrt(g)", grid=CustomGridFlux(np.array([[1, 0, 0]])))["sqrt(g)"]
         )
     assert sign == 1
     return eq
@@ -213,7 +215,7 @@ def rescale(
         eq = eq.copy()
 
     # size scaling
-    grid_L = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid_L = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_L = eq.compute(L_keys, grid=grid_L)
     L_old = data_L[L_key]
     L_new = L_new or L_old
@@ -222,15 +224,15 @@ def rescale(
     cL = float(cL.squeeze())
     # field scaling
     if B_key == "B0":
-        grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+        grid_B = LinearGridFlux(N=eq.N_grid, NFP=eq.NFP, rho=0)
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.mean(data_B["|B|"])
     elif B_key == "<B>":
-        grid_B = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        grid_B = QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         data_B = eq.compute("<|B|>_vol", grid=grid_B)
         B_old = data_B["<|B|>_vol"]
     elif B_key == "B_max":
-        grid_B = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+        grid_B = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
         data_B = eq.compute("|B|", grid=grid_B)
         B_old = np.max(data_B["|B|"])
     B_new = B_new or B_old
@@ -394,7 +396,7 @@ def contract_equilibrium(
             # b) can safely use that from_values to represent a
             #    subset of itself.
             x = np.linspace(0, 1, profile_num_points)
-            grid = LinearGrid(rho=x / rho)
+            grid = LinearGridFlux(rho=x / rho)
             y = profile.compute(grid)
             return profile.from_values(x=x, y=y)
         elif contract_profiles:
@@ -406,7 +408,7 @@ def contract_equilibrium(
                 "Falling back to fitting the values with a SplineProfile",
             )
             x = np.linspace(0, 1, profile_num_points)
-            grid = LinearGrid(rho=x / rho)
+            grid = LinearGridFlux(rho=x / rho)
             y = profile.compute(grid)
             return SplineProfile(knots=x, values=y)
         else:  # don't do any scaling of the profile
@@ -449,7 +451,7 @@ def contract_equilibrium(
         sym=eq.sym,
         ensure_nested=False,  # we fit the surfaces later so don't check now
     )
-    inner_grid = LinearGrid(
+    inner_grid = LinearGridFlux(
         rho=np.linspace(0, inner_rho, eq.L_grid * 2),
         M=eq.M_grid,
         N=eq.N_grid,

@@ -10,7 +10,7 @@ import desc.examples
 import desc.io
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import CustomGridFlux, LinearGridFlux, QuadratureGridFlux
 from desc.objectives import MagneticWell, MercierStability
 from desc.utils import PRINT_WIDTH, cross, dot
 
@@ -90,7 +90,7 @@ def test_compute_d_shear():
 
     def test(eq, vmec, rho_range=(0, 1), rtol=1e-12, atol=0.0):
         rho, d_shear_vmec = get_vmec_data(vmec, "DShear")
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_shear = grid.compress(eq.compute("D_shear", grid=grid)["D_shear"])
 
         assert np.all(
@@ -114,7 +114,7 @@ def test_compute_d_current():
 
     def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
         rho, d_current_vmec = get_vmec_data(vmec, "DCurr")
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_current = grid.compress(eq.compute("D_current", grid=grid)["D_current"])
 
         assert (
@@ -144,7 +144,7 @@ def test_compute_d_well():
 
     def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
         rho, d_well_vmec = get_vmec_data(vmec, "DWell")
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
 
         assert (
@@ -184,7 +184,7 @@ def test_compute_d_geodesic():
 
     def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
         rho, d_geodesic_vmec = get_vmec_data(vmec, "DGeod")
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_geodesic = grid.compress(eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
         assert np.all(
@@ -218,7 +218,7 @@ def test_compute_d_mercier():
 
     def test(eq, vmec, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL):
         rho, d_mercier_vmec = get_vmec_data(vmec, "DMerc")
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_mercier = grid.compress(eq.compute("D_Mercier", grid=grid)["D_Mercier"])
 
         assert (
@@ -253,7 +253,7 @@ def test_compute_magnetic_well():
     """Test that D_well and magnetic_well match signs under finite pressure."""
 
     def test(eq, rho=np.linspace(0, 1, 128)):
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
         magnetic_well = grid.compress(
             eq.compute("magnetic well", grid=grid)["magnetic well"]
@@ -271,7 +271,7 @@ def test_compute_magnetic_well():
 def test_mercier_print(capsys):
     """Test that the Mercier stability criteria prints correctly."""
     eq = Equilibrium()
-    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    grid = LinearGridFlux(L=10, M=10, N=5, axis=False)
 
     Dmerc = eq.compute("D_Mercier", grid=grid)["D_Mercier"]
 
@@ -322,7 +322,7 @@ def test_mercier_print(capsys):
 def test_magwell_print(capsys):
     """Test that the magnetic well stability criteria prints correctly."""
     eq = desc.examples.get("HELIOTRON")
-    grid = LinearGrid(L=12, M=12, N=6, NFP=eq.NFP, axis=False)
+    grid = LinearGridFlux(L=12, M=12, N=6, NFP=eq.NFP, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
     obj.build()
 
@@ -377,7 +377,7 @@ def test_ballooning_geometry(tmpdir_factory):
     for eq in eq_list:
         eq_keys = ["iota", "iota_r", "a", "rho", "psi"]
 
-        grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, NFP=eq.NFP)
+        grid = QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid, NFP=eq.NFP)
         data_eq = eq.compute(eq_keys, grid=grid)
 
         fi = interp1d(
@@ -430,13 +430,13 @@ def test_ballooning_geometry(tmpdir_factory):
             "g^rz",
         ]
 
-        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         # Fieldline data
         data = eq.compute(data_keys, grid=grid)
 
         # Data used to defining normalization
-        data01 = eq.compute(["Psi", "a"], grid=LinearGrid(rho=np.array([1.0])))
+        data01 = eq.compute(["Psi", "a"], grid=LinearGridFlux(rho=np.array([1.0])))
         # normalizations
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
         Lref = data01["a"]
@@ -597,7 +597,7 @@ def test_ballooning_stability_eval():
     # Flux surfaces on which to evaluate ballooning stability
     surfaces = [0.01, 0.8, 1.0]
 
-    grid = LinearGrid(rho=jnp.array(surfaces), NFP=eq.NFP)
+    grid = LinearGridFlux(rho=jnp.array(surfaces), NFP=eq.NFP)
     eq_data_keys = ["iota"]
 
     data = eq.compute(eq_data_keys, grid=grid)
@@ -619,7 +619,7 @@ def test_ballooning_stability_eval():
     for i in range(len(surfaces)):
         rho = np.array([surfaces[i]])
 
-        grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+        grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
         data_keys0 = [
             "g^aa",
@@ -643,13 +643,13 @@ def test_ballooning_stability_eval():
         rho = jnp.mean(data0["rho"])
 
         data_keys01 = ["Psi", "a"]
-        data01 = eq.compute(data_keys01, grid=LinearGrid(rho=np.array([1.0])))
+        data01 = eq.compute(data_keys01, grid=LinearGridFlux(rho=np.array([1.0])))
 
         # here we use a different method for calculating the growth rate that uses
         # different numerics than "ideal ballooning lambda" so that we can verify them
         # against one another
         psi_b = data01["Psi"][-1] / (2 * jnp.pi)
-        # Calculating a_N accurately requires a QuadratureGrid
+        # Calculating a_N accurately requires a QuadratureGridFlux
         # which is automatically accounted for inside of eq.compute
         a_N = data01["a"]
         B_N = 2 * psi_b / a_N**2
@@ -848,7 +848,9 @@ def test_ballooning_compare_with_COBRAVMEC():
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
     lam2_array = []
     for i in range(surfaces.size):
-        grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
+        grid = CustomGridFlux.create_meshgrid(
+            [surfaces[i], alpha, zeta], coordinates="raz"
+        )
         data = eq.compute("ideal ballooning lambda", grid=grid)
         lam2_array.append(data["ideal ballooning lambda"].max())
     lam2_array = np.array(lam2_array)

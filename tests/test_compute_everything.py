@@ -24,7 +24,7 @@ from desc.geometry import (
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridCurve, LinearGridFlux
 from desc.integrals import Bounce2D
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -135,7 +135,7 @@ def test_compute_everything():
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
-        ).to_SplineXYZ(grid=LinearGrid(N=50)),
+        ).to_SplineXYZ(grid=LinearGridCurve(N=50)),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -198,7 +198,7 @@ def test_compute_everything():
         f" to test against master."
     )
     # use this low resolution grid for equilibria to reduce file size
-    eqgrid = LinearGrid(
+    eqgrid = LinearGridFlux(
         L=9,
         M=5,
         N=5,
@@ -206,9 +206,9 @@ def test_compute_everything():
         sym=things["desc.equilibrium.equilibrium.Equilibrium"].sym,
         axis=True,
     )
-    curvegrid1 = LinearGrid(N=10)
-    curvegrid2 = LinearGrid(N=10, NFP=2)
-    fieldgrid = LinearGrid(
+    curvegrid1 = LinearGridCurve(N=10)
+    curvegrid2 = LinearGridCurve(N=10, NFP=2)
+    fieldgrid = LinearGridFlux(
         L=2,
         M=4,
         N=5,
@@ -316,7 +316,7 @@ def fft_grid_data(p):
     eq = get("W7-X")
     # ci and my laptop differ a bunch at rho = 0, so skip that
     rho = np.linspace(1e-2, 1, 10)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
@@ -370,7 +370,7 @@ def raz_grid_data(p):
     rho = np.linspace(1e-2, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
-    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
     data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)
     data = apply(data, grid.compress, raz_names)

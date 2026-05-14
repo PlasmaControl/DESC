@@ -81,7 +81,7 @@ functions. We import ``_compute`` with an alias ``compute_fun`` to avoid confusi
     from desc.objectives.normalization import compute_scaling_factors
     from desc.compute import get_profiles, get_transforms
     from desc.compute.utils import _compute as compute_fun
-    from desc.grid import LinearGrid
+    from desc.grid import LinearGridFlux
 
 
 ``_Objective`` parent class provides a lot of functionality for objectives, such as ``compute_scaled`` for scaling the result of
@@ -98,7 +98,7 @@ and can be adjusted as shown below.
         ----------
         eq : Equilibrium
             Equilibrium that will be optimized to satisfy the Objective.
-        grid : Grid, optional
+        grid : AbstractGridFlux, optional
             Collocation grid containing the nodes to evaluate at.
 
         """
@@ -151,7 +151,7 @@ attributes and call the parent class's ``__init__`` method which will handle com
 ``build`` method can be thought as a pre-computation step that prepares the objective for optimization by storing the constants
 needed for ``compute`` method to prevent extra computations. This method is not JIT-compiled, so it can perform any Python code.
 
-``grid`` is a ``Grid`` object that contains the nodes where the objective will be evaluated. If it is not provided, a default
+``grid`` is an ``AbstractGrid`` object that contains the nodes where the objective will be evaluated. If it is not provided, a default
 grid is created based on the grid requirements for the objective. For example, if the objective needs to compute a volumetric
 quantity, a grid that covers the entire plasma volume needs to be chosen as default, or if there is an integral quantity
 a grid with proper quadrature points needs to be chosen. Sometimes 2 grids are needed, for example coil objectives, one for the
@@ -193,7 +193,7 @@ and ``self._profiles``. Finally, we call the parent class's ``build`` method for
             eq = self.things[0]
             # need some sensible default grid
             if self._grid is None:
-                grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+                grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
             else:
                 grid = self._grid
             # dim_f = size of the output vector returned by self.compute
@@ -300,7 +300,7 @@ from above are not repeated here)
     from desc.objectives.objective_funs import _Objective
     from desc.compute import get_profiles, get_transforms
     from desc.compute.utils import _compute as compute_fun
-    from desc.grid import LinearGrid
+    from desc.grid import LinearGridFlux
     from desc.integrals.surface_integral import surface_max, surface_min
 
     class MirrorRatio(_Objective):
@@ -317,10 +317,10 @@ from above are not repeated here)
         ----------
         eq : Equilibrium or OmnigenousField
             Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
-        grid : Grid, optional
+        grid : AbstractGrid, optional
             Collocation grid containing the nodes to evaluate at. Defaults to
-            ``LinearGrid(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-            or ``LinearGrid(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+            ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
+            or ``LinearGridFlux(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
 
         """
 
@@ -389,7 +389,7 @@ from above are not repeated here)
             if self._grid is None and isinstance(eq, Equilibrium):
                 # default grid here only has rho=1.0 so a single flux surface, but the objective
                 # is written generally for arbitrary number of surfaces
-                grid = LinearGrid(
+                grid = LinearGridFlux(
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
@@ -398,7 +398,7 @@ from above are not repeated here)
             elif self._grid is None and isinstance(eq, OmnigenousField):
                 # we have a different default grid when an OmnigenousField is the
                 # object being optimized
-                grid = LinearGrid(
+                grid = LinearGridFlux(
                     theta=2 * eq.M_B,
                     N=2 * eq.N_x,
                     NFP=eq.NFP,

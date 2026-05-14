@@ -24,7 +24,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jax, jnp, rfft2
 from desc.batching import batch_map
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._bounce_utils import (
     Y_B_rule,
     _sentinel,
@@ -190,7 +190,7 @@ class Bounce2D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
@@ -386,7 +386,7 @@ class Bounce2D(Bounce):
 
         eq = obj.things[0]
         if obj._grid is None:
-            obj._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+            obj._grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert obj._grid.can_fft2
 
         X = obj._hyperparam.pop("X")
@@ -427,7 +427,7 @@ class Bounce2D(Bounce):
         obj._constants["lambda"] = get_transforms(
             "lambda",
             eq,
-            grid=LinearGrid(
+            grid=LinearGridFlux(
                 rho=rho, M=eq.L_basis.M, zeta=obj._constants["y"], NFP=eq.NFP
             ),
         )["L"]
@@ -610,7 +610,7 @@ class Bounce2D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, θ, ζ).
         f : jnp.ndarray
             Data evaluated on grid.
@@ -733,14 +733,14 @@ class Bounce2D(Bounce):
 
             in_name = "vartheta"
             zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
-            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
+            grid = LinearGridFlux(rho=rho, M=eq.L_basis.M, zeta=zeta.size, NFP=eq.NFP)
             if iota is None:
                 iota = 0.0
 
         elif name == "delta":
             in_name = "alpha"
             zeta = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
-            grid = LinearGrid(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
+            grid = LinearGridFlux(rho=rho, M=eq.L_basis.M, zeta=zeta, NFP=eq.NFP)
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
 
@@ -1445,7 +1445,7 @@ class Bounce1D(Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates (the unique values prior to taking the tensor-product)
         must be strictly increasing and preferably uniformly spaced. These are used
@@ -1613,7 +1613,7 @@ class Bounce1D(Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         f : jnp.ndarray
             Data evaluated on grid.

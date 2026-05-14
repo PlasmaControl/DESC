@@ -52,6 +52,7 @@ from desc.utils import (
     check_posint,
     copy_coeffs,
     errorif,
+    errorif_wrong_grid,
     get_ess_scale,
     only1,
     setdefault,
@@ -902,12 +903,8 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGridFlux(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        errorif(
-            not isinstance(grid, AbstractGridFlux),
-            TypeError,
-            msg="Must pass in an AbstractGridFlux object for argument grid, "
-            + f"but instead got type {type(grid)}.",
-        )
+        errorif_wrong_grid(grid, AbstractGridFlux)
+
         # a check for Redl to prevent computing on-axis or
         # at a rho=1.0 point where profiles vanish
         if (

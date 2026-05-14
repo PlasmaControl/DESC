@@ -248,7 +248,7 @@ def DummyCoilSet(tmpdir_factory):
 
     # CoilSet with symmetry
     num_coils = 3  # number of unique coils per half field period
-    grid_flux = LinearGridFlux(zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
+    grid_flux = LinearGridFlux(rho=[0.0], zeta=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
     grid_curve = LinearGridCurve(s=2 * num_coils, NFP=eq.NFP * (eq.sym + 1))
     with pytest.warns(UserWarning):  # because eq.NFP != grid.NFP
         data_center = eq.axis.compute("x", grid=grid_curve, basis="xyz")

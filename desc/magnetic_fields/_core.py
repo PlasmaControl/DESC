@@ -39,6 +39,7 @@ from desc.utils import (
     copy_coeffs,
     dot,
     errorif,
+    errorif_wrong_grid,
     flatten_list,
     get_ess_scale,
     rpz2xyz,
@@ -3093,11 +3094,7 @@ class OmnigenousField(Optimizable, IOAble):
             grid = LinearGridFlux(
                 theta=2 * self.M_B, N=2 * self.N_x, NFP=self.NFP, sym=False
             )
-        elif not isinstance(grid, AbstractGridFlux):
-            raise TypeError(
-                "Must pass in an AbstractGridFlux object for argument grid, "
-                f"but instead got type {type(grid)}."
-            )
+        errorif_wrong_grid(grid, AbstractGridFlux)
 
         if params is None:
             params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))

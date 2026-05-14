@@ -499,7 +499,7 @@ def test_magnetic_axis():
     eq = desc.examples.get("HELIOTRON")
     axis = eq.axis
 
-    grid_flux = LinearGridFlux(N=3 * eq.N_grid, NFP=eq.NFP, rho=0.0)
+    grid_flux = LinearGridFlux(rho=[0.0], N=3 * eq.N_grid, NFP=eq.NFP)
     grid_curve = LinearGridCurve(N=3 * eq.N_grid, NFP=eq.NFP)
 
     data = eq.compute(["R", "Z"], grid=grid_flux)

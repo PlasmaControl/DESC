@@ -666,6 +666,8 @@ class Omnigenity(_Objective):
         self._eq_data_keys = ["|B|_mn_B"]
         self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
 
+        errorif_wrong_grid(eq_grid, AbstractGridFlux, msg_grid="eq_grid")
+        errorif_wrong_grid(field_grid, AbstractGridFlux, msg_grid="field_grid")
         errorif(
             eq_grid.NFP != field_grid.NFP,
             msg="eq_grid and field_grid must have the same number of field periods",

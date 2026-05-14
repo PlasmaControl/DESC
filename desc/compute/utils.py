@@ -10,7 +10,7 @@ from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
-from .data_index import allowed_kwargs, data_index, deprecated_names
+from .data_index import _topological_order, allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -128,9 +128,8 @@ def compute(  # noqa: C901
                     f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
 
-        _ = _get_deps(
-            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
-        )
+        # this call is purely for validation of the grid/deps consistency
+        _ = _get_deps(p, names, data, transforms["grid"].axis.size, check_fun=check_fun)
 
     if data is None:
         data = {}
@@ -147,7 +146,6 @@ def compute(  # noqa: C901
 
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-
         for name in data.keys():
             errorif(
                 data_index[p][name]["dim"] == (3, 3),
@@ -179,45 +177,24 @@ def _compute(
     case, either call above function or manually convert the output to xyz basis.
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
-    parameterization = _parse_parameterization(parameterization)
+    p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     if data is None:
         data = {}
 
-    for name in names:
+    has_axis = bool(transforms["grid"].axis.size)
+    needed = _get_deps(p, names, data=data, has_axis=has_axis)
+    needed = sorted(needed, key=_topological_order[p].__getitem__)
+
+    for name in needed:
         if name in data:
-            # don't compute something that's already been computed
+            # a previously-called fun may have populated this already
             continue
-        if not has_data_dependencies(
-            parameterization, name, data, transforms["grid"].axis.size
-        ):
-            # then compute the missing dependencies
-            data = _compute(
-                parameterization,
-                data_index[parameterization][name]["dependencies"]["data"],
-                params=params,
-                transforms=transforms,
-                profiles=profiles,
-                data=data,
-                **kwargs,
-            )
-            if transforms["grid"].axis.size:
-                data = _compute(
-                    parameterization,
-                    data_index[parameterization][name]["dependencies"][
-                        "axis_limit_data"
-                    ],
-                    params=params,
-                    transforms=transforms,
-                    profiles=profiles,
-                    data=data,
-                    **kwargs,
-                )
-        # now compute the quantity
-        data = data_index[parameterization][name]["fun"](
+        data = data_index[p][name]["fun"](
             params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
         )
+
     return data
 
 
@@ -246,60 +223,21 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     if not data:
         out = []
         for key in keys:
-            out += _get_deps_1_key(p, key, has_axis)
+            out += data_index[p][key][deps_type]["data"]
         out = set(out)
     else:
-        out = _get_deps(p, keys, deps=set(), data=data, has_axis=has_axis)
+        out = _get_deps(p, keys, data=data, has_axis=has_axis)
         out.difference_update(keys)
     if basis.lower() == "xyz":
         out.add("phi")
     return sorted(out)
 
 
-def _get_deps_1_key(p, key, has_axis):
-    """Gather all quantities required to compute ``key``.
-
-    Parameters
-    ----------
-    p : str
-        Type of object to compute for, eg Equilibrium, Curve, etc.
-    key : str
-        Name of the quantity to compute.
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
-
-    Returns
-    -------
-    deps_1_key : list of str
-        Dependencies required to compute ``key``.
-
-
-    """
-    if has_axis:
-        if "full_with_axis_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_with_axis_dependencies"]["data"]
-    elif "full_dependencies" in data_index[p][key]:
-        return data_index[p][key]["full_dependencies"]["data"]
-
-    deps = data_index[p][key]["dependencies"]["data"]
-    if len(deps) == 0:
-        return deps
-    out = deps.copy()  # to avoid modifying the data_index
-    for dep in deps:
-        out += _get_deps_1_key(p, dep, has_axis)
-    if has_axis:
-        axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
-        out += axis_limit_deps.copy()  # to be safe
-        for dep in axis_limit_deps:
-            out += _get_deps_1_key(p, dep, has_axis)
-
-    return sorted(set(out))
-
-
-def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fun=None):
+def _get_deps(parameterization, names, data=None, has_axis=False, check_fun=None):
     """Gather all quantities required to compute ``names`` given already computed data.
 
     Parameters
@@ -308,8 +246,6 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
-    deps : set[str]
-        Dependencies gathered so far.
     data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
@@ -324,28 +260,31 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
 
     """
     p = _parse_parameterization(parameterization)
-    for name in names:
-        if name not in deps and (data is None or name not in data):
-            if check_fun is not None:
-                check_fun(name)
-            deps.add(name)
-            deps = _get_deps(
-                p,
-                data_index[p][name]["dependencies"]["data"],
-                deps,
-                data,
-                has_axis,
-                check_fun,
-            )
-            if has_axis:
-                deps = _get_deps(
-                    p,
-                    data_index[p][name]["dependencies"]["axis_limit_data"],
-                    deps,
-                    data,
-                    has_axis,
-                    check_fun,
-                )
+    deps = set()
+    # below while loop expands each direct dependency if they are not
+    # in data or they are already added to the set before
+    stack = [n for n in names if data is None or n not in data]
+    while stack:
+        name = stack.pop()
+        if name in deps:
+            continue
+        if check_fun is not None:
+            check_fun(name)
+        deps.add(name)
+        direct = data_index[p][name]["dependencies"]
+        for dep in direct["data"]:
+            if dep in deps:
+                continue
+            if data is not None and dep in data:
+                continue
+            stack.append(dep)
+        if has_axis:
+            for dep in direct["axis_limit_data"]:
+                if dep in deps:
+                    continue
+                if data is not None and dep in data:
+                    continue
+                stack.append(dep)
     return deps
 
 
@@ -372,10 +311,9 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     """
     p = _parse_parameterization(parameterization)
     out = seeds.copy()
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     for key in search_space:
-        deps = data_index[p][key][
-            "full_with_axis_dependencies" if has_axis else "full_dependencies"
-        ]["data"]
+        deps = data_index[p][key][deps_type]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -405,25 +343,11 @@ def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-
-    def _get_derivs_1_key(key):
-        if has_axis:
-            if "full_with_axis_dependencies" in data_index[p][key]:
-                return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
-        elif "full_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, p, has_axis=has_axis, basis=basis)
-        derivs = {}
-        for dep in deps:
-            for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
-                if key not in derivs:
-                    derivs[key] = []
-                derivs[key] += val
-        return derivs
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
 
     derivs = {}
     for key in keys:
-        derivs1 = _get_derivs_1_key(key)
+        derivs1 = data_index[p][key][deps_type]["transforms"]
         for key1, val in derivs1.items():
             if key1 not in derivs:
                 derivs[key1] = []
@@ -459,11 +383,14 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    profs = []
-    for key in deps:
-        profs += data_index[p][key]["dependencies"]["profiles"]
-    profs = sorted(set(profs))
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    profs = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any profiles, no problem
+    # this way we skip calling get_data_deps again
+    for key in keys:
+        profs.update(data_index[p][key][deps_type]["profiles"])
+    profs = sorted(profs)
     if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None
@@ -496,12 +423,18 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    params = []
-    for key in deps:
-        params += data_index[p][key]["dependencies"]["params"]
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    params = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any params, no problem
+    # this way we skip calling get_data_deps again
+    # TODO (#568): This will probably need w_lmn
+    for key in keys:
+        params.update(data_index[p][key][deps_type]["params"])
+    params = sorted(params)
+
     if isinstance(obj, str) or inspect.isclass(obj):
-        return params
+        return list(params)
     temp_params = {}
     for name in params:
         p = getattr(obj, name)
@@ -647,60 +580,6 @@ def get_transforms(
             t.build()
 
     return transforms
-
-
-def has_data_dependencies(parameterization, qty, data, axis=False):
-    """Determine if we have the data needed to compute qty."""
-    return _has_data(qty, data, parameterization) and (
-        not axis or _has_axis_limit_data(qty, data, parameterization)
-    )
-
-
-def has_dependencies(parameterization, qty, params, transforms, profiles, data):
-    """Determine if we have the ingredients needed to compute qty.
-
-    Parameters
-    ----------
-    parameterization : str or class
-        Type of thing we're checking dependencies for. eg desc.equilibrium.Equilibrium
-    qty : str
-        Name of something from the data index.
-    params : dict[str, jnp.ndarray]
-        Dictionary of parameters we have.
-    transforms : dict[str, Transform]
-        Dictionary of transforms we have.
-    profiles : dict[str, Profile]
-        Dictionary of profiles we have.
-    data : dict[str, jnp.ndarray]
-        Dictionary of what we've computed so far.
-
-    Returns
-    -------
-    has_dependencies : bool
-        Whether we have what we need.
-    """
-    return (
-        _has_data(qty, data, parameterization)
-        and (
-            not transforms["grid"].axis.size
-            or _has_axis_limit_data(qty, data, parameterization)
-        )
-        and _has_params(qty, params, parameterization)
-        and _has_profiles(qty, profiles, parameterization)
-        and _has_transforms(qty, transforms, parameterization)
-    )
-
-
-def _has_data(qty, data, parameterization):
-    p = _parse_parameterization(parameterization)
-    deps = data_index[p][qty]["dependencies"]["data"]
-    return all(d in data for d in deps)
-
-
-def _has_axis_limit_data(qty, data, parameterization):
-    p = _parse_parameterization(parameterization)
-    deps = data_index[p][qty]["dependencies"]["axis_limit_data"]
-    return all(d in data for d in deps)
 
 
 def _has_params(qty, params, parameterization):

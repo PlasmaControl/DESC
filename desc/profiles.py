@@ -222,6 +222,7 @@ class _Profile(IOAble, ABC):
         if np.isscalar(x):
             if isinstance(self, ScaledProfile):
                 self._scale *= x
+                return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -252,6 +253,7 @@ class _Profile(IOAble, ABC):
         if np.isscalar(x):
             if isinstance(self, PowerProfile):
                 self._power *= x
+                return self
             return PowerProfile(x, self)
         else:
             raise NotImplementedError()

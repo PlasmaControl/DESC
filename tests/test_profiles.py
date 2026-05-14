@@ -18,7 +18,9 @@ from desc.profiles import (
     FourierZernikeProfile,
     HermiteSplineProfile,
     MTanhProfile,
+    PowerProfile,
     PowerSeriesProfile,
+    ScaledProfile,
     SplineProfile,
     TwoPowerProfile,
 )
@@ -564,3 +566,25 @@ class TestProfiles:
         )
         eq.solve()
         assert eq.is_nested()
+
+    @pytest.mark.unit
+    def test_double_scale_power(self):
+        """Test double scaled/powered profiles."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
+        pp2 = pp.copy() * 2
+        assert isinstance(pp2, ScaledProfile)
+        assert pp2._scale == 2
+
+        pp2 *= 3
+        assert isinstance(pp2, ScaledProfile)
+        assert pp2._scale == 6
+
+        pp3 = pp.copy() ** 2
+        assert isinstance(pp3, PowerProfile)
+        assert pp3._power == 2
+
+        pp3 = pp3**3
+        assert isinstance(pp3, PowerProfile)
+        assert pp3._power == 6

@@ -575,16 +575,20 @@ class TestProfiles:
         )
         pp2 = pp.copy() * 2
         assert isinstance(pp2, ScaledProfile)
+        assert isinstance(pp2._profile, PowerSeriesProfile)
         assert pp2._scale == 2
 
         pp2 *= 3
         assert isinstance(pp2, ScaledProfile)
+        assert isinstance(pp2._profile, PowerSeriesProfile)
         assert pp2._scale == 6
 
         pp3 = pp.copy() ** 2
         assert isinstance(pp3, PowerProfile)
+        assert isinstance(pp3._profile, PowerSeriesProfile)
         assert pp3._power == 2
 
         pp3 = pp3**3
         assert isinstance(pp3, PowerProfile)
+        assert isinstance(pp3._profile, PowerSeriesProfile)
         assert pp3._power == 6

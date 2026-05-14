@@ -3554,7 +3554,6 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
     for t in theta_offset:
         nodes = np.array(
             [
-                np.zeros_like(theta),
                 np.atleast_1d(np.asarray((theta + t) % (2 * np.pi))),
                 np.atleast_1d(np.asarray(zeta)),
             ]

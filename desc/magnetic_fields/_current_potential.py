@@ -1848,7 +1848,6 @@ def _find_current_potential_contours(
 
     nodes = jnp.array(
         [
-            jnp.zeros_like(theta_full_2D.flatten(order="F")),
             jnp.atleast_1d(jnp.asarray(theta_full_2D.flatten(order="F"))),
             jnp.atleast_1d(jnp.asarray(zeta_full_2D.flatten(order="F"))),
         ]
@@ -2036,7 +2035,6 @@ def _find_XYZ_points(
     for thetas, zetas in zip(theta_pts, zeta_pts):
         nodes = jnp.array(
             [
-                jnp.zeros_like(thetas),
                 jnp.atleast_1d(jnp.asarray(thetas)),
                 jnp.atleast_1d(jnp.asarray(zetas)),
             ]

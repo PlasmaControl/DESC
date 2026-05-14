@@ -447,24 +447,19 @@ class CustomGridFlux(AbstractGridFlux):
         jitable=False,
         **kwargs,
     ):
-        # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
-        # This change measurably reduces memory usage of objects that
-        # define all attributes in their __init__ method.
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = False
-        self._coordinates = coordinates
-        self._source_grid = source_grid
-        self._is_meshgrid = bool(is_meshgrid)
-        # If you are using a custom grid it almost always is not uniform, or is under
-        # jit where we cannot properly check this anyways, so just set to False.
-        self._fft_x1 = False
-        self._fft_x2 = False
+        nodes = jnp.atleast_2d(jnp.asarray(nodes))
+        assert len(nodes.shape) == 2
+        assert nodes.shape[1] == 3
         self._nodes = self._create_nodes(nodes)
-        self._spacing = (
-            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
-            if spacing is not None
-            else None
-        )
+
+        if spacing is not None:
+            spacing = jnp.atleast_2d(jnp.asarray(spacing))
+            assert len(spacing.shape) == 2
+            assert spacing.shape[1] == 3
+            self._spacing = spacing.reshape(self.nodes.shape).astype(float)
+        else:
+            self._spacing = None
+
         self._weights = (
             jnp.atleast_1d(jnp.asarray(weights))
             .reshape(self.nodes.shape[0])
@@ -472,8 +467,14 @@ class CustomGridFlux(AbstractGridFlux):
             if weights is not None
             else None
         )
+
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._coordinates = coordinates
+        self._source_grid = source_grid
+        self._is_meshgrid = bool(is_meshgrid)
         if sort:
             self._sort_nodes()
+
         setable_attr = [
             "_unique_x0_idx",
             "_unique_x1_idx",
@@ -483,8 +484,8 @@ class CustomGridFlux(AbstractGridFlux):
             "_inverse_x2_idx",
         ]
         if jitable:
-            # Don't do anything with symmetry since that changes number of nodes
-            # avoid point at the axis, for now.
+            # Do not do anything with symmetry since that changes the number of nodes.
+            # Avoid point at the axis for now.
             r, t, z = self._nodes.T
             r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
             self._nodes = jnp.column_stack([r, t, z])
@@ -505,7 +506,8 @@ class CustomGridFlux(AbstractGridFlux):
                 self._unique_x2_idx,
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
-        # Assign with logic in setter method if possible else 0.
+
+        # assign with logic in setter method if possible else 0
         self._L = self.num_x0 - 1 if hasattr(self, "num_x0") else 0
         self._M = (
             (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
@@ -529,9 +531,8 @@ class CustomGridFlux(AbstractGridFlux):
             Node coordinates, in (rho,theta,zeta).
 
         """
-        # do not alter nodes given by the user for custom grids.
-        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
-        return nodes
+        # do not alter nodes given by the user for custom grids
+        return nodes.reshape((-1, 3)).astype(float)
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""

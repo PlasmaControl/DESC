@@ -314,8 +314,8 @@ class TestFourierRZCurve:
             atol=1e-12,
         )
         # pass in non-monotonic phi
-        s = np.array([0, 3, 2, 4, 1])
-        grid = CustomGridCurve(np.array([np.zeros_like(s), np.zeros_like(s), s]).T)
+        s = np.atleast_2d([0, 3, 2, 4, 1]).T
+        grid = CustomGridCurve(s)
         with pytest.raises(ValueError):
             xyz.to_FourierRZ(N=1, grid=grid)
 

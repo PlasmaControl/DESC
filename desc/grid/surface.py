@@ -382,7 +382,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
 
     Parameters
     ----------
-    nodes : ndarray of float, size(num_nodes,3)
+    nodes : ndarray of float, size(num_nodes,2) or size(num_nodes,3)
         Node coordinates, in (_,theta,zeta).
     spacing : ndarray of float, size(num_nodes,)
         Spacing between each node.
@@ -408,18 +408,23 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
         jitable=False,
         **kwargs,
     ):
-        self._NFP = check_posint(NFP, "NFP", False)
-        # If you are using a custom grid it almost always is not uniform, or is under
-        # jit where we cannot properly check this anyways, so just set to False.
-        self._fft_x1 = False
-        self._fft_x2 = False
-        self._can_fft2 = False
+        nodes = jnp.atleast_2d(jnp.asarray(nodes))
+        assert len(nodes.shape) == 2
+        assert nodes.shape[1] in [2, 3]
+        if nodes.shape[1] == 2:  # pad nodes if only 2 columns
+            nodes = jnp.pad(nodes, ((0, 0), (1, 0)))
         self._nodes = self._create_nodes(nodes)
-        self._spacing = (
-            jnp.atleast_2d(jnp.asarray(spacing)).reshape(self.nodes.shape).astype(float)
-            if spacing is not None
-            else None
-        )
+
+        if spacing is not None:
+            spacing = jnp.atleast_2d(jnp.asarray(spacing))
+            assert len(spacing.shape) == 2
+            assert spacing.shape[1] in [2, 3]
+            if spacing.shape[1] == 2:  # pad spacing if only 2 columns
+                spacing = jnp.pad(spacing, ((0, 0), (1, 0)))
+            self._spacing = spacing.reshape(self.nodes.shape).astype(float)
+        else:
+            self._spacing = None
+
         self._weights = (
             jnp.atleast_1d(jnp.asarray(weights))
             .reshape(self.nodes.shape[0])
@@ -427,8 +432,11 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
             if weights is not None
             else None
         )
+
+        self._NFP = check_posint(NFP, "NFP", False)
         if sort:
             self._sort_nodes()
+
         setable_attr = [
             "_unique_x0_idx",
             "_unique_x1_idx",
@@ -453,6 +461,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
                 self._unique_x2_idx,
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
+
         # assign with logic in setter method if possible else 0
         self._M = (
             (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
@@ -477,8 +486,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
 
         """
         # do not alter nodes given by the user for custom grids
-        nodes = jnp.atleast_2d(jnp.asarray(nodes)).reshape((-1, 3)).astype(float)
-        return nodes
+        return nodes.reshape((-1, 3)).astype(float)
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""

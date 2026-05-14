@@ -510,9 +510,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             raise NotImplementedError("zeta != phi not yet implemented")
         nodes = CustomGridToroidalSurface(
-            np.vstack([np.ones_like(theta), theta, coords[:, 1]]).T,
-            sort=False,
-            jitable=True,
+            np.vstack([theta, coords[:, 1]]).T, sort=False, jitable=True
         )
 
         R = coords[:, 0]

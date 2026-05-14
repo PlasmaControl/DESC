@@ -472,10 +472,8 @@ class TestCoil:
             x1[:, 1] - coil5.center[1],
             x1[:, 0] - coil5.center[0],
         )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
-        s = np.atleast_1d(np.asarray(angle))
-        grid_planar = CustomGridCurve(
-            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
-        )
+        s = np.atleast_2d(np.asarray(angle)).T
+        grid_planar = CustomGridCurve(s)
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
@@ -835,10 +833,8 @@ class TestCoilSet:
             x0[0]["x"][:, 1] - coils3[0].center[1],
             x0[0]["x"][:, 0] - coils3[0].center[0],
         )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
-        s = np.atleast_1d(np.asarray(angle))
-        grid_planar = CustomGridCurve(
-            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
-        )
+        s = np.atleast_2d(np.asarray(angle)).T
+        grid_planar = CustomGridCurve(s)
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
 
         np.testing.assert_allclose(
@@ -886,10 +882,8 @@ class TestCoilSet:
             x5[0]["x"][:, 1] - coils8[0].center[1],
             x5[0]["x"][:, 0] - coils8[0].center[0],
         )  # use CustomGridCurve instead of LinearGridCurve to prevent node sorting
-        s = np.atleast_1d(np.asarray(angle))
-        grid_planar = CustomGridCurve(
-            np.array([np.zeros_like(s), np.zeros_like(s), s]).T
-        )
+        s = np.atleast_2d(np.asarray(angle)).T
+        grid_planar = CustomGridCurve(s)
         x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
 
         np.testing.assert_allclose(

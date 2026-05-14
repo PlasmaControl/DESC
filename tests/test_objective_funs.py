@@ -16,7 +16,7 @@ from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
@@ -4629,3 +4629,34 @@ def test_objective_use_jit():
         assert f == 2 * r**2 if r > 0 else 9 * r**2 / 2
         assert g[0] == 4 * r if r > 0 else 9 * r
         assert np.all(g[1:] == 0)
+
+
+@pytest.mark.unit
+def test_jax_static_attrs():
+    """Test that jax arrays in _static_attrs handled correctly."""
+
+    class DummyObj(_Objective):
+        _static_attrs = _Objective._static_attrs + ["_arr"]
+
+        def __init__(self, eq, arr):
+            self._arr = arr
+            super().__init__(things=[eq])
+
+        def build(self, use_jit=True, verbose=3):
+            self._dim_f = 1
+            super().build(use_jit=use_jit, verbose=verbose)
+
+        def compute(self, params, constants=None):
+            return params["Psi"] * jnp.sum(self._arr)
+
+    eq = get("precise_QA")
+    obj = DummyObj(eq, arr=jnp.arange(3))
+    obj.build()
+    # obj._arr stays as jax array until it is flattened by a jit
+    # compiled function
+    assert isinstance(obj._arr, jax.Array)
+    with pytest.warns(UserWarning, match="Detected jax array"):
+        _ = obj.compute_scaled_error(*obj.xs(eq))
+    # once a compiled function is called, the attribute should become
+    # a numpy array to prevent future warnings
+    assert isinstance(obj._arr, np.ndarray)

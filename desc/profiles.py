@@ -220,6 +220,8 @@ class _Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
+            if isinstance(self, ScaledProfile):
+                self._scale *= x
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -248,6 +250,8 @@ class _Profile(IOAble, ABC):
     def __pow__(self, x):
         """Raise this profile to a power."""
         if np.isscalar(x):
+            if isinstance(self, PowerProfile):
+                self._power *= x
             return PowerProfile(x, self)
         else:
             raise NotImplementedError()

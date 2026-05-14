@@ -353,6 +353,8 @@ def _create_linear_nodes(res, x, period, endpoint, NFP=1, sym=False):
     # note: dx spacing should not depend on NFP
     # spacing corresponds to a node's weight in an integral, not the coordinates
 
+    # note: sym=True assumes x=π as the symmetry line
+
     if res is not None:
         x = 2 * res + 1
         x = 2 * (res + 1) if sym else 2 * res + 1

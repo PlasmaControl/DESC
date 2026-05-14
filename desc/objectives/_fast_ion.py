@@ -205,11 +205,10 @@ class GammaC(_Objective):
             Γ_c as a function of the flux surface label.
 
         """
-        constants = self._get_deprecated_constants(constants)
-
         if self._use_bounce1d:
             return self._compute_bounce1d(params, constants)
 
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(
@@ -283,6 +282,7 @@ class GammaC(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_bounce1d(self, params, constants=None):
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(

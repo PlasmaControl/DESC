@@ -140,7 +140,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x, objective.constants)
+            f = fun(x)
             func_allf.append(f)
         return f
 
@@ -153,7 +153,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x, objective.constants)
+            g = grad(x)
             grad_allf.append(g)
         return g * scale
 
@@ -166,7 +166,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x, objective.constants)
+            H = hess(x)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
@@ -377,14 +377,14 @@ def _optimize_scipy_least_squares(  # noqa: C901
     def fun_wrapped(x):
         # record all the xs and fs we see
         fun_allx.append(x)
-        f = jnp.atleast_1d(fun(x, objective.constants))
+        f = jnp.atleast_1d(fun(x))
         fun_allf.append(f)
         return f
 
     def jac_wrapped(x):
         # record all the xs and jacobians we see
         jac_allx.append(x)
-        J = jac(x, objective.constants)
+        J = jac(x)
         jac_allf.append(J)
         callback(x)
         return J
@@ -596,7 +596,7 @@ def _optimize_scipy_constrained(  # noqa: C901
                 f = np.array([])
             if not f.size:
                 cfun_allx.append(x)
-                f = constraint.compute_scaled(x, constraint.constants)
+                f = constraint.compute_scaled(x)
                 cfun_allf.append(f)
             return f
 
@@ -608,7 +608,7 @@ def _optimize_scipy_constrained(  # noqa: C901
                 J = np.array([[]])
             if not J.size:
                 cjac_allx.append(x)
-                J = constraint.jac_scaled(x, constraint.constants)
+                J = constraint.jac_scaled(x)
                 cjac_allf.append(J)
             return J * scale
 
@@ -625,7 +625,7 @@ def _optimize_scipy_constrained(  # noqa: C901
 
     def constraint_violation(xs):
         if constraint is not None:
-            f = constraint.compute_scaled_error(xs * scale, constraint.constants)
+            f = constraint.compute_scaled_error(xs * scale)
         else:
             f = 0.0
         return jnp.max(jnp.abs(f))
@@ -661,7 +661,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x, objective.constants)
+            f = fun(x)
             func_allf.append(f)
         return f
 
@@ -674,7 +674,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x, objective.constants)
+            g = grad(x)
             grad_allf.append(g)
         return g * scale
 
@@ -687,7 +687,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x, objective.constants)
+            H = hess(x)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 

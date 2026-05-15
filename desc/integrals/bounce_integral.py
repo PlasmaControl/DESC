@@ -49,7 +49,7 @@ from desc.integrals._bounce_utils import (
 )
 from desc.integrals._interp_utils import (
     _JF_BUG,
-    _eps,
+    _root_eps,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -106,11 +106,6 @@ class _Bounce(eqx.Module, ABC):
 
         """
         if isinstance(num_pitch, int):
-            errorif(
-                num_pitch > 1e5,
-                msg="Floating point error impedes detection of bounce points "
-                f"near global extrema. Choose {num_pitch} < 1e5.",
-            )
             simp = kwargs.get("simp", True)
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
 
@@ -674,7 +669,7 @@ class Bounce2D(_Bounce):
             # size of 10⁻⁸ is reduced from 10³ to 10⁻⁶ for Γ_c
             # (which has the singular weight 1/v_∥).
             z1, z2 = self._B.intersect1d(
-                self._swap_axes(pitch_inv), num_intersect=num_well, eps=_eps
+                self._swap_axes(pitch_inv), num_intersect=num_well, eps=_root_eps()
             )
             z1 = move(z1)
             z2 = move(z2)
@@ -983,7 +978,7 @@ class Bounce2D(_Bounce):
         # such that all bounce points are at ζ >= 0; and therefore,
         # junk values in B_mins cannot be selected in argmin.
         mins, B_mins = (
-            self._B.extrema1d(1, num_mins, fill_value=0.0, eps=_eps)
+            self._B.extrema1d(1, num_mins, fill_value=0.0, eps=_root_eps())
             if isinstance(self._B, PiecewiseChebyshevSeries)
             else get_mins(self._c["knots"], self._B, num_mins, fill_value=0.0)
         )
@@ -1111,7 +1106,7 @@ class Bounce2D(_Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, eps=_eps)
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, eps=_root_eps())
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 
@@ -1907,7 +1902,8 @@ class Options(NamedTuple):
 
         """
         errorif(
-            (surf_batch_size > 1) and (pitch_batch_size is not None),
+            (surf_batch_size is None or surf_batch_size > 1)
+            and (pitch_batch_size is not None),
             msg=f"Expected pitch_batch_size to be None, got {pitch_batch_size}.",
         )
 

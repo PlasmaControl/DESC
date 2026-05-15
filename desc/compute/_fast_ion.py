@@ -119,9 +119,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
@@ -270,9 +270,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         num_pitch,
         _,
         _,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
@@ -382,9 +382,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-1, grid, **kwargs)
 

@@ -9,7 +9,16 @@ from desc.backend import cond, jit, jnp, put, solve_triangular
 from desc.utils import Index
 
 
-def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
+def inequality_to_bounds(  # noqa: C901
+    x0,
+    fun,
+    grad,
+    hess,
+    constraint,
+    bounds,
+    *args,
+    con_state=None,
+):
     """Convert inequality constraints to bounds using slack variables.
 
     We do this by introducing slack variables s
@@ -30,6 +39,12 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
         constraint object of both equality and inequality constraints
     bounds : tuple
         lower and upper bounds for primal variables x
+    fun_has_state : bool
+        Whether the functions fun, grad, hess return a state.
+    con_has_state : bool
+        Whether the constraint return a state.
+    con_state : Any
+        Initial state to pass to constraint.
 
     Returns
     -------
@@ -45,8 +60,13 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
         function for splitting combined variable z into primal
         and slack variables x and s
 
+
+    Notes
+    -----
+    Assumes fun, grad, hess, constraint etc all take and return state.
     """
-    c0 = constraint.fun(x0, *args)
+    c0, _ = constraint.fun(x0, *args, state=con_state)
+
     ncon = c0.size
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
     cbounds = (constraint.lb, constraint.ub)
@@ -71,75 +91,75 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds, *args):
     def z2xs(z):
         return z[: len(z) - nslack], z[len(z) - nslack :]
 
-    def fun_wrapped(z, *args):
+    def fun_wrapped(z, *args, state):
         x, s = z2xs(z)
-        return fun(x, *args)
+        return fun(x, *args, state=state)
 
     if hess is None:
         # assume grad is really jac of least squares
-        def grad_wrapped(z, *args):
+        def grad_wrapped(z, *args, state):
             x, s = z2xs(z)
-            g = grad(x, *args)
-            return jnp.hstack([g, jnp.zeros((g.shape[0], nslack))])
+            g, state = grad(x, *args, state=state)
+            return jnp.hstack([g, jnp.zeros((g.shape[0], nslack))]), state
 
     else:
 
-        def grad_wrapped(z, *args):
+        def grad_wrapped(z, *args, state):
             x, s = z2xs(z)
-            g = grad(x, *args)
-            return jnp.concatenate([g, jnp.zeros(nslack)])
+            g, state = grad(x, *args, state=state)
+            return jnp.concatenate([g, jnp.zeros(nslack)]), state
 
     if callable(hess):
 
-        def hess_wrapped(z, *args):
+        def hess_wrapped(z, *args, state):
             x, s = z2xs(z)
-            H = hess(x, *args)
-            return jnp.pad(H, (0, nslack))
+            H, state = hess(x, *args, state=state)
+            return jnp.pad(H, (0, nslack)), state
 
     else:  # using BFGS
         hess_wrapped = hess
 
-    def confun_wrapped(z, *args):
+    def confun_wrapped(z, *args, state):
         x, s = z2xs(z)
-        c = constraint.fun(x, *args)
+        c, state = constraint.fun(x, *args, state=state)
         sbig = jnp.zeros(ncon)
         sbig = put(sbig, ineq_mask, s)
-        return c - sbig - target
+        return c - sbig - target, state
 
-    def conjac_wrapped(z, *args):
+    def conjac_wrapped(z, *args, state):
         x, s = z2xs(z)
-        J = constraint.jac(x, *args)
+        J, state = constraint.jac(x, *args, state=state)
         I = jnp.eye(nslack)
         Js = jnp.zeros((ncon, nslack))
         Js = put(Js, Index[ineq_mask, :], -I)
-        return jnp.hstack([J, Js])
+        return jnp.hstack([J, Js]), state
 
     if callable(constraint.hess):
 
-        def conhess_wrapped(z, y, *args):
+        def conhess_wrapped(z, y, *args, state):
             x, s = z2xs(z)
-            H = constraint.hess(x, y, *args)
-            return jnp.pad(H, (0, nslack))
+            H, state = constraint.hess(x, y, *args, state=state)
+            return jnp.pad(H, (0, nslack)), state
 
     else:  # using BFGS
         conhess_wrapped = constraint.hess
 
     if hasattr(constraint, "vjp"):
 
-        def vjp_wrapped(y, z, *args):
+        def vjp_wrapped(y, z, *args, state):
             x, s = z2xs(z)
             I = jnp.eye(nslack)
             Js = jnp.zeros((ncon, nslack))
             Js = put(Js, Index[ineq_mask, :], -I)
-            vjpx = constraint.vjp(y, x, *args)
+            vjpx, state = constraint.vjp(y, x, *args, state=state)
             vjps = jnp.dot(y, Js)
-            return jnp.concatenate([vjpx, vjps])
+            return jnp.concatenate([vjpx, vjps]), state
 
     else:
 
-        def vjp_wrapped(y, z, *args):
-            J = conjac_wrapped(z, *args)
-            return jnp.dot(y, J)
+        def vjp_wrapped(y, z, *args, state):
+            J, state = conjac_wrapped(z, *args, state=state)
+            return jnp.dot(y, J), state
 
     newcon = copy.copy(constraint)
     newcon.fun = confun_wrapped
@@ -551,3 +571,8 @@ def solve_triangular_regularized(R, b, lower=False):
     Rs = R * dri[:, None]
     b = dri * b
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
+
+
+def wrap_stateless_fun(fun):
+    """Wrap a stateless fun to accept and return dummy state."""
+    return lambda x, *args, state=None: (fun(x, *args), None)

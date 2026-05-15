@@ -25,6 +25,7 @@ from .utils import (
     inequality_to_bounds,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    wrap_stateless_fun,
 )
 
 
@@ -45,6 +46,10 @@ def fmin_auglag(  # noqa: C901
     maxiter=None,
     callback=None,
     options={},
+    fun_has_state=False,
+    con_has_state=False,
+    fun_init_state=None,
+    con_init_state=None,
 ):
     """Minimize a function with constraints using an augmented Lagrangian method.
 
@@ -192,6 +197,19 @@ def fmin_auglag(  # noqa: C901
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
+    fun_has_state : bool
+        If True, `fun`, `grad` and `hess` are assumed to have a signature of the form
+        fun(x, *args, state=fun_state) -> array, fun_state. State will be updated on
+        each accepted step.
+    con_has_state : bool
+        If True, `constraint` is assumed to have a signature of the form
+        fun(x, *args, state=con_state) -> array, con_state. State will be updated on
+        each accepted step.
+    fun_init_state : Any
+        Initial value for fun_state. Only used if `fun_has_state=True`.
+    con_init_state : Any
+        Initial value for con_state. Only used if `con_has_state=True`.
+
     Returns
     -------
     res : OptimizeResult
@@ -207,15 +225,42 @@ def fmin_auglag(  # noqa: C901
            Second Edition (2006).
 
     """
-    constraint = setdefault(
-        constraint,
-        NonlinearConstraint(  # create a dummy constraint
+    if constraint is None:
+        constraint = NonlinearConstraint(  # create a dummy constraint
             fun=lambda x, *args: jnp.array([0.0]),
             lb=0.0,
             ub=0.0,
             jac=lambda x, *args: jnp.zeros((1, x.size)),
-        ),
-    )
+        )
+        con_has_state = False
+        con_init_state = None
+
+    if not fun_has_state:
+        fun = wrap_stateless_fun(fun)
+        grad = wrap_stateless_fun(grad)
+        if callable(hess):
+            hess = wrap_stateless_fun(hess)
+    if not con_has_state:
+        constraint_fun = wrap_stateless_fun(constraint.fun)
+        constraint_jac = wrap_stateless_fun(constraint.jac)
+        constraint_hess = (
+            wrap_stateless_fun(constraint.hess)
+            if callable(constraint.hess)
+            else constraint.hess
+        )
+        constraint_vjp = (
+            wrap_stateless_fun(constraint.vjp) if hasattr(constraint, "vjp") else None
+        )
+        constraint = NonlinearConstraint(
+            fun=constraint_fun,
+            lb=constraint.lb,
+            ub=constraint.ub,
+            jac=constraint_jac,
+            hess=constraint_hess,
+            keep_feasible=constraint.keep_feasible,
+        )
+        if constraint_vjp:
+            constraint.vjp = constraint_vjp
 
     (
         z0,
@@ -233,15 +278,17 @@ def fmin_auglag(  # noqa: C901
         constraint,
         bounds,
         *args,
+        con_state=con_init_state,
     )
 
     def lagfun(f, c, y, mu, *args):
         return f - jnp.dot(y, c) + jnp.sum(mu / 2 * c * c)
 
-    def laggrad(z, y, mu, *args):
-        c = constraint_wrapped.fun(z, *args)
-        yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
-        return grad_wrapped(z, *args) - yJ
+    def laggrad(z, y, mu, *args, fun_state, con_state):
+        c, con_state = constraint_wrapped.fun(z, *args, state=con_state)
+        yJ, con_state = constraint_wrapped.vjp(y - mu * c, z, *args, state=con_state)
+        g, fun_state = grad_wrapped(z, *args, state=fun_state)
+        return g - yJ, fun_state, con_state
 
     if isinstance(hess_wrapped, str) and hess_wrapped.lower() == "bfgs":
         bfgs = True
@@ -266,22 +313,22 @@ def fmin_auglag(  # noqa: C901
     elif callable(constraint_wrapped.hess) and callable(hess_wrapped):
         bfgs = False
 
-        def laghess(z, y, mu, *args):
-            c = constraint_wrapped.fun(z, *args)
-            Hf = hess_wrapped(z, *args)
-            Jc = constraint_wrapped.jac(z, *args)
-            Hc1 = constraint_wrapped.hess(z, y)
-            Hc2 = constraint_wrapped.hess(z, c * mu)
-            return Hf - Hc1 + Hc2 + jnp.dot(mu * Jc.T, Jc)
+        def laghess(z, y, mu, *args, fun_state, con_state):
+            c, con_state = constraint_wrapped.fun(z, *args, state=con_state)
+            Hf, fun_state = hess_wrapped(z, *args, state=fun_state)
+            Jc, con_state = constraint_wrapped.jac(z, *args, state=con_state)
+            Hc1, con_state = constraint_wrapped.hess(z, y, state=con_state)
+            Hc2, con_state = constraint_wrapped.hess(z, c * mu, state=con_state)
+            return Hf - Hc1 + Hc2 + jnp.dot(mu * Jc.T, Jc), fun_state, con_state
 
     elif callable(hess_wrapped):
         bfgs = False
 
-        def laghess(z, y, mu, *args):
-            H = hess_wrapped(z, *args)
-            J = constraint_wrapped.jac(z, *args)
+        def laghess(z, y, mu, *args, fun_state, con_state):
+            H, fun_state = hess_wrapped(z, *args, state=fun_state)
+            J, con_state = constraint_wrapped.jac(z, *args, state=con_state)
             # ignoring higher order derivatives of constraints for now
-            return H + jnp.dot(mu * J.T, J)
+            return H + jnp.dot(mu * J.T, J), fun_state, con_state
 
     errorif(
         not (isinstance(laghess, BFGS) or callable(laghess)),
@@ -295,8 +342,8 @@ def fmin_auglag(  # noqa: C901
     iteration = 0
 
     z = z0.copy()
-    f = fun_wrapped(z, *args)
-    c = constraint_wrapped.fun(z, *args)
+    f, fun_state = fun_wrapped(z, *args, state=fun_init_state)
+    c, con_state = constraint_wrapped.fun(z, *args, state=con_init_state)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -308,19 +355,19 @@ def fmin_auglag(  # noqa: C901
     mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
-        _J = constraint_wrapped.jac(z, *args)
-        _g = grad_wrapped(z, *args)
+        _J, _ = constraint_wrapped.jac(z, *args, state=con_state)
+        _g, _ = grad_wrapped(z, *args, state=fun_state)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
     L = lagfun(f, c, y, mu)
-    g = laggrad(z, y, mu, *args)
+    g, _, _ = laggrad(z, y, mu, *args, fun_state=fun_state, con_state=con_state)
     ngev += 1
     if bfgs:
         H = laghess.get_matrix()
     else:
-        H = laghess(z, y, mu, *args)
+        H, _, _ = laghess(z, y, mu, *args, fun_state=fun_state, con_state=con_state)
         nhev += 1
 
     allx = []
@@ -505,8 +552,8 @@ def fmin_auglag(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
-            f_new = fun_wrapped(z_new, *args)
-            c_new = constraint_wrapped.fun(z_new, *args)
+            f_new, fun_state_new = fun_wrapped(z_new, *args, state=fun_state)
+            c_new, con_state_new = constraint_wrapped.fun(z_new, *args, state=con_state)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 
@@ -560,16 +607,20 @@ def fmin_auglag(  # noqa: C901
             allx.append(z)
             f = f_new
             c = c_new
+            fun_state = fun_state_new
+            con_state = con_state_new
             constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
             L = L_new
             g_old = g
-            g = laggrad(z, y, mu, *args)
+            g, _, _ = laggrad(z, y, mu, *args, fun_state=fun_state, con_state=con_state)
             ngev += 1
             if bfgs:
                 laghess.update(z - z_old, g - g_old)
                 H = laghess.get_matrix()
             else:
-                H = laghess(z, y, mu, *args)
+                H, _, _ = laghess(
+                    z, y, mu, *args, fun_state=fun_state, con_state=con_state
+                )
                 nhev += 1
 
             if hess_scale:
@@ -592,14 +643,18 @@ def fmin_auglag(  # noqa: C901
                     gtolk = max(omega / (jnp.mean(mu) ** alpha_omega), gtol)
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
-                g = laggrad(z, y, mu, *args)
+                g, _, _ = laggrad(
+                    z, y, mu, *args, fun_state=fun_state, con_state=con_state
+                )
                 ngev += 1
 
                 if bfgs:
                     laghess.update(z - z_old, g - g_old)
                     H = laghess.get_matrix()
                 else:
-                    H = laghess(z, y, mu, *args)
+                    H, _, _ = laghess(
+                        z, y, mu, *args, fun_state=fun_state, con_state=con_state
+                    )
                     nhev += 1
 
                 if hess_scale:
@@ -674,6 +729,8 @@ def fmin_auglag(  # noqa: C901
         message=message,
         active_mask=active_mask,
         constr_violation=constr_violation,
+        fun_state=fun_state,
+        con_state=con_state,
     )
     if verbose > 0:
         if result["success"]:

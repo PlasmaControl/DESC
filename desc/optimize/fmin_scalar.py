@@ -24,6 +24,7 @@ from .utils import (
     compute_hess_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    wrap_stateless_fun,
 )
 
 
@@ -42,6 +43,8 @@ def fmintr(  # noqa: C901
     maxiter=None,
     callback=None,
     options=None,
+    has_state=False,
+    init_state=None,
 ):
     """Minimize a scalar function using a (quasi)-Newton trust region method.
 
@@ -162,6 +165,13 @@ def fmintr(  # noqa: C901
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
+    has_state : bool
+        If True, `fun`, `grad` and `hess` are assumed to have a signature of the form
+        fun(x, *args, state=state) -> array, state. State will be updated on each
+        accepted step.
+    init_state : Any
+        Initial value for state. Only used if `has_state=True`.
+
     Returns
     -------
     res : OptimizeResult
@@ -178,6 +188,12 @@ def fmintr(  # noqa: C901
 
     """
     options = {} if options is None else options
+    if not has_state:
+        fun = wrap_stateless_fun(fun)
+        grad = wrap_stateless_fun(grad)
+        if callable(hess):
+            hess = wrap_stateless_fun(hess)
+
     nfev = 0
     ngev = 0
     nhev = 0
@@ -190,9 +206,9 @@ def fmintr(  # noqa: C901
     assert in_bounds(x, lb, ub), "x0 is infeasible"
     x = make_strictly_feasible(x, lb, ub)
 
-    f = fun(x, *args)
+    f, state = fun(x, *args, state=init_state)
     nfev += 1
-    g = grad(x, *args)
+    g, _ = grad(x, *args, state=state)
     ngev += 1
 
     if isinstance(hess, str) and hess.lower() == "bfgs":
@@ -203,7 +219,7 @@ def fmintr(  # noqa: C901
         hess_min_curvature = options.pop("hessian_minimum_curvature", None)
         hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
     if callable(hess):
-        H = hess(x, *args)
+        H, _ = hess(x, *args, state=state)
         nhev += 1
         bfgs = False
     elif isinstance(hess, BFGS):
@@ -372,7 +388,7 @@ def fmintr(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
-            f_new = fun(x_new, *args)
+            f_new, state_new = fun(x_new, *args, state=state)
             nfev += 1
             actual_reduction = f - f_new
 
@@ -419,14 +435,15 @@ def fmintr(  # noqa: C901
             x_old = x
             x = x_new
             f = f_new
+            state = state_new
             g_old = g
-            g = grad(x, *args)
+            g, _ = grad(x, *args, state=state)
             ngev += 1
             if bfgs:
                 hess.update(x - x_old, g - g_old)
                 H = hess.get_matrix()
             else:
-                H = hess(x, *args)
+                H, _ = hess(x, *args, state=state)
                 nhev += 1
 
             if hess_scale:
@@ -492,6 +509,7 @@ def fmintr(  # noqa: C901
         active_mask=active_mask,
         allx=allx,
         alltr=alltr,
+        state=state,
     )
     if verbose > 0:
         if result["success"]:

@@ -26,6 +26,7 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
     solve_triangular_regularized,
+    wrap_stateless_fun,
 )
 
 
@@ -45,6 +46,10 @@ def lsq_auglag(  # noqa: C901
     maxiter=None,
     callback=None,
     options={},
+    fun_has_state=False,
+    con_has_state=False,
+    fun_init_state=None,
+    con_init_state=None,
 ):
     """Minimize a function with constraints using an augmented Lagrangian method.
 
@@ -176,6 +181,19 @@ def lsq_auglag(  # noqa: C901
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 
+    fun_has_state : bool
+        If True, `fun` and `jac` are assumed to have a signature of the form
+        fun(x, *args, state=fun_state) -> array, fun_state. State will be updated on
+        each accepted step.
+    con_has_state : bool
+        If True, `constraint` is assumed to have a signature of the form
+        fun(x, *args, state=con_state) -> array, con_state. State will be updated on
+        each accepted step.
+    fun_init_state : Any
+        Initial value for fun_state. Only used if `fun_has_state=True`.
+    con_init_state : Any
+        Initial value for con_state. Only used if `con_has_state=True`.
+
     Returns
     -------
     res : OptimizeResult
@@ -189,15 +207,29 @@ def lsq_auglag(  # noqa: C901
            methods" (2000).
 
     """
-    constraint = setdefault(
-        constraint,
-        NonlinearConstraint(  # create a dummy constraint
+    if constraint is None:
+        constraint = NonlinearConstraint(  # create a dummy constraint
             fun=lambda x, *args: jnp.array([0.0]),
             lb=0.0,
             ub=0.0,
             jac=lambda x, *args: jnp.zeros((1, x.size)),
-        ),
-    )
+        )
+        con_has_state = False
+        con_init_state = None
+
+    if not fun_has_state:
+        fun = wrap_stateless_fun(fun)
+        jac = wrap_stateless_fun(jac)
+    if not con_has_state:
+        constraint_fun = wrap_stateless_fun(constraint.fun)
+        constraint_jac = wrap_stateless_fun(constraint.jac)
+        constraint = NonlinearConstraint(
+            fun=constraint_fun,
+            lb=constraint.lb,
+            ub=constraint.ub,
+            jac=constraint_jac,
+            keep_feasible=constraint.keep_feasible,
+        )
 
     (
         z0,
@@ -215,6 +247,7 @@ def lsq_auglag(  # noqa: C901
         constraint,
         bounds,
         *args,
+        con_state=con_init_state,
     )
 
     # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
@@ -225,20 +258,20 @@ def lsq_auglag(  # noqa: C901
         c = -y / sqrt_mu + sqrt_mu * c
         return jnp.concatenate((f, c))
 
-    def lagjac(z, y, mu, *args):
-        Jf = jac_wrapped(z, *args)
-        Jc = constraint_wrapped.jac(z, *args)
+    def lagjac(z, y, mu, *args, fun_state, con_state):
+        Jf, fun_state = jac_wrapped(z, *args, state=fun_state)
+        Jc, con_state = constraint_wrapped.jac(z, *args, state=con_state)
         Jc = jnp.sqrt(mu)[:, None] * Jc
-        return jnp.vstack((Jf, Jc))
+        return jnp.vstack((Jf, Jc)), fun_state, con_state
 
     nfev = 0
     njev = 0
     iteration = 0
 
     z = z0.copy()
-    f = fun_wrapped(z, *args)
+    f, fun_state = fun_wrapped(z, *args, state=fun_init_state)
     cost = 1 / 2 * jnp.dot(f, f)
-    c = constraint_wrapped.fun(z, *args)
+    c, con_state = constraint_wrapped.fun(z, *args, state=con_init_state)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
     nfev += 1
 
@@ -250,14 +283,16 @@ def lsq_auglag(  # noqa: C901
     mu = options.pop("initial_penalty_parameter", 10 * jnp.ones_like(c))
     y = options.pop("initial_multipliers", jnp.zeros_like(c))
     if y == "least_squares":  # use least squares multiplier estimates
-        _J = constraint_wrapped.jac(z, *args)
-        _g = f @ jac_wrapped(z, *args)
+        _J, _ = constraint_wrapped.jac(z, *args, state=con_state)
+        _f, _ = fun_wrapped(z, *args, state=fun_state)
+        _J_f, _ = jac_wrapped(z, *args, state=fun_state)
+        _g = _f @ _J_f
         y = jnp.linalg.lstsq(_J.T, _g)[0]
         y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     y, mu, c = jnp.broadcast_arrays(y, mu, c)
 
     L = lagfun(f, c, y, mu)
-    J = lagjac(z, y, mu, *args)
+    J, _, _ = lagjac(z, y, mu, *args, fun_state=fun_state, con_state=con_state)
     Lcost = 1 / 2 * jnp.dot(L, L)
     g = L @ J
 
@@ -462,9 +497,9 @@ def lsq_auglag(  # noqa: C901
             step_norm = jnp.linalg.norm(step, ord=2)
 
             z_new = make_strictly_feasible(z + step, lb, ub, rstep=0)
-            f_new = fun_wrapped(z_new, *args)
+            f_new, fun_state_new = fun_wrapped(z_new, *args, state=fun_state)
             cost_new = 0.5 * jnp.dot(f_new, f_new)
-            c_new = constraint_wrapped.fun(z_new, *args)
+            c_new, con_state_new = constraint_wrapped.fun(z_new, *args, state=con_state)
             L_new = lagfun(f_new, c_new, y, mu)
             nfev += 1
 
@@ -518,11 +553,13 @@ def lsq_auglag(  # noqa: C901
             allx.append(z)
             f = f_new
             c = c_new
+            fun_state = fun_state_new
+            con_state = con_state_new
             constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
             L = L_new
             cost = cost_new
             Lcost = Lcost_new
-            J = lagjac(z, y, mu, *args)
+            J, _, _ = lagjac(z, y, mu, *args, fun_state=fun_state, con_state=con_state)
             njev += 1
             g = jnp.dot(J.T, L)
 
@@ -547,7 +584,9 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                J = lagjac(z, y, mu, *args)
+                J, _, _ = lagjac(
+                    z, y, mu, *args, fun_state=fun_state, con_state=con_state
+                )
                 njev += 1
                 g = jnp.dot(J.T, L)
 
@@ -622,6 +661,8 @@ def lsq_auglag(  # noqa: C901
         constr_violation=constr_violation,
         allx=[z2xs(x)[0] for x in allx],
         alltr=alltr,
+        fun_state=fun_state,
+        con_state=con_state,
     )
     if verbose > 0:
         if result["success"]:

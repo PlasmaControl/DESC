@@ -26,6 +26,7 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -2162,6 +2163,62 @@ class TestObjectiveFunction:
         lam = (lam - lambda0) * (lam >= lambda0)
         lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
         np.testing.assert_allclose(obj.compute(eq.params_dict), lam)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "solve_method", ["auto", "fixed_point", "bicgstab", "least_squares"]
+    )
+    def test_objective_against_compute_free_surface_error(self, solve_method):
+        """Test FreeSurfaceError against the underlying |K_vc|^2 compute quantity."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=4, N=4, NFP=eq.NFP, sym=False)
+        B = ToroidalMagneticField(5, 1)
+        field = FreeSurfaceOuterField(eq.surface, M=3, N=3, B_coil=B)
+        obj = FreeSurfaceError(
+            eq,
+            field,
+            grid=grid,
+            eval_grid=grid,
+            solve_method=solve_method,
+        )
+        obj.build(verbose=0)
+
+        inner = compute_fun(
+            eq,
+            obj._inner_keys,
+            eq.params_dict,
+            obj.constants["eq_transforms"],
+            obj.constants["profiles"],
+        )
+        field_params = {
+            "R_lmn": eq.params_dict["Rb_lmn"],
+            "Z_lmn": eq.params_dict["Zb_lmn"],
+            "I": inner["I"][grid.unique_rho_idx[-1]],
+            "Y": field.Y,
+        }
+        outer_data = {key: inner[key] for key in obj._reuseable_keys}
+        outer_data["interpolator"] = obj.constants["interpolator"]
+        outer_data["B0*n"] = obj._phi_sec_dot_n(field_params, inner)
+        outer = compute_fun(
+            field,
+            "|K_vc|^2",
+            field_params,
+            obj.constants["eval_transforms"],
+            obj.constants["profiles"],
+            data=outer_data,
+            xtol=obj._xtol,
+            maxiter=obj._maxiter,
+            solve_method=solve_method,
+            Phi_0=obj.constants["initial_guess"],
+            chunk_size=obj._chunk_size,
+            B_coil_chunk_size=obj._B_coil_chunk_size,
+            B_coil=B,
+        )
+        expected = (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
+            "|e_theta x e_zeta|"
+        ]
+
+        np.testing.assert_allclose(obj.compute(eq.params_dict), expected)
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):

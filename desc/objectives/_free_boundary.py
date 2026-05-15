@@ -881,11 +881,8 @@ class FreeSurfaceError(_Objective):
 
     Warnings
     --------
-    Bugs with the optimizer may cause the optimizer to stall in the optimization
-    landscape of this objective. See GitHub issue #1208 to resolve.
-    Also, if ``field`` is an instance of ``FreeSurfaceOuterField``, then
-    ``field._B_coil`` should be smooth and divergence free until GitHub issue #1796
-    is resolved.
+    If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
+    should be smooth and divergence free until GitHub issue #1796 is resolved.
 
     Parameters
     ----------
@@ -918,6 +915,11 @@ class FreeSurfaceError(_Objective):
         If positive, then performs that many fixed point iterations until ``maxiter``
         or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
         error of ``1e-5`` as illustrated in [1]. Default is ``25``.
+    solve_method : str
+        Method to use for the scalar potential solve. One of ``"auto"``,
+        ``"fixed_point"``, ``"bicgstab"``, or ``"least_squares"``.
+        Default is ``"bicgstab"``, initialized from one fixed point solve during
+        ``build``.
     chunk_size : int or None
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -951,6 +953,7 @@ class FreeSurfaceError(_Objective):
         "_q",
         "_xtol",
         "_maxiter",
+        "_solve_method",
         "_chunk_size",
         "_B_coil_chunk_size",
         "_grad_keys",
@@ -971,6 +974,7 @@ class FreeSurfaceError(_Objective):
         q=None,
         xtol=1e-7,
         maxiter=25,
+        solve_method="bicgstab",
         chunk_size=None,
         B_coil_chunk_size=None,
         I_sheet=0.0,
@@ -1020,6 +1024,7 @@ class FreeSurfaceError(_Objective):
         self._q = q
         self._xtol = xtol
         self._maxiter = maxiter
+        self._solve_method = solve_method
         self._chunk_size = chunk_size
         self._B_coil_chunk_size = B_coil_chunk_size
         self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
@@ -1086,6 +1091,12 @@ class FreeSurfaceError(_Objective):
         )
         # No net poloidal current in equation 4.13 of [1].
         self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
+        profiles = get_profiles(self._inner_keys, eq, grid=self._eval_grid)
+        initial_guess = self._compute_initial_guess(
+            eq,
+            source_transforms,
+            data["interpolator"],
+        )
 
         self._constants = {
             "interpolator": data["interpolator"],
@@ -1093,7 +1104,8 @@ class FreeSurfaceError(_Objective):
             "grad_transforms": grad_transforms,
             "eval_transforms": eval_transforms,
             "source_transforms": source_transforms,
-            "profiles": get_profiles(self._inner_keys, eq, grid=self._eval_grid),
+            "profiles": profiles,
+            "initial_guess": initial_guess,
             "quad_weights": np.sqrt(eval_transforms["grid"].weights),
         }
         self._dim_f = self._eval_grid.num_nodes
@@ -1108,6 +1120,62 @@ class FreeSurfaceError(_Objective):
             )
 
         super().build(use_jit=use_jit, verbose=verbose)
+
+    def _compute_initial_guess(
+        self,
+        eq,
+        source_transforms,
+        interpolator,
+    ):
+        """Compute the fixed point potential used to initialize iterative solves."""
+        params = eq.params_dict
+        source_grid = self._grid
+        source_keys = list(
+            dict.fromkeys(self._reuseable_keys + self._grad_keys + ["I"])
+        )
+        source_data = eq.compute(
+            source_keys,
+            grid=source_grid,
+        )
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            "I": source_data["I"][source_grid.unique_rho_idx[-1]] + self._I_sheet,
+            "Y": self._field.Y,
+        }
+        data = {key: source_data[key] for key in self._reuseable_keys}
+        data["interpolator"] = interpolator
+        data["B0*n"] = self._phi_sec_dot_n(field_params, source_data)
+        if self._is_neumann:
+            data, _ = self._field.compute(
+                "B_coil",
+                grid=source_grid,
+                params=field_params,
+                transforms=source_transforms,
+                data=data,
+                B_coil_chunk_size=self._B_coil_chunk_size,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+            data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+
+        problem = {"problem": "exterior Neumann"} if self._is_neumann else {}
+        data, _ = self._field.compute(
+            "Phi (periodic)",
+            grid=source_grid,
+            params=field_params,
+            transforms=source_transforms,
+            data=data,
+            xtol=self._xtol,
+            maxiter=self._maxiter,
+            solve_method="fixed_point",
+            chunk_size=self._chunk_size,
+            B_coil_chunk_size=self._B_coil_chunk_size,
+            B_coil=self._B_coil,
+            field_grid=self._coil_grid,
+            **problem,
+        )
+        return data["Phi (periodic)"]
 
     def compute(self, params, constants=None):
         """Compute boundary error.
@@ -1201,6 +1269,8 @@ class FreeSurfaceError(_Objective):
                 data=data,
                 xtol=self._xtol,
                 maxiter=self._maxiter,
+                solve_method=self._solve_method,
+                Phi_0=constants["initial_guess"],
                 chunk_size=self._chunk_size,
                 B_coil_chunk_size=self._B_coil_chunk_size,
                 B_coil=self._B_coil,
@@ -1217,6 +1287,8 @@ class FreeSurfaceError(_Objective):
             data=outer,
             xtol=self._xtol,
             maxiter=self._maxiter,
+            solve_method=self._solve_method,
+            Phi_0=constants["initial_guess"],
             chunk_size=self._chunk_size,
             B_coil_chunk_size=self._B_coil_chunk_size,
             B_coil=self._B_coil,

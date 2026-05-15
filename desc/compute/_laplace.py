@@ -7,12 +7,12 @@ References
 
 """
 
-from functools import partial
-
+import equinox as eqx
+import jax
 import lineax as lx
 from interpax_fft import rfft_interp2d
 
-from desc.backend import fixed_point, jit, jnp
+from desc.backend import fixed_point, jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -23,7 +23,7 @@ from desc.integrals.singularities import (
     get_interpolator,
     singular_integral,
 )
-from desc.utils import apply, cross, dot
+from desc.utils import apply, cross, dot, errorif
 
 from .data_index import register_compute_fun
 
@@ -32,7 +32,7 @@ _doc = {
         Initial guess for iteration.
         """,
     "xtol": """float :
-        Stopping tolerance for fixed point method. Default is ``1e-7``.
+        Stopping tolerance for the scalar potential solve. Default is ``1e-7``.
         """,
     "maxiter": """int :
         Maximum number of iterations for fixed point method.
@@ -41,9 +41,17 @@ _doc = {
         or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
         error of ``1e-5`` as illustrated in [1]. Default is ``25``.
         """,
+    "solve_method": """str :
+        Method to use for the scalar potential solve. One of ``"auto"``,
+        ``"fixed_point"``, ``"bicgstab"``, or ``"least_squares"``.
+        If ``"auto"``, then uses fixed point iteration when ``maxiter`` is
+        positive and the problem supports it, otherwise use the least-squares
+        solve. Default is ``"auto"``.
+        """,
     "full_output": """bool
         Whether to compute the maximum error ``Phi error`` and store the number of
-        iterations ``num iter`` used for the fixed point method. Default is ``False``.
+        iterations ``num iter`` used by the scalar potential solver. Default is
+        ``False``.
         """,
     "chunk_size": """int or None :
         Size to split integral computation into chunks.
@@ -142,7 +150,7 @@ def _D_plus_half(
     return result
 
 
-def _lsmr_compute_potential(
+def _least_squares_compute_potential(
     boundary_condition,
     potential_data,
     source_data,
@@ -228,7 +236,29 @@ def _iteration_operator(
     ) / xi
 
 
-@partial(jit, static_argnames=["xtol", "maxiter", "full_output", "chunk_size"])
+def _linear_potential_operator(
+    Phi,
+    potential_data,
+    source_data,
+    interpolator,
+    chunk_size,
+):
+    """Equation solved by the fixed point iteration."""
+    potential_data["Phi(x) (periodic)"] = Phi
+    source_data["Phi (periodic)"] = Phi
+    return (
+        _D_plus_half(
+            potential_data,
+            source_data,
+            interpolator,
+            chunk_size=chunk_size,
+            prune_data=False,
+        )
+        - Phi
+    )
+
+
+@eqx.filter_jit
 def _fixed_point_potential(
     boundary_condition,
     potential_data,
@@ -238,6 +268,7 @@ def _fixed_point_potential(
     *,
     xtol=1e-7,
     maxiter=25,
+    solve_method="fixed_point",
     full_output=False,
     chunk_size=None,
 ):
@@ -253,7 +284,36 @@ def _fixed_point_potential(
     )
     if Phi_0 is None:
         Phi_0 = jnp.ones(potential_grid.num_nodes)
-    out = fixed_point(
+    if solve_method == "auto":
+        solve_method = "fixed_point"
+    errorif(
+        solve_method not in {"fixed_point", "bicgstab"},
+        msg="_fixed_point_potential only supports solve_method='fixed_point' "
+        f"or 'bicgstab', got {solve_method!r}.",
+    )
+    if solve_method == "bicgstab":
+        operator = lx.FunctionLinearOperator(
+            lambda Phi: _linear_potential_operator(
+                Phi, potential_data, source_data, interpolator, chunk_size
+            ),
+            jax.ShapeDtypeStruct(Phi_0.shape, Phi_0.dtype),
+        )
+        solution = lx.linear_solve(
+            operator,
+            boundary_condition,
+            solver=lx.BiCGStab(
+                rtol=xtol,
+                atol=xtol,
+                max_steps=maxiter if maxiter > 0 else None,
+            ),
+            options={"y0": Phi_0},
+        )
+        if full_output:
+            err = operator.mv(solution.value) - boundary_condition
+            return solution.value, (err, solution.stats["num_steps"])
+        return solution.value
+
+    return fixed_point(
         _iteration_operator,
         Phi_0,
         (boundary_condition, potential_data, source_data, interpolator, chunk_size),
@@ -262,10 +322,25 @@ def _fixed_point_potential(
         method="simple",
         scalar=True,
         full_output=full_output,
-        anderson_m=8,
-        anderson_beta=1.0,
     )
-    return out
+
+
+def _select_potential_solve_method(solve_method, maxiter, problem):
+    if solve_method == "auto":
+        if (maxiter > 0) and (problem != "interior Neumann"):
+            return "fixed_point"
+        return "least_squares"
+    errorif(
+        solve_method not in {"fixed_point", "bicgstab", "least_squares"},
+        msg="solve_method must be one of 'auto', 'fixed_point', 'bicgstab', "
+        f"or 'least_squares', got {solve_method!r}.",
+    )
+    errorif(
+        solve_method in {"fixed_point", "bicgstab"} and (problem == "interior Neumann"),
+        msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
+        "problems. Use solve_method='least_squares' instead.",
+    )
+    return solve_method
 
 
 @register_compute_fun(
@@ -391,24 +466,29 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
 )
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
+    solve_method = _select_potential_solve_method(
+        kwargs.get("solve_method", "auto"),
+        kwargs.get("maxiter", 25),
+        kwargs["problem"],
+    )
 
-    if (kwargs.get("maxiter", 25) > 0) and (kwargs["problem"] != "interior Neumann"):
+    if solve_method in {"fixed_point", "bicgstab"}:
+        solve_kwargs = apply(kwargs, subset=_doc)
+        solve_kwargs["solve_method"] = solve_method
         data["Phi (periodic)"] = _fixed_point_potential(
             data["S[B0*n]"],
             data,
             data,
             data["interpolator"],
-            **apply(kwargs, subset=_doc),
+            **solve_kwargs,
         )
         if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"], _, _) = data[
-                "Phi (periodic)"
-            ]
+            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
-        data["Phi_mn"] = _lsmr_compute_potential(
+        data["Phi_mn"] = _least_squares_compute_potential(
             data["S[B0*n]"],
             data.get("potential data", data),
             data,
@@ -977,24 +1057,29 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
     # noqa: unused dependency
 
     boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
+    solve_method = _select_potential_solve_method(
+        kwargs.get("solve_method", "auto"),
+        kwargs.get("maxiter", 25),
+        "interior Dirichlet",
+    )
 
-    if kwargs.get("maxiter", 25) > 0:
+    if solve_method in {"fixed_point", "bicgstab"}:
+        solve_kwargs = apply(kwargs, subset=_doc)
+        solve_kwargs["solve_method"] = solve_method
         data["Phi (periodic)"] = _fixed_point_potential(
             boundary_condition,
             data,
             data,
             data["interpolator"],
-            **apply(kwargs, subset=_doc),
+            **solve_kwargs,
         )
         if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"], _, _) = data[
-                "Phi (periodic)"
-            ]
+            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
             data["Phi error"] = jnp.abs(err).max()
 
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     else:
-        data["Phi_mn"] = _lsmr_compute_potential(
+        data["Phi_mn"] = _least_squares_compute_potential(
             boundary_condition,
             data.get("potential data", data),
             data,

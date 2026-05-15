@@ -751,10 +751,18 @@ class TestLaplace:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "surface, M, N, maxiter, chunk_size, just_err",
-        [(None, 16, 16, -1, 500, False), (None, 16, 16, 40, 500, False)],
+        "surface, M, N, solve_method, maxiter, chunk_size, just_err",
+        [
+            pytest.param(
+                None, 16, 16, "least_squares", -1, 500, False, id="least-squares"
+            ),
+            pytest.param(None, 16, 16, "fixed_point", 40, 500, False, id="fixed-point"),
+            pytest.param(None, 16, 16, "bicgstab", 40, 500, False, id="bicgstab"),
+        ],
     )
-    def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
+    def test_interior_Dirichlet(
+        self, surface, M, N, solve_method, maxiter, chunk_size, just_err
+    ):
         """Test multiply connected interior Dirichlet Laplace solver."""
         if surface is None:
             surface = FourierRZToroidalSurface(
@@ -777,6 +785,7 @@ class TestLaplace:
             ["Phi error", "num iter"] if just_err else "γ potential",
             grid,
             maxiter=maxiter,
+            solve_method=solve_method,
             full_output=True,
             chunk_size=chunk_size,
         )
@@ -808,7 +817,7 @@ class TestLaplace:
         print()
         for i in maxiter:
             n, e = self.test_interior_Dirichlet(
-                surface, M, N, i, chunk_size, just_err=True
+                surface, M, N, "fixed_point", i, chunk_size, just_err=True
             )
             num_iter.append(n)
             Phi_err.append(e)

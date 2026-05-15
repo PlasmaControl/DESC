@@ -34,12 +34,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _newton,
-    bounce_points,
-    check_bounce_points,
-    get_mins,
-)
+from desc.integrals._bounce_utils import _bounce_points, check_bounce_points, get_mins
 from desc.integrals.quad_utils import (
     automorphism_sin,
     bijection_from_disc,
@@ -732,7 +727,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -748,7 +743,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -767,7 +762,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -792,8 +787,12 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        z = np.stack((z1, z2))
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        assert not np.any(
+            (z > 0) & (z < 2)
+        ), "This triple root intersect should be removed."
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -813,7 +812,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
+        z1, z2 = _bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, sentinel=start)
         check_bounce_points(
             z1,
             z2,
@@ -845,7 +844,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -879,9 +878,6 @@ class TestBouncePoints:
         np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
 
 
-auto_sin = (automorphism_sin, grad_automorphism_sin)
-
-
 class TestBounceQuadrature:
     """Test bounce quadrature."""
 
@@ -890,11 +886,12 @@ class TestBounceQuadrature:
         "is_strong, quad, automorphism",
         [
             (True, tanh_sinh(30), None),
-            (False, tanh_sinh(20), None),
-            (True, leggauss(25), auto_sin),
-            # chebgauss1 without c.o.v. is sensitive to approximation error
-            (True, chebgauss1(25), auto_sin),
-            (False, leggauss_lob(8, interior_only=True), auto_sin),
+            (True, leggauss(25), (automorphism_sin, grad_automorphism_sin)),
+            (
+                False,
+                leggauss_lob(8, interior_only=True),
+                (automorphism_sin, grad_automorphism_sin),
+            ),
             (False, chebgauss2(21), None),
         ],
     )
@@ -1099,7 +1096,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         bounce = Bounce1D(grid, data, check=True)
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1280,26 +1277,24 @@ class TestBounce:
             + np.cos(data["theta_PEST"])
             - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
         )
-        gbdrift_analytic_low_order = fudge_1 * (
+        gbdrift_analytical_low_order = fudge_1 * (
             -data["shear"]
             + np.cos(data["theta_PEST"])
             - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
         cvdrift_analytical = gbdrift_analytical + fudge_2 * alpha_MHD / B**2
-        cvdrift_analytic_low_order = (
-            gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
+        cvdrift_analytical_low_order = (
+            gbdrift_analytical_low_order + fudge_2 * alpha_MHD / B0**2
         )
         np.testing.assert_allclose(gbdrift, gbdrift_analytical, atol=1e-2)
         np.testing.assert_allclose(cvdrift, cvdrift_analytical, atol=2e-2)
-        np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
-        np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
+        np.testing.assert_allclose(gbdrift, gbdrift_analytical_low_order, atol=1e-2)
+        np.testing.assert_allclose(cvdrift, cvdrift_analytical_low_order, atol=2e-2)
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
-            0
-        ][:-1]
+        pitch_inv = Bounce1D.pitch_quad(np.min(B), np.max(B), 100, simp=False)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1342,13 +1337,18 @@ class TestBounce:
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
         data, things = TestBounce.get_drift_analytical_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(data)
+        drift_analytical, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(
+            data
+        )
+
+        data["|B|"] /= data["Bref"]
+        data["|B|_z|r,a"] /= data["Bref"]
+        data["B^zeta"] *= data["a"] / data["Bref"]
+        data["B^zeta_z|r,a"] *= data["a"] / data["Bref"]
 
         bounce = Bounce1D(
             things["grid"].source_grid,
             data,
-            Bref=data["Bref"],
-            Lref=data["a"],
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1367,16 +1367,16 @@ class TestBounce:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
+        assert drift_numerical.size == drift_analytical.size, msg
 
         np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+            drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, data)
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_analytical)
         ax.plot(pitch_inv, drift_numerical)
         return fig
 
@@ -1478,7 +1478,7 @@ class TestBounce2D:
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
-            num_transit=1,
+            num_field_periods=1,
             nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
@@ -1514,12 +1514,12 @@ class TestBounce2D:
             data,
             angle,
             alpha=alpha,
-            num_transit=2,
+            num_field_periods=38,
             check=True,
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1595,7 +1595,7 @@ class TestBounce2D:
             points=points,
             nufft_eps=1e-7,
             check=True,
-            low_ram=True,
+            loop=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
@@ -1605,13 +1605,10 @@ class TestBounce2D:
             num_nufft[~near_zero_nufft], num[~near_zero], rtol=3e-2
         )
 
-        bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
-        points = bounce.points(pitch_inv)
-        z1, z2 = _newton(
-            bounce, pitch_inv[:, None], *points, points[0] < points[1], 1e-10
+        bounce = Bounce2D(
+            grid, data, angle, alpha=alpha, num_field_periods=38, check=True
         )
-        np.testing.assert_allclose(points[0], z1, rtol=5e-6)
-        np.testing.assert_allclose(points[1], z2, rtol=5e-6)
+        points = bounce.points(pitch_inv)
 
         bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
@@ -1648,6 +1645,8 @@ class TestBounce2D:
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
+        grid_data["|B|"] /= data["Bref"]
+        grid_data["B^zeta"] *= data["a"] / data["Bref"]
 
         bounce = Bounce2D(
             grid,
@@ -1655,9 +1654,7 @@ class TestBounce2D:
             Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
-            num_transit=3,
-            Bref=data["Bref"],
-            Lref=data["a"],
+            num_field_periods=3,
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,

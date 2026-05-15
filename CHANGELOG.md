@@ -7,7 +7,7 @@ New Features
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
-- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
+- Method to compute bounce integrals in batches that supports sparse pullbacks is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
 - Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number.
@@ -17,16 +17,27 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 
 Performance Improvements
 
+- Sparse reverse-mode differentiation was introduced to DESC
+  to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170).
+  Plumbing to use this method was added to DESC that
+  will be progressively taken advantage of in the future.
 - Reduces import time of `desc` modules.
     - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
     - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
-- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+
+Breaking Changes
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- The method name ``get_pitch_inv_quad`` has been shortened to ``pitch_quad`` to
+  make calling it less cumbersome.
 
 
 v0.17.1

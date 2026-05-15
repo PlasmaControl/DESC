@@ -5,9 +5,6 @@ if [ -f "devtools/pre-commit.log" ]; then
     exit 1
 fi
 
-# Start the timer using date (in seconds since epoch)
-start_time=$(date +%s)
-
 echo "Files to check: $@"
 # Collect unmarked tests for the specific file and suppress errors
 unmarked=$(pytest "$@" --collect-only -m "not unit and not regression and not benchmark and not memory and not skip" -q 2> /dev/null | head -n 2)
@@ -25,3 +22,4 @@ if [ "$num_unmarked" -gt 0 ]; then
     printf "\nTime taken: %d seconds" "$elapsed_time"
     exit 1
 fi
+python devtools/check_unmarked_tests.py "$@"

@@ -3,15 +3,21 @@ Changelog
 
 New Features
 
+- Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
+- Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
 - Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
     - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
+- Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number.
+- Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
+  If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
 
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 
 Performance Improvements
 
@@ -29,6 +35,7 @@ v0.17.1
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
+
 
 
 v0.17.0

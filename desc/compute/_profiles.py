@@ -429,6 +429,29 @@ def _ni_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni_rr",
+    label="\\partial_{\\rho \\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, second radial derivative",
+    dim=1,
+    params=["ni_l"],
+    transforms={"grid": []},
+    profiles=["ion_density"],
+    coordinates="r",
+    data=["0"],
+)
+def _ni_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["ion_density"] is not None:
+        data["ni_rr"] = profiles["ion_density"].compute(
+            transforms["grid"], params["ni_l"], dr=2
+        )
+    else:
+        data["ne_rr"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",

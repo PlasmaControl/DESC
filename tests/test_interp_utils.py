@@ -260,6 +260,13 @@ class TestPolyUtils:
                 )
 
     @pytest.mark.unit
+    def test_polyroot_vec_quadratic_zero_linear_term(self):
+        """Test quadratic roots when the linear coefficient is zero."""
+        c = jnp.array([[1.0, 0.0, -1.0], [2.0, 0.0, -8.0]])
+        r = polyroot_vec(c, a_min=-jnp.inf, a_max=jnp.inf, sort=True)
+        np.testing.assert_allclose(r, jnp.array([[-1.0, 1.0], [-2.0, 2.0]]))
+
+    @pytest.mark.unit
     @pytest.mark.parametrize("companion", [True, False])
     def test_polyroot_vec_distinct(self, companion):
         """Test vectorized computation of cubic polynomial exact roots."""

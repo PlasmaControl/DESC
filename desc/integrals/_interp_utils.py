@@ -521,7 +521,7 @@ def _root_cubic(a, b, c, d):
 def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(b**2 - 4 * a * c))
+    q = -0.5 * (b + jnp.where(b >= 0.0, 1.0, -1.0) * jnp.sqrt(b**2 - 4 * a * c))
     # second branch generalizes linear root
     return jnp.stack([q / a, c / q])
 

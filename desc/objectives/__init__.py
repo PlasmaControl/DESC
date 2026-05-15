@@ -46,6 +46,7 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    SurfaceArea,
     Volume,
 )
 from ._neoclassical import EffectiveRipple

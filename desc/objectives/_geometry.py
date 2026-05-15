@@ -452,6 +452,149 @@ class Volume(_Objective):
         return data["V"]
 
 
+class SurfaceArea(_Objective):
+    """Flux surface area.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
+        or ``LinearGrid(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        loss_detail=" Note: Has no effect for this objective.",
+    )
+
+    _scalar = True
+    _units = "(m^2)"
+    _print_value_fmt = "Flux surface area: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="Surface Area",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface,
+                # has no radial resolution so just need
+                # the surface points
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 2,
+                    N=eq.N * 2,
+                    NFP=eq.NFP,
+                )
+        else:
+            grid = self._grid
+
+        self._dim_f = 1
+        self._data_keys = ["S"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (scales["V"]) ** (2 / 3)
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute flux surface area.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        S : float
+            Plasma volume (m^3).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        return data["S"]
+
+
 class PlasmaVesselDistance(_Objective):
     """Target the distance between the plasma and a surrounding surface.
 

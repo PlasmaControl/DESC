@@ -269,6 +269,21 @@ def vmap_chunked(
     - https://github.com/jax-ml/jax/issues/26689
     - https://github.com/jax-ml/jax/issues/27591
     - https://github.com/jax-ml/jax/issues/31919
+    - Due to an actively worked on issue in JAX,
+      https://docs.jax.dev/en/latest/jep/
+      2026-custom-derivatives.html#main-problem-descriptions,
+      this function can simply ignore custom derivative rules
+      of the function in wraps if ``chunk_size`` is not ``None``,
+      and therefore can damp the effeciency gains of ``sparse_pullback``.
+      Use ``batch_map`` instead to avoid this,
+      or try to make a hack with jax.custom_transforms to bypass this.
+    - Only out axes = 0 is supported.
+
+    See Also
+    --------
+    batch_map
+        If the function supports native vectorization, use ``batch_map`` instead
+        for the reasons discussed the docstring.
 
     Parameters
     ----------
@@ -316,20 +331,39 @@ def batch_map(
     *,
     reduction=None,
     chunk_reduction=identity,
+    strip_dim0=False,
     shard_input_data=False,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
-    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
-    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
-    supplied function. This makes compilation faster and avoids the weaknesses of
-    applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303.
+    Notes
+    -----
+    This method does not automatically wrap ``fun`` with ``vmap``.
+    Unless ``fun`` is already wrapped with ``vmap``, the leading dimension
+    of ``fun_input`` will not be stripped before it is passed into ``fun``.
+    This can be inconvenient for nesting calls to ``batch_map``,
+    since only batching along the first axis is supported.
+    However, the ``strip_dim0`` flag should cover the most common case
+    of nesting calls where ``batch_size`` is one on the outermost call.
+
+    If ``fun`` is natively vectorized, this can be preferable to ``vmap_chunked``
+    to reduce compilation time, avoid issues such as executing all branches of
+    code conditioned on dynamic values, or avoid messing up the behavior of
+    jvp's and vjp's under vmap, e.g.
+    https://docs.jax.dev/en/latest/jep/
+    2026-custom-derivatives.html#main-problem-descriptions.
+
+    Only out axes = 0 is supported.
+
+    See Also
+    --------
+    vmap_chunked
+        If the function does not support native vectorization.
 
     Parameters
     ----------
     fun : callable
-        Natively vectorized function.
+        Vectorized function.
     fun_input : pytree
         Data to split into batches to feed to ``fun``.
     batch_size : int or None
@@ -342,6 +376,11 @@ def batch_map(
         Chunk-wise reduction operation.
         Should typically apply ``reduction`` along the mapped axis,
         e.g. ``jnp.add.reduce``.
+    strip_dim0 : bool
+        Whether to strip the leading dim of ``fun_input`` before passing it
+        to ``fun``; see notes. This flag only works if ``batch_size`` is one.
+        It should be set to ``False`` if ``fun`` is wrapped in ``vmap``.
+        Default is ``False``.
 
     Returns
     -------
@@ -349,18 +388,19 @@ def batch_map(
         Returns ``chunk_reduction(fun(fun_input))``.
 
     """
-    return (
-        chunk_reduction(fun(fun_input))
-        if batch_size is None
-        else _evaluate_in_chunks(
-            fun,
-            batch_size,
-            (0,),
-            reduction,
-            chunk_reduction,
-            shard_input_data,
-            fun_input,
-        )
+    if batch_size is None:
+        return chunk_reduction(fun(fun_input))
+    if strip_dim0 and batch_size == 1:
+        return _scanmap(fun, 0, reduction, identity)(fun_input)
+
+    return _evaluate_in_chunks(
+        fun,
+        batch_size,
+        (0,),
+        reduction,
+        chunk_reduction,
+        fun_input,
+        shard_input_data=shard_input_data,
     )
 
 

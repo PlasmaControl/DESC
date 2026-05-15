@@ -310,27 +310,28 @@ def fft_grid_data(p):
     if p != "desc.equilibrium.equilibrium.Equilibrium":
         return {}
 
-    # TODO: can automate this later to add omngeneity, boozer transform, etc.
+    # TODO: can automate this later to add omnigeneity, boozer transform, etc.
     fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco"]
 
     eq = get("W7-X")
-    # ci and my laptop differ a bunch at rho = 0, so skip that
-    rho = np.linspace(1e-2, 1, 10)
+    rho = np.linspace(0, 1, 10)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
+    nufft_eps = 1e-10
     kwargs = dict(
-        angle=Bounce2D.angle(eq, X=32, Y=32, rho=rho, tol=1e-10),
-        Y_B=grid.num_zeta * grid.NFP,
-        num_transit=5,
-        num_well=20 * 5,
-        nufft_eps=1e-10,
+        angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
+        Y_B=grid.num_zeta,
+        num_field_periods=25,
+        num_well=100,
     )
-    data = eq.compute(fft_names, grid, **kwargs)
+    data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)
 
     # check vectorization too
     d = data.copy()
     del d["Gamma_c"]
-    d = eq.compute("Gamma_c", grid, data=d, surf_batch_size=2, **kwargs)
+    d = eq.compute(
+        "Gamma_c", grid, data=d, surf_batch_size=2, nufft_eps=nufft_eps, **kwargs
+    )
     np.testing.assert_allclose(
         d["Gamma_c"],
         data["Gamma_c"],
@@ -340,19 +341,17 @@ def fft_grid_data(p):
     )
     # check no nufft
     del d["Gamma_c"]
-    kwargs["nufft_eps"] = 0.0
-    d = eq.compute("Gamma_c", grid, data=d, **kwargs)
+    data["Gamma_c no nufft"] = eq.compute(
+        "Gamma_c", grid, data=d, nufft_eps=0.0, **kwargs
+    )["Gamma_c"]
     np.testing.assert_allclose(
-        d["Gamma_c"],
         data["Gamma_c"],
-        # This is large since no nuffts + spline for bounce points
-        # are innaccurate due to lack of Newton step after finding bounce point
-        # approximation with splines.
-        rtol=0.2,
+        data["Gamma_c no nufft"],
+        rtol=5e-5,
         err_msg="Gamma_c no nufft",
     )
 
-    data = apply(data, grid.compress, fft_names)
+    data = apply(data, grid.compress, fft_names + ["Gamma_c no nufft"])
     return data
 
 
@@ -366,10 +365,10 @@ def raz_grid_data(p):
 
     eq = get("W7-X")
     num_transit = 2
-    Y_B = eq.N_grid * 2 * eq.NFP
-    rho = np.linspace(1e-2, 1, 10)
+    Y_B = eq.N_grid * 2
+    rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
-    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B)
+    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
 
     data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)

@@ -1,44 +1,37 @@
 """Old compute functions.
 
 These do not appear in the public documentation under the list of variables.
+They are kept for verification and correctness testing.
 """
 
 from functools import partial
 
-from orthax.legendre import leggauss
-
 from desc.backend import jit, jnp
 
-from ..integrals.bounce_integral import Bounce1D
-from ..integrals.quad_utils import (
-    automorphism_sin,
-    chebgauss2,
-    get_quadrature,
-    grad_automorphism_sin,
+from ..integrals.bounce_integral import Bounce1D, Options
+from ..utils import safediv
+from ._fast_ion import (
+    _gamma_c_data,
+    _poloidal_drift_periodic,
+    _radial_drift_1,
+    _radial_drift_2,
+    _v_tau,
 )
-from ..utils import cross, dot, safediv
-from ._fast_ion import _drift1, _drift2, _radial_drift, _v_tau
-from ._neoclassical import _bounce_doc, _dI_1, _dI_2
+from ._neoclassical import _dI_1, _dI_2
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
-    "num_well": _bounce_doc["num_well"],
-    "num_quad": _bounce_doc["num_quad"],
-    "num_pitch": _bounce_doc["num_pitch"],
-    "surf_batch_size": _bounce_doc["surf_batch_size"],
-    "quad": _bounce_doc["quad"],
+    "num_well": Options._doc["num_well"],
+    "num_quad": Options._doc["num_quad"],
+    "num_pitch": Options._doc["num_pitch"],
+    "surf_batch_size": Options._doc["surf_batch_size"],
+    "quad": Options._doc["quad"],
 }
 
 
 @register_compute_fun(
     name="old effective ripple 3/2",
-    label=(
-        # ε¹ᐧ⁵ = π/(8√2) R₀²〈|∇ψ|〉⁻² B₀⁻¹ ∫ dλ λ⁻² 〈 ∑ⱼ Hⱼ²/Iⱼ 〉
-        "\\epsilon_{\\mathrm{eff}}^{3/2} = \\frac{\\pi}{8 \\sqrt{2}} "
-        "R_0^2 \\langle \\vert\\nabla \\psi\\vert \\rangle^{-2} "
-        "B_0^{-1} \\int d\\lambda \\lambda^{-2} "
-        "\\langle \\sum_j H_j^2 / I_j \\rangle"
-    ),
+    label="\\epsilon_{\\mathrm{eff}}^{3/2}",
     units="~",
     units_long="None",
     description="Effective ripple modulation amplitude to 3/2 power",
@@ -73,48 +66,35 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    num_well = kwargs.get("num_well", None)
-    num_pitch = kwargs.get("num_pitch", 51)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"] if "quad" in kwargs else chebgauss2(kwargs.get("num_quad", 32))
-    )
+    opts = Options.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
-        """(∂ψ/∂ρ)⁻² B₀⁻³ ∫ dλ λ⁻² ∑ⱼ Hⱼ²/Iⱼ."""
-        # B₀ has units of λ⁻¹.
-        # Nemov's ∑ⱼ Hⱼ²/Iⱼ = (∂ψ/∂ρ)² (λB₀)³ (I₁²/I₂).sum(-1).
-        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        I_1, I_2 = bounce.integrate(
-            [_dI_1, _dI_2],
-            data["pitch_inv"],
-            data,
-            ["|grad(rho)|*kappa_g"],
-            num_well=num_well,
+        pitch_inv, weight = Bounce1D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
+        I_1, I_2 = Bounce1D(grid, data, opts.quad).integrate(
+            [_dI_1, _dI_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
         )
         return jnp.sum(
-            safediv(I_1**2, I_2).sum(-1).mean(-2)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 3,
+            safediv(I_1**2, I_2).sum(-1).mean(-2) * weight / pitch_inv**3,
             axis=-1,
         )
 
     B0 = data["max_tz |B|"]
     scalar = jnp.pi / (8 * 2**0.5) * data["R0"] ** 2
-
+    out = Bounce1D.batch(
+        eps_32,
+        {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+        data,
+        grid,
+        opts.surf_batch_size,
+    )
+    assert out.ndim == 1
     data["old effective ripple 3/2"] = (
         (B0 / data["<|grad(rho)|>"]) ** 2
         * scalar
-        * Bounce1D.batch(
-            eps_32,
-            {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
-            data,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
+        * grid.expand(out)
         / data["fieldline length"]
     )
     return data
@@ -206,71 +186,40 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    num_pitch = kwargs.get("num_pitch", 65)
-    num_well = kwargs.get("num_well", None)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
-        )
-    )
+    opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        points = bounce.points(data["pitch_inv"], num_well)
-        v_tau, drift1, drift2 = bounce.integrate(
-            [_v_tau, _drift1, _drift2],
-            data["pitch_inv"],
+        pitch_inv, weight = Bounce1D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
+        bounce = Bounce1D(grid, data, opts.quad)
+        points = bounce.points(pitch_inv, num_well)
+        v_tau, radial_drift, poloidal_drift = bounce.integrate(
+            [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
+            pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(
+        gamma_c_pi_over_2 = jnp.arctan(
             safediv(
-                drift1,
-                drift2
+                radial_drift,
+                poloidal_drift
                 * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
         )
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
-    fun_data = {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
-        "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
-        "|B|_r|v,p": data["|B|_r|v,p"],
-        "K": data["iota_r"]
-        * dot(cross(data["grad(psi)"], data["b"]), data["grad(phi)"])
-        - (2 * data["|B|_r|v,p"] - data["|B|"] * data["B^phi_r|v,p"] / data["B^phi"]),
-    }
+    out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, opts.surf_batch_size)
+    assert out.ndim == 1
     data["old Gamma_c"] = (
-        Bounce1D.batch(
-            Gamma_c,
-            fun_data,
-            data,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
-        / data["fieldline length"]
-        / (2**1.5 * jnp.pi)
+        grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
     return data
-
-
-def _poloidal_drift(data, B, pitch):
-    return safediv(
-        data["gbdrift"] * (1 - 0.5 * pitch * B), jnp.sqrt(jnp.abs(1 - pitch * B))
-    )
 
 
 @register_compute_fun(
@@ -304,56 +253,44 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
         https://doi.org/10.1088/1741-4326/ac2994.
 
-    This expression has a secular term that drives the result to zero as the number
-    of toroidal transits increases if the secular term is not averaged out from the
-    singular integrals. It is observed that this implementation does not average
-    out the secular term. Currently, an optimization using this metric may need
-    to be evaluated by measuring decrease in Γ_c at a fixed number of toroidal
-    transits.
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    num_well = kwargs.get("num_well", None)
-    num_pitch = kwargs.get("num_pitch", 65)
-    surf_batch_size = kwargs.get("surf_batch_size", 1)
-    quad = (
-        kwargs["quad"]
-        if "quad" in kwargs
-        else get_quadrature(
-            leggauss(kwargs.get("num_quad", 32)),
-            (automorphism_sin, grad_automorphism_sin),
+    opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    num_well = kwargs.get("num_well", -1)
+
+    def _poloidal_drift_secular(data, B, pitch):
+        return safediv(
+            data["gbdrift"] * (1 - 0.5 * pitch * B),
+            jnp.sqrt(jnp.abs(1 - pitch * B)),
         )
-    )
 
     def Gamma_c(data):
-        bounce = Bounce1D(grid, data, quad, is_reshaped=True)
-        v_tau, radial_drift, poloidal_drift = bounce.integrate(
-            [_v_tau, _radial_drift, _poloidal_drift],
-            data["pitch_inv"],
+        pitch_inv, weight = Bounce1D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
+        v_tau, radial_drift, poloidal_drift = Bounce1D(grid, data, opts.quad).integrate(
+            [_v_tau, _radial_drift_2, _poloidal_drift_secular],
+            pitch_inv,
             data,
             ["cvdrift0", "gbdrift"],
             num_well=num_well,
         )
-        # This is γ_c π/2.
-        gamma_c = jnp.arctan(safediv(radial_drift, poloidal_drift))
+        gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2)
-            * data["pitch_inv weight"]
-            / data["pitch_inv"] ** 2,
+            (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2) * weight / pitch_inv**2,
             axis=-1,
         )
 
+    out = Bounce1D.batch(
+        Gamma_c,
+        {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
+        data,
+        grid,
+        opts.surf_batch_size,
+    )
+    assert out.ndim == 1
     data["old Gamma_c Velasco"] = (
-        Bounce1D.batch(
-            Gamma_c,
-            {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
-            data,
-            grid,
-            num_pitch,
-            surf_batch_size,
-            expand_out=True,
-        )
-        / data["fieldline length"]
-        / (2**1.5 * jnp.pi)
+        grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
     )
     return data

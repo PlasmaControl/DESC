@@ -84,9 +84,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
     data["V(r)"] = jnp.abs(
         surface_integrals(
-            transforms["grid"],
-            cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
-            surface_label="x0",
+            transforms["grid"], cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
         )
     )
     return data

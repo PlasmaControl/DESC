@@ -2165,7 +2165,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "solve_method", ["auto", "fixed_point", "bicgstab", "least_squares"]
+        "solve_method", ["auto", "fixed_point", "gmres", "least_squares"]
     )
     def test_objective_against_compute_free_surface_error(self, solve_method):
         """Test FreeSurfaceError against the underlying |K_vc|^2 compute quantity."""
@@ -4047,6 +4047,7 @@ class TestObjectiveNaNGrad:
                 field,
                 eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
                 grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
+                solve_method="fixed_point",
             )
         )
         obj.build()

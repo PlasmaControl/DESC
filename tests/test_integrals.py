@@ -757,7 +757,7 @@ class TestLaplace:
                 None, 16, 16, "least_squares", -1, 500, False, id="least-squares"
             ),
             pytest.param(None, 16, 16, "fixed_point", 40, 500, False, id="fixed-point"),
-            pytest.param(None, 16, 16, "bicgstab", 40, 500, False, id="bicgstab"),
+            pytest.param(None, 16, 16, "gmres", 40, 500, False, id="gmres"),
         ],
     )
     def test_interior_Dirichlet(
@@ -877,6 +877,7 @@ class TestLaplace:
         just_err=False,
         _midpoint_quad=False,
         _D_quad=False,
+        solve_method="least_squares",
     ):
         """Test Laplacian solver in interior."""
         if surface is None:
@@ -905,7 +906,9 @@ class TestLaplace:
             RpZ_data=RpZ_data,
             RpZ_grid=RpZ_grid,
             problem="interior Neumann",
+            solve_method=solve_method,
             on_boundary=True,
+            maxiter=10,
             chunk_size=chunk_size,
             _midpoint_quad=_midpoint_quad,
             _D_quad=_D_quad,
@@ -949,7 +952,14 @@ class TestLaplace:
             for r in rs:
                 err.append(
                     self.test_interior_Neumann(
-                        surface, r, r, chunk_size, True, mid_quad, D_quad
+                        surface,
+                        r,
+                        r,
+                        chunk_size,
+                        True,
+                        mid_quad,
+                        D_quad,
+                        solve_method="auto",
                     )
                 )
                 print(f"Resolution {r} is done.")

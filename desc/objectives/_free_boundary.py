@@ -884,6 +884,11 @@ class FreeSurfaceError(_Objective):
     If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
     should be smooth and divergence free until GitHub issue #1796 is resolved.
 
+    Notes
+    -----
+    Performance is expected to improve significantly by resolving GitHub issues
+    #1034 and #2171.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -908,18 +913,17 @@ class FreeSurfaceError(_Objective):
     q : int
         Order of integration on the local singular grid.
     xtol : float
-        Stopping tolerance for fixed point method. Default is ``1e-7``.
+        Stopping tolerance for the scalar potential solve. Default is ``1e-8``.
     maxiter : int
-        Maximum number of iterations for fixed point method.
+        Maximum number of iterations for iterative scalar potential solves.
         If non-positive then the linear operator will be inverted instead.
-        If positive, then performs that many fixed point iterations until ``maxiter``
-        or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
-        error of ``1e-5`` as illustrated in [1]. Default is ``25``.
+        If positive, then performs that many iterations until ``maxiter`` or an
+        error tolerance of ``xtol`` is reached. Ten iterations should suffice for
+        the default GMRES solve. Default is ``10``.
     solve_method : str
         Method to use for the scalar potential solve. One of ``"auto"``,
-        ``"fixed_point"``, ``"bicgstab"``, or ``"least_squares"``.
-        Default is ``"bicgstab"``, initialized from one fixed point solve during
-        ``build``.
+        ``"fixed_point"``, ``"gmres"``, or ``"least_squares"``.
+        Default is ``"gmres"``, initialized from one GMRES solve during ``build``.
     chunk_size : int or None
         Size to split integral computation into chunks.
         If no chunking should be done or the chunk size is the full input
@@ -972,9 +976,9 @@ class FreeSurfaceError(_Objective):
         grid=None,
         coil_grid=None,
         q=None,
-        xtol=1e-7,
-        maxiter=25,
-        solve_method="bicgstab",
+        xtol=1e-8,
+        maxiter=10,
+        solve_method="gmres",
         chunk_size=None,
         B_coil_chunk_size=None,
         I_sheet=0.0,
@@ -1127,7 +1131,7 @@ class FreeSurfaceError(_Objective):
         source_transforms,
         interpolator,
     ):
-        """Compute the fixed point potential used to initialize iterative solves."""
+        """Compute the GMRES potential used to initialize iterative solves."""
         params = eq.params_dict
         source_grid = self._grid
         source_keys = list(
@@ -1168,7 +1172,7 @@ class FreeSurfaceError(_Objective):
             data=data,
             xtol=self._xtol,
             maxiter=self._maxiter,
-            solve_method="fixed_point",
+            solve_method="gmres",
             chunk_size=self._chunk_size,
             B_coil_chunk_size=self._B_coil_chunk_size,
             B_coil=self._B_coil,

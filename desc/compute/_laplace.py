@@ -32,21 +32,21 @@ _doc = {
         Initial guess for iteration.
         """,
     "xtol": """float :
-        Stopping tolerance for the scalar potential solve. Default is ``1e-7``.
+        Stopping tolerance for the scalar potential solve. Default is ``1e-8``.
         """,
     "maxiter": """int :
-        Maximum number of iterations for fixed point method.
+        Maximum number of iterations for iterative scalar potential solves.
         If non-positive then the linear operator will be inverted instead.
-        If positive, then performs that many fixed point iterations until ``maxiter``
-        or an error tolerance of ``xtol`` is reached. For reference, ``20`` yields an
-        error of ``1e-5`` as illustrated in [1]. Default is ``25``.
+        If positive, then performs that many iterations until ``maxiter`` or an
+        error tolerance of ``xtol`` is reached. Ten iterations should suffice for
+        the default GMRES solve. Default is ``10``.
         """,
     "solve_method": """str :
         Method to use for the scalar potential solve. One of ``"auto"``,
-        ``"fixed_point"``, ``"bicgstab"``, or ``"least_squares"``.
-        If ``"auto"``, then uses fixed point iteration when ``maxiter`` is
-        positive and the problem supports it, otherwise use the least-squares
-        solve. Default is ``"auto"``.
+        ``"fixed_point"``, ``"gmres"``, or ``"least_squares"``.
+        If ``"auto"``, then uses GMRES when ``maxiter`` is positive and the
+        problem supports it, otherwise use the least-squares solve. Default is
+        ``"auto"``.
         """,
     "full_output": """bool
         Whether to compute the maximum error ``Phi error`` and store the number of
@@ -243,7 +243,7 @@ def _linear_potential_operator(
     interpolator,
     chunk_size,
 ):
-    """Equation solved by the fixed point iteration."""
+    """Equation solved by the iterative linear solver."""
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi
     return (
@@ -266,9 +266,9 @@ def _fixed_point_potential(
     interpolator,
     Phi_0=None,
     *,
-    xtol=1e-7,
-    maxiter=25,
-    solve_method="fixed_point",
+    xtol=1e-8,
+    maxiter=10,
+    solve_method="gmres",
     full_output=False,
     chunk_size=None,
 ):
@@ -285,13 +285,13 @@ def _fixed_point_potential(
     if Phi_0 is None:
         Phi_0 = jnp.ones(potential_grid.num_nodes)
     if solve_method == "auto":
-        solve_method = "fixed_point"
+        solve_method = "gmres"
     errorif(
-        solve_method not in {"fixed_point", "bicgstab"},
+        solve_method not in {"fixed_point", "gmres"},
         msg="_fixed_point_potential only supports solve_method='fixed_point' "
-        f"or 'bicgstab', got {solve_method!r}.",
+        f"or 'gmres', got {solve_method!r}.",
     )
-    if solve_method == "bicgstab":
+    if solve_method == "gmres":
         operator = lx.FunctionLinearOperator(
             lambda Phi: _linear_potential_operator(
                 Phi, potential_data, source_data, interpolator, chunk_size
@@ -301,7 +301,7 @@ def _fixed_point_potential(
         solution = lx.linear_solve(
             operator,
             boundary_condition,
-            solver=lx.BiCGStab(
+            solver=lx.GMRES(
                 rtol=xtol,
                 atol=xtol,
                 max_steps=maxiter if maxiter > 0 else None,
@@ -328,15 +328,15 @@ def _fixed_point_potential(
 def _select_potential_solve_method(solve_method, maxiter, problem):
     if solve_method == "auto":
         if (maxiter > 0) and (problem != "interior Neumann"):
-            return "fixed_point"
+            return "gmres"
         return "least_squares"
     errorif(
-        solve_method not in {"fixed_point", "bicgstab", "least_squares"},
-        msg="solve_method must be one of 'auto', 'fixed_point', 'bicgstab', "
+        solve_method not in {"fixed_point", "gmres", "least_squares"},
+        msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
         f"or 'least_squares', got {solve_method!r}.",
     )
     errorif(
-        solve_method in {"fixed_point", "bicgstab"} and (problem == "interior Neumann"),
+        solve_method in {"fixed_point", "gmres"} and (problem == "interior Neumann"),
         msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
         "problems. Use solve_method='least_squares' instead.",
     )
@@ -468,11 +468,11 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     solve_method = _select_potential_solve_method(
         kwargs.get("solve_method", "auto"),
-        kwargs.get("maxiter", 25),
+        kwargs.get("maxiter", 10),
         kwargs["problem"],
     )
 
-    if solve_method in {"fixed_point", "bicgstab"}:
+    if solve_method in {"fixed_point", "gmres"}:
         solve_kwargs = apply(kwargs, subset=_doc)
         solve_kwargs["solve_method"] = solve_method
         data["Phi (periodic)"] = _fixed_point_potential(
@@ -1059,11 +1059,11 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
     boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
     solve_method = _select_potential_solve_method(
         kwargs.get("solve_method", "auto"),
-        kwargs.get("maxiter", 25),
+        kwargs.get("maxiter", 10),
         "interior Dirichlet",
     )
 
-    if solve_method in {"fixed_point", "bicgstab"}:
+    if solve_method in {"fixed_point", "gmres"}:
         solve_kwargs = apply(kwargs, subset=_doc)
         solve_kwargs["solve_method"] = solve_method
         data["Phi (periodic)"] = _fixed_point_potential(

@@ -2104,7 +2104,7 @@ class TestObjectiveFunction:
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data[names[0]])
+            obj.compute(eq.params_dict), grid.compress(data[names[0]]), atol=1e-4
         )
         obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()

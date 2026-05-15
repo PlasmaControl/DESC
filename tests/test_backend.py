@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
-from desc.batching import make_shardable
+from desc.batching import batch_map, make_shardable, vmap_chunked
 
 
 @pytest.mark.unit
@@ -38,6 +38,32 @@ def test_vmap():
     outputs = np.array([[0, 1, 8], [125, 64, 27], [0, -1, -8]])
     np.testing.assert_allclose(vmap(f)(inputs), outputs)
     np.testing.assert_allclose(vmap(f, out_axes=1)(inputs), outputs.T)
+
+
+@pytest.mark.unit
+def test_batch_map_with_chunk_size():
+    """Test batch_map with a chunk size."""
+    x = jnp.arange(5.0)
+    np.testing.assert_allclose(batch_map(lambda y: y + 1, x, batch_size=2), x + 1)
+
+
+@pytest.mark.unit
+def test_sharded_chunked_batching():
+    """Test chunked batching with sharded input data."""
+    x = jnp.arange(5.0)
+    np.testing.assert_allclose(
+        batch_map(lambda y: y + 1, x, batch_size=2, shard_input_data=True),
+        x + 1,
+    )
+    np.testing.assert_allclose(
+        vmap_chunked(
+            lambda y, scale: y * scale,
+            in_axes=(0, None),
+            chunk_size=2,
+            shard_input_data=True,
+        )(x, 3.0),
+        x * 3,
+    )
 
 
 @pytest.mark.unit

@@ -174,12 +174,25 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
+            batch_map(
+                fun,
+                pitch_inv,
+                opts.pitch_batch_size,
+                shard_input_data=opts.shard_input_data,
+            )
+            * weight
+            / pitch_inv**2,
             axis=-1,
         )
 
     out = Bounce2D.batch(
-        Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
+        Gamma_c,
+        _gamma_c_data(data),
+        data,
+        angle,
+        grid,
+        opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
     data["Gamma_c"] = (
@@ -266,6 +279,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         grid,
         surf_batch_size=1,
         sparse=False,  # don't know of any applications that differentiate anyway
+        shard_input_data=opts.shard_input_data,
     )
     return data
 
@@ -337,7 +351,14 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
+            batch_map(
+                fun,
+                pitch_inv,
+                opts.pitch_batch_size,
+                shard_input_data=opts.shard_input_data,
+            )
+            * weight
+            / pitch_inv**2,
             axis=-1,
         )
 
@@ -352,6 +373,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         angle,
         grid,
         opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
     data["Gamma_c Velasco"] = (

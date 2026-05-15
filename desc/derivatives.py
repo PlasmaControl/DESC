@@ -13,6 +13,7 @@ if use_jax:
     from desc.batching import (
         jacfwd_chunked,
         jacrev_chunked,
+        make_shardable,
         _concat,
         _scanmap,
         _batch_and_remainder,
@@ -105,6 +106,7 @@ def sparse_pullback(
     reduction=None,
     chunk_reduction=identity,
     strip_dim0=False,
+    shard_input_data=False,
 ):
     """Compute ``chunk_reduction(fn(fun_input))`` in batches with sparse pullbacks.
 
@@ -153,6 +155,9 @@ def sparse_pullback(
         to ``fn``; see notes. This flag only works if ``batch_size`` is one.
         It should be set to ``False`` if ``fn`` is wrapped in ``vmap``.
         Default is ``False``.
+    shard_input_data : bool
+        Whether to shard ``y`` across devices before applying chunked batching.
+        Default is ``False``.
 
     Returns
     -------
@@ -164,6 +169,47 @@ def sparse_pullback(
     >>> out = sparse_pullback(fn, y)
 
     """
+    if shard_input_data:
+        y_shardable, y_remainder = make_shardable(y)
+        n_shardable = tree_leaves(y_shardable)[0].shape[0]
+        n_remainder = tree_leaves(y_remainder)[0].shape[0]
+
+        if n_shardable == 0:
+            return sparse_pullback(
+                fn,
+                y_remainder,
+                batch_size,
+                reduction=reduction,
+                chunk_reduction=chunk_reduction,
+                strip_dim0=strip_dim0,
+            )
+
+        out_shardable = sparse_pullback(
+            fn,
+            y_shardable,
+            batch_size,
+            reduction=reduction,
+            chunk_reduction=chunk_reduction,
+            strip_dim0=strip_dim0,
+        )
+
+        if n_remainder == 0:
+            return out_shardable
+
+        out_remainder = sparse_pullback(
+            fn,
+            y_remainder,
+            batch_size,
+            reduction=reduction,
+            chunk_reduction=chunk_reduction,
+            strip_dim0=strip_dim0,
+        )
+        return (
+            _concat(out_shardable, out_remainder)
+            if reduction is None
+            else reduction(out_shardable, out_remainder)
+        )
+
     if strip_dim0 and batch_size == 1:
         return _scanmap(
             sparse_pullback_map(fn, _get_first_chunk(y)),

@@ -74,6 +74,7 @@ class EffectiveRipple(_Objective):
         surf_batch_size=1,
         nufft_eps=1e-6,
         spline=True,
+        shard_input_data=False,
     ):
         errorif(
             deriv_mode == "fwd",
@@ -111,6 +112,7 @@ class EffectiveRipple(_Objective):
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
             "spline": spline,
+            "shard_input_data": shard_input_data,
         }
 
         super().__init__(

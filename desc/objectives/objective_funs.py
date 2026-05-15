@@ -209,6 +209,9 @@ doc_bounce = """
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    shard_input_data : bool
+        Whether to shard batched input data across devices before applying chunked
+        batching. Default is ``False``.
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.

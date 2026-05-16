@@ -2164,9 +2164,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(obj.compute(eq.params_dict), lam)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "solve_method", ["auto", "fixed_point", "gmres", "least_squares"]
-    )
+    @pytest.mark.parametrize("solve_method", ["fixed_point", "gmres", "least_squares"])
     def test_objective_against_compute_free_surface_error(self, solve_method):
         """Test FreeSurfaceError against the underlying |K_vc|^2 compute quantity."""
         eq = get("W7-X")

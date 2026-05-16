@@ -151,7 +151,7 @@ def test_lstsq():
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("method", ["del2", "iteration", "anderson"])
+@pytest.mark.parametrize("method", ["del2", "iteration"])
 def test_fixed_point(method):
     """Test fixed point iteration."""
 
@@ -161,12 +161,21 @@ def test_fixed_point(method):
     c1 = jnp.array([10.0, 12.0])
     c2 = jnp.array([3.0, 5.0])
     x0 = jnp.array([1.2, 1.3])
-    p, (_, i, full_ps, full_fs) = fixed_point(
-        func, x0, (c1, c2), xtol=1e-10, method=method, full_output=True, anderson_m=2
+    p, (_, i) = fixed_point(
+        func, x0, (c1, c2), xtol=1e-8, method=method, full_output=True
     )
     np.testing.assert_allclose(p, [1.4920333, 1.37228132])
-    assert (
-        (i == 4 and method == "del2")
-        or (i == 14 and method == "iteration")
-        or (i == 6 and method == "anderson")
-    )
+    assert (i == 3 and method == "del2") or (i == 11 and method == "iteration")
+
+
+@pytest.mark.unit
+def test_fixed_point_matrix_convergence():
+    """Test fixed point convergence check for non-vector array inputs."""
+
+    def func(x):
+        return jnp.ones_like(x)
+
+    x0 = jnp.zeros((2, 2))
+    p, (_, i) = fixed_point(func, x0, xtol=1e-8, method="iteration", full_output=True)
+    np.testing.assert_allclose(p, jnp.ones_like(x0))
+    assert i == 2

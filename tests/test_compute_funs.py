@@ -2042,6 +2042,45 @@ def test_parallel_grad_fd(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.slow
+def test_fieldline_average():
+    """Test that fieldline average converges to surface average."""
+    rho = np.array([1])
+    alpha = np.array([0])
+    eq = get("DSHAPE")
+    iota_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
+    # For axisymmetric devices, one poloidal transit must be exact.
+    zeta = np.linspace(0, 2 * np.pi / iota, 25)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
+
+    # Otherwise, many toroidal transits are necessary to sample surface.
+    eq = get("W7-X")
+    zeta = np.linspace(0, 40 * np.pi, 300)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=2e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
+
+
+@pytest.mark.unit
 def test_compute_deprecation_warning():
     """Test DeprecationWarning for deprecated compute names."""
     eq = Equilibrium()

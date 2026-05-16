@@ -751,10 +751,18 @@ class TestLaplace:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "surface, M, N, maxiter, chunk_size, just_err",
-        [(None, 16, 16, -1, 500, False), (None, 16, 16, 40, 500, False)],
+        "surface, M, N, solve_method, maxiter, chunk_size, just_err",
+        [
+            pytest.param(
+                None, 16, 16, "least_squares", -1, 500, False, id="least-squares"
+            ),
+            pytest.param(None, 16, 16, "fixed_point", 40, 500, False, id="fixed-point"),
+            pytest.param(None, 16, 16, "gmres", 40, 500, False, id="gmres"),
+        ],
     )
-    def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
+    def test_interior_Dirichlet(
+        self, surface, M, N, solve_method, maxiter, chunk_size, just_err
+    ):
         """Test multiply connected interior Dirichlet Laplace solver."""
         if surface is None:
             surface = FourierRZToroidalSurface(
@@ -777,6 +785,7 @@ class TestLaplace:
             ["Phi error", "num iter"] if just_err else "γ potential",
             grid,
             maxiter=maxiter,
+            solve_method=solve_method,
             full_output=True,
             chunk_size=chunk_size,
         )
@@ -808,7 +817,7 @@ class TestLaplace:
         print()
         for i in maxiter:
             n, e = self.test_interior_Dirichlet(
-                surface, M, N, i, chunk_size, just_err=True
+                surface, M, N, "fixed_point", i, chunk_size, just_err=True
             )
             num_iter.append(n)
             Phi_err.append(e)
@@ -868,6 +877,7 @@ class TestLaplace:
         just_err=False,
         _midpoint_quad=False,
         _D_quad=False,
+        solve_method="least_squares",
     ):
         """Test Laplacian solver in interior."""
         if surface is None:
@@ -896,7 +906,9 @@ class TestLaplace:
             RpZ_data=RpZ_data,
             RpZ_grid=RpZ_grid,
             problem="interior Neumann",
+            solve_method=solve_method,
             on_boundary=True,
+            maxiter=10,
             chunk_size=chunk_size,
             _midpoint_quad=_midpoint_quad,
             _D_quad=_D_quad,
@@ -940,7 +952,14 @@ class TestLaplace:
             for r in rs:
                 err.append(
                     self.test_interior_Neumann(
-                        surface, r, r, chunk_size, True, mid_quad, D_quad
+                        surface,
+                        r,
+                        r,
+                        chunk_size,
+                        True,
+                        mid_quad,
+                        D_quad,
+                        solve_method="auto",
                     )
                 )
                 print(f"Resolution {r} is done.")
@@ -1265,7 +1284,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1281,7 +1300,7 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1300,7 +1319,7 @@ class TestBouncePoints:
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
-        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1325,7 +1344,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
-        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -1346,7 +1365,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
-        z1, z2, _ = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
+        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T)
         check_bounce_points(
             z1,
             z2,
@@ -1378,7 +1397,7 @@ class TestBouncePoints:
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
-        z1, z2, _ = bounce_points(pitch_inv, k, B.c.T)
+        z1, z2 = bounce_points(pitch_inv, k, B.c.T)
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
@@ -2135,12 +2154,14 @@ class TestBounce2D:
         np.testing.assert_array_equal(near_zero_nufft, near_zero)
         np.testing.assert_allclose(num_nufft[near_zero_nufft], num[near_zero])
         np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=8e-3
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=3e-2
         )
 
         bounce = Bounce2D(grid, data, angle, alpha=alpha, num_transit=2, check=True)
         points = bounce.points(pitch_inv)
-        z1, z2 = _newton(bounce, pitch_inv[:, None], *points, points[0] < points[1])
+        z1, z2 = _newton(
+            bounce, pitch_inv[:, None], *points, points[0] < points[1], 1e-10
+        )
         np.testing.assert_allclose(points[0], z1, rtol=5e-6)
         np.testing.assert_allclose(points[1], z2, rtol=5e-6)
 

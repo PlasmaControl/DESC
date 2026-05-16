@@ -1,5 +1,6 @@
 """Test integration algorithms."""
 
+import pickle
 from functools import partial
 from itertools import product
 
@@ -761,7 +762,15 @@ class TestLaplace:
         ],
     )
     def test_interior_Dirichlet(
-        self, surface, M, N, solve_method, maxiter, chunk_size, just_err
+        self,
+        surface,
+        M,
+        N,
+        solve_method,
+        maxiter,
+        chunk_size,
+        just_err,
+        xtol=1e-12,
     ):
         """Test multiply connected interior Dirichlet Laplace solver."""
         if surface is None:
@@ -784,10 +793,11 @@ class TestLaplace:
         data, _ = field.compute(
             ["Phi error", "num iter"] if just_err else "γ potential",
             grid,
-            maxiter=maxiter,
+            maxiter=int(maxiter),
             solve_method=solve_method,
             full_output=True,
             chunk_size=chunk_size,
+            xtol=xtol,
         )
         if maxiter > 0:
             print()
@@ -805,19 +815,17 @@ class TestLaplace:
         surface=get("W7-X").surface,
         M=30,
         N=30,
-        maxiter=np.array([5, 10, 20, 30, 40]),
+        maxiter=np.array([1, 2, 3, 4, 5]),
         chunk_size=1000,
         name="convergence-fp_W7-X",
     ):
         """Stores errors for potential in name.pkl for plotting analysis."""
-        import pickle
-
         num_iter = []
         Phi_err = []
         print()
         for i in maxiter:
             n, e = self.test_interior_Dirichlet(
-                surface, M, N, "fixed_point", i, chunk_size, just_err=True
+                surface, M, N, "gmres", i, chunk_size, just_err=True
             )
             num_iter.append(n)
             Phi_err.append(e)
@@ -834,8 +842,6 @@ class TestLaplace:
         The remainder of name after first underscore will be
         appendend to plot title.
         """
-        import pickle
-
         with open(f"{name}.pkl", "rb") as file:
             data = pickle.load(file)
 
@@ -856,13 +862,13 @@ class TestLaplace:
             }
         )
         fig, ax = plt.subplots()
-        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=r"$\xi=2/3$")
+        gmres_label = None
+        # fp_label = r"$\xi=2/3$" # noqa: E800
+        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=gmres_label)
         ax.axhline(1e-7, color="black", label="Stop tolerance")
-        ax.set_xlabel(r"Number of fixed point iterations in inversion for $\Phi$")
+        ax.set_xlabel(r"Number of gmres iterations in inversion for $\Phi$")
         ax.set_ylabel("Absolute error")
-        ax.set_title(
-            r"$\Phi$ error vs. fixed point iterations " + name.split("_", 1)[1]
-        )
+        ax.set_title(r"$\Phi$ error vs. gmres iterations " + name.split("_", 1)[1])
         ax.legend(loc="upper right", frameon=True)
         fig.tight_layout()
         plt.savefig(f"{name}.pdf")
@@ -939,8 +945,6 @@ class TestLaplace:
             Grid resolutions (rs=M=N) to compute potential.
 
         """
-        import pickle
-
         bools = np.array([True, False])
         settings = np.array(np.meshgrid(bools, bools)).T.reshape(-1, 2)
 
@@ -975,8 +979,6 @@ class TestLaplace:
         The remainder of name after first underscore will be
         appendend to plot title.
         """
-        import pickle
-
         with open(f"{name}.pkl", "rb") as file:
             data = pickle.load(file)
 

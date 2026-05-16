@@ -130,8 +130,9 @@ class _AutoRegisterPytree(type):
                         warnif(
                             True,
                             UserWarning,
-                            "Detected jax array in _static_attrs. Converting it to "
-                            "numpy array to prevent stalling code.",
+                            "Detected jax array in _static_attrs. Converting "
+                            f"{key} attribute of the {obj.__class__.__name__} "
+                            "to numpy array to prevent stalling code. ",
                         )
                         val = np.asarray(val)
                         # update the obj attribute in place to prevent future warnings

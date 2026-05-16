@@ -3,17 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.backend import (
-    _lstsq,
-    fixed_point,
-    jax,
-    jnp,
-    put,
-    root,
-    root_scalar,
-    sign,
-    vmap,
-)
+from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
 
 
 @pytest.mark.unit
@@ -148,34 +138,3 @@ def test_lstsq():
     np.testing.assert_allclose(
         _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
     )
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("method", ["del2", "iteration"])
-def test_fixed_point(method):
-    """Test fixed point iteration."""
-
-    def func(x, c1, c2):
-        return jnp.sqrt(c1 / (x + c2))
-
-    c1 = jnp.array([10.0, 12.0])
-    c2 = jnp.array([3.0, 5.0])
-    x0 = jnp.array([1.2, 1.3])
-    p, (_, i) = fixed_point(
-        func, x0, (c1, c2), xtol=1e-8, method=method, full_output=True
-    )
-    np.testing.assert_allclose(p, [1.4920333, 1.37228132])
-    assert (i == 3 and method == "del2") or (i == 11 and method == "iteration")
-
-
-@pytest.mark.unit
-def test_fixed_point_matrix_convergence():
-    """Test fixed point convergence check for non-vector array inputs."""
-
-    def func(x):
-        return jnp.ones_like(x)
-
-    x0 = jnp.zeros((2, 2))
-    p, (_, i) = fixed_point(func, x0, xtol=1e-8, method="iteration", full_output=True)
-    np.testing.assert_allclose(p, jnp.ones_like(x0))
-    assert i == 2

@@ -69,44 +69,6 @@ def _is_converged(residual, tol):
     return jnp.sum(residual * residual) <= tol**2
 
 
-def _is_converged_pointwise(residual, tol):
-    return jnp.all(jnp.abs(residual) <= tol)
-
-
-def _to_fp(f):
-    def g(x):
-        return f(x) + x
-
-    return g
-
-
-def _fixed_point(
-    func,
-    x0,
-    tol,
-    maxiter,
-    method,
-    is_converged,
-):
-    from desc.utils import safediv
-
-    def cond_fun(state):
-        _, err, i = state
-        return (i < maxiter) & (~is_converged(err, tol))
-
-    def body_fun(state):
-        p0, _, i = state
-        p = func(p0)
-        if method == "del2":
-            p2 = func(p)
-            p = p0 - safediv((p - p0) ** 2, p2 - 2 * p + p0, p0 - p2)
-        err = p - p0
-        return p, err, i + 1
-
-    err0 = jnp.full_like(jax.eval_shape(func, x0), jnp.inf)
-    return jax.lax.while_loop(cond_fun, body_fun, (x0, err0, 0))
-
-
 def _lstsq(A, y):
     """Cholesky factorized least-squares.
 
@@ -582,78 +544,6 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
-    def fixed_point(
-        func,
-        x0,
-        args=(),
-        xtol=1e-6,
-        maxiter=20,
-        method="del2",
-        scalar=False,
-        full_output=False,
-    ):
-        """Find a fixed point of the function.
-
-        Parameters
-        ----------
-        func : callable
-            Function to evaluate.
-        x0 : Array
-            Initial guesses for fixed points.
-        args : tuple
-            Extra arguments to ``func``.
-        xtol : float
-            Pointwise convergence tolerance, defaults to 1e-6.
-        maxiter : int
-            Maximum number of iterations, defaults to 20.
-        method : {"del2", "iteration", "simple"}
-            Method of finding the fixed-point, defaults to ``del2``,
-            which uses Steffensen's acceleration method.
-            The former typically converges quadratically and the latter converges
-            linearly. Both statements assume the conditions for the contraction
-            mapping theorem are satisfied.
-        scalar : bool
-            Whether ``func`` is a single-variable map.
-        full_output : bool
-            Whether to return the error and iteration count.
-
-        Returns
-        -------
-        p : jnp.ndarray
-            The fixed points, if convergence is achieved.
-            If full output is true, returns the tuple (p, (err, iter_count)).
-
-        """
-        if method == "simple":
-            method = "iteration"
-        if method not in {"del2", "iteration"}:
-            raise ValueError(
-                "method must be one of 'del2', 'iteration', or 'simple', "
-                f"got {method!r}."
-            )
-
-        def solve(f, x0):
-            p, err, i = _fixed_point(
-                _to_fp(f),
-                x0,
-                xtol,
-                maxiter,
-                method,
-                _is_converged_pointwise if scalar else _is_converged,
-            )
-            return (p, (err, i)) if full_output else p
-
-        def f(x):
-            return func(x, *args) - x
-
-        return jax.lax.custom_root(
-            f,
-            initial_guess=x0,
-            solve=solve,
-            tangent_solve=_tangent_solve,
-            has_aux=full_output,
-        )
-
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -1078,61 +968,6 @@ else:  # pragma: no cover
             return out.x, out
         else:
             return out.x
-
-    def fixed_point(
-        func,
-        x0,
-        args=(),
-        xtol=1e-6,
-        maxiter=20,
-        method="del2",
-        scalar=False,
-        full_output=False,
-    ):
-        """Find a fixed point of the function.
-
-        Parameters
-        ----------
-        func : callable
-            Function to evaluate.
-        x0 : Array
-            Initial guess for fixed point.
-        args : tuple
-            Extra arguments to ``func``.
-        xtol : float
-            Convergence tolerance, defaults to 1e-6.
-        maxiter : int
-            Maximum number of iterations, defaults to 20.
-        method : {"del2", "iteration", "simple"}
-            Method of finding the fixed-point, defaults to ``del2``,
-            which uses Steffensen's acceleration method.
-            The former typically converges quadratically and the latter converges
-            linearly. Both statements assume the conditions for the contraction
-            mapping theorem are satisfied.
-        scalar : bool
-            Whether ``func`` is a single-variable map.
-        full_output : bool
-            Whether to return the error and iteration count.
-
-        Returns
-        -------
-        p : jnp.ndarray
-            The fixed points, if convergence is achieved.
-            If full output is true, returns the tuple (p, (err, iter_count)).
-
-        """
-        if full_output:
-            raise NotImplementedError
-        if method == "simple":
-            method = "iteration"
-        return scipy.optimize.fixed_point(
-            func,
-            x0,
-            args=args,
-            xtol=xtol,
-            maxiter=maxiter,
-            method=method,
-        )
 
     def flatnonzero(a, size=None, fill_value=0):
         """A numpy implementation of jnp.flatnonzero."""

@@ -10,9 +10,10 @@ References
 import equinox as eqx
 import jax
 import lineax as lx
+import optimistix as optx
 from interpax_fft import rfft_interp2d
 
-from desc.backend import fixed_point, jnp
+from desc.backend import jnp
 from desc.integrals.singularities import (
     _kernel_BS_plus_grad_S,
     _kernel_dipole,
@@ -210,16 +211,9 @@ def _least_squares_compute_potential(
     ).value
 
 
-def _iteration_operator(
-    Phi,
-    gamma,
-    potential_data,
-    source_data,
-    interpolator,
-    chunk_size,
-    xi=2 / 3,
-):
+def _iteration_operator(Phi, args):
     """Equation 3.12 in [1]."""
+    gamma, potential_data, source_data, interpolator, chunk_size, xi = args
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = Phi
     return (
@@ -306,22 +300,41 @@ def _fixed_point_potential(
                 max_steps=maxiter if maxiter > 0 else None,
             ),
             options={"y0": Phi_0},
+            throw=False,
         )
         if full_output:
             err = operator.mv(solution.value) - boundary_condition
             return solution.value, (err, solution.stats["num_steps"])
         return solution.value
 
-    return fixed_point(
-        _iteration_operator,
-        Phi_0,
-        (boundary_condition, potential_data, source_data, interpolator, chunk_size),
-        xtol,
-        maxiter,
-        method="simple",
-        scalar=True,
-        full_output=full_output,
+    xi = 2 / 3
+    args = (
+        boundary_condition,
+        potential_data,
+        source_data,
+        interpolator,
+        chunk_size,
+        xi,
     )
+    solution = optx.fixed_point(
+        _iteration_operator,
+        optx.FixedPointIteration(rtol=xtol, atol=xtol),
+        Phi_0,
+        args,
+        max_steps=maxiter if maxiter > 0 else None,
+        adjoint=optx.ImplicitAdjoint(
+            lx.GMRES(
+                rtol=xtol,
+                atol=xtol,
+                max_steps=maxiter if maxiter > 0 else None,
+            )
+        ),
+        throw=False,
+    )
+    if full_output:
+        err = _iteration_operator(solution.value, args) - solution.value
+        return solution.value, (err, solution.stats["num_steps"])
+    return solution.value
 
 
 def _select_potential_solve_method(solve_method, maxiter, problem):

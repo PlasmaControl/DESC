@@ -199,8 +199,7 @@ def _least_squares_compute_potential(
         D -= Phi
         if not well_posed:
             well_posed = None
-        # This system is negative definite, but perhaps not symmetric. (For example,
-        # there is discretization error in the quadrature that could destroy symmetry).
+        # This system is negative definite, but perhaps not symmetric.
         # Lineax assumes negative semidefinite means the operator is symmetric.
         # Hence we do not set that tag even when well_posed is true.
     # else the system is positive definite but the same logic applies.

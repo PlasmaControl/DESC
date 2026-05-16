@@ -1,6 +1,7 @@
 """Objectives for solving free boundary equilibria."""
 
 import numpy as np
+from jax.lax import stop_gradient
 from scipy.constants import mu_0
 
 from desc.backend import jnp
@@ -879,11 +880,6 @@ class FreeSurfaceError(_Objective):
         [1] Unalmis et al. New high-order accurate free surface stellarator
             equilibria optimization and boundary integral methods in DESC.
 
-    Warnings
-    --------
-    If ``field`` is an instance of ``FreeSurfaceOuterField``, then ``field._B_coil``
-    should be smooth and divergence free until GitHub issue #1796 is resolved.
-
     Notes
     -----
     Performance is expected to improve significantly by resolving GitHub issues
@@ -1179,7 +1175,9 @@ class FreeSurfaceError(_Objective):
             field_grid=self._coil_grid,
             **problem,
         )
-        return data["Phi (periodic)"]
+        # We differentiate through the solution, not the initial guess,
+        # so we stop the gradient for numerical stability.
+        return stop_gradient(data["Phi (periodic)"])
 
     def compute(self, params, constants=None):
         """Compute boundary error.

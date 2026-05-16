@@ -61,10 +61,6 @@ _doc = {
         Recommend to verify computation with ``chunk_size`` set to a
         small number due to bugs in JAX or XLA.
         """,
-    "_midpoint_quad": """bool :
-        Set to ``True`` to perform double layer potential quadrature with a midpoint
-        rule. Default is ``False``. This is intended for developer use.
-        """,
     "_D_quad": """bool
         Set to ``True`` to perform double layer potential quadrature without removing
         singularities. Default is ``False``. This is intended for developer use.
@@ -79,7 +75,6 @@ def _D_plus_half(
     basis=None,
     chunk_size=None,
     prune_data=True,
-    _midpoint_quad=False,
     _D_quad=False,
 ):
     """Compute (D[Φ] + Φ/2)(x).
@@ -94,9 +89,6 @@ def _D_plus_half(
         acts on the spectral coefficients of Φ in the supplied + secular basis.
     prune_data : bool
         Whether the data should be pruned. Default is True.
-    _midpoint_quad : bool
-        Set to ``True`` to perform double layer potential quadrature with a midpoint
-        rule. Default is ``False``. This is intended for developer use.
     _D_quad : bool
         Set to ``True`` to perform double layer potential quadrature without removing
         singularities. Default is ``False``. This is intended for developer use.
@@ -111,37 +103,16 @@ def _D_plus_half(
 
     kernel = _kernel_dipole if _D_quad else _kernel_dipole_plus_half
 
-    if _midpoint_quad:
-        if prune_data:
-            eval_data, source_data = prune_data(
-                eval_data,
-                interpolator.eval_grid,
-                source_data,
-                interpolator.source_grid,
-                _kernel_dipole_plus_half,
-            )
-        result = _nonsingular_part(
-            eval_data,
-            None,
-            source_data,
-            interpolator.source_grid,
-            st=jnp.nan,
-            sz=jnp.nan,
-            kernel=kernel,
-            ndim=ndim,
-            chunk_size=chunk_size,
-        )
-    else:
-        result = singular_integral(
-            eval_data,
-            source_data,
-            interpolator,
-            kernel,
-            known_map=known_map,
-            ndim=ndim,
-            chunk_size=chunk_size,
-            _prune_data=prune_data,
-        )
+    result = singular_integral(
+        eval_data,
+        source_data,
+        interpolator,
+        kernel,
+        known_map=known_map,
+        ndim=ndim,
+        chunk_size=chunk_size,
+        _prune_data=prune_data,
+    )
     if ndim == 1:
         result = result.squeeze(-1)
 
@@ -159,7 +130,6 @@ def _least_squares_compute_potential(
     basis,
     problem,
     chunk_size=None,
-    _midpoint_quad=False,
     _D_quad=False,
     **kwargs,
 ):
@@ -192,7 +162,6 @@ def _least_squares_compute_potential(
         basis,
         chunk_size,
         prune_data=False,
-        _midpoint_quad=_midpoint_quad,
         _D_quad=_D_quad,
     )
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
@@ -277,8 +246,7 @@ def _fixed_point_potential(
     )
     if Phi_0 is None:
         Phi_0 = jnp.ones(potential_grid.num_nodes)
-    if solve_method == "auto":
-        solve_method = "gmres"
+    solve_method = "gmres" if (solve_method == "auto") else solve_method
     errorif(
         solve_method not in {"fixed_point", "gmres"},
         msg="_fixed_point_potential only supports solve_method='fixed_point' "

@@ -881,7 +881,6 @@ class TestLaplace:
         N=50,
         chunk_size=1000,
         just_err=False,
-        _midpoint_quad=False,
         _D_quad=False,
         solve_method="least_squares",
     ):
@@ -916,7 +915,6 @@ class TestLaplace:
             on_boundary=True,
             maxiter=10,
             chunk_size=chunk_size,
-            _midpoint_quad=_midpoint_quad,
             _D_quad=_D_quad,
         )
         err = np.ptp(data["Z"] - data["Phi"])
@@ -945,12 +943,9 @@ class TestLaplace:
             Grid resolutions (rs=M=N) to compute potential.
 
         """
-        bools = np.array([True, False])
-        settings = np.array(np.meshgrid(bools, bools)).T.reshape(-1, 2)
-
         data = {"resolution": rs, "Phi error": {}}
 
-        for mid_quad, D_quad in settings:
+        for D_quad in (False, True):
             err = []
             print()
             for r in rs:
@@ -961,13 +956,12 @@ class TestLaplace:
                         r,
                         chunk_size,
                         True,
-                        mid_quad,
                         D_quad,
                         solve_method="auto",
                     )
                 )
                 print(f"Resolution {r} is done.")
-            data["Phi error"][(mid_quad, D_quad)] = np.array(err)
+            data["Phi error"][D_quad] = np.array(err)
 
         with open(f"{name}.pkl", "wb") as file:
             pickle.dump(data, file)
@@ -1007,7 +1001,7 @@ class TestLaplace:
                 val,
                 marker="o",
                 linestyle="-",
-                label=f"midpoint rule={key[0]}, has singularity={key[1]}",
+                label=f"has singularity={key}",
             )
 
         ax.set_xlabel(

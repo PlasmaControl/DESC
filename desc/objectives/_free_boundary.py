@@ -909,10 +909,10 @@ class FreeSurfaceError(_Objective):
     q : int
         Order of integration on the local singular grid.
     xtol : float
-        Stopping tolerance for the scalar potential solve. Default is ``1e-8``.
+        Absolute and relative error for the linear solve. Default is ``1e-8``.
     maxiter : int
         Maximum number of iterations for iterative scalar potential solves.
-        If non-positive then the linear operator will be inverted instead.
+        If non-positive then the materialized matrix will be inverted instead.
         If positive, then performs that many iterations until ``maxiter`` or an
         error tolerance of ``xtol`` is reached. Ten iterations should suffice for
         the default GMRES solve. Default is ``10``.

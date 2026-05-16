@@ -7,6 +7,8 @@ References
 
 """
 
+from functools import partial
+
 import equinox as eqx
 import jax
 import lineax as lx
@@ -33,11 +35,11 @@ _doc = {
         Initial guess for iteration.
         """,
     "xtol": """float :
-        Stopping tolerance for the scalar potential solve. Default is ``1e-8``.
+        Absolute and relative error for the linear solve. Default is ``1e-8``.
         """,
     "maxiter": """int :
         Maximum number of iterations for iterative scalar potential solves.
-        If non-positive then the linear operator will be inverted instead.
+        If non-positive then the materialized matrix will be inverted instead.
         If positive, then performs that many iterations until ``maxiter`` or an
         error tolerance of ``xtol`` is reached. Ten iterations should suffice for
         the default GMRES solve. Default is ``10``.
@@ -66,6 +68,24 @@ _doc = {
         singularities. Default is ``False``. This is intended for developer use.
         """,
 }
+
+
+def _select_potential_solve_method(solve_method, maxiter, problem):
+    if solve_method == "auto":
+        if (maxiter > 0) and (problem != "interior Neumann"):
+            return "gmres"
+        return "least_squares"
+    errorif(
+        solve_method not in {"fixed_point", "gmres", "least_squares"},
+        msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
+        f"or 'least_squares', got {solve_method!r}.",
+    )
+    errorif(
+        solve_method in {"fixed_point", "gmres"} and (problem == "interior Neumann"),
+        msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
+        "problems. Use solve_method='least_squares' instead.",
+    )
+    return solve_method
 
 
 def _D_plus_half(
@@ -234,6 +254,8 @@ def _fixed_point_potential(
     full_output=False,
     chunk_size=None,
 ):
+    assert solve_method in {"gmres", "fixed_point"}
+
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
@@ -246,27 +268,22 @@ def _fixed_point_potential(
     )
     if Phi_0 is None:
         Phi_0 = jnp.ones(potential_grid.num_nodes)
-    solve_method = "gmres" if (solve_method == "auto") else solve_method
-    errorif(
-        solve_method not in {"fixed_point", "gmres"},
-        msg="_fixed_point_potential only supports solve_method='fixed_point' "
-        f"or 'gmres', got {solve_method!r}.",
-    )
+
     if solve_method == "gmres":
         operator = lx.FunctionLinearOperator(
-            lambda Phi: _linear_potential_operator(
-                Phi, potential_data, source_data, interpolator, chunk_size
+            partial(
+                _linear_potential_operator,
+                potential_data=potential_data,
+                source_data=source_data,
+                interpolator=interpolator,
+                chunk_size=chunk_size,
             ),
             jax.ShapeDtypeStruct(Phi_0.shape, Phi_0.dtype),
         )
         solution = lx.linear_solve(
             operator,
             boundary_condition,
-            solver=lx.GMRES(
-                rtol=xtol,
-                atol=xtol,
-                max_steps=maxiter if maxiter > 0 else None,
-            ),
+            solver=lx.GMRES(rtol=xtol, atol=xtol, max_steps=maxiter),
             options={"y0": Phi_0},
             throw=False,
         )
@@ -290,37 +307,13 @@ def _fixed_point_potential(
         Phi_0,
         args,
         max_steps=maxiter if maxiter > 0 else None,
-        adjoint=optx.ImplicitAdjoint(
-            lx.GMRES(
-                rtol=xtol,
-                atol=xtol,
-                max_steps=maxiter if maxiter > 0 else None,
-            )
-        ),
+        adjoint=optx.ImplicitAdjoint(lx.GMRES(rtol=xtol, atol=xtol, max_steps=maxiter)),
         throw=False,
     )
     if full_output:
         err = _iteration_operator(solution.value, args) - solution.value
         return solution.value, (err, solution.stats["num_steps"])
     return solution.value
-
-
-def _select_potential_solve_method(solve_method, maxiter, problem):
-    if solve_method == "auto":
-        if (maxiter > 0) and (problem != "interior Neumann"):
-            return "gmres"
-        return "least_squares"
-    errorif(
-        solve_method not in {"fixed_point", "gmres", "least_squares"},
-        msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
-        f"or 'least_squares', got {solve_method!r}.",
-    )
-    errorif(
-        solve_method in {"fixed_point", "gmres"} and (problem == "interior Neumann"),
-        msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
-        "problems. Use solve_method='least_squares' instead.",
-    )
-    return solve_method
 
 
 @register_compute_fun(

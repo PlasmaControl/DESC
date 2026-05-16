@@ -882,7 +882,7 @@ class TestLaplace:
         chunk_size=1000,
         just_err=False,
         _D_quad=False,
-        solve_method="least_squares",
+        solve_method="auto",
     ):
         """Test Laplacian solver in interior."""
         if surface is None:
@@ -957,7 +957,6 @@ class TestLaplace:
                         chunk_size,
                         True,
                         D_quad,
-                        solve_method="auto",
                     )
                 )
                 print(f"Resolution {r} is done.")

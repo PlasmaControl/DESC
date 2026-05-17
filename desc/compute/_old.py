@@ -194,11 +194,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, opts.quad)
         points = bounce.points(pitch_inv, num_well)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
-            [
-                _v_tau,
-                _radial_drift,
-                _poloidal_drift_periodic,
-            ],
+            [_v_tau, _radial_drift, _poloidal_drift_periodic],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],

@@ -149,11 +149,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, opts.num_well)
             v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [
-                    _v_tau,
-                    _radial_drift,
-                    _poloidal_drift_periodic,
-                ],
+                [_v_tau, _radial_drift, _poloidal_drift_periodic],
                 pitch_inv,
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
@@ -323,11 +319,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [
-                    _v_tau,
-                    _radial_drift_wb_inverse,
-                    _poloidal_drift_secular_wb_inverse,
-                ],
+                [_v_tau, _radial_drift_wb_inverse, _poloidal_drift_secular_wb_inverse],
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],

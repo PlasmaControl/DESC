@@ -420,8 +420,6 @@ class Bounce2D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
-        if surface_data is None:
-            surface_data = {}
         for name in Bounce2D.required_names:
             fun_data[name] = desc_data[name]
         fun_data.pop("iota", None)

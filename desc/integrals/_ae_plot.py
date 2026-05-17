@@ -9,7 +9,6 @@ from interpax import PPoly
 from interpax_fft import PiecewiseChebyshevSeries
 from matplotlib.collections import LineCollection
 from matplotlib.ticker import MaxNLocator
-from orthax.laguerre import laggauss
 
 from desc.backend import jnp
 from desc.grid import LinearGrid
@@ -187,7 +186,7 @@ def _ae_well_data(
         Values replacing ``ne_r / ne`` and ``Te_r / Te`` before multiplication
         by ``radial_scale``. If omitted, the equilibrium profiles are used.
     num_energy : int, optional
-        Number of Gauss-Laguerre nodes for the energy integral.
+        Number of generalized Gauss-Laguerre nodes for the energy integral.
     num_zeta : int, optional
         Number of points used to plot ``|B|`` along the field line.
     **kwargs
@@ -202,6 +201,7 @@ def _ae_well_data(
     from desc.compute._available_energy import (
         _ae,
         _binormal_drift_wb_inverse,
+        _energy_quad,
         _G_hat_half,
     )
     from desc.compute._fast_ion import _radial_drift
@@ -286,9 +286,9 @@ def _ae_well_data(
         loop=opts.loop,
     )
 
-    e, e_weight = laggauss(num_energy)
+    energy, energy_weight = _energy_quad(num_energy)
     ae_per_pitch_well = jnp.sum(
-        _ae(G, G_ω_α, G_ω_ψ, fun_data, e) * (e**2.5 * e_weight)[..., None],
+        _ae(G, G_ω_α, G_ω_ψ, fun_data, energy) * energy_weight[..., None],
         axis=-2,
     )
 

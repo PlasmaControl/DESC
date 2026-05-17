@@ -3,7 +3,8 @@
 from functools import partial
 
 from jax.lax import stop_gradient
-from orthax.laguerre import laggauss
+from orthax import orthgauss
+from orthax.recurrence import GeneralizedLaguerre
 
 from desc.backend import jit, jnp
 
@@ -27,24 +28,28 @@ def _binormal_drift_wb_inverse(data, B, pitch):
     return (cvdrift - 0.5 * gbdrift) * g + safediv(0.5 * gbdrift, g)
 
 
-def _ae(G, G_ω_α, G_ω_ψ, data, e):
+def _ae(G, G_ω_α, G_ω_ψ, data, energy):
     shape = (-1,) + (1,) * G.ndim
 
-    G = G[..., None, :]  # Thiis is sqrt G hat.
+    G = G[..., None, :]  # This is sqrt G hat.
     # scale by conjugate widths
     G_ω_α = G_ω_α[..., None, :] * data["ae psi width"].reshape(shape)
     G_ω_ψ = G_ω_ψ[..., None, :] * data["ae alpha width"].reshape(shape)
-    G_ω_star = G * (
-        (
-            data["ae grad(density)"].reshape(shape)
-            + data["ae grad(temperature)"].reshape(shape) * (e - 1.5)[..., None]
-        )
-        / e[..., None]
-    )
-    drift = jnp.hypot(G_ω_α, G_ω_ψ)
-    drive = jnp.hypot(G_ω_star - G_ω_α, G_ω_ψ)
+    η_n = data["ae grad(density)"].reshape(shape)
+    η_T = data["ae grad(temperature)"].reshape(shape)
+    C = η_n - 1.5 * η_T
+    energy = energy[..., None]
 
-    return safediv(G_ω_α * G_ω_star + drift * (drive - drift), G)
+    drift = jnp.hypot(G_ω_α, G_ω_ψ)
+    drive = jnp.hypot((G * η_T - G_ω_α) + G * C / energy, G_ω_ψ)
+
+    return G_ω_α * C + (G_ω_α * η_T + safediv(drift * (drive - drift), G)) * energy
+
+
+def _energy_quad(num_energy):
+    # The energy integral has weight E^(5/2) exp(-E), but
+    # ω_* = η_T + C / E makes AE(E) ~ C/E for E near zero.
+    return orthgauss(num_energy, GeneralizedLaguerre(1.5))
 
 
 @register_compute_fun(
@@ -78,7 +83,9 @@ def _ae(G, G_ω_α, G_ω_ψ, data, e):
     grid_requirement={"can_fft2": True},
     radial_scale="float : Multiplier for the radial correlation length.",
     binormal_scale="float : Multiplier for the binormal correlation length.",
-    num_energy="int : Resolution for Gauss-Laguerre quadrature over energy.",
+    num_energy=(
+        "int : Resolution for generalized Gauss-Laguerre quadrature over energy."
+    ),
     **Options._doc,
 )
 @partial(
@@ -99,14 +106,14 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     radial_scale, binormal_scale : float
         Correlation-length multipliers. Default is 1.
     num_energy : int
-        Resolution for Gauss-Laguerre quadrature over energy.
+        Resolution for generalized Gauss-Laguerre quadrature over energy.
 
     """
     # noqa: unused dependency
     num_energy = kwargs.get("num_energy", 16)
     radial_scale = kwargs.get("radial_scale", 1.0)
     binormal_scale = kwargs.get("binormal_scale", 1.0)
-    e, e_weight = stop_gradient(laggauss(num_energy))
+    energy, energy_weight = stop_gradient(_energy_quad(num_energy))
 
     angle = parse_argname_change(
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
@@ -129,11 +136,11 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
                         loop=opts.loop,
                     ),
                     data,
-                    e,
+                    energy,
                 )
                 .sum(-1)
                 .mean(-3)
-                .dot(e**2.5 * e_weight)
+                .dot(energy_weight)
             )
 
         pitch_inv, weight = Bounce2D.pitch_quad(

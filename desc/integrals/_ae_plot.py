@@ -198,13 +198,13 @@ def _ae_well_data(
         Per-pitch, per-well available-energy data on one flux surface and one
         field line.
     """
-    from desc.compute._available_energy import (
+    from desc.compute._fast_ion import _radial_drift
+    from desc.compute._turbulence import (
         _ae,
         _binormal_drift_wb_inverse,
         _energy_quad,
         _G_hat_half,
     )
-    from desc.compute._fast_ion import _radial_drift
 
     bounce_names = (
         "cvdrift (periodic)",

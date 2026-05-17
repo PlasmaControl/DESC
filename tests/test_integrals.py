@@ -15,7 +15,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
-from desc.compute._available_energy import _binormal_drift_wb_inverse
+from desc.compute._turbulence import _binormal_drift_wb_inverse
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get

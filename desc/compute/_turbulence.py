@@ -1,4 +1,4 @@
-"""Compute functions for available energy of trapped electrons."""
+"""Compute functions for turbulent transport."""
 
 from functools import partial
 
@@ -86,6 +86,7 @@ def _energy_quad(num_energy):
     num_energy=(
         "int : Resolution for generalized Gauss-Laguerre quadrature over energy."
     ),
+    energy_quad="tuple : Nodes and weights for the energy quadrature.",
     **Options._doc,
 )
 @partial(
@@ -95,8 +96,8 @@ def _energy_quad(num_energy):
 def _available_energy(params, transforms, profiles, data, **kwargs):
     """Dimensionless available energy of trapped electrons.
 
-    Refrences
-    ---------
+    References
+    ----------
     [1] Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
     [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
         and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
@@ -110,13 +111,18 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    num_energy = kwargs.get("num_energy", 16)
     radial_scale = kwargs.get("radial_scale", 1.0)
     binormal_scale = kwargs.get("binormal_scale", 1.0)
-    energy, energy_weight = stop_gradient(_energy_quad(num_energy))
+    energy_quad = kwargs.get("energy_quad", None)
+    if energy_quad is None:
+        energy_quad = _energy_quad(kwargs.get("num_energy", 16))
+    energy, energy_weight = stop_gradient(energy_quad)
 
     angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+        kwargs.get("angle", kwargs.get("theta", None)),
+        kwargs,
+        "theta",
+        "angle",
     )
     grid = transforms["grid"]
     opts = Options.guess(-1, grid, **kwargs)

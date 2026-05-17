@@ -123,7 +123,8 @@ def _fieldline_B(bounce, num_zeta, rho_idx=0):
     if isinstance(bounce._B, PPoly):
         zeta = np.linspace(bounce._B.x[0], bounce._B.x[-1], num_zeta)
         return zeta, bounce._B(zeta)[None, :]
-    elif isinstance(bounce._B, PiecewiseChebyshevSeries):
+
+    if isinstance(bounce._B, PiecewiseChebyshevSeries):
         domain = bounce._B.domain
         B = bounce._B.cheb
         if B.ndim == 4:
@@ -137,18 +138,14 @@ def _fieldline_B(bounce, num_zeta, rho_idx=0):
                 for B_alpha in B
             ]
         )
-    else:
-        B = bounce._B
-        if B.ndim == 4:
-            B = B[rho_idx]
-        zeta = np.linspace(bounce._c["knots"][0], bounce._c["knots"][-1], num_zeta)
-        if B.ndim == 2:
-            B = B[None, ...]
-        return zeta, np.stack([evaluate_ppoly(B_alpha) for B_alpha in B])
 
-
-def _grid_rho(grid):
-    return np.asarray(grid.compress(grid.nodes[:, 0]), dtype=float).ravel()
+    B = bounce._B
+    if B.ndim == 4:
+        B = B[rho_idx]
+    zeta = np.linspace(bounce._c["knots"][0], bounce._c["knots"][-1], num_zeta)
+    if B.ndim == 2:
+        B = B[None, ...]
+    return zeta, np.stack([evaluate_ppoly(B_alpha) for B_alpha in B])
 
 
 def _ae_well_data(
@@ -248,7 +245,7 @@ def _ae_well_data(
             grid.num_rho != 1,
             msg="available-energy well plots require a single-rho grid.",
         )
-        grid_rho = _grid_rho(grid)
+        grid_rho = grid.compress(grid.nodes[:, 0])
         if rho is None:
             rho = grid_rho
         else:
@@ -324,7 +321,6 @@ def _well_segments(well_data):
     zeta1, zeta2 = well_data.points
     segments = []
     values = []
-    A = np.maximum(well_data.ae_per_pitch_well, 0.0)
 
     for pitch_idx, y in enumerate(well_data.pitch_inv):
         for well_idx in range(zeta1.shape[1]):
@@ -336,7 +332,7 @@ def _well_segments(well_data):
                     (zeta2[pitch_idx, well_idx], y),
                 ]
             )
-            values.append(A[pitch_idx, well_idx])
+            values.append(well_data.ae_per_pitch_well[pitch_idx, well_idx])
 
     return segments, np.asarray(values)
 
@@ -480,15 +476,13 @@ def plot_available_energy(
         Returned only when ``return_data`` is True.
 
     """
-    errorif(eq is None, msg="eq must be supplied.")
     well_data = _ae_well_data(eq, **kwargs)
 
-    if ax is None:
-        fig, ax = plt.subplots(
-            figsize=kwargs.pop("figsize", (7, 4.5)), constrained_layout=True
-        )
-    else:
-        fig = ax.figure
+    fig, ax = (
+        plt.subplots(figsize=kwargs.pop("figsize", (7, 4.5)), constrained_layout=True)
+        if ax is None
+        else (ax.figure, ax)
+    )
 
     zeta = well_data.zeta
     segments, values = _well_segments(well_data)

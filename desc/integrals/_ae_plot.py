@@ -92,6 +92,14 @@ def _prepare_ae_data(
     temperature_gradient = _surface_quantity(grid, data["rho"], temperature_gradient)
     if temperature_gradient is None:
         temperature_gradient = safediv(data["Te_r"], data["Te"])
+    errorif(
+        not np.isfinite(density_gradient).all(),
+        msg=("Density gradient was not set for this equilibrium."),
+    )
+    errorif(
+        not np.isfinite(temperature_gradient).all(),
+        msg=("Temperature gradient was not set for this equilibrium."),
+    )
 
     surface_data = {
         "ae grad(density)": radial_scale * density_gradient,
@@ -477,7 +485,7 @@ def plot_available_energy(
 
     if ax is None:
         fig, ax = plt.subplots(
-            figsize=kwargs.pop("figsize", None), constrained_layout=True
+            figsize=kwargs.pop("figsize", (7, 4.5)), constrained_layout=True
         )
     else:
         fig = ax.figure

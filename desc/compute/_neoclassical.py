@@ -7,7 +7,7 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.surface_integral import surface_integrals
-from ..utils import parse_argname_change, safediv
+from ..utils import apply, parse_argname_change, safediv
 from .data_index import register_compute_fun
 
 
@@ -64,9 +64,8 @@ def _dI_2(data, B, pitch):
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "kappa_g",
+        "|grad(rho)|*kappa_g",
         "R0",
-        "|grad(rho)|",
         "<|grad(rho)|>",
         "V_psi",
     ]
@@ -126,7 +125,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
     out = Bounce2D.batch(
         eps_32,
-        {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+        apply(data, subset=("|grad(rho)|*kappa_g",)),
         data,
         angle,
         grid,

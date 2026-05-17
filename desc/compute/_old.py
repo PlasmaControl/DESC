@@ -9,12 +9,12 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D, Options
-from ..utils import safediv
+from ..utils import apply, safediv
 from ._fast_ion import (
     _gamma_c_data,
     _poloidal_drift_periodic,
-    _radial_drift_1,
-    _radial_drift_2,
+    _radial_drift,
+    _radial_drift_wb_inverse,
     _v_tau,
 )
 from ._neoclassical import _dI_1, _dI_2
@@ -43,9 +43,8 @@ _bounce1D_doc = {
     data=[
         "min_tz |B|",
         "max_tz |B|",
-        "kappa_g",
         "R0",
-        "|grad(rho)|",
+        "|grad(rho)|*kappa_g",
         "<|grad(rho)|>",
         "fieldline length",
     ]
@@ -85,7 +84,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     scalar = jnp.pi / (8 * 2**0.5) * data["R0"] ** 2
     out = Bounce1D.batch(
         eps_32,
-        {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
+        apply(data, subset=("|grad(rho)|*kappa_g",)),
         data,
         grid,
         opts.surf_batch_size,
@@ -151,10 +150,9 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
         "b",
         "grad(phi)",
         "grad(psi)",
-        "|grad(psi)|",
+        "|grad(psi)|*kappa_g",
         "|grad(rho)|",
         "|e_alpha|r,p|",
-        "kappa_g",
         "iota_r",
         "fieldline length",
     ]
@@ -196,7 +194,11 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, opts.quad)
         points = bounce.points(pitch_inv, num_well)
         v_tau, radial_drift, poloidal_drift = bounce.integrate(
-            [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
+            [
+                _v_tau,
+                _radial_drift,
+                _poloidal_drift_periodic,
+            ],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
@@ -259,7 +261,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
     num_well = kwargs.get("num_well", -1)
 
-    def _poloidal_drift_secular(data, B, pitch):
+    def _poloidal_drift_secular_wb_inverse(data, B, pitch):
         return safediv(
             data["gbdrift"] * (1 - 0.5 * pitch * B),
             jnp.sqrt(jnp.abs(1 - pitch * B)),
@@ -270,7 +272,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         v_tau, radial_drift, poloidal_drift = Bounce1D(grid, data, opts.quad).integrate(
-            [_v_tau, _radial_drift_2, _poloidal_drift_secular],
+            [_v_tau, _radial_drift_wb_inverse, _poloidal_drift_secular_wb_inverse],
             pitch_inv,
             data,
             ["cvdrift0", "gbdrift"],

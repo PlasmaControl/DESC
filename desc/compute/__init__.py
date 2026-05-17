@@ -27,6 +27,7 @@ import numpy as np
 
 from ..utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from . import (
+    _available_energy,
     _basis_vectors,
     _bootstrap,
     _core,

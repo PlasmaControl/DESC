@@ -1798,6 +1798,24 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|grad(rho)|*kappa_g",
+    label="|\\nabla\\rho| \\kappa_g",
+    units="m^{-2}",
+    units_long="Inverse square meters",
+    description="Radial coordinate gradient magnitude times geodesic curvature.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(rho)|", "kappa_g"],
+)
+def _gradrho_mag_times_kappa_g(params, transforms, profiles, data, **kwargs):
+    data["|grad(rho)|*kappa_g"] = data["|grad(rho)|"] * data["kappa_g"]
+    return data
+
+
+@register_compute_fun(
     name="<|grad(rho)|>",  # same as S(r) / V_r(r)
     label="\\langle \\vert \\nabla \\rho \\vert \\rangle",
     units="m^{-1}",
@@ -1838,6 +1856,24 @@ def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
 )
 def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+    return data
+
+
+@register_compute_fun(
+    name="|grad(psi)|*kappa_g",
+    label="|\\nabla\\psi| \\kappa_g",
+    units="T",
+    units_long="Tesla",
+    description="Toroidal flux gradient magnitude times geodesic curvature.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(psi)|", "kappa_g"],
+)
+def _gradpsi_mag_times_kappa_g(params, transforms, profiles, data, **kwargs):
+    data["|grad(psi)|*kappa_g"] = data["|grad(psi)|"] * data["kappa_g"]
     return data
 
 

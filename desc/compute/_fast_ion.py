@@ -33,7 +33,7 @@ def _gamma_c_data(data):
     # units Tesla meters. Smoothness is determined by positive lower bound of
     # log argument, and hence behaves as ∂log(|B|/B₀)/∂ρ |B| = ∂|B|/∂ρ.
     return {
-        "|grad(psi)|*kappa_g": data["|grad(psi)|"] * data["kappa_g"],
+        "|grad(psi)|*kappa_g": data["|grad(psi)|*kappa_g"],
         "|grad(rho)|*|e_alpha|r,p|": data["|grad(rho)|"] * data["|e_alpha|r,p|"],
         "|B|_r|v,p": data["|B|_r|v,p"],
         "K": data["iota_r"]
@@ -48,7 +48,7 @@ def _v_tau(data, B, pitch):
     return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 
-def _radial_drift_1(data, B, pitch):
+def _radial_drift(data, B, pitch):
     return (
         safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
         * data["|grad(psi)|*kappa_g"]
@@ -57,21 +57,18 @@ def _radial_drift_1(data, B, pitch):
 
 
 def _poloidal_drift_periodic(data, B, pitch):
-    return (
-        safediv(1 - 0.5 * pitch * B, jnp.sqrt(jnp.abs(1 - pitch * B)))
-        * data["|B|_r|v,p"]
-        + jnp.sqrt(jnp.abs(1 - pitch * B)) * data["K"]
-    ) / B
+    g = jnp.sqrt(jnp.abs(1 - pitch * B))
+    return (safediv(1 - 0.5 * pitch * B, g) * data["|B|_r|v,p"] + g * data["K"]) / B
 
 
-def _radial_drift_2(data, B, pitch):
+def _radial_drift_wb_inverse(data, B, pitch):
     return safediv(
         data["cvdrift0"] * (1 - 0.5 * pitch * B),
         jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 
-def _poloidal_drift_secular(data, B, pitch):
+def _poloidal_drift_secular_wb_inverse(data, B, pitch):
     # TODO (#465), multiply by (omega + zeta) instead of zeta
     return safediv(
         (data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"])
@@ -104,10 +101,9 @@ def _poloidal_drift_secular(data, B, pitch):
         "b",
         "grad(phi)",
         "grad(psi)",
-        "|grad(psi)|",
         "|grad(rho)|",
         "|e_alpha|r,p|",
-        "kappa_g",
+        "|grad(psi)|*kappa_g",
         "iota_r",
         "V_psi",
     ]
@@ -153,7 +149,11 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         def fun(pitch_inv):
             points = bounce.points(pitch_inv, opts.num_well)
             v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [_v_tau, _radial_drift_1, _poloidal_drift_periodic],
+                [
+                    _v_tau,
+                    _radial_drift,
+                    _poloidal_drift_periodic,
+                ],
                 pitch_inv,
                 data,
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
@@ -208,10 +208,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         "b",
         "grad(phi)",
         "grad(psi)",
-        "|grad(psi)|",
         "|grad(rho)|",
         "|e_alpha|r,p|",
-        "kappa_g",
+        "|grad(psi)|*kappa_g",
         "iota_r",
     ]
     + Bounce2D.required_names,
@@ -243,7 +242,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         points = bounce.points(pitch_inv, opts.num_well)
         radial_drift, poloidal_drift = bounce.integrate(
-            [_radial_drift_1, _poloidal_drift_periodic],
+            [_radial_drift, _poloidal_drift_periodic],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
@@ -324,7 +323,11 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 
         def fun(pitch_inv):
             v_tau, radial_drift, poloidal_drift = bounce.integrate(
-                [_v_tau, _radial_drift_2, _poloidal_drift_secular],
+                [
+                    _v_tau,
+                    _radial_drift_wb_inverse,
+                    _poloidal_drift_secular_wb_inverse,
+                ],
                 pitch_inv,
                 data,
                 ["cvdrift0", "gbdrift (periodic)", "gbdrift (secular)/phi"],

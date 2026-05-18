@@ -12,7 +12,7 @@ from matplotlib.ticker import MaxNLocator
 
 from desc.backend import jnp
 from desc.grid import LinearGrid
-from desc.utils import apply, errorif, safediv
+from desc.utils import apply, errorif, safediv, setdefault
 
 from .bounce_integral import Bounce2D, Options
 
@@ -337,9 +337,68 @@ def _well_segments(well_data):
     return segments, np.asarray(values)
 
 
-def _add_well_segments(fig, ax, segments, values, cmap, normalize_ae, linewidth):
+def _color_norm(norm, values, vmin, vmax):
+    if norm is None or norm == "linear":
+        return colors.Normalize(vmin=vmin, vmax=vmax)
+    if norm == "log":
+        positive = values[np.isfinite(values) & (values > 0)]
+        errorif(
+            not positive.size,
+            msg="LogNorm requires at least one positive available-energy value.",
+        )
+        vmin = 1e-6 if vmax > 1e-6 else np.nanmin(positive)
+        return colors.LogNorm(vmin=vmin, vmax=vmax)
+    return norm
+
+
+def _pitch_spacing_linewidths(fig, ax, pitch_inv, segment_pitch, fallback=1.0):
+    pitch_inv = np.asarray(pitch_inv, dtype=float)
+    pitch_inv = np.unique(pitch_inv[np.isfinite(pitch_inv)])
+    if pitch_inv.size < 2:
+        return fallback
+
+    display_y = ax.transData.transform(
+        np.column_stack((np.zeros_like(pitch_inv), pitch_inv))
+    )[:, 1]
+    spacing = np.diff(np.sort(display_y))
+    if not np.any(spacing > 0):
+        return fallback
+
+    spacing = np.concatenate(
+        ([spacing[0]], np.minimum(spacing[:-1], spacing[1:]), [spacing[-1]])
+    )
+    # Adjacent strokes that exactly touch can still leave subpixel white seams
+    # after antialiasing. Overscan slightly in display space to make filled
+    # pitch bands visually continuous.
+    LINEWIDTH_OVERSCAN_PIXELS = 1.0
+    max_linewidth = (spacing + LINEWIDTH_OVERSCAN_PIXELS) * 72 / fig.dpi
+    idx = np.searchsorted(pitch_inv, segment_pitch)
+    idx = np.clip(idx, 0, pitch_inv.size - 1)
+    prev_idx = np.clip(idx - 1, 0, pitch_inv.size - 1)
+    idx = np.where(
+        np.abs(pitch_inv[prev_idx] - segment_pitch)
+        < np.abs(pitch_inv[idx] - segment_pitch),
+        prev_idx,
+        idx,
+    )
+    return max_linewidth[idx]
+
+
+def _add_well_segments(
+    fig,
+    ax,
+    segments,
+    values,
+    pitch_inv,
+    cmap,
+    normalize_ae,
+    norm,
+    linewidth,
+):
     if not values.size:
         return None
+    auto_linewidth = linewidth is None or not np.isfinite(linewidth)
+    initial_linewidth = 1.0 if auto_linewidth else linewidth
 
     max_value = np.nanmax(values)
     if normalize_ae and max_value > 0:
@@ -354,15 +413,22 @@ def _add_well_segments(fig, ax, segments, values, cmap, normalize_ae, linewidth)
         segments,
         array=values,
         cmap=cmap,
-        norm=colors.Normalize(vmin=vmin, vmax=vmax),
-        linewidths=linewidth,
+        norm=_color_norm(norm, values, vmin, vmax),
+        linewidths=initial_linewidth,
         alpha=0.95,
         zorder=1,
     )
     ax.add_collection(collection)
     cbar = fig.colorbar(collection, ax=ax, pad=0.08, fraction=0.055)
     cbar.set_label(cbar_label)
-    cbar.ax.yaxis.set_major_locator(MaxNLocator(5))
+    if not isinstance(collection.norm, colors.LogNorm):
+        cbar.ax.yaxis.set_major_locator(MaxNLocator(5))
+    if auto_linewidth:
+        fig.canvas.draw()
+        segment_pitch = np.asarray(segments, dtype=float)[:, 0, 1]
+        collection.set_linewidths(
+            _pitch_spacing_linewidths(fig, ax, pitch_inv, segment_pitch)
+        )
     return collection
 
 
@@ -379,14 +445,14 @@ def _drift_samples(well_data):
     return roots, omega_alpha, omega_psi
 
 
-def _add_drifts(ax, well_data):
+def _add_drifts(ax, well_data, omega_psi_color, omega_alpha_color):
     drift_ax = ax.twinx()
     roots, omega_alpha, omega_psi = _drift_samples(well_data)
     if roots.size:
         drift_ax.scatter(
             roots,
             omega_psi,
-            color="tab:orange",
+            color=omega_psi_color,
             marker=".",
             s=9,
             alpha=0.9,
@@ -395,20 +461,18 @@ def _add_drifts(ax, well_data):
         drift_ax.scatter(
             roots,
             omega_alpha,
-            color="tab:olive",
+            color=omega_alpha_color,
             marker=".",
             s=9,
             alpha=0.9,
             label=r"$\widehat{\omega}_\alpha$",
         )
-        drift_ax.axhline(0.0, color="0.15", linestyle="dotted", linewidth=0.9)
+        drift_ax.axhline(0.0, color="0.15", linestyle="dotted", linewidth=1.0)
         legend = drift_ax.legend(
             loc="lower right",
-            frameon=True,
             facecolor="white",
             edgecolor="0.25",
             framealpha=0.95,
-            fancybox=False,
             markerscale=2.5,
             scatterpoints=3,
         )
@@ -439,10 +503,13 @@ def _style_well_axes(ax, zeta, B):
 def plot_available_energy(
     eq,
     ax=None,
-    cmap="turbo",
+    cmap=None,
     normalize_ae=True,
+    norm="log",
     include_drifts=True,
-    linewidth=1.0,
+    linewidth=None,
+    omega_psi_color="tab:blue",
+    omega_alpha_color="darkolivegreen",
     return_data=False,
     **kwargs,
 ):
@@ -455,14 +522,21 @@ def plot_available_energy(
     ax : matplotlib.axes.Axes, optional
         Axes to draw into. If omitted, a new figure and axes are created.
     cmap : str or Colormap, optional
-        Colormap for the available-energy well segments.
+        Colormap for the available-energy well segments. If omitted, ``"turbo"``
+        is used for log normalization and ``"plasma"`` is used otherwise.
     normalize_ae : bool, optional
         If True, normalize segment colors by the maximum plotted
         available-energy value.
+    norm : {"log", "linear"} or matplotlib.colors.Normalize, optional
+        Color normalization for available-energy well segments. ``"log"``
+        uses ``matplotlib.colors.LogNorm`` with cutoff at ``1e-6``.
     include_drifts : bool, optional
         If True, overlay drift-frequency samples on a secondary y-axis.
-    linewidth : float, optional
-        Width of the available-energy well segments.
+    linewidth : float or None, optional
+        Width of the available-energy well segments. If ``None`` or ``np.inf``,
+        fill the pitch-grid spacing.
+    omega_psi_color, omega_alpha_color : color, optional
+        Colors for the overlaid drift-frequency markers.
     return_data : bool, optional
         If True, return ``well_data`` along with the figure and axes.
 
@@ -485,13 +559,30 @@ def plot_available_energy(
     )
 
     zeta = well_data.zeta
-    segments, values = _well_segments(well_data)
-    _add_well_segments(fig, ax, segments, values, cmap, normalize_ae, linewidth)
-
-    ax.plot(zeta, well_data.B, color="black", linewidth=1.8, zorder=3)
+    ax.plot(zeta, well_data.B, color="black", linewidth=2, zorder=3)
     _style_well_axes(ax, zeta, well_data.B)
 
+    segments, values = _well_segments(well_data)
+    _add_well_segments(
+        fig,
+        ax,
+        segments,
+        values,
+        well_data.pitch_inv,
+        setdefault(
+            cmap,
+            (
+                "turbo"
+                if (norm == "log" or isinstance(norm, colors.LogNorm))
+                else "plasma"
+            ),
+        ),
+        normalize_ae,
+        norm,
+        linewidth,
+    )
+
     if include_drifts:
-        _add_drifts(ax, well_data)
+        _add_drifts(ax, well_data, omega_psi_color, omega_alpha_color)
 
     return (fig, ax, well_data) if return_data else (fig, ax)

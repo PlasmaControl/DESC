@@ -1066,7 +1066,7 @@ def test_plot_b_mag():
 
 @pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_available_energy_ncsx():
+def test_plot_available_energy():
     """Test plotting available-energy wells for NCSX."""
     eq = get("NCSX")
     grid = LinearGrid(rho=[0.5], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
@@ -1075,7 +1075,6 @@ def test_plot_available_energy_ncsx():
         grid=grid,
         density_gradient=-3.0,
         temperature_gradient=0.0,
-        num_pitch=50,
         num_quad=16,
         num_field_periods=10,
     )

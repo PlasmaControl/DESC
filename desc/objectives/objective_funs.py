@@ -683,7 +683,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x, x0=None, constants=None):
+    def print_value(self, x, x0=None, constants=None, fse=None, f0se=None):
         """Print the value(s) of the objective.
 
         Parameters
@@ -694,6 +694,12 @@ class ObjectiveFunction(IOAble):
             Initial state vector before optimization.
         constants : list
             Constant parameters passed to sub-objectives.
+        fse : ndarray, optional
+            Output of self.compute_scaled_error(x), if available
+            through last iteration of the optimization.
+        f0se : ndarray, optional
+            Output of self.compute_scaled_error(x0), if available
+            through first iteration of the optimization.
 
         Returns
         -------
@@ -703,16 +709,21 @@ class ObjectiveFunction(IOAble):
         out = {}
         if constants is None:
             constants = self.constants
-        if self.compiled and self._compile_mode in {"scalar", "all"}:
-            f = self.compute_scalar(x, constants=constants)
-            if x0 is not None:
-                f0 = self.compute_scalar(x0, constants=constants)
+
+        # Compute scaled error array (majority of optimizers use this)
+        # to avoid recompiling individual objectives.
+        if fse is not None:
+            f_full = fse
         else:
-            f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
-            if x0 is not None:
-                f0 = (
-                    jnp.sum(self.compute_scaled_error(x0, constants=constants) ** 2) / 2
-                )
+            f_full = self.compute_scaled_error(x, constants=constants)
+        f = jnp.sum(f_full**2) / 2  # compute_scalar
+        if x0 is not None:
+            if f0se is not None:
+                f0_full = f0se
+            else:
+                f0_full = self.compute_scaled_error(x0, constants=constants)
+            f0 = jnp.sum(f0_full**2) / 2
+
         if x0 is not None:
             print(
                 f"{'Total (sum of squares): ':<{PRINT_WIDTH}}"
@@ -725,26 +736,36 @@ class ObjectiveFunction(IOAble):
             )
             temp_out = {"f": f}
         out["Total (sum of squares)"] = temp_out
+
+        # these params will be used in case the objective has bounds
+        # instead of target. Since it is not possible to get actual
+        # unclipped value from the compute_scaled_error function, we will
+        # fall back to compute_unscaled for this case. Overall, this should
+        # reduce the extra jit compilations for the print_value
         params = self.unpack_state(x)
-        assert len(params) == len(constants) == len(self.objectives)
         if x0 is not None:
             params0 = self.unpack_state(x0)
-            assert len(params0) == len(constants) == len(self.objectives)
-            for par, par0, obj, const in zip(
-                params, params0, self.objectives, constants
-            ):
-                outi = obj.print_value(par, par0, constants=const)
-                if obj._print_value_fmt in out:
-                    out[obj._print_value_fmt].append(outi)
-                else:
-                    out[obj._print_value_fmt] = [outi]
         else:
-            for par, obj, const in zip(params, self.objectives, constants):
-                outi = obj.print_value(par, constants=const)
-                if obj._print_value_fmt in out:
-                    out[obj._print_value_fmt].append(outi)
-                else:
-                    out[obj._print_value_fmt] = [outi]
+            params0 = [None] * len(params)
+        assert len(params) == len(constants) == len(self.objectives)
+        assert len(params0) == len(constants) == len(self.objectives)
+
+        offset = 0
+        for par, par0, obj, const in zip(params, params0, self.objectives, constants):
+            dim = obj.dim_f
+            fi = f_full[offset : offset + dim]
+            if x0 is not None:
+                f0i = f0_full[offset : offset + dim]
+            else:
+                f0i = None
+            offset += dim
+            outi = obj.print_value(
+                args=par, args0=par0, fse=fi, f0se=f0i, constants=const
+            )
+            if obj._print_value_fmt in out:
+                out[obj._print_value_fmt].append(outi)
+            else:
+                out[obj._print_value_fmt] = [outi]
         return out
 
     @functools.partial(jit, static_argnames="per_objective")
@@ -1445,6 +1466,32 @@ class _Objective(IOAble, ABC):
         f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
         return f_norm * w * self.weight
 
+    def _unscale(self, f_scaled, **kwargs):
+        """Reverse of _scale."""
+        constants = kwargs.get("constants", self.constants)
+        if constants is None:
+            w = 1
+        else:
+            w = constants["quad_weights"]
+        return f_scaled * self.normalization / (w * self.weight)
+
+    def _unshift(self, f_shifted):
+        """Reverse of _shift.
+
+        Note that this function return f_shifted if objective has bounds,
+        because the mapping from unshifted to shifted is not invertible in this case.
+        """
+        if self.bounds is not None:
+            # _shift with bounds is not invertible (values within bounds map to 0),
+            # so we return the shifted values as-is.
+            return f_shifted
+        else:
+            if self._normalize_target:
+                target = self.target
+            else:
+                target = self.target * self.normalization
+            return f_shifted + target
+
     @jit
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
@@ -1570,19 +1617,64 @@ class _Objective(IOAble, ABC):
         """
         return self._jvp(v, x, constants, "unscaled")
 
-    def print_value(self, args, args0=None, **kwargs):  # noqa: C901
-        """Print the value of the objective and return a dict of values."""
-        # compute_unscaled is jitted so better to use than than bare compute
+    def _get_values_to_print(self, args, args0=None, fse=None, f0se=None, **kwargs):
+        """Resolve unscaled and shifted values for print_value."""
+        has_f0 = f0se is not None or args0 is not None
+
+        if self.bounds is not None or fse is None:
+            f_unscaled = self.compute_unscaled(*args, **kwargs)
+            f_shifted = self._shift(f_unscaled)
+        else:
+            # _scale(_shift(f_unscaled)) = fse
+            f_shifted = self._unscale(fse, **kwargs)
+            f_unscaled = self._unshift(f_shifted)
+
+        if not has_f0:
+            f0_unscaled = f_unscaled
+            f0_shifted = f_shifted
+        elif self.bounds is not None or f0se is None:
+            errorif(
+                args0 is None,
+                ValueError,
+                "args0 must be provided if objective is bounded.",
+            )
+            f0_unscaled = self.compute_unscaled(*args0, **kwargs)
+            f0_shifted = self._shift(f0_unscaled)
+        else:
+            f0_shifted = self._unscale(f0se, **kwargs)
+            f0_unscaled = self._unshift(f0_shifted)
+
+        return f_unscaled, f_shifted, f0_unscaled, f0_shifted, has_f0
+
+    def print_value(  # noqa: C901
+        self, args, args0=None, fse=None, f0se=None, **kwargs
+    ):
+        """Print the value of the objective and return a dict of values.
+
+        Parameters
+        ----------
+        args : tuple
+            Parameters for this objective.
+        args0 : tuple, optional
+            Initial parameters.
+        fse : ndarray, optional
+            Pre-computed scaled error (output of compute_scaled_error) for this
+            objective. Used to recover unscaled values without recompilation for
+            target-based objectives. If objective is bounded, recomputes unscaled
+            values at the cost of (possible) recompilation.
+        f0se : ndarray, optional
+            Pre-computed scaled error for the initial state.
+        """
         out = {}
-        if args0 is not None:
-            f = self.compute_unscaled(*args, **kwargs)
-            f0 = self.compute_unscaled(*args0, **kwargs)
+        f_unscaled, f_shifted, f0_unscaled, f0_shifted, has_f0 = (
+            self._get_values_to_print(args, args0, fse, f0se, **kwargs)
+        )
+
+        if has_f0:
             print_value_fmt = (
                 f"{self._print_value_fmt:<{PRINT_WIDTH}}" + "{:10.3e}  -->  {:10.3e} "
             )
         else:
-            f = self.compute_unscaled(*args, **kwargs)
-            f0 = f
             # In this case, print_value_fmt only has 1 value,
             # but the format string is still used with 2 arguments given.
             # This is a bit of a hack, but it works. the format() only replaces
@@ -1592,52 +1684,54 @@ class _Objective(IOAble, ABC):
 
         if self.linear:
             # probably a Fixed* thing, just need to know norm
-            f = jnp.linalg.norm(self._shift(f))
-            f0 = jnp.linalg.norm(self._shift(f0))
+            f = jnp.linalg.norm(f_shifted)
+            f0 = jnp.linalg.norm(f0_shifted)
             print(print_value_fmt.format(f0, f) + self._units)
             out["f"] = f
-            if args0 is not None:
+            if has_f0:
                 out["f0"] = f0
 
         elif self.scalar:
             # dont need min/max/mean of a scalar
-            fs = f.squeeze()
-            f0s = f0.squeeze()
+            fs = f_unscaled.squeeze()
+            f0s = f0_unscaled.squeeze()
             print(print_value_fmt.format(f0s, fs) + self._units)
             out["f"] = fs
-            if args0 is not None:
+            if has_f0:
                 out["f0"] = f0s
             if self._normalize and self._units != "(dimensionless)":
-                fs_norm = self._scale(self._shift(f)).squeeze()
-                f0s_norm = self._scale(self._shift(f0)).squeeze()
+                _fse = self._scale(f_shifted, **kwargs)
+                _f0se = self._scale(f0_shifted, **kwargs)
+                fs_norm = _fse.squeeze()
+                f0s_norm = _f0se.squeeze()
                 print(print_value_fmt.format(f0s_norm, fs_norm) + "(normalized error)")
                 out["f_norm"] = fs_norm
-                if args0 is not None:
+                if has_f0:
                     out["f0_norm"] = f0s_norm
 
         else:
             # try to do weighted mean if possible
             constants = kwargs.get("constants", self.constants)
             if constants is None:
-                w = jnp.ones_like(f)
+                w = jnp.ones_like(f_unscaled)
             else:
                 w = constants["quad_weights"]
 
             # target == 0 probably indicates f is some sort of error metric,
             # mean abs makes more sense than mean
             abserr = jnp.all(self.target == 0)
-            f = jnp.abs(f) if abserr else f
+            f = jnp.abs(f_unscaled) if abserr else f_unscaled
             fmax = jnp.max(f)
             fmin = jnp.min(f)
             fmean = jnp.mean(f * w) / jnp.mean(w)
 
-            f0 = jnp.abs(f0) if abserr else f0
+            f0 = jnp.abs(f0_unscaled) if abserr else f0_unscaled
             f0max = jnp.max(f0)
             f0min = jnp.min(f0)
             f0mean = jnp.mean(f0 * w) / jnp.mean(w)
 
             pre_width = len("Maximum absolute ") if abserr else len("Maximum ")
-            if args0 is not None:
+            if has_f0:
                 print_value_fmt = (
                     f"{self._print_value_fmt:<{PRINT_WIDTH-pre_width}}"
                     + "{:10.3e}  -->  {:10.3e} "
@@ -1653,7 +1747,7 @@ class _Objective(IOAble, ABC):
                 + self._units
             )
             out["f_max"] = fmax
-            if args0 is not None:
+            if has_f0:
                 out["f0_max"] = f0max
             print(
                 "Minimum "
@@ -1662,7 +1756,7 @@ class _Objective(IOAble, ABC):
                 + self._units
             )
             out["f_min"] = fmin
-            if args0 is not None:
+            if has_f0:
                 out["f0_min"] = f0min
             print(
                 "Average "
@@ -1671,7 +1765,7 @@ class _Objective(IOAble, ABC):
                 + self._units
             )
             out["f_mean"] = fmean
-            if args0 is not None:
+            if has_f0:
                 out["f0_mean"] = f0mean
 
             if self._normalize and self._units != "(dimensionless)":
@@ -1690,7 +1784,7 @@ class _Objective(IOAble, ABC):
                     + "(normalized)"
                 )
                 out["f_max_norm"] = fmax_norm
-                if args0 is not None:
+                if has_f0:
                     out["f0_max_norm"] = f0max_norm
                 print(
                     "Minimum "
@@ -1699,7 +1793,7 @@ class _Objective(IOAble, ABC):
                     + "(normalized)"
                 )
                 out["f_min_norm"] = fmin_norm
-                if args0 is not None:
+                if has_f0:
                     out["f0_min_norm"] = f0min_norm
                 print(
                     "Average "
@@ -1708,7 +1802,7 @@ class _Objective(IOAble, ABC):
                     + "(normalized)"
                 )
                 out["f_mean_norm"] = fmean_norm
-                if args0 is not None:
+                if has_f0:
                     out["f0_mean_norm"] = f0mean_norm
         return out
 

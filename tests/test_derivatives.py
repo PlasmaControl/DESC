@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from numpy.random import default_rng
 
-from desc.backend import jnp
-from desc.derivatives import AutoDiffDerivative
+from desc.backend import jax, jnp
+from desc.derivatives import AutoDiffDerivative, sparse_pullback
 
 from .utils import FiniteDiffDerivative
 
@@ -361,3 +361,57 @@ class TestJVP:
             self.fun, 0, self.y, self.x, self.c1, self.c2
         )
         np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]), rtol=1e-4)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("case", ["unbatched", "chunked", "reduced", "strip_dim0"])
+def test_sparse_pullback(case):
+    """Test sparse pullback."""
+
+    def assert_tree_allclose(got, expected):
+        np.testing.assert_allclose(got["a"], expected["a"])
+        np.testing.assert_allclose(got["b"]["c"], expected["b"]["c"])
+
+    def batched_fun(y):
+        a = y["a"]
+        c = y["b"]["c"]
+        return jnp.sum(jnp.sin(a) + a**2, axis=1) + jnp.sum(jnp.exp(c), axis=1)
+
+    def single_fun(y):
+        a = y["a"]
+        c = y["b"]["c"]
+        return jnp.sum(jnp.sin(a) + a**2) + jnp.sum(jnp.exp(c))
+
+    x = {
+        "a": jnp.linspace(-1, 1, 10 * 7).reshape(10, 7),
+        "b": {"c": jnp.linspace(0.1, 0.9, 10 * 5).reshape(10, 5)},
+    }
+    ct = jnp.linspace(0.5, 1.5, 10)
+
+    if case == "unbatched":
+        dense = batched_fun
+        sparse = lambda y: sparse_pullback(batched_fun, y)
+        cotangent = ct
+    elif case == "chunked":
+        dense = batched_fun
+        sparse = lambda y: sparse_pullback(batched_fun, y, batch_size=4)
+        cotangent = ct
+    elif case == "reduced":
+        dense = lambda y: jnp.sum(batched_fun(y))
+        sparse = lambda y: sparse_pullback(
+            batched_fun,
+            y,
+            batch_size=4,
+            reduction=jnp.add,
+            chunk_reduction=jnp.sum,
+        )
+        cotangent = jnp.array(1.7)
+    else:
+        dense = lambda y: jax.vmap(single_fun)(y)
+        sparse = lambda y: sparse_pullback(single_fun, y, batch_size=1, strip_dim0=True)
+        cotangent = ct
+
+    out, pullback = jax.vjp(dense, x)
+    got_out, got_pullback = jax.vjp(sparse, x)
+    np.testing.assert_allclose(got_out, out)
+    assert_tree_allclose(got_pullback(cotangent)[0], pullback(cotangent)[0])

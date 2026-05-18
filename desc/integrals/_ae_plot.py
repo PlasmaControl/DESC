@@ -346,7 +346,7 @@ def _color_norm(norm, values, vmin, vmax):
             not positive.size,
             msg="LogNorm requires at least one positive available-energy value.",
         )
-        vmin = 1e-6 if vmax > 1e-6 else np.nanmin(positive)
+        vmin = 1e-5 if vmax > 1e-5 else np.nanmin(positive)
         return colors.LogNorm(vmin=vmin, vmax=vmax)
     return norm
 
@@ -508,8 +508,8 @@ def plot_available_energy(
     norm="log",
     include_drifts=True,
     linewidth=None,
-    omega_psi_color="tab:blue",
-    omega_alpha_color="darkolivegreen",
+    omega_psi_color=None,
+    omega_alpha_color=None,
     return_data=False,
     **kwargs,
 ):
@@ -529,7 +529,7 @@ def plot_available_energy(
         available-energy value.
     norm : {"log", "linear"} or matplotlib.colors.Normalize, optional
         Color normalization for available-energy well segments. ``"log"``
-        uses ``matplotlib.colors.LogNorm`` with cutoff at ``1e-6``.
+        uses ``matplotlib.colors.LogNorm`` with cutoff at ``1e-5``.
     include_drifts : bool, optional
         If True, overlay drift-frequency samples on a secondary y-axis.
     linewidth : float or None, optional
@@ -581,6 +581,12 @@ def plot_available_energy(
         norm,
         linewidth,
     )
+
+    is_log = norm == "log" or isinstance(norm, colors.LogNorm)
+    omega_psi_color = setdefault(
+        omega_psi_color, "tab:purple" if is_log else "tab:brown"
+    )
+    omega_alpha_color = setdefault(omega_alpha_color, "tab:gray")
 
     if include_drifts:
         _add_drifts(ax, well_data, omega_psi_color, omega_alpha_color)

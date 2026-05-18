@@ -10,8 +10,8 @@ import h5py
 import numpy as np
 from termcolor import colored
 
-from desc.backend import register_pytree_node
-from desc.utils import equals
+from desc.backend import jax, register_pytree_node
+from desc.utils import equals, warnif
 
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .pickle_io import PickleReader, PickleWriter
@@ -126,6 +126,17 @@ class _AutoRegisterPytree(type):
 
             for key, val in obj.__dict__.items():
                 if key in static_attrs:
+                    if isinstance(val, jax.Array):
+                        warnif(
+                            True,
+                            UserWarning,
+                            "Detected jax array in _static_attrs. Converting "
+                            f"{key} attribute of the {obj.__class__.__name__} "
+                            "to numpy array to prevent stalling code. ",
+                        )
+                        val = np.asarray(val)
+                        # update the obj attribute in place to prevent future warnings
+                        obj.__dict__.update({key: val})
                     aux_data += [(key, _make_hashable(val))]
                 else:
                     children[key] = val

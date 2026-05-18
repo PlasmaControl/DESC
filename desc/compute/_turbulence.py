@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import numpy as np
 from jax.lax import stop_gradient
 from orthax import orthgauss
 from orthax.recurrence import GeneralizedLaguerre
@@ -49,7 +50,7 @@ def _ae(G, G_ω_α, G_ω_ψ, data, energy):
 def _energy_quad(num_energy):
     # The energy integral has weight E^(5/2) exp(-E), but
     # ω_* = η_T + C / E makes AE(E) ~ C/E for E near zero.
-    return orthgauss(num_energy, GeneralizedLaguerre(1.5))
+    return stop_gradient(orthgauss(num_energy, GeneralizedLaguerre(np.array([1.5]))))
 
 
 @register_compute_fun(
@@ -116,7 +117,6 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     energy_quad = kwargs.get("energy_quad", None)
     if energy_quad is None:
         energy_quad = _energy_quad(kwargs.get("num_energy", 16))
-    energy, energy_weight = stop_gradient(energy_quad)
 
     angle = parse_argname_change(
         kwargs.get("angle", kwargs.get("theta", None)),
@@ -142,11 +142,11 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
                         loop=opts.loop,
                     ),
                     data,
-                    energy,
+                    energy_quad[0],
                 )
                 .sum(-1)
                 .mean(-3)
-                .dot(energy_weight)
+                .dot(energy_quad[1])
             )
 
         pitch_inv, weight = Bounce2D.pitch_quad(

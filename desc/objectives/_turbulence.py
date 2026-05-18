@@ -1,7 +1,5 @@
 """Objectives for turbulence proxies."""
 
-from jax.lax import stop_gradient
-
 from desc.backend import jnp
 from desc.compute._turbulence import _energy_quad
 from desc.compute.utils import _compute as compute_fun
@@ -140,8 +138,8 @@ class AvailableEnergy(_Objective):
 
         """
         Options._build_objective(self, "available energy", eta=-1)
-        self._constants["energy_quad"] = stop_gradient(
-            _energy_quad(self._hyperparam.pop("num_energy"))
+        self._constants["energy_quad"] = _energy_quad(
+            self._hyperparam.pop("num_energy")
         )
         super().build(use_jit=use_jit, verbose=verbose)
 

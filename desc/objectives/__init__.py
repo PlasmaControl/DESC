@@ -81,6 +81,7 @@ from .linear_objectives import (
     FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
+    FixIonDensity,
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,

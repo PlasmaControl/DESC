@@ -3064,7 +3064,7 @@ def plot_boozer_modes(  # noqa: C901
     basis = get_transforms(
         "|B|_mn_B",
         obj=eq,
-        grid=CustomGridFlux(np.array([])),
+        grid=CustomGridFlux(np.array([[0, 0, 0]])),
         M_booz=M_booz,
         N_booz=N_booz,
     )["B"].basis

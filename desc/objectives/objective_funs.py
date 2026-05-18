@@ -857,7 +857,7 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         vs = jnp.split(v[0], xs_splits, axis=-1)
         J = []
-        assert len(self.objectives) == len(self.constants)
+        assert len(self.objectives) == len(constants)
         # basic idea is we compute the jacobian of each objective wrt each thing
         # one by one, and assemble into big block matrix
         # if objective doesn't depend on a given thing, that part is set to 0.
@@ -1086,7 +1086,7 @@ class ObjectiveFunction(IOAble):
     def _get_deprecated_constants(self, constants=None):
         """Return constants and throw deprecation warning."""
         if constants is None:
-            constants = [None] * len(self.constants)
+            constants = [None] * len(self.objectives)
         else:
             warnif(
                 not all(c is None for c in constants),
@@ -1101,6 +1101,14 @@ class ObjectiveFunction(IOAble):
     @property
     def constants(self):
         """list: constant parameters for each sub-objective."""
+        warnif(
+            True,
+            FutureWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as self._constants.",
+        )
         return [obj.constants for obj in self.objectives]
 
     @property
@@ -1743,7 +1751,9 @@ class _Objective(IOAble, ABC):
     def _get_deprecated_constants(self, constants=None):
         """Return constants and throw deprecation warning."""
         if constants is None:
-            constants = self.constants
+            if hasattr(self, "_constants"):
+                return self._constants
+            return None
         else:
             warnif(
                 True,
@@ -1758,6 +1768,14 @@ class _Objective(IOAble, ABC):
     @property
     def constants(self):
         """dict: Constant parameters such as transforms and profiles."""
+        warnif(
+            True,
+            FutureWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as self._constants.",
+        )
         if hasattr(self, "_constants"):
             return self._constants
         return None

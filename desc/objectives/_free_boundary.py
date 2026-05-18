@@ -261,7 +261,7 @@ class VacuumBoundaryError(_Objective):
             args, args0, fse, f0se, **kwargs
         )
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -792,7 +792,7 @@ class BoundaryError(_Objective):
             args, args0, fse, f0se, **kwargs
         )
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = jnp.ones_like(f)
         else:

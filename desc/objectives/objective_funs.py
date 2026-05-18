@@ -1486,7 +1486,7 @@ class _Objective(IOAble, ABC):
 
     def _unscale(self, f_scaled, **kwargs):
         """Reverse of _scale."""
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = 1
         else:

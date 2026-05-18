@@ -439,7 +439,7 @@ def _ni_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["ion_density"],
     coordinates="r",
-    data=["ne", "ne_r", "Zeff", "Zeff_r", "Zeff_rr"],
+    data=["ne", "ne_r", "ne_rr", "Zeff", "Zeff_r", "Zeff_rr"],
 )
 def _ni_rr(params, transforms, profiles, data, **kwargs):
     if profiles["ion_density"] is not None:

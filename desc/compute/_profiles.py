@@ -521,7 +521,7 @@ def _Zeff_rr(params, transforms, profiles, data, **kwargs):
             transforms["grid"], params["Zeff_l"], dr=2
         )
     else:
-        data["Zeff_r"] = jnp.nan * data["0"]
+        data["Zeff_rr"] = jnp.nan * data["0"]
     return data
 
 

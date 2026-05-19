@@ -584,7 +584,7 @@ def plot_available_energy(
 
     is_log = norm == "log" or isinstance(norm, colors.LogNorm)
     omega_psi_color = setdefault(
-        omega_psi_color, "tab:purple" if is_log else "tab:brown"
+        omega_psi_color, "tab:purple" if is_log else "springgreen"
     )
     omega_alpha_color = setdefault(omega_alpha_color, "tab:gray")
 

@@ -26,7 +26,7 @@ import numpy as np
 from desc.backend import jax
 from desc.examples import get
 from desc.grid import LinearGrid
-from desc.objectives import AvailableEnergy, ObjectiveFunction
+from desc.objectives import EffectiveRipple, ObjectiveFunction
 
 eq = get("W7-X")
 rho = np.linspace(0.1, 1, 10)
@@ -35,7 +35,7 @@ grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 num_field_periods = 75
 obj = ObjectiveFunction(
     [
-        AvailableEnergy(
+        EffectiveRipple(
             eq,
             grid=grid,
             X=32,

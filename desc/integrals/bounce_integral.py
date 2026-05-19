@@ -375,11 +375,9 @@ class Bounce2D(_Bounce):
         batch_size=1,
         sparse=True,
     ):
-        """Compute function ``fun`` over phase space in batches.
+        """Compute function ``fun`` batched over flux surfaces.
 
-        This is a utility method to compute some function of bounce integrals
-        over the phase space efficiently. You may want to also JIT compile your
-        code which calls this utility method.
+        You may want to also JIT compile your code which calls this utility method.
 
         Examples
         --------
@@ -1420,16 +1418,13 @@ class Bounce1D(_Bounce):
         batch_size=1,
         sparse=True,
     ):
-        """Compute function ``fun`` over phase space in batches.
+        """Compute function ``fun`` batched over flux surfaces.
 
-        This is a utility method to compute some function of bounce integrals
-        over the phase space efficiently. You may want to also JIT compile your
-        code which calls this utility method.
+        You may want to also JIT compile your code which calls this utility method.
 
         Examples
         --------
-          * ``desc/compute/_old.py::_epsilon_32_1D``
-          * ``desc/compute/_old.py::_Gamma_c_1D``
+          * ``desc/compute/_old.py``
 
         Parameters
         ----------

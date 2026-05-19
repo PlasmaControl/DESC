@@ -7,7 +7,7 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.surface_integral import surface_integrals
-from ..utils import apply, parse_argname_change, safediv
+from ..utils import safediv
 from .data_index import register_compute_fun
 
 
@@ -78,28 +78,26 @@ def _dI_2(data, B, pitch):
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
-    [1] Evaluation of 1/ν neoclassical transport in stellarators.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-        https://doi.org/10.1063/1.873749.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
-        Equation 2.12.
+    References
+    ----------
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and M. F. Heyn,
+           "Evaluation of 1/ν neoclassical transport in stellarators,"
+           Phys. Plasmas 6, 4622-4632 (1999).
+           https://doi.org/10.1063/1.873749.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
+           differentiable bounce-averaging algorithm and its applications,"
+           Journal of Plasma Physics. Equation 2.12.
 
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
     # TODO: in future don't close over grid so that sharding works
     grid = transforms["grid"]
     opts = Options.guess(1, grid, **kwargs)
 
-    def eps_32(data):
+    def foreach_surface(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
-        def fun(pitch_inv):
+        def foreach(pitch_inv):
             I_1, I_2 = bounce.integrate(
                 [_dI_1, _dI_2],
                 pitch_inv,
@@ -115,7 +113,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**3,
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            * weight
+            / pitch_inv**3,
             axis=-1,
         )
 
@@ -124,12 +124,12 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         opts.num_field_periods / grid.NFP * 4 * 2**0.5
     )
     out = Bounce2D.batch(
-        eps_32,
-        apply(data, subset=("|grad(rho)|*kappa_g",)),
+        foreach_surface,
         data,
-        angle,
         grid,
-        opts.surf_batch_size,
+        angle=kwargs["angle"],
+        names=("|grad(rho)|*kappa_g",),
+        batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["effective ripple 3/2"] = scalar * (

@@ -2,8 +2,8 @@
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
-from desc.utils import warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 from .utils import errorif
@@ -48,6 +48,7 @@ class EffectiveRipple(_Objective):
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Effective ripple ε: "
+    _compute_fun = staticmethod(compute_fun)
 
     def __init__(
         self,
@@ -80,17 +81,7 @@ class EffectiveRipple(_Objective):
             ValueError,
             "Reverse mode should be used for the objective: EffectiveRipple.",
         )
-        try:
-            import jax_finufft  # noqa: F401
-        except Exception:
-            warnif(
-                nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed properly.\n"
-                "Setting parameter nufft_eps to zero.\n"
-                "Performance may be somewhat slower.\n",
-            )
-            nufft_eps = 0.0
-        nufft_eps = float(nufft_eps)
+        nufft_eps = check_nufft(nufft_eps)
 
         if target is None and bounds is None:
             target = 0.0
@@ -158,35 +149,4 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        if constants is None:
-            constants = self.constants
-        eq = self.things[0]
-
-        data = compute_fun(
-            eq, "iota", params, constants["transforms"], constants["profiles"]
-        )
-        delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
-            # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-8,
-        )[..., ::-1]
-
-        data = compute_fun(
-            eq,
-            "effective ripple",
-            params,
-            constants["transforms"],
-            constants["profiles"],
-            data,
-            angle=delta,
-            alpha=constants["alpha"],
-            quad=constants["quad"],
-            _vander=constants["_vander"],
-            **self._hyperparam,
-        )
-        return constants["transforms"]["grid"].compress(data["effective ripple"])
+        return Options._compute_objective(self, params, constants, "effective ripple")

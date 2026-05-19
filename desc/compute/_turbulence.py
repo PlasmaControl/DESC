@@ -11,7 +11,7 @@ from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
-from ..utils import apply, safediv
+from ..utils import safediv
 from ._fast_ion import _radial_drift
 from .data_index import register_compute_fun
 
@@ -84,9 +84,7 @@ def _energy_quad(num_energy):
     grid_requirement={"can_fft2": True},
     radial_scale="float : Multiplier for the radial correlation length.",
     binormal_scale="float : Multiplier for the binormal correlation length.",
-    num_energy=(
-        "int : Resolution for generalized Gauss-Laguerre quadrature over energy."
-    ),
+    num_energy="int : Resolution for generalized Laguerre quadrature over energy.",
     energy_quad="tuple : Nodes and weights for the energy quadrature.",
     **Options._doc,
 )
@@ -125,7 +123,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     def foreach_surface(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
-        def foreach_pitch(pitch_inv):
+        def foreach(pitch_inv):
             return (
                 _ae(
                     *bounce.integrate(
@@ -148,7 +146,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(foreach_pitch, pitch_inv, opts.pitch_batch_size)
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
             * weight
             / pitch_inv**2,
             axis=-1,
@@ -162,17 +160,17 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     )
     out = Bounce2D.batch(
         foreach_surface,
-        apply(data, subset=names),
         data,
-        kwargs["angle"],
         grid,
-        opts.surf_batch_size,
-        surface_data={
-            "ae grad(density)": radial_scale * safediv(data["ne_r"], data["ne"]),
+        angle=kwargs["angle"],
+        names=names,
+        rho_data={
+            "ae grad(density)": safediv(radial_scale * data["ne_r"], data["ne"]),
             "ae psi width": radial_scale * data["psi_r"],
-            "ae alpha width": binormal_scale * safediv(1.0, data["rho"]),
-            "ae grad(temperature)": radial_scale * safediv(data["Te_r"], data["Te"]),
+            "ae alpha width": safediv(binormal_scale, data["rho"]),
+            "ae grad(temperature)": safediv(radial_scale * data["Te_r"], data["Te"]),
         },
+        batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
 

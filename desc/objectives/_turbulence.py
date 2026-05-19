@@ -3,8 +3,8 @@
 from desc.backend import jnp
 from desc.compute._turbulence import _energy_quad
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
-from desc.utils import warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 from .utils import errorif
@@ -28,6 +28,17 @@ class AvailableEnergy(_Objective):
     __doc__ = (
         __doc__.rstrip()
         + doc_bounce
+        + """
+    num_energy : int
+        Resolution for generalized Laguerre quadrature over energy.
+        Default is 16.
+    radial_scale : float
+        Multiplier for the radial correlation length.
+        Default is 1.0.
+    binormal_scale : float
+        Multiplier for the binormal correlation length.
+        Default is 1.0.
+        """.rstrip()
         + collect_docs(
             target_default="``target=0``.",
             bounds_default="``target=0``.",
@@ -42,6 +53,7 @@ class AvailableEnergy(_Objective):
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Available energy: "
+    _compute_fun = staticmethod(compute_fun)
 
     def __init__(
         self,
@@ -64,30 +76,20 @@ class AvailableEnergy(_Objective):
         num_well=None,
         num_quad=32,
         num_pitch=65,
-        num_energy=16,
-        radial_scale=1.0,
-        binormal_scale=1.0,
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=1e-7,
         spline=True,
+        num_energy=16,
+        radial_scale=1.0,
+        binormal_scale=1.0,
     ):
         errorif(
             deriv_mode == "fwd",
             ValueError,
             "Reverse mode should be used for the objective: AvailableEnergy.",
         )
-        try:
-            import jax_finufft  # noqa: F401
-        except Exception:
-            warnif(
-                nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed properly.\n"
-                "Setting parameter nufft_eps to zero.\n"
-                "Performance may be somewhat slower.\n",
-            )
-            nufft_eps = 0.0
-        nufft_eps = float(nufft_eps)
+        nufft_eps = check_nufft(nufft_eps)
 
         if target is None and bounds is None:
             target = 0.0
@@ -161,36 +163,4 @@ class AvailableEnergy(_Objective):
             Available energy as a function of the flux surface label.
 
         """
-        if constants is None:
-            constants = self.constants
-        eq = self.things[0]
-
-        data = compute_fun(
-            eq, "iota", params, constants["transforms"], constants["profiles"]
-        )
-        delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
-            # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-8,
-        )[..., ::-1]
-
-        data = compute_fun(
-            eq,
-            "available energy",
-            params,
-            constants["transforms"],
-            constants["profiles"],
-            data,
-            angle=delta,
-            alpha=constants["alpha"],
-            quad=constants["quad"],
-            energy_quad=constants.get("energy_quad", None),
-            _vander=constants["_vander"],
-            **self._hyperparam,
-        )
-        return constants["transforms"]["grid"].compress(data["available energy"])
+        return Options._compute_objective(self, params, constants, "available energy")

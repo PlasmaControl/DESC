@@ -36,6 +36,7 @@ except Exception as e:
         )
 
 from desc.backend import jax, jnp
+from desc.utils import warnif
 
 _JF_BUG = True
 """https://github.com/flatironinstitute/jax-finufft/issues/158.
@@ -44,6 +45,21 @@ _JF_BUG = True
    https://github.com/flatironinstitute/jax-finufft/pull/216
    then bump min version and set this to False.
 """
+
+
+def check_nufft(nufft_eps):
+    """Set NUFFT tolerance to zero when jax-finufft is unavailable."""
+    try:
+        import jax_finufft  # noqa: F401
+    except Exception:
+        warnif(
+            nufft_eps >= 1e-14,
+            msg="\njax-finufft is not installed properly.\n"
+            "Setting parameter nufft_eps to zero.\n"
+            "Performance may be somewhat slower.\n",
+        )
+        nufft_eps = 0.0
+    return float(nufft_eps)
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):

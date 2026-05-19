@@ -311,7 +311,14 @@ def fft_grid_data(p):
         return {}
 
     # TODO: can automate this later to add omnigeneity, boozer transform, etc.
-    fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco", "available energy"]
+    fft_names = [
+        "effective ripple",
+        "Gamma_c",
+        "Gamma_c Velasco",
+        "Gamma_delta",
+        "Gamma_alpha",
+        "available energy",
+    ]
 
     eq = get("W7-X")
     rho = np.linspace(0, 1, 10)

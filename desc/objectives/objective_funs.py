@@ -360,7 +360,7 @@ class ObjectiveFunction(IOAble):
         to manually choose a chunk_size if an OOM error is experienced in this case.
     mpi : MPI object, optional
         MPI communicator. Required when using multiple devices.
-    rank_per_objective : ndarray, optional
+    rank_per_objective : array-like of int, optional
         Specifies which rank each objective should run on. This will allow for multiple
         objectives to run on the same rank. By default, each objective will be assigned
         to different ranks.
@@ -435,6 +435,7 @@ class ObjectiveFunction(IOAble):
                 if rank_per_objective is not None
                 else np.arange(len(objectives))
             )
+            self._rank_per_objective = np.asarray(self._rank_per_objective)
             errorif(
                 np.unique(self._rank_per_objective).size < desc_config["num_device"],
                 ValueError,
@@ -452,7 +453,6 @@ class ObjectiveFunction(IOAble):
                 f"ranks {self._rank_per_objective} and device ids {device_ids} are "
                 "not compatible.",
             )
-            # TODO: should this throw an Error?
             warnif(
                 max(device_ids) != desc_config["num_device"] - 1,
                 UserWarning,

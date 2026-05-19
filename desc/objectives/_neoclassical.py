@@ -152,7 +152,7 @@ class EffectiveRipple(_Objective):
             ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
+            Defaults to ``self.constants``. (Deprecated)
 
         Returns
         -------
@@ -160,8 +160,7 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(

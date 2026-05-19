@@ -161,8 +161,7 @@ class AvailableEnergy(_Objective):
             Available energy as a function of the flux surface label.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(

@@ -1195,7 +1195,7 @@ def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     " \\frac{d\\zeta}{|B^{\\zeta}|}",
     units="m / T",
     units_long="Meter / tesla",
-    description="Mean field-line transit integral in toroidal coordinate",
+    description="(Mean) proper length of field line(s)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -1224,7 +1224,7 @@ def _fieldline_length(data, transforms, profiles, **kwargs):
     " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
     units_long="inverse webers",
-    description="Mean field-line transit integral over volume Jacobian",
+    description="(Mean) proper length over volume of field line(s)"
     dim=1,
     params=[],
     transforms={"grid": []},

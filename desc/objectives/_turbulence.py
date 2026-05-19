@@ -106,13 +106,13 @@ class AvailableEnergy(_Objective):
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "num_energy": num_energy,
-            "radial_scale": radial_scale,
-            "binormal_scale": binormal_scale,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
             "spline": spline,
+            "num_energy": num_energy,
+            "radial_scale": radial_scale,
+            "binormal_scale": binormal_scale,
         }
 
         super().__init__(

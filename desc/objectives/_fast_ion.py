@@ -201,18 +201,19 @@ class GammaLoss(_Objective):
 
     """
 
+    _bounce_doc_head, _bounce_doc_marker, _bounce_doc_tail = doc_bounce.partition(
+        "    Parameters\n    ----------\n"
+    )
     __doc__ = (
         __doc__.rstrip()
-        + doc_bounce.split("Parameters\n----------\n", maxsplit=1)[0]
+        + _bounce_doc_head
+        + _bounce_doc_marker
         + """
-    Parameters
-    ----------
     kind : {"delta", "alpha"}
         Select ``"delta"`` for Γ_δ or ``"alpha"`` for Γ_α.
         """.rstrip()
         + "\n"
-        + doc_bounce.split("Parameters\n----------\n", maxsplit=1)[1]
-        + "\n"
+        + _bounce_doc_tail
         + """
     gamma_threshold : float
         Threshold for superbanana classification. Must be in ``(0,1)``.
@@ -261,11 +262,11 @@ class GammaLoss(_Objective):
         num_well=None,
         num_quad=32,
         num_pitch=65,
-        gamma_threshold=0.2,
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=1e-7,
         spline=True,
+        gamma_threshold=0.2,
     ):
         errorif(
             kind not in ("delta", "alpha"),

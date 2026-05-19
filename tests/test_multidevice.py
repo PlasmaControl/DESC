@@ -448,14 +448,61 @@ def test_multidevice_eq_optimize():
 
     eq = get("precise_QA")
     eq.change_resolution(M=3, N=2, M_grid=6, N_grid=4)
+    eq_no_mpi = eq.copy()
 
     # create two grids with different rho values, this will effectively separate
     # the quasisymmetry objective into two parts
-    gM = eq.M_grid
-    gN = eq.N_grid
+    gM = 2
+    gN = 2
     grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2], sym=True)
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
+
+    # we will fix some modes as usual
+    k = 1
+    sRm = eq.surface.R_basis.modes
+    sZm = eq.surface.Z_basis.modes
+    R_modes = np.vstack(([0, 0, 0], sRm[np.max(np.abs(sRm), 1) > k, :]))
+    Z_modes = sZm[np.max(np.abs(sZm), 1) > k, :]
+
+    verbose = 3 if rank == 0 else 0
+    maxiter = 3
+
+    ### Single device optimization
+
+    # when using parallel objectives, the user needs to supply the device_id
+    obj1 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid1)
+    obj2 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid2)
+    obj3 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid3)
+    obj4 = AspectRatio(eq=eq_no_mpi, target=8, weight=100)
+    objs = [obj1, obj2, obj3, obj4]
+
+    objective = ObjectiveFunction(objs, deriv_mode="blocked")
+    objective.build(verbose=verbose)
+
+    constraints = (
+        ForceBalance(eq=eq_no_mpi),
+        FixBoundaryR(eq=eq_no_mpi, modes=R_modes),
+        FixBoundaryZ(eq=eq_no_mpi, modes=Z_modes),
+        FixPressure(eq=eq_no_mpi),
+        FixPsi(eq=eq_no_mpi),
+        FixCurrent(eq=eq_no_mpi),
+    )
+    optimizer = Optimizer("proximal-lsq-exact")
+    eq_no_mpi.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer=optimizer,
+        maxiter=maxiter,
+        verbose=verbose,
+    )
+    x1_no_mpi = objective.x(eq_no_mpi)
+    f1_no_mpi = objective.compute_scalar(x1_no_mpi)
+
+    ### Multidevice optimization
+
+    # Wait for everyone to finish their work before proceeding
+    MPI.COMM_WORLD.Barrier()
 
     # when using parallel objectives, the user needs to supply the device_id
     obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
@@ -469,12 +516,6 @@ def test_multidevice_eq_optimize():
     )
     objective.build()
 
-    # we will fix some modes as usual
-    k = 1
-    sRm = eq.surface.R_basis.modes
-    sZm = eq.surface.Z_basis.modes
-    R_modes = np.vstack(([0, 0, 0], sRm[np.max(np.abs(sRm), 1) > k, :]))
-    Z_modes = sZm[np.max(np.abs(sZm), 1) > k, :]
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq, modes=R_modes),
@@ -492,8 +533,12 @@ def test_multidevice_eq_optimize():
                 objective=objective,
                 constraints=constraints,
                 optimizer=optimizer,
-                maxiter=1,
+                maxiter=maxiter,
                 verbose=3,
             )
-            f1 = objective.compute_scalar(objective.x(eq))
+            x1 = objective.x(eq)
+            f1 = objective.compute_scalar(x1)
             assert f1 < f0
+
+            np.testing.assert_allclose(x1_no_mpi, x1, atol=1e-8, rtol=1e-8)
+            np.testing.assert_allclose(f1_no_mpi, f1, atol=1e-8, rtol=1e-8)

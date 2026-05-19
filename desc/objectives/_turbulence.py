@@ -16,7 +16,7 @@ class AvailableEnergy(_Objective):
     The available-energy metric estimates the dimensionless free energy available
     to trapped electrons from density and temperature profile gradients.
 
-    The objective is presented in [1], and the computation is presented in [2]_.
+    The objective is presented in [1]_, and the computation is presented in [2]_.
 
     References
     ----------

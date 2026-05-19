@@ -2141,8 +2141,7 @@ class Options(NamedTuple):
     @staticmethod
     def _compute_objective(o, params, constants, key):
         """Compute an objective built with ``Options._build_objective``."""
-        if constants is None:
-            constants = o.constants
+        constants = o._get_deprecated_constants(constants)
         eq = o.things[0]
 
         data = o._compute_fun(

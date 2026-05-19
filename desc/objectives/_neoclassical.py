@@ -141,7 +141,7 @@ class EffectiveRipple(_Objective):
             ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
+            Defaults to ``self.constants``. (Deprecated)
 
         Returns
         -------

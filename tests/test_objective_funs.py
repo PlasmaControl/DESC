@@ -125,9 +125,9 @@ class TestObjectiveFunction:
         def test(f, thing, grid=None, compress=False):
             obj = GenericObjective(f, thing=thing, grid=grid)
             obj.build()
-            val = thing.compute(f, grid=obj.constants["transforms"]["grid"])[f]
+            val = thing.compute(f, grid=obj._constants["transforms"]["grid"])[f]
             if compress:
-                val = obj.constants["transforms"]["grid"].compress(val)
+                val = obj._constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
                 obj.compute(thing.params_dict),
                 val,
@@ -469,19 +469,19 @@ class TestObjectiveFunction:
         # precise_QA should have lower QA than QH
         obj = QuasisymmetryTwoTerm(eq=eq1, helicity=helicity_QA)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq1))
         obj.helicity = helicity_QH
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq1), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq1))
         assert f1 < f2
 
         # precise_QH should have lower QH than QA
         obj = QuasisymmetryTwoTerm(eq=eq2, helicity=helicity_QH)
         obj.build()
-        f1 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f1 = obj.compute_scalar(*obj.xs(eq2))
         obj.helicity = helicity_QA
         obj.build()
-        f2 = obj.compute_scalar(*obj.xs(eq2), constants=obj.constants)
+        f2 = obj.compute_scalar(*obj.xs(eq2))
         assert f1 < f2
 
     @pytest.mark.unit
@@ -529,7 +529,7 @@ class TestObjectiveFunction:
             obj.build()
             DMerc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(
-                len(DMerc), obj.constants["transforms"]["grid"].num_rho
+                len(DMerc), obj._constants["transforms"]["grid"].num_rho
             )
             np.testing.assert_allclose(DMerc, 0)
 
@@ -557,7 +557,7 @@ class TestObjectiveFunction:
             obj.build()
             magnetic_well = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(
-                len(magnetic_well), obj.constants["transforms"]["grid"].num_rho
+                len(magnetic_well), obj._constants["transforms"]["grid"].num_rho
             )
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -2168,14 +2168,18 @@ class TestObjectiveFunction:
         lam = eq.compute(
             ["ideal ballooning lambda"],
             Grid.create_meshgrid(
-                [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
+                [
+                    obj._constants["rho"],
+                    obj._constants["alpha"],
+                    obj._constants["zeta"],
+                ],
                 coordinates="raz",
             ),
         )["ideal ballooning lambda"]
         lambda0, w0, w1 = (
-            obj.constants["lambda0"],
-            obj.constants["w0"],
-            obj.constants["w1"],
+            obj._constants["lambda0"],
+            obj._constants["w0"],
+            obj._constants["w1"],
         )
         lam = (lam - lambda0) * (lam >= lambda0)
         lam = w0 * lam.sum(axis=(-1, -2, -3)) + w1 * lam.max(axis=(-1, -2, -3))
@@ -2487,8 +2491,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         obji.target,
         iota(
-            obji.constants["transforms"]["grid"].nodes[
-                obji.constants["transforms"]["grid"].unique_rho_idx
+            obji._constants["transforms"]["grid"].nodes[
+                obji._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2497,8 +2501,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objs.target,
         shear(
-            objs.constants["transforms"]["grid"].nodes[
-                objs.constants["transforms"]["grid"].unique_rho_idx
+            objs._constants["transforms"]["grid"].nodes[
+                objs._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2507,8 +2511,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objc.target,
         current(
-            objc.constants["transforms"]["grid"].nodes[
-                objc.constants["transforms"]["grid"].unique_rho_idx
+            objc._constants["transforms"]["grid"].nodes[
+                objc._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2517,8 +2521,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objm.bounds[0],
         merc(
-            objm.constants["transforms"]["grid"].nodes[
-                objm.constants["transforms"]["grid"].unique_rho_idx
+            objm._constants["transforms"]["grid"].nodes[
+                objm._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2528,16 +2532,16 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objw.bounds[0],
         merc(
-            objw.constants["transforms"]["grid"].nodes[
-                objw.constants["transforms"]["grid"].unique_rho_idx
+            objw._constants["transforms"]["grid"].nodes[
+                objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
     np.testing.assert_allclose(
         objw.bounds[1],
         well(
-            objw.constants["transforms"]["grid"].nodes[
-                objw.constants["transforms"]["grid"].unique_rho_idx
+            objw._constants["transforms"]["grid"].nodes[
+                objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2546,8 +2550,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objp.target,
         pres(
-            objp.constants["transforms"]["grid"].nodes[
-                objp.constants["transforms"]["grid"].unique_rho_idx
+            objp._constants["transforms"]["grid"].nodes[
+                objp._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
     )
@@ -2556,8 +2560,8 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objp.target,
         2
-        * objp.constants["transforms"]["grid"].nodes[
-            objp.constants["transforms"]["grid"].unique_rho_idx, 0
+        * objp._constants["transforms"]["grid"].nodes[
+            objp._constants["transforms"]["grid"].unique_rho_idx, 0
         ],
     )
 
@@ -3214,18 +3218,18 @@ def test_objective_target_bounds():
     assert bounds[1][1] == 3 * asp.weight
     np.testing.assert_allclose(
         bounds[0][2:],
-        (-1 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (-1 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
     np.testing.assert_allclose(
         bounds[1][2:],
-        (2 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (2 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
 
     assert target[0] == 3 / vol.normalization * vol.weight
     assert target[1] == 2.5 * asp.weight
     np.testing.assert_allclose(
         target[2:],
-        (0.5 / fbl.normalization * fbl.weight * fbl.constants["quad_weights"]),
+        (0.5 / fbl.normalization * fbl.weight * fbl._constants["quad_weights"]),
     )
 
     assert weight[0] == 2
@@ -4765,3 +4769,19 @@ def test_jax_static_attrs():
     # once a compiled function is called, the attribute should become
     # a numpy array to prevent future warnings
     assert isinstance(obj._arr, np.ndarray)
+
+
+@pytest.mark.unit
+def test_deprecated_constants():
+    """Test that using deprecated constants raises a warning."""
+    eq = get("DSHAPE")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=1, M=1, L_grid=2, M_grid=2)
+    obj = ForceBalance(eq)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(*obj.xs(), constants=obj.constants)
+    obj = ObjectiveFunction(obj)
+    obj.build()
+    with pytest.warns(FutureWarning, match="constants is deprecated"):
+        _ = obj.compute_scaled_error(obj.x(), constants=obj.constants)

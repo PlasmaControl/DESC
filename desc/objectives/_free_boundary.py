@@ -213,7 +213,7 @@ class VacuumBoundaryError(_Objective):
             Dictionary of field parameters, if field is not fixed.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -224,8 +224,7 @@ class VacuumBoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -262,7 +261,7 @@ class VacuumBoundaryError(_Objective):
             args, args0, fse, f0se, **kwargs
         )
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -686,7 +685,7 @@ class BoundaryError(_Objective):
             Dictionary of field parameters, if field is not fixed.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -698,8 +697,7 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         source_data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._eq_data_keys,
@@ -794,7 +792,7 @@ class BoundaryError(_Objective):
             args, args0, fse, f0se, **kwargs
         )
         # try to do weighted mean if possible
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -1048,7 +1046,7 @@ class BoundaryErrorNESTOR(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1056,8 +1054,7 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary magnetic pressure error (T^2*m^2).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

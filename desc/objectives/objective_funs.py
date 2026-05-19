@@ -596,8 +596,7 @@ class ObjectiveFunction(IOAble):
 
     def _compute_op(self, x, constants=None, op="compute_unscaled"):
         """Helper function to compute various operations."""
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         params = self.unpack_state(x)
         assert len(params) == len(constants) == len(self.objectives)
         f = jnp.concatenate(
@@ -698,7 +697,7 @@ class ObjectiveFunction(IOAble):
         x0 : ndarray, optional
             Initial state vector before optimization.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
         fse : ndarray, optional
             Output of self.compute_scaled_error(x), if available
             through last iteration of the optimization.
@@ -712,8 +711,7 @@ class ObjectiveFunction(IOAble):
             Dictionary mapping objective titles/names to residual values.
         """
         out = {}
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # Compute scaled error array (majority of optimizers use this)
         # to avoid recompiling individual objectives.
@@ -842,8 +840,7 @@ class ObjectiveFunction(IOAble):
     @jit
     def grad(self, x, constants=None):
         """Compute gradient vector of self.compute_scalar wrt x."""
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         return jnp.atleast_1d(
             Derivative(self.compute_scalar, mode="grad")(x, constants).squeeze()
         )
@@ -851,8 +848,7 @@ class ObjectiveFunction(IOAble):
     @jit
     def hess(self, x, constants=None):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         return jnp.atleast_2d(
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
@@ -876,8 +872,7 @@ class ObjectiveFunction(IOAble):
         return self.jvp_unscaled(v, x, constants).T
 
     def _jvp_blocked(self, v, x, constants=None, op="scaled"):
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         v = ensure_tuple(v)
         if len(v) > 1:
             # using blocked for higher order derivatives is a pain, and only really
@@ -888,7 +883,7 @@ class ObjectiveFunction(IOAble):
         xs = jnp.split(x, xs_splits)
         vs = jnp.split(v[0], xs_splits, axis=-1)
         J = []
-        assert len(self.objectives) == len(self.constants)
+        assert len(self.objectives) == len(constants)
         # basic idea is we compute the jacobian of each objective wrt each thing
         # one by one, and assemble into big block matrix
         # if objective doesn't depend on a given thing, that part is set to 0.
@@ -1080,31 +1075,31 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "bfgs", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scalar(x, self.constants).block_until_ready()
+            _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Gradient compilation time")
-            _ = self.grad(x, self.constants).block_until_ready()
+            _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
         if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
-            _ = self.hess(x, self.constants).block_until_ready()
+            _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled_error(x, self.constants).block_until_ready()
+            _ = self.compute_scaled_error(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
 
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled_error(x, self.constants).block_until_ready()
+            _ = self.jac_scaled_error(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -1114,9 +1109,32 @@ class ObjectiveFunction(IOAble):
             timer.disp("Total compilation time")
         self._compiled = True
 
+    def _get_deprecated_constants(self, constants=None):
+        """Return constants and throw deprecation warning."""
+        if constants is None:
+            constants = [None] * len(self.objectives)
+        else:
+            warnif(
+                not all(c is None for c in constants),
+                FutureWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as obj._constants.",
+            )
+        return constants
+
     @property
     def constants(self):
         """list: constant parameters for each sub-objective."""
+        warnif(
+            True,
+            FutureWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as self._constants.",
+        )
         return [obj.constants for obj in self.objectives]
 
     @property
@@ -1463,7 +1481,7 @@ class _Objective(IOAble, ABC):
 
     def _scale(self, f, *args, **kwargs):
         """Apply weighting, normalization etc."""
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = jnp.ones_like(f)
         else:
@@ -1473,7 +1491,7 @@ class _Objective(IOAble, ABC):
 
     def _unscale(self, f_scaled, **kwargs):
         """Reverse of _scale."""
-        constants = kwargs.get("constants", self.constants)
+        constants = self._get_deprecated_constants(kwargs.get("constants", None))
         if constants is None:
             w = 1
         else:
@@ -1716,7 +1734,7 @@ class _Objective(IOAble, ABC):
 
         else:
             # try to do weighted mean if possible
-            constants = kwargs.get("constants", self.constants)
+            constants = self._get_deprecated_constants(kwargs.get("constants", None))
             if constants is None:
                 w = jnp.ones_like(f_unscaled)
             else:
@@ -1829,9 +1847,34 @@ class _Objective(IOAble, ABC):
             )
         return tuple([t.params_dict for t in things])
 
+    def _get_deprecated_constants(self, constants=None):
+        """Return constants and throw deprecation warning."""
+        if constants is None:
+            if hasattr(self, "_constants"):
+                return self._constants
+            return None
+        else:
+            warnif(
+                True,
+                FutureWarning,
+                "constants is deprecated and will be removed in a future "
+                "release. Users should not include constants in the arguments "
+                "of their objective compute methods. Instead declare all the "
+                "constants in the build method and use as self._constants.",
+            )
+        return constants
+
     @property
     def constants(self):
         """dict: Constant parameters such as transforms and profiles."""
+        warnif(
+            True,
+            FutureWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as self._constants.",
+        )
         if hasattr(self, "_constants"):
             return self._constants
         return None

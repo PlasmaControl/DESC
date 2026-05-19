@@ -147,6 +147,12 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
         GPU id to use. Default is None. Supported only when num_device is 1.
     num_device : int
         number of devices to use. Default is 1.
+    mpi : MPI object, optional
+        MPI communicator. Used to get distinct CPU information for multi-node
+        jobs where each rank runs on different node. Communicator is not used
+        if the backend is ``'gpu'``. Supplying communicator doesn't
+        change the computations, it can only change the output of
+        ``desc.backend.print_backend_info()``.
 
     """
     config["kind"] = kind

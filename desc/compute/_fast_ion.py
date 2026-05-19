@@ -10,8 +10,8 @@ References
        energetic ions in stellarators," Nucl. Fusion 61, 116059 (2021).
        https://doi.org/10.1088/1741-4326/ac2994.
 .. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
-       bounce-averaging algorithm and its applications," Journal of Plasma
-       Physics.
+       bounce-averaging algorithm and its applications,"
+       J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
 """
 
@@ -133,9 +133,7 @@ def _poloidal_drift_secular_wb_inverse(data, B, pitch):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Nemov et al.
-
-    References [1] and [3].
+    """Equation 61 of [1]_.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -227,9 +225,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Nemov et al.
-
-    References [1] and [3].
+    """Equation 50 of [1]_.
 
     Returns
     -------
@@ -341,11 +337,7 @@ def _periodic_interval_mask(start, stop, dist):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
-    """Fast ion confinement proxy as defined by Velasco et al.
-
-    References [2] and [3]. Equation 20 of [2].
-
-    """
+    """Equation 20 of [2]_."""
     # noqa: unused dependency
     data["Gamma_c Velasco"] = _Gamma(
         _reduction_Gamma_c, params, transforms, profiles, data, **kwargs
@@ -363,7 +355,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Fast ion prompt-loss proxy (scalar) "
+    description="Fast ion superbanana proxy (scalar) "
     "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
@@ -385,11 +377,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_delta(params, transforms, profiles, data, **kwargs):
-    """Fast ion prompt-loss proxy as defined by Velasco et al.
-
-    References [2] and [3]. Equation 22 of [2].
-
-    """
+    """Equation 22 of [2]_."""
     # noqa: unused dependency
     data["Gamma_delta"] = _Gamma(
         _reduction_Gamma_delta, params, transforms, profiles, data, **kwargs
@@ -410,7 +398,7 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     ),
     units="~",
     units_long="None",
-    description="Fast ion prompt-loss proxy (scalar) "
+    description="Fast ion superbanana proxy (scalar) "
     "as defined by Velasco et al. (doi:10.1088/1741-4326/ac2994)",
     dim=1,
     params=[],
@@ -432,11 +420,7 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
-    """Fast ion prompt-loss proxy as defined by Velasco et al.
-
-    References [2] and [3]. Equation 25 of [2].
-
-    """
+    """Equation 25 of [2_]."""
     # noqa: unused dependency
     data["Gamma_alpha"] = _Gamma(
         _reduction_Gamma_alpha, params, transforms, profiles, data, **kwargs

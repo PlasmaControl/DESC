@@ -19,15 +19,17 @@ class EffectiveRipple(_Objective):
     coefficients in the banana regime. To ensure low neoclassical transport,
     a stellarator is typically optimized so that ε < 10⁻².
 
+    The objective is presented in [1]_, [2]_, and the computation is presented in [2]_.
+
     References
     ----------
-    [1] Evaluation of 1/ν neoclassical transport in stellarators.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-        https://doi.org/10.1063/1.873749.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and M. F. Heyn,
+           "Evaluation of 1/ν neoclassical transport in stellarators,"
+           Phys. Plasmas 6, 4622-4632 (1999).
+           https://doi.org/10.1063/1.873749.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 

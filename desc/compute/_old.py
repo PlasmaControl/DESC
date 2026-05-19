@@ -69,10 +69,10 @@ _bounce1D_doc = {
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
-def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
+def _old_epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
-    References [1].
+    References [1]_.
 
     """
     # noqa: unused dependency
@@ -125,7 +125,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     data=["old effective ripple 3/2"],
     public=False,
 )
-def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
+def _old_effective_ripple(params, transforms, profiles, data, **kwargs):
     """Proxy for neoclassical transport in the banana regime."""
     data["old effective ripple"] = data["old effective ripple 3/2"] ** (2 / 3)
     return data
@@ -167,10 +167,10 @@ def _effective_ripple_1D(params, transforms, profiles, data, **kwargs):
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
-def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
+def _old_Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
-    References [2]. Equation 61 of [2].
+    Equation 61 of reference [2]_.
 
     """
     # noqa: unused dependency
@@ -239,10 +239,10 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     **_bounce1D_doc,
 )
 @partial(jit, static_argnames=["num_well", "num_quad", "num_pitch", "surf_batch_size"])
-def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
+def _old_Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
-    References [3]. Equation 20 of [3].
+    Equation 20 of reference [3]_.
 
     """
     # noqa: unused dependency

@@ -36,7 +36,7 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
 
 
 def _dI_1(data, B, pitch):
-    """Integrand of Unalmis et al. eqaution 2.9 with |∂ψ/∂ρ| removed."""
+    """Integrand of eqaution 2.9 in [2]_ with |∂ψ/∂ρ| removed."""
     return (
         jnp.sqrt(jnp.abs(1 - pitch * B))
         * (4 / (pitch * B) - 1)
@@ -46,7 +46,7 @@ def _dI_1(data, B, pitch):
 
 
 def _dI_2(data, B, pitch):
-    """Integrand of Unalmis et al. equation 2.10."""
+    """Integrand of equation 2.10 in [2]_."""
     return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
@@ -84,9 +84,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
            "Evaluation of 1/ν neoclassical transport in stellarators,"
            Phys. Plasmas 6, 4622-4632 (1999).
            https://doi.org/10.1063/1.873749.
-    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
-           differentiable bounce-averaging algorithm and its applications,"
-           Journal of Plasma Physics. Equation 2.12.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
     # noqa: unused dependency

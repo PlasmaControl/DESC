@@ -174,13 +174,13 @@ class Bounce2D(_Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    The pseudo-spectral formulation follows [1]_.
+    The computation is breifly presented in [1]_.
 
     References
     ----------
-    .. [1] K. Unalmis et al., "Spectrally accurate, reverse-mode
-           differentiable bounce-averaging algorithm and its applications,"
-           Journal of Plasma Physics.
+    .. [1] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     Examples
     --------

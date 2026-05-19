@@ -23,21 +23,21 @@ class GammaC(_Objective):
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.
 
+    The objective is presented in [1]_ and [2]_, and the computation is
+    presented in [3]_.
+
     References
     ----------
-    [1] Poloidal motion of trapped particle orbits in real-space coordinates.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-        Phys. Plasmas 1 May 2008; 15 (5): 052501.
-        https://doi.org/10.1063/1.2912456.
-        Equation 61.
-
-    [2] A model for the fast evaluation of prompt losses of energetic ions in
-        stellarators. Equation 16.
-        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-        https://doi.org/10.1088/1741-4326/ac2994.
-
-    [3] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and G. O. Leitold,
+           "Poloidal motion of trapped particle orbits in real-space coordinates,"
+           Phys. Plasmas 15, 052501 (2008). https://doi.org/10.1063/1.2912456.
+    .. [2] J. L. Velasco, I. Calvo, S. Mulas, E. Sanchez, F. I. Parra, A. Cappa,
+           and the W7-X Team, "A model for the fast evaluation of prompt losses of
+           energetic ions in stellarators," Nucl. Fusion 61, 116059 (2021).
+           https://doi.org/10.1088/1741-4326/ac2994.
+    .. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 
@@ -186,18 +186,18 @@ class GammaLoss(_Objective):
     value as lost if there exists an outward superbanana somewhere on the flux
     surface, or model II, ``"alpha"``, which classifies a subset of alpha values
     as lost between consecutive inward and outward superbanana branches.
-    If not specified, the default field-line labels are 16 points uniformly spaced
-    on ``[0, (1 + eq.sym) * pi)`` and ``num_field_periods`` is ``eq.NFP + 2``.
+
+    The objective is presented in [1]_, and the computation is presented in [2]_.
 
     References
     ----------
-    [1] A model for the fast evaluation of prompt losses of energetic ions in
-        stellarators. Equations 22 and 25.
-        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-        https://doi.org/10.1088/1741-4326/ac2994.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] J. L. Velasco, I. Calvo, S. Mulas, E. Sanchez, F. I. Parra, A. Cappa,
+           and the W7-X Team, "A model for the fast evaluation of prompt losses of
+           energetic ions in stellarators," Nucl. Fusion 61, 116059 (2021).
+           https://doi.org/10.1088/1741-4326/ac2994.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 

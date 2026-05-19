@@ -98,9 +98,9 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     References
     ----------
     .. [1] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
-    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
-           differentiable bounce-averaging algorithm and its applications,"
-           Journal of Plasma Physics.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     Parameters
     ----------

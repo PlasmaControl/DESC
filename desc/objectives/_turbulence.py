@@ -16,12 +16,14 @@ class AvailableEnergy(_Objective):
     The available-energy metric estimates the dimensionless free energy available
     to trapped electrons from density and temperature profile gradients.
 
+    The objective is presented in [1], and the computation is presented in [2]_.
+
     References
     ----------
-    [1] Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 

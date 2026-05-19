@@ -19,7 +19,7 @@ from desc.objectives.utils import (
     factorize_linear_constraints,
     remove_fixed_parameters,
 )
-from desc.utils import Timer, errorif, get_instance, setdefault
+from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
 from .utils import f_where_x
 
@@ -268,7 +268,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -288,7 +288,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -308,7 +308,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -328,7 +328,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -347,7 +347,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -367,7 +367,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -397,7 +397,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -415,7 +415,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -433,7 +433,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Reduced state vector that satisfies linear constraints.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -459,7 +459,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._jvp(v, x_reduced, constants, "jvp_scaled")
@@ -474,7 +474,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._jvp(v, x_reduced, constants, "jvp_scaled_error")
@@ -489,7 +489,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._jvp(v, x_reduced, constants, "jvp_unscaled")
@@ -509,7 +509,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._vjp(v, x_reduced, constants, "vjp_scaled")
@@ -524,7 +524,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._vjp(v, x_reduced, constants, "vjp_scaled_error")
@@ -539,7 +539,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x_reduced : ndarray
             Optimization variables with linear constraints removed.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         return self._vjp(v, x_reduced, constants, "vjp_unscaled")
@@ -968,7 +968,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -976,7 +976,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled(xopt, constants[0])
 
@@ -988,7 +988,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -996,7 +996,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled_error(xopt, constants[0])
 
@@ -1008,7 +1008,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1027,7 +1027,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1035,7 +1035,7 @@ class ProximalProjection(ObjectiveFunction):
             Objective function value(s).
 
         """
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_unscaled(xopt, constants[0])
 
@@ -1047,7 +1047,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1065,7 +1065,7 @@ class ProximalProjection(ObjectiveFunction):
         # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
         # We get the part in [] using the _get_tangent method.
         v = jnp.eye(x.shape[0])
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
         jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
         tangents = batched_vectorize(
@@ -1088,7 +1088,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1107,7 +1107,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1126,7 +1126,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1145,7 +1145,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             State vector.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         Returns
         -------
@@ -1166,7 +1166,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             Optimization variables.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         op = "scaled"
@@ -1183,7 +1183,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             Optimization variables.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         op = "scaled_error"
@@ -1200,7 +1200,7 @@ class ProximalProjection(ObjectiveFunction):
         x : ndarray
             Optimization variables.
         constants : list
-            Constant parameters passed to sub-objectives.
+            Constant parameters passed to sub-objectives. (Deprecated)
 
         """
         op = "unscaled"
@@ -1223,7 +1223,7 @@ class ProximalProjection(ObjectiveFunction):
         # First we will compute the tangent direction (see _get_tangent for details),
         # then we will compute the Jacobian.
         v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, self.constants)
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
 
         # we don't need to divide this part into blocked and batched because
@@ -1296,6 +1296,14 @@ class ProximalProjection(ObjectiveFunction):
     @property
     def constants(self):
         """list: constant parameters for each sub-objective."""
+        warnif(
+            True,
+            FutureWarning,
+            "constants is deprecated and will be removed in a future "
+            "release. Users should not include constants in the arguments "
+            "of their objective compute methods. Instead declare all the "
+            "constants in the build method and use as obj._constants.",
+        )
         return [self._objective.constants, self._constraint.constants]
 
     def __getattr__(self, name):
@@ -1363,7 +1371,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     # Note: This function is very similar to _jvp_blocked in ObjectiveFunction with
     # some naming differences to account for ProximalProjection.
     out = []
-    for k, (obj, const) in enumerate(zip(objective.objectives, objective.constants)):
+    for k, obj in enumerate(objective.objectives):
         thing_idx = objective._things_per_objective_idx[k]
         xi = [xgs[i] for i in thing_idx]
         vi = [vgs[i] for i in thing_idx]
@@ -1374,10 +1382,10 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             # obj might not allow fwd mode, so compute full rev mode jacobian
             # and do matmul manually. This is slightly inefficient, but usually
             # when rev mode is used, dim_f <<< dim_x, so its not too bad.
-            Ji = getattr(obj, "jac_" + op)(*xi, constants=const)
+            Ji = getattr(obj, "jac_" + op)(*xi)
             outi = jnp.array([Jii @ vii.T for Jii, vii in zip(Ji, vi)]).sum(axis=0)
             out.append(outi)
         else:
-            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi, constants=const).T
+            outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi).T
             out.append(outi)
     return jnp.concatenate(out).T

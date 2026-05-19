@@ -232,7 +232,7 @@ class TestBootstrapCompute:
         """
         # Make up some arbitrary functions to use for input:
         ne = PowerSeriesProfile(1.0e20 * np.array([1, -0.8]), modes=[0, 4])
-        ni = PowerSeriesProfile(0.9e20 * np.array([1, -0.8]), modes=[0, 4])
+        ni = PowerSeriesProfile(0.9e20 * np.array([1, -0.3]), modes=[0, 2])
         Te = PowerSeriesProfile(25e3 * np.array([1, -0.9]), modes=[0, 2])
         Ti = PowerSeriesProfile(20e3 * np.array([1, -0.9]), modes=[0, 2])
         Zeff = PowerSeriesProfile(np.array([1.5, 0.5]), modes=[0, 2])
@@ -255,8 +255,8 @@ class TestBootstrapCompute:
         Te_rho = Te(rho)
         Ti_rho = Ti(rho)
         Zeff_rho = Zeff(rho)
-        ni_rho = ne_rho / Zeff_rho
         d_ne_d_s = ne(rho, dr=1) / (2 * rho)
+        d_ni_d_s = ni(rho, dr=1) / (2 * rho)
         d_Te_d_s = Te(rho, dr=1) / (2 * rho)
         d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
@@ -377,7 +377,6 @@ class TestBootstrapCompute:
         pi = ni_rho * Ti_J
         p = pe + pi
         Rpe = pe / p
-        d_ni_d_s = d_ne_d_s / Zeff_rho
         d_p_d_s = (
             ne_rho * d_Te_d_s_J
             + Te_J * d_ne_d_s
@@ -434,6 +433,9 @@ class TestBootstrapCompute:
         )
         np.testing.assert_allclose(
             J_dot_B_data["nu_i_star"], nu_i, atol=atol, rtol=rtol
+        )
+        np.testing.assert_allclose(
+            J_dot_B_data["d_ni_d_s"], d_ni_d_s, atol=atol, rtol=rtol
         )
         np.testing.assert_allclose(J_dot_B_data["X31"], X31, atol=atol, rtol=rtol)
         np.testing.assert_allclose(J_dot_B_data["L31"], L31, atol=atol, rtol=rtol)

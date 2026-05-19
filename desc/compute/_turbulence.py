@@ -11,7 +11,7 @@ from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
-from ..utils import apply, parse_argname_change, safediv
+from ..utils import apply, safediv
 from ._fast_ion import _radial_drift
 from .data_index import register_compute_fun
 
@@ -99,9 +99,10 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
 
     References
     ----------
-    [1] Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
+           differentiable bounce-averaging algorithm and its applications,"
+           Journal of Plasma Physics.
 
     Parameters
     ----------
@@ -118,19 +119,13 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     if energy_quad is None:
         energy_quad = _energy_quad(kwargs.get("num_energy", 16))
 
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)),
-        kwargs,
-        "theta",
-        "angle",
-    )
     grid = transforms["grid"]
     opts = Options.guess(-1, grid, **kwargs)
 
-    def available_energy(data):
+    def foreach_surface(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
 
-        def fun(pitch_inv):
+        def foreach_pitch(pitch_inv):
             return (
                 _ae(
                     *bounce.integrate(
@@ -153,7 +148,9 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
+            batch_map(foreach_pitch, pitch_inv, opts.pitch_batch_size)
+            * weight
+            / pitch_inv**2,
             axis=-1,
         )
 
@@ -164,10 +161,10 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         "|grad(psi)|*kappa_g",
     )
     out = Bounce2D.batch(
-        available_energy,
+        foreach_surface,
         apply(data, subset=names),
         data,
-        angle,
+        kwargs["angle"],
         grid,
         opts.surf_batch_size,
         surface_data={

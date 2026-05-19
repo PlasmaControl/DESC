@@ -297,11 +297,11 @@ class GammaLoss(_Objective):
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "gamma_threshold": gamma_threshold,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
             "spline": spline,
+            "gamma_threshold": gamma_threshold,
         }
         self._key = {"delta": "Gamma_delta", "alpha": "Gamma_alpha"}[kind]
         self._print_value_fmt = {"delta": "Γ_δ: ", "alpha": "Γ_α: "}[kind]

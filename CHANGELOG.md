@@ -39,6 +39,10 @@ Breaking Changes
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 
+Deprecations
+
+- `constants` argument of `compute`, `jvp`, `jac`, `grad` and `hess` methods (including all of their variants) to all objective classes (including `ObjectiveFunction` and wrappers) is deprecated and will be removed in a future release. This argument was not necessary, and the code will still work if user doesn't pass it. Users should update their custom objectives for this change. In addition, `constants` property of the `ObjectiveFunction` and all sub-classes of `_Objective` is deprecated.
+
 
 v0.17.1
 -------

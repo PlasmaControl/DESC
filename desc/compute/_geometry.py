@@ -1224,7 +1224,7 @@ def _fieldline_length(data, transforms, profiles, **kwargs):
     " \\frac{d\\zeta}{|B^{\\zeta} \\sqrt g|}",
     units="1 / Wb",
     units_long="inverse webers",
-    description="(Mean) proper length over volume of field line(s)"
+    description="(Mean) proper length over volume of field line(s)",
     dim=1,
     params=[],
     transforms={"grid": []},

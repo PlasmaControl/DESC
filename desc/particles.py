@@ -417,6 +417,9 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         rho0, theta0, zeta0, xi0, E, m, q = map(
             jnp.asarray, (rho0, theta0, zeta0, xi0, E, m, q)
         )
+        rho0, theta0, zeta0, xi0, E, m, q = map(
+            jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
+        )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
         )

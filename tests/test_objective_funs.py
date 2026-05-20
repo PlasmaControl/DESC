@@ -2190,8 +2190,8 @@ class TestObjectiveFunction:
                 obj._inner_keys,
                 grid=grid,
                 params=eq.params_dict,
-                transforms=obj.constants["eq_transforms"],
-                profiles=obj.constants["profiles"],
+                transforms=obj._constants["eq_transforms"],
+                profiles=obj._constants["profiles"],
                 override_grid=False,
             )
         field_params = {
@@ -2201,19 +2201,19 @@ class TestObjectiveFunction:
             "Y": field.Y,
         }
         outer_data = {key: inner[key] for key in obj._reuseable_keys}
-        outer_data["interpolator"] = obj.constants["interpolator"]
+        outer_data["interpolator"] = obj._constants["interpolator"]
         outer_data["B0*n"] = obj._phi_sec_dot_n(field_params, inner)
         outer, _ = field.compute(
             "|K_vc|^2",
             grid=grid,
             params=field_params,
-            transforms=obj.constants["eval_transforms"],
+            transforms=obj._constants["eval_transforms"],
             data=outer_data,
             override_grid=False,
             xtol=obj._xtol,
             maxiter=obj._maxiter,
             solve_method=solve_method,
-            Phi_0=obj.constants["initial_guess"],
+            Phi_0=obj._constants["initial_guess"],
             chunk_size=obj._chunk_size,
             B_coil_chunk_size=obj._B_coil_chunk_size,
             B_coil=B,

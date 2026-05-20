@@ -133,8 +133,8 @@ class _CoilObjective(_Objective):
                 params_tree["coils"] contains a nested list of 0s representing
                 individual coils and the coilsets to which they belong. Similarly,
                 params_tree["nodes"] lists the grid nodes associated with each coil.
-                params_tree["coil_mask"] contains the indices in [0,self._num_coils]
-                for which the corresponding weight is positive. Similarly,
+                params_tree["coilset_mask"] contains the indices in
+                [0,self._num_coils-1] for which the corresponding weight is positive.
                 params_tree["objective_mask"] contains the indices in [0,self._dim_f-1]
                 for which the corresponding weight is positive. If all weights are
                 positive (i.e. no masking needed), contains default slice(None).
@@ -168,15 +168,15 @@ class _CoilObjective(_Objective):
             self._coilset_tree = {
                 "coils": tree[0],
                 "nodes": tree[1],
-                "coil_mask": np.arange(self._num_coils),
+                "coilset_mask": np.arange(self._num_coils),
                 "objective_mask": slice(None),
             }
             if np.any([w == 0 for w in tree_leaves(self._weight)]):
-                coil_mask = self._coilset_broadcast(self._weight)
+                coilset_mask = self._coilset_broadcast(self._weight)
                 objective_mask = self._coilset_broadcast(
                     self._weight, self._broadcast_input
                 )
-                self._coilset_tree["coil_mask"] = np.nonzero(coil_mask)[0]
+                self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask)[0]
                 self._coilset_tree["objective_mask"] = np.nonzero(objective_mask)[0]
 
         coil = self.things[0]
@@ -222,11 +222,13 @@ class _CoilObjective(_Objective):
 
         if self._broadcast_input == "Node":
             grid_nodes_unmasked = [
-                grid[i].num_nodes for i in self._coilset_tree["coil_mask"]
+                grid[i].num_nodes for i in self._coilset_tree["coilset_mask"]
             ]
             self._dim_f = np.sum(grid_nodes_unmasked)
         else:
-            coils_unmasked = np.ones(self._num_coils)[self._coilset_tree["coil_mask"]]
+            coils_unmasked = np.ones(self._num_coils)[
+                self._coilset_tree["coilset_mask"]
+            ]
             self._dim_f = len(coils_unmasked)
 
         # map grid to the same structure as coil and then remove unnecessary members
@@ -335,6 +337,8 @@ class _CoilObjective(_Objective):
             Float inputs are returned unchanged, and list inputs are
             expanded to size self._dim_f.
         """
+        assert target in ["Node", "Coil"]
+
         # No need to broadcast if input is a scalar
         arr_flat = tree_leaves(x)
         if len(arr_flat) == 1:

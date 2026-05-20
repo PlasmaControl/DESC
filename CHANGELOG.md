@@ -36,6 +36,11 @@ Deprecations
 
 - `constants` argument of `compute`, `jvp`, `jac`, `grad` and `hess` methods (including all of their variants) to all objective classes (including `ObjectiveFunction` and wrappers) is deprecated and will be removed in a future release. This argument was not necessary, and the code will still work if user doesn't pass it. Users should update their custom objectives for this change. In addition, `constants` property of the `ObjectiveFunction` and all sub-classes of `_Objective` is deprecated.
 
+Breaking Changes
+
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom
+  subclasses with `_broadcast_input="Node"` that previously used `coilset_mask` should
+  switch to `objective_mask`.
 
 v0.17.1
 -------
@@ -74,6 +79,10 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
+- Adds support for optimization targeting individual coils in a coilset.
+  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+  - Able to set weights to zero, excluding certain coils from the objective.
+
 
 Bug Fixes
 
@@ -109,10 +118,6 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
-- Adds support for optimization targeting individual coils in a coilset.
-  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
-  - Able to set weights to zero, excluding certain coils from the objective.
-
 
 
 Bug Fixes

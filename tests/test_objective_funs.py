@@ -4571,6 +4571,7 @@ def test_deflation_operator_all_Nones():
 @pytest.mark.unit
 def test_coil_objective_input(DummyMixedCoilSet):
     """Tests broadcasting for inputs to _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     weight = [1.0, 2.0, 3.0, 4.0]
@@ -4602,7 +4603,9 @@ def test_coil_objective_input(DummyMixedCoilSet):
 @pytest.mark.unit
 def test_coil_objective_indices(DummyMixedCoilSet):
     """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [single coil, single coil, single coil]
     coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
 
     weight = [0, [1, 0, 0], 1, 1]
@@ -4613,6 +4616,7 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     compA = objA.compute_scaled_error(None)
     compB = objB.compute_scaled_error(None)
     np.testing.assert_allclose(compA, compB, atol=1e-13)
+    assert objA.dim_f == 3
 
     objC = CoilCurvature(coilsetA, weight=weight, normalize=False)
     objD = CoilCurvature(coilsetB, normalize=False)
@@ -4621,15 +4625,24 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     compC = objC.compute_scaled_error(None)
     compD = objD.compute_scaled_error(None)
     np.testing.assert_allclose(compC, compD, atol=1e-13)
+    assert objC.dim_f == objD.dim_f
 
-    objE = CoilTorsion(coilsetA, weight=weight)
+    objE = CoilTorsion(coilsetA, weight=weight, normalize=False)
+    objF = CoilTorsion(coilsetB, normalize=False)
     objE.build()
+    objF.build()
+    compE = objE.compute_scaled_error(None)
+    compF = objF.compute_scaled_error(None)
+    np.testing.assert_allclose(compE, compF, atol=1e-13)
+    assert objE.dim_f == objF.dim_f
 
 
 @pytest.mark.unit
 def test_coil_objective_setter(DummyMixedCoilSet):
     """Tests setters for _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [coilset with 1 coil, coilset with 3 coils]
     coilsetB = MixedCoilSet((coilsetA[0], coilsetA[1]), check_intersection=False)
 
     objA = CoilLength(coilsetA)

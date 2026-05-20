@@ -25,11 +25,11 @@ from desc.backend import jit, jnp
 from ..integrals.bounce_integral import Bounce1D, Options
 from ..utils import safediv
 from ._fast_ion import (
-    _gamma_c,
     _gamma_c_data,
     _poloidal_drift_periodic,
     _radial_drift,
     _radial_drift_wb_inverse,
+    _reduction_Gamma_c,
     _v_tau,
 )
 from ._neoclassical import _dI_1, _dI_2
@@ -88,7 +88,7 @@ def _old_epsilon_32(params, transforms, profiles, data, **kwargs):
             [_dI_1, _dI_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
         )
         return jnp.sum(
-            safediv(I_1**2, I_2).sum(-1).mean(-2) * weight / pitch_inv**3,
+            safediv(I_1**2, I_2).sum(-1).mean(-2) * (weight / pitch_inv**3),
             axis=-1,
         )
 
@@ -191,13 +191,14 @@ def _old_Gamma_c(params, transforms, profiles, data, **kwargs):
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
             points,
         )
-        gamma_c = _gamma_c(
-            radial,
-            poloidal,
-            bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
-        )
         return jnp.sum(
-            (v_tau * gamma_c**2).sum(-1).mean(-2) * weight / pitch_inv**2,
+            _reduction_Gamma_c(
+                v_tau,
+                radial,
+                poloidal
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
+            )
+            * (weight / pitch_inv**2),
             axis=-1,
         )
 
@@ -268,9 +269,7 @@ def _old_Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             num_well=num_well,
         )
         return jnp.sum(
-            (v_tau * _gamma_c(radial, poloidal) ** 2).sum(-1).mean(-2)
-            * weight
-            / pitch_inv**2,
+            _reduction_Gamma_c(v_tau, radial, poloidal) * (weight / pitch_inv**2),
             axis=-1,
         )
 

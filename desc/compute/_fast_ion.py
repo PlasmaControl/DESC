@@ -151,7 +151,6 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-2, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def foreach(pitch_inv):
             points = bounce.points(pitch_inv, opts.num_well)
@@ -162,20 +161,20 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
             )
-            gamma_c = _gamma_c(
+            return _reduction_Gamma_c(
+                v_tau,
                 radial,
-                poloidal,
-                bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
+                poloidal
+                * bounce.interp_to_argmin(data["|grad(rho)|*|e_alpha|r,p|"], points),
             )
-            return (v_tau * gamma_c**2).sum(-1).mean(-2)
 
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
             batch_map(foreach, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**2,
+            * (weight / pitch_inv**2),
             axis=-1,
         )
 
@@ -267,42 +266,44 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _reduction_Gamma_c(v_tau, radial, poloidal, _):
+def _reduction_Gamma_c(v_tau, radial, poloidal, opts=None):
     return (v_tau * _gamma_c(radial, poloidal) ** 2).sum(-1).mean(-2)
 
 
 def _reduction_Gamma_delta(v_tau, radial, poloidal, opts):
     v_tau = v_tau.mean(-3)
-    outward_superbanana = safediv(radial, jnp.abs(poloidal)).max(-3) > opts.thresh
+    outward_superbanana = (radial > (opts.thresh * jnp.abs(poloidal))).any(-3)
     return (v_tau * outward_superbanana).sum(-1)
 
 
 def _reduction_Gamma_alpha(v_tau, radial, poloidal, opts):
-    drift_ratio = safediv(radial, jnp.abs(poloidal))
-    outward = drift_ratio > opts.thresh
-    inward = drift_ratio < -opts.thresh
+    thresh = opts.thresh * jnp.abs(poloidal)
+    alpha_out = radial > thresh
+    alpha_in = radial < -thresh
 
-    dist = (opts.alpha[None, :] - opts.alpha[:, None]) % (2 * jnp.pi)
+    # dist[i,j] is the right-handed distance along unit circle from alpha[i] to alpha[j]
+    dist = (opts.alpha - opts.alpha[:, None]) % (2 * jnp.pi)
     loss_cone = jnp.where(
         poloidal >= 0,
-        _periodic_interval_mask(inward, outward, dist),
-        _periodic_interval_mask(outward, inward, dist),
+        _loss_cone(alpha_in, alpha_out, dist),
+        _loss_cone(alpha_out, alpha_in, dist),
     )
-    loss_cone = outward.any(-3, keepdims=True) & (
-        ~inward.any(-3, keepdims=True) | loss_cone
+    loss_cone = alpha_out.any(-3, keepdims=True) & (
+        loss_cone | ~alpha_in.any(-3, keepdims=True)
     )
     return (v_tau * loss_cone).sum(-1).mean(-2)
 
 
-def _periodic_interval_mask(start, stop, dist):
-    """Mask points in intervals from ``start`` to the next ``stop`` in alpha."""
-    start = jnp.moveaxis(start, -3, -1)
-    stop = jnp.moveaxis(stop, -3, -1)
+def _loss_cone(start, stop, dist):
+    start = start.swapaxes(-3, -1)
+    stop = stop.swapaxes(-3, -1)
 
-    stop_dist = jnp.where(stop[..., None, :], dist, jnp.inf)
-    nearest_stop = stop_dist.min(-1)[..., :, None]
-    interval = start[..., :, None] & jnp.isfinite(nearest_stop) & (dist <= nearest_stop)
-    return jnp.moveaxis(interval.any(-2), -1, -3)
+    first_stop = jnp.where(stop[..., None, :], dist, jnp.inf).min(-1, keepdims=True)
+    # loss_cone[..., start alpha, test alpha] answers:
+    # For this start branch, is that test alpha between the start and its next stop?
+    loss_cone = start[..., None] & jnp.isfinite(first_stop) & (dist <= first_stop)
+    # Is that test alpha in any loss cone?
+    return loss_cone.any(-2).swapaxes(-3, -1)
 
 
 @register_compute_fun(
@@ -433,7 +434,6 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def foreach(pitch_inv):
             return reduction(
@@ -454,10 +454,10 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
             batch_map(foreach, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**2,
+            * (weight / pitch_inv**2),
             axis=-1,
         )
 

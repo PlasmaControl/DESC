@@ -121,7 +121,6 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def foreach(pitch_inv):
             return (
@@ -145,10 +144,10 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
             batch_map(foreach, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**2,
+            * (weight / pitch_inv**2),
             axis=-1,
         )
 

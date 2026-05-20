@@ -95,7 +95,6 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(1, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
         def foreach(pitch_inv):
             I_1, I_2 = bounce.integrate(
@@ -107,15 +106,15 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
-        # B₀ has units of λ⁻¹.
-        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
+        # B₀ has units of λ⁻¹.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         return jnp.sum(
             batch_map(foreach, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**3,
+            * (weight / pitch_inv**3),
             axis=-1,
         )
 

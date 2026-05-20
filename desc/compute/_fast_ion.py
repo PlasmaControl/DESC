@@ -21,6 +21,7 @@ from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.quad_utils import _LossCone
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
@@ -161,7 +162,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
                 ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],
                 points,
             )
-            return _reduction_Gamma_c(
+            return _reduction_gamma_c(
                 v_tau,
                 radial,
                 poloidal
@@ -266,44 +267,35 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def _reduction_Gamma_c(v_tau, radial, poloidal, opts=None):
+def _reduction_gamma_c(v_tau, radial, poloidal, opts=None):
     return (v_tau * _gamma_c(radial, poloidal) ** 2).sum(-1).mean(-2)
 
 
-def _reduction_Gamma_delta(v_tau, radial, poloidal, opts):
+def _reduction_gamma_delta(v_tau, radial, poloidal, opts):
     v_tau = v_tau.mean(-3)
-    outward_superbanana = (radial > (opts.thresh * jnp.abs(poloidal))).any(-3)
+    outward_superbanana = (radial > opts.thresh * jnp.abs(poloidal)).any(-3)
     return (v_tau * outward_superbanana).sum(-1)
 
 
-def _reduction_Gamma_alpha(v_tau, radial, poloidal, opts):
+def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1):
     thresh = opts.thresh * jnp.abs(poloidal)
-    alpha_out = radial > thresh
-    alpha_in = radial < -thresh
+    outward_score = radial - thresh
+    inward_score = -radial - thresh
 
     # dist[i,j] is the right-handed distance along unit circle from alpha[i] to alpha[j]
     dist = (opts.alpha - opts.alpha[:, None]) % (2 * jnp.pi)
+    da = 2 * jnp.pi / opts.alpha.size
     loss_cone = jnp.where(
         poloidal >= 0,
-        _loss_cone(alpha_in, alpha_out, dist),
-        _loss_cone(alpha_out, alpha_in, dist),
+        _LossCone.indicator(inward_score, outward_score, dist, da, order=order),
+        _LossCone.indicator(outward_score, inward_score, dist, da, order=order),
     )
-    loss_cone = alpha_out.any(-3, keepdims=True) & (
-        loss_cone | ~alpha_in.any(-3, keepdims=True)
+    has_alpha_out = (outward_score > 0).any(-3, keepdims=True)
+    has_alpha_in = (inward_score > 0).any(-3, keepdims=True)
+    loss_cone = (has_alpha_out & has_alpha_in) * loss_cone + (
+        has_alpha_out & ~has_alpha_in
     )
     return (v_tau * loss_cone).sum(-1).mean(-2)
-
-
-def _loss_cone(start, stop, dist):
-    start = start.swapaxes(-3, -1)
-    stop = stop.swapaxes(-3, -1)
-
-    first_stop = jnp.where(stop[..., None, :], dist, jnp.inf).min(-1, keepdims=True)
-    # loss_cone[..., start alpha, test alpha] answers:
-    # For this start branch, is that test alpha between the start and its next stop?
-    loss_cone = start[..., None] & jnp.isfinite(first_stop) & (dist <= first_stop)
-    # Is that test alpha in any loss cone?
-    return loss_cone.any(-2).swapaxes(-3, -1)
 
 
 @register_compute_fun(
@@ -341,7 +333,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Equation 20 of [2]_."""
     # noqa: unused dependency
     data["Gamma_c Velasco"] = _Gamma(
-        _reduction_Gamma_c, params, transforms, profiles, data, **kwargs
+        _reduction_gamma_c, params, transforms, profiles, data, **kwargs
     )
     return data
 
@@ -381,7 +373,7 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     """Equation 22 of [2]_."""
     # noqa: unused dependency
     data["Gamma_delta"] = _Gamma(
-        _reduction_Gamma_delta, params, transforms, profiles, data, **kwargs
+        _reduction_gamma_delta, params, transforms, profiles, data, **kwargs
     )
     return data
 
@@ -421,10 +413,10 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
-    """Equation 25 of [2_]."""
+    """Equation 25 of [2]_."""
     # noqa: unused dependency
     data["Gamma_alpha"] = _Gamma(
-        _reduction_Gamma_alpha, params, transforms, profiles, data, **kwargs
+        _reduction_gamma_alpha, params, transforms, profiles, data, **kwargs
     )
     return data
 

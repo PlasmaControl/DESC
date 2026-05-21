@@ -21,7 +21,7 @@ from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
-from ..integrals.quad_utils import _LossCone
+from ..integrals.quad_utils import _LossCone, _periodic_voronoi_widths
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
@@ -271,29 +271,134 @@ def _reduction_gamma_c(v_tau, radial, poloidal, opts=None):
     return (v_tau * _gamma_c(radial, poloidal) ** 2).sum(-1).mean(-2)
 
 
-def _reduction_gamma_delta(v_tau, radial, poloidal, opts):
+def _reshape_iota(iota, prefix_ndim, suffix_ndim):
+    """Reshape iota to broadcast over prefixed surface data."""
+    iota = jnp.asarray(iota)
+    if prefix_ndim == 0 or iota.size == 1:
+        return jnp.reshape(iota, ())
+    return jnp.reshape(iota, iota.shape + (1,) * suffix_ndim)
+
+
+def _well_field_period(points, num_field_periods, NFP):
+    """Locate each long-field-line well by its midpoint field period."""
+    z1, z2 = points
+    midpoint = 0.5 * (z1 + z2)
+    return (NFP * midpoint) // (2 * jnp.pi)
+
+
+def _local_well_rank(field_period, valid):
+    """Rank wells within each single-field-period segment."""
+    well = jnp.arange(field_period.shape[-1])
+    previous = well[None, :] < well[:, None]
+    return (
+        (field_period[..., None] == field_period[..., None, :])
+        & valid[..., None, :]
+        & previous
+    ).sum(-1)
+
+
+def _fold_wells_to_alpha(values, points, opts, iota, NFP):
+    """Treat long-field-line wells as denser alpha samples over one field period."""
+    z1, z2 = points
+    valid_well = z1 < z2
+    well_field_period = _well_field_period(points, opts.num_field_periods, NFP)
+    local_well_index = _local_well_rank(well_field_period, valid_well)
+    num_alpha, num_pitch, num_well = z1.shape[-3:]
+    prefix = z1.shape[:-3]
+
+    field_period_index = jnp.arange(opts.num_field_periods).reshape(
+        (1, opts.num_field_periods, 1, 1, 1)
+    )
+    local_well_slot = jnp.arange(num_well).reshape((1, 1, 1, 1, num_well))
+    # Axes: prefix, base alpha, field period, pitch, original well, local well.
+    well_to_alpha = (
+        valid_well[..., :, None, :, :, None]
+        & (well_field_period[..., :, None, :, :, None] == field_period_index)
+        & (local_well_index[..., :, None, :, :, None] == local_well_slot)
+    )
+
+    def fold(value):
+        value = jnp.where(well_to_alpha, value[..., :, None, :, :, None], 0.0).sum(-2)
+        return value.reshape(
+            prefix + (num_alpha * opts.num_field_periods, num_pitch, num_well)
+        )
+
+    alpha = jnp.reshape(opts.alpha, (1,) * len(prefix) + (num_alpha, 1))
+    alpha = alpha + _reshape_iota(iota, len(prefix), 2) * (
+        2 * jnp.pi / NFP
+    ) * jnp.arange(opts.num_field_periods)
+    alpha = (alpha % (2 * jnp.pi)).reshape(
+        prefix + (num_alpha * opts.num_field_periods, 1, 1)
+    )
+    mask = well_to_alpha.any(-2).reshape(
+        prefix + (num_alpha * opts.num_field_periods, num_pitch, num_well)
+    )
+    return (*[fold(value) for value in values], alpha, mask)
+
+
+def _alpha_weights(alpha, valid, period=2 * jnp.pi):
+    """Periodic Voronoi cell widths for a possibly nonuniform alpha grid."""
+    alpha = alpha.swapaxes(-3, -1)
+    valid = valid.swapaxes(-3, -1)
+    count = valid.sum(-1, keepdims=True)
+    _, _, width = _periodic_voronoi_widths(alpha, valid, period)
+    weight = jnp.where(count == 1, 1.0, safediv(width, period))
+    return jnp.where(valid, weight, 0.0).swapaxes(-3, -1)
+
+
+def _reduction_gamma_delta(v_tau, radial, poloidal, opts, alpha=None, mask=None):
+    alpha_out_candidate = radial > opts.thresh * jnp.abs(poloidal)
+    if alpha is not None:
+        weight = _alpha_weights(alpha, mask)
+        v_tau = (v_tau * weight).sum(-3)
+        has_alpha_out_candidate = alpha_out_candidate.any(-3)
+        return (v_tau * has_alpha_out_candidate).sum(-1)
+
     v_tau = v_tau.mean(-3)
-    outward_superbanana = (radial > opts.thresh * jnp.abs(poloidal)).any(-3)
-    return (v_tau * outward_superbanana).sum(-1)
+    has_alpha_out_candidate = alpha_out_candidate.any(-3)
+    return (v_tau * has_alpha_out_candidate).sum(-1)
 
 
-def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1):
-    thresh = opts.thresh * jnp.abs(poloidal)
-    outward_score = radial - thresh
-    inward_score = -radial - thresh
+def _reduction_gamma_alpha(
+    v_tau, radial, poloidal, opts, order=1, alpha=None, mask=None
+):
+    drift_threshold = opts.thresh * jnp.abs(poloidal)
+    alpha_out_candidate = radial - drift_threshold
+    alpha_in_candidate = -radial - drift_threshold
+
+    if alpha is not None:
+        loss_cone = jnp.where(
+            poloidal >= 0,
+            _LossCone.indicator_nonuniform(
+                alpha_in_candidate, alpha_out_candidate, alpha, mask, order=order
+            ),
+            _LossCone.indicator_nonuniform(
+                alpha_out_candidate, alpha_in_candidate, alpha, mask, order=order
+            ),
+        )
+        has_alpha_out_candidate = (alpha_out_candidate > 0).any(-3, keepdims=True)
+        has_alpha_in_candidate = (alpha_in_candidate > 0).any(-3, keepdims=True)
+        loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
+            has_alpha_out_candidate & ~has_alpha_in_candidate
+        )
+        return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum(-3).sum(-1)
 
     # dist[i,j] is the right-handed distance along unit circle from alpha[i] to alpha[j]
     dist = (opts.alpha - opts.alpha[:, None]) % (2 * jnp.pi)
     da = 2 * jnp.pi / opts.alpha.size
     loss_cone = jnp.where(
         poloidal >= 0,
-        _LossCone.indicator(inward_score, outward_score, dist, da, order=order),
-        _LossCone.indicator(outward_score, inward_score, dist, da, order=order),
+        _LossCone.indicator(
+            alpha_in_candidate, alpha_out_candidate, dist, da, order=order
+        ),
+        _LossCone.indicator(
+            alpha_out_candidate, alpha_in_candidate, dist, da, order=order
+        ),
     )
-    has_alpha_out = (outward_score > 0).any(-3, keepdims=True)
-    has_alpha_in = (inward_score > 0).any(-3, keepdims=True)
-    loss_cone = (has_alpha_out & has_alpha_in) * loss_cone + (
-        has_alpha_out & ~has_alpha_in
+    has_alpha_out_candidate = (alpha_out_candidate > 0).any(-3, keepdims=True)
+    has_alpha_in_candidate = (alpha_in_candidate > 0).any(-3, keepdims=True)
+    loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
+        has_alpha_out_candidate & ~has_alpha_in_candidate
     )
     return (v_tau * loss_cone).sum(-1).mean(-2)
 
@@ -373,7 +478,13 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     """Equation 22 of [2]_."""
     # noqa: unused dependency
     data["Gamma_delta"] = _Gamma(
-        _reduction_gamma_delta, params, transforms, profiles, data, **kwargs
+        _reduction_gamma_delta,
+        params,
+        transforms,
+        profiles,
+        data,
+        fold_alpha=True,
+        **kwargs,
     )
     return data
 
@@ -416,30 +527,44 @@ def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
     """Equation 25 of [2]_."""
     # noqa: unused dependency
     data["Gamma_alpha"] = _Gamma(
-        _reduction_gamma_alpha, params, transforms, profiles, data, **kwargs
+        _reduction_gamma_alpha,
+        params,
+        transforms,
+        profiles,
+        data,
+        fold_alpha=True,
+        **kwargs,
     )
     return data
 
 
-def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
+def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kwargs):
     grid = transforms["grid"]
     opts = Options.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
 
         def foreach(pitch_inv):
+            points = bounce.points(pitch_inv, opts.num_well) if fold_alpha else None
+            integrals = bounce.integrate(
+                [
+                    _v_tau,
+                    _radial_drift_wb_inverse,
+                    _poloidal_drift_secular_wb_inverse,
+                ],
+                pitch_inv,
+                data,
+                names,
+                points,
+                num_well=opts.num_well,
+            )
+            if fold_alpha:
+                *integrals, alpha, mask = _fold_wells_to_alpha(
+                    integrals, points, opts, data["iota"], grid.NFP
+                )
+                return reduction(*integrals, opts, alpha=alpha, mask=mask)
             return reduction(
-                *bounce.integrate(
-                    [
-                        _v_tau,
-                        _radial_drift_wb_inverse,
-                        _poloidal_drift_secular_wb_inverse,
-                    ],
-                    pitch_inv,
-                    data,
-                    names,
-                    num_well=opts.num_well,
-                ),
+                *integrals,
                 opts,
             )
 
@@ -464,4 +589,6 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
     scalar = jnp.pi**3 / 16 * grid.NFP / opts.num_field_periods
+    if fold_alpha:
+        scalar *= opts.num_field_periods
     return grid.expand(out) / data["V_psi"] * scalar

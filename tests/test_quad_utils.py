@@ -12,7 +12,7 @@ from scipy.special import roots_chebyu
 from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
-from desc.compute._fast_ion import _reduction_gamma_alpha
+from desc.compute._fast_ion import _fold_wells_to_alpha, _reduction_gamma_alpha
 from desc.integrals.quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
@@ -49,6 +49,43 @@ def _manufactured_gamma_alpha(num_alpha):
     ) / (2 * np.pi)
     opts = SimpleNamespace(alpha=alpha, thresh=thresh)
     return v_tau, radial, poloidal, opts, exact
+
+
+@pytest.mark.unit
+def test_fold_wells_to_alpha_midpoint_mapping():
+    """Test long-field-line wells fold to midpoint effective alpha labels."""
+    nfp = 2
+    period = 2 * jnp.pi / nfp
+    opts = SimpleNamespace(alpha=jnp.array([0.0, 1.0]), num_field_periods=3, thresh=0.2)
+    z1 = jnp.array([[[0.1, 0.5, period + 0.1]], [[0.2, 0.6, period + 0.2]]])
+    z2 = z1 + 0.1
+    values = [jnp.ones_like(z1)]
+
+    value, alpha, mask = _fold_wells_to_alpha(
+        values, (z1, z2), opts, jnp.array(0.4), nfp
+    )
+
+    expected_alpha = np.array(
+        [0.0, 0.4 * np.pi, 0.8 * np.pi, 1.0, 1.0 + 0.4 * np.pi, 1.0 + 0.8 * np.pi]
+    )
+    np.testing.assert_allclose(alpha[:, 0, 0], expected_alpha)
+    np.testing.assert_allclose(value[mask], 1.0)
+    np.testing.assert_array_equal(mask.sum(axis=0), np.array([[4, 2, 0]]))
+
+
+@pytest.mark.unit
+def test_nonuniform_loss_cone_matches_uniform_grid():
+    """Test nonuniform loss-cone path agrees on a uniform grid."""
+    v_tau, radial, poloidal, opts, _ = _manufactured_gamma_alpha(32)
+    alpha = jnp.asarray(opts.alpha[:, None, None])
+    mask = jnp.ones_like(radial, dtype=bool)
+
+    uniform = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1)
+    nonuniform = _reduction_gamma_alpha(
+        v_tau, radial, poloidal, opts, order=1, alpha=alpha, mask=mask
+    )
+
+    np.testing.assert_allclose(nonuniform, uniform)
 
 
 @pytest.mark.unit

@@ -14,6 +14,7 @@ from tests.test_plotting import tol_1d
 from desc.backend import jnp
 from desc.compute._fast_ion import _fold_wells_to_alpha, _reduction_gamma_alpha
 from desc.integrals.quad_utils import (
+    _LossCone,
     automorphism_arcsin,
     automorphism_sin,
     bijection_from_disc,
@@ -51,6 +52,11 @@ def _manufactured_gamma_alpha(num_alpha):
     return v_tau, radial, poloidal, opts, exact
 
 
+def _alpha_and_mask(opts, radial):
+    """Uniform alpha grid and valid mask for manufactured Gamma_alpha data."""
+    return jnp.asarray(opts.alpha[:, None, None]), jnp.ones_like(radial, dtype=bool)
+
+
 @pytest.mark.unit
 def test_fold_wells_to_alpha_midpoint_mapping():
     """Test long-field-line wells fold to midpoint effective alpha labels."""
@@ -75,14 +81,20 @@ def test_fold_wells_to_alpha_midpoint_mapping():
 
 @pytest.mark.unit
 def test_nonuniform_loss_cone_matches_uniform_grid():
-    """Test nonuniform loss-cone path agrees on a uniform grid."""
-    v_tau, radial, poloidal, opts, _ = _manufactured_gamma_alpha(32)
-    alpha = jnp.asarray(opts.alpha[:, None, None])
-    mask = jnp.ones_like(radial, dtype=bool)
+    """Test nonuniform loss-cone indicator agrees on a uniform grid."""
+    _, radial, poloidal, opts, _ = _manufactured_gamma_alpha(32)
+    alpha, mask = _alpha_and_mask(opts, radial)
+    thresh = opts.thresh * jnp.abs(poloidal)
+    alpha_out_candidate = radial - thresh
+    alpha_in_candidate = -radial - thresh
+    dist = (opts.alpha - opts.alpha[:, None]) % (2 * jnp.pi)
+    da = 2 * jnp.pi / opts.alpha.size
 
-    uniform = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1)
-    nonuniform = _reduction_gamma_alpha(
-        v_tau, radial, poloidal, opts, order=1, alpha=alpha, mask=mask
+    uniform = _LossCone.indicator(
+        alpha_in_candidate, alpha_out_candidate, dist, da, order=1
+    )
+    nonuniform = _LossCone.indicator_nonuniform(
+        alpha_in_candidate, alpha_out_candidate, alpha, mask, order=1
     )
 
     np.testing.assert_allclose(nonuniform, uniform)
@@ -97,8 +109,13 @@ def test_loss_cone_convergence():
     highs = []
     for num in num_alpha:
         v_tau, radial, poloidal, opts, exact = _manufactured_gamma_alpha(num)
-        lo = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=0).item()
-        hi = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1).item()
+        alpha, mask = _alpha_and_mask(opts, radial)
+        lo = _reduction_gamma_alpha(
+            v_tau, radial, poloidal, opts, alpha, mask, order=0
+        ).item()
+        hi = _reduction_gamma_alpha(
+            v_tau, radial, poloidal, opts, alpha, mask, order=1
+        ).item()
         lowes.append(abs(lo - exact))
         highs.append(abs(hi - exact))
     lowes, highs = np.asarray(lowes), np.asarray(highs)

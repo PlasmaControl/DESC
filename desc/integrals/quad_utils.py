@@ -350,12 +350,14 @@ class _LossCone:
         cell_start = center - dx / 2
         cell_stop = center + dx / 2
         shift = period * jnp.arange(-1, 2)
-        coverage = jnp.clip(
-            jnp.minimum(cell_stop[..., None] + shift, stop[..., None])
-            - jnp.maximum(cell_start[..., None] + shift, 0.0),
-            0.0,
-            dx,
-        ).sum(-1)
+        coverage = (
+            (
+                jnp.minimum(cell_stop[..., None] + shift, stop[..., None])
+                - jnp.maximum(cell_start[..., None] + shift, 0.0)
+            )
+            .clip(0.0, dx)
+            .sum(-1)
+        )
         return coverage / dx
 
     @staticmethod
@@ -366,7 +368,7 @@ class _LossCone:
         dist = jnp.where(
             valid[..., :, None] & valid[..., None, :] & (dist > 0), dist, jnp.inf
         )
-        prev_idx = jnp.argmin(dist, axis=-2)
+        prev_idx = dist.argmin(axis=-2)
         prev_dist = jnp.take_along_axis(dist, prev_idx[..., None, :], axis=-2)[
             ..., 0, :
         ]
@@ -386,17 +388,19 @@ class _LossCone:
         left = (cell_left[..., None, :] - root[..., :, None]) % period
         right = left + width[..., None, :]
         shift = period * jnp.arange(-1, 2)
-        coverage = jnp.clip(
-            jnp.minimum(right[..., None] + shift, stop[..., None])
-            - jnp.maximum(left[..., None] + shift, 0.0),
-            0.0,
-            width[..., None, :, None],
-        ).sum(-1)
+        coverage = (
+            (
+                jnp.minimum(right[..., None] + shift, stop[..., None])
+                - jnp.maximum(left[..., None] + shift, 0.0)
+            )
+            .clip(0.0, width[..., None, :, None])
+            .sum(-1)
+        )
         return safediv(coverage, width[..., None, :])
 
     @staticmethod
     def indicator_nonuniform(
-        start_score, stop_score, alpha, valid=None, period=2 * jnp.pi, order=1
+        start_score, stop_score, alpha, valid, period=2 * jnp.pi, order=1
     ):
         """Periodic interval indicator on a nonuniform alpha grid.
 
@@ -409,10 +413,7 @@ class _LossCone:
         start_score = start_score.swapaxes(-3, -1)
         stop_score = stop_score.swapaxes(-3, -1)
         alpha = alpha.swapaxes(-3, -1)
-        if valid is None:
-            valid = jnp.ones_like(start_score, dtype=bool)
-        else:
-            valid = valid.swapaxes(-3, -1)
+        valid = valid.swapaxes(-3, -1)
 
         dist = (alpha[..., None, :] - alpha[..., :, None]) % period
         if order == 0:
@@ -449,7 +450,7 @@ class _LossCone:
                 start_alpha, first_stop, alpha, valid, period
             )
         )
-        return jnp.clip(loss_cone.sum(-2), 0.0, 1.0).swapaxes(-3, -1)
+        return loss_cone.sum(-2).clip(0.0, 1.0).swapaxes(-3, -1)
 
     @staticmethod
     def indicator(start_score, stop_score, dist, dx=None, period=2 * jnp.pi, order=1):
@@ -512,4 +513,4 @@ class _LossCone:
             * jnp.isfinite(first_stop)
             * _LossCone._cell_weight(center, first_stop, dx, period)
         )
-        return jnp.clip(loss_cone.sum(-2), 0.0, 1.0).swapaxes(-3, -1)
+        return loss_cone.sum(-2).clip(0.0, 1.0).swapaxes(-3, -1)

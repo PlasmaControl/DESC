@@ -271,19 +271,18 @@ def _reduction_gamma_c(v_tau, radial, poloidal, opts=None):
     return (v_tau * _gamma_c(radial, poloidal) ** 2).sum(-1).mean(-2)
 
 
-def _reshape_iota(iota, prefix_ndim, suffix_ndim):
+def _reshape_iota(iota, suffix_ndim):
     """Reshape iota to broadcast over prefixed surface data."""
     iota = jnp.asarray(iota)
-    if prefix_ndim == 0 or iota.size == 1:
-        return jnp.reshape(iota, ())
-    return jnp.reshape(iota, iota.shape + (1,) * suffix_ndim)
+    prefix = () if iota.size == 1 else iota.shape
+    return iota.reshape(prefix + (1,) * suffix_ndim)
 
 
-def _well_field_period(points, num_field_periods, NFP):
+def _well_field_period(points, NFP):
     """Locate each long-field-line well by its midpoint field period."""
     z1, z2 = points
     midpoint = 0.5 * (z1 + z2)
-    return (NFP * midpoint) // (2 * jnp.pi)
+    return ((NFP * midpoint) // (2 * jnp.pi)).astype(jnp.int32)
 
 
 def _local_well_rank(field_period, valid):
@@ -301,7 +300,7 @@ def _fold_wells_to_alpha(values, points, opts, iota, NFP):
     """Treat long-field-line wells as denser alpha samples over one field period."""
     z1, z2 = points
     valid_well = z1 < z2
-    well_field_period = _well_field_period(points, opts.num_field_periods, NFP)
+    well_field_period = _well_field_period(points, NFP)
     local_well_index = _local_well_rank(well_field_period, valid_well)
     num_alpha, num_pitch, num_well = z1.shape[-3:]
     prefix = z1.shape[:-3]
@@ -323,10 +322,10 @@ def _fold_wells_to_alpha(values, points, opts, iota, NFP):
             prefix + (num_alpha * opts.num_field_periods, num_pitch, num_well)
         )
 
-    alpha = jnp.reshape(opts.alpha, (1,) * len(prefix) + (num_alpha, 1))
-    alpha = alpha + _reshape_iota(iota, len(prefix), 2) * (
-        2 * jnp.pi / NFP
-    ) * jnp.arange(opts.num_field_periods)
+    alpha = opts.alpha.reshape((1,) * len(prefix) + (num_alpha, 1))
+    alpha = alpha + _reshape_iota(iota, 2) * (2 * jnp.pi / NFP) * jnp.arange(
+        opts.num_field_periods
+    )
     alpha = (alpha % (2 * jnp.pi)).reshape(
         prefix + (num_alpha * opts.num_field_periods, 1, 1)
     )
@@ -346,53 +345,26 @@ def _alpha_weights(alpha, valid, period=2 * jnp.pi):
     return jnp.where(valid, weight, 0.0).swapaxes(-3, -1)
 
 
-def _reduction_gamma_delta(v_tau, radial, poloidal, opts, alpha=None, mask=None):
+def _reduction_gamma_delta(v_tau, radial, poloidal, opts, alpha, mask):
     alpha_out_candidate = radial > opts.thresh * jnp.abs(poloidal)
-    if alpha is not None:
-        weight = _alpha_weights(alpha, mask)
-        v_tau = (v_tau * weight).sum(-3)
-        has_alpha_out_candidate = alpha_out_candidate.any(-3)
-        return (v_tau * has_alpha_out_candidate).sum(-1)
-
-    v_tau = v_tau.mean(-3)
+    weight = _alpha_weights(alpha, mask)
+    v_tau = (v_tau * weight).sum(-3)
     has_alpha_out_candidate = alpha_out_candidate.any(-3)
     return (v_tau * has_alpha_out_candidate).sum(-1)
 
 
-def _reduction_gamma_alpha(
-    v_tau, radial, poloidal, opts, order=1, alpha=None, mask=None
-):
+def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
     drift_threshold = opts.thresh * jnp.abs(poloidal)
     alpha_out_candidate = radial - drift_threshold
     alpha_in_candidate = -radial - drift_threshold
 
-    if alpha is not None:
-        loss_cone = jnp.where(
-            poloidal >= 0,
-            _LossCone.indicator_nonuniform(
-                alpha_in_candidate, alpha_out_candidate, alpha, mask, order=order
-            ),
-            _LossCone.indicator_nonuniform(
-                alpha_out_candidate, alpha_in_candidate, alpha, mask, order=order
-            ),
-        )
-        has_alpha_out_candidate = (alpha_out_candidate > 0).any(-3, keepdims=True)
-        has_alpha_in_candidate = (alpha_in_candidate > 0).any(-3, keepdims=True)
-        loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
-            has_alpha_out_candidate & ~has_alpha_in_candidate
-        )
-        return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum(-3).sum(-1)
-
-    # dist[i,j] is the right-handed distance along unit circle from alpha[i] to alpha[j]
-    dist = (opts.alpha - opts.alpha[:, None]) % (2 * jnp.pi)
-    da = 2 * jnp.pi / opts.alpha.size
     loss_cone = jnp.where(
         poloidal >= 0,
-        _LossCone.indicator(
-            alpha_in_candidate, alpha_out_candidate, dist, da, order=order
+        _LossCone.indicator_nonuniform(
+            alpha_in_candidate, alpha_out_candidate, alpha, mask, order=order
         ),
-        _LossCone.indicator(
-            alpha_out_candidate, alpha_in_candidate, dist, da, order=order
+        _LossCone.indicator_nonuniform(
+            alpha_out_candidate, alpha_in_candidate, alpha, mask, order=order
         ),
     )
     has_alpha_out_candidate = (alpha_out_candidate > 0).any(-3, keepdims=True)
@@ -400,7 +372,7 @@ def _reduction_gamma_alpha(
     loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
         has_alpha_out_candidate & ~has_alpha_in_candidate
     )
-    return (v_tau * loss_cone).sum(-1).mean(-2)
+    return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum(-3).sum(-1)
 
 
 @register_compute_fun(

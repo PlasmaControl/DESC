@@ -341,16 +341,14 @@ def _alpha_weights(alpha, valid, period=2 * jnp.pi):
     valid = valid.swapaxes(-3, -1)
     count = valid.sum(-1, keepdims=True)
     _, _, width = _periodic_voronoi_widths(alpha, valid, period)
-    weight = jnp.where(count == 1, 1.0, safediv(width, period))
+    weight = jnp.where(count == 1, 1.0, width / period)
     return jnp.where(valid, weight, 0.0).swapaxes(-3, -1)
 
 
 def _reduction_gamma_delta(v_tau, radial, poloidal, opts, alpha, mask):
-    alpha_out_candidate = radial > opts.thresh * jnp.abs(poloidal)
-    weight = _alpha_weights(alpha, mask)
-    v_tau = (v_tau * weight).sum(-3)
-    has_alpha_out_candidate = alpha_out_candidate.any(-3)
-    return (v_tau * has_alpha_out_candidate).sum(-1)
+    v_tau = (v_tau * _alpha_weights(alpha, mask)).sum(-3)
+    outward_superbanana = (radial > opts.thresh * jnp.abs(poloidal)).any(-3)
+    return (v_tau * outward_superbanana).sum(-1)
 
 
 def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
@@ -372,7 +370,7 @@ def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
     loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
         has_alpha_out_candidate & ~has_alpha_in_candidate
     )
-    return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum(-3).sum(-1)
+    return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum((-3, -1))
 
 
 @register_compute_fun(

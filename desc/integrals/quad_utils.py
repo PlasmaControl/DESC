@@ -332,7 +332,6 @@ def _periodic_voronoi_widths(alpha, valid, period=2 * jnp.pi):
     return prev_width, next_width, width
 
 
-# This can be made more efficient, but it gets the job done.
 class _LossCone:
     """Utilities for periodic loss-cone indicators."""
 
@@ -396,7 +395,7 @@ class _LossCone:
             .clip(0.0, width[..., None, :, None])
             .sum(-1)
         )
-        return safediv(coverage, width[..., None, :])
+        return coverage / width[..., None, :]
 
     @staticmethod
     def indicator_nonuniform(

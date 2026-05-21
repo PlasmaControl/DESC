@@ -1952,7 +1952,7 @@ class _Objective(IOAble, ABC):
 
     def _jvp(self, v, x, constants=None, op="scaled"):
         if constants is None:
-            constants = self.constants
+            constants = self._get_deprecated_constants(constants)
         v = ensure_tuple(v)
         x = ensure_tuple(x)
         assert len(x) == len(v)

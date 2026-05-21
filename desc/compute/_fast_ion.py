@@ -352,23 +352,23 @@ def _reduction_gamma_delta(v_tau, radial, poloidal, opts, alpha, mask):
 
 
 def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
-    drift_threshold = opts.thresh * jnp.abs(poloidal)
-    alpha_out_candidate = radial - drift_threshold
-    alpha_in_candidate = -radial - drift_threshold
+    thresh = opts.thresh * jnp.abs(poloidal)
+    outward_score = radial - thresh  # alpha out candidate
+    inward_score = -radial - thresh  # alpha in candidate
 
     loss_cone = jnp.where(
         poloidal >= 0,
         _LossCone.indicator_nonuniform(
-            alpha_in_candidate, alpha_out_candidate, alpha, mask, order=order
+            inward_score, outward_score, alpha, mask, order=order
         ),
         _LossCone.indicator_nonuniform(
-            alpha_out_candidate, alpha_in_candidate, alpha, mask, order=order
+            outward_score, inward_score, alpha, mask, order=order
         ),
     )
-    has_alpha_out_candidate = (alpha_out_candidate > 0).any(-3, keepdims=True)
-    has_alpha_in_candidate = (alpha_in_candidate > 0).any(-3, keepdims=True)
-    loss_cone = (has_alpha_out_candidate & has_alpha_in_candidate) * loss_cone + (
-        has_alpha_out_candidate & ~has_alpha_in_candidate
+    has_alpha_out = (outward_score > 0).any(-3, keepdims=True)
+    has_alpha_in = (inward_score > 0).any(-3, keepdims=True)
+    loss_cone = (has_alpha_out & has_alpha_in) * loss_cone + (
+        has_alpha_out & ~has_alpha_in
     )
     return (v_tau * loss_cone * _alpha_weights(alpha, mask)).sum((-3, -1))
 

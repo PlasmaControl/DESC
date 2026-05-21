@@ -2431,7 +2431,7 @@ def jvp_proximal_per_process(x, v, objectives, op):
         else:
             J_rank.append(
                 getattr(obj, "jvp_" + op)(
-                    [_vi for _vi in v[idx]], x[idx], constants=obj.constants
+                    [_vi for _vi in v[idx]], x[idx], constants=None
                 ).T
             )
     return jnp.vstack(J_rank)

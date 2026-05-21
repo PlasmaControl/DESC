@@ -2409,7 +2409,7 @@ def jvp_per_process(x, v, objectives, op):
     """Compute the Jacobian-vector product on each process."""
     return jnp.hstack(
         [
-            getattr(obj, op)(v[idx], x[idx], constants=obj.constants)
+            getattr(obj, op)(v[idx], x[idx], constants=None)
             for idx, obj in enumerate(objectives)
         ]
     )

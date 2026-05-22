@@ -178,9 +178,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
     )
     assert out.ndim == 1
-    data["Gamma_c"] = (
-        grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
-    )
+    scalar = opts.num_field_periods / grid.NFP * 2**0.5
+    data["Gamma_c"] = grid.expand(out / scalar) / data["V_psi"]
     return data
 
 
@@ -349,7 +348,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         opts.surf_batch_size,
     )
     assert out.ndim == 1
-    data["Gamma_c Velasco"] = (
-        grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
-    )
+
+    scalar = opts.num_field_periods / grid.NFP * 2**0.5
+    data["Gamma_c Velasco"] = grid.expand(out / scalar) / data["V_psi"]
     return data

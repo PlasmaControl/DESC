@@ -132,8 +132,8 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         opts.surf_batch_size,
     )
     assert out.ndim == 1
-    data["effective ripple 3/2"] = scalar * (
-        (B0 / data["<|grad(rho)|>"]) ** 2 * grid.expand(out) / data["V_psi"]
+    data["effective ripple 3/2"] = (
+        (B0 / data["<|grad(rho)|>"]) ** 2 * grid.expand(out * scalar) / data["V_psi"]
     )
     return data
 

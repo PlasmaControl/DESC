@@ -173,7 +173,6 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
 
-    B0 = data["max_tz |B|"]
-    scalar = 2 * jnp.pi * grid.NFP / opts.num_field_periods
-    data["available energy"] = (scalar * B0 / data["V_psi"]) * grid.expand(out)
+    scalar = jnp.sqrt(jnp.pi) * grid.NFP / (3 * opts.num_field_periods)
+    data["available energy"] = grid.expand(scalar * out) / data["V_psi"]
     return data

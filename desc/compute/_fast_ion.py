@@ -189,7 +189,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
     scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.num_field_periods
-    data["Gamma_c"] = grid.expand(out) / data["V_psi"] * scalar
+    data["Gamma_c"] = grid.expand(out * scalar) / data["V_psi"]
     return data
 
 
@@ -464,4 +464,4 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
     scalar = jnp.pi**3 / 16 * grid.NFP / opts.num_field_periods
-    return grid.expand(out) / data["V_psi"] * scalar
+    return grid.expand(out * scalar) / data["V_psi"]

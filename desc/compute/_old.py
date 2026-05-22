@@ -104,8 +104,7 @@ def _old_epsilon_32(params, transforms, profiles, data, **kwargs):
     assert out.ndim == 1
     data["old effective ripple 3/2"] = (
         (B0 / data["<|grad(rho)|>"]) ** 2
-        * scalar
-        * grid.expand(out)
+        * grid.expand(out * scalar)
         / data["fieldline length"]
     )
     return data
@@ -211,7 +210,7 @@ def _old_Gamma_c(params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
     data["old Gamma_c"] = (
-        grid.expand(out) / data["fieldline length"] * (jnp.pi / 2**3.5)
+        grid.expand(out * (jnp.pi / 2**3.5)) / data["fieldline length"]
     )
     return data
 
@@ -283,6 +282,6 @@ def _old_Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     )
     assert out.ndim == 1
     data["old Gamma_c Velasco"] = (
-        grid.expand(out) / data["fieldline length"] * (jnp.pi**2 / 2**5)
+        grid.expand(out * (jnp.pi**2 / 2**5)) / data["fieldline length"]
     )
     return data

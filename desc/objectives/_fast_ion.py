@@ -50,12 +50,10 @@ class GammaC(_Objective):
         Default is Nemov. Set to ``False`` to use Velasco's.
 
         Nemov's Γ_c converges to a finite nonzero value in the infinity limit
-        of the number of toroidal transits. Velasco's expression has a secular
-        term that drives the result to zero as the number of toroidal transits
-        increases if the secular term is not averaged out from the singular
-        integrals. At finite resolution, an optimization using Velasco's metric
-        may need to be evaluated by measuring decrease in Γ_c at a fixed number
-        of toroidal transits.
+        of the number of toroidal transits. Velasco et al.'s expression has a
+        secular part that drives the result to zero. Therefore, an optimization
+        using Velasco et al.'s metric should be evaluated by measuring
+        improvement over a fixed numbe of field period transits.
         """.rstrip()
         + collect_docs(
             target_default="``target=0``.",

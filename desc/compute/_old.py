@@ -24,15 +24,9 @@ from desc.backend import jit, jnp
 
 from ..integrals.bounce_integral import Bounce1D, Options
 from ..utils import safediv
-from ._fast_ion import (
-    _gamma_c_data,
-    _poloidal_drift_periodic,
-    _radial_drift,
-    _radial_drift_wb_inverse,
-    _reduction_gamma_c,
-    _v_tau,
-)
-from ._neoclassical import _dI_1, _dI_2
+from ._drift import _radial_drift, _radial_drift_wb_inverse, _v_tau, _vartheta_drift
+from ._fast_ion import _gamma_c_data, _reduction_gamma_c
+from ._neoclassical import _I_1, _I_2
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
@@ -85,7 +79,7 @@ def _old_epsilon_32(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         I_1, I_2 = Bounce1D(grid, data, opts.quad).integrate(
-            [_dI_1, _dI_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
+            [_I_1, _I_2], pitch_inv, data, ["|grad(rho)|*kappa_g"], num_well=num_well
         )
         return jnp.sum(
             safediv(I_1**2, I_2).sum(-1).mean(-2) * (weight / pitch_inv**3),
@@ -184,7 +178,7 @@ def _old_Gamma_c(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(grid, data, opts.quad)
         points = bounce.points(pitch_inv, num_well)
         v_tau, radial, poloidal = bounce.integrate(
-            [_v_tau, _radial_drift, _poloidal_drift_periodic],
+            [_v_tau, _radial_drift, _vartheta_drift],
             pitch_inv,
             data,
             ["|grad(psi)|*kappa_g", "|B|_r|v,p", "K"],

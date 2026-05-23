@@ -17,6 +17,10 @@ class AvailableEnergy(_Objective):
     to trapped electrons from density and temperature profile gradients.
 
     The objective is presented in [1]_, and the computation is presented in [2]_.
+    This objective computes the particle drifts using a flux tube model;
+    and therefore, has a meaningless ergodic limit. An optimization should be
+    evaluated by measuring improvement over a fixed number of field period
+    transits.
 
     References
     ----------

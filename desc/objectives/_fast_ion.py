@@ -186,6 +186,10 @@ class GammaLoss(_Objective):
     as lost between consecutive inward and outward superbanana branches.
 
     The objective is presented in [1]_, and the computation is presented in [2]_.
+    This objective computes the particle drifts using a flux tube model;
+    and therefore, has a meaningless ergodic limit. An optimization should be
+    evaluated by measuring improvement over a fixed number of field period
+    transits.
 
     References
     ----------

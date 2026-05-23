@@ -53,7 +53,7 @@ class GammaC(_Objective):
         of the number of toroidal transits. Velasco et al.'s expression has a
         secular part that drives the result to zero. Therefore, an optimization
         using Velasco et al.'s metric should be evaluated by measuring
-        improvement over a fixed numbe of field period transits.
+        improvement over a fixed number of field period transits.
         """.rstrip()
         + collect_docs(
             target_default="``target=0``.",

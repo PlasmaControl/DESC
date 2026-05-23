@@ -430,7 +430,9 @@ class Bounce2D(_Bounce):
         def fft(value):
             return Bounce2D.fourier(Bounce2D.reshape(grid, value))
 
-        fun_data = apply(data, fft, subset=names)
+        fun_data = apply(
+            data, fft, subset=names, exclude=("|e_zeta|r,a|", "zeta", "theta")
+        )
         if custom_data is not None:
             fun_data.update(apply(custom_data, fft))
         for name in Bounce2D.required_names:

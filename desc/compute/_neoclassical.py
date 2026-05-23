@@ -8,6 +8,7 @@ from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.surface_integral import surface_integrals
 from ..utils import safediv
+from ._drift import _I_1, _I_2
 from .data_index import register_compute_fun
 
 
@@ -33,21 +34,6 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
         transforms["grid"], jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"]))
     )
     return data
-
-
-def _dI_1(data, B, pitch):
-    """Integrand of eqaution 2.9 in [2]_ with |∂ψ/∂ρ| removed."""
-    return (
-        jnp.sqrt(jnp.abs(1 - pitch * B))
-        * (4 / (pitch * B) - 1)
-        * data["|grad(rho)|*kappa_g"]
-        / B
-    )
-
-
-def _dI_2(data, B, pitch):
-    """Integrand of equation 2.10 in [2]_."""
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -98,7 +84,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
         def foreach(pitch_inv):
             I_1, I_2 = bounce.integrate(
-                [_dI_1, _dI_2],
+                [_I_1, _I_2],
                 pitch_inv,
                 data,
                 ["|grad(rho)|*kappa_g"],

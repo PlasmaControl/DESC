@@ -189,7 +189,9 @@ class GammaLoss(_Objective):
     This objective computes the particle drifts using a flux tube model;
     and therefore, has a meaningless ergodic limit. An optimization should be
     evaluated by measuring improvement over a fixed number of field period
-    transits.
+    transits. By default, the number of field period transits is set to
+    ``eq.NFP + 2``. To cover the surface, it is reccommended to increase the
+    number of field lines instead of the number of transits.
 
     References
     ----------

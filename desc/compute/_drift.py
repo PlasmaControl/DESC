@@ -25,7 +25,6 @@ def register_drift(**_):
 
 @register_drift(
     name="binormal drift",
-    label="ω_α/sqrt(1-λB)",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Local binormal drift for flux tube model.",
@@ -41,7 +40,6 @@ def _binormal_drift(data, B, pitch):
 
 @register_drift(
     name="sqrt(G hat)",
-    label="1/sqrt(1-λB)",
     units="~",
     units_long="None",
 )
@@ -51,7 +49,6 @@ def _sqrt_G_hat(data, B, pitch):
 
 @register_drift(
     name="v tau",
-    label="vτ",
     units="~",
     units_long="None",
     description="Local bounce time.",
@@ -64,7 +61,6 @@ def _v_tau(data, B, pitch):
 
 @register_drift(
     name="radial drift",
-    label="v_M · ∇ψ integrand",
     units="~",
     units_long="None",
     description="Local radial drift.",
@@ -79,7 +75,6 @@ def _radial_drift(data, B, pitch):
 
 @register_drift(
     name="radial drift",
-    label="v_M · ∇ψ/sqrt(1-λB)",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Local radial drift.",
@@ -93,7 +88,6 @@ def _radial_drift_wb_inverse(data, B, pitch):
 
 @register_drift(
     name="vartheta drift",
-    label="v_M · ∇ϑ integrand",
     units="~",
     units_long="None",
     description="Poloidal drift for trapped particle orbit model.",
@@ -105,7 +99,6 @@ def _vartheta_drift(data, B, pitch):
 
 @register_drift(
     name="alpha drift",
-    label="v_M · ∇α/sqrt(1-λB)",
     units="1 / Wb",
     units_long="Inverse webers",
     description="Poloidal drift for flux tube model.",
@@ -121,7 +114,6 @@ def _alpha_drift_wb_inverse(data, B, pitch):
 
 @register_drift(
     name="I_1",
-    label="I_1",
     units="m^{-2} T^{-1}",
     units_long="Inverse square meters per tesla",
     description="Integrand of equation 2.9 in [2]_  in neoclassical file "
@@ -138,7 +130,6 @@ def _I_1(data, B, pitch):
 
 @register_drift(
     name="I_2",
-    label="I_2",
     units="T^{-1}",
     units_long="Inverse tesla",
     description="Integrand of equation 2.10 in [2]_ in neoclassical file.",

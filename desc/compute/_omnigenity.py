@@ -920,13 +920,12 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 
     return data
 
-
 @register_compute_fun(
     name="|B|_pwO",
     label="|\\mathbf{B}_{pwO}|",
     units="T",
     units_long="Tesla",
-    description="Magnitude of omnigenous magnetic field",
+    description="Magnitude of piecewise omnigenous magnetic field",
     dim=1,
     params=["B_min", "B_max", "zeta_C", "theta_C", "t_1", "t_2"],
     transforms={"grid": []},
@@ -936,39 +935,28 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    # RG:How does this objective change if iota < 0?
-    nsurfs = len(params["B_max"])
-    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[:, None]
-
-    # RG: (theta_B, zeta_B) grid must be the same for all flux surfaces
-    # else this logic below will fail
-    # RG: Eerie logic here
-    Ntheta_B = len(transforms["grid"].nodes[:, 1]) / nsurfs
-    Nzeta_B = len(transforms["grid"].nodes[:, 2]) / nsurfs
-    gridsize = Ntheta_B * Nzeta_B
-    theta_B = transforms["grid"].nodes[:gridsize, 1]
-    zeta_B = transforms["grid"].nodes[:gridsize, 2]
-
+    iota0 = kwargs.get("iota", 0.6)  # This way we ensure iota0 = iota
+    theta_B = transforms["grid"].nodes[:, 1]
+    zeta_B = transforms["grid"].nodes[:, 2]
     # NFP can't be a parameter. Must come from equilibrium
     NFP = transforms["grid"].NFP
 
-    zeta_C = params["zeta_C"][:, None]
-    theta_C = params["theta_C"][:, None]
-    t_1 = params["t_1"][:, None]
-    t_2 = params["t_2"][:, None]
+    zeta_C = params["zeta_C"]
+    theta_C = params["theta_C"]
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
+    
+    # DISCLAIMER: This must give automatically w2 = pi. 
+    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
+        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+    )
+    
+    B_min = params["B_min"]
+    B_max = params["B_max"]
 
-    w_2 = (
-        jnp.pi**2
-        * (1 - t_1 * t_2)
-        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
-    )  # Formula of w_2 to ensure Delta = 0
-
-    B_min = params["B_min"][:, None]
-    B_max = params["B_max"][:, None]
-    p = int(10)
-
-    # shape (num surfaces, grid points)
+    p = kwargs.get("p", 3)
+    
     exponent = -1 * (
         ((zeta_B - zeta_C + t_1 * (theta_B - theta_C)) / w_1) ** (2 * p)
         + ((theta_B - theta_C + t_2 * (zeta_B - zeta_C)) / w_2) ** (2 * p)
@@ -980,7 +968,6 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     data["|B|_pwO"] = B_pwO
 
     return data
-
 
 @register_compute_fun(
     name="Q_pwO",
@@ -997,30 +984,22 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    nsurfs = len(params["B_max"])
-    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[
-        :, None
-    ]  # This way we ensure iota0 = iota
-
-    # NFP can't be a parameter. Must come from equilibrium
+    iota0 = kwargs.get("iota", 0.6) 
     NFP = transforms["grid"].NFP
 
-    t_1 = params["t_1"][:, None]
-    t_2 = params["t_2"][:, None]
+    t_1 = params["t_1"]
+    t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
-    w_2 = (
-        jnp.pi**2
-        * (1 - t_1 * t_2)
-        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
-    )  # Formula of w_2 to ensure Delta = 0
+    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
+        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+    ) 
 
     zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
     zeta_pm = (w_1 + t_1 * w_2) / (1 - t_1 * t_2)
     theta_pp = (w_2 - t_2 * w_1) / (1 - t_1 * t_2)
     theta_pm = (-w_2 - t_2 * w_1) / (1 - t_1 * t_2)
 
-    # stacking/max needs to be along a new dimension
     Q = (
         jnp.max(
             jnp.stack(
@@ -1030,9 +1009,8 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
                     theta_pp - jnp.pi,
                     -theta_pm - jnp.pi,
                 ],
-                axis=2,
-            ),
-            axis=2,
+                axis=0,
+            )
         )
         / jnp.pi
     )
@@ -1040,58 +1018,6 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     data["Q_pwO"] = Q
 
     return data
-
-
-@register_compute_fun(
-    name="Delta_BS",
-    label="|\\Delta_{BS}|",
-    units="~",
-    units_long="None",
-    description="Delta proxi for zero pwO Bootstrap current",
-    dim=1,
-    params=["B_max", "t_1", "t_2"],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="rtz",
-    data=["|B|_pwO"],
-    parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
-)
-def _Delta_bs_piecewiseomni(params, transforms, profiles, data, **kwargs):
-    nsurfs = len(params["B_max"])
-    iota0 = kwargs.get("iota", 0.6 * jnp.ones((nsurfs,)))[
-        :, None
-    ]  # This way we ensure iota0 = iota
-    # NFP can't be a parameter. Must come from equilibrium
-    NFP = transforms["grid"].NFP
-
-    B_max = params["B_max"][:, None]
-    t_1 = params["t_1"][:, None]
-    t_2 = params["t_2"][:, None]
-    w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
-
-    w_2 = (
-        jnp.pi**2
-        * (1 - t_1 * t_2)
-        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
-    )  # Formula of w_2 to ensure Delta = 0
-
-    A1 = jnp.abs((4 * w_2 * (w_1 - jnp.pi / NFP)) / (1 - t_1 * t_2))
-    A2 = jnp.abs((4 * jnp.pi**2 / NFP) - (4 * w_2 * jnp.pi) / (NFP * (1 - t_1 * t_2)))
-
-    # RG: Need to check if averaging is correct
-    B_pwO_squared_averaged = surface_averages(
-        transforms["grid"],
-        (data["|B|_pwO"] ** 2).flatten(),
-    )[0]
-
-    Delta = (B_pwO_squared_averaged / (4 * jnp.pi**2 * B_max**2)) * (
-        (A1 / (iota0 + 1 / t_1)) + (A2 / (iota0 + t_2))
-    )
-
-    data["Delta_BS"] = Delta
-
-    return data
-
 
 @register_compute_fun(
     name="isodynamicity",

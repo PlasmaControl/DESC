@@ -59,29 +59,29 @@ def print_backend_info():
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
 
-    if desc_config["num_device"] == 1:
-        print(
-            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
-            "GB available memory"
-        )
-    elif desc_config["kind"] == "cpu":
-        print(
-            f"Using {desc_config['num_device']} CPUs with "
-            + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
-        )
-        for i, dev in enumerate(desc_config["devices"]):
-            print(f"\t CPU : {dev}")
+    if desc_config["kind"] == "cpu":
+        if desc_config["num_device"] == 1:
+            print(
+                f"CPU Info: {desc_config['cpu_info']} with "
+                f"{desc_config['cpu_mem']:.2f} GB available memory"
+            )
+        else:
+            print(
+                f"Using {desc_config['num_device']} CPUs with "
+                + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
+            )
+            for dev in desc_config["devices"]:
+                print(f"\t CPU : {dev}")
 
+            print(
+                "\nNote: The backend information assumes that the user has 1 "
+                "process per CPU (node). Using multiple processes per CPU (node) is "
+                "not the most efficient way to use MPI with purely CPUs."
+            )
+    elif desc_config["kind"] == "gpu":
         print(
-            "\nNote: The backend information assumes that the user has 1 "
-            "process per CPU (node). Using multiple processes per CPU (node) is "
-            "not the most efficient way to use MPI with purely CPUs."
-        )
-
-    if desc_config["kind"] == "gpu":
-        print(
-            f"CPU Info: {desc_config['cpu_info']} with {desc_config['cpu_mem']:.2f} "
-            "GB available memory"
+            f"CPU Info: {desc_config['cpu_info']} with "
+            f"{desc_config['cpu_mem']:.2f} GB available memory"
         )
         print(f"Using {desc_config['num_device']} device:")
         for i, dev in enumerate(desc_config["devices"]):

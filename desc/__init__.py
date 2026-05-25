@@ -129,10 +129,9 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
     """Sets the device to use for computation.
 
     If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
-    gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects the
-    one with the most available memory.
-    Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
-    available GPUs.
+    gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects
+    the one with the most available memory. Respects environment variable
+    `CUDA_VISIBLE_DEVICES` for selecting from multiple available GPUs.
 
     Notes
     -----
@@ -142,11 +141,13 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
     Parameters
     ----------
     kind : {``'cpu'``, ``'gpu'``}
-        whether to use CPU or GPU.
+        Whether to use CPU or GPU.
     gpuid : int, optional
         GPU id to use. Default is None. Supported only when num_device is 1.
-    num_device : int
-        number of devices to use. Default is 1.
+    num_device : int, optional
+        Number of devices to use. For `cpu`, this is the number of nodes.
+        For `gpu`, this is equal to the number of GPUs connected to a single node.
+        Default is 1.
     mpi : MPI object, optional
         MPI communicator. Used to get distinct CPU information for multi-node
         jobs where each rank runs on different node. Communicator is not used
@@ -170,29 +171,21 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
             config["devices"] = [f"{cpu_info} CPU"]
             config["avail_mems"] = [cpu_mem]
         else:
-            try:
-                if mpi is None:
-                    warnings.warn(
-                        "To get the full list of CPUs, provide the MPI communicator.",
-                        UserWarning,
-                    )
-                    # return the same device multiple times
-                    cpu_names = [
-                        f"{str(i) + ' ' + cpu_info}" for i in range(num_device)
-                    ]
-                else:
-                    comm = mpi.COMM_WORLD
-                    rank = comm.Get_rank()
-                    cpu_name = f"{str(rank) + ' ' + cpu_info}"
-                    cpu_names = comm.allgather(cpu_name)
-                config["devices"] = [name for name in cpu_names]
-                # This memory is not individual but the total memory
-                config["avail_mems"] = [cpu_mem for _ in range(num_device)]
-            except ModuleNotFoundError:
-                raise ValueError(
-                    "JAX not installed. Please install JAX to use multiple CPUs."
-                    "Alternatively, set num_device=1 to use a single CPU."
+            if mpi is None:
+                warnings.warn(
+                    "To get the full list of CPUs, provide the MPI communicator.",
+                    UserWarning,
                 )
+                # return the same device multiple times
+                cpu_names = [f"{i} {cpu_info}" for i in range(num_device)]
+            else:
+                comm = mpi.COMM_WORLD
+                rank = comm.Get_rank()
+                cpu_name = f"{rank} {cpu_info}"
+                cpu_names = comm.allgather(cpu_name)
+            config["devices"] = cpu_names
+            # This memory is not individual but the total memory
+            config["avail_mems"] = [cpu_mem] * num_device
 
     elif kind == "gpu":
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -265,6 +258,9 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
         memories = {dev["index"]: dev["mem_total"] - dev["mem_used"] for dev in devices}
 
         if num_device == 1:
+            selected_gpu = max(
+                devices, key=lambda dev: dev["mem_total"] - dev["mem_used"]
+            )
             if gpuid is not None:
                 if str(gpuid) in gpu_ids:
                     selected_gpu = next(
@@ -278,10 +274,6 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
                             "yellow",
                         )
                     )
-            else:
-                selected_gpu = max(
-                    devices, key=lambda dev: dev["mem_total"] - dev["mem_used"]
-                )
             devices = [selected_gpu]
 
         else:
@@ -293,12 +285,7 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
                 # TODO: implement multiple GPU selection
                 raise ValueError("Cannot specify `gpuid` when requesting multiple GPUs")
 
-        config["avail_mems"] = [
-            memories[dev["index"]] / 1024 for dev in devices[:num_device]
-        ]  # in GB
-        config["devices"] = [
-            f"{dev['type']} (id={dev['index']})" for dev in devices[:num_device]
-        ]
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(
-            str(dev["index"]) for dev in devices[:num_device]
-        )
+        devs = devices[:num_device]
+        config["avail_mems"] = [memories[dev["index"]] / 1024 for dev in devs]  # in GB
+        config["devices"] = [f"{dev['type']} (id={dev['index']})" for dev in devs]
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(dev["index"]) for dev in devs)

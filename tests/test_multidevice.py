@@ -378,7 +378,7 @@ def test_multidevice_objective_build():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj1.build()
 
-    # reset objectives
+    # reset objectives that are built
     for o in [objective1, objective2, objective3]:
         o._built = False
         o._use_jit = True

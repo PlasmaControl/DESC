@@ -436,14 +436,18 @@ class ObjectiveFunction(IOAble):
                 else np.arange(len(objectives))
             )
             self._rank_per_objective = np.asarray(self._rank_per_objective)
+            assert len(objectives) == len(self._rank_per_objective)
             errorif(
                 np.unique(self._rank_per_objective).size < desc_config["num_device"],
                 ValueError,
                 "Requested number of ranks is less than the number of devices. You "
                 f"asked for {desc_config['num_device']} devices, but only have "
-                f" {np.unique(self._rank_per_objective).size} ranks assigned to "
+                f"{np.unique(self._rank_per_objective).size} ranks assigned to "
                 "objectives. There should be at least as many ranks as devices.",
             )
+            # here, we guess the number of devices per node by max(device_ids) + 1
+            # device id can be same for different devices on different nodes, these will
+            # have different ranks, for the check, we take the mod for mapping
             errorif(
                 (
                     np.mod(self._rank_per_objective, max(device_ids) + 1) != device_ids
@@ -465,20 +469,27 @@ class ObjectiveFunction(IOAble):
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
-            errorif(
-                max(self._rank_per_objective) + 1 != self.size,
-                ValueError,
+            msg = (
                 "The maximum value of rank_per_objective "
                 f"({max(self._rank_per_objective)+1}, supplied as "
-                f"({max(self._rank_per_objective)} in the array) "
-                f"is not equal to the number of ranks ({self.size}). There "
-                "should be at least 1 objective per rank.",
+                f"{max(self._rank_per_objective)} in the array) "
+                f"is not equal to the number of ranks ({self.size}). "
+            )
+            errorif(
+                max(self._rank_per_objective) + 1 < self.size,
+                ValueError,
+                f"{msg} There should be at least 1 objective per rank.",
+            )
+            errorif(
+                max(self._rank_per_objective) + 1 > self.size,
+                ValueError,
+                f"{msg} Some objectives are assigned to a rank that doesn't exist.",
             )
             self._obj_per_rank = [
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
             ]
             errorif(
-                np.array([foo.size == 0 for foo in self._obj_per_rank]).any(),
+                any(foo.size == 0 for foo in self._obj_per_rank),
                 ValueError,
                 "There is at least one rank that does not have any objective assigned. "
                 f"Objectives per rank are {self._obj_per_rank}.",

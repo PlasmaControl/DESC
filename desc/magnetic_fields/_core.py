@@ -2997,28 +2997,45 @@ class OmnigenousField(Optimizable, IOAble):
 
 
 class PiecewiseOmnigenousField(Optimizable, IOAble):
-    """A magnetic field with piecewise omnigenity.
+    """A piecewise omnigenous magnetic field.
 
-    Uses parameterization from Velasco et al.[2]
+    Uses the piecewise omnigenous parameterization from Velasco et al. [1].
 
     Parameters
     ----------
+    B_min : float, optional
+        Minimum magnetic field strength of the target piecewise omnigenous field.
+        This is an optimizable parameter.
+    B_max : float, optional
+        Maximum magnetic field strength of the target piecewise omnigenous field.
+        This is an optimizable parameter.
+    zeta_C : float, optional
+        Boozer toroidal coordinate of the center of the parallelogram.
+        This is an optimizable parameter.
+    theta_C : float
+        Boozer poloidal coordinate of the center of the parallelogram.
+        This is an optimizable parameter. 
+    t_1 : float
+        Tilt parameter t_1.
+        This is an optimizable parameter.
+    t_2 : float
+        Tilt parameter t_2.
+        This is an optimizable parameter.
     NFP : int
-        Number of field periods.
-    helicity : tuple, optional
-        Type of pseudo-symmetry (M, N). Default = toroidal contours (1, 0).
-    params0 : ndarray, optional
-        Omnigenity parameters describing h(ρ,η,α). The coefficients correspond to the
-        modes in `x_basis`. If not supplied, `x_lmn` defaults to zero for all modes.
+        Number of field periods. 
+    p : int
+        Exponent of the pwO field.
 
     Notes
     -----
-    Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
-    computational coordinates, not vector B in lab coordinates.
+    Doesn't conform to the MagneticField API, as it only knows about
+    :math:`|B|` in computational/Boozer coordinates, not vector
+    :math:`\\mathbf{B}` in lab coordinates.
 
     References
     ----------
-    .. [1] Velasco, Jose L., et al. "Piecewise Omnigenity"
+    .. [1] Velasco, J. L., et al. "Piecewise Omnigenous stellarators",
+    Phys. Rev. Lett. 133, 185101.
     """
 
     _io_attrs_ = [
@@ -3029,6 +3046,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         "_theta_C",
         "_t_1",
         "_t_2",
+        "_p", 
     ]
 
     def __init__(
@@ -3040,15 +3058,16 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         t_1=0.2,
         t_2=1.0,
         NFP=1,
+        p=3, 
     ):
         self._NFP = NFP
-
         self._B_min = B_min
         self._B_max = B_max
         self._zeta_C = zeta_C
         self._theta_C = theta_C
         self._t_1 = t_1
         self._t_2 = t_2
+        self._p = p
 
     def compute(
         self,
@@ -3125,6 +3144,15 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
+    
+    @property
+    def p(self):
+        """int: Exponent of the pwO parametrization."""
+        return self._p
+        
+    @p.setter
+    def p(self, p):
+        self._p = p
 
     @optimizable_parameter
     @property

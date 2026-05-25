@@ -1951,8 +1951,6 @@ class _Objective(IOAble, ABC):
         )(*args, **kwargs)
 
     def _jvp(self, v, x, constants=None, op="scaled"):
-        if constants is None:
-            constants = self._get_deprecated_constants(constants)
         v = ensure_tuple(v)
         x = ensure_tuple(x)
         assert len(x) == len(v)
@@ -2398,7 +2396,7 @@ def compute_per_process(params, objectives, op):
     """Compute the objective function on each process."""
     return jnp.concatenate(
         [
-            getattr(obj, op)(*param, constants=obj.constants)
+            getattr(obj, op)(*param, constants=None)
             for (obj, param) in zip(objectives, params)
         ]
     )

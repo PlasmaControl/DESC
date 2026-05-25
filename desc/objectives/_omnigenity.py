@@ -1010,6 +1010,8 @@ class PiecewiseOmnigenity(_Objective):
 
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
 
+        errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -1125,31 +1127,15 @@ class PiecewiseOmnigenity(_Objective):
             )
 
         data = {
-            "iota": jnp.unique(iota_data["iota"]),
-            "iota_r": jnp.unique(iota_data["iota_r"]),
-            "shear": jnp.unique(iota_data["shear"]),
-        }
-
-        ### Passing a Grid of Boozer coordinate values because for the same
-        # DESC grid changing the eq changes the Boozer grid
-        #### TODO: Have to account for NFP
-        NFP = constants["eq_transforms"]["grid"].NFP
-        field_grid = Grid(
-            jnp.array(
-                [
-                    eq_data["rho"],
-                    eq_data["theta_B"],
-                    jnp.mod(eq_data["zeta_B"], 2 * jnp.pi / NFP),
-                ]
-            ).T,
-            NFP=NFP,
-            jitable=True,
-        )
+            "iota": iota_data["iota"][0],
+            "iota_r": iota_data["iota_r"][0],
+            "shear": iota_data["shear"][0],
+        }   
 
         field_transforms = get_transforms(
             self._field_data_keys,
             obj=field,
-            grid=field_grid,
+            grid=constants["eq_transforms"]["grid"], # Ensure that the residual is evaluated at same collocation nodes
             jitable=True,
         )
 
@@ -1162,6 +1148,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data=data,
                 iota=data["iota"],
+                p = field.p, 
             )
         else:
             field_data = compute_fun(
@@ -1172,6 +1159,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data={},
                 iota=data["iota"],
+                p = field.p, 
             )
 
         Ntheta = constants["Ntheta_B"]
@@ -1181,12 +1169,16 @@ class PiecewiseOmnigenity(_Objective):
         Q_pwO = field_data["Q_pwO"]
 
         # ReLU operation
-        Q_pwO = (Q_pwO + 0.05) * (Q_pwO >= -0.05)
+        Q_pwO = (Q_pwO + 0.1) * (Q_pwO >= -0.1)
 
-        # temporarily commenting the Q_pwO calculation
-        # --no-verify pwO_error = (eq_data["|B|"] - B_pwO)
-        # --no-verify constants["overlap_penalty"] * Q_pwO
-        pwO_error = eq_data["|B|"].flatten() - B_pwO.flatten()
+        # Extra penalty so that field.B_max and field.B_min do not collapse to the same value
+        if self._field_fixed:
+            Q_B = 0
+        else:
+            Q_B = 100 * (field_params["B_max"] - field_params["B_min"] <= 0.15 )
+
+        # Residual: pwO error + corners penalty + Bmax/Bmin penalty
+        pwO_error = (eq_data["|B|"] - B_pwO) + constants["overlap_penalty"] * Q_pwO + Q_B
 
         return pwO_error.ravel()
 

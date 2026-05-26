@@ -436,14 +436,10 @@ class ObjectiveFunction(IOAble):
                 else np.arange(len(objectives))
             )
             self._rank_per_objective = np.asarray(self._rank_per_objective)
-            assert len(objectives) == len(self._rank_per_objective)
-            errorif(
-                np.unique(self._rank_per_objective).size < desc_config["num_device"],
-                ValueError,
-                "Requested number of ranks is less than the number of devices. You "
-                f"asked for {desc_config['num_device']} devices, but only have "
-                f"{np.unique(self._rank_per_objective).size} ranks assigned to "
-                "objectives. There should be at least as many ranks as devices.",
+            assert len(objectives) == len(self._rank_per_objective), (
+                "rank_per_objective must have one entry per objective. Got "
+                f"{len(self._rank_per_objective)} entries for "
+                f"{len(objectives)} objectives."
             )
             # here, we guess the number of devices per node by max(device_ids) + 1
             # device id can be same for different devices on different nodes, these will
@@ -453,37 +449,44 @@ class ObjectiveFunction(IOAble):
                     np.mod(self._rank_per_objective, max(device_ids) + 1) != device_ids
                 ).any(),
                 ValueError,
-                "Same rank objectives should also have the same device id. Supplied "
-                f"ranks {self._rank_per_objective} and device ids {device_ids} are "
-                "not compatible.",
+                "Some objective's rank and device id are inconsistent. The device id "
+                "of an objective must equal its rank modulo the number of devices per "
+                f"node ({max(device_ids) + 1}). Got rank_per_objective="
+                f"{self._rank_per_objective} and device_ids={device_ids}.",
             )
             warnif(
                 max(device_ids) != desc_config["num_device"] - 1,
                 UserWarning,
-                "You are not using all the devices available. You asked for "
-                f"{desc_config['num_device']} devices, but the maximum device id is "
-                f"{max(device_ids)}. This means that some devices are not being used.",
+                f"Not all available devices are being used. {desc_config['num_device']}"
+                f" device(s) are available, but the highest device id assigned to an "
+                f"objective is {max(device_ids)}.",
             )
             self.mpi = mpi
             self.comm = self.mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.size = self.comm.Get_size()
             self.running = True
+            # rank_per_objective is 0-indexed, so the number of ranks it expects
+            # is its maximum value + 1. This must match the number of MPI ranks.
+            n_ranks_needed = max(self._rank_per_objective) + 1
             msg = (
-                "The maximum value of rank_per_objective "
-                f"({max(self._rank_per_objective)+1}, supplied as "
-                f"{max(self._rank_per_objective)} in the array) "
-                f"is not equal to the number of ranks ({self.size}). "
+                f"rank_per_objective uses {n_ranks_needed} rank(s) (highest rank "
+                f"index is {max(self._rank_per_objective)}), but {self.size} MPI "
+                f"rank(s) are running. These must match. "
             )
             errorif(
-                max(self._rank_per_objective) + 1 < self.size,
+                n_ranks_needed < self.size,
                 ValueError,
-                f"{msg} There should be at least 1 objective per rank.",
+                f"{msg}You are running more MPI ranks than rank_per_objective uses, "
+                "so some ranks would have no objective assigned. Either reduce the "
+                "number of MPI ranks or assign objectives to every rank.",
             )
             errorif(
-                max(self._rank_per_objective) + 1 > self.size,
+                n_ranks_needed > self.size,
                 ValueError,
-                f"{msg} Some objectives are assigned to a rank that doesn't exist.",
+                f"{msg}Some objectives are assigned to a rank index that is too large "
+                "for the number of MPI ranks running. Either run more MPI ranks or "
+                "lower the rank indices in rank_per_objective.",
             )
             self._obj_per_rank = [
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
@@ -491,8 +494,10 @@ class ObjectiveFunction(IOAble):
             errorif(
                 any(foo.size == 0 for foo in self._obj_per_rank),
                 ValueError,
-                "There is at least one rank that does not have any objective assigned. "
-                f"Objectives per rank are {self._obj_per_rank}.",
+                "Every rank must have at least one objective assigned, but the "
+                "following ranks have none: "
+                f"{[i for i, foo in enumerate(self._obj_per_rank) if foo.size == 0]}. "
+                f"Objective indices per rank are {self._obj_per_rank}.",
             )
             self._static_attrs += [
                 "mpi",

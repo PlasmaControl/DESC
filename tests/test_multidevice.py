@@ -358,14 +358,14 @@ def test_multidevice_objective_build():
         obj1 = ObjectiveFunction([objective1, objective2, objective3])
 
     # need to use multiple ranks if using multiple devices
-    with pytest.raises(ValueError, match="Requested number of ranks is"):
+    with pytest.raises(ValueError, match="uses fewer distinct ranks"):
         # this one is multi-device
         obj1 = ObjectiveFunction(
             [objective1, objective2, objective3], mpi=MPI, rank_per_objective=[0, 0, 0]
         )
 
     # need to have same device for the same rank objectives
-    with pytest.raises(ValueError, match="Same rank objectives should"):
+    with pytest.raises(ValueError, match="rank and device id are inconsistent"):
         # this one is multi-device
         obj1 = ObjectiveFunction(
             [objective1, objective2, objective3, objective4],

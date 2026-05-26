@@ -41,7 +41,7 @@ def _ae(G, G_ω_α, G_ω_ψ, data, energy):
     energy = energy[..., None]
 
     drift = jnp.hypot(G_ω_α, G_ω_ψ)
-    drive = jnp.hypot((G * η_T - G_ω_α) + G * C / energy, G_ω_ψ)
+    drive = jnp.hypot(G * (η_T + C / energy) - G_ω_α, G_ω_ψ)
 
     return G_ω_α * C + (G_ω_α * η_T + safediv(drift * (drive - drift), G)) * energy
 

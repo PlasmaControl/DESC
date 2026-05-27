@@ -5,7 +5,6 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, root, root_scalar, vmap
-from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -280,7 +279,7 @@ def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
         distance = safenorm(_fixup_residual(coords - xg, period), axis=-1)
         return jnp.argmin(distance, axis=-1)
 
-    idx = batch_map(_distance_body, coords[..., jnp.newaxis, :], 20)
+    idx = vmap(_distance_body, coords[..., jnp.newaxis, :], 20)
     return yg[idx]
 
 

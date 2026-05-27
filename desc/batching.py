@@ -230,49 +230,6 @@ def vmap_chunked(
     )
 
 
-def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=identity
-):
-    """Compute ``chunk_reduction(fun(fun_input))`` in batches.
-
-    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
-    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
-    supplied function. This makes compilation faster and avoids the weaknesses of
-    applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303.
-
-    Parameters
-    ----------
-    fun : callable
-        Natively vectorized function.
-    fun_input : pytree
-        Data to split into batches to feed to ``fun``.
-    batch_size : int or None
-        Size of batches. If no batching should be done or the batch size is the
-        full input then supply ``None``.
-    reduction : callable or None
-        Binary reduction operation.
-        Should take two arguments and return one output, e.g. ``jnp.add``.
-    chunk_reduction : callable
-        Chunk-wise reduction operation.
-        Should typically apply ``reduction`` along the mapped axis,
-        e.g. ``jnp.add.reduce``.
-
-    Returns
-    -------
-    fun_output
-        Returns ``chunk_reduction(fun(fun_input))``.
-
-    """
-    return (
-        chunk_reduction(fun(fun_input))
-        if batch_size is None
-        else _evaluate_in_chunks(
-            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
-        )
-    )
-
-
 def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):
     """Define a vectorized function with broadcasting and batching.
 

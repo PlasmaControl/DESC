@@ -371,7 +371,7 @@ class Bounce2D(_Bounce):
         angle,
         names=(),
         custom_data=None,
-        rho_data=None,
+        flux_data=None,
         batch_size=1,
         sparse=True,
     ):
@@ -407,7 +407,7 @@ class Bounce2D(_Bounce):
         custom_data : dict[str, jnp.ndarray]
             Optional, other data that is not constant on each flux surface.
             These will be FFT'd and passed to ``fun`` in batches.
-        rho_data : dict[str, jnp.ndarray]
+        flux_data : dict[str, jnp.ndarray]
             Data constant on each flux surface.
             These will be passed to ``fun`` as a scalar for each surface.
         batch_size : int or None
@@ -439,8 +439,8 @@ class Bounce2D(_Bounce):
             if name not in fun_data and name != "iota":
                 fun_data[name] = fft(data[name])
 
-        if rho_data is not None:
-            fun_data.update(apply(rho_data, grid.compress))
+        if flux_data is not None:
+            fun_data.update(apply(flux_data, grid.compress))
 
         if "iota" not in fun_data:
             fun_data["iota"] = grid.compress(data["iota"])
@@ -1416,7 +1416,7 @@ class Bounce1D(_Bounce):
         *,
         names=(),
         custom_data=None,
-        rho_data=None,
+        flux_data=None,
         batch_size=1,
         sparse=True,
     ):
@@ -1447,7 +1447,7 @@ class Bounce1D(_Bounce):
         custom_data : dict[str, jnp.ndarray]
             Optional, other data that is not constant on each flux surface.
             These will be passed to ``fun`` in batches.
-        rho_data : dict[str, jnp.ndarray]
+        flux_data : dict[str, jnp.ndarray]
             Data constant on each flux surface.
             These will be passed to ``fun`` as a scalar for each surface.
         batch_size : int or None
@@ -1474,8 +1474,8 @@ class Bounce1D(_Bounce):
             if name not in fun_data:
                 fun_data[name] = reshape(data[name])
 
-        if rho_data is not None:
-            fun_data.update(apply(rho_data, grid.compress))
+        if flux_data is not None:
+            fun_data.update(apply(flux_data, grid.compress))
 
         if "min_tz |B|" not in fun_data:
             fun_data["min_tz |B|"] = grid.compress(data["min_tz |B|"])

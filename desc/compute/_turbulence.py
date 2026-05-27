@@ -159,7 +159,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         grid,
         angle=kwargs["angle"],
         names=names,
-        rho_data={
+        flux_data={
             "ae grad(density)": safediv(radial_scale * data["ne_r"], data["ne"]),
             "ae psi width": radial_scale * data["psi_r"],
             "ae alpha width": safediv(binormal_scale, data["rho"]),

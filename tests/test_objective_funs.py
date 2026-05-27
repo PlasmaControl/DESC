@@ -30,7 +30,6 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.integrals import Bounce2D
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -56,14 +55,12 @@ from desc.objectives import (
     CoilSetMinDistance,
     CoilTorsion,
     DeflationOperator,
-    EffectiveRipple,
     Elongation,
     Energy,
     ExternalObjective,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
-    GammaC,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -2080,66 +2077,6 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_against_compute_bounce(self, use_bounce1d):
-        """Test objectives are built properly."""
-        eq = get("W7-X")
-        rho = np.linspace(0.1, 1, 3)
-        obj_grid = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
-        )
-        X = 16
-        Y = 32
-        num_transit = 4
-        opts = dict(
-            Y_B=64,
-            num_transit=num_transit,
-            num_well=15 * num_transit,
-            num_quad=16,
-            num_pitch=10,
-        )
-        names = ["effective ripple", "Gamma_c"]
-        if use_bounce1d:
-            names = ["old " + n for n in names]
-            angle = None
-            alpha = np.array([0.0])
-            zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
-            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-        else:
-            angle = Bounce2D.angle(eq, X, Y, rho)
-            grid = obj_grid
-
-        data = eq.compute(names, grid, angle=angle, **opts)
-        obj = EffectiveRipple(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-6,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
-        obj.build()
-        assert obj._hyperparam["num_well"] == opts["num_well"]
-        np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data[names[0]])
-        )
-        obj = GammaC(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-7,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
-        obj.build()
-        assert obj._hyperparam["num_well"] == opts["num_well"]
-        np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data[names[1]])
-        )
-
-    @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
@@ -3275,13 +3212,6 @@ def test_loss_function_asserts():
 
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    if objective in {EffectiveRipple, GammaC}:
-        kwargs["X"] = 16
-        kwargs["Y"] = 24
-        kwargs["num_transit"] = 4
-        kwargs["num_well"] = 15 * kwargs["num_transit"]
-        kwargs["num_pitch"] = 24
-        kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
 
 
@@ -3829,11 +3759,9 @@ class TestObjectiveNaNGrad:
         CoilSetLinkingNumber,
         CoilSetMinDistance,
         CoilTorsion,
-        EffectiveRipple,
         ForceBalanceAnisotropic,
         DeflationOperator,
         FusionPower,
-        GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
@@ -4177,77 +4105,6 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), str(helicity)
-
-    @pytest.mark.unit
-    def test_objective_no_nangrad_effective_ripple(self):
-        """Effective ripple."""
-        eq = get("ESTELL")
-        with pytest.warns(UserWarning, match="Reducing radial"):
-            eq.change_resolution(2, 2, 2, 4, 4, 4)
-
-        obj_0 = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=0)
-        )
-        obj_0.build(verbose=0)
-        g_0 = obj_0.grad(obj_0.x())
-        assert not np.any(np.isnan(g_0))
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, nufft_eps=1e-6)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε¹ᐧ⁵) error in integrals with v_||. For the
-        # gradient it is probably O(ε) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.0025)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
-
-    @pytest.mark.unit
-    def test_objective_no_nangrad_Gamma_c(self):
-        """Gamma_c."""
-        eq = get("ESTELL")
-        with pytest.warns(UserWarning, match="Reducing radial"):
-            eq.change_resolution(2, 2, 2, 4, 4, 4)
-        obj_0 = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=0)
-        )
-        obj_0.build(verbose=0)
-        g_0 = obj_0.grad(obj_0.x())
-        assert not np.any(np.isnan(g_0))
-
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε⁰ᐧ⁵) error in integrals with 1/v_||. For the gradient
-        # it is probably O(ε⁰ᐧ³³) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.042)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

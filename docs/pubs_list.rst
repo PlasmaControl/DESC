@@ -55,11 +55,6 @@ Papers extending DESC functionality
    [`JPP <https://doi.org/10.1017/S0022377824000655>`__]
    [`pdf <https://arxiv.org/abs/2403.11033>`__]
 
-#. Kaya Unalmis et al. (2025).
-   *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
-   its applications*.
-   [`pdf <https://arxiv.org/abs/2412.01724>`__]
-
 #. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
    *High Order Free Boundary MHD Equilibria in DESC*.
    [`pdf <https://arxiv.org/abs/2412.05680>`__]
@@ -149,6 +144,11 @@ Papers applying DESC
    E. Kolemen, and J.-K. Park. (2025).
    *Robustness of quasi-symmetry along parametric boundary variation*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/adf6e1>`__]
+
+#. Kaya Unalmis et al. (2025).
+   *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
+   its applications*.
+   [`pdf <https://arxiv.org/abs/2412.01724>`__]
 
 .. raw:: html
 

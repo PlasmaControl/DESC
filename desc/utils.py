@@ -705,31 +705,6 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-def flatten_mat(y, axes=2):
-    """Flatten matrix to vector.
-
-    Parameters
-    ----------
-    axes : int
-        Number of trailing axes to flatten into last dimension.
-        Default is two.
-
-    Returns
-    -------
-    y : jnp.ndarray
-        Shape (*y.shape[:-axes], -1).
-
-    """
-    return y.reshape(*y.shape[:-axes], -1)
-
-
-# TODO: Eventually remove and use numpy's stuff.
-# https://github.com/numpy/numpy/issues/25805
-def atleast_nd(ndmin, ary):
-    """Adds dimensions to front if necessary."""
-    return jnp.array(ary, ndmin=ndmin) if jnp.ndim(ary) < ndmin else ary
-
-
 def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
     """Make an external (python) function work with JAX.
 
@@ -1130,37 +1105,6 @@ def copy_rpz_periods(rpz, NFP):
 def identity(y):
     """Returns the input."""
     return y
-
-
-def apply(d, fun=identity, subset=None, exclude=None):
-    """Applies ``fun`` to ``d``.
-
-    Parameters
-    ----------
-    d : dict
-        Dictionary to map.
-    fun : callable
-        Function to apply to values in dictionary.
-        Default is the identity.
-    subset : list or set or tuple
-        Subset of keys in ``d`` to consider.
-        Default is all keys in ``d``.
-    exclude : collection
-        Stuff in subset to exclude.
-
-    Returns
-    -------
-    d : dict
-        New dictionary with ``fun`` mapped over values with keys in ``subset``
-        and keys not in ``exclude``.
-
-    """
-    if subset is None:
-        subset = d.keys()
-    elif isinstance(subset, str):
-        subset = (subset,)
-    exclude = () if (exclude is None) else exclude
-    return {k: fun(d[k]) for k in subset if k not in exclude}
 
 
 def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):

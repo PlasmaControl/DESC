@@ -755,16 +755,12 @@ def argmin(z1, z2, f, mins, B_mins):
     # to accumulate through only the minimum since we are differentiating how our
     # physics objective changes wrt equilibrium perturbations not wrt which of the
     # extrema get interpolated to.
-    where = jnp.argmin(
-        jnp.where(
-            (z1[..., None] < mins[..., None, None, :])
-            & (mins[..., None, None, :] < z2[..., None]),
-            B_mins[..., None, None, :],
-            jnp.inf,
-        ),
-        axis=-1,
-        keepdims=True,
-    )
+    where = jnp.where(
+        (z1[..., None] < mins[..., None, None, :])
+        & (mins[..., None, None, :] < z2[..., None]),
+        B_mins[..., None, None, :],
+        jnp.inf,
+    ).argmin(axis=-1, keepdims=True)
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 

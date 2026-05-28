@@ -374,6 +374,7 @@ class Bounce2D(_Bounce):
         flux_data=None,
         batch_size=1,
         sparse=True,
+        shard_input_data=False,
     ):
         """Compute function ``fun`` batched over flux surfaces.
 
@@ -420,6 +421,10 @@ class Bounce2D(_Bounce):
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.
+        shard_input_data : bool
+            Whether to shard batched input data across devices before applying
+            chunked batching.
+            Default is ``False``.
 
         Returns
         -------
@@ -451,9 +456,21 @@ class Bounce2D(_Bounce):
         fun_data["angle"] = angle
 
         if sparse:
-            return sparse_pullback(fun, fun_data, batch_size, strip_dim0=True)
+            return sparse_pullback(
+                fun,
+                fun_data,
+                batch_size,
+                strip_dim0=True,
+                shard_input_data=shard_input_data,
+            )
 
-        return batch_map(fun, fun_data, batch_size, strip_dim0=True)
+        return batch_map(
+            fun,
+            fun_data,
+            batch_size,
+            strip_dim0=True,
+            shard_input_data=shard_input_data,
+        )
 
     @staticmethod
     def reshape(grid, f):
@@ -1878,6 +1895,10 @@ class Options(NamedTuple):
             Default is ``1``.
             Only consider increasing if ``pitch_batch_size`` is ``None``.
             """,
+        "shard_input_data": """bool :
+            Whether to shard batched input data across devices before applying
+            chunked batching.
+            """,
         "nufft_eps": """float :
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
@@ -1907,6 +1928,7 @@ class Options(NamedTuple):
         "num_quad",
         "num_well",
         "pitch_batch_size",
+        "shard_input_data",
         "spline",
         "surf_batch_size",
         "Y_B",
@@ -1920,6 +1942,7 @@ class Options(NamedTuple):
     pitch_batch_size: int
     pitch_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
+    shard_input_data: bool
     spline: bool
     surf_batch_size: int
     thresh: float
@@ -1942,6 +1965,7 @@ class Options(NamedTuple):
         num_well=None,
         pitch_batch_size=None,
         quad=None,
+        shard_input_data=False,
         spline=True,
         surf_batch_size=1,
         Y_B=None,
@@ -1993,6 +2017,7 @@ class Options(NamedTuple):
             pitch_batch_size=pitch_batch_size,
             pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
             quad=Options._quad(eta, num_quad) if quad is None else quad,
+            shard_input_data=shard_input_data,
             spline=spline,
             surf_batch_size=surf_batch_size,
             thresh=jnp.tan(jnp.pi / 2 * gamma_threshold),

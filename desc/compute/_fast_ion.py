@@ -146,7 +146,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
-            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            batch_map(
+                foreach,
+                pitch_inv,
+                opts.pitch_batch_size,
+                shard_input_data=opts.shard_input_data,
+            )
             * (weight / pitch_inv**2),
             axis=-1,
         )
@@ -158,6 +163,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         angle=kwargs["angle"],
         custom_data=_gamma_c_data(data),
         batch_size=opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
     scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.num_field_periods
@@ -235,6 +241,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         custom_data=_gamma_c_data(data),
         batch_size=1,
         sparse=False,  # don't know of any applications that differentiate anyway
+        shard_input_data=opts.shard_input_data,
     )
     return data
 
@@ -512,7 +519,12 @@ def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kw
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
-            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            batch_map(
+                foreach,
+                pitch_inv,
+                opts.pitch_batch_size,
+                shard_input_data=opts.shard_input_data,
+            )
             * (weight / pitch_inv**2),
             axis=-1,
         )
@@ -525,6 +537,7 @@ def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kw
         angle=kwargs["angle"],
         names=names,
         batch_size=opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
     scalar = jnp.pi**3 / 16 * grid.NFP / opts.num_field_periods

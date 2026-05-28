@@ -14,6 +14,20 @@ class TestDerivative:
     """Tests Derivative classes."""
 
     @pytest.mark.unit
+    def test_sparse_pullback_sharded_chunked(self):
+        """Test sparse_pullback with chunking and sharded input data."""
+        x = jnp.arange(5.0)
+        np.testing.assert_allclose(
+            sparse_pullback(
+                lambda y: y**2,
+                x,
+                batch_size=2,
+                shard_input_data=True,
+            ),
+            x**2,
+        )
+
+    @pytest.mark.unit
     def test_finite_diff_vec(self):
         """Test finite differences of vector function."""
 

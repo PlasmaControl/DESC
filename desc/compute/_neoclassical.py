@@ -99,7 +99,12 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # B₀ has units of λ⁻¹.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         return jnp.sum(
-            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            batch_map(
+                foreach,
+                pitch_inv,
+                opts.pitch_batch_size,
+                shard_input_data=opts.shard_input_data,
+            )
             * (weight / pitch_inv**3),
             axis=-1,
         )
@@ -115,6 +120,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         angle=kwargs["angle"],
         names=("|grad(rho)|*kappa_g",),
         batch_size=opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
     data["effective ripple 3/2"] = (

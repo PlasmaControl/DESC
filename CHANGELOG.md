@@ -3,6 +3,9 @@ Changelog
 
 New Features
 
+- Moves all objectives for neoclassical transport, fast ion confinment, turbelent transport, max J etc.
+(e.g. epsilon effective, GammaC, GammaAlpha, GammaDelta, available energy, turbITG, max J, J parallel)
+and associated algorithms such as sparsity preserving pullbacks, bounce integrals, etc. to an external package so that other stellarator optimization libraries can use them.
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.

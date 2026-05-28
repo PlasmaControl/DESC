@@ -175,17 +175,11 @@ def test_proximal_freeb_jac_blocked():
 @pytest.mark.memory
 def test_proximal_jac_ripple():
     """Benchmark computing objective jacobian for effective ripple."""
-    _test_proximal_ripple(False, "jac_scaled_error")
+    _test_proximal_ripple("jac_scaled_error")
 
 
 @pytest.mark.memory
-def test_proximal_jac_ripple_bounce1d():
-    """Benchmark computing objective jacobian for effective ripple."""
-    _test_proximal_ripple(True, "jac_scaled_error")
-
-
-@pytest.mark.memory
-def _test_proximal_ripple(use_bounce1d, method):
+def _test_proximal_ripple(method):
     jax.clear_caches()
     gc.collect()
     eq = desc.examples.get("HELIOTRON")
@@ -193,16 +187,15 @@ def _test_proximal_ripple(use_bounce1d, method):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
-    num_transit = 20
+    num_field_periods = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_transit=num_transit,
-                num_well=10 * num_transit,
+                num_field_periods=num_field_periods,
+                num_well=2 * num_field_periods,
                 num_quad=16,
-                Y_B=64,
-                use_bounce1d=use_bounce1d,
+                Y_B=13,
             )
         ]
     )
@@ -254,8 +247,6 @@ if __name__ == "__main__":
         test_proximal_freeb_jac_blocked()
     elif func == "test_proximal_jac_ripple":
         test_proximal_jac_ripple()
-    elif func == "test_proximal_jac_ripple_bounce1d":
-        test_proximal_jac_ripple_bounce1d()
     elif func == "test_eq_solve":
         test_eq_solve()
     else:

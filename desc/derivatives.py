@@ -10,7 +10,197 @@ from desc.utils import ensure_tuple
 if use_jax:
     import jax
 
-    from desc.batching import jacfwd_chunked, jacrev_chunked
+    from desc.batching import (
+        jacfwd_chunked,
+        jacrev_chunked,
+        _concat,
+        _scanmap,
+        _batch_and_remainder,
+        _unchunk,
+        _get_first_chunk,
+        identity,
+    )
+
+from functools import wraps
+
+import equinox as eqx
+from jax.tree_util import tree_leaves, tree_map
+
+
+@eqx.filter_custom_vjp
+def _sparse_pullback(y, *, fn):
+    return fn(y)
+
+
+@_sparse_pullback.def_fwd
+def _sparse_pullback_fwd(perturbed, y, *, fn):
+    out, vjp_fn = eqx.filter_vjp(fn, y)
+    p = eqx.filter(vjp_fn(jnp.ones_like(out))[0], perturbed)
+    return out, p
+
+
+@_sparse_pullback.def_bwd
+def _sparse_pullback_bwd(p, g, perturbed, y, *, fn):
+    def apply(leaf):
+        if leaf is None:
+            return None
+        # not doing sparse linear algebra here since we
+        # do not assume the cotangent is sparse.
+        # could do case fn expands leaf, but in that scenario
+        # it is always the case user should diagonalize later so
+        # better to just error.
+        return leaf * g.reshape(g.shape + (1,) * (leaf.ndim - g.ndim))
+
+    return tree_map(apply, p)
+
+
+def sparse_pullback_map(fn, y):
+    """Wrapper for sparsity exploiting pullback.
+
+    Wraps the given map with logic to ensure cotangents flow through the diagonal
+    of its pullback. The derivatives will be exact for maps whose Jacobians are
+    block diagonal.
+
+    References
+    ----------
+    Kaya Unalmis.
+    https://github.com/jax-ml/jax/issues/36862.
+
+    See Also
+    --------
+    sparse_pullback
+        Applies the same transformation and immediatly returns its output.
+
+    Parameters
+    ----------
+    fn : callable
+        Vectorized map.
+
+    Returns
+    -------
+    wrapper : callable
+        Same forward map but with a sparsity exploiting pullback.
+
+    Examples
+    --------
+    >>> fn = sparse_pullback_map(fn, y)
+    >>> out = fn(y)
+
+    """
+    fn = eqx.filter_closure_convert(fn, y)
+
+    @wraps(fn)
+    def wrapper(y):
+        return _sparse_pullback(y, fn=fn)
+
+    return wrapper
+
+
+def sparse_pullback(
+    fn,
+    y,
+    /,
+    batch_size=None,
+    *,
+    reduction=None,
+    chunk_reduction=identity,
+    strip_dim0=False,
+):
+    """Compute ``chunk_reduction(fn(fun_input))`` in batches with sparse pullbacks.
+
+    Wraps the given map with logic to ensure cotangents flow through the diagonal
+    of its pullback. The derivatives will be exact for maps whose Jacobians are
+    block diagonal.
+
+    Notes
+    -----
+    This method does not automatically wrap ``fn`` with ``vmap``.
+    Unless ``fn`` is already wrapped with ``vmap``, the leading dimension
+    of ``y`` will not be stripped before it is passed into ``fn``.
+    This can be inconvenient for nesting calls to ``sparse_pullback``, since
+    only batching along the first axis is currently supported.
+    However, the ``strip_dim0`` flag should cover the most common case
+    of nesting calls where ``batch_size`` is one on the outermost call.
+
+    See Also
+    --------
+    sparse_pullback_map
+        Functional version.
+
+    References
+    ----------
+    Kaya Unalmis.
+    https://github.com/jax-ml/jax/issues/36862.
+
+    Parameters
+    ----------
+    fn : callable
+        Vectorized map.
+    y : pytree
+        Data to split into batches to feed to ``fn``.
+    batch_size : int or None
+        Size of batches. If no batching should be done or the batch size is the
+        full input then supply ``None``.
+    reduction : callable or None
+        Binary reduction operation.
+        Should take two arguments and return one output, e.g. ``jnp.add``.
+    chunk_reduction : callable
+        Chunk-wise reduction operation.
+        Should typically apply ``reduction`` along the mapped axis,
+        e.g. ``jnp.add.reduce``.
+    strip_dim0 : bool
+        Whether to strip the leading dim of ``y`` before passing it
+        to ``fn``; see notes. This flag only works if ``batch_size`` is one.
+        It should be set to ``False`` if ``fn`` is wrapped in ``vmap``.
+        Default is ``False``.
+
+    Returns
+    -------
+    out : pytree
+        Returns ``chunk_reduction(fn(y))``.
+
+    Examples
+    --------
+    >>> out = sparse_pullback(fn, y)
+
+    """
+    if strip_dim0 and batch_size == 1:
+        return _scanmap(
+            sparse_pullback_map(fn, _get_first_chunk(y)),
+            0,
+            reduction,
+            identity,
+        )(y)
+
+    if batch_size is None or (n_elements := tree_leaves(y)[0].shape[0]) <= batch_size:
+        return chunk_reduction(
+            _sparse_pullback(y, fn=eqx.filter_closure_convert(fn, y))
+        )
+
+    y, remain = _batch_and_remainder(y, batch_size)
+    # Note that num_batches in _batch_and_remainder is always positive.
+
+    y = _scanmap(
+        sparse_pullback_map(fn, _get_first_chunk(y)),
+        0,
+        reduction,
+        chunk_reduction,
+    )(y)
+
+    if reduction is None:
+        y = _unchunk(y)
+
+    if n_elements % batch_size == 0:
+        return y
+
+    remain = chunk_reduction(
+        _sparse_pullback(remain, fn=eqx.filter_closure_convert(fn, remain))
+    )
+
+    if reduction is None:
+        return _concat(y, remain)
+
+    return reduction(y, remain)
 
 
 class _Derivative(ABC):

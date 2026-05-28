@@ -1504,7 +1504,7 @@ class TestMagneticFields:
     def test_omnigenous_field_change_resolution_B(self):
         """Test OmnigenousField.change_resolution() of the B_lm parameters."""
         L_B_old = 1
-        L_B_new = 2
+        L_B_new = 3
         M_B_old = 3
         M_B_new = 6
         NFP = 4
@@ -1531,6 +1531,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)  # Issue #2189
 
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):

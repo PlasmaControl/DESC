@@ -3,7 +3,7 @@
 import warnings
 from abc import ABC, abstractmethod
 
-from equinox import Module
+import equinox as eqx
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
@@ -36,7 +36,7 @@ from desc.integrals._bounce_utils import (
     fast_chebyshev,
     fast_cubic_spline,
     get_mins,
-    get_vander,
+    get_vander_spline,
     mmt_for_bounce,
     move,
     num_well_rule,
@@ -46,8 +46,8 @@ from desc.integrals._bounce_utils import (
     theta_on_fieldlines,
 )
 from desc.integrals._interp_utils import (
+    _JF_BUG,
     _eps,
-    can_use_nufft,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -70,10 +70,11 @@ from desc.utils import (
     flatten_mat,
     parse_argname_change,
     setdefault,
+    warnif,
 )
 
 
-class Bounce(Module, ABC):
+class Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
@@ -92,9 +93,9 @@ class Bounce(Module, ABC):
             If ``True``, then the pitch angles are chosen so that the quadrature
             over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
             interior completed by an open midpoint scheme near the boundary such
-            that an accuracy of fourth order is preserved. If the integrand is not
-            sufficiently smooth then quadrature accuracy reduces to third order.
-            If ``False``, then an open midpoint scheme is returned.
+            that an accuracy of fourth order is preserved.
+            If ``False``, then an open midpoint scheme is returned, which
+            is only recommended for plotting purposes.
 
         Returns
         -------
@@ -207,7 +208,10 @@ class Bounce2D(Bounce):
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline`` option is 100.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -252,14 +256,15 @@ class Bounce2D(Bounce):
     Lref : float
         Optional. Reference length scale for normalization.
     spline : bool
-        Whether to use cubic splines to compute bounce points instead of
-        Chebyshev series. Default is ``True``.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
 
     """
 
-    required_names = ["B^zeta", "|B|", "iota"]
+    required_names = ["B^zeta", "|B|", "iota"]  # TODO(#2152)
+    """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
     _quad: tuple[jax.Array]
     _NFP: int
@@ -268,6 +273,7 @@ class Bounce2D(Bounce):
     _modes_t: jax.Array
     _c: dict[str, jax.Array]
     _theta: PiecewiseChebyshevSeries
+    _nufft_eps: float = eqx.field(static=True)
 
     def __init__(
         self,
@@ -322,6 +328,8 @@ class Bounce2D(Bounce):
         iota, alpha = jnp.atleast_1d(iota, alpha)
         self._theta = theta_on_fieldlines(angle, iota, alpha, num_transit, grid.NFP)
 
+        self._nufft_eps = float(nufft_eps)
+
         if Y_B is None:
             Y_B = Y_B_rule(grid, spline)
         if spline:
@@ -333,11 +341,15 @@ class Bounce2D(Bounce):
                 self._modes_t,
                 self._modes_z,
                 self._NFP,
-                nufft_eps,
+                self._nufft_eps,
                 vander_t=vander.get("dct spline", None),
                 check=check,
             )
         else:
+            warnif(
+                Y_B > grid.num_theta + grid.num_zeta,
+                msg="Unnecessarily high resolution for Y_B with spline=False.",
+            )
             self._c["B(z)"] = fast_chebyshev(
                 self._theta,
                 self._c["|B|"],
@@ -348,8 +360,8 @@ class Bounce2D(Bounce):
             )
 
     @staticmethod
-    def _objective_build(obj, names, eta):
-        """Default build for bounce integrals objectives.
+    def _build(obj, names, eta):
+        """Builds the objective, selecting default values if they were not specified.
 
         Examples
         --------
@@ -384,14 +396,22 @@ class Bounce2D(Bounce):
 
         Y_B = obj._hyperparam["Y_B"]
         if Y_B is None:
-            Y_B = Y_B_rule(obj._grid, spline=True)
+            Y_B = Y_B_rule(obj._grid, obj._hyperparam["spline"])
             obj._hyperparam["Y_B"] = Y_B
         if obj._hyperparam["num_well"] is None:
             obj._hyperparam["num_well"] = num_well_rule(
-                obj._hyperparam["num_transit"], eq.NFP, Y_B
+                obj._hyperparam["num_transit"],
+                eq.NFP,
+                # Due to legacy reasons Y_B is resolution over full transit
+                # if spline is true.
+                Y_B if obj._hyperparam["spline"] else (Y_B * eq.NFP),
             )
 
-        obj._constants["_vander"] = get_vander(obj._grid, Y, Y_B, eq.NFP)
+        obj._constants["_vander"] = (
+            get_vander_spline(obj._grid, Y, Y_B, eq.NFP)
+            if obj._hyperparam["spline"]
+            else {}
+        )
 
         num_quad = obj._hyperparam.pop("num_quad")
         if eta == 1:
@@ -484,7 +504,12 @@ class Bounce2D(Bounce):
         num_transit = kwargs.get("num_transit", 20)
 
         Y_B = kwargs.get("Y_B", Y_B_rule(grid, spline))
-        num_well = kwargs.get("num_well", num_well_rule(num_transit, grid.NFP, Y_B))
+        num_well = kwargs.get(
+            "num_well",
+            # Due to legacy reasons Y_B is resolution over full transit
+            # if spline is true.
+            num_well_rule(num_transit, grid.NFP, Y_B if spline else (Y_B * grid.NFP)),
+        )
 
         return (
             angle,
@@ -495,9 +520,9 @@ class Bounce2D(Bounce):
             num_pitch,
             pitch_batch_size,
             surf_batch_size,
-            quad,
             nufft_eps,
             spline,
+            quad,
             vander,
         )
 
@@ -630,7 +655,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def compute_theta(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,
@@ -649,7 +674,7 @@ class Bounce2D(Bounce):
     @staticmethod
     def angle(
         eq,
-        X=16,
+        X=32,
         Y=32,
         rho=jnp.array([1.0]),
         iota=None,
@@ -668,10 +693,12 @@ class Bounce2D(Bounce):
         X : int
             Poloidal Fourier grid resolution to interpolate the angle.
             Preferably rounded down to power of 2.
+            Default is 32.
         Y : int
             Toroidal Chebyshev grid resolution over a single field period
             to interpolate the angle.
             Preferably rounded down to power of 2.
+            Default is 32.
         rho : float or jnp.ndarray
             Shape (num ρ, ).
             Flux surfaces labels in [0, 1] on which to compute.
@@ -795,22 +822,20 @@ class Bounce2D(Bounce):
             num_well = num_well_rule(self._theta.X // self._NFP, self._NFP)
 
         if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            # Skip Newton update since these points are exponentially accurate.
             z1, z2 = self._c["B(z)"].intersect1d(
-                self._swap_pitch(pitch_inv), _eps, num_well
+                self._swap_pitch(pitch_inv), num_intersect=num_well, eps=_eps
             )
             z1 = move(z1)
             z2 = move(z2)
             return z1, z2
 
         pitch_inv = broadcast_for_bounce(pitch_inv)
-        if can_use_nufft:
-            return regular_points(self, pitch_inv, num_well, 1e-10)
-
-        # Newton update has only been implemented for nuffts; contributions welcome.
-        z1, z2, _ = bounce_points(
-            pitch_inv, self._c["knots"], self._c["B(z)"], num_well
-        )
-        return z1, z2
+        if self._nufft_eps < 1e-14:
+            # FIXME: Newton update has only been implemented for nuffts; contributions
+            # welcome : copy logic in desc/equilibrium/coords._map_poloidal_coordinates.
+            return bounce_points(pitch_inv, self._c["knots"], self._c["B(z)"], num_well)
+        return regular_points(self, pitch_inv, num_well)
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -832,7 +857,6 @@ class Bounce2D(Bounce):
             Whether to plot the field lines and bounce points of the given pitch angles.
         kwargs : dict
             Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d`` or
             ``desc/integrals/_bounce_utils.py::plot_ppoly``.
 
         Returns
@@ -954,7 +978,6 @@ class Bounce2D(Bounce):
 
         if points is None:
             points = self.points(pitch_inv, num_well)
-        z1, z2 = points
 
         pitch = 1 / pitch_inv
         # to broadcast with (..., num pitch, num well, num quad)
@@ -963,27 +986,17 @@ class Bounce2D(Bounce):
         elif jnp.ndim(pitch) > 1:
             pitch = pitch[:, None, :, None, None]
 
-        z = bijection_from_disc(x, z1[..., None], z2[..., None])
-
         if nufft_eps < 1e-14:
-            data = self._nummt(z, data, low_ram)
+            data = self._nummt(x, *points, data, low_ram)
         else:
-            data = self._nufft(
-                z,
-                data,
-                nufft_eps,
-                low_ram,
-                mask=flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], z.shape), 4),
-                sentinel=0.5 * jnp.min(pitch_inv),
-            )
+            data = self._nufft(x, *points, data, low_ram, nufft_eps, pitch_inv)
         data["|e_zeta|r,a|"] = data["|B|"] / jnp.abs(data["B^zeta"])
-        data["zeta"] = z
 
         # Strictly increasing ζ knots enforces dζ > 0.
         # To retain dℓ = |B|/(B⋅∇ζ) dζ > 0 after fixing dζ > 0, we require
         # B⋅∇ζ > 0. This is equivalent to changing the sign of ∇ζ
         # or (∂ℓ/∂ζ)|ρ,a. Recall dζ = ∇ζ⋅dR ⇔ 1 = ∇ζ⋅(e_ζ|ρ,a).
-        cov = grad_bijection_from_disc(z1, z2)
+        cov = grad_bijection_from_disc(*points)
         result = [
             (f(data, data["|B|"], pitch) * data["|e_zeta|r,a|"]).dot(w) * cov
             for f in integrand
@@ -991,7 +1004,7 @@ class Bounce2D(Bounce):
 
         if check:
             check_interp(
-                z,
+                data["zeta"],
                 jnp.reciprocal(data["|e_zeta|r,a|"]),
                 data["|B|"],
                 [data[k] for k in data if k not in ("zeta", "|e_zeta|r,a|", "|B|")],
@@ -1001,25 +1014,30 @@ class Bounce2D(Bounce):
 
         return result[0] if len(result) == 1 else result
 
-    def _nufft(self, z, data, eps, low_ram, mask, sentinel):
-        shape = z.shape
-        z = flatten_mat(z, 3)
+    def _nufft(self, x, z1, z2, data, low_ram, eps, pitch_inv):
+        shape = (*z1.shape, x.size)
+
+        z = flatten_mat(bijection_from_disc(x, z1[..., None], z2[..., None]), 3)
         t = flatten_mat(self._theta.eval1d(z, loop=low_ram))
         z = flatten_mat(z)
-        c = jnp.where(
-            mask[:, None] if mask.ndim == 2 else mask,
-            nufft2d2r(
-                z,
-                t,
-                jnp.concatenate(
-                    [*data.values(), self._c["B^zeta"], self._c["|B|"]], -3
-                ),
-                (0, 2 * jnp.pi / self._NFP),
-                vec=True,
-                eps=eps,
-                mask=mask,
-            ),
-            sentinel,  # replace junk zeros to avoid nans
+        # t and z have shape (num rho surfaces, num points on each surface)
+        #            or just (                  num points on each surface).
+
+        if _JF_BUG:
+            mask = fill_value = None
+        else:
+            mask = flatten_mat(jnp.broadcast_to((z1 < z2)[..., None], shape), 4)
+            fill_value = 0.5 * jnp.min(pitch_inv)
+
+        c = nufft2d2r(
+            z,
+            t,
+            jnp.concatenate([*data.values(), self._c["B^zeta"], self._c["|B|"]], -3),
+            (0, 2 * jnp.pi / self._NFP),
+            vec=True,
+            eps=eps,
+            mask=mask,
+            fill_value=fill_value,
         )
         c = (
             c.reshape(len(data) + 2, *shape)
@@ -1027,18 +1045,45 @@ class Bounce2D(Bounce):
             # reshape before swap to avoid memory copy
             else c.reshape(shape[0], len(data) + 2, *shape[1:]).swapaxes(0, 1)
         )
-        return dict(zip([*data.keys(), "B^zeta", "|B|"], c))
 
-    def _nummt(self, z, data, low_ram):
-        t = self._theta.eval1d(flatten_mat(z, 3), loop=low_ram).reshape(z.shape)
-        t = jnp.exp(1j * self._modes_t * t[..., None])
-        z = jnp.exp(1j * self._modes_z * z[..., None])
-        data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
-        data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
-        data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        data = dict(zip([*data.keys(), "B^zeta", "|B|"], c))
+        data["zeta"] = z.reshape(shape)
         return data
 
-    def interp_to_argmin(self, f, points, *, nufft_eps=1e-6, is_fourier=False):
+    def _nummt(self, x, z1, z2, data, low_ram):
+        shape = (*z1.shape, x.size)
+
+        zeta = bijection_from_disc(x, z1[..., None], z2[..., None])
+        z = flatten_mat(zeta, 3)
+        t = self._theta.eval1d(z, loop=low_ram).reshape(*shape, 1)
+
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            # Using the same |B| that gave bounce points increases correlation
+            # in discretization error in an open neighboorhood around the
+            # current point in the optimization landscape, and hence removes
+            # noise from optimization derivatives. For example, the difference
+            # between the auto derivative and a 4 point finite difference
+            # stencil at the optimal step size is reduced from 10³ to 10⁻⁶ for
+            # Γ_c (which has the singular weight 1/v_∥).
+            # Also uses less memory due to the dimension reduction.
+            B = self._c["B(z)"].eval1d(z, loop=low_ram).reshape(shape)
+
+        z = zeta[..., None]
+        z = jnp.exp(1j * self._modes_z * z)
+        t = jnp.exp(1j * self._modes_t * t)
+        data = {name: mmt_for_bounce(z, t, c) for name, c in data.items()}
+        data["B^zeta"] = mmt_for_bounce(z, t, self._c["B^zeta"])
+        if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries):
+            data["|B|"] = B
+        else:
+            data["|B|"] = mmt_for_bounce(z, t, self._c["|B|"])
+        data["zeta"] = zeta
+
+        return data
+
+    def interp_to_argmin(
+        self, f, points, *, nufft_eps=1e-6, is_fourier=False, **kwargs
+    ):
         """Interpolate ``f`` to the deepest point pⱼ in magnetic well j.
 
         Parameters
@@ -1069,24 +1114,19 @@ class Bounce2D(Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        errorif(
-            isinstance(self._c["B(z)"], PiecewiseChebyshevSeries),
-            NotImplementedError,
-            "Must choose Bounce2D(spline=True) for this feature.",
-        )
         if not is_fourier:
             f = Bounce2D.fourier(f)
 
         num_transit = self._theta.X // self._NFP
-        K_z = self._num_z // 2 * self._NFP
-        mins, B_mins = get_mins(
-            self._c["knots"],
-            self._c["B(z)"],
-            num_mins=num_transit * max(K_z, 5),  # liberal heuristic
-            # We set fill value to 0 since we chose our coordinates
-            # such that all bounce points are at ζ >= 0; and therefore,
-            # junk values in B_mins cannot be selected in argmin.
-            fill_value=0.0,
+        K_z = max(self._num_z // 2 * self._NFP, self._num_t // 2, 5)  # liberal
+        num_mins = kwargs.get("num_mins", num_transit * K_z)
+        # We set fill value to 0 since we chose our coordinates
+        # such that all bounce points are at ζ >= 0; and therefore,
+        # junk values in B_mins cannot be selected in argmin.
+        mins, B_mins = (
+            self._c["B(z)"].extrema1d(1, num_mins, fill_value=0.0, eps=_eps)
+            if isinstance(self._c["B(z)"], PiecewiseChebyshevSeries)
+            else get_mins(self._c["knots"], self._c["B(z)"], num_mins, fill_value=0.0)
         )
         t = self._theta.eval1d(mins)
 
@@ -1200,9 +1240,6 @@ class Bounce2D(Bounce):
             Shape (num pitch, ).
             Optional, 1/λ values whose corresponding bounce points on the field line
             specified by Clebsch coordinate ρ(l), α(m) will be plotted.
-        kwargs
-            Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -1226,7 +1263,7 @@ class Bounce2D(Bounce):
                 B = B[m]
             B = PiecewiseChebyshevSeries(B, domain)
             if pitch_inv is not None:
-                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, _eps)
+                kwargs["z1"], kwargs["z2"] = B.intersect1d(pitch_inv, eps=_eps)
                 kwargs["k"] = pitch_inv
             return B.plot1d(B.cheb, **kwargs)
 
@@ -1235,9 +1272,7 @@ class Bounce2D(Bounce):
         if B.ndim == 3:
             B = B[m]
         if pitch_inv is not None:
-            kwargs["z1"], kwargs["z2"], _ = bounce_points(
-                pitch_inv, self._c["knots"], B
-            )
+            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._c["knots"], B)
             kwargs["k"] = pitch_inv
         return plot_ppoly(PPoly(B.T, self._c["knots"]), **kwargs)
 
@@ -1253,9 +1288,6 @@ class Bounce2D(Bounce):
         m : int
             Index into the ``alpha`` array supplied to make this object.
             The alpha value corresponds to ``alpha[m]``.
-        kwargs
-            Keyword arguments into
-            ``desc/integrals/_bounce_utils.py::PiecewiseChebyshevSeries.plot1d``.
 
         Returns
         -------
@@ -1449,6 +1481,7 @@ class Bounce1D(Bounce):
     """
 
     required_names = ["B^zeta", "B^zeta_z|r,a", "|B|", "|B|_z|r,a"]
+    """Required keys in the ``data`` dictionary given to the ``__init__`` method."""
 
     _quad: tuple[jax.Array]
     _data: dict[str, jax.Array]
@@ -1633,10 +1666,9 @@ class Bounce1D(Bounce):
             line and pitch, is padded with zero.
 
         """
-        z1, z2, _ = bounce_points(
+        return bounce_points(
             broadcast_for_bounce(pitch_inv), self._zeta, self._B, num_well
         )
-        return z1, z2
 
     def check_points(self, points, pitch_inv, *, plot=True, **kwargs):
         """Check that bounce points are computed correctly.
@@ -1860,7 +1892,7 @@ class Bounce1D(Bounce):
                 jnp.ndim(pitch_inv) > 1,
                 msg=f"Got pitch_inv.ndim={jnp.ndim(pitch_inv)}, but expected 1.",
             )
-            kwargs["z1"], kwargs["z2"], _ = bounce_points(pitch_inv, self._zeta, B)
+            kwargs["z1"], kwargs["z2"] = bounce_points(pitch_inv, self._zeta, B)
             kwargs["k"] = pitch_inv
         fig, ax = plot_ppoly(
             PPoly(B.T, self._zeta), **set_default_plot_kwargs(kwargs, l, m)

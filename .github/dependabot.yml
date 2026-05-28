@@ -29,7 +29,6 @@ updates:
       minor_packages:
         patterns:
           - "colorama"
-          - "nvgpu"
           - "psutil"
           - "pylatexenc"
           - "termcolor"

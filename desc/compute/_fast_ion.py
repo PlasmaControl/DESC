@@ -146,12 +146,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
-            batch_map(
-                foreach,
-                pitch_inv,
-                opts.pitch_batch_size,
-                shard_input_data=opts.shard_input_data,
-            )
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
             * (weight / pitch_inv**2),
             axis=-1,
         )
@@ -519,12 +514,7 @@ def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kw
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
-            batch_map(
-                foreach,
-                pitch_inv,
-                opts.pitch_batch_size,
-                shard_input_data=opts.shard_input_data,
-            )
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
             * (weight / pitch_inv**2),
             axis=-1,
         )

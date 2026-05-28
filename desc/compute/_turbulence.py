@@ -162,6 +162,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
             "ae grad(temperature)": safediv(radial_scale * data["Te_r"], data["Te"]),
         },
         batch_size=opts.surf_batch_size,
+        shard_input_data=opts.shard_input_data,
     )
     assert out.ndim == 1
 

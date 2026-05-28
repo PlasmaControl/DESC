@@ -99,12 +99,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         # B₀ has units of λ⁻¹.
         # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         return jnp.sum(
-            batch_map(
-                foreach,
-                pitch_inv,
-                opts.pitch_batch_size,
-                shard_input_data=opts.shard_input_data,
-            )
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
             * (weight / pitch_inv**3),
             axis=-1,
         )

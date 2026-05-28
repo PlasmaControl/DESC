@@ -1,4 +1,20 @@
-"""Compute functions for turbulent transport."""
+"""Compute functions for turbulent transport.
+
+References
+----------
+.. [1] J. H. E. Proll et al., "TEM turbulence optimisation in stellarators,"
+       Plasma Phys. Control. Fusion 58, 014006 (2016).
+       https://doi.org/10.1088/0741-3335/58/1/014006.
+.. [2] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
+.. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+       bounce-averaging algorithm and its applications,"
+       J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+.. [4] R. J. J. Mackenbach, P. Helander, M. Landreman, S. Brunner, and
+       J. H. E. Proll, "On the curvature-driven ion-temperature-gradient
+       instability and its available energy," J. Plasma Phys. 91, E144 (2025).
+       https://doi.org/10.1017/S0022377825100846.
+
+"""
 
 from functools import partial
 
@@ -11,22 +27,9 @@ from desc.backend import jit, jnp
 
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
-from ..utils import apply, safediv
-from ._fast_ion import _radial_drift
+from ..utils import safediv
+from ._drift import _binormal_drift, _radial_drift, _sqrt_G_hat
 from .data_index import register_compute_fun
-
-
-def _G_hat_half(data, B, pitch):
-    return safediv(1.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
-
-
-def _binormal_drift_wb_inverse(data, B, pitch):
-    # TODO (#465), multiply by (omega + zeta) instead of zeta
-    gbdrift_secular = data["gbdrift (secular)/phi"] * data["zeta"]
-    cvdrift = data["cvdrift (periodic)"] + gbdrift_secular
-    gbdrift = data["gbdrift (periodic)"] + gbdrift_secular
-    g = jnp.sqrt(jnp.abs(1 - pitch * B))
-    return (cvdrift - 0.5 * gbdrift) * g + safediv(0.5 * gbdrift, g)
 
 
 def _ae(G, G_ω_α, G_ω_ψ, data, energy):
@@ -84,9 +87,7 @@ def _energy_quad(num_energy):
     grid_requirement={"can_fft2": True},
     radial_scale="float : Multiplier for the radial correlation length.",
     binormal_scale="float : Multiplier for the binormal correlation length.",
-    num_energy=(
-        "int : Resolution for generalized Gauss-Laguerre quadrature over energy."
-    ),
+    num_energy="int : Resolution for generalized Laguerre quadrature over energy.",
     energy_quad="tuple : Nodes and weights for the energy quadrature.",
     **Options._doc,
 )
@@ -95,14 +96,7 @@ def _energy_quad(num_energy):
     static_argnames=Options._static_argnames + ("num_energy",),
 )
 def _available_energy(params, transforms, profiles, data, **kwargs):
-    """Dimensionless available energy of trapped electrons.
-
-    References
-    ----------
-    .. [1] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
-    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
-           differentiable bounce-averaging algorithm and its applications,"
-           Journal of Plasma Physics.
+    """Dimensionless available energy of trapped electrons [2]_.
 
     Parameters
     ----------
@@ -123,13 +117,12 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     opts = Options.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
 
-        def foreach_pitch(pitch_inv):
+        def foreach(pitch_inv):
             return (
                 _ae(
                     *bounce.integrate(
-                        [_G_hat_half, _binormal_drift_wb_inverse, _radial_drift],
+                        [_sqrt_G_hat, _binormal_drift, _radial_drift],
                         pitch_inv,
                         data,
                         names,
@@ -147,10 +140,10 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
         return jnp.sum(
-            batch_map(foreach_pitch, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**2,
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            * (weight / pitch_inv**2),
             axis=-1,
         )
 
@@ -162,17 +155,17 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     )
     out = Bounce2D.batch(
         foreach_surface,
-        apply(data, subset=names),
         data,
-        kwargs["angle"],
         grid,
-        opts.surf_batch_size,
-        surface_data={
-            "ae grad(density)": radial_scale * safediv(data["ne_r"], data["ne"]),
+        angle=kwargs["angle"],
+        names=names,
+        flux_data={
+            "ae grad(density)": safediv(radial_scale * data["ne_r"], data["ne"]),
             "ae psi width": radial_scale * data["psi_r"],
-            "ae alpha width": binormal_scale * safediv(1.0, data["rho"]),
-            "ae grad(temperature)": radial_scale * safediv(data["Te_r"], data["Te"]),
+            "ae alpha width": safediv(binormal_scale, data["rho"]),
+            "ae grad(temperature)": safediv(radial_scale * data["Te_r"], data["Te"]),
         },
+        batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
 

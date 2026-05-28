@@ -65,6 +65,7 @@ from desc.objectives import (
     ForceBalanceAnisotropic,
     FusionPower,
     GammaC,
+    GammaLoss,
     GenericObjective,
     HeatingPowerISS04,
     Isodynamicity,
@@ -2118,6 +2119,36 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )
+        loss_opts = dict(
+            Y_B=13,
+            num_well=3 * (eq.NFP + 2),
+            num_quad=16,
+            num_pitch=10,
+        )
+        for kind, name in (
+            ("delta", "Gamma_delta"),
+            ("alpha", "Gamma_alpha"),
+        ):
+            obj = GammaLoss(
+                kind, eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **loss_opts
+            )
+            obj.build()
+            np.testing.assert_allclose(
+                obj.constants["alpha"], GammaLoss._default_alpha(eq)
+            )
+            assert obj._hyperparam["num_field_periods"] == eq.NFP + 2
+            data = eq.compute(
+                name,
+                grid,
+                angle=angle,
+                alpha=obj.constants["alpha"],
+                quad=obj.constants["quad"],
+                _vander=obj.constants["_vander"],
+                **obj._hyperparam,
+            )
+            np.testing.assert_allclose(
+                obj.compute(eq.params_dict), grid.compress(data[name])
+            )
         data = eq.compute("available energy", grid, angle=angle, num_energy=8, **opts)
         obj = AvailableEnergy(
             eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, num_energy=8, **opts
@@ -3264,16 +3295,23 @@ def test_loss_function_asserts():
 
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    if objective in {AvailableEnergy, EffectiveRipple, GammaC}:
+    if objective in {AvailableEnergy, EffectiveRipple, GammaC, GammaLoss}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
         kwargs["num_field_periods"] = 10
         kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is GammaLoss:
+        kwargs["num_field_periods"] = eq.NFP + 2
+        kwargs.setdefault("alpha", GammaLoss._default_alpha(eq))
+        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
     if objective is AvailableEnergy:
         kwargs["num_energy"] = 8
         kwargs.setdefault("Y_B", 16)
+    if objective is GammaLoss:
+        kind = kwargs.pop("kind")
+        return objective(kind, eq=eq, **kwargs)
     return objective(eq=eq, **kwargs)
 
 
@@ -3305,6 +3343,7 @@ class TestComputeScalarResolution:
         CoilTorsion,
         FusionPower,
         GenericObjective,
+        GammaLoss,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
@@ -3854,6 +3893,7 @@ class TestObjectiveNaNGrad:
         DeflationOperator,
         FusionPower,
         GammaC,
+        GammaLoss,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
         Omnigenity,
@@ -4248,23 +4288,30 @@ class TestObjectiveNaNGrad:
         np.testing.assert_allclose(g, g_0, atol=1e-6)
 
     @pytest.mark.unit
-    def test_objective_no_nangrad_Gamma_c(self):
-        """Gamma_c."""
+    @pytest.mark.parametrize(
+        "objective", [GammaC, ("delta", GammaLoss), ("alpha", GammaLoss)]
+    )
+    def test_objective_no_nangrad_fast_ion(self, objective):
+        """Fast ion objectives."""
         eq = get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(2, 2, 2, 4, 4, 4)
+        kind = objective[0] if isinstance(objective, tuple) else None
+        objective = objective[1] if isinstance(objective, tuple) else objective
+        kwargs = {"kind": kind} if kind is not None else {}
         obj_0 = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, nufft_eps=0)
+            _reduced_resolution_objective(eq, objective, nufft_eps=0, **kwargs)
         )
         obj_0.build(verbose=0)
         g_0 = obj_0.grad(obj_0.x())
         assert not np.any(np.isnan(g_0))
 
-        obj = ObjectiveFunction(_reduced_resolution_objective(eq, GammaC))
+        obj = ObjectiveFunction(_reduced_resolution_objective(eq, objective, **kwargs))
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=2e-5)
+        if objective is GammaC:
+            np.testing.assert_allclose(g, g_0, atol=2e-5)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

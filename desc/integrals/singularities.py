@@ -9,7 +9,7 @@ from interpax_fft import rfft2_modes, rfft2_vander
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, rfft2
-from desc.batching import batch_map, vmap_chunked
+from desc.batching import vmap_chunked
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.utils import (
@@ -655,7 +655,7 @@ def _nonsingular_part(
             )
             return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
 
-        f += batch_map(eval_pt, eval_data, chunk_size).reshape(
+        f += vmap_chunked(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
         )
         return f, source_data

@@ -21,6 +21,7 @@ from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import surface_averages
+from desc.integrals._ae_plot import plot_available_energy
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
@@ -1060,6 +1061,23 @@ def test_plot_b_mag():
     bmag = eq.compute("|B|", grid=grid)["|B|"] / Bref
     fig, ax = plt.subplots()
     ax.plot(bmag)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_available_energy():
+    """Test plotting available-energy wells for NCSX."""
+    eq = get("NCSX")
+    grid = LinearGrid(rho=[0.5], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+    fig, ax = plot_available_energy(
+        eq=eq,
+        grid=grid,
+        density_gradient=-3.0,
+        temperature_gradient=0.0,
+        num_quad=16,
+        num_field_periods=10,
+    )
     return fig
 
 

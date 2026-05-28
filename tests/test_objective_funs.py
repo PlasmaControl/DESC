@@ -43,6 +43,7 @@ from desc.magnetic_fields import (
 )
 from desc.objectives import (
     AspectRatio,
+    AvailableEnergy,
     BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
@@ -2083,6 +2084,11 @@ class TestObjectiveFunction:
     def test_objective_against_compute_bounce(self):
         """Test objectives are built properly."""
         eq = get("W7-X")
+        eq.pressure = None
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -5e18])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.atomic_number = 1.0
         rho = np.linspace(0.1, 1, 3)
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
@@ -2111,6 +2117,15 @@ class TestObjectiveFunction:
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
+        )
+        data = eq.compute("available energy", grid, angle=angle, num_energy=8, **opts)
+        obj = AvailableEnergy(
+            eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, num_energy=8, **opts
+        )
+        obj.build()
+        assert obj._hyperparam["num_well"] == opts["num_well"]
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), grid.compress(data["available energy"])
         )
 
     @pytest.mark.unit
@@ -3249,13 +3264,16 @@ def test_loss_function_asserts():
 
 def _reduced_resolution_objective(eq, objective, **kwargs):
     """Speed up testing suite by defining rules to reduce objective resolution."""
-    if objective in {EffectiveRipple, GammaC}:
+    if objective in {AvailableEnergy, EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
         kwargs["num_field_periods"] = 10
         kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is AvailableEnergy:
+        kwargs["num_energy"] = 8
+        kwargs.setdefault("Y_B", 16)
     return objective(eq=eq, **kwargs)
 
 
@@ -3274,6 +3292,7 @@ class TestComputeScalarResolution:
     ]
     specials = [
         # these require special logic
+        AvailableEnergy,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
@@ -3310,6 +3329,32 @@ class TestComputeScalarResolution:
 
     eq = get("HELIOTRON")
     res_array = np.array([2, 2.5, 3])
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_available_energy(self):
+        """AvailableEnergy."""
+        eq = self.eq.copy()
+        eq.pressure = None
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -5e18])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.atomic_number = 1.0
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            grid = LinearGrid(
+                M=int(self.eq.M * res),
+                N=int(self.eq.N * res),
+                NFP=self.eq.NFP,
+                rho=np.array([0.3, 0.7]),
+                sym=False,
+            )
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(eq, AvailableEnergy, grid=grid),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-1)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_plasma_vessel(self):
@@ -3792,6 +3837,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        AvailableEnergy,
         BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,
@@ -3826,6 +3872,33 @@ class TestObjectiveNaNGrad:
         ObjectiveFromUser,
     ]
     other_objectives = list(set(objectives) - set(specials))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_available_energy(self):
+        """AvailableEnergy."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+        eq.pressure = None
+        eq.electron_density = PowerSeriesProfile([1e19, 0, -5e18])
+        eq.electron_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.ion_temperature = PowerSeriesProfile([1e3, 0, -5e2])
+        eq.atomic_number = 1.0
+
+        obj_0 = ObjectiveFunction(
+            _reduced_resolution_objective(eq, AvailableEnergy, nufft_eps=0)
+        )
+        obj_0.build(verbose=0)
+        g_0 = obj_0.grad(obj_0.x())
+        assert not np.any(np.isnan(g_0))
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, AvailableEnergy, nufft_eps=1e-8)
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=5e-5)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_plasma_vessel(self):

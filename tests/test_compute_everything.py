@@ -314,8 +314,7 @@ def fft_grid_data(p):
     fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco"]
 
     eq = get("W7-X")
-    # ci and my laptop differ a bunch at rho = 0, so skip that
-    rho = np.linspace(1e-2, 1, 10)
+    rho = np.linspace(0, 1, 10)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
     nufft_eps = 1e-10
@@ -367,7 +366,7 @@ def raz_grid_data(p):
     eq = get("W7-X")
     num_transit = 2
     Y_B = eq.N_grid * 2
-    rho = np.linspace(1e-2, 1, 10)
+    rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")

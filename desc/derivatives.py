@@ -13,8 +13,8 @@ if use_jax:
     from desc.batching import (
         jacfwd_chunked,
         jacrev_chunked,
-        make_shardable,
         _concat,
+        _evaluate_in_chunks,
         _scanmap,
         _batch_and_remainder,
         _unchunk,
@@ -22,7 +22,7 @@ if use_jax:
         identity,
     )
 
-from functools import wraps
+from functools import partial, wraps
 
 import equinox as eqx
 from jax.tree_util import tree_leaves, tree_map
@@ -95,6 +95,17 @@ def sparse_pullback_map(fn, y):
         return _sparse_pullback(y, fn=fn)
 
     return wrapper
+
+
+def _sparse_pullback_sharded(fn, y):
+    return _sparse_pullback(y, fn=eqx.filter_closure_convert(fn, y))
+
+
+def _sparse_pullback_sharded_map_stripped(fn, y):
+    def apply(yi):
+        return _sparse_pullback(yi, fn=eqx.filter_closure_convert(fn, yi))
+
+    return jax.vmap(apply)(y)
 
 
 def sparse_pullback(
@@ -170,44 +181,23 @@ def sparse_pullback(
 
     """
     if shard_input_data:
-        y_shardable, y_remainder = make_shardable(y)
-        n_shardable = tree_leaves(y_shardable)[0].shape[0]
-        n_remainder = tree_leaves(y_remainder)[0].shape[0]
-
-        if n_shardable == 0:
-            return sparse_pullback(
-                fn,
-                y_remainder,
-                batch_size,
-                reduction=reduction,
-                chunk_reduction=chunk_reduction,
-                strip_dim0=strip_dim0,
-            )
-
-        out_shardable = sparse_pullback(
+        sparse_fun = partial(
+            (
+                _sparse_pullback_sharded_map_stripped
+                if strip_dim0 and batch_size == 1
+                else _sparse_pullback_sharded
+            ),
             fn,
-            y_shardable,
-            batch_size,
-            reduction=reduction,
-            chunk_reduction=chunk_reduction,
-            strip_dim0=strip_dim0,
         )
 
-        if n_remainder == 0:
-            return out_shardable
-
-        out_remainder = sparse_pullback(
-            fn,
-            y_remainder,
+        return _evaluate_in_chunks(
+            sparse_fun,
             batch_size,
-            reduction=reduction,
-            chunk_reduction=chunk_reduction,
-            strip_dim0=strip_dim0,
-        )
-        return (
-            _concat(out_shardable, out_remainder)
-            if reduction is None
-            else reduction(out_shardable, out_remainder)
+            (0,),
+            reduction,
+            chunk_reduction,
+            True,
+            y,
         )
 
     if strip_dim0 and batch_size == 1:

@@ -1,12 +1,27 @@
 """Tests for backend functions."""
 
 import os
+import subprocess
+import sys
+import textwrap
 
 import numpy as np
 import pytest
 
 from desc.backend import _lstsq, jax, jnp, put, root, root_scalar, sign, vmap
-from desc.batching import batch_map, make_shardable, vmap_chunked
+from desc.batching import batch_map
+
+
+def _run_forced_cpu_devices(code, num_devices=4):
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    env["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_devices}"
+    subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code)],
+        check=True,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        env=env,
+    )
 
 
 @pytest.mark.unit
@@ -50,20 +65,81 @@ def test_batch_map_with_chunk_size():
 @pytest.mark.unit
 def test_sharded_chunked_batching():
     """Test chunked batching with sharded input data."""
-    x = jnp.arange(5.0)
-    np.testing.assert_allclose(
-        batch_map(lambda y: y + 1, x, batch_size=2, shard_input_data=True),
-        x + 1,
-    )
-    np.testing.assert_allclose(
-        vmap_chunked(
-            lambda y, scale: y * scale,
-            in_axes=(0, None),
+    _run_forced_cpu_devices("""
+        import numpy as np
+
+        from desc.backend import jax, jnp
+        from desc.batching import batch_map, vmap_chunked
+
+        assert jax.device_count() == 4
+        x = jnp.arange(13.0)
+
+        cases = [
+            (
+                lambda y: batch_map(
+                    lambda z: z + 1,
+                    y,
+                    batch_size=2,
+                    shard_input_data=True,
+                ),
+                x + 1,
+            ),
+            (
+                lambda y: batch_map(lambda z: z + 1, y, shard_input_data=True),
+                x + 1,
+            ),
+            (
+                lambda y: batch_map(
+                    lambda z: z + 1,
+                    y,
+                    batch_size=1,
+                    strip_dim0=True,
+                    shard_input_data=True,
+                ),
+                x + 1,
+            ),
+            (
+                lambda y: vmap_chunked(
+                    lambda z, scale: z * scale,
+                    in_axes=(0, None),
+                    chunk_size=2,
+                    shard_input_data=True,
+                )(y, 3.0),
+                x * 3,
+            ),
+            (
+                lambda y: vmap_chunked(
+                    lambda z, scale: z * scale,
+                    in_axes=(0, None),
+                    shard_input_data=True,
+                )(y, 3.0),
+                x * 3,
+            ),
+            (
+                lambda y: batch_map(
+                    lambda z: z,
+                    y,
+                    batch_size=2,
+                    reduction=jnp.add,
+                    chunk_reduction=jnp.sum,
+                    shard_input_data=True,
+                ),
+                jnp.sum(x),
+            ),
+        ]
+        for fun, expected in cases:
+            np.testing.assert_allclose(fun(x), expected)
+            np.testing.assert_allclose(jax.jit(fun)(x), expected)
+
+        two_inputs = lambda y, z: vmap_chunked(
+            lambda a, b: a - b,
+            in_axes=(0, 0),
             chunk_size=2,
             shard_input_data=True,
-        )(x, 3.0),
-        x * 3,
-    )
+        )(y, z)
+        np.testing.assert_allclose(two_inputs(x, x[::-1]), x - x[::-1])
+        np.testing.assert_allclose(jax.jit(two_inputs)(x, x[::-1]), x - x[::-1])
+        """)
 
 
 @pytest.mark.unit
@@ -171,23 +247,34 @@ def test_lstsq():
     )
 
 
-@pytest.mark.xfail(reason="The flags need to be set before desc.backend is imported.")
 @pytest.mark.unit
 def test_make_shardable():
     """Test that sharding works."""
-    num_cpu = 10
-    flags = os.environ.get("XLA_FLAGS", "")
-    flags += f" --xla_force_host_platform_device_count={num_cpu}"
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    os.environ["XLA_FLAGS"] = flags
+    _run_forced_cpu_devices("""
+        import numpy as np
 
-    f = np.arange(201)
-    sf, rf = make_shardable(f, num_devices=num_cpu)
-    assert sf.size == 200
-    assert rf.size == 1
+        from desc.backend import jax, jnp
+        from desc.batching import make_shardable
 
-    gsf = jnp.sin(sf)
-    grf = jnp.sin(rf)
-    g = np.concatenate([gsf, grf])
+        assert jax.device_count() == 4
 
-    np.testing.assert_allclose(g, jnp.sin(f))
+        f = np.arange(21)
+        sf, rf = make_shardable(f, num_devices=4)
+        assert sf.size == 20
+        assert rf.size == 1
+        np.testing.assert_allclose(
+            np.concatenate([np.asarray(jnp.sin(sf)), np.asarray(jnp.sin(rf))]),
+            jnp.sin(f),
+        )
+
+        f = jnp.arange(20).reshape(2, 10)
+        sf, rf = make_shardable(f, axis=1, num_devices=4)
+        assert sf.shape == (2, 8)
+        assert rf.shape == (2, 2)
+        np.testing.assert_allclose(
+            np.concatenate(
+                [np.asarray(jnp.sin(sf)), np.asarray(jnp.sin(rf))], axis=1
+            ),
+            jnp.sin(f),
+        )
+        """)

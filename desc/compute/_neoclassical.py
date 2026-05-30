@@ -116,14 +116,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
-            batch_map(
-                fun,
-                pitch_inv,
-                opts.pitch_batch_size,
-                shard_input_data=opts.shard_input_data,
-            )
-            * weight
-            / pitch_inv**3,
+            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**3,
             axis=-1,
         )
 

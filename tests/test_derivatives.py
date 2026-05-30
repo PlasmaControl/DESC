@@ -1,5 +1,10 @@
 """Tests for jax autodiff wrappers and finite differences."""
 
+import os
+import subprocess
+import sys
+import textwrap
+
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -10,22 +15,77 @@ from desc.derivatives import AutoDiffDerivative, sparse_pullback
 from .utils import FiniteDiffDerivative
 
 
+def _run_forced_cpu_devices(code, num_devices=4):
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    env["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_devices}"
+    subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(code)],
+        check=True,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        env=env,
+    )
+
+
 class TestDerivative:
     """Tests Derivative classes."""
 
     @pytest.mark.unit
     def test_sparse_pullback_sharded_chunked(self):
         """Test sparse_pullback with chunking and sharded input data."""
-        x = jnp.arange(5.0)
-        np.testing.assert_allclose(
-            sparse_pullback(
-                lambda y: y**2,
-                x,
-                batch_size=2,
-                shard_input_data=True,
-            ),
-            x**2,
-        )
+        _run_forced_cpu_devices("""
+            import numpy as np
+
+            from desc.backend import jax, jnp
+            from desc.derivatives import sparse_pullback
+
+            assert jax.device_count() == 4
+            x = jnp.arange(13.0)
+
+            cases = [
+                (
+                    lambda y: sparse_pullback(
+                        lambda z: z**2,
+                        y,
+                        batch_size=2,
+                        shard_input_data=True,
+                    ),
+                    x**2,
+                ),
+                (
+                    lambda y: sparse_pullback(
+                        lambda z: z**2,
+                        y,
+                        shard_input_data=True,
+                    ),
+                    x**2,
+                ),
+                (
+                    lambda y: sparse_pullback(
+                        lambda z: z**2,
+                        y,
+                        batch_size=1,
+                        strip_dim0=True,
+                        shard_input_data=True,
+                    ),
+                    x**2,
+                ),
+                (
+                    lambda y: sparse_pullback(
+                        lambda z: z**2,
+                        y,
+                        batch_size=2,
+                        reduction=jnp.add,
+                        chunk_reduction=jnp.sum,
+                        shard_input_data=True,
+                    ),
+                    jnp.sum(x**2),
+                ),
+            ]
+            for fun, expected in cases:
+                np.testing.assert_allclose(fun(x), expected)
+                np.testing.assert_allclose(jax.jit(fun)(x), expected)
+            """)
 
     @pytest.mark.unit
     def test_finite_diff_vec(self):

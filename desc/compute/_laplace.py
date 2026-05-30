@@ -1,13 +1,14 @@
-"""Compute functions for multiply connected geometry Laplace solver.
+"""Compute functions for multiply connected Laplace solver as described in [1]_.
 
 References
 ----------
-    [1] Unalmis et al. New high-order accurate free surface stellarator
+.. [1] Unalmis et al. New high-order accurate free surface stellarator
         equilibria optimization and boundary integral methods in DESC.
 
 """
 
 from functools import partial
+from typing import NamedTuple, Optional
 
 import equinox as eqx
 import jax
@@ -26,66 +27,93 @@ from desc.integrals.singularities import (
     get_interpolator,
     singular_integral,
 )
-from desc.utils import apply, cross, dot, errorif
+from desc.utils import cross, dot, errorif
 
 from .data_index import register_compute_fun
 
-_doc = {
-    "Phi_0": """jnp.ndarray :
-        Initial guess for iteration.
-        """,
-    "xtol": """float :
-        Absolute and relative error for the linear solve. Default is ``1e-8``.
-        """,
-    "maxiter": """int :
-        Maximum number of iterations for iterative scalar potential solves.
-        If non-positive then the materialized matrix will be inverted instead.
-        If positive, then performs that many iterations until ``maxiter`` or an
-        error tolerance of ``xtol`` is reached. Ten iterations should suffice for
-        the default GMRES solve. Default is ``10``.
-        """,
-    "solve_method": """str :
-        Method to use for the scalar potential solve. One of ``"auto"``,
-        ``"fixed_point"``, ``"gmres"``, or ``"least_squares"``.
-        If ``"auto"``, then uses GMRES when ``maxiter`` is positive and the
-        problem supports it, otherwise use the least-squares solve. Default is
-        ``"auto"``.
-        """,
-    "full_output": """bool
-        Whether to compute the maximum error ``Phi error`` and store the number of
-        iterations ``num iter`` used by the scalar potential solver. Default is
-        ``False``.
-        """,
-    "chunk_size": """int or None :
-        Size to split integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.  Default is ``None``.
-        Recommend to verify computation with ``chunk_size`` set to a
-        small number due to bugs in JAX or XLA.
-        """,
-    "_D_quad": """bool
-        Set to ``True`` to perform double layer potential quadrature without removing
-        singularities. Default is ``False``. This is intended for developer use.
-        """,
-}
 
+class Options(NamedTuple):
+    """Laplace solver options."""
 
-def _select_potential_solve_method(solve_method, maxiter, problem):
-    if solve_method == "auto":
-        if (maxiter > 0) and (problem != "interior Neumann"):
-            return "gmres"
-        return "least_squares"
-    errorif(
-        solve_method not in {"fixed_point", "gmres", "least_squares"},
-        msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
-        f"or 'least_squares', got {solve_method!r}.",
-    )
-    errorif(
-        solve_method in {"fixed_point", "gmres"} and (problem == "interior Neumann"),
-        msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
-        "problems. Use solve_method='least_squares' instead.",
-    )
-    return solve_method
+    Phi_0: Optional[jax.Array] = None
+    """Initial guess for iteration."""
+
+    atol: float = 1e-7
+    """Absolute error tolerance for the iterative linear solve. Default is ``1e-7``."""
+
+    rtol: float = 1e-6
+    """Relative error tolerance for the iterative linear solve. Default is ``1e-6``."""
+
+    max_steps: int = 10
+    """Maximum number of steps for iterative linear solve.
+
+    Typically converges in 2 iterations. Default max value is ``10``.
+    """
+
+    problem: str = "interior Neumann"
+    """Boundary value problem to solve.
+
+    One of ``"interior Neumann"``, ``"exterior Neumann"``, or ``"interior Dirichlet"``.
+    (In some routines this may be determined automatically.)
+    """
+
+    solve_method: str = "auto"
+    """Method to use for the scalar potential solve.
+
+    One of ``"auto"``, ``"gmres"``, or ``"direct"``. If ``"auto"``, then uses
+    GMRES when the problem supports it, otherwise uses the direct solve. Default
+    is ``"auto"``. If GMRES errors due to incompatibility with old JAX versions,
+    ``"fixed_point"`` can be selected instead.
+    """
+
+    full_output: bool = False
+    """Whether to return diagnostic output of the iterative potential solve.
+
+    If ``True``, computes the maximum error ``Phi error`` and stores the number
+    of steps ``num_steps`` used by the scalar potential solver. Default is
+    ``False``.
+    """
+
+    chunk_size: Optional[int] = None
+    """Size to split integral computation into chunks.
+
+    If no chunking should be done or the chunk size is the full input then
+    supply ``None``. Default is ``None``. Recommend to verify computation with
+    ``chunk_size`` set to a small number due to bugs in JAX or XLA.
+    """
+
+    B_coil_chunk_size: Optional[int] = None
+    """Size to split coil integral computation into chunks.
+
+    If no chunking should be done or the chunk size is the full input then
+    supply ``None``. Default is ``None``.
+    """
+
+    D_quad: bool = False
+    """Developer option for double-layer potential quadrature.
+
+    Set to ``True`` to perform double-layer potential quadrature without removing
+    singularities. Default is ``False``.
+    """
+
+    @staticmethod
+    def select_solver(options):
+        """Pick the solver based on the problem."""
+        solve_method = options.solve_method
+        is_interior_neumann = options.problem == "interior Neumann"
+        if solve_method == "auto":
+            solve_method = "direct" if is_interior_neumann else "gmres"
+        errorif(
+            solve_method not in {"fixed_point", "gmres", "direct"},
+            msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
+            f"or 'direct', got {solve_method!r}.",
+        )
+        errorif(
+            solve_method in {"fixed_point", "gmres"} and is_interior_neumann,
+            msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
+            "problems. Use solve_method='direct' instead.",
+        )
+        return options._replace(solve_method=solve_method)
 
 
 def _D_plus_half(
@@ -142,19 +170,10 @@ def _D_plus_half(
     return result
 
 
-def _least_squares_compute_potential(
-    boundary_condition,
-    potential_data,
-    source_data,
-    interpolator,
-    basis,
-    problem,
-    chunk_size=None,
-    _D_quad=False,
-    **kwargs,
+@eqx.filter_jit
+def _direct_solve(
+    boundary_condition, potential_data, source_data, interpolator, basis, options
 ):
-    assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
-
     potential_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
@@ -172,7 +191,12 @@ def _least_squares_compute_potential(
     Phi = basis.evaluate(potential_grid)
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = (
-        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
+        Phi
+        if (
+            potential_grid.num_theta == source_grid.num_theta
+            and potential_grid.num_zeta == source_grid.num_zeta
+        )
+        else basis.evaluate(source_grid)
     )
 
     D = _D_plus_half(
@@ -180,12 +204,12 @@ def _least_squares_compute_potential(
         source_data,
         interpolator,
         basis,
-        chunk_size,
+        options.chunk_size,
         prune_data=False,
-        _D_quad=_D_quad,
+        _D_quad=options.D_quad,
     )
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
-    if problem == "exterior Neumann" or problem == "interior Dirichlet":
+    if options.problem in ("exterior Neumann", "interior Dirichlet"):
         D -= Phi
         if not well_posed:
             well_posed = None
@@ -200,11 +224,90 @@ def _least_squares_compute_potential(
     ).value
 
 
+@eqx.filter_jit
+def _iterative_solve(
+    boundary_condition, potential_data, source_data, interpolator, options
+):
+    potential_grid = interpolator.eval_grid
+    source_grid = interpolator.source_grid
+
+    potential_data, source_data = _prune_data(
+        potential_data,
+        potential_grid,
+        source_data,
+        source_grid,
+        _kernel_dipole_plus_half,
+    )
+    Phi_0 = options.Phi_0
+    if Phi_0 is None:
+        Phi_0 = jnp.ones(potential_grid.num_nodes)
+    assert Phi_0.size == potential_grid.num_nodes
+
+    if options.solve_method == "gmres":
+        operator = lx.FunctionLinearOperator(
+            partial(
+                _linear_potential_operator,
+                potential_data=potential_data,
+                source_data=source_data,
+                interpolator=interpolator,
+                chunk_size=options.chunk_size,
+            ),
+            jax.ShapeDtypeStruct(Phi_0.shape, Phi_0.dtype),
+        )
+        solution = lx.linear_solve(
+            operator,
+            boundary_condition,
+            solver=lx.GMRES(
+                rtol=options.rtol,
+                atol=options.atol,
+                max_steps=options.max_steps,
+            ),
+            options={"y0": Phi_0},
+            throw=False,
+        )
+        if options.full_output:
+            err = operator.mv(solution.value) - boundary_condition
+            return solution.value, (err, solution.stats["num_steps"])
+        return solution.value
+
+    # Some JAX versions fail to transpose scan, so we keep fixed point.
+    xi = 2 / 3
+    args = (
+        boundary_condition,
+        potential_data,
+        source_data,
+        interpolator,
+        options.chunk_size,
+        xi,
+    )
+    solution = optx.fixed_point(
+        _iteration_operator,
+        optx.FixedPointIteration(rtol=options.rtol, atol=options.atol),
+        Phi_0,
+        args,
+        max_steps=options.max_steps,
+        adjoint=optx.ImplicitAdjoint(
+            lx.GMRES(
+                rtol=options.rtol,
+                atol=options.atol,
+                max_steps=options.max_steps,
+            )
+        ),
+        throw=False,
+    )
+    if options.full_output:
+        err = _iteration_operator(solution.value, args) - solution.value
+        return solution.value, (err, solution.stats["num_steps"])
+    return solution.value
+
+
 def _iteration_operator(Phi, args):
     """Equation 3.12 in [1]."""
     gamma, potential_data, source_data, interpolator, chunk_size, xi = args
     potential_data["Phi(x) (periodic)"] = Phi
-    source_data["Phi (periodic)"] = Phi
+    source_data["Phi (periodic)"] = _interp(
+        Phi, interpolator.eval_grid, interpolator.source_grid
+    )
     return (
         _D_plus_half(
             potential_data,
@@ -219,15 +322,13 @@ def _iteration_operator(Phi, args):
 
 
 def _linear_potential_operator(
-    Phi,
-    potential_data,
-    source_data,
-    interpolator,
-    chunk_size,
+    Phi, potential_data, source_data, interpolator, chunk_size
 ):
     """Equation solved by the iterative linear solver."""
     potential_data["Phi(x) (periodic)"] = Phi
-    source_data["Phi (periodic)"] = Phi
+    source_data["Phi (periodic)"] = _interp(
+        Phi, interpolator.eval_grid, interpolator.source_grid
+    )
     return (
         _D_plus_half(
             potential_data,
@@ -240,80 +341,19 @@ def _linear_potential_operator(
     )
 
 
-@eqx.filter_jit
-def _fixed_point_potential(
-    boundary_condition,
-    potential_data,
-    source_data,
-    interpolator,
-    Phi_0=None,
-    *,
-    xtol=1e-8,
-    maxiter=10,
-    solve_method="gmres",
-    full_output=False,
-    chunk_size=None,
-):
-    assert solve_method in {"gmres", "fixed_point"}
-
-    potential_grid = interpolator.eval_grid
-    source_grid = interpolator.source_grid
-
-    potential_data, source_data = _prune_data(
-        potential_data,
-        potential_grid,
-        source_data,
-        source_grid,
-        _kernel_dipole_plus_half,
-    )
-    if Phi_0 is None:
-        Phi_0 = jnp.ones(potential_grid.num_nodes)
-
-    if solve_method == "gmres":
-        operator = lx.FunctionLinearOperator(
-            partial(
-                _linear_potential_operator,
-                potential_data=potential_data,
-                source_data=source_data,
-                interpolator=interpolator,
-                chunk_size=chunk_size,
-            ),
-            jax.ShapeDtypeStruct(Phi_0.shape, Phi_0.dtype),
-        )
-        solution = lx.linear_solve(
-            operator,
-            boundary_condition,
-            solver=lx.GMRES(rtol=xtol, atol=xtol, max_steps=maxiter),
-            options={"y0": Phi_0},
-            throw=False,
-        )
-        if full_output:
-            err = operator.mv(solution.value) - boundary_condition
-            return solution.value, (err, solution.stats["num_steps"])
-        return solution.value
-
-    xi = 2 / 3
-    args = (
-        boundary_condition,
-        potential_data,
-        source_data,
-        interpolator,
-        chunk_size,
-        xi,
-    )
-    solution = optx.fixed_point(
-        _iteration_operator,
-        optx.FixedPointIteration(rtol=xtol, atol=xtol),
-        Phi_0,
-        args,
-        max_steps=maxiter if maxiter > 0 else None,
-        adjoint=optx.ImplicitAdjoint(lx.GMRES(rtol=xtol, atol=xtol, max_steps=maxiter)),
-        throw=False,
-    )
-    if full_output:
-        err = _iteration_operator(solution.value, args) - solution.value
-        return solution.value, (err, solution.stats["num_steps"])
-    return solution.value
+def _interp(x, input_grid, output_grid):
+    if (
+        input_grid.num_theta == output_grid.num_theta
+        and input_grid.num_zeta == output_grid.num_zeta
+    ):
+        return x
+    return rfft_interp2d(
+        input_grid.meshgrid_reshape(x, "rtz")[0],
+        output_grid.num_theta,
+        output_grid.num_zeta,
+        dx=2 * jnp.pi / input_grid.num_theta,
+        dy=2 * jnp.pi / input_grid.num_zeta / input_grid.NFP,
+    ).ravel(order="F")
 
 
 @register_compute_fun(
@@ -344,26 +384,14 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     potential_grid = kwargs.get("potential_grid", grid)
     data["interpolator"] = get_interpolator(potential_grid, grid, data, **kwargs)
 
-    if potential_grid == grid:
-        data["potential data"] = apply(data, subset=("R", "phi", "Z"))
-    else:
-        dt = 2 * jnp.pi / grid.num_theta
-        dz = 2 * jnp.pi / grid.num_zeta / grid.NFP
-
-        # TODO: just interpolate Rb_mn, Zb_mn, and omegab_mn onto potential grid
-        #       to avoid interpolation on oversampled grid
-        def fun(x):
-            return rfft_interp2d(
-                grid.meshgrid_reshape(x, "rtz")[0],
-                potential_grid.num_theta,
-                potential_grid.num_zeta,
-                dx=dt,
-                dy=dz,
-            ).ravel(order="F")
-
-        data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
-        zeta = potential_grid.nodes[:, 2]
-        data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
+    # TODO: interpolate Rb_mn, Zb_mn, and omegab_mn directly
+    data["potential data"] = {
+        "R": _interp(data["R"], grid, potential_grid),
+        "omega": _interp(data["omega"], grid, potential_grid),
+        "Z": _interp(data["Z"], grid, potential_grid),
+    }
+    zeta = potential_grid.nodes[:, 2]
+    data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
 
     return data
 
@@ -403,17 +431,18 @@ def _potential_grid_position(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     public=False,
 )
 def _S_B0_n(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
+    options = kwargs.get("options", Options())
     data["S[B0*n]"] = singular_integral(
         data.get("potential data", data),
         data,
         data["interpolator"],
         _kernel_monopole,
-        chunk_size=kwargs.get("chunk_size", None),
+        chunk_size=options.chunk_size,
     ).squeeze(-1)
     return data
 
@@ -434,41 +463,35 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
-    **_doc,
+    options=Options.__doc__,
 )
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    solve_method = _select_potential_solve_method(
-        kwargs.get("solve_method", "auto"),
-        kwargs.get("maxiter", 10),
-        kwargs["problem"],
-    )
+    options = Options.select_solver(kwargs.get("options", Options()))
 
-    if solve_method in {"fixed_point", "gmres"}:
-        solve_kwargs = apply(kwargs, subset=_doc)
-        solve_kwargs["solve_method"] = solve_method
-        data["Phi (periodic)"] = _fixed_point_potential(
-            data["S[B0*n]"],
-            data,
-            data,
-            data["interpolator"],
-            **solve_kwargs,
-        )
-        if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
-            data["Phi error"] = jnp.abs(err).max()
-
-        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
-    else:
-        data["Phi_mn"] = _least_squares_compute_potential(
+    if options.solve_method == "direct":
+        data["Phi_mn"] = _direct_solve(
             data["S[B0*n]"],
             data.get("potential data", data),
             data,
             data["interpolator"],
             transforms["Phi"].basis,
-            **kwargs,
+            options,
         )
+    else:
+        data["Phi (periodic)"] = _iterative_solve(
+            data["S[B0*n]"],
+            data.get("potential data", data),
+            data,
+            data["interpolator"],
+            options,
+        )
+        if options.full_output:
+            data["Phi (periodic)"], (err, data["num_steps"]) = data["Phi (periodic)"]
+            data["Phi error"] = jnp.abs(err).max()
+
+        assert data["Phi (periodic)"].size == transforms["Phi"].grid.num_nodes
+        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     return data
 
 
@@ -553,8 +576,8 @@ def _pot_Phi_z_periodic(params, transforms, profiles, data, **kwargs):
 )
 def _virtual_surface_current_periodic(params, transforms, profiles, data, **kwargs):
     data["K_vc (periodic)"] = -(
-        data["Phi_t (periodic)"][:, jnp.newaxis] * data["n_rho x grad(theta)"]
-        + data["Phi_z (periodic)"][:, jnp.newaxis] * data["n_rho x grad(zeta)"]
+        data["Phi_t (periodic)"][:, None] * data["n_rho x grad(theta)"]
+        + data["Phi_z (periodic)"][:, None] * data["n_rho x grad(zeta)"]
     )
     return data
 
@@ -603,11 +626,11 @@ def _Phi_error(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="num iter",
-    label="\\text{number of iterations}",
+    name="num_steps",
+    label="\\text{number of steps}",
     units="",
     units_long="",
-    description="Magnetic scalar potential number of iterations for inversion",
+    description="Magnetic scalar potential number of steps for inversion",
     dim=0,
     coordinates="",
     params=[],
@@ -617,7 +640,7 @@ def _Phi_error(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     public=False,
 )
-def _Phi_num_iter(params, transforms, profiles, data, **kwargs):
+def _Phi_num_steps(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     return data
 
@@ -676,8 +699,8 @@ def _pot_Phi_z(params, transforms, profiles, data, **kwargs):
 )
 def _virtual_surface_current(params, transforms, profiles, data, **kwargs):
     data["K_vc"] = -(
-        data["Phi_t"][:, jnp.newaxis] * data["n_rho x grad(theta)"]
-        + data["Phi_z"][:, jnp.newaxis] * data["n_rho x grad(zeta)"]
+        data["Phi_t"][:, None] * data["n_rho x grad(theta)"]
+        + data["Phi_z"][:, None] * data["n_rho x grad(zeta)"]
     )
     return data
 
@@ -717,19 +740,18 @@ def _K_vc_squared(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     eval_interpolator="""_BIESTInterpolator :
         Interpolator from source grid to evaluation grid on boundary.
         If not given, default is to interpolate to source grid.
         """,
-    problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
     on_boundary="bool : Whether RpZcoords are on boundary surface.",
     public=False,
 )
 def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
     # noqa: unused dependency
-    chunk_size = kwargs.get("chunk_size", None)
-    sign = 1 - 2 * int("exterior" in kwargs.get("problem", ""))
+    options = kwargs.get("options", Options())
+    sign = 1 - 2 * int("exterior" in options.problem)
 
     if kwargs["on_boundary"]:
         RpZ_data["∇φ"] = (
@@ -740,7 +762,7 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
                 data,
                 kwargs.get("eval_interpolator", data.get("interpolator", None)),
                 _kernel_BS_plus_grad_S,
-                chunk_size=chunk_size,
+                chunk_size=options.chunk_size,
             )
         )
     else:
@@ -756,7 +778,7 @@ def _grad_potential(params, transforms, profiles, data, RpZ_data, **kwargs):
             st=jnp.nan,
             sz=jnp.nan,
             kernel=_kernel_BS_plus_grad_S,
-            chunk_size=chunk_size,
+            chunk_size=options.chunk_size,
         )
     return RpZ_data
 
@@ -795,14 +817,15 @@ def _total_B(params, transforms, profiles, data, RpZ_data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     B0="_MagneticField : Field object to compute with.",
     field_grid="Grid : Source grid used to compute magnetic field.",
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
 )
 def _B0_dot_n(params, transforms, profiles, data, **kwargs):
+    options = kwargs.get("options", Options())
     data["B0*n"] = dot(
         kwargs["B0"].compute_magnetic_field(
             coords=data["x"],
             source_grid=kwargs.get("field_grid", None),
-            chunk_size=kwargs.get("chunk_size", None),
+            chunk_size=options.chunk_size,
         ),
         data["n_rho"],
     )
@@ -824,15 +847,16 @@ def _B0_dot_n(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
     B0="_MagneticField : Field object to compute with.",
     field_grid="Grid : Source grid used to compute magnetic field.",
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     public=False,
 )
 def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
+    options = kwargs.get("options", Options())
     coords = jnp.column_stack([RpZ_data["R"], RpZ_data["phi"], RpZ_data["Z"]])
     RpZ_data["B0"] = kwargs["B0"].compute_magnetic_field(
         coords=coords,
         source_grid=kwargs.get("field_grid", None),
-        chunk_size=kwargs.get("chunk_size", None),
+        chunk_size=options.chunk_size,
     )
     return RpZ_data
 
@@ -850,15 +874,16 @@ def _B0_field(params, transforms, profiles, data, RpZ_data, **kwargs):
     profiles=[],
     data=["x"],
     parameterization="desc.magnetic_fields._laplace.SourceFreeField",
-    B_coil_chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     B_coil="_MagneticField : Field object to compute with.",
     field_grid="Grid : Source grid used to compute magnetic field.",
 )
 def _B_coil_field(params, transforms, profiles, data, **kwargs):
+    options = kwargs.get("options", Options())
     data["B_coil"] = kwargs["B_coil"].compute_magnetic_field(
         coords=data["x"],
         source_grid=kwargs.get("field_grid", None),
-        chunk_size=kwargs.get("B_coil_chunk_size", None),
+        chunk_size=options.B_coil_chunk_size,
     )
     return data
 
@@ -894,7 +919,7 @@ def _n_rho_x_B_coil(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     data=["e_zeta", "B_coil"],
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _Y_coil(params, transforms, profiles, data, **kwargs):
@@ -932,13 +957,13 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     basis = transforms["Phi_coil"].basis
     # could compute these in objective build
     # and avoid computing if they are passed in as kwargs
-    _t = basis.evaluate(grid, [0, 1, 0])[:, jnp.newaxis]
-    _z = basis.evaluate(grid, [0, 0, 1])[:, jnp.newaxis]
+    _t = basis.evaluate(grid, [0, 1, 0])[:, None]
+    _z = basis.evaluate(grid, [0, 0, 1])[:, None]
 
     mat = lx.MatrixLinearOperator(
         (
-            _t * data["n_rho x grad(theta)"][..., jnp.newaxis]
-            + _z * data["n_rho x grad(zeta)"][..., jnp.newaxis]
+            _t * data["n_rho x grad(theta)"][..., None]
+            + _z * data["n_rho x grad(zeta)"][..., None]
         ).reshape(grid.num_nodes * 3, basis.num_modes)
     )
 
@@ -1024,43 +1049,38 @@ def _Phi_coil(params, transforms, profiles, data, **kwargs):
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
-    **_doc,
+    options=Options.__doc__,
 )
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-
-    boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
-    solve_method = _select_potential_solve_method(
-        kwargs.get("solve_method", "auto"),
-        kwargs.get("maxiter", 10),
-        "interior Dirichlet",
+    options = Options.select_solver(
+        kwargs.get("options", Options())._replace(problem="interior Dirichlet")
     )
 
-    if solve_method in {"fixed_point", "gmres"}:
-        solve_kwargs = apply(kwargs, subset=_doc)
-        solve_kwargs["solve_method"] = solve_method
-        data["Phi (periodic)"] = _fixed_point_potential(
-            boundary_condition,
-            data,
-            data,
-            data["interpolator"],
-            **solve_kwargs,
-        )
-        if kwargs.get("full_output", False):
-            data["Phi (periodic)"], (err, data["num iter"]) = data["Phi (periodic)"]
-            data["Phi error"] = jnp.abs(err).max()
-
-        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
-    else:
-        data["Phi_mn"] = _least_squares_compute_potential(
+    boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
+    if options.solve_method == "direct":
+        data["Phi_mn"] = _direct_solve(
             boundary_condition,
             data.get("potential data", data),
             data,
             data["interpolator"],
             transforms["Phi"].basis,
-            problem="interior Dirichlet",
-            **kwargs,
+            options,
         )
+    else:
+        data["Phi (periodic)"] = _iterative_solve(
+            boundary_condition,
+            data.get("potential data", data),
+            data,
+            data["interpolator"],
+            options,
+        )
+        if options.full_output:
+            data["Phi (periodic)"], (err, data["num_steps"]) = data["Phi (periodic)"]
+            data["Phi error"] = jnp.abs(err).max()
+
+        assert data["Phi (periodic)"].size == transforms["Phi"].grid.num_nodes
+        data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
     return data
 
 
@@ -1079,11 +1099,12 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
-    chunk_size=_doc["chunk_size"],
+    options=Options.__doc__,
     public=False,
 )
 def _gamma_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
+    options = kwargs.get("options", Options())
     data["Phi(x) (periodic)"] = data["Phi (periodic)"]
     # Left hand side of equation 5.15 in [1] computed by evaluating
     # the right hand side. This is used for testing.
@@ -1091,6 +1112,6 @@ def _gamma_potential(params, transforms, profiles, data, **kwargs):
         data,
         data,
         data["interpolator"],
-        chunk_size=kwargs.get("chunk_size", None),
+        chunk_size=options.chunk_size,
     )
     return data

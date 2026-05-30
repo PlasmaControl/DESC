@@ -6,11 +6,14 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
+from desc.compute._laplace import Options as LaplaceOptions
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import get_interpolator, virtual_casing_biot_savart
+from desc.io import IOAble
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
@@ -23,6 +26,27 @@ from desc.utils import (
 )
 
 from .normalization import compute_scaling_factors
+
+
+class _FreeSurfaceSheetCurrent(IOAble, Optimizable):
+    """Optimizable toroidal sheet-current parameter for FreeSurfaceError."""
+
+    _io_attrs_ = ["_I_sheet"]
+
+    def __init__(self):
+        self.I_sheet = 0.0
+
+    @optimizable_parameter
+    @property
+    def I_sheet(self):
+        """float: Net toroidal sheet current determining a circulation of Phi."""
+        return self._I_sheet
+
+    @I_sheet.setter
+    def I_sheet(self, new):
+        new = jnp.asarray(new)
+        assert new.size == 1
+        self._I_sheet = new.squeeze()
 
 
 class VacuumBoundaryError(_Objective):
@@ -873,17 +897,17 @@ class BoundaryError(_Objective):
 
 
 class FreeSurfaceError(_Objective):
-    """Target for free surface ideal MHD equilirium conditions on LCFS.
+    """Target for free surface ideal MHD equilirium as described in [1]_.
 
     References
     ----------
-        [1] Unalmis et al. New high-order accurate free surface stellarator
-            equilibria optimization and boundary integral methods in DESC.
+    .. [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
 
     Notes
     -----
-    Performance is expected to improve significantly by resolving GitHub issues
-    #1034 and #2171.
+    Performance is expected to improve significantly by resolving GitHub
+    issues #1034 and #2171.
 
     Parameters
     ----------
@@ -894,10 +918,20 @@ class FreeSurfaceError(_Objective):
         assumes ``field._B_coil`` is the magnetic field due to coils.
         If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
         the magnetic field due to coils.
+        The net toroidal sheet current ``I_sheet`` is an optimizable scalar
+        parameter initialized to zero.
     eval_grid : Grid
         Evaluation points on boundary to evaluate objective error.
-        Default is ``grid``, but it is likely best to use a grid
-        with much lower resolution.
+        Also implicitly determines the Fourier resolution of the potential.
+        Default is ``grid``, but it is better to use a grid with much lower resolution.
+
+        If reverse mode differentiation is being used, it is of great benefit for
+        the objective residual to be a lower dimensional item. In such cases, to avoid
+        reducing the Fourier resolution of the potential (and hence reducing the
+        accuracy of the objective), it is better to instead use a loss function
+        that reduces the dimension of the residual before computing the derivative
+        relevant for optimization. This can be a mean squared error over all points
+        of the evaluation grid or mean absolute error over blocks of the grid, etc.
     grid : Grid
         Grid for the integral transforms.
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
@@ -908,31 +942,8 @@ class FreeSurfaceError(_Objective):
         Default is default grid of coil magnetic field.
     q : int
         Order of integration on the local singular grid.
-    xtol : float
-        Absolute and relative error for the linear solve. Default is ``1e-8``.
-    maxiter : int
-        Maximum number of iterations for iterative scalar potential solves.
-        If non-positive then the materialized matrix will be inverted instead.
-        If positive, then performs that many iterations until ``maxiter`` or an
-        error tolerance of ``xtol`` is reached. Ten iterations should suffice for
-        the default GMRES solve. Default is ``10``.
-    solve_method : str
-        Method to use for the scalar potential solve. One of ``"auto"``,
-        ``"fixed_point"``, ``"gmres"``, or ``"least_squares"``.
-        Default is ``"gmres"``, initialized from one GMRES solve during ``build``.
-    chunk_size : int or None
-        Size to split integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.  Default is ``None``.
-        Recommend to verify computation with ``chunk_size`` set to a
-        small number due to bugs in JAX or XLA.
-    B_coil_chunk_size : int or None
-        Size to split coil integral computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.  Default is ``None``.
-    I_sheet : float
-        Net toroidal sheet current determining a circulation of Φ.
-        Default is zero.
+    options : LaplaceOptions
+        Options for the Laplace solver.
 
     """
 
@@ -951,13 +962,10 @@ class FreeSurfaceError(_Objective):
         "_B_coil",
         "_use_same_grid",
         "_q",
-        "_xtol",
-        "_maxiter",
-        "_solve_method",
-        "_chunk_size",
-        "_B_coil_chunk_size",
+        "_options",
         "_grad_keys",
         "_inner_keys",
+        "_I_sheet",
         "_reuseable_keys",
     ]
 
@@ -972,12 +980,7 @@ class FreeSurfaceError(_Objective):
         grid=None,
         coil_grid=None,
         q=None,
-        xtol=1e-8,
-        maxiter=10,
-        solve_method="gmres",
-        chunk_size=None,
-        B_coil_chunk_size=None,
-        I_sheet=0.0,
+        options=None,
         target=None,
         bounds=None,
         weight=1,
@@ -1014,6 +1017,29 @@ class FreeSurfaceError(_Objective):
             msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
         )
         eval_grid = setdefault(eval_grid, grid)
+        assert eval_grid.can_fft2
+        errorif(
+            field.M_Phi > eval_grid.M,
+            msg=f"M_Phi = {field.M_Phi} > {eval_grid.M} = eval_grid.M.",
+        )
+        errorif(
+            field.N_Phi > eval_grid.N,
+            msg=f"N_Phi = {field.N_Phi} > {eval_grid.N} = eval_grid.N.",
+        )
+        errorif(
+            not self._is_neumann and field.M_Phi_coil > eval_grid.M,
+            msg=(
+                f"M_Phi_coil = {getattr(field, 'M_Phi_coil', 0)} > "
+                f"{eval_grid.M} = eval_grid.M."
+            ),
+        )
+        errorif(
+            not self._is_neumann and field.N_Phi_coil > eval_grid.N,
+            msg=(
+                f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > "
+                f"{eval_grid.N} = eval_grid.N."
+            ),
+        )
 
         self._field = field
         self._B_coil = field._B0 if self._is_neumann else field._B_coil
@@ -1022,18 +1048,32 @@ class FreeSurfaceError(_Objective):
         self._coil_grid = coil_grid
         self._use_same_grid = grid.equiv(eval_grid)
         self._q = q
-        self._xtol = xtol
-        self._maxiter = maxiter
-        self._solve_method = solve_method
-        self._chunk_size = chunk_size
-        self._B_coil_chunk_size = B_coil_chunk_size
+        self._I_sheet = _FreeSurfaceSheetCurrent()
+        if options is None:
+            options = LaplaceOptions()
+        options = options._replace(
+            problem="exterior Neumann" if self._is_neumann else "interior Dirichlet"
+        )
+        self._options = options
         self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
-        self._inner_keys = ["|B|^2", "p", "I", "|e_theta x e_zeta|"] + self._grad_keys
+        self._inner_keys = [
+            "|B|^2",
+            "p",
+            "I",
+            "R",
+            "phi",
+            "omega",
+            "Z",
+            "|e_theta x e_zeta|",
+        ] + self._grad_keys
         self._reuseable_keys = [
             "0",
             "R",
+            "phi",
+            "omega",
             "R_t",
             "R_z",
+            "Z",
             "Z_t",
             "Z_z",
             "e_theta",
@@ -1044,10 +1084,9 @@ class FreeSurfaceError(_Objective):
             "omega_z",
             "|e_theta x e_zeta|",
         ]
-        self._I_sheet = I_sheet
 
         super().__init__(
-            things=eq,
+            things=[eq, self._I_sheet],
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1079,7 +1118,9 @@ class FreeSurfaceError(_Objective):
             grad_transforms = eq_transforms
         else:
             source_transforms = get_transforms("Phi_mn", self._field, grid=self._grid)
-            grad_transforms = get_transforms(self._grad_keys, eq, grid=self._grid)
+            grad_transforms = get_transforms(
+                self._grad_keys + ["phi", "omega", "Z"], eq, grid=self._grid
+            )
 
         data, _ = self._field.compute(
             ["interpolator"] if self._is_neumann else ["interpolator", "Y_coil"],
@@ -1087,7 +1128,8 @@ class FreeSurfaceError(_Objective):
             q=self._q,
             transforms=source_transforms,
             B_coil=self._B_coil,
-            B_coil_chunk_size=self._B_coil_chunk_size,
+            options=self._options,
+            potential_grid=self._eval_grid,
         )
         # No net poloidal current in equation 4.13 of [1].
         self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
@@ -1095,6 +1137,9 @@ class FreeSurfaceError(_Objective):
         initial_guess = self._compute_initial_guess(
             eq,
             source_transforms,
+            eval_transforms,
+            profiles,
+            self._I_sheet.params_dict,
             data["interpolator"],
         )
 
@@ -1125,14 +1170,15 @@ class FreeSurfaceError(_Objective):
         self,
         eq,
         source_transforms,
+        eval_transforms,
+        profiles,
+        I_sheet_params,
         interpolator,
     ):
-        """Compute the GMRES potential used to initialize iterative solves."""
+        """Compute the potential used to initialize iterative solves."""
         params = eq.params_dict
         source_grid = self._grid
-        source_keys = list(
-            dict.fromkeys(self._reuseable_keys + self._grad_keys + ["I"])
-        )
+        source_keys = self._reuseable_keys + ["grad(theta)", "grad(zeta)", "I"]
         source_data = eq.compute(
             source_keys,
             grid=source_grid,
@@ -1140,11 +1186,14 @@ class FreeSurfaceError(_Objective):
         field_params = {
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
-            "I": source_data["I"][source_grid.unique_rho_idx[-1]] + self._I_sheet,
+            "I": source_data["I"][source_grid.unique_rho_idx[-1]]
+            + I_sheet_params["I_sheet"][0],
             "Y": self._field.Y,
         }
         data = {key: source_data[key] for key in self._reuseable_keys}
         data["interpolator"] = interpolator
+        if not self._use_same_grid:
+            data["potential data"] = eq.compute(["R", "phi", "Z"], grid=self._eval_grid)
         data["B0*n"] = self._phi_sec_dot_n(field_params, source_data)
         if self._is_neumann:
             data, _ = self._field.compute(
@@ -1153,33 +1202,40 @@ class FreeSurfaceError(_Objective):
                 params=field_params,
                 transforms=source_transforms,
                 data=data,
-                B_coil_chunk_size=self._B_coil_chunk_size,
+                options=self._options,
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
             data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+        elif not self._use_same_grid:
+            potential_field_data, _ = self._field.compute(
+                "Phi_coil (periodic)",
+                grid=self._eval_grid,
+                params=field_params,
+                transforms=eval_transforms,
+                data={"Y_coil": self._field.Y},
+                options=self._options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+            data["Phi_coil (periodic)"] = potential_field_data["Phi_coil (periodic)"]
 
-        problem = {"problem": "exterior Neumann"} if self._is_neumann else {}
-        data, _ = self._field.compute(
-            "Phi (periodic)",
-            grid=source_grid,
-            params=field_params,
-            transforms=source_transforms,
+        data = compute_fun(
+            self._field,
+            "Phi_mn",
+            field_params,
+            eval_transforms,
+            profiles,
             data=data,
-            xtol=self._xtol,
-            maxiter=self._maxiter,
-            solve_method="gmres",
-            chunk_size=self._chunk_size,
-            B_coil_chunk_size=self._B_coil_chunk_size,
+            options=self._options._replace(solve_method="gmres"),
             B_coil=self._B_coil,
             field_grid=self._coil_grid,
-            **problem,
         )
         # We differentiate through the solution, not the initial guess,
         # so we stop the gradient for numerical stability.
         return stop_gradient(data["Phi (periodic)"])
 
-    def compute(self, params, constants=None):
+    def compute(self, params, I_sheet_params, constants=None):
         """Compute boundary error.
 
         Parameters
@@ -1187,6 +1243,8 @@ class FreeSurfaceError(_Objective):
         params : dict
             Dictionary of equilibrium degrees of freedom, e.g.
             ``Equilibrium.params_dict``.
+        I_sheet_params : dict
+            Dictionary containing the optimizable sheet current ``I_sheet``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
             Defaults to ``self.constants``.
@@ -1199,6 +1257,7 @@ class FreeSurfaceError(_Objective):
         """
         constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
+        options = LaplaceOptions(*self._options)
 
         inner = compute_fun(
             eq,
@@ -1211,7 +1270,8 @@ class FreeSurfaceError(_Objective):
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
             # This is I_plasma + I_sheet.
-            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]] + self._I_sheet,
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]]
+            + I_sheet_params["I_sheet"][0],
             "Y": self._field.Y,
         }
         outer = {key: inner[key] for key in self._reuseable_keys}
@@ -1224,12 +1284,28 @@ class FreeSurfaceError(_Objective):
                 constants["eval_transforms"],
                 constants["profiles"],
                 data=outer,
-                B_coil_chunk_size=self._B_coil_chunk_size,
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+        elif not self._use_same_grid:
+            outer = compute_fun(
+                self._field,
+                "Phi_coil (periodic)",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=outer,
+                options=options,
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
 
-        problem = {"problem": "exterior Neumann"} if self._is_neumann else {}
+        potential_data = (
+            None
+            if self._use_same_grid
+            else {key: inner[key] for key in ["R", "phi", "Z"]}
+        )
 
         if self._use_same_grid:
             outer["interpolator"] = constants["interpolator"]
@@ -1237,15 +1313,20 @@ class FreeSurfaceError(_Objective):
             if self._is_neumann:
                 outer["B0*n"] += dot(outer["B_coil"], inner["n_rho"])
         else:
+            source_keys = self._grad_keys + ["phi", "omega", "Z"]
             grads = compute_fun(
                 eq,
-                self._grad_keys,
+                source_keys,
                 params,
                 constants["grad_transforms"],
                 constants["profiles"],
             )
             data = {key: grads[key] for key in self._reuseable_keys}
             data["interpolator"] = constants["interpolator"]
+            if potential_data is not None:
+                data["potential data"] = potential_data
+            if not self._is_neumann:
+                data["Phi_coil (periodic)"] = outer["Phi_coil (periodic)"]
             data["B0*n"] = self._phi_sec_dot_n(field_params, grads)
             if self._is_neumann:
                 data = compute_fun(
@@ -1255,7 +1336,7 @@ class FreeSurfaceError(_Objective):
                     constants["source_transforms"],
                     constants["profiles"],
                     data=data,
-                    B_coil_chunk_size=self._B_coil_chunk_size,
+                    options=options,
                     B_coil=self._B_coil,
                     field_grid=self._coil_grid,
                 )
@@ -1265,18 +1346,12 @@ class FreeSurfaceError(_Objective):
                 self._field,
                 "Phi_mn",
                 field_params,
-                constants["source_transforms"],
+                constants["eval_transforms"],
                 constants["profiles"],
                 data=data,
-                xtol=self._xtol,
-                maxiter=self._maxiter,
-                solve_method=self._solve_method,
-                Phi_0=constants["initial_guess"],
-                chunk_size=self._chunk_size,
-                B_coil_chunk_size=self._B_coil_chunk_size,
+                options=options._replace(Phi_0=constants["initial_guess"]),
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
-                **problem,
             )["Phi_mn"]
 
         outer = compute_fun(
@@ -1286,15 +1361,9 @@ class FreeSurfaceError(_Objective):
             constants["eval_transforms"],
             constants["profiles"],
             data=outer,
-            xtol=self._xtol,
-            maxiter=self._maxiter,
-            solve_method=self._solve_method,
-            Phi_0=constants["initial_guess"],
-            chunk_size=self._chunk_size,
-            B_coil_chunk_size=self._B_coil_chunk_size,
+            options=options._replace(Phi_0=constants["initial_guess"]),
             B_coil=self._B_coil,
             field_grid=self._coil_grid,
-            **problem,
         )
         if self._is_neumann:
             outer["K_vc"] -= outer["n_rho x B_coil"]

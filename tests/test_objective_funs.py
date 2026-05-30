@@ -26,6 +26,7 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms
+from desc.compute._laplace import Options as LaplaceOptions
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -2168,7 +2169,7 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(obj.compute(eq.params_dict), lam)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("solve_method", ["fixed_point", "gmres", "least_squares"])
+    @pytest.mark.parametrize("solve_method", ["fixed_point", "gmres", "direct"])
     def test_objective_against_compute_free_surface_error(self, solve_method):
         """Test FreeSurfaceError against the underlying |K_vc|^2 compute quantity."""
         eq = get("W7-X")
@@ -2180,7 +2181,7 @@ class TestObjectiveFunction:
             field,
             grid=grid,
             eval_grid=grid,
-            solve_method=solve_method,
+            options=LaplaceOptions(solve_method=solve_method),
         )
         obj.build(verbose=0)
 
@@ -2210,19 +2211,49 @@ class TestObjectiveFunction:
             transforms=obj._constants["eval_transforms"],
             data=outer_data,
             override_grid=False,
-            xtol=obj._xtol,
-            maxiter=obj._maxiter,
-            solve_method=solve_method,
-            Phi_0=obj._constants["initial_guess"],
-            chunk_size=obj._chunk_size,
-            B_coil_chunk_size=obj._B_coil_chunk_size,
+            options=obj._options._replace(
+                solve_method=solve_method,
+                Phi_0=obj._constants["initial_guess"],
+            ),
             B_coil=B,
         )
         expected = (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
             "|e_theta x e_zeta|"
         ]
 
-        np.testing.assert_allclose(obj.compute(eq.params_dict), expected)
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict, obj._I_sheet.params_dict), expected
+        )
+
+    @pytest.mark.unit
+    def test_free_surface_error_optimizes_sheet_current(self):
+        """Test FreeSurfaceError exposes I_sheet as an optimizable parameter."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface, M=1, N=1, B_coil=ToroidalMagneticField(5, 1)
+        )
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                grid=grid,
+                eval_grid=grid,
+                options=LaplaceOptions(solve_method="direct"),
+            )
+        )
+        obj.build(verbose=0)
+
+        assert obj.things[1].optimizable_params == ["I_sheet"]
+        x0 = obj.x()
+        idx = obj.things[0].dim_x + obj.things[1].x_idx["I_sheet"][0]
+        grad = obj.grad(x0)
+        assert np.isfinite(grad[idx])
+        assert not np.isclose(grad[idx], 0)
+
+        step = 1e-5 * np.sign(grad[idx])
+        x1 = x0.at[idx].add(-step)
+        assert obj.compute_scalar(x1) < obj.compute_scalar(x0)
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):
@@ -4080,9 +4111,9 @@ class TestObjectiveNaNGrad:
         eq = get("W7-X")
         B = ToroidalMagneticField(5, 1)
         field = (
-            FreeSurfaceOuterField(eq.surface, 3, 3, B_coil=B)
+            FreeSurfaceOuterField(eq.surface, 2, 2, B_coil=B)
             if flag
-            else SourceFreeField(eq.surface, 3, 3, B0=B)
+            else SourceFreeField(eq.surface, 2, 2, B0=B)
         )
         obj = ObjectiveFunction(
             FreeSurfaceError(
@@ -4090,12 +4121,31 @@ class TestObjectiveNaNGrad:
                 field,
                 eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
                 grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
-                solve_method="fixed_point",
+                options=LaplaceOptions(solve_method="fixed_point"),
             )
         )
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_free_surface_error_field_resolution_eval_grid(self, flag):
+        """Free surface error requires Phi resolution to fit on eval_grid."""
+        eq = get("W7-X")
+        B = ToroidalMagneticField(5, 1)
+        field = (
+            FreeSurfaceOuterField(eq.surface, 3, 3, B_coil=B)
+            if flag
+            else SourceFreeField(eq.surface, 3, 3, B0=B)
+        )
+        with pytest.raises(ValueError, match="M_Phi"):
+            FreeSurfaceError(
+                eq,
+                field,
+                eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
+                grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
+            )
 
     @pytest.mark.unit
     def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):

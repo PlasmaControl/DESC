@@ -1,8 +1,8 @@
-"""High order accurate multiply connected geometry Laplace solver.
+"""High order accurate multiply connected geometry Laplace solver as described in [1]_.
 
 References
 ----------
-    [1] Unalmis et al. New high-order accurate free surface stellarator
+.. [1] Unalmis et al. New high-order accurate free surface stellarator
         equilibria optimization and boundary integral methods in DESC.
 
 """
@@ -18,7 +18,7 @@ class SourceFreeField(FourierRZToroidalSurface):
     """Compute source free magnetic fields.
 
     Implements the Neumann formulation in multiply connected
-    geometry described in [1].
+    geometry described in [1]_.
 
     Let 𝒳 be an open set with continuously differentiable
     closed boundary ∂𝒳. This class solves the following
@@ -235,7 +235,7 @@ class FreeSurfaceOuterField(SourceFreeField):
     """Compute field on outer plasma for free surface.
 
     Implements the interior Dirichlet formulation in multiply connected
-    geometry described in [1].
+    geometry described in [1]_.
 
     Parameters
     ----------

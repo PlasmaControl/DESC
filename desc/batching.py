@@ -21,7 +21,7 @@ from jax._src.numpy.vectorize import (
     _parse_input_dimensions,
 )
 from jax._src.util import wraps
-from jax.sharding import NamedSharding, PartitionSpec, reshard
+from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -37,6 +37,12 @@ try:
     from jax.extend import linear_util as lu
 except ImportError:
     from jax import linear_util as lu
+
+
+try:
+    from jax.sharding import reshard
+except ImportError:
+    reshard = None
 
 
 try:
@@ -89,7 +95,10 @@ def _reshape_with_sharding(x, shape, spec, mesh=None):
 
 
 def _reshard_leaf_to_replicated(x, mesh):
-    return reshard(x, NamedSharding(mesh, PartitionSpec(*(None,) * x.ndim)))
+    sharding = NamedSharding(mesh, PartitionSpec(*(None,) * x.ndim))
+    if reshard is None:
+        raise ImportError("jax.sharding.reshard is required for sharded batching.")
+    return reshard(x, sharding)
 
 
 def _concat_resharded_to_replicated(x, y, mesh):

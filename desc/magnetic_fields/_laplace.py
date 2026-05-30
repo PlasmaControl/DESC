@@ -3,7 +3,7 @@
 References
 ----------
 .. [1] Unalmis et al. New high-order accurate free surface stellarator
-        equilibria optimization and boundary integral methods in DESC.
+       equilibria optimization and boundary integral methods in DESC.
 
 """
 

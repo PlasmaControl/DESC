@@ -302,7 +302,7 @@ def _iterative_solve(
 
 
 def _iteration_operator(Phi, args):
-    """Equation 3.12 in [1]."""
+    """Equation 3.12 in [1]_."""
     gamma, potential_data, source_data, interpolator, chunk_size, xi = args
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = _interp(
@@ -926,7 +926,7 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     if params.get("Y", None) is not None:
         data["Y_coil"] = params["Y"]
         return data
-    # Equation B.2 in [1].
+    # Equation B.2 in [1]_.
     data["Y_coil"] = dot(data["B_coil"], data["e_zeta"]).mean()
     return data
 
@@ -967,7 +967,7 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
         ).reshape(grid.num_nodes * 3, basis.num_modes)
     )
 
-    # Equation 5.16 in [1].
+    # Equation 5.16 in [1]_.
     data["Phi_coil_mn"] = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
@@ -1106,7 +1106,7 @@ def _gamma_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     options = kwargs.get("options", Options())
     data["Phi(x) (periodic)"] = data["Phi (periodic)"]
-    # Left hand side of equation 5.15 in [1] computed by evaluating
+    # Left hand side of equation 5.15 in [1]_ computed by evaluating
     # the right hand side. This is used for testing.
     data["γ potential"] = data["Phi (periodic)"] - _D_plus_half(
         data,

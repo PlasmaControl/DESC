@@ -942,6 +942,8 @@ class FreeSurfaceError(_Objective):
         Default is default grid of coil magnetic field.
     q : int
         Order of integration on the local singular grid.
+    fix_I_sheet : bool, optional
+        Whether to fix the net toroidal sheet current to zero instead of optimizing it.
     options : LaplaceOptions
         Options for the Laplace solver.
 
@@ -962,10 +964,10 @@ class FreeSurfaceError(_Objective):
         "_B_coil",
         "_use_same_grid",
         "_q",
+        "_fix_I_sheet",
         "_options",
         "_grad_keys",
         "_inner_keys",
-        "_I_sheet",
         "_reuseable_keys",
     ]
 
@@ -980,6 +982,7 @@ class FreeSurfaceError(_Objective):
         grid=None,
         coil_grid=None,
         q=None,
+        fix_I_sheet=False,
         options=None,
         target=None,
         bounds=None,
@@ -994,6 +997,7 @@ class FreeSurfaceError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0.0
+        assert fix_I_sheet in {True, False}
 
         if grid is None:
             grid = LinearGrid(
@@ -1052,7 +1056,8 @@ class FreeSurfaceError(_Objective):
         self._coil_grid = coil_grid
         self._use_same_grid = grid.equiv(eval_grid)
         self._q = q
-        self._I_sheet = _FreeSurfaceSheetCurrent()
+        self._fix_I_sheet = fix_I_sheet
+        I_sheet = _FreeSurfaceSheetCurrent()
         if options is None:
             options = LaplaceOptions()
         else:
@@ -1091,8 +1096,9 @@ class FreeSurfaceError(_Objective):
             "|e_theta x e_zeta|",
         ]
 
+        things = [eq] if fix_I_sheet else [eq, I_sheet]
         super().__init__(
-            things=[eq, self._I_sheet],
+            things=things,
             target=target,
             bounds=bounds,
             weight=weight,
@@ -1146,8 +1152,8 @@ class FreeSurfaceError(_Objective):
             source_transforms,
             eval_transforms,
             profiles,
-            self._I_sheet.params_dict,
             data["interpolator"],
+            None if self._fix_I_sheet else self.things[1].params_dict,
         )
 
         self._constants = {
@@ -1179,12 +1185,13 @@ class FreeSurfaceError(_Objective):
         source_transforms,
         eval_transforms,
         profiles,
-        I_sheet_params,
         interpolator,
+        I_sheet_params=None,
     ):
         """Compute the potential used to initialize iterative solves."""
         options = LaplaceOptions(*self._options)
         params = eq.params_dict
+        I_sheet = 0.0 if I_sheet_params is None else I_sheet_params["I_sheet"][0]
         source_grid = self._grid
         source_keys = self._reuseable_keys + ["grad(theta)", "grad(zeta)", "I"]
         source_data = eq.compute(
@@ -1194,8 +1201,7 @@ class FreeSurfaceError(_Objective):
         field_params = {
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
-            "I": source_data["I"][source_grid.unique_rho_idx[-1]]
-            + I_sheet_params["I_sheet"][0],
+            "I": source_data["I"][source_grid.unique_rho_idx[-1]] + I_sheet,
             "Y": self._field.Y,
         }
         data = {key: source_data[key] for key in self._reuseable_keys}
@@ -1243,7 +1249,7 @@ class FreeSurfaceError(_Objective):
         # so we stop the gradient for numerical stability.
         return stop_gradient(data["Phi (periodic)"])
 
-    def compute(self, params, I_sheet_params, constants=None):
+    def compute(self, params, I_sheet_params=None, constants=None):
         """Compute boundary error.
 
         Parameters
@@ -1252,7 +1258,8 @@ class FreeSurfaceError(_Objective):
             Dictionary of equilibrium degrees of freedom, e.g.
             ``Equilibrium.params_dict``.
         I_sheet_params : dict
-            Dictionary containing the optimizable sheet current ``I_sheet``.
+            Dictionary containing the optimizable sheet current ``I_sheet``. If omitted,
+            the sheet current is fixed to zero.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
             Defaults to ``self.constants``.
@@ -1265,6 +1272,7 @@ class FreeSurfaceError(_Objective):
         """
         constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
+        I_sheet = 0.0 if I_sheet_params is None else I_sheet_params["I_sheet"][0]
         options = LaplaceOptions(*self._options)._replace(
             Phi_0=constants["initial_guess"]
         )
@@ -1280,8 +1288,7 @@ class FreeSurfaceError(_Objective):
             "R_lmn": params["Rb_lmn"],
             "Z_lmn": params["Zb_lmn"],
             # This is I_plasma + I_sheet.
-            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]]
-            + I_sheet_params["I_sheet"][0],
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]] + I_sheet,
             "Y": self._field.Y,
         }
         outer = {key: inner[key] for key in self._reuseable_keys}

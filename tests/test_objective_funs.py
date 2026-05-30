@@ -2222,7 +2222,7 @@ class TestObjectiveFunction:
         ]
 
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict, obj._I_sheet.params_dict), expected
+            obj.compute(eq.params_dict, obj.things[1].params_dict), expected
         )
 
     @pytest.mark.unit
@@ -2254,6 +2254,31 @@ class TestObjectiveFunction:
         step = 1e-5 * np.sign(grad[idx])
         x1 = x0.at[idx].add(-step)
         assert obj.compute_scalar(x1) < obj.compute_scalar(x0)
+
+    @pytest.mark.unit
+    def test_free_surface_error_can_fix_sheet_current(self):
+        """Test FreeSurfaceError can fix I_sheet to zero."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface, M=grid.M, N=grid.N, B_coil=ToroidalMagneticField(5, 1)
+        )
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                grid=grid,
+                eval_grid=grid,
+                fix_I_sheet=True,
+                options=LaplaceOptions(solve_method="direct"),
+            )
+        )
+        obj.build(verbose=0)
+
+        assert len(obj.things) == 1
+        assert obj.things[0] is eq
+        assert obj.dim_x == eq.dim_x
+        assert np.isfinite(obj.compute_scalar(obj.x()))
 
     @pytest.mark.unit
     def test_generic_with_kwargs(self):
@@ -3600,7 +3625,14 @@ class TestComputeScalarResolution:
                 if flag
                 else SourceFreeField(eq.surface, eq.M, eq.N, B0=B)
             )
-            obj = ObjectiveFunction(FreeSurfaceError(eq, field))
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M,
+                N=eq.N,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+            obj = ObjectiveFunction(FreeSurfaceError(eq, field, grid=grid))
             obj.build()
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)

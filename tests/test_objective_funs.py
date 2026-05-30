@@ -2211,7 +2211,7 @@ class TestObjectiveFunction:
             transforms=obj._constants["eval_transforms"],
             data=outer_data,
             override_grid=False,
-            options=obj._options._replace(
+            options=LaplaceOptions(*obj._options)._replace(
                 solve_method=solve_method,
                 Phi_0=obj._constants["initial_guess"],
             ),

@@ -922,8 +922,8 @@ class FreeSurfaceError(_Objective):
         parameter initialized to zero.
     eval_grid : Grid
         Evaluation points on boundary to evaluate objective error.
-        Also implicitly determines the Fourier resolution of the potential.
-        Default is ``grid``, but it is better to use a grid with much lower resolution.
+        Also determines the Fourier resolution of the potential.
+        Default is ``LinearGrid(M=field.M_Phi,N=field.N_Phi,NFP=grid.NFP,sym=False)``.
 
         If reverse mode differentiation is being used, it is of great benefit for
         the objective residual to be a lower dimensional item. In such cases, to avoid
@@ -1016,15 +1016,19 @@ class FreeSurfaceError(_Objective):
             not self._is_neumann and field.N_Phi_coil > grid.N,
             msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
         )
-        eval_grid = setdefault(eval_grid, grid)
+        if eval_grid is None:
+            eval_grid = LinearGrid(
+                M=field.M_Phi, N=field.N_Phi, NFP=grid.NFP, sym=False
+            )
         assert eval_grid.can_fft2
+
         errorif(
-            field.M_Phi > eval_grid.M,
-            msg=f"M_Phi = {field.M_Phi} > {eval_grid.M} = eval_grid.M.",
+            field.M_Phi != eval_grid.M,
+            msg=f"M_Phi = {field.M_Phi} != {eval_grid.M} = eval_grid.M.",
         )
         errorif(
-            field.N_Phi > eval_grid.N,
-            msg=f"N_Phi = {field.N_Phi} > {eval_grid.N} = eval_grid.N.",
+            field.N_Phi != eval_grid.N,
+            msg=f"N_Phi = {field.N_Phi} != {eval_grid.N} = eval_grid.N.",
         )
         errorif(
             not self._is_neumann and field.M_Phi_coil > eval_grid.M,
@@ -1051,10 +1055,12 @@ class FreeSurfaceError(_Objective):
         self._I_sheet = _FreeSurfaceSheetCurrent()
         if options is None:
             options = LaplaceOptions()
+        else:
+            options = LaplaceOptions(*options)
         options = options._replace(
             problem="exterior Neumann" if self._is_neumann else "interior Dirichlet"
         )
-        self._options = options
+        self._options = tuple(options)  # DESC is dumb and casts NamedTuples to Tuples
         self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
         self._inner_keys = [
             "|B|^2",
@@ -1110,6 +1116,7 @@ class FreeSurfaceError(_Objective):
 
         """
         eq = self.things[0]
+        options = LaplaceOptions(*self._options)
 
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
         eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
@@ -1128,7 +1135,7 @@ class FreeSurfaceError(_Objective):
             q=self._q,
             transforms=source_transforms,
             B_coil=self._B_coil,
-            options=self._options,
+            options=options,
             potential_grid=self._eval_grid,
         )
         # No net poloidal current in equation 4.13 of [1].
@@ -1176,6 +1183,7 @@ class FreeSurfaceError(_Objective):
         interpolator,
     ):
         """Compute the potential used to initialize iterative solves."""
+        options = LaplaceOptions(*self._options)
         params = eq.params_dict
         source_grid = self._grid
         source_keys = self._reuseable_keys + ["grad(theta)", "grad(zeta)", "I"]
@@ -1202,7 +1210,7 @@ class FreeSurfaceError(_Objective):
                 params=field_params,
                 transforms=source_transforms,
                 data=data,
-                options=self._options,
+                options=options,
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
@@ -1214,7 +1222,7 @@ class FreeSurfaceError(_Objective):
                 params=field_params,
                 transforms=eval_transforms,
                 data={"Y_coil": self._field.Y},
-                options=self._options,
+                options=options,
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
@@ -1222,12 +1230,12 @@ class FreeSurfaceError(_Objective):
 
         data = compute_fun(
             self._field,
-            "Phi_mn",
+            "Phi (periodic)",
             field_params,
             eval_transforms,
             profiles,
             data=data,
-            options=self._options._replace(solve_method="gmres"),
+            options=options._replace(solve_method="gmres"),
             B_coil=self._B_coil,
             field_grid=self._coil_grid,
         )
@@ -1257,7 +1265,9 @@ class FreeSurfaceError(_Objective):
         """
         constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
-        options = LaplaceOptions(*self._options)
+        options = LaplaceOptions(*self._options)._replace(
+            Phi_0=constants["initial_guess"]
+        )
 
         inner = compute_fun(
             eq,
@@ -1313,10 +1323,9 @@ class FreeSurfaceError(_Objective):
             if self._is_neumann:
                 outer["B0*n"] += dot(outer["B_coil"], inner["n_rho"])
         else:
-            source_keys = self._grad_keys + ["phi", "omega", "Z"]
             grads = compute_fun(
                 eq,
-                source_keys,
+                self._grad_keys + ["phi", "omega", "Z"],
                 params,
                 constants["grad_transforms"],
                 constants["profiles"],
@@ -1349,7 +1358,7 @@ class FreeSurfaceError(_Objective):
                 constants["eval_transforms"],
                 constants["profiles"],
                 data=data,
-                options=options._replace(Phi_0=constants["initial_guess"]),
+                options=options,
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )["Phi_mn"]
@@ -1361,7 +1370,7 @@ class FreeSurfaceError(_Objective):
             constants["eval_transforms"],
             constants["profiles"],
             data=outer,
-            options=options._replace(Phi_0=constants["initial_guess"]),
+            options=options,
             B_coil=self._B_coil,
             field_grid=self._coil_grid,
         )

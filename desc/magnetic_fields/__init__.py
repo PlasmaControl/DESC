@@ -1,5 +1,7 @@
 """Classes for Magnetic Fields."""
 
+from desc.compute._laplace import Options
+
 from ._core import (
     MagneticFieldFromUser,
     OmnigenousField,

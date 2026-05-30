@@ -65,11 +65,9 @@ from desc.integrals.singularities import (
     _kernel_nr_over_r3,
 )
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import (
-    FreeSurfaceOuterField,
-    SourceFreeField,
-    ToroidalMagneticField,
-)
+from desc.magnetic_fields import FreeSurfaceOuterField
+from desc.magnetic_fields import Options as LaplaceOptions
+from desc.magnetic_fields import SourceFreeField, ToroidalMagneticField
 from desc.transform import Transform
 from desc.utils import dot, errorif, rpz2xyz, safediv
 
@@ -752,12 +750,28 @@ class TestLaplace:
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "surface, M, N, solve_method, maxiter, chunk_size, just_err",
+        "surface, M, N, solve_method, max_steps, chunk_size, just_err",
         [
             pytest.param(
-                None, 16, 16, "least_squares", -1, 500, False, id="least-squares"
+                None,
+                16,
+                16,
+                "direct",
+                10,
+                500,
+                False,
+                id="direct",
             ),
-            pytest.param(None, 16, 16, "fixed_point", 40, 500, False, id="fixed-point"),
+            pytest.param(
+                None,
+                16,
+                16,
+                "fixed_point",
+                40,
+                500,
+                False,
+                id="fixed-point",
+            ),
             pytest.param(None, 16, 16, "gmres", 40, 500, False, id="gmres"),
         ],
     )
@@ -767,10 +781,11 @@ class TestLaplace:
         M,
         N,
         solve_method,
-        maxiter,
+        max_steps,
         chunk_size,
         just_err,
-        xtol=1e-12,
+        atol=1e-12,
+        rtol=1e-12,
     ):
         """Test multiply connected interior Dirichlet Laplace solver."""
         if surface is None:
@@ -790,21 +805,26 @@ class TestLaplace:
             B_coil=TestLaplace._Z_hat_field(),
         )
         assert field.M != grid.M and field.N != grid.N
+
+        keys = ["Phi error", "num_steps"] if just_err else "γ potential"
         data, _ = field.compute(
-            ["Phi error", "num iter"] if just_err else "γ potential",
+            keys,
             grid,
-            maxiter=int(maxiter),
-            solve_method=solve_method,
-            full_output=True,
-            chunk_size=chunk_size,
-            xtol=xtol,
+            options=LaplaceOptions(
+                max_steps=int(max_steps),
+                solve_method=solve_method,
+                full_output=True,
+                chunk_size=chunk_size,
+                atol=atol,
+                rtol=rtol,
+            ),
         )
-        if maxiter > 0:
+        if "num_steps" in data:
             print()
-            print(data["num iter"])
+            print(data["num_steps"])
             print(data["Phi error"])
             if just_err:
-                return data["num iter"], data["Phi error"]
+                return data["num_steps"], data["Phi error"]
         np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
         np.testing.assert_allclose(data["Phi_coil (periodic)"], data["Z"])
         np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
@@ -815,22 +835,22 @@ class TestLaplace:
         surface=get("W7-X").surface,
         M=30,
         N=30,
-        maxiter=np.array([1, 2, 3, 4, 5]),
+        max_steps=np.array([1, 2, 3, 4, 5]),
         chunk_size=1000,
         name="convergence-fp_W7-X",
     ):
         """Stores errors for potential in name.pkl for plotting analysis."""
-        num_iter = []
+        num_steps = []
         Phi_err = []
         print()
-        for i in maxiter:
+        for i in max_steps:
             n, e = self.test_interior_Dirichlet(
-                surface, M, N, "gmres", i, chunk_size, just_err=True
+                surface, M, N, "gmres", i, chunk_size, True
             )
-            num_iter.append(n)
+            num_steps.append(n)
             Phi_err.append(e)
-            print(f"Resolution num iter={n} is done with error={e}.")
-        data = {"num iter": np.asarray(num_iter), "Phi error": np.asarray(Phi_err)}
+            print(f"Resolution num_steps={n} is done with error={e}.")
+        data = {"num_steps": np.asarray(num_steps), "Phi error": np.asarray(Phi_err)}
 
         with open(f"{name}.pkl", "wb") as file:
             pickle.dump(data, file)
@@ -864,11 +884,11 @@ class TestLaplace:
         fig, ax = plt.subplots()
         gmres_label = None
         # fp_label = r"$\xi=2/3$" # noqa: E800
-        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=gmres_label)
+        ax.semilogy(data["num_steps"], data["Phi error"], marker="o", label=gmres_label)
         ax.axhline(1e-7, color="black", label="Stop tolerance")
-        ax.set_xlabel(r"Number of gmres iterations in inversion for $\Phi$")
+        ax.set_xlabel(r"Number of gmres steps in inversion for $\Phi$")
         ax.set_ylabel("Absolute error")
-        ax.set_title(r"$\Phi$ error vs. gmres iterations " + name.split("_", 1)[1])
+        ax.set_title(r"$\Phi$ error vs. gmres steps " + name.split("_", 1)[1])
         ax.legend(loc="upper right", frameon=True)
         fig.tight_layout()
         plt.savefig(f"{name}.pdf")
@@ -910,12 +930,14 @@ class TestLaplace:
             data=data,
             RpZ_data=RpZ_data,
             RpZ_grid=RpZ_grid,
-            problem="interior Neumann",
-            solve_method=solve_method,
             on_boundary=True,
-            maxiter=10,
-            chunk_size=chunk_size,
-            _D_quad=_D_quad,
+            options=LaplaceOptions(
+                problem="interior Neumann",
+                solve_method=solve_method,
+                max_steps=10,
+                chunk_size=chunk_size,
+                D_quad=_D_quad,
+            ),
         )
         err = np.ptp(data["Z"] - data["Phi"])
         if just_err:
@@ -1016,7 +1038,7 @@ class TestLaplace:
         plt.savefig(f"{name}.pdf")
 
     @pytest.mark.unit
-    def test_exterior_Neumann(self, maxiter=30, chunk_size=1000):
+    def test_exterior_Neumann(self, max_steps=30, chunk_size=1000):
         """Test Laplacian solver in exterior."""
         # Fourier spectrum of G(x) becomes very wide at large R0 (e.g. 10 is large).
         R0 = 2
@@ -1038,15 +1060,17 @@ class TestLaplace:
             ["∇φ", "Phi", "x", "n_rho"],
             grid,
             data=data,
-            problem="exterior Neumann",
             on_boundary=True,
-            maxiter=maxiter,
-            full_output=True,
-            chunk_size=chunk_size,
+            options=LaplaceOptions(
+                problem="exterior Neumann",
+                max_steps=max_steps,
+                full_output=True,
+                chunk_size=chunk_size,
+            ),
             basis="xyz",
         )
         assert data is RpZ_data
-        print("num iterations:", data["num iter"])
+        print("num steps     :", data["num_steps"])
         print("Phi error     :", data["Phi error"])
 
         np.testing.assert_allclose(
@@ -1126,10 +1150,10 @@ class TestLaplace:
             data=data,
             RpZ_data=RpZ_data,
             RpZ_grid=RpZ_grid,
-            problem="interior Neumann",
             on_boundary=True,
-            maxiter=0,
-            chunk_size=chunk_size,
+            options=LaplaceOptions(
+                problem="interior Neumann", max_steps=10, chunk_size=chunk_size
+            ),
             warn_fft=False,
         )
         np.testing.assert_allclose(dot(RpZ_data["B"], RpZ_data["n_rho"]), 0, atol=5e-4)
@@ -1147,7 +1171,7 @@ class TestLaplace:
             data=data,
             RpZ_grid=LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP),
             on_boundary=False,
-            chunk_size=chunk_size,
+            options=LaplaceOptions(chunk_size=chunk_size),
         )
         assert np.isfinite(RpZ_data["B"]).all()
 

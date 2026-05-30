@@ -2175,7 +2175,7 @@ class TestObjectiveFunction:
         eq = get("W7-X")
         grid = LinearGrid(rho=np.array([1.0]), M=4, N=4, NFP=eq.NFP, sym=False)
         B = ToroidalMagneticField(5, 1)
-        field = FreeSurfaceOuterField(eq.surface, M=3, N=3, B_coil=B)
+        field = FreeSurfaceOuterField(eq.surface, M=grid.M, N=grid.N, B_coil=B)
         obj = FreeSurfaceError(
             eq,
             field,
@@ -2231,7 +2231,7 @@ class TestObjectiveFunction:
         eq = get("W7-X")
         grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
         field = FreeSurfaceOuterField(
-            eq.surface, M=1, N=1, B_coil=ToroidalMagneticField(5, 1)
+            eq.surface, M=grid.M, N=grid.N, B_coil=ToroidalMagneticField(5, 1)
         )
         obj = ObjectiveFunction(
             FreeSurfaceError(
@@ -4111,7 +4111,7 @@ class TestObjectiveNaNGrad:
         eq = get("W7-X")
         B = ToroidalMagneticField(5, 1)
         field = (
-            FreeSurfaceOuterField(eq.surface, 2, 2, B_coil=B)
+            (FreeSurfaceOuterField)(eq.surface, 2, 2, B_coil=B)
             if flag
             else SourceFreeField(eq.surface, 2, 2, B0=B)
         )

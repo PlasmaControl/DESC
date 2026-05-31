@@ -346,14 +346,9 @@ def polyroot_vec(
     if get_only_real_roots:
         a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
         a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
-        # Allow eps tolerance on the bounds so roots that land within a few ulp
-        # of a_min/a_max (e.g. a true root at x=0 returned as -1 ulp by the
-        # vectorized cubic formula) are not dropped. Clip survivors into range.
         r = jnp.where(
-            (jnp.abs(r.imag) <= eps)
-            & (a_min - eps <= r.real)
-            & (r.real <= a_max + eps),
-            jnp.clip(r.real, a_min, a_max),
+            (jnp.abs(r.imag) <= eps) & (a_min <= r.real) & (r.real <= a_max),
+            r.real,
             sentinel,
         )
 

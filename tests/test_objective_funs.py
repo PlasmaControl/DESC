@@ -2134,16 +2134,16 @@ class TestObjectiveFunction:
             )
             obj.build()
             np.testing.assert_allclose(
-                obj.constants["alpha"], GammaLoss._default_alpha(eq)
+                obj._constants["alpha"], GammaLoss._default_alpha(eq)
             )
             assert obj._hyperparam["num_field_periods"] == eq.NFP + 2
             data = eq.compute(
                 name,
                 grid,
                 angle=angle,
-                alpha=obj.constants["alpha"],
-                quad=obj.constants["quad"],
-                _vander=obj.constants["_vander"],
+                alpha=obj._constants["alpha"],
+                quad=obj._constants["quad"],
+                _vander=obj._constants["_vander"],
                 **obj._hyperparam,
             )
             np.testing.assert_allclose(

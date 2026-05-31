@@ -374,6 +374,7 @@ class _LossCone:
         previous = jnp.take_along_axis(score, prev_idx, axis=-1)
         has_previous = jnp.isfinite(prev_dist)
         event = valid & has_previous & (score > 0) & (previous <= 0)
+        prev_dist = jnp.where(has_previous, prev_dist, 0.0)
         offset = jnp.where(
             has_previous, safediv(prev_dist * score, score - previous), 0.0
         )

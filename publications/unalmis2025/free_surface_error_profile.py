@@ -19,7 +19,6 @@ from desc.optimize import ProximalProjection
 
 eq = get("W7-X")
 grid = LinearGrid(rho=np.array([1.0]), M=8, N=8, NFP=eq.NFP, sym=False)
-eval_grid = grid
 B_coil = ToroidalMagneticField(5, 1)
 
 field = FreeSurfaceOuterField(eq.surface, M=8, N=8, B_coil=B_coil)
@@ -29,7 +28,6 @@ obj = ObjectiveFunction(
             eq,
             field,
             grid=grid,
-            eval_grid=eval_grid,
             solve_method="gmres",
             deriv_mode="fwd",
         )

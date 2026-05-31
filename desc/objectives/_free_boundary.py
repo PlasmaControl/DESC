@@ -909,29 +909,27 @@ class FreeSurfaceError(_Objective):
     Performance is expected to improve significantly by resolving GitHub
     issues #1034 and #2171.
 
+    If reverse mode differentiation is being used, it is of great benefit for
+    the objective residual to be a lower dimensional item. In such cases, it is
+    better to instead use a loss function that reduces the dimension of the
+    residual before computing the derivative relevant for optimization. This can
+    be a mean squared error over all points of the output grid or mean absolute
+    error over blocks of the grid, etc.
+
     Parameters
     ----------
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
     field : FreeSurfaceOuterField or SourceFreeField
-        Laplace solver object. If is an instance of ``FreeSurfaceOuterField``
+        Laplace solver object.
+
+        If is an instance of ``FreeSurfaceOuterField``
         assumes ``field._B_coil`` is the magnetic field due to coils.
         If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
         the magnetic field due to coils.
+
         The net toroidal sheet current ``I_sheet`` is an optimizable scalar
         parameter initialized to zero.
-    eval_grid : Grid
-        Evaluation points on boundary to evaluate objective error.
-        Also determines the Fourier resolution of the potential.
-        Default is ``LinearGrid(M=field.M_Phi,N=field.N_Phi,NFP=grid.NFP,sym=False)``.
-
-        If reverse mode differentiation is being used, it is of great benefit for
-        the objective residual to be a lower dimensional item. In such cases, to avoid
-        reducing the Fourier resolution of the potential (and hence reducing the
-        accuracy of the objective), it is better to instead use a loss function
-        that reduces the dimension of the residual before computing the derivative
-        relevant for optimization. This can be a mean squared error over all points
-        of the evaluation grid or mean absolute error over blocks of the grid, etc.
     grid : Grid
         Grid for the integral transforms.
         Tensor-product grid in (θ, ζ) with uniformly spaced nodes
@@ -978,7 +976,6 @@ class FreeSurfaceError(_Objective):
         eq,
         field,
         *,
-        eval_grid=None,
         grid=None,
         coil_grid=None,
         q=None,
@@ -1020,10 +1017,11 @@ class FreeSurfaceError(_Objective):
             not self._is_neumann and field.N_Phi_coil > grid.N,
             msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
         )
-        if eval_grid is None:
-            eval_grid = LinearGrid(
-                M=field.M_Phi, N=field.N_Phi, NFP=grid.NFP, sym=False
-            )
+        eval_grid = (
+            grid
+            if (grid.M == field.M_Phi and grid.N == field.N_Phi)
+            else LinearGrid(M=field.M_Phi, N=field.N_Phi, NFP=grid.NFP, sym=False)
+        )
         assert eval_grid.can_fft2
 
         errorif(

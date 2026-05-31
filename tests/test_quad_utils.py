@@ -101,6 +101,23 @@ def test_nonuniform_loss_cone_matches_uniform_grid():
 
 
 @pytest.mark.unit
+def test_nonuniform_loss_cone_padded_samples_finite_gradient():
+    """Test padded alpha samples do not poison loss-cone reverse-mode AD."""
+    alpha = jnp.array([0.0, 1.0, 2.0, 3.0])[:, None, None]
+    valid = jnp.array([True, True, False, False])[:, None, None]
+
+    def loss(score):
+        score = score[:, None, None]
+        return _LossCone.indicator_nonuniform(
+            score, -score, alpha, valid, order=1
+        ).sum()
+
+    gradient = grad(loss)(jnp.array([-1.0, 1.0, 0.0, 0.0]))
+    assert not np.any(np.isnan(gradient))
+    np.testing.assert_allclose(gradient[~valid[:, 0, 0]], 0.0)
+
+
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_loss_cone_convergence():
     """Test Gamma_alpha reduction on a manufactured alpha loss cone."""

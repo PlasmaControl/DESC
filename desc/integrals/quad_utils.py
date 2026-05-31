@@ -325,7 +325,7 @@ def _periodic_voronoi_widths(alpha, valid, period=2 * jnp.pi):
     dist = jnp.where(
         valid[..., :, None] & valid[..., None, :] & (dist > 0), dist, jnp.inf
     )
-    has_neighbors = valid.sum(-1, keepdims=True) > 1
+    has_neighbors = valid & (valid.sum(-1, keepdims=True) > 1)
     prev_width = jnp.where(has_neighbors, dist.min(-2), period)
     next_width = jnp.where(has_neighbors, dist.min(-1), period)
     width = 0.5 * (prev_width + next_width)

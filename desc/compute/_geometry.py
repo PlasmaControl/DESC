@@ -182,7 +182,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
         A = jnp.abs(
             line_integrals(
                 grid,
-                -data["Z"] * data["e_theta"][:, 0],
+                data["Z"] * data["R_t"],
                 line_label="theta",
                 fix_surface=("rho", max_rho),
                 expand_out=False,
@@ -213,7 +213,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
+    data=["rho", "Z", "R_t", "|e_rho x e_theta|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
@@ -242,7 +242,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
+    data=["rho", "Z", "R_t", "|e_rho x e_theta|"],
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
     resolution_requirement="tz",
 )
@@ -264,7 +264,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
+    data=["rho", "Z", "R_t", "|e_rho x e_theta|"],
     parameterization=["desc.geometry.surface.ZernikeRZToroidalSection"],
     resolution_requirement="t",
     # Needs to be False since resolution requirement lacks toroidal resolution.
@@ -288,7 +288,7 @@ def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "Z", "e_theta"],
+    data=["rho", "Z", "R_t"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
@@ -313,7 +313,7 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta"],
+    data=["rho", "Z", "R_t"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="tz",
 )

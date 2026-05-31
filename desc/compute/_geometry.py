@@ -179,16 +179,14 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
         #  on constant ζ surface is 1. Then choose v = (w - w^ζ).
         #  OR make sure that integration contour is along constant ϕ surface
         #     using source_grid_requirement="rtp" and use e_rho|t,p and e_theta|r,p.
-        dl = jnp.sqrt(data["g_tt"])
-        t = data["e_theta"] / dl[:, jnp.newaxis]
-        n = -data["e_theta_t"] + dot(data["e_theta_t"], t)[:, jnp.newaxis] * t
-        n = n[:, 2] / jnp.linalg.norm(n, axis=-1)
-        A = line_integrals(
-            grid,
-            dl * n * data["Z"],
-            line_label="theta",
-            fix_surface=("rho", max_rho),
-            expand_out=False,
+        A = jnp.abs(
+            line_integrals(
+                grid,
+                -data["Z"] * data["e_theta"][:, 0],
+                line_label="theta",
+                fix_surface=("rho", max_rho),
+                expand_out=False,
+            )
         )
         if extrap:
             # To approximate area at ρ ~ 1, we scale by ρ⁻², assuming the integrand
@@ -215,7 +213,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "Z", "e_theta", "e_theta_t", "g_tt", "|e_rho x e_theta|"],
+    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
         "desc.geometry.surface.ZernikeRZToroidalSection",
@@ -224,6 +222,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     grid_requirement={"sym": False},
 )
 def _A_of_z(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     # noqa: unused dependency
     data["A(z)"] = _compute_A_of_z(
         transforms["grid"], data, extrap=True, expand_out=True
@@ -243,7 +242,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta", "e_theta_t", "g_tt", "|e_rho x e_theta|"],
+    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
     parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
     resolution_requirement="tz",
 )
@@ -265,13 +264,14 @@ def _A(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta", "e_theta_t", "g_tt", "|e_rho x e_theta|"],
+    data=["rho", "Z", "e_theta", "|e_rho x e_theta|"],
     parameterization=["desc.geometry.surface.ZernikeRZToroidalSection"],
     resolution_requirement="t",
     # Needs to be False since resolution requirement lacks toroidal resolution.
     grid_requirement={"sym": False},
 )
 def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     # noqa: unused dependency
     data["A"] = _compute_A_of_z(transforms["grid"], data, extrap=True, mean=True)
     return data
@@ -288,12 +288,13 @@ def _A_cross_section_surface(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["rho", "Z", "e_theta", "e_theta_t", "g_tt"],
+    data=["rho", "Z", "e_theta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
 def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     # noqa: unused dependency
     data["A(z)"] = _compute_A_of_z(
         transforms["grid"], data, extrap=False, expand_out=True
@@ -312,7 +313,7 @@ def _A_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["rho", "Z", "e_theta", "e_theta_t", "g_tt"],
+    data=["rho", "Z", "e_theta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="tz",
 )
@@ -539,6 +540,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     grid_requirement={"sym": False},
 )
 def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = (
         line_integrals(
@@ -572,6 +574,7 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     grid_requirement={"sym": False},
 )
 def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = line_integrals(
         transforms["grid"],

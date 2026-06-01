@@ -20,6 +20,7 @@ Bug Fixes
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 - Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
 - `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.
+- Fixes a bug in `desc.magnetic_fields.field_integrate` when calling with an integer `bs_chunk_size`.
 
 Performance Improvements
 

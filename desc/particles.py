@@ -15,7 +15,7 @@ from diffrax import (
 )
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jit, jnp, tree_map
+from desc.backend import jax, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -130,7 +130,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Coordinate frame of the model."""
         return self._frame
 
-    @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 

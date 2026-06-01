@@ -499,6 +499,18 @@ class ObjectiveFunction(IOAble):
                 f"{[i for i, foo in enumerate(self._obj_per_rank) if foo.size == 0]}. "
                 f"Objective indices per rank are {self._obj_per_rank}.",
             )
+            # if the constaints should also use MPI, we will store the constraints here
+            # such that we don't need to pass the constraint objects between workers.
+            # This can be thought of making them globally accessible to the single
+            # worker loop. We will set this manually in desc.optimize
+            # get_combined_constraint_objectives function.
+            self._constraints = None
+            # we will use this string to check if the computations should be done on the
+            # objective or the constraint when we receive the message in the worker loop
+            # The possible values are "obj" and "con". The default will be updated again
+            # in get_combined_constraint_objectives function.
+
+            self._obj_type = "obj"
             self._static_attrs += [
                 "mpi",
                 "comm",
@@ -509,6 +521,8 @@ class ObjectiveFunction(IOAble):
                 "_rank_per_objective",
                 "_f_sizes",
                 "_f_displs",
+                "_constraints",
+                "_obj_type",
             ]
 
         if self._is_mpi and mpi is None:

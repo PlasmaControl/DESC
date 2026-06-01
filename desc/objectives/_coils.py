@@ -59,7 +59,7 @@ class _CoilObjective(_Objective):
     "Coil" if the objective returns a single scalar per coil, and "Node"
     if it returns a scalar at every grid point. To be compatible with
     masking, compute function should apply the mask
-    self._coilset_tree["coilset_mask"] before returning data.
+    self._coilset_tree["objective_mask"] before returning data.
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
@@ -133,7 +133,9 @@ class _CoilObjective(_Objective):
                 params_tree["coils"] contains a nested list of 0s representing
                 individual coils and the coilsets to which they belong. Similarly,
                 params_tree["nodes"] lists the grid nodes associated with each coil.
-                params_tree["coilset_mask"] contains the indices in [0,self._dim_f-1]
+                params_tree["coilset_mask"] contains the indices in
+                [0,self._num_coils-1] for which the corresponding weight is positive.
+                params_tree["objective_mask"] contains the indices in [0,self._dim_f-1]
                 for which the corresponding weight is positive. If all weights are
                 positive (i.e. no masking needed), contains default slice(None).
             """
@@ -166,12 +168,16 @@ class _CoilObjective(_Objective):
             self._coilset_tree = {
                 "coils": tree[0],
                 "nodes": tree[1],
-                "coilset_mask": slice(None),
+                "coilset_mask": np.arange(self._num_coils),
+                "objective_mask": slice(None),
             }
             if np.any([w == 0 for w in tree_leaves(self._weight)]):
-                mask = self._coilset_broadcast(self._weight)
-                mask = np.nonzero(mask)[0]
-                self._coilset_tree["coilset_mask"] = mask
+                coilset_mask = self._coilset_broadcast(self._weight)
+                objective_mask = self._coilset_broadcast(
+                    self._weight, self._broadcast_input
+                )
+                self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask)[0]
+                self._coilset_tree["objective_mask"] = np.nonzero(objective_mask)[0]
 
         coil = self.things[0]
         grid = self._grid
@@ -211,12 +217,12 @@ class _CoilObjective(_Objective):
 
         _build_coilset_tree()
         quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])[
-            self._coilset_tree["coilset_mask"]
+            self._coilset_tree["objective_mask"]
         ]
 
         if self._broadcast_input == "Node":
             grid_nodes_unmasked = [
-                g.num_nodes for g in grid[self._coilset_tree["coilset_mask"]]
+                grid[i].num_nodes for i in self._coilset_tree["coilset_mask"]
             ]
             self._dim_f = np.sum(grid_nodes_unmasked)
         else:
@@ -230,14 +236,14 @@ class _CoilObjective(_Objective):
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
 
-        self._weight = self._coilset_broadcast(self._weight)
+        self._weight = self._coilset_broadcast(self._weight, self._broadcast_input)
         if self._bounds:
             self._bounds = (
-                self._coilset_broadcast(self._bounds[0]),
-                self._coilset_broadcast(self._bounds[1]),
+                self._coilset_broadcast(self._bounds[0], self._broadcast_input),
+                self._coilset_broadcast(self._bounds[1], self._broadcast_input),
             )
         elif self._target:
-            self._target = self._coilset_broadcast(self._target)
+            self._target = self._coilset_broadcast(self._target, self._broadcast_input)
 
         timer = Timer()
         if verbose > 0:
@@ -294,14 +300,18 @@ class _CoilObjective(_Objective):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         if bounds:
             self._bounds = (
-                self._coilset_broadcast(bounds[0]),
-                self._coilset_broadcast(bounds[1]),
+                self._coilset_broadcast(bounds[0], self._broadcast_input),
+                self._coilset_broadcast(bounds[1], self._broadcast_input),
             )
         self._check_dimensions()
 
     @_Objective.target.setter
     def target(self, target):
-        self._target = self._coilset_broadcast(target) if target is not None else target
+        self._target = (
+            self._coilset_broadcast(target, self._broadcast_input)
+            if target is not None
+            else target
+        )
         self._check_dimensions()
 
     @_Objective.weight.setter
@@ -311,13 +321,15 @@ class _CoilObjective(_Objective):
         # objective should be rebuilt to account for masking
         self._built = False
 
-    def _coilset_broadcast(self, x):
-        """Expand an array in accordance with the attribute _broadcast_input.
+    def _coilset_broadcast(self, x, target="Coil"):
+        """Broadcast an array to dimensions consistent with "target".
 
         Parameters
         ----------
         x : float or list[float]
             Must be broadcastable to the structure of self._things[0].
+        target: str, optional
+            Optional string taking values "Coil" or "Node". Defaults to "Coil".
 
         Returns
         -------
@@ -325,16 +337,18 @@ class _CoilObjective(_Objective):
             Float inputs are returned unchanged, and list inputs are
             expanded to size self._dim_f.
         """
+        assert target in ["Node", "Coil"]
+
         # No need to broadcast if input is a scalar
         arr_flat = tree_leaves(x)
         if len(arr_flat) == 1:
             return np.atleast_1d(arr_flat[0])
 
         arr = jax_tree_broadcast(x, self._coilset_tree["coils"])
-        if self._broadcast_input == "Node":
+        if target == "Node":
             arr = tree_map(lambda a, b: [a] * b, arr, self._coilset_tree["nodes"])
         arr, _ = tree_flatten(arr)
-        return np.asarray(arr)[self._coilset_tree["coilset_mask"]]
+        return np.asarray(arr)[self._coilset_tree["objective_mask"]]
 
 
 class CoilLength(_CoilObjective):
@@ -433,7 +447,7 @@ class CoilLength(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilCurvature(_CoilObjective):
@@ -535,7 +549,7 @@ class CoilCurvature(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilTorsion(_CoilObjective):
@@ -635,7 +649,7 @@ class CoilTorsion(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilCurrentLength(CoilLength):
@@ -741,7 +755,7 @@ class CoilCurrentLength(CoilLength):
         lengths = super().compute(params, constants=constants)
         params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
         currents = jnp.concatenate([param["current"] for param in params])
-        out = jnp.atleast_1d(lengths * currents[self._coilset_tree["coilset_mask"]])
+        out = jnp.atleast_1d(lengths * currents[self._coilset_tree["objective_mask"]])
         return out
 
 
@@ -848,7 +862,7 @@ class CoilIntegratedCurvature(_CoilObjective):
                 for dat in data
             ]
         )
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilSetMinDistance(_Objective):
@@ -1566,7 +1580,7 @@ class CoilArclengthVariance(_CoilObjective):
         constants = self._get_deprecated_constants(constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
-        return (out * constants["mask"])[self._coilset_tree["coilset_mask"]]
+        return (out * constants["mask"])[self._coilset_tree["objective_mask"]]
 
 
 class QuadraticFlux(_Objective):

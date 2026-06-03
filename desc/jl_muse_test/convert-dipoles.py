@@ -25,9 +25,10 @@ desc_df = pd.DataFrame({
     "x (m)": ox,
     "y (m)": oy,
     "z (m)": oz,
-    "rho (unitless)": pho,
     "phi (rad)": mp,
     "theta (rad)": mt,
+    "m0": 0.074625,
+    "rho (unitless)": pho,
 })
 
 output_path = "muse_dipoles_desc.csv"

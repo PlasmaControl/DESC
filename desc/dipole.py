@@ -836,8 +836,57 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         return cls(*dipoleset)
     
+    from desc.utils import xyz2rpz
+    from desc.integrals import compute_B_plasma
+    def calc_g(dipoles,eq):
+        # points_rpz = xyz2rpz(points)
+        # gridpoints = eq.map_coordinates(
+        #     points_rpz,
+        #     inbasis=('R', 'phi', 'Z'),
+        #     outbasis=('rho', 'theta', 'zeta'),
+        # )
+        # grid = Grid(gridpoints)
 
+        mu_0 = 4 * np.pi * 1e-7
+        grid = LinearGrid(M=8, N=17, NFP=eq.NFP, sym=False, endpoint=True)
+        n_surf = eq.surface.compute(['n_rho'], grid=grid)['n_rho']
+        g_array = np.zeros((256,12674))
+        data = eq.compute(["X", "Y", "Z"], grid=grid)
+        xyz = np.column_stack([data["X"], data["Y"], data["Z"]])
+        # dipole_x = dipoles.x
+        # dipole_y = dipoles.y
+        # dipole_z = dipoles.z
+        # m_vec = dipoles[:].m_xyz
+        # d_xyz = np.column_stack([dipole_x, dipole_y, dipole_z])
+        # r = xyz - d_xyz
+        # r_mag = np.linalg.norm(r)
 
+        # nums = (mu_0 * 2)/(4*np.pi * r_mag**3)
+
+        # A = np.dot(r,n_surf)*np.dot(r,m_vec)
+        # B = np.dot(n_surf,m_vec)
+
+        # nax = np.newaxis
+        # g_array = nums * (A[:,nax] - B[nax,:])
+
+        for i in range(256):
+            for j in range(12674):
+                m = dipoles[j]
+                m_vec = m.m_xyz
+                d_pos = jnp.array([m.x, m.y, m.z])
+                r = xyz[i] - d_pos 
+                r_mag = np.linalg.norm(r)
+                g_ij = ((mu_0)/(4*np.pi)) * ((3*(np.dot(r,n_surf[i]))*(np.dot(r,m_vec))-(np.dot(n_surf[i],m_vec)))/(r_mag**3))
+                g_array[i][j] = g_ij
+
+        '''
+        (An+Bm)/Cnm
+        nax = np.newaxis
+
+        (A[:,nax] + B[nax,:]) C
+
+        '''
+        return g_array, xyz
 
     # add is_self_intersecting and save_in_makegrid_format later on
 
@@ -895,15 +944,15 @@ def export_dipoles(dipole_set, f):
 
 import csv
 
-def create_dipole(x, y, z, phi, theta, rho):
-    return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=0.074625, rho=rho)
+def create_dipole(x, y, z, theta, rho, m0, phi):
+    return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(eq, filename):
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
 
         csv_data = [
-            (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["rho (unitless)"]))
+            (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
         #print(csv_data)

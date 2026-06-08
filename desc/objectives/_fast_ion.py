@@ -3,10 +3,9 @@
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals.bounce_integral import Options
-from desc.utils import warnif
+from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
-from .utils import errorif
 
 
 class GammaC(_Objective):
@@ -50,12 +49,10 @@ class GammaC(_Objective):
         Default is Nemov. Set to ``False`` to use Velasco's.
 
         Nemov's Γ_c converges to a finite nonzero value in the infinity limit
-        of the number of toroidal transits. Velasco's expression has a secular
-        term that drives the result to zero as the number of toroidal transits
-        increases if the secular term is not averaged out from the singular
-        integrals. At finite resolution, an optimization using Velasco's metric
-        may need to be evaluated by measuring decrease in Γ_c at a fixed number
-        of toroidal transits.
+        of the number of toroidal transits. Velasco et al.'s expression has a
+        secular part that drives the result to zero. Therefore, an optimization
+        using Velasco et al.'s metric should be evaluated by measuring
+        improvement over a fixed number of field period transits.
         """.rstrip()
         + collect_docs(
             target_default="``target=0``.",
@@ -82,7 +79,7 @@ class GammaC(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="rev",
         name="Gamma_c",
         grid=None,
         X=32,
@@ -98,11 +95,13 @@ class GammaC(_Objective):
         nufft_eps=1e-7,
         spline=True,
         Nemov=True,
+        **kwargs,
     ):
         errorif(
             deriv_mode == "fwd",
             ValueError,
-            "Reverse mode should be used for the objective: GammaC.",
+            "Reverse mode recommended for the objective: GammaC."
+            "Make an issue if you need forward mode.",
         )
         try:
             import jax_finufft  # noqa: F401

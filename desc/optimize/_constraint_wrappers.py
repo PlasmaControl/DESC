@@ -1285,8 +1285,10 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-def jit_if_possible(func, *, static_argnames=("op",)):
+def jit_if_possible(func=None, *, static_argnames=("op",)):
     """Jit a function if use_jit."""
+    if func is None:
+        return functools.partial(jit_if_possible, static_argnames=static_argnames)
     jitted_func = functools.partial(jit, static_argnames=list(static_argnames))(func)
 
     @functools.wraps(func)

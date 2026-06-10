@@ -532,6 +532,7 @@ class TestBootstrapCompute:
                 "Ti": Ti(rho),
                 "Zeff": Zeff_rho,
                 "ne_r": ne(rho, dr=1),
+                "ni_r": ni(rho, dr=1),
                 "Te_r": Te(rho, dr=1),
                 "Ti_r": Ti(rho, dr=1),
             }
@@ -671,6 +672,7 @@ class TestBootstrapCompute:
                     "Ti": Ti(rho),
                     "Zeff": Zeff_rho,
                     "ne_r": ne(rho, dr=1),
+                    "ni_r": ni(rho, dr=1),
                     "Te_r": Te(rho, dr=1),
                     "Ti_r": Ti(rho, dr=1),
                 }

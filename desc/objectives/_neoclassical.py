@@ -4,9 +4,9 @@ from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
+from desc.utils import errorif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
-from .utils import errorif
 
 
 class EffectiveRipple(_Objective):
@@ -62,7 +62,7 @@ class EffectiveRipple(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="rev",
         name="Effective ripple",
         grid=None,
         X=32,
@@ -77,11 +77,13 @@ class EffectiveRipple(_Objective):
         surf_batch_size=1,
         nufft_eps=1e-6,
         spline=True,
+        **kwargs,
     ):
         errorif(
             deriv_mode == "fwd",
             ValueError,
-            "Reverse mode should be used for the objective: EffectiveRipple.",
+            "Reverse mode recommended for the objective: EffectiveRipple.\n"
+            "Make an issue if you need forward mode.",
         )
         nufft_eps = check_nufft(nufft_eps)
 

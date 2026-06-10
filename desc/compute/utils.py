@@ -93,7 +93,7 @@ def compute(  # noqa: C901
                     "instead.",
                     DeprecationWarning,
                 )
-    bad_kwargs = kwargs.keys() - allowed_kwargs
+    bad_kwargs = kwargs.keys() - allowed_kwargs - {"num_transit"}
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 

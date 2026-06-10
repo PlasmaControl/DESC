@@ -119,6 +119,8 @@ class _Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
+    get_pitch_inv_quad = pitch_quad
+
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
         """Compute bounce points."""
@@ -293,6 +295,8 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
+        if "num_transit" in kwargs and num_field_periods == 20:  # default value
+            num_field_periods = kwargs["num_transit"] * grid.NFP
 
         if quad is None:
             quad = Options._quad(eta=-2, num_quad=32)

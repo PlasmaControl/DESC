@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- More efficient `ProximalProjection` jacobians especially if the `ForceBalance` constraint uses a small `jac_chunk_size`.
+
+
+v0.17.2
+-------
+
 New Features
 
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.

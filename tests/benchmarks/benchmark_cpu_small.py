@@ -348,6 +348,29 @@ def test_proximal_jac_atf(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
+def test_proximal_jac_atf_chunked(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    eq = desc.examples.get("ATF")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    # chunk the computation, total size is 252, so this should take at most
+    # 2.5x the unchunked case above
+    constraint = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
+    prox.build()
+    x = prox.x(eq)
+    prox.jac_scaled_error(x).block_until_ready()
+
+    def run(x, prox):
+        prox.jac_scaled_error(x).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
 def test_proximal_jac_atf_with_eq_update(benchmark):
     """Benchmark computing jacobian of constrained proximal projection."""
     # Compare with test_proximal_jac_atf, this test additionally benchmarks the

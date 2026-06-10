@@ -1069,12 +1069,21 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
+        uf, sfi, vtf = _get_fxh_inverse(
+            self._constraint,
+            xf,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents.T,
+            "scaled_error",
+        )
         tangents = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
             constants[1],
-            self._eq_solve_objective._feasible_tangents.T,
+            uf,
+            sfi,
+            vtf,
             self._dxdc,
             self._feasible_tangents,
             self._dimc_per_thing,
@@ -1236,12 +1245,21 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
+        uf, sfi, vtf = _get_fxh_inverse(
+            self._constraint,
+            xf,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents.T,
+            op,
+        )
         tangents = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
             constants[1],
-            self._eq_solve_objective._feasible_tangents.T,
+            uf,
+            sfi,
+            vtf,
             self._dxdc,
             self._feasible_tangents,
             self._dimc_per_thing,
@@ -1309,16 +1327,15 @@ def _proximal_get_tangents(
     xf,
     v,
     constants,
-    eq_feasible_tangents_T,
+    uf,
+    sfi,
+    vtf,
     dxdc,
     feasible_tangents,
     dimc_per_thing,
     eq_idx,
     op="scaled_error",
 ):
-    uf, sfi, vtf = _get_fxh_inverse(
-        constraint, xf, constants, eq_feasible_tangents_T, op
-    )
     jvpfun = lambda u: _get_tangent(
         constraint,
         u,
@@ -1395,6 +1412,7 @@ def _get_tangent(
     return tangent
 
 
+@jit_if_possible
 def _get_fxh_inverse(constraint, xf, constants, eq_feasible_tangents_T, op):
     # This is the transpose of dF/dx
     Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents_T, xf, constants)

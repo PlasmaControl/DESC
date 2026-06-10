@@ -4,9 +4,9 @@ from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
+from desc.utils import errorif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
-from .utils import errorif
 
 
 class GammaC(_Objective):
@@ -81,7 +81,7 @@ class GammaC(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="rev",
         name="Gamma_c",
         grid=None,
         X=32,
@@ -97,11 +97,13 @@ class GammaC(_Objective):
         nufft_eps=1e-7,
         spline=True,
         Nemov=True,
+        **kwargs,
     ):
         errorif(
             deriv_mode == "fwd",
             ValueError,
-            "Reverse mode should be used for the objective: GammaC.",
+            "Reverse mode recommended for the objective: GammaC."
+            "Make an issue if you need forward mode.",
         )
         nufft_eps = check_nufft(nufft_eps)
 

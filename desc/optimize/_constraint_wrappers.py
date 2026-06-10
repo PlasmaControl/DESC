@@ -1335,7 +1335,6 @@ def _proximal_get_tangents(
     )(v)
 
 
-@jit_if_possible(static_argnames=("op", "dimc_per_thing", "eq_idx"))
 def _get_tangent(
     constraint,
     v,
@@ -1395,7 +1394,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     # of same size as full equilibrium state vector. This function returns a 1D array.
 
     # here we are forming (dF/dx)⁻¹ @ dF/dc
-    # where Fxh is dF/dx and Fc is dF/dc.
+    # where Fxh is dF/dxᵀ and Fc is dF/dc.
     # Note: Fxh and its SVD do not depend on dc (the vectorized argument). Since the
     # whole tangent computation is jitted as one program, we rely on the compiler to
     # hoist this loop-invariant SVD out of the batched scan/vmap rather than

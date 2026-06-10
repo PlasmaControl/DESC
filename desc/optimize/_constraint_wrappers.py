@@ -1069,21 +1069,12 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        uf, sfi, vtf = _get_fxh_inverse(
-            self._constraint,
-            xf,
-            constants[1],
-            self._eq_solve_objective._feasible_tangents.T,
-            "scaled_error",
-        )
         tangents = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
             constants[1],
-            uf,
-            sfi,
-            vtf,
+            self._eq_solve_objective._feasible_tangents,
             self._dxdc,
             self._feasible_tangents,
             self._dimc_per_thing,
@@ -1245,21 +1236,12 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        uf, sfi, vtf = _get_fxh_inverse(
-            self._constraint,
-            xf,
-            constants[1],
-            self._eq_solve_objective._feasible_tangents.T,
-            op,
-        )
         tangents = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
             constants[1],
-            uf,
-            sfi,
-            vtf,
+            self._eq_solve_objective._feasible_tangents,
             self._dxdc,
             self._feasible_tangents,
             self._dimc_per_thing,
@@ -1327,9 +1309,7 @@ def _proximal_get_tangents(
     xf,
     v,
     constants,
-    uf,
-    sfi,
-    vtf,
+    eq_feasible_tangents,
     dxdc,
     feasible_tangents,
     dimc_per_thing,
@@ -1341,9 +1321,7 @@ def _proximal_get_tangents(
         u,
         xf,
         constants,
-        uf,
-        sfi,
-        vtf,
+        eq_feasible_tangents,
         dxdc,
         feasible_tangents,
         dimc_per_thing,
@@ -1357,14 +1335,13 @@ def _proximal_get_tangents(
     )(v)
 
 
+@jit_if_possible(static_argnames=("op", "dimc_per_thing", "eq_idx"))
 def _get_tangent(
     constraint,
     v,
     xf,
     constants,
-    uf,
-    sfi,
-    vtf,
+    eq_feasible_tangents,
     dxdc,
     feasible_tangents,
     dimc_per_thing,
@@ -1379,7 +1356,7 @@ def _get_tangent(
     vs = jnp.split(v, np.cumsum(dimc_per_thing))
     # This is (dF/dx)⁻¹ * dF/dc  # noqa : E800
     dfdc = _proximal_jvp_f_pure(
-        constraint, xf, constants, vs[eq_idx], uf, sfi, vtf, dxdc, op
+        constraint, xf, constants, vs[eq_idx], eq_feasible_tangents, dxdc, op
     )
     # broadcasting against multiple things
     dfdcs = [jnp.zeros(dim) for dim in dimc_per_thing]
@@ -1412,25 +1389,18 @@ def _get_tangent(
     return tangent
 
 
-@jit_if_possible
-def _get_fxh_inverse(constraint, xf, constants, eq_feasible_tangents_T, op):
-    # This is the transpose of dF/dx
-    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents_T, xf, constants)
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    return uf, sfi, vtf
-
-
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, uf, sfi, vtf, dxdc, op):
+def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
     # of same size as full equilibrium state vector. This function returns a 1D array.
 
     # here we are forming (dF/dx)⁻¹ @ dF/dc
-    # where Fc is dF/dc and (dF/dx)⁻¹ is given by uf, sfi and vtf which are from the
-    # SVD of dF/dxᵀ computed in _get_fxh_inverse.
+    # where Fxh is dF/dx and Fc is dF/dc.
+    # Note: Fxh and its SVD do not depend on dc (the vectorized argument). Since the
+    # whole tangent computation is jitted as one program, we rely on the compiler to
+    # hoist this loop-invariant SVD out of the batched scan/vmap rather than
+    # recomputing it for every tangent.
+    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants)
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
@@ -1438,10 +1408,10 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, uf, sfi, vtf, dxdc, op):
     # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
     # for the relation between Rb_lmn and R_lmn.
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
-    # Note: keeping uf and vtf separate is more efficient than multiplying them to get a
-    # single inverse matrix that is computed once out of the batched operation for small
-    # batch sizes. For larger batch sizes, it can be more efficient to compute the full
-    # inverse matrix and do a single matmul, but this is omitted for now.
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
     return uf @ (sfi * (vtf @ Fc))
 
 

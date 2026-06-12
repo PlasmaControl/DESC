@@ -848,7 +848,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         # grid = Grid(gridpoints)
 
         mu_0 = 4 * np.pi * 1e-7
-        grid = LinearGrid(M=8, N=17, NFP=eq.NFP, sym=False, endpoint=True)
+        grid = LinearGrid(M=2, N=2, NFP=2, sym=False, endpoint=False)
         n_surf = eq.surface.compute(['n_rho'], grid=grid)['n_rho']
         g_array = np.zeros((256,12674))
         data = eq.compute(["X", "Y", "Z"], grid=grid)
@@ -944,7 +944,7 @@ def export_dipoles(dipole_set, f):
 
 import csv
 
-def create_dipole(x, y, z, theta, rho, m0, phi):
+def create_dipole(x, y, z, phi, theta, m0, rho):
     return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(eq, filename):
@@ -955,15 +955,12 @@ def import_dipoles(eq, filename):
             (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
-        #print(csv_data)
     num=0
     num2=0
     dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
-    #print(eq.sym)
     for line in csv_data:
         if (line[-1] != 0):
             dipole_set.append( create_dipole(*line))
-            #print(line)
             num+=1
         num2+=1
     print("rho!=0",num)

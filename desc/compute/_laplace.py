@@ -266,7 +266,7 @@ def _iterative_solve(
             throw=False,
         )
         if options.full_output:
-            err = operator.mv(solution.value) - boundary_condition
+            err = jnp.abs(operator.mv(solution.value) - boundary_condition).max()
             return solution.value, (err, solution.stats["num_steps"])
         return solution.value
 
@@ -296,7 +296,7 @@ def _iterative_solve(
         throw=False,
     )
     if options.full_output:
-        err = _iteration_operator(solution.value, args) - solution.value
+        err = jnp.abs(_iteration_operator(solution.value, args) - solution.value).max()
         return solution.value, (err, solution.stats["num_steps"])
     return solution.value
 
@@ -487,8 +487,9 @@ def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
             options,
         )
         if options.full_output:
-            data["Phi (periodic)"], (err, data["num_steps"]) = data["Phi (periodic)"]
-            data["Phi error"] = jnp.abs(err).max()
+            data["Phi (periodic)"], (data["Phi error"], data["num_steps"]) = data[
+                "Phi (periodic)"
+            ]
 
         assert data["Phi (periodic)"].size == transforms["Phi"].grid.num_nodes
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])
@@ -1076,8 +1077,9 @@ def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwar
             options,
         )
         if options.full_output:
-            data["Phi (periodic)"], (err, data["num_steps"]) = data["Phi (periodic)"]
-            data["Phi error"] = jnp.abs(err).max()
+            data["Phi (periodic)"], (data["Phi error"], data["num_steps"]) = data[
+                "Phi (periodic)"
+            ]
 
         assert data["Phi (periodic)"].size == transforms["Phi"].grid.num_nodes
         data["Phi_mn"] = transforms["Phi"].fit(data["Phi (periodic)"])

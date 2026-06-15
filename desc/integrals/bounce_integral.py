@@ -3,6 +3,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from functools import partial
+from itertools import chain
 from typing import NamedTuple, Union
 
 import equinox as eqx
@@ -68,6 +69,7 @@ from desc.integrals.quad_utils import (
 )
 from desc.utils import (
     apply,
+    apply_funs,
     atleast_nd,
     errorif,
     flatten_mat,
@@ -412,8 +414,9 @@ class Bounce2D(_Bounce):
             Optional, other data that is not constant on each flux surface.
             These will be FFT'd and passed to ``fun`` in batches.
         flux_data : dict[str, jnp.ndarray]
-            Data constant on each flux surface.
+            Optional, other data constant on each flux surface.
             These will be passed to ``fun`` as a scalar for each surface.
+            All arrays must have dimension one.
         batch_size : int or None
             Number of flux surfaces to compute simultaneously.
             Default is ``1``.
@@ -430,28 +433,27 @@ class Bounce2D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
+        if isinstance(names, str):
+            names = (names,)
 
-        def fft(value):
-            return Bounce2D.fourier(Bounce2D.reshape(grid, value))
+        reshape = partial(Bounce2D.reshape, grid)
+        # We wrap fun as follows rather than wrapping reshape with an fft so that
+        # the sparse pullback applies to the fft as well.
+        fun = partial(_fft_then_fun, fun)
 
-        fun_data = apply(
-            data, fft, subset=names, exclude=("|e_zeta|r,a|", "zeta", "theta")
+        fun_data = apply_funs(
+            data,
+            fun1=reshape,
+            fun2=grid.compress,
+            subset1=chain(names, ("B^zeta", "|B|")),
+            subset2=("iota", "min_tz |B|", "max_tz |B|"),
+            exclude=("|e_zeta|r,a|", "zeta", "theta", "angle"),
         )
         if custom_data is not None:
-            fun_data.update(apply(custom_data, fft))
-        for name in Bounce2D.required_names:
-            if name not in fun_data and name != "iota":
-                fun_data[name] = fft(data[name])
-
+            fun_data.update(apply(custom_data, reshape))
         if flux_data is not None:
             fun_data.update(apply(flux_data, grid.compress))
 
-        if "iota" not in fun_data:
-            fun_data["iota"] = grid.compress(data["iota"])
-        if "min_tz |B|" not in fun_data:
-            fun_data["min_tz |B|"] = grid.compress(data["min_tz |B|"])
-        if "max_tz |B|" not in fun_data:
-            fun_data["max_tz |B|"] = grid.compress(data["max_tz |B|"])
         fun_data["angle"] = angle
 
         if sparse:
@@ -1288,6 +1290,14 @@ def _fourier_if_real(thing):
     return Bounce2D.fourier(thing) if jnp.isrealobj(thing) else thing
 
 
+def _fft_then_fun(fun, data):
+    data = {
+        k: Bounce2D.fourier(v) if (k != "angle" and v.ndim > 1) else v
+        for k, v in data.items()
+    }
+    return fun(data)
+
+
 class Bounce1D(_Bounce):
     """Computes bounce integrals using one-dimensional spline methods.
 
@@ -1452,8 +1462,9 @@ class Bounce1D(_Bounce):
             Optional, other data that is not constant on each flux surface.
             These will be passed to ``fun`` in batches.
         flux_data : dict[str, jnp.ndarray]
-            Data constant on each flux surface.
+            Optional, other data constant on each flux surface.
             These will be passed to ``fun`` as a scalar for each surface.
+            All arrays must have dimension one.
         batch_size : int or None
             Number of flux surfaces to compute simultaneously.
             Default is ``1``.
@@ -1470,21 +1481,21 @@ class Bounce1D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
+        if isinstance(names, str):
+            names = (names,)
+
         reshape = partial(Bounce1D.reshape, grid)
-        fun_data = apply(data, reshape, subset=names)
+        fun_data = apply_funs(
+            data,
+            fun1=reshape,
+            fun2=grid.compress,
+            subset1=chain(names, Bounce1D.required_names),
+            subset2=("min_tz |B|", "max_tz |B|"),
+        )
         if custom_data is not None:
             fun_data.update(apply(custom_data, reshape))
-        for name in Bounce1D.required_names:
-            if name not in fun_data:
-                fun_data[name] = reshape(data[name])
-
         if flux_data is not None:
             fun_data.update(apply(flux_data, grid.compress))
-
-        if "min_tz |B|" not in fun_data:
-            fun_data["min_tz |B|"] = grid.compress(data["min_tz |B|"])
-        if "max_tz |B|" not in fun_data:
-            fun_data["max_tz |B|"] = grid.compress(data["max_tz |B|"])
 
         if sparse:
             return sparse_pullback(fun, fun_data, batch_size, strip_dim0=True)

@@ -151,7 +151,7 @@ class TestFourierRZToroidalSurface:
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=3, N=2)
         offset = 1
-        (s_offset, data, _) = s.constant_offset_surface(
+        s_offset, data, _ = s.constant_offset_surface(
             offset, grid, M=1, N=1, full_output=True
         )
         r_offset_surf = data["x_offset_surface"]
@@ -260,7 +260,7 @@ class TestFourierRZToroidalSurface:
         s = eq.surface
         s.change_resolution(M=2, N=2)
         offset = 0.1
-        (s_offset, data, _) = s.constant_offset_surface(
+        s_offset, data, _ = s.constant_offset_surface(
             offset, grid=None, M=2, N=2, full_output=True
         )
         r_offset_surf = data["x_offset_surface"]

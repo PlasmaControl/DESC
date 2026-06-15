@@ -20,7 +20,10 @@ _bounce_doc = {
         If the option ``spline`` is ``True``, the bounce points are found with
         8th order accuracy in this parameter. If the option ``spline`` is ``False``,
         then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline`` option is 100.
+        A reference value for the ``spline=True`` option is
+        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
+        A reference value for the ``spline=False`` option is
+        ``(grid.num_theta+grid.num_zeta)//2``.
 
         An error of ε in a bounce point manifests
         𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
@@ -52,6 +55,8 @@ _bounce_doc = {
         A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
         The ``check_points`` or ``plot`` methods in ``desc.integrals.Bounce2D``
         are useful to select a reasonable value.
+
+        This is the most important parameter to specify for performance.
         """,
     "num_quad": """int :
         Resolution for quadrature of bounce integrals.
@@ -70,18 +75,18 @@ _bounce_doc = {
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
         """,
-    "quad": """tuple[jnp.ndarray] :
-        Used to compute bounce integrals.
-        Quadrature points xₖ and weights wₖ for the
-        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
-        """,
     "nufft_eps": """float :
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         """,
     "spline": """bool :
-        Whether to use cubic splines to compute bounce points instead of
-        Chebyshev series. Default is ``True``.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series. Default is ``True``.
+        """,
+    "quad": """tuple[jnp.ndarray] :
+        Used to compute bounce integrals.
+        Quadrature points xₖ and weights wₖ for the
+        approximate evaluation of the integral ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ).
         """,
     "_vander": """dict[str,jnp.ndarray] :
         Precomputed transform matrix "dct spline".
@@ -199,9 +204,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(1, grid, **kwargs)
 

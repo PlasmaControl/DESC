@@ -15,13 +15,14 @@ from desc.coils import FourierRZCoil
 from desc.compute.utils import get_transforms
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import _map_clebsch_coordinates
+from desc.equilibrium.coords import _map_poloidal_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.io import InputReader, load
 from desc.magnetic_fields import PlasmaField, SumMagneticField
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
+from desc.objectives.normalization import compute_scaling_factors
 from desc.profiles import PowerSeriesProfile
 from desc.utils import dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
@@ -114,7 +115,7 @@ def test_map_clebsch_coordinates():
         lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
     )
     np.testing.assert_allclose(
-        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        _map_poloidal_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
         grid.meshgrid_reshape(out[:, 1], "raz"),
     )
 
@@ -467,6 +468,24 @@ def test_assigning_profile_iota_current():
     with pytest.warns(UserWarning, match="existing toroidal"):
         eq.iota = PowerSeriesProfile()
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_assigning_profile_pressure_kinetic():
+    """Test assigning pressure to kinetic-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # pressure-constrained
+    with pytest.warns(UserWarning, match="existing pressure"):
+        eq.electron_density = PowerSeriesProfile()
+
+    eq = get("reactor_QA")  # kinetic-constrained
+    with pytest.warns(UserWarning, match="at least one kinetic"):
+        eq.pressure = PowerSeriesProfile()
+    # also tests that the normalization scales include "n","T" when pressure
+    # is also present
+    with pytest.warns(UserWarning, match="kinetic and pressure"):
+        scales = compute_scaling_factors(eq)
+    for key in ["p", "n", "T"]:
+        assert key in scales.keys()
 
 
 @pytest.mark.unit

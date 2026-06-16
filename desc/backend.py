@@ -86,7 +86,14 @@ if use_jax:  # noqa: C901
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
     from jax.scipy.fft import dct, dctn, idct, idctn
-    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+    from jax.scipy.linalg import (
+        block_diag,
+        cho_factor,
+        cho_solve,
+        qr,
+        qr_multiply,
+        solve_triangular,
+    )
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
@@ -539,6 +546,7 @@ else:  # pragma: no cover
         cho_factor,
         cho_solve,
         qr,
+        qr_multiply,
         solve_triangular,
     )
     from scipy.special import gammaln  # noqa: F401

@@ -9,6 +9,7 @@ from desc.backend import (
     jit,
     jnp,
     qr,
+    qr_multiply,
     solve_triangular,
     while_loop,
 )
@@ -413,7 +414,11 @@ def trust_region_step_exact_qr(
         alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
 
-        fp = jnp.pad(f, (0, J.shape[1]))
+        n = J.shape[1]
+        # Factor J = Q1@R and z = Q1.T@f once; the alpha-loop only retriangularizes
+        # the reduced system [R; sqrt(alpha)*I] rather than restacking [J; ...].
+        z, R = qr_multiply(J, f, mode="right")
+        zp = jnp.concatenate([z, jnp.zeros(n)])
 
         def loop_cond(state):
             p, alpha, alpha_lower, alpha_upper, phi, k = state
@@ -422,17 +427,16 @@ def trust_region_step_exact_qr(
         def loop_body(state):
             p, alpha, alpha_lower, alpha_upper, phi, k = state
 
-            Ji = jnp.vstack([J, jnp.sqrt(alpha) * jnp.eye(J.shape[1])])
-            # Ji is always tall since its padded by alpha*I
-            Q, R = qr(Ji, mode="economic")
+            A = jnp.vstack([R, jnp.sqrt(alpha) * jnp.eye(n)])
+            Qtz, Rtil = qr_multiply(A, zp, mode="right")
 
-            p = solve_triangular_regularized(R, -Q.T @ fp)
+            p = solve_triangular_regularized(Rtil, -Qtz)
             p_norm = jnp.linalg.norm(p)
             phi = p_norm - trust_radius
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            q = solve_triangular_regularized(R.T, p, lower=True)
+            q = solve_triangular_regularized(Rtil.T, p, lower=True)
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius

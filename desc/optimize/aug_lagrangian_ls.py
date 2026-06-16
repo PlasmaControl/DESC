@@ -2,7 +2,7 @@
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jnp, qr, qr_multiply
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -408,15 +408,13 @@ def lsq_auglag(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
+                z, R = qr_multiply(J_a, L_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -z)
             else:
                 Q, R = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
-            # We don't need the Q and R matrices anymore
-            # Trust region solver will solve the augmented system
-            # with a new Q and R
-            del Q, R
+                # not reused; the tr solver refactorizes the augmented system
+                del Q, R
 
         actual_reduction = -1
         Lactual_reduction = -1

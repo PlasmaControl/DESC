@@ -174,7 +174,14 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-3e3, 3e3), eq=eq)
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
+    eq.solve(
+        objective=obj,
+        ftol=1e-16,
+        xtol=1e-16,
+        maxiter=200,
+        verbose=3,
+        options={"tr_method": "svd"},
+    )
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute_scaled_error(obj.x(eq))

@@ -358,7 +358,7 @@ def trust_region_step_exact_cho(
 
 @jit
 def trust_region_step_exact_qr(
-    p_newton, f, J, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
+    p_newton, z, R, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -374,12 +374,19 @@ def trust_region_step_exact_qr(
     which is equivalent to
         || [J; sqrt(alpha)*I].Tp - [f; 0].T ||^2
 
+    The caller supplies the factorization ``J = Q1@R`` (and ``z = Q1.T@f``), so
+    the alpha-loop only retriangularizes the small reduced system
+    ``[R; sqrt(alpha)*I]`` instead of refactorizing ``J`` each iteration.
+
     Parameters
     ----------
-    f : ndarray
-        Vector of residuals.
-    J : ndarray
-        Jacobian matrix.
+    p_newton : ndarray
+        The full (unregularized) Newton step, returned as-is if it lies within
+        the trust region.
+    z : ndarray
+        ``Q1.T@f``, where ``J = Q1@R`` is the (economic) QR factorization of J.
+    R : ndarray
+        The R factor of J, as returned by ``qr_multiply(J, f, mode="right")``.
     trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
@@ -408,16 +415,14 @@ def trust_region_step_exact_qr(
         return p_newton, False, 0.0
 
     def falsefun(*_):
-        alpha_upper = jnp.linalg.norm(J.T @ f) / trust_radius
+        # J.T@f == R.T@z, so we never need J or f here
+        alpha_upper = jnp.linalg.norm(R.T @ z) / trust_radius
         alpha_lower = 0.0
         alpha = initial_alpha
         alpha = jnp.clip(alpha, alpha_lower, alpha_upper)
         k = 0
 
-        n = J.shape[1]
-        # Factor J = Q1@R and z = Q1.T@f once; the alpha-loop only retriangularizes
-        # the reduced system [R; sqrt(alpha)*I] rather than restacking [J; ...].
-        z, R = qr_multiply(J, f, mode="right")
+        n = R.shape[1]
         zp = jnp.concatenate([z, jnp.zeros(n)])
 
         def loop_cond(state):

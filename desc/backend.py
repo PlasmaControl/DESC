@@ -86,14 +86,24 @@ if use_jax:  # noqa: C901
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
     from jax.scipy.fft import dct, dctn, idct, idctn
-    from jax.scipy.linalg import (
-        block_diag,
-        cho_factor,
-        cho_solve,
-        qr,
-        qr_multiply,
-        solve_triangular,
-    )
+    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+
+    # TODO: remove fallback once JAX min version >= 0.10.0
+    if Version(jax.__version__) >= Version("0.10.0"):
+        from jax.scipy.linalg import qr_multiply
+    else:
+
+        def qr_multiply(a, c, mode="right"):
+            """Fallback for ``jax.scipy.linalg.qr_multiply`` (added in JAX 0.10.0)."""
+            Q, R = qr(a, mode="economic")
+            if mode == "right":
+                # 1-D c (all DESC uses) matches the old Q.T @ c; c @ Q keeps
+                # higher-dim c consistent with qr_multiply rather than silently wrong
+                cq = Q.T @ c if c.ndim == 1 else c @ Q
+            else:
+                cq = Q @ c
+            return cq, R
+
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,

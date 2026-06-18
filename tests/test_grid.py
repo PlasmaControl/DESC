@@ -551,8 +551,8 @@ class TestGrid:
         assert "N=4" in s
 
     @pytest.mark.unit
-    def test_change_resolution(self):
-        """Test changing grid resolution."""
+    def test_change_resolution_flux(self):
+        """Test changing grid resolution for flux grids."""
 
         def test(grid, *desired_resolution):
             assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
@@ -592,6 +592,53 @@ class TestGrid:
         cg = ConcentricGridFlux(2, 3, 4)
         cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
         test(cg, cg.L, cg.M, cg.N, 5)
+
+    @pytest.mark.unit
+    def test_change_resolution_toroidal_surface(self):
+        """Test changing grid resolution for toroidal surface grids."""
+
+        def test(grid, *desired_resolution):
+            assert (grid.M, grid.N, grid.NFP) == desired_resolution
+            assert grid.num_theta == grid.unique_theta_idx.size
+            assert grid.num_zeta == grid.unique_zeta_idx.size
+            np.testing.assert_equal(
+                (grid.unique_theta_idx, grid.inverse_theta_idx),
+                np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_zeta_idx, grid.inverse_zeta_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_zeta_idx[-1], 2],
+                (grid.num_zeta - 1) / grid.num_zeta * 2 * np.pi / grid.NFP,
+            )
+
+        lg = LinearGridToroidalSurface(2, 3)
+        lg.change_resolution(3, 4, 5)
+        test(lg, 3, 4, 5)
+
+    @pytest.mark.unit
+    def test_change_resolution_curve(self):
+        """Test changing grid resolution for curve grids."""
+
+        def test(grid, *desired_resolution):
+            assert (grid.N, grid.NFP) == desired_resolution
+            assert grid.num_s == grid.unique_s_idx.size
+            np.testing.assert_equal(
+                (grid.unique_s_idx, grid.inverse_s_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_s_idx[-1], 2],
+                (grid.num_s - 1) / grid.num_s * 2 * np.pi / grid.NFP,
+            )
+
+        lg = LinearGridCurve(2)
+        lg.change_resolution(3, 4)
+        test(lg, 3, 4)
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):
@@ -773,8 +820,8 @@ class TestGrid:
         np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
 
     @pytest.mark.unit
-    def test_meshgrid_reshape(self):
-        """Test that reshaping meshgrids works correctly."""
+    def test_meshgrid_reshape_flux(self):
+        """Test that reshaping meshgrids works correctly for flux grids."""
         grid = LinearGridFlux(2, 3, 4)
 
         r = grid.nodes[grid.unique_rho_idx, 0]
@@ -830,6 +877,42 @@ class TestGrid:
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
     @pytest.mark.unit
+    def test_meshgrid_reshape_toroidal_surface(self):
+        """Test that reshaping meshgrids works correctly for toroidal surface grids."""
+        grid = LinearGridToroidalSurface(3, 4)
+
+        t = grid.nodes[grid.unique_theta_idx, 1]
+        z = grid.nodes[grid.unique_zeta_idx, 2]
+        _ = np.zeros_like(t)
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping _tz should have zeros along first axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "_tz"), _[:, None, None]
+        )
+        # reshaping _zt should have theta along last axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "_zt"), t[None, None, :]
+        )
+        # reshaping tz_ should have zeta along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "tz_")[:, :, :, 2], z[None, :, None]
+        )
+
+    @pytest.mark.unit
+    def test_meshgrid_reshape_curve(self):
+        """Test that reshaping meshgrids works correctly for curve grids."""
+        grid = LinearGridCurve(3, 4)
+
+        s = grid.nodes[grid.unique_s_idx, 2]
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping _s_ should have s along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "_s_")[:, :, :, 2], s[None, :, None]
+        )
+
+    @pytest.mark.unit
     def test_meshgrid_flatten(self):
         """Test that meshgrid_flatten is the inverse of meshgrid_reshape."""
         grid = LinearGridFlux(2, 3, 4)
@@ -840,8 +923,25 @@ class TestGrid:
             y = grid.meshgrid_reshape(x, order)
             z = grid.meshgrid_flatten(y, order)
             np.testing.assert_allclose(x, z)
-
         x = rng.random((grid.num_nodes, 3))
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
+
+        grid = LinearGridToroidalSurface(2, 3)
+        orders = ["_tz", "t_z", "z_t", "_zt", "tz_", "zt_"]
+        rng = np.random.default_rng(123)
+        x = rng.random(grid.num_nodes)
+        for order in orders:
+            y = grid.meshgrid_reshape(x, order)
+            z = grid.meshgrid_flatten(y, order)
+            np.testing.assert_allclose(x, z)
+
+        grid = LinearGridCurve(4)
+        orders = ["__s", "_s_", "s__"]
+        rng = np.random.default_rng(123)
+        x = rng.random(grid.num_nodes)
         for order in orders:
             y = grid.meshgrid_reshape(x, order)
             z = grid.meshgrid_flatten(y, order)

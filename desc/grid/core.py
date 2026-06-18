@@ -221,6 +221,7 @@ class AbstractGrid(IOAble, ABC):
             ValueError,
             f"order should be a permutation of {self.coordinates}, got {order}",
         )
+
         shape = (self.num_x1, self.num_x0, self.num_x2)
         vec = False
         if x.ndim > 1:
@@ -229,7 +230,7 @@ class AbstractGrid(IOAble, ABC):
         x = x.reshape(shape, order="F")
         # swap to change shape from trz/arz to rtz/raz etc.
         x = x.swapaxes(1, 0)
-        newax = tuple(self.coordinates.index(c) for c in order)
+        newax = [_replace_(self.coordinates).index(c) for c in _replace_(order)]
         if vec:
             newax += (3,)
         x = x.transpose(newax)
@@ -276,7 +277,7 @@ class AbstractGrid(IOAble, ABC):
         )
         vec = x.ndim == 4
         # reshape to radial/poloidal/toroidal
-        newax = tuple(order.index(c) for c in self.coordinates)
+        newax = tuple(_replace_(order).index(c) for c in _replace_(self.coordinates))
         if vec:
             newax += (3,)
         x = x.transpose(newax)
@@ -546,3 +547,17 @@ class AbstractGrid(IOAble, ABC):
         return self.__dict__.setdefault(
             "_can_fft2", self.is_meshgrid and self.fft_x1 and self.fft_x2
         )
+
+
+def _replace_(old):
+    """Replace '_' with unique ints in coordinate strings."""
+    i = 0
+    new = []
+    for c in old:
+        if c == "_":
+            x = str(i)
+            i += 1
+        else:
+            x = c
+        new.append(x)
+    return new

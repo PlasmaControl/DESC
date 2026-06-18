@@ -211,7 +211,6 @@ class LinearGridCurve(AbstractGridCurve):
             )
             # symmetry handled in create_nodes()
             self._sort_nodes()
-            self._axis = self._find_axis()
             (
                 self._unique_x0_idx,
                 self._inverse_x0_idx,

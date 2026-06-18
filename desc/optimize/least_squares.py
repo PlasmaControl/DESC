@@ -302,15 +302,15 @@ def lsqtr(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                z, R = qr_multiply(J_a, f_a, mode="right")
-                p_newton = solve_triangular_regularized(R, -z)
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -Qt_fa)
             else:
                 # min-norm Newton step uses the QR of J_a.T
                 Q, Rt = qr(J_a.T, mode="economic")
                 p_newton = Q @ solve_triangular_regularized(Rt.T, -f_a, lower=True)
                 del Q, Rt
                 # the tr subproblem still needs the QR of J_a itself
-                z, R = qr_multiply(J_a, f_a, mode="right")
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
 
         actual_reduction = -1
 
@@ -332,7 +332,7 @@ def lsqtr(  # noqa: C901
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    p_newton, z, R, trust_radius, alpha
+                    p_newton, Qt_fa, R, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 

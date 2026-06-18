@@ -15,6 +15,7 @@ from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
+from desc.coils import CoilSet, FourierPlanarCoil
 from desc.compute.utils import get_params, get_transforms
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
@@ -1220,6 +1221,31 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_field_line_integrate_coil_bs_chunk(self):
+        """Test field line integration for coils with bs_chunk_size."""
+        # Related to issue #2214
+        # simple toroidal field
+        B0 = 1
+        R0 = 4
+        I = 2 * np.pi * B0 * R0 / mu_0
+        field = CoilSet(
+            FourierPlanarCoil(
+                current=I,
+                center=[R0, 0, 0],
+                normal=[0, 1, 0],
+                r_n=R0 / 4,
+            ),
+            NFP=40,
+            check_intersection=False,
+        )
+        r0 = [10.0]
+        z0 = [0.0]
+        phis = [0, np.pi]
+        r, z = field_line_integrate(r0, z0, phis, field, bs_chunk_size=1000)
+        np.testing.assert_allclose(r[-1], r0[0], rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[-1], z0[0], rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
     def test_field_line_integrate_jax_transforms(self, capsys):

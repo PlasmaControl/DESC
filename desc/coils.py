@@ -1552,7 +1552,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def current(self, new):
         # new must be a 1D iterable regardless of the tree structure of the CoilSet
         old, tree = tree_flatten(self.current)
-        new = jnp.atleast_1d(new).flatten()
+        new = jnp.atleast_1d(jnp.asarray(new)).flatten()
         new = jnp.broadcast_to(new, (len(old),))
         new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):

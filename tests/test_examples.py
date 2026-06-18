@@ -168,6 +168,7 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
 @pytest.mark.solve
 def test_solve_bounds():
     """Tests optimizing with bounds=(lower bound, upper bound)."""
+    # Note: This test is known to be sensitive to minor numerical changes
     # decrease resolution and double pressure so no longer in force balance
     eq = get("DSHAPE")
     with pytest.warns(UserWarning, match="Reducing radial"):

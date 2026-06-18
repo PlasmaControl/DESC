@@ -777,7 +777,7 @@ class LinearGridFlux(AbstractGridFlux):
         theta=0.0,
         zeta=0.0,
     ):
-        """Create grid nodes and weights.
+        """Create grid nodes and spacing.
 
         Parameters
         ----------
@@ -982,7 +982,7 @@ class QuadratureGridFlux(AbstractGridFlux):
         self._weights = self.spacing.prod(axis=1)
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
-        """Create grid nodes and weights.
+        """Create grid nodes and spacing.
 
         Parameters
         ----------
@@ -1147,7 +1147,7 @@ class ConcentricGridFlux(AbstractGridFlux):
         self._weights = self._scale_weights()
 
     def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
-        """Create grid nodes and weights.
+        """Create grid nodes and spacing.
 
         Parameters
         ----------

@@ -247,7 +247,7 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         theta=0.0,
         zeta=0.0,
     ):
-        """Create grid nodes and weights.
+        """Create grid nodes and spacing.
 
         Parameters
         ----------

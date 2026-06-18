@@ -210,7 +210,7 @@ class _CoilObjective(_Objective):
         )
         warnif(
             np.any([not isinstance(g, LinearGridCurve) for g in grid]),
-            DeprecationWarning,
+            FutureWarning,
             "Using a LinearGridFlux for coil objectives is deprecated and will be "
             + "removed in a future DESC version, use a LinearGridCurve instead.",
         )

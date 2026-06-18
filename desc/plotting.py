@@ -25,6 +25,7 @@ from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import map_coordinates
 from desc.geometry import Curve, FourierRZToroidalSurface
 from desc.grid import (
+    AbstractGridFlux,
     CustomGridFlux,
     LinearGridCurve,
     LinearGridFlux,
@@ -37,6 +38,7 @@ from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
     errorif,
+    errorif_wrong_grid,
     islinspaced,
     only1,
     parse_argname_change,
@@ -3579,7 +3581,7 @@ def plot_grid(grid, return_data=False, **kwargs):
 
     Parameters
     ----------
-    grid : AbstractGrid
+    grid : AbstractGridFlux
         Grid to plot.
     return_data : bool
         If True, return the data plotted as well as fig,ax
@@ -3619,6 +3621,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ax = plt.subplot(projection="polar")
     title_fontsize = kwargs.pop("title_fontsize", None)
 
+    errorif_wrong_grid(grid, AbstractGridFlux)
     assert (
         len(kwargs) == 0
     ), f"plot_grid got unexpected keyword argument: {kwargs.keys()}"
@@ -3652,21 +3655,17 @@ def plot_grid(grid, return_data=False, **kwargs):
         ]
     )
     ax.set_yticklabels([])
-    if grid.__class__.__name__ in [
-        "CustomGridFlux",
-        "LinearGridFlux",
-        "QuadratureGridFlux",
-    ]:
-        ax.set_title(
-            "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
-            pad=20,
-            fontsize=title_fontsize,
-        )
-    if grid.__class__.__name__ in ["ConcentricGridFlux"]:
+    if grid.__class__.__name__ in ["ConcentricGrid", "ConcentricGridFlux"]:
         ax.set_title(
             "{}, $L={}$, $M={}, pattern: {}$".format(
                 grid.__class__.__name__, grid.L, grid.M, grid.node_pattern
             ),
+            pad=20,
+            fontsize=title_fontsize,
+        )
+    else:
+        ax.set_title(
+            "{}, $L={}$, $M={}$".format(grid.__class__.__name__, grid.L, grid.M),
             pad=20,
             fontsize=title_fontsize,
         )

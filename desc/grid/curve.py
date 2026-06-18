@@ -142,7 +142,7 @@ class LinearGridCurve(AbstractGridCurve):
         self._weights = self._scale_weights()
 
     def _create_nodes(self, N=None, NFP=1, endpoint=False, s=0.0):
-        """Create grid nodes and weights.
+        """Create grid nodes and spacing.
 
         Parameters
         ----------

@@ -64,7 +64,6 @@ class AvailableEnergy(_Objective):
         num_well=None,
         num_quad=32,
         num_pitch=65,
-        num_energy=16,
         radial_scale=1.0,
         binormal_scale=1.0,
         pitch_batch_size=None,
@@ -104,7 +103,6 @@ class AvailableEnergy(_Objective):
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "num_energy": num_energy,
             "radial_scale": radial_scale,
             "binormal_scale": binormal_scale,
             "pitch_batch_size": pitch_batch_size,
@@ -138,9 +136,7 @@ class AvailableEnergy(_Objective):
 
         """
         Options._build_objective(self, "available energy", eta=-1)
-        self._constants["energy_quad"] = _energy_quad(
-            self._hyperparam.pop("num_energy")
-        )
+        self._constants["energy_quad"] = _energy_quad(32)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

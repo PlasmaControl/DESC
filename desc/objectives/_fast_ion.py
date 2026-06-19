@@ -22,6 +22,11 @@ class GammaC(_Objective):
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 3 below refers to that implementation.
+
     References
     ----------
     [1] Poloidal motion of trapped particle orbits in real-space coordinates.

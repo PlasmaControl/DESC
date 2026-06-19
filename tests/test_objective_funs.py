@@ -2118,10 +2118,8 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[1]])
         )
-        data = eq.compute("available energy", grid, angle=angle, num_energy=8, **opts)
-        obj = AvailableEnergy(
-            eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, num_energy=8, **opts
-        )
+        data = eq.compute("available energy", grid, angle=angle, **opts)
+        obj = AvailableEnergy(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
@@ -3272,7 +3270,6 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is AvailableEnergy:
-        kwargs["num_energy"] = 8
         kwargs.setdefault("Y_B", 16)
     return objective(eq=eq, **kwargs)
 

@@ -78,6 +78,11 @@ def _dI_2(data, B, pitch):
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
+
     [1] Evaluation of 1/ν neoclassical transport in stellarators.
         V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
         Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.

@@ -9,7 +9,6 @@ from orthax.recurrence import GeneralizedLaguerre
 
 from desc.backend import jit, jnp
 
-from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..utils import apply, safediv
 from ._fast_ion import _radial_drift
@@ -42,15 +41,15 @@ def _ae(G, G_ω_α, G_ω_ψ, data, energy):
     energy = energy[..., None]
 
     drift = jnp.hypot(G_ω_α, G_ω_ψ)
-    drive = jnp.hypot(G * (η_T + C / energy) - G_ω_α, G_ω_ψ)
+    drive = jnp.hypot(G * (η_T + safediv(C, energy)) - G_ω_α, G_ω_ψ)
 
     return G_ω_α * C + (G_ω_α * η_T + safediv(drift * (drive - drift), G)) * energy
 
 
-def _energy_quad(num_energy):
+def _energy_quad(deg):
     # The energy integral has weight E^(5/2) exp(-E), but
     # ω_* = η_T + C / E makes AE(E) ~ C/E for E near zero.
-    return stop_gradient(orthgauss(num_energy, GeneralizedLaguerre(np.array([1.5]))))
+    return stop_gradient(orthgauss(deg, GeneralizedLaguerre(np.array([1.5]))))
 
 
 @register_compute_fun(
@@ -84,15 +83,12 @@ def _energy_quad(num_energy):
     grid_requirement={"can_fft2": True},
     radial_scale="float : Multiplier for the radial correlation length.",
     binormal_scale="float : Multiplier for the binormal correlation length.",
-    num_energy=(
-        "int : Resolution for generalized Gauss-Laguerre quadrature over energy."
-    ),
-    energy_quad="tuple : Nodes and weights for the energy quadrature.",
+    energy_quad="tuple : Optional nodes and weights for fixed energy quadrature.",
     **Options._doc,
 )
 @partial(
     jit,
-    static_argnames=Options._static_argnames + ("num_energy",),
+    static_argnames=Options._static_argnames,
 )
 def _available_energy(params, transforms, profiles, data, **kwargs):
     """Dimensionless available energy of trapped electrons.
@@ -107,9 +103,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     Parameters
     ----------
     radial_scale, binormal_scale : float
-        Correlation-length multipliers. Default is 1.
-    num_energy : int
-        Resolution for generalized Gauss-Laguerre quadrature over energy.
+        Correlation-length multipliers. Default is 1.0.
 
     """
     # noqa: unused dependency
@@ -117,40 +111,28 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     binormal_scale = kwargs.get("binormal_scale", 1.0)
     energy_quad = kwargs.get("energy_quad", None)
     if energy_quad is None:
-        energy_quad = _energy_quad(kwargs.get("num_energy", 16))
+        energy_quad = _energy_quad(32)
 
     grid = transforms["grid"]
     opts = Options.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
-
-        def foreach_pitch(pitch_inv):
-            return (
-                _ae(
-                    *bounce.integrate(
-                        [_G_hat_half, _binormal_drift_wb_inverse, _radial_drift],
-                        pitch_inv,
-                        data,
-                        names,
-                        num_well=opts.num_well,
-                        loop=opts.loop,
-                    ),
-                    data,
-                    energy_quad[0],
-                )
-                .sum(-1)
-                .mean(-3)
-                .dot(energy_quad[1])
-            )
-
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        weight /= pitch_inv**2
+        ae_data = Bounce2D(grid, data, data["angle"], **opts).integrate(
+            [_G_hat_half, _binormal_drift_wb_inverse, _radial_drift],
+            pitch_inv,
+            data,
+            names,
+            num_well=opts.num_well,
+            loop=opts.loop,
+        )
+
         return jnp.sum(
-            batch_map(foreach_pitch, pitch_inv, opts.pitch_batch_size)
-            * weight
-            / pitch_inv**2,
+            _ae(*ae_data, data, energy_quad[0]).sum(-1).mean(-3).dot(energy_quad[1])
+            * weight,
             axis=-1,
         )
 

@@ -19,7 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign
+from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -2816,8 +2816,8 @@ def _intfun_wrapper(
     )
 
 
-@jit
 def _odefun(s, rpz, args):
+    # Note: this function is already jitted by diffeqsolve
     field, params, scale, source_grid, bs_chunk_size = args
     r = rpz[0]
     br, bp, bz = (

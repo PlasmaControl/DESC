@@ -9,9 +9,7 @@ from jax._src.api import (
     _check_output_dtype_jacrev,
     _jacfwd_unravel,
     _jacrev_unravel,
-    _jvp,
     _std_basis,
-    _vjp,
 )
 from jax._src.api_util import _ensure_index, argnums_partial, check_callable
 from jax._src.numpy.vectorize import (
@@ -409,6 +407,27 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
     return wrapped
 
 
+def _argnums_partial(fun, argnums, args, kwargs):
+    """Bind every argument except those in ``argnums``.
+
+    This mirrors JAX's internal ``argnums_partial`` but returns a plain callable
+    (and the tuple of differentiated arguments) instead of a
+    ``linear_util.WrappedFun``. A plain callable is what the public
+    ``jax.jvp``/``jax.vjp`` expect, so we avoid the private ``jax._src`` helpers
+    (e.g. ``_jvp``, which was removed in JAX 0.10.2).
+    """
+    argnums_t = (argnums,) if isinstance(argnums, int) else tuple(argnums)
+    dyn_args = tuple(args[i] for i in argnums_t)
+
+    def f_partial(*dyn):
+        full_args = list(args)
+        for i, a in zip(argnums_t, dyn):
+            full_args[i] = a
+        return fun(*full_args, **kwargs)
+
+    return f_partial, dyn_args
+
+
 def jacfwd_chunked(
     fun,
     argnums=0,
@@ -463,18 +482,17 @@ def jacfwd_chunked(
 
     @wraps(fun, docstr=docstr, argnums=argnums)
     def jacfun(*args, **kwargs):
-        f = lu.wrap_init(fun, kwargs)
-        f_partial, dyn_args = argnums_partial(
-            f, argnums, args, require_static_args_hashable=False
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
         if not has_aux:
-            pushfwd = partial(_jvp, f_partial, dyn_args)
+            pushfwd = lambda tangents: jax.jvp(f_partial, dyn_args, tangents)
             y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(_std_basis(dyn_args))
             y = tree_map(lambda x: x[0], y)
             jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
         else:
-            pushfwd = partial(_jvp, f_partial, dyn_args, has_aux=True)
+            pushfwd = lambda tangents: jax.jvp(
+                f_partial, dyn_args, tangents, has_aux=True
+            )
             y, jac, aux = vmap_chunked(pushfwd, chunk_size=chunk_size)(
                 _std_basis(dyn_args)
             )
@@ -550,15 +568,12 @@ def jacrev_chunked(
 
     @wraps(fun, docstr=docstr, argnums=argnums)
     def jacfun(*args, **kwargs):
-        f = lu.wrap_init(fun, kwargs)
-        f_partial, dyn_args = argnums_partial(
-            f, argnums, args, require_static_args_hashable=False
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         tree_map(partial(_check_input_dtype_jacrev, holomorphic, allow_int), dyn_args)
         if not has_aux:
-            y, pullback = _vjp(f_partial, *dyn_args)
+            y, pullback = jax.vjp(f_partial, *dyn_args)
         else:
-            y, pullback, aux = _vjp(f_partial, *dyn_args, has_aux=True)
+            y, pullback, aux = jax.vjp(f_partial, *dyn_args, has_aux=True)
         tree_map(partial(_check_output_dtype_jacrev, holomorphic), y)
         jac = vmap_chunked(pullback, chunk_size=chunk_size)(_std_basis(y))
         jac = jac[0] if isinstance(argnums, int) else jac

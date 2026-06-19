@@ -2149,10 +2149,8 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(
                 obj.compute(eq.params_dict), grid.compress(data[name])
             )
-        data = eq.compute("available energy", grid, angle=angle, num_energy=8, **opts)
-        obj = AvailableEnergy(
-            eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, num_energy=8, **opts
-        )
+        data = eq.compute("available energy", grid, angle=angle, **opts)
+        obj = AvailableEnergy(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
@@ -3307,7 +3305,6 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs.setdefault("alpha", GammaLoss._default_alpha(eq))
         kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
     if objective is AvailableEnergy:
-        kwargs["num_energy"] = 8
         kwargs.setdefault("Y_B", 16)
     if objective is GammaLoss:
         kind = kwargs.pop("kind")

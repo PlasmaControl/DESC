@@ -108,6 +108,10 @@ def _gamma_c(radial_drift, poloidal_drift, weight=1.0):
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Equation 61 of [1]_.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
     metric γ_c quantifies whether the contours of the second adiabatic invariant
@@ -377,7 +381,13 @@ def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
 )
 @partial(jit, static_argnames=Options._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
-    """Equation 20 of [2]_."""
+    """Equation 20 of [2]_.
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+
+    """
     # noqa: unused dependency
     data["Gamma_c Velasco"] = _Gamma(
         _reduction_gamma_c, params, transforms, profiles, data, **kwargs

@@ -26,6 +26,10 @@ class GammaC(_Objective):
     The objective is presented in [1]_ and [2]_, and the computation is
     presented in [3]_.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+
     References
     ----------
     .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and G. O. Leitold,

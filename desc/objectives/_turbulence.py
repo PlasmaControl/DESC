@@ -79,12 +79,12 @@ class AvailableEnergy(_Objective):
         num_well=None,
         num_quad=32,
         num_pitch=65,
-        radial_scale=1.0,
-        binormal_scale=1.0,
         pitch_batch_size=None,
         surf_batch_size=1,
         nufft_eps=1e-7,
         spline=True,
+        radial_scale=1.0,
+        binormal_scale=1.0,
     ):
         errorif(
             deriv_mode == "fwd",
@@ -108,12 +108,12 @@ class AvailableEnergy(_Objective):
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
-            "radial_scale": radial_scale,
-            "binormal_scale": binormal_scale,
             "pitch_batch_size": pitch_batch_size,
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
             "spline": spline,
+            "radial_scale": radial_scale,
+            "binormal_scale": binormal_scale,
         }
 
         super().__init__(

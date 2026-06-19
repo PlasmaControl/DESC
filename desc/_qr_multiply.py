@@ -14,10 +14,7 @@ plain matmuls are used here. Block sizes are the upstream A100-tuned values.
 
 from functools import partial
 
-import jax
-import jax.numpy as jnp
-from jax import vmap
-from jax.scipy.linalg import solve_triangular
+from desc.backend import jax, jit, jnp, solve_triangular, vmap
 
 
 def _householder_multiply(a, taus, c, *, transpose=False):
@@ -73,6 +70,7 @@ def _blocked_householder_multiply(a, taus, c, *, left, transpose):
     return c
 
 
+@partial(jit, static_argnames="mode")
 def qr_multiply(a, c, mode="right"):
     """Pure-JAX drop-in for ``jax.scipy.linalg.qr_multiply``; returns ``(CQ, R)``.
 

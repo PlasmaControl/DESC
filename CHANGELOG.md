@@ -12,6 +12,8 @@ v0.17.2
 
 New Features
 
+- Adds utility methods ``Bounce*D.batch`` to compute bounce integrals over each surface in batches with sparsity preserving pullbacks.
+- Adds Velasco et. al.'s Gamma_alpha and Gamma_delta metrics related to radially outward drifting superbananas.
 - Adds Available Energy for nonlinear measure of turbelent transport [#2215](https://github.com/PlasmaControl/DESC/pull/2215) and local potential well plotting utitlity for analysis.
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
@@ -50,6 +52,7 @@ Breaking Changes
 
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier. ``num_transit`` may still be used but note the equivalence ``num_field_periods = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- We have changed the our implementation of of ``Gamma_c Velasco`` from equation 16 of his paper to equation 20. The new quantity is simply scaled by a factor of pi/(2 root 2).
 
 Deprecations
 

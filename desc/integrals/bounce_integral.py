@@ -2,6 +2,8 @@
 
 import warnings
 from abc import ABC, abstractmethod
+from functools import partial
+from itertools import chain
 from typing import NamedTuple, Union
 
 import equinox as eqx
@@ -67,6 +69,7 @@ from desc.integrals.quad_utils import (
 )
 from desc.utils import (
     apply,
+    apply_funs,
     atleast_nd,
     errorif,
     flatten_mat,
@@ -175,23 +178,24 @@ class Bounce2D(_Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
+    The computation is briefly presented in [1]_.
+
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
-    The reference 2 below refers to that implementation.
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     Examples
     --------
+      * ``desc/compute/_fast_ion.py``
+      * ``desc/compute/_neoclassical.py``
+      * ``desc/compute/_turbulence.py``
       * ``tests/test_integrals.py::TestBounce2D::test_bounce2d_checks``
-      * ``desc/compute/_fast_ion.py::_little_gamma_c_Nemov``
-      * ``desc/compute/_neoclassical.py::_epsilon_32``
-      * ``desc/objectives/_fast_ion.py::GammaC``
-      * ``desc/objectives/_neoclassical.py::EffectiveRipple``
 
     See Also
     --------
@@ -368,28 +372,28 @@ class Bounce2D(_Bounce):
                 self._modes_z,
             )
 
-    # TODO(#2152): clean this up when angle is removed.
     @staticmethod
     def batch(
         fun,
-        fun_data,
-        desc_data,
-        angle,
+        data,
         grid,
-        surf_batch_size=1,
+        *,
+        angle,
+        names=(),
+        custom_data=None,
+        flux_data=None,
+        batch_size=1,
         sparse=True,
-        surface_data=None,
     ):
-        """Compute function ``fun`` over phase space in batches.
+        """Compute function ``fun`` batched over flux surfaces.
 
-        This is a utility method to compute some function of bounce integrals
-        over the phase space efficiently. You may want to also JIT compile your
-        code which calls this utility method.
+        You may want to also JIT compile your code which calls this utility method.
 
         Examples
         --------
-          * ``desc/compute/_fast_ion.py::_little_gamma_c_Nemov``
-          * ``desc/compute/_neoclassical.py::_epsilon_32``
+          * ``desc/compute/_fast_ion.py``
+          * ``desc/compute/_neoclassical.py``
+          * ``desc/compute/_turbulence.py``
 
         Parameters
         ----------
@@ -397,56 +401,69 @@ class Bounce2D(_Bounce):
             A function which takes a single argument ``fun_data`` and computes
             bounce integrals assuming ``fun_data`` holds all required quantities
             to construct a ``Bounce2D`` operator as well as call its methods.
-        fun_data : dict[str, jnp.ndarray]
-            Data to reshape, interpolate, and pass to ``fun``.
-            The structure of the data should match the structure
-            returned by the registered compute functions in ``desc.compute``.
-            Note this dictionary will be modified.
-        desc_data : dict[str, jnp.ndarray]
+        data : dict[str, jnp.ndarray]
             Data dictionary with the same structure as the data returned by the
-            functions in ``desc.compute``.
+            functions in ``desc.compute``. Must contain the quantities in
+            ``Bounce2D.required_names``, ``min_tz |B|``, ``max_tz |B|``,
+            and any entries requested by ``names``.
+        grid : Grid
+            Grid on which ``data`` was computed.
         angle : jnp.ndarray
             Shape (num rho, X, Y).
             Angle returned by ``Bounce2D.angle``.
-        grid : Grid
-            Grid on which ``fun_data`` and ``desc_data`` were computed.
-        surf_batch_size : int
-            Number of flux surfaces with which to compute simultaneously.
+        names : tuple[str]
+            Optional, things in ``data`` that are not constant on each flux surface.
+            These will be FFT'd and passed to ``fun`` in batches.
+        custom_data : dict[str, jnp.ndarray]
+            Optional, other data that is not constant on each flux surface.
+            These will be FFT'd and passed to ``fun`` in batches.
+        flux_data : dict[str, jnp.ndarray]
+            Optional, other data constant on each flux surface.
+            These will be passed to ``fun`` as a scalar for each surface.
+            All arrays must have dimension one.
+        batch_size : int or None
+            Number of flux surfaces to compute simultaneously.
             Default is ``1``.
         sparse : bool
-            Whether to differentiate with sparsity preserving pullbacks.
+            Whether to use sparsity preserving pullbacks.
             Default is ``True``, which makes the most sense if the output has
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.
-        surface_data : dict[str, jnp.ndarray]
-            Data constant on each flux surface. These are compressed over ``rho``
-            and added to ``fun_data`` instead of reshaped and Fourier transformed.
 
         Returns
         -------
         The output ``fun(fun_data)``.
 
         """
-        for name in Bounce2D.required_names:
-            fun_data[name] = desc_data[name]
-        fun_data.pop("iota", None)
+        if isinstance(names, str):
+            names = (names,)
 
-        for name in fun_data:
-            fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
-        if surface_data is not None:
-            fun_data.update(apply(surface_data, grid.compress))
+        reshape = partial(Bounce2D.reshape, grid)
+        # We wrap fun as follows rather than wrapping reshape with an fft so that
+        # the sparse pullback applies to the fft as well.
+        fun = partial(_fft_then_fun, fun)
 
-        fun_data["iota"] = grid.compress(desc_data["iota"])
-        fun_data["min_tz |B|"] = grid.compress(desc_data["min_tz |B|"])
-        fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
+        fun_data = apply_funs(
+            data,
+            fun1=reshape,
+            fun2=grid.compress,
+            subset1=chain(names, ("B^zeta", "|B|")),
+            subset2=("iota", "min_tz |B|", "max_tz |B|"),
+            exclude=("|e_zeta|r,a|", "zeta", "theta", "angle"),
+        )
+        if custom_data is not None:
+            fun_data.update(apply(custom_data, reshape))
+        if flux_data is not None:
+            fun_data.update(apply(flux_data, grid.compress))
+
         fun_data["angle"] = angle
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size, strip_dim0=True)
+            return sparse_pullback(fun, fun_data, batch_size, strip_dim0=True)
 
-        return batch_map(fun, fun_data, surf_batch_size, strip_dim0=True)
+        return batch_map(fun, fun_data, batch_size, strip_dim0=True)
 
     @staticmethod
     def reshape(grid, f):
@@ -1277,6 +1294,14 @@ def _fourier_if_real(thing):
     return Bounce2D.fourier(thing) if jnp.isrealobj(thing) else thing
 
 
+def _fft_then_fun(fun, data):
+    data = {
+        k: Bounce2D.fourier(v) if (k != "angle" and v.ndim > 1) else v
+        for k, v in data.items()
+    }
+    return fun(data)
+
+
 class Bounce1D(_Bounce):
     """Computes bounce integrals using one-dimensional spline methods.
 
@@ -1297,9 +1322,8 @@ class Bounce1D(_Bounce):
 
     Examples
     --------
+      * ``desc/compute/_old.py``
       * ``tests/test_integrals.py::TestBounce::test_bounce1d_checks``
-      * ``desc/compute/_old.py::_epsilon_32_1D``
-      * ``desc/compute/_old.py::_Gamma_c_1D``
 
     See Also
     --------
@@ -1403,17 +1427,24 @@ class Bounce1D(_Bounce):
         )
 
     @staticmethod
-    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True):
-        """Compute function ``fun`` over phase space in batches.
+    def batch(
+        fun,
+        data,
+        grid,
+        *,
+        names=(),
+        custom_data=None,
+        flux_data=None,
+        batch_size=1,
+        sparse=True,
+    ):
+        """Compute function ``fun`` batched over flux surfaces.
 
-        This is a utility method to compute some function of bounce integrals
-        over the phase space efficiently. You may want to also JIT compile your
-        code which calls this utility method.
+        You may want to also JIT compile your code which calls this utility method.
 
         Examples
         --------
-          * ``desc/compute/_old.py::_epsilon_32_1D``
-          * ``desc/compute/_old.py::_Gamma_c_1D``
+          * ``desc/compute/_old.py``
 
         Parameters
         ----------
@@ -1421,21 +1452,28 @@ class Bounce1D(_Bounce):
             A function which takes a single argument ``fun_data`` and computes
             bounce integrals assuming ``fun_data`` holds all required quantities
             to construct a ``Bounce1D`` operator as well as call its methods.
-        fun_data : dict[str, jnp.ndarray]
-            Data to reshape, interpolate, and pass to ``fun``.
-            The structure of the data should match the structure
-            returned by the registered compute functions in ``desc.compute``.
-            Note this dictionary will be modified.
-        desc_data : dict[str, jnp.ndarray]
+        data : dict[str, jnp.ndarray]
             Data dictionary with the same structure as the data returned by the
-            functions in ``desc.compute``.
+            functions in ``desc.compute``. Must contain the quantities in
+            ``Bounce1D.required_names``, ``min_tz |B|``, ``max_tz |B|``,
+            and any entries requested by ``names``.
         grid : Grid
-            Grid on which ``fun_data`` and ``desc_data`` were computed.
-        surf_batch_size : int
-            Number of flux surfaces with which to compute simultaneously.
+            Grid on which ``data`` was computed.
+        names : tuple[str]
+            Optional, things in ``data`` that are not constant on each flux surface.
+            These will be passed to ``fun`` in batches.
+        custom_data : dict[str, jnp.ndarray]
+            Optional, other data that is not constant on each flux surface.
+            These will be passed to ``fun`` in batches.
+        flux_data : dict[str, jnp.ndarray]
+            Optional, other data constant on each flux surface.
+            These will be passed to ``fun`` as a scalar for each surface.
+            All arrays must have dimension one.
+        batch_size : int or None
+            Number of flux surfaces to compute simultaneously.
             Default is ``1``.
         sparse : bool
-            Whether to differentiate with sparsity preserving pullbacks.
+            Whether to use sparsity preserving pullbacks.
             Default is ``True``, which makes the most sense if the output has
             shape (num_rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
@@ -1447,17 +1485,26 @@ class Bounce1D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
-        for name in Bounce1D.required_names:
-            fun_data[name] = desc_data[name]
-        for name in fun_data:
-            fun_data[name] = Bounce1D.reshape(grid, fun_data[name])
-        fun_data["min_tz |B|"] = grid.compress(desc_data["min_tz |B|"])
-        fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])
+        if isinstance(names, str):
+            names = (names,)
+
+        reshape = partial(Bounce1D.reshape, grid)
+        fun_data = apply_funs(
+            data,
+            fun1=reshape,
+            fun2=grid.compress,
+            subset1=chain(names, Bounce1D.required_names),
+            subset2=("min_tz |B|", "max_tz |B|"),
+        )
+        if custom_data is not None:
+            fun_data.update(apply(custom_data, reshape))
+        if flux_data is not None:
+            fun_data.update(apply(flux_data, grid.compress))
 
         if sparse:
-            return sparse_pullback(fun, fun_data, surf_batch_size, strip_dim0=True)
+            return sparse_pullback(fun, fun_data, batch_size, strip_dim0=True)
 
-        return batch_map(fun, fun_data, surf_batch_size, strip_dim0=True)
+        return batch_map(fun, fun_data, batch_size, strip_dim0=True)
 
     @staticmethod
     def reshape(grid, f):
@@ -1806,6 +1853,10 @@ class Options(NamedTuple):
             non-axisymmetric configurations, it is necessary to integrate along
             multiple field lines until the surface is covered sufficiently.
             """,
+        "gamma_threshold": """float :
+            Threshold for superbanana classification. Must be in (0,1).
+            Default is 0.2.
+            """,
         "num_field_periods": """int :
             Number of field periods to follow field line.
             In axisymmetric configurations, integration along the field line for a
@@ -1866,7 +1917,6 @@ class Options(NamedTuple):
             This private parameter is intended to be used only by
             developers for objectives.
             """,
-        "theta": "",
     }
 
     _static_argnames = (
@@ -1891,6 +1941,7 @@ class Options(NamedTuple):
     quad: tuple[jnp.ndarray]
     spline: bool
     surf_batch_size: int
+    thresh: float
     vander: tuple[jnp.ndarray]
     Y_B: int
 
@@ -1901,6 +1952,7 @@ class Options(NamedTuple):
         grid,
         *,
         alpha=None,
+        gamma_threshold=0.2,
         loop=False,
         nufft_eps=-1.0,
         num_field_periods=20,
@@ -1962,6 +2014,7 @@ class Options(NamedTuple):
             quad=Options._quad(eta, num_quad) if quad is None else quad,
             spline=spline,
             surf_batch_size=surf_batch_size,
+            thresh=jnp.tan(jnp.pi / 2 * gamma_threshold),
             vander=kwargs.get("_vander", None),
             Y_B=Y_B,
         )
@@ -2100,3 +2153,39 @@ class Options(NamedTuple):
         o._constants["transforms"] = get_transforms(names, eq, grid=o._grid)
         o._dim_f = o._grid.num_rho
         o._target, o._bounds = _parse_callable_target_bounds(o._target, o._bounds, rho)
+
+    @staticmethod
+    def _compute_objective(o, params, constants, key):
+        """Compute an objective built with ``Options._build_objective``."""
+        constants = o._get_deprecated_constants(constants)
+        eq = o.things[0]
+
+        data = o._compute_fun(
+            eq, "iota", params, constants["transforms"], constants["profiles"]
+        )
+        delta = eq._map_poloidal_coordinates(
+            constants["transforms"]["grid"].compress(data["iota"]),
+            constants["x"],
+            constants["y"],
+            params["L_lmn"],
+            constants["lambda"],
+            outbasis="delta",
+            # TODO (#1034): Use old theta values as initial guess.
+            tol=1e-8,
+        )[..., ::-1]
+
+        data = o._compute_fun(
+            eq,
+            key,
+            params,
+            constants["transforms"],
+            constants["profiles"],
+            data,
+            angle=delta,
+            alpha=constants["alpha"],
+            quad=constants["quad"],
+            energy_quad=constants.get("energy_quad", None),
+            _vander=constants["_vander"],
+            **o._hyperparam,
+        )
+        return constants["transforms"]["grid"].compress(data[key])

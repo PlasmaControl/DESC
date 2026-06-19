@@ -1132,7 +1132,7 @@ def identity(y):
     return y
 
 
-def apply(d, fun=identity, subset=None, exclude=None):
+def apply(d, fun=identity, subset=None, exclude=()):
     """Applies ``fun`` to ``d``.
 
     Parameters
@@ -1161,8 +1161,40 @@ def apply(d, fun=identity, subset=None, exclude=None):
         subset = d.keys()
     elif isinstance(subset, str):
         subset = (subset,)
-    exclude = () if (exclude is None) else exclude
-    return {k: fun(d[k]) for k in subset if k not in exclude}
+    return {k: fun(d[k]) for k in subset if (k in d and k not in exclude)}
+
+
+def apply_funs(d, fun1, fun2, subset1, subset2, exclude=()):
+    """Applies ``fun`` to ``d`` if name in ``subset``.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary to map.
+    fun1 : callable
+        Function to apply to values in dictionary.
+    fun2 : callable
+        Function to apply to values in dictionary.
+    subset1 : iterable
+        Subset of keys in ``d`` to consider applying ``fun1``.
+    subset2 : iterable
+        Subset of keys in ``d`` to consider applying ``fun2``.
+    exclude : collection
+        Stuff in subsets to exclude.
+
+    Returns
+    -------
+    d : dict
+        New dictionary with ``fun`` mapped over values with keys in ``subset``
+        and keys not in ``exclude``.
+
+    """
+    return {
+        k: fun(d[k])
+        for subset, fun in ((subset1, fun1), (subset2, fun2))
+        for k in subset
+        if (k in d and k not in exclude)
+    }
 
 
 def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):

@@ -74,6 +74,10 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
            bounce-averaging algorithm and its applications,"
            J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+
     """
     # noqa: unused dependency
     # TODO: in future don't close over grid so that sharding works

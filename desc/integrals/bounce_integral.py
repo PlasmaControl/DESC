@@ -178,7 +178,11 @@ class Bounce2D(_Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
-    The computation is breifly presented in [1]_.
+    The computation is briefly presented in [1]_.
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
 
     References
     ----------

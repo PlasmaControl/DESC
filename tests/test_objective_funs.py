@@ -2180,7 +2180,6 @@ class TestObjectiveFunction:
             eq,
             field,
             grid=grid,
-            eval_grid=grid,
             options=LaplaceOptions(solve_method=solve_method),
         )
         obj.build(verbose=0)
@@ -2238,7 +2237,6 @@ class TestObjectiveFunction:
                 eq,
                 field,
                 grid=grid,
-                eval_grid=grid,
                 options=LaplaceOptions(solve_method="direct"),
             )
         )
@@ -2268,7 +2266,6 @@ class TestObjectiveFunction:
                 eq,
                 field,
                 grid=grid,
-                eval_grid=grid,
                 fix_I_sheet=True,
                 options=LaplaceOptions(solve_method="direct"),
             )
@@ -4151,7 +4148,6 @@ class TestObjectiveNaNGrad:
             FreeSurfaceError(
                 eq,
                 field,
-                eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
                 grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
                 options=LaplaceOptions(solve_method="fixed_point"),
             )
@@ -4159,25 +4155,6 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_free_surface_error_field_resolution_eval_grid(self, flag):
-        """Free surface error requires Phi resolution to fit on eval_grid."""
-        eq = get("W7-X")
-        B = ToroidalMagneticField(5, 1)
-        field = (
-            FreeSurfaceOuterField(eq.surface, 3, 3, B_coil=B)
-            if flag
-            else SourceFreeField(eq.surface, 3, 3, B0=B)
-        )
-        with pytest.raises(ValueError, match="M_Phi"):
-            FreeSurfaceError(
-                eq,
-                field,
-                eval_grid=LinearGrid(M=2, N=2, NFP=eq.NFP),
-                grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
-            )
 
     @pytest.mark.unit
     def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):

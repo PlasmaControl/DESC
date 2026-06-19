@@ -4,7 +4,8 @@ Changelog
 
 Performance Improvements
 
-- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep, and by using ``qr_multiply`` to apply ``Q`` without forming it explicitly.
+- Adds a pure-JAX ``qr_multiply`` fallback (a blocked Householder / compact-WY implementation) for ``jax < 0.10.0``, so the above ``Q``-avoidance speedup is available on the currently pinned JAX with no jaxlib rebuild (~1.5-2x faster than forming ``Q`` on CPU for tall Jacobians, larger on GPU).
 
 
 v0.17.2

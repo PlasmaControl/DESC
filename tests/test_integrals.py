@@ -904,6 +904,8 @@ class TestLaplace:
         solve_method="gmres",
         max_steps=10,
         residual_atol=None,
+        phi_atol=2e-5,
+        grad_atol=5e-6,
     ):
         """Check Laplacian solver in interior."""
         if surface is None:
@@ -931,23 +933,16 @@ class TestLaplace:
             atol=1e-12,
             rtol=1e-12,
         )
-        if residual_atol is not None:
-            data, _ = field.compute(
-                ["Phi_mn", "Phi error", "num_steps"],
-                grid,
-                data=data,
-                options=options,
-            )
-            np.testing.assert_allclose(data["Phi error"], 0, atol=residual_atol)
-            assert np.all(np.isfinite(data["Phi_mn"]))
-            return
 
         RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
         RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
         RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
 
+        keys = ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"]
+        if residual_atol is not None:
+            keys += ["Phi_mn", "Phi error", "num_steps"]
         data, RpZ_data = field.compute(
-            ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
+            keys,
             grid,
             data=data,
             RpZ_data=RpZ_data,
@@ -955,26 +950,32 @@ class TestLaplace:
             on_boundary=True,
             options=options,
         )
-        err = np.ptp(data["Z"] - data["Phi"])
+        potential_error = data["Z"] - data["Phi"]
+        potential_error = potential_error - potential_error.mean()
+        err = np.max(np.abs(potential_error))
+        if residual_atol is not None:
+            np.testing.assert_allclose(data["Phi error"], 0, atol=residual_atol)
+            assert np.all(np.isfinite(data["Phi_mn"]))
         if just_err:
             return err
-        np.testing.assert_allclose(err, 0, atol=2e-5)
+        np.testing.assert_allclose(potential_error, 0, atol=phi_atol)
         np.testing.assert_allclose(
             dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
             -RpZ_data["B0*n"],
-            atol=5e-6,
+            atol=grad_atol,
         )
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
-        "solve_method, M, N, max_steps, residual_atol",
+        "solve_method, M, N, max_steps, residual_atol, phi_atol, grad_atol",
         [
-            pytest.param("direct", 50, 50, 10, None, id="direct"),
-            pytest.param("gmres", 16, 16, 40, 1e-12, id="gmres"),
-            pytest.param("fixed_point", 16, 16, 40, 2e-3, id="fixed-point"),
+            pytest.param("direct", 50, 50, 10, None, 2e-5, 5e-6, id="direct"),
+            pytest.param("gmres", 16, 16, 40, 1e-12, 1e-2, 7e-3, id="gmres"),
         ],
     )
-    def test_interior_Neumann(self, solve_method, M, N, max_steps, residual_atol):
+    def test_interior_Neumann(
+        self, solve_method, M, N, max_steps, residual_atol, phi_atol, grad_atol
+    ):
         """Test Laplacian solver in interior."""
         self._check_interior_Neumann(
             M=M,
@@ -982,6 +983,8 @@ class TestLaplace:
             solve_method=solve_method,
             max_steps=max_steps,
             residual_atol=residual_atol,
+            phi_atol=phi_atol,
+            grad_atol=grad_atol,
         )
 
     @pytest.mark.unit

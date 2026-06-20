@@ -57,12 +57,11 @@ class Options(NamedTuple):
     (In some routines this may be determined automatically.)
     """
 
-    solve_method: str = "auto"
+    solve_method: str = "gmres"
     """Method to use for the scalar potential solve.
 
-    One of ``"auto"``, ``"gmres"``, or ``"direct"``. If ``"auto"``, then uses
-    GMRES when the problem supports it, otherwise uses the direct solve. Default
-    is ``"auto"``. If GMRES errors due to incompatibility with old JAX versions,
+    One of ``"fixed_point"``, ``"gmres"``, or ``"direct"``. Default is
+    ``"gmres"``. If GMRES errors due to incompatibility with old JAX versions,
     ``"fixed_point"`` can be selected instead.
     """
 
@@ -96,24 +95,14 @@ class Options(NamedTuple):
     singularities. Default is ``False``.
     """
 
-    @staticmethod
-    def select_solver(options):
-        """Pick the solver based on the problem."""
-        solve_method = options.solve_method
-        is_interior_neumann = options.problem == "interior Neumann"
-        if solve_method == "auto":
-            solve_method = "direct" if is_interior_neumann else "gmres"
-        errorif(
-            solve_method not in {"fixed_point", "gmres", "direct"},
-            msg="solve_method must be one of 'auto', 'fixed_point', 'gmres', "
-            f"or 'direct', got {solve_method!r}.",
-        )
-        errorif(
-            solve_method in {"fixed_point", "gmres"} and is_interior_neumann,
-            msg=f"solve_method={solve_method!r} is not supported for interior Neumann "
-            "problems. Use solve_method='direct' instead.",
-        )
-        return options._replace(solve_method=solve_method)
+
+def _check_solve_method(solve_method):
+    """Check that a scalar potential solve method is valid."""
+    errorif(
+        solve_method not in {"fixed_point", "gmres", "direct"},
+        msg="solve_method must be one of 'fixed_point', 'gmres', or "
+        f"'direct', got {solve_method!r}.",
+    )
 
 
 def _D_plus_half(
@@ -256,6 +245,7 @@ def _iterative_solve(
         Phi_0 = jnp.ones(potential_grid.num_nodes)
     assert Phi_0.size == potential_grid.num_nodes
 
+    subtract_phi = options.problem in ("exterior Neumann", "interior Dirichlet")
     if options.solve_method == "gmres":
         operator = lx.FunctionLinearOperator(
             partial(
@@ -264,6 +254,7 @@ def _iterative_solve(
                 source_data=source_data,
                 interpolator=interpolator,
                 chunk_size=options.chunk_size,
+                subtract_phi=subtract_phi,
             ),
             jax.ShapeDtypeStruct(Phi_0.shape, Phi_0.dtype),
         )
@@ -292,6 +283,7 @@ def _iterative_solve(
         interpolator,
         options.chunk_size,
         xi,
+        subtract_phi,
     )
     solution = optx.fixed_point(
         _iteration_operator,
@@ -309,49 +301,68 @@ def _iterative_solve(
         throw=False,
     )
     if options.full_output:
-        err = jnp.abs(_iteration_operator(solution.value, args) - solution.value).max()
+        err = jnp.abs(
+            _linear_potential_operator(
+                solution.value,
+                potential_data,
+                source_data,
+                interpolator,
+                options.chunk_size,
+                subtract_phi,
+            )
+            - boundary_condition
+        ).max()
         return solution.value, (err, solution.stats["num_steps"])
     return solution.value
 
 
 def _iteration_operator(Phi, args):
-    """Equation 3.12 in [1]_."""
-    gamma, potential_data, source_data, interpolator, chunk_size, xi = args
+    """Fixed-point iteration for the selected boundary integral equation."""
+    (
+        rhs,
+        potential_data,
+        source_data,
+        interpolator,
+        chunk_size,
+        xi,
+        subtract_phi,
+    ) = args
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = _interp(
         Phi, interpolator.eval_grid, interpolator.source_grid
     )
-    return (
-        _D_plus_half(
-            potential_data,
-            source_data,
-            interpolator,
-            chunk_size=chunk_size,
-            prune_data=False,
-        )
-        + (xi - 1) * Phi
-        - gamma
-    ) / xi
+    out = _D_plus_half(
+        potential_data,
+        source_data,
+        interpolator,
+        chunk_size=chunk_size,
+        prune_data=False,
+    )
+    if subtract_phi:
+        out = ((xi - 1) * Phi + out - rhs) / xi
+    else:
+        out = (xi * Phi - out + rhs) / xi
+    return out
 
 
 def _linear_potential_operator(
-    Phi, potential_data, source_data, interpolator, chunk_size
+    Phi, potential_data, source_data, interpolator, chunk_size, subtract_phi
 ):
     """Equation solved by the iterative linear solver."""
     potential_data["Phi(x) (periodic)"] = Phi
     source_data["Phi (periodic)"] = _interp(
         Phi, interpolator.eval_grid, interpolator.source_grid
     )
-    return (
-        _D_plus_half(
-            potential_data,
-            source_data,
-            interpolator,
-            chunk_size=chunk_size,
-            prune_data=False,
-        )
-        - Phi
+    out = _D_plus_half(
+        potential_data,
+        source_data,
+        interpolator,
+        chunk_size=chunk_size,
+        prune_data=False,
     )
+    if subtract_phi:
+        out -= Phi
+    return out
 
 
 def _interp(x, input_grid, output_grid):
@@ -480,7 +491,8 @@ def _S_B0_n(params, transforms, profiles, data, **kwargs):
 )
 def _scalar_potential_mn_Neumann(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    options = Options.select_solver(kwargs.get("options", Options()))
+    options = kwargs.get("options", Options())
+    _check_solve_method(options.solve_method)
 
     if options.solve_method == "direct":
         data["Phi_mn"] = _direct_solve(
@@ -1072,9 +1084,8 @@ def _Phi_coil(params, transforms, profiles, data, **kwargs):
 )
 def _scalar_potential_mn_free_surface(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    options = Options.select_solver(
-        kwargs.get("options", Options())._replace(problem="interior Dirichlet")
-    )
+    options = kwargs.get("options", Options())._replace(problem="interior Dirichlet")
+    _check_solve_method(options.solve_method)
 
     boundary_condition = data["S[B0*n]"] - data["Phi_coil (periodic)"]
     if options.solve_method == "direct":

@@ -14,6 +14,7 @@ if use_jax:
         jacfwd_chunked,
         jacrev_chunked,
         _concat,
+        _evaluate_in_chunks,
         _scanmap,
         _batch_and_remainder,
         _unchunk,
@@ -21,7 +22,7 @@ if use_jax:
         identity,
     )
 
-from functools import wraps
+from functools import partial, wraps
 
 import equinox as eqx
 from jax.tree_util import tree_leaves, tree_map
@@ -96,6 +97,17 @@ def sparse_pullback_map(fn, y):
     return wrapper
 
 
+def _sparse_pullback_sharded(fn, y):
+    return _sparse_pullback(y, fn=eqx.filter_closure_convert(fn, y))
+
+
+def _sparse_pullback_sharded_map_stripped(fn, y):
+    def apply(yi):
+        return _sparse_pullback(yi, fn=eqx.filter_closure_convert(fn, yi))
+
+    return jax.vmap(apply)(y)
+
+
 def sparse_pullback(
     fn,
     y,
@@ -105,6 +117,7 @@ def sparse_pullback(
     reduction=None,
     chunk_reduction=identity,
     strip_dim0=False,
+    shard_input_data=False,
 ):
     """Compute ``chunk_reduction(fn(fun_input))`` in batches with sparse pullbacks.
 
@@ -153,6 +166,9 @@ def sparse_pullback(
         to ``fn``; see notes. This flag only works if ``batch_size`` is one.
         It should be set to ``False`` if ``fn`` is wrapped in ``vmap``.
         Default is ``False``.
+    shard_input_data : bool
+        Whether to shard ``y`` across devices before applying chunked batching.
+        Default is ``False``.
 
     Returns
     -------
@@ -164,6 +180,26 @@ def sparse_pullback(
     >>> out = sparse_pullback(fn, y)
 
     """
+    if shard_input_data:
+        sparse_fun = partial(
+            (
+                _sparse_pullback_sharded_map_stripped
+                if strip_dim0 and batch_size == 1
+                else _sparse_pullback_sharded
+            ),
+            fn,
+        )
+
+        return _evaluate_in_chunks(
+            sparse_fun,
+            batch_size,
+            (0,),
+            reduction,
+            chunk_reduction,
+            True,
+            y,
+        )
+
     if strip_dim0 and batch_size == 1:
         return _scanmap(
             sparse_pullback_map(fn, _get_first_chunk(y)),

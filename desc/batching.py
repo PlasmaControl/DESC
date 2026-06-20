@@ -1,6 +1,7 @@
 """Batched operations."""
 
 from functools import partial
+from inspect import signature
 
 from jax._src.api import (
     _check_input_dtype_jacfwd,
@@ -21,6 +22,7 @@ from jax._src.numpy.vectorize import (
     _parse_input_dimensions,
 )
 from jax._src.util import wraps
+from jax.sharding import NamedSharding, PartitionSpec
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -30,12 +32,22 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan, vmap
-from desc.utils import errorif, identity
+from desc.utils import Index, errorif, identity
+
+_HAS_LAX_RESHAPE_OUT_SHARDING = "out_sharding" in signature(jax.lax.reshape).parameters
 
 try:
     from jax.extend import linear_util as lu
 except ImportError:
     from jax import linear_util as lu
+
+
+try:
+    from jax.sharding import reshard
+except ImportError:
+    reshard = None
+
+_SUPPORTS_SHARDED_BATCHING = _HAS_LAX_RESHAPE_OUT_SHARDING and reshard is not None
 
 
 try:
@@ -70,9 +82,42 @@ except ImportError:
         return scan_tree, remainder_tree
 
 
-_unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
 _concat = partial(tree_map, lambda y1, y2: jnp.concatenate((y1, y2)))
 _get_first_chunk = partial(tree_map, lambda x: x[0])
+
+
+def _reshape_with_sharding(x, shape, spec, mesh=None):
+    sharding = getattr(x, "sharding", None)
+    if mesh is None and isinstance(sharding, NamedSharding):
+        mesh = sharding.mesh
+    if mesh is not None:
+        return jax.lax.reshape(
+            x,
+            shape,
+            out_sharding=NamedSharding(mesh, spec),
+        )
+    return x.reshape(shape)
+
+
+def _reshard_leaf_to_replicated(x, mesh):
+    sharding = NamedSharding(mesh, PartitionSpec(*(None,) * x.ndim))
+    return reshard(x, sharding)
+
+
+def _concat_resharded_to_replicated(x, y, mesh):
+    return _concat(
+        tree_map(lambda leaf: _reshard_leaf_to_replicated(leaf, mesh), x),
+        tree_map(lambda leaf: _reshard_leaf_to_replicated(leaf, mesh), y),
+    )
+
+
+def _unchunk_leaf(y):
+    shape = (y.shape[0] * y.shape[1], *y.shape[2:])
+    spec = PartitionSpec("x", *(None,) * (y.ndim - 2))
+    return _reshape_with_sharding(y, shape, spec)
+
+
+_unchunk = partial(tree_map, _unchunk_leaf)
 
 
 def _scan_append(f, x, reduction=None, carry_init_fun=None):
@@ -131,15 +176,315 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     return f_
 
 
+def make_shardable(f, axis=0, num_devices=None):
+    """Return sharded and remainder portions of ``f``.
+
+    Parameters
+    ----------
+    f : Pytree
+    axis : int
+        Axis across which ``f`` should be sharded.
+    num_devices : int
+        Number of devices to shard on.
+        If not given, then determined according to ``jax_device_count()``.
+
+    Return
+    ------
+    sf : Pytree
+        Sharded portion of ``f``.
+    rf : Pytree
+        Remainder portion of ``f``.
+
+    """
+    if num_devices is None:
+        num_devices = jax.device_count()
+
+    mesh = jax.make_mesh((num_devices,), ("x",))
+    leaves, treedef = tree_flatten(f)
+    out = [_shard(leaf, axis, num_devices, mesh) for leaf in leaves]
+    sf = treedef.unflatten(f[0] for f in out)
+    rf = treedef.unflatten(f[1] for f in out)
+    return sf, rf
+
+
+def _shard(f, axis, num_devices, mesh):
+    axis = axis % f.ndim
+    shardable_size = f.shape[axis] - (f.shape[axis] % num_devices)
+    sf = f[Index.get(slice(0, shardable_size), axis, f.ndim)]
+    rf = f[Index.get(slice(shardable_size, f.shape[axis]), axis, f.ndim)]
+    P = PartitionSpec(*(None,) * axis, "x", *(None,) * (f.ndim - axis - 1))
+    sf = jax.device_put(sf, NamedSharding(mesh, P))
+    return sf, rf
+
+
+def _to_device_local_leaf(x, num_devices, mesh):
+    local_size = x.shape[0] // num_devices
+    shape = (num_devices, local_size, *x.shape[1:])
+    # Device-local layout: one shard per device, with an unsharded local axis.
+    spec = PartitionSpec("x", *(None,) * x.ndim)
+    return _reshape_with_sharding(x, shape, spec, mesh)
+
+
+def _flatten_device_local_leaf(x, mesh=None):
+    shape = (x.shape[0] * x.shape[1], *x.shape[2:])
+    spec = PartitionSpec("x", *(None,) * (x.ndim - 2))
+    return _reshape_with_sharding(x, shape, spec, mesh)
+
+
+def _flat_to_device_local_leaf(x, num_devices, local_size, mesh=None):
+    shape = (num_devices, local_size, *x.shape[1:])
+    spec = PartitionSpec("x", None, *(None,) * (x.ndim - 1))
+    return _reshape_with_sharding(x, shape, spec, mesh)
+
+
+def _batch_device_local_leaf(x, chunk_size, mesh=None):
+    local_size = x.shape[1]
+    num_chunks = local_size // chunk_size
+    chunked_size = num_chunks * chunk_size
+    full = x[:, :chunked_size]
+    # Scan chunk layout after moveaxis: (num_chunks, num_devices, chunk_size, ...).
+    full = _reshape_with_sharding(
+        full,
+        (x.shape[0], num_chunks, chunk_size, *x.shape[2:]),
+        PartitionSpec("x", None, None, *(None,) * (x.ndim - 2)),
+        mesh,
+    )
+    return jnp.moveaxis(full, 1, 0)
+
+
+def _device_local_remainder_leaf(x, chunked_size):
+    return x[:, chunked_size:]
+
+
+def _unbatch_device_local_leaf(y, mesh=None):
+    y = jnp.moveaxis(y, 0, 1)
+    shape = (y.shape[0], y.shape[1] * y.shape[2], *y.shape[3:])
+    spec = PartitionSpec("x", None, *(None,) * (y.ndim - 3))
+    return _reshape_with_sharding(y, shape, spec, mesh)
+
+
+_concat_device_local = partial(
+    tree_map, lambda y1, y2: jnp.concatenate((y1, y2), axis=1)
+)
+
+
+def _flatten_device_local(x, mesh=None):
+    return tree_map(lambda y: _flatten_device_local_leaf(y, mesh), x)
+
+
+def _unbatch_device_local(x, mesh=None):
+    return tree_map(lambda y: _unbatch_device_local_leaf(y, mesh), x)
+
+
+def _to_device_local(x, num_devices, mesh):
+    return tree_map(lambda y: _to_device_local_leaf(y, num_devices, mesh), x)
+
+
+def _flat_to_device_local(x, num_devices, local_size, mesh=None):
+    return tree_map(
+        lambda y: _flat_to_device_local_leaf(y, num_devices, local_size, mesh), x
+    )
+
+
+def _batch_device_local(x, chunk_size, mesh=None):
+    return tree_map(lambda y: _batch_device_local_leaf(y, chunk_size, mesh), x)
+
+
+def _device_local_remainder(x, chunked_size):
+    return tree_map(lambda y: _device_local_remainder_leaf(y, chunked_size), x)
+
+
+def _scan_device_local_chunks(
+    fun,
+    argnums,
+    reduction,
+    chunk_reduction,
+    num_devices,
+    chunk_size,
+    mesh,
+    *args,
+    **kwargs,
+):
+    f_partial, dyn_args = argnums_partial(
+        lu.wrap_init(fun, kwargs),
+        argnums,
+        args,
+        require_static_args_hashable=False,
+    )
+
+    def chunk_fun(x):
+        x = _flatten_device_local(x, mesh)
+        y = chunk_reduction(f_partial.call_wrapped(*x))
+        if reduction is None:
+            y = _flat_to_device_local(y, num_devices, chunk_size, mesh)
+        return y
+
+    scan_fun = _scan_append if reduction is None else _scan_reduce
+    return scan_fun(chunk_fun, dyn_args, reduction)
+
+
+def _evaluate_device_local_in_chunks(
+    fun,
+    chunk_size,
+    argnums,
+    reduction,
+    chunk_reduction,
+    num_devices,
+    mesh,
+    *args,
+    **kwargs,
+):
+    local_size = tree_leaves(args[argnums[0]])[0].shape[1]
+
+    if local_size <= chunk_size:
+        flat_args = tuple(
+            _flatten_device_local(a, mesh) if i in argnums else a
+            for i, a in enumerate(args)
+        )
+        y = chunk_reduction(fun(*flat_args, **kwargs))
+        if reduction is None:
+            y = _flat_to_device_local(y, num_devices, local_size, mesh)
+        return y
+
+    scan_x = tuple(
+        _batch_device_local(a, chunk_size, mesh) if i in argnums else a
+        for i, a in enumerate(args)
+    )
+    local_remainder = local_size % chunk_size
+    y = _scan_device_local_chunks(
+        fun,
+        argnums,
+        reduction,
+        chunk_reduction,
+        num_devices,
+        chunk_size,
+        mesh,
+        *scan_x,
+        **kwargs,
+    )
+
+    if reduction is None:
+        y = _unbatch_device_local(y, mesh)
+
+    if local_remainder == 0:
+        return y
+
+    chunked_size = local_size - local_remainder
+    remain_x = tuple(
+        _device_local_remainder(a, chunked_size) if i in argnums else a
+        for i, a in enumerate(args)
+    )
+    flat_remain_x = tuple(
+        _flatten_device_local(a, mesh) if i in argnums else a
+        for i, a in enumerate(remain_x)
+    )
+    remain_y = chunk_reduction(fun(*flat_remain_x, **kwargs))
+    if reduction is None:
+        remain_y = _flat_to_device_local(remain_y, num_devices, local_remainder, mesh)
+        return _concat_device_local(y, remain_y)
+
+    return reduction(y, remain_y)
+
+
+def _evaluate_sharded(
+    fun,
+    chunk_size,
+    argnums,
+    reduction,
+    chunk_reduction,
+    *args,
+    **kwargs,
+):
+    args_shardable, args_remainder = zip(
+        *[make_shardable(a) if i in argnums else (a, a) for i, a in enumerate(args)]
+    )
+    n_shardable = tree_leaves(args_shardable[argnums[0]])[0].shape[0]
+    n_remainder = tree_leaves(args_remainder[argnums[0]])[0].shape[0]
+
+    if n_shardable == 0:
+        return _evaluate_in_chunks(
+            fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            False,
+            *args_remainder,
+            **kwargs,
+        )
+
+    num_devices = jax.device_count()
+    mesh = jax.make_mesh((num_devices,), ("x",))
+
+    # Global sharded layout: the divisible prefix is partitioned over axis 0.
+    if chunk_size is None:
+        out_shardable = chunk_reduction(fun(*args_shardable, **kwargs))
+    else:
+        args_local = tuple(
+            _to_device_local(a, num_devices, mesh) if i in argnums else a
+            for i, a in enumerate(args_shardable)
+        )
+        out_shardable = _evaluate_device_local_in_chunks(
+            fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            num_devices,
+            mesh,
+            *args_local,
+            **kwargs,
+        )
+        if reduction is None:
+            out_shardable = _flatten_device_local(out_shardable, mesh)
+
+    if n_remainder == 0:
+        return out_shardable
+
+    out_remainder = _evaluate_in_chunks(
+        fun,
+        chunk_size,
+        argnums,
+        reduction,
+        chunk_reduction,
+        False,
+        *args_remainder,
+        **kwargs,
+    )
+    return (
+        _concat_resharded_to_replicated(out_shardable, out_remainder, mesh)
+        if reduction is None
+        else reduction(out_shardable, out_remainder)
+    )
+
+
 def _evaluate_in_chunks(
     vmapped_fun,
     chunk_size,
     argnums,
     reduction=None,
     chunk_reduction=identity,
+    shard_input_data=False,
     *args,
     **kwargs,
 ):
+    if shard_input_data and not _SUPPORTS_SHARDED_BATCHING:
+        shard_input_data = False
+
+    if shard_input_data:
+        return _evaluate_sharded(
+            vmapped_fun,
+            chunk_size,
+            argnums,
+            reduction,
+            chunk_reduction,
+            *args,
+            **kwargs,
+        )
+
+    if chunk_size is None:
+        return chunk_reduction(vmapped_fun(*args, **kwargs))
+
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
@@ -180,6 +525,10 @@ def _parse_in_axes(in_axes):
     return in_axes, argnums
 
 
+def _map_stripped(fun, x):
+    return vmap(fun)(x)
+
+
 def vmap_chunked(
     f,
     /,
@@ -188,6 +537,7 @@ def vmap_chunked(
     chunk_size=None,
     reduction=None,
     chunk_reduction=identity,
+    shard_input_data=False,
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
@@ -229,6 +579,9 @@ def vmap_chunked(
     chunk_reduction : callable
         Chunk-wise reduction operation.
         Should apply ``reduction`` along the mapped axis, e.g. ``jnp.add.reduce``.
+    shard_input_data : bool
+        Whether to shard mapped input data across devices before applying
+        chunked batching. Default is ``False``.
 
     Returns
     -------
@@ -238,10 +591,16 @@ def vmap_chunked(
     """
     in_axes, argnums = _parse_in_axes(in_axes)
     f = vmap(f, in_axes=in_axes)
-    if chunk_size is None:
+    if chunk_size is None and not shard_input_data:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
-        _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
+        _evaluate_in_chunks,
+        f,
+        chunk_size,
+        argnums,
+        reduction,
+        chunk_reduction,
+        shard_input_data,
     )
 
 
@@ -254,6 +613,7 @@ def batch_map(
     reduction=None,
     chunk_reduction=identity,
     strip_dim0=False,
+    shard_input_data=False,
 ):
     """Compute ``chunk_reduction(fun(fun_input))`` in batches.
 
@@ -302,6 +662,9 @@ def batch_map(
         to ``fun``; see notes. This flag only works if ``batch_size`` is one.
         It should be set to ``False`` if ``fun`` is wrapped in ``vmap``.
         Default is ``False``.
+    shard_input_data : bool
+        Whether to shard ``fun_input`` across devices before applying chunked
+        batching. Default is ``False``.
 
     Returns
     -------
@@ -309,9 +672,19 @@ def batch_map(
         Returns ``chunk_reduction(fun(fun_input))``.
 
     """
-    if batch_size is None:
+    if batch_size is None and not shard_input_data:
         return chunk_reduction(fun(fun_input))
     if strip_dim0 and batch_size == 1:
+        if shard_input_data:
+            return _evaluate_in_chunks(
+                partial(_map_stripped, fun),
+                batch_size,
+                (0,),
+                reduction,
+                chunk_reduction if reduction is not None else identity,
+                True,
+                fun_input,
+            )
         return _scanmap(fun, 0, reduction, identity)(fun_input)
 
     return _evaluate_in_chunks(
@@ -320,6 +693,7 @@ def batch_map(
         (0,),
         reduction,
         chunk_reduction,
+        shard_input_data,
         fun_input,
     )
 

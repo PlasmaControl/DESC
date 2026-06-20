@@ -609,6 +609,17 @@ class DoubleFourierSeries(_Basis):
         self._spectral_indexing = "linear"
         self._modes = self._get_modes(M=self.M, N=self.N)
         super().__init__()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+
+    def _set_up(self):
+        """Do things after loading or changing resolution."""
+        super()._set_up()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+
+    @property
+    def gauge_idx(self):
+        """ndarray: Index of constant-potential gauge mode, if present."""
+        return self._gauge_idx
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.

@@ -949,6 +949,52 @@ class TestLaplace:
             atol=5e-6,
         )
 
+    @pytest.mark.unit
+    def test_interior_Neumann_direct_fixes_constant_gauge(self):
+        """Test direct interior Neumann solve fixes the constant potential gauge."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = SourceFreeField(
+            eq.surface, M=grid.M, N=grid.N, sym=False, B0=ToroidalMagneticField(5, 1)
+        )
+        data, _ = field.compute(
+            "Phi_mn", grid, options=LaplaceOptions(solve_method="direct")
+        )
+        constant_idx = field.Phi_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_mn"]))
+
+        grid = LinearGrid(rho=np.array([1.0]), M=3, N=3, NFP=eq.NFP, sym=False)
+        field = SourceFreeField(
+            eq.surface, M=2, N=2, sym=False, B0=ToroidalMagneticField(5, 1)
+        )
+        data, _ = field.compute(
+            "Phi_mn", grid, options=LaplaceOptions(solve_method="direct")
+        )
+        constant_idx = field.Phi_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_mn"]))
+
+    @pytest.mark.unit
+    def test_Phi_coil_mn_fixes_constant_gauge(self):
+        """Test coil potential solve fixes the constant potential gauge."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface,
+            M=grid.M,
+            N=grid.N,
+            sym=False,
+            B_coil=ToroidalMagneticField(5, 1),
+        )
+        data, _ = field.compute("Phi_coil_mn", grid)
+        constant_idx = field.Phi_coil_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_coil_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_coil_mn"]))
+
     @pytest.mark.skip
     def test_convergence_run(
         self,

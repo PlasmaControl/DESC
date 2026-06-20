@@ -180,6 +180,8 @@ def _direct_solve(
     assert basis.M <= potential_grid.M
     assert basis.N <= potential_grid.N
     well_posed = potential_grid.num_nodes == basis.num_modes
+    if not well_posed:
+        well_posed = None
 
     potential_data, source_data = _prune_data(
         potential_data,
@@ -209,19 +211,30 @@ def _direct_solve(
         _D_quad=options.D_quad,
     )
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
+
+    insert_gauge = False
     if options.problem in ("exterior Neumann", "interior Dirichlet"):
-        D -= Phi
-        if not well_posed:
-            well_posed = None
         # This system is negative definite, but perhaps not symmetric.
         # Lineax assumes negative semidefinite means the operator is symmetric.
-        # Hence we do not set that tag even when well_posed is true.
-    # else the system is positive definite but the same logic applies.
-    D = lx.MatrixLinearOperator(D)
+        # Hence we do not set that tag.
+        D -= Phi
+    elif options.problem == "interior Neumann" and basis.gauge_idx.size:
+        # This system is positive definite, but the same logic above applies.
+        if well_posed:
+            D = D.at[-1].set(0.0).at[-1, basis.gauge_idx].set(1.0)
+            boundary_condition = boundary_condition.at[-1].set(0.0)
+        else:
+            D = jnp.delete(D, basis.gauge_idx, axis=1, assume_unique_indices=True)
+            insert_gauge = True
 
-    return lx.linear_solve(
+    D = lx.MatrixLinearOperator(D)
+    Phi_mn = lx.linear_solve(
         D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
     ).value
+    if insert_gauge:
+        Phi_mn = jnp.insert(Phi_mn, basis.gauge_idx, 0.0)
+
+    return Phi_mn
 
 
 @eqx.filter_jit
@@ -956,24 +969,29 @@ def _Phi_mn_coil(params, transforms, profiles, data, **kwargs):
     assert grid.num_rho == 1
 
     basis = transforms["Phi_coil"].basis
-    # could compute these in objective build
-    # and avoid computing if they are passed in as kwargs
+    # TODO: could compute these in objective build
+    #       and avoid computing if they are passed in as kwargs
     _t = basis.evaluate(grid, [0, 1, 0])[:, None]
     _z = basis.evaluate(grid, [0, 0, 1])[:, None]
 
-    mat = lx.MatrixLinearOperator(
-        (
-            _t * data["n_rho x grad(theta)"][..., None]
-            + _z * data["n_rho x grad(zeta)"][..., None]
-        ).reshape(grid.num_nodes * 3, basis.num_modes)
-    )
+    mat = (
+        _t * data["n_rho x grad(theta)"][..., None]
+        + _z * data["n_rho x grad(zeta)"][..., None]
+    ).reshape(grid.num_nodes * 3, basis.num_modes)
+    if basis.gauge_idx.size:
+        mat = jnp.delete(mat, basis.gauge_idx, axis=1, assume_unique_indices=True)
+    mat = lx.MatrixLinearOperator(mat)
 
     # Equation 5.16 in [1]_.
-    data["Phi_coil_mn"] = lx.linear_solve(
+    Phi_coil_mn = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
-        solver=lx.AutoLinearSolver(well_posed=False),
+        solver=lx.AutoLinearSolver(well_posed=None),
     ).value
+    if basis.gauge_idx.size:
+        Phi_coil_mn = jnp.insert(Phi_coil_mn, basis.gauge_idx, 0.0)
+
+    data["Phi_coil_mn"] = Phi_coil_mn
     return data
 
 

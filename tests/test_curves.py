@@ -1270,3 +1270,64 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))
+
+    @pytest.mark.unit
+    def test_discontinuous_splines(self):
+        """Test splines that have break points."""
+        break_indices = [0, 500, 800]
+
+        def test(method, data_key, compare_breaks=True):
+            R = 2
+            phi = 2 * np.pi * np.linspace(0, 1, 1001, endpoint=True) ** 2
+            discontinuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                break_indices=break_indices,
+                method=method,
+            )
+
+            continuous = SplineXYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots="arclength",
+                break_indices=None,
+                method=method,
+            )
+
+            assert discontinuous.method == method
+            assert continuous.method == method
+
+            grid = LinearGrid(N=100, endpoint=False)
+
+            discont_data = discontinuous.compute([data_key], grid=grid)
+            discont_quantity = discont_data[data_key]
+            cont_quantity = continuous.compute(data_key, grid=grid)[data_key]
+
+            if compare_breaks:
+                np.testing.assert_allclose(discont_quantity, cont_quantity, rtol=1e-3)
+            else:
+                # coil quantities aligned with s array so need to find breaks in s
+                is_break_point = np.isin(
+                    discont_data["s"], discontinuous.knots[break_indices]
+                )
+                # don't include break points because sometimes they are not comparable
+                np.testing.assert_allclose(
+                    discont_quantity[~is_break_point],
+                    cont_quantity[~is_break_point],
+                    rtol=1e-3,
+                )
+                # we know there is 1 break point in s (0th index)
+                assert len(discont_quantity[~is_break_point]) != len(discont_quantity)
+
+        test("linear", "length")
+        test("linear", "curvature")
+        # torsion = 0 for breakpoints, but otherwise torsion = NaN, so can't compare
+        test("linear", "torsion", compare_breaks=False)
+
+        test("cubic", "length")
+        # don't include break points because of interpolator BCs
+        test("cubic", "curvature", compare_breaks=False)
+        test("cubic", "torsion")

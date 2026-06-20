@@ -588,7 +588,15 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis="xyz", name=name
         )
 
-    def to_SplineXYZ(self, knots=None, grid=None, method="cubic", name="", **kwargs):
+    def to_SplineXYZ(
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        break_indices=None,
+        **kwargs,
+    ):
         """Convert coil to SplineXYZCoil.
 
         Parameters
@@ -614,6 +622,18 @@ class _Coil(_MagneticField, Optimizable, ABC):
             - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         name : str
             Name for this coil
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -625,7 +645,13 @@ class _Coil(_MagneticField, Optimizable, ABC):
             grid = LinearGrid(zeta=knots)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
         return SplineXYZCoil.from_values(
-            self.current, coords, knots=knots, method=method, name=name, basis="xyz"
+            self.current,
+            coords,
+            knots=knots,
+            method=method,
+            name=name,
+            basis="xyz",
+            break_indices=break_indices,
         )
 
     def to_FourierRZ(self, N=10, grid=None, NFP=None, sym=False, name="", **kwargs):
@@ -1176,15 +1202,36 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at both
           endpoints
     name : str
-        Name for this coil
-
+        Name for this curve
+    break_indices : ndarray or None
+        If supplied, the spline will be a piecewise set of splines.
+        Indices are of knots at which the curve breaks and is only C0 continuous (e.g.
+        continuous but with "corners" where the derivative jumps). In between each set
+        of break points, there is an unbroken spline whose start and endpoints are
+        given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+        Each (the ith) spline is interpolated independently of all other unbroken
+        splines (i+1th, i-1th, etc.) and does not consider their query points
+        (knots) when interpolating. The boundary conditions are evaluated using
+        interpax's default where non-periodicity is assumed.
+        If None (the default), the spline will be the usual periodic spline with
+        the continuity dictated by the spline method.
     """
 
     _io_attrs_ = _Coil._io_attrs_ + SplineXYZCurve._io_attrs_
     _static_attrs = _Coil._static_attrs + SplineXYZCurve._static_attrs
 
-    def __init__(self, current, X, Y, Z, knots=None, method="cubic", name=""):
-        super().__init__(current, X, Y, Z, knots, method, name)
+    def __init__(
+        self,
+        current,
+        X,
+        Y,
+        Z,
+        knots=None,
+        method="cubic",
+        name="",
+        break_indices=None,
+    ):
+        super().__init__(current, X, Y, Z, knots, method, name, break_indices)
 
     def _compute_A_or_B(
         self,
@@ -1381,7 +1428,14 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
     @classmethod
     def from_values(
-        cls, current, coords, knots=None, method="cubic", name="", basis="xyz"
+        cls,
+        current,
+        coords,
+        knots=None,
+        method="cubic",
+        name="",
+        basis="xyz",
+        break_indices=None,
     ):
         """Create SplineXYZCoil from coordinate values.
 
@@ -1414,6 +1468,18 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
 
         basis : {"rpz", "xyz"}
             basis for input coordinates. Defaults to "xyz"
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -1432,6 +1498,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             knots=curve.knots,
             method=curve.method,
             name=name,
+            break_indices=break_indices,
         )
 
 
@@ -2497,9 +2564,15 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        check_intersection=True,
+        break_indices=None,
     ):
-        """Convert all coils to SplineXYZCoil representation.
+        """Convert all coils to SplineXYZCoil.
 
         Parameters
         ----------
@@ -2524,6 +2597,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for the new CoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -2531,7 +2616,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             New representation of the coilset parameterized by a spline for X,Y,Z.
 
         """
-        coils = [coil.to_SplineXYZ(knots, grid, method) for coil in self]
+        coils = [
+            coil.to_SplineXYZ(knots, grid, method, break_indices=break_indices)
+            for coil in self
+        ]
         return self.__class__(
             *coils,
             NFP=self.NFP,
@@ -3111,7 +3199,13 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self,
+        knots=None,
+        grid=None,
+        method="cubic",
+        name="",
+        check_intersection=True,
+        break_indices=None,
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -3138,6 +3232,18 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+        break_indices : ndarray or None
+            If supplied, the spline will be a piecewise set of splines.
+            Indices of knots at which the curve breaks and is only C0 continuous (e.g.
+            continuous but with "corners" where the derivative jumps). In between each
+            set of break points, there is an unbroken spline whose start and endpoints
+            are given by `break_indices[i-1, i]`, where `i` indicates the ith spline.
+            Each (the ith) spline is interpolated independently of all other unbroken
+            splines (i+1th, i-1th, etc.) and does not consider their query points
+            (knots) when interpolating. The boundary conditions are evaluated using
+            Interpax's default where non-periodicity is assumed.
+            If None (the default), the spline will be the usual periodic spline with
+            the continuity dictated by the spline method.
 
         Returns
         -------
@@ -3147,7 +3253,11 @@ class MixedCoilSet(CoilSet):
         """
         coils = [
             coil.to_SplineXYZ(
-                knots, grid, method, check_intersection=check_intersection
+                knots,
+                grid,
+                method,
+                check_intersection=check_intersection,
+                break_indices=break_indices,
             )
             for coil in self
         ]
@@ -3204,6 +3314,7 @@ class MixedCoilSet(CoilSet):
               the data, and will not introduce new extrema in the interpolated points
             - ``'monotonic-0'``: same as `'monotonic'` but with 0 first derivatives at
               both endpoints
+
         ignore_groups : bool
             If False, return the coils in a nested MixedCoilSet, with a sub coilset per
             single coilgroup. If there is only a single group, however, this will not

@@ -893,8 +893,7 @@ class TestLaplace:
         fig.tight_layout()
         plt.savefig(f"{name}.pdf")
 
-    @pytest.mark.unit
-    def test_interior_Neumann(
+    def _check_interior_Neumann(
         self,
         surface=None,
         M=50,
@@ -902,9 +901,13 @@ class TestLaplace:
         chunk_size=1000,
         just_err=False,
         _D_quad=False,
-        solve_method="auto",
+        solve_method="gmres",
+        max_steps=10,
+        residual_atol=None,
+        phi_atol=2e-5,
+        grad_atol=5e-6,
     ):
-        """Test Laplacian solver in interior."""
+        """Check Laplacian solver in interior."""
         if surface is None:
             surface = FourierRZToroidalSurface(
                 R_lmn=[10, 1, 0.2],
@@ -916,38 +919,119 @@ class TestLaplace:
         data = surface.compute("n_rho", grid=grid)
         data["B0*n"] = -data["n_rho"][:, 2]
 
-        RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
-        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
-        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
-
         # Φ = Z so these resolutions must give exact reconstruction.
         field = SourceFreeField(
             surface, surface.M, surface.N, surface.NFP, "sin" if surface.sym else False
         )
+        options = LaplaceOptions(
+            problem="interior Neumann",
+            solve_method=solve_method,
+            max_steps=max_steps,
+            chunk_size=chunk_size,
+            D_quad=_D_quad,
+            full_output=residual_atol is not None,
+            atol=1e-12,
+            rtol=1e-12,
+        )
+
+        RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
+        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
+        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
+
+        keys = ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"]
+        if residual_atol is not None:
+            keys += ["Phi_mn", "Phi error", "num_steps"]
         data, RpZ_data = field.compute(
-            ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
+            keys,
             grid,
             data=data,
             RpZ_data=RpZ_data,
             RpZ_grid=RpZ_grid,
             on_boundary=True,
-            options=LaplaceOptions(
-                problem="interior Neumann",
-                solve_method=solve_method,
-                max_steps=10,
-                chunk_size=chunk_size,
-                D_quad=_D_quad,
-            ),
+            options=options,
         )
-        err = np.ptp(data["Z"] - data["Phi"])
+        potential_error = data["Z"] - data["Phi"]
+        potential_error = potential_error - potential_error.mean()
+        err = np.max(np.abs(potential_error))
+        if residual_atol is not None:
+            np.testing.assert_allclose(data["Phi error"], 0, atol=residual_atol)
+            assert np.all(np.isfinite(data["Phi_mn"]))
         if just_err:
             return err
-        np.testing.assert_allclose(err, 0, atol=2e-5)
+        np.testing.assert_allclose(potential_error, 0, atol=phi_atol)
         np.testing.assert_allclose(
             dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
             -RpZ_data["B0*n"],
-            atol=5e-6,
+            atol=grad_atol,
         )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "solve_method, M, N, max_steps, residual_atol, phi_atol, grad_atol",
+        [
+            pytest.param("direct", 50, 50, 10, None, 2e-5, 5e-6, id="direct"),
+            pytest.param("gmres", 16, 16, 40, 1e-12, 1e-2, 7e-3, id="gmres"),
+        ],
+    )
+    def test_interior_Neumann(
+        self, solve_method, M, N, max_steps, residual_atol, phi_atol, grad_atol
+    ):
+        """Test Laplacian solver in interior."""
+        self._check_interior_Neumann(
+            M=M,
+            N=N,
+            solve_method=solve_method,
+            max_steps=max_steps,
+            residual_atol=residual_atol,
+            phi_atol=phi_atol,
+            grad_atol=grad_atol,
+        )
+
+    @pytest.mark.unit
+    def test_interior_Neumann_direct_fixes_constant_gauge(self):
+        """Test direct interior Neumann solve fixes the constant potential gauge."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = SourceFreeField(
+            eq.surface, M=grid.M, N=grid.N, sym=False, B0=ToroidalMagneticField(5, 1)
+        )
+        data, _ = field.compute(
+            "Phi_mn", grid, options=LaplaceOptions(solve_method="direct")
+        )
+        constant_idx = field.Phi_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_mn"]))
+
+        grid = LinearGrid(rho=np.array([1.0]), M=3, N=3, NFP=eq.NFP, sym=False)
+        field = SourceFreeField(
+            eq.surface, M=2, N=2, sym=False, B0=ToroidalMagneticField(5, 1)
+        )
+        data, _ = field.compute(
+            "Phi_mn", grid, options=LaplaceOptions(solve_method="direct")
+        )
+        constant_idx = field.Phi_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_mn"]))
+
+    @pytest.mark.unit
+    def test_Phi_coil_mn_fixes_constant_gauge(self):
+        """Test coil potential solve fixes the constant potential gauge."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface,
+            M=grid.M,
+            N=grid.N,
+            sym=False,
+            B_coil=ToroidalMagneticField(5, 1),
+        )
+        data, _ = field.compute("Phi_coil_mn", grid)
+        constant_idx = field.Phi_coil_basis.gauge_idx
+        assert constant_idx.size
+        np.testing.assert_allclose(data["Phi_coil_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["Phi_coil_mn"]))
 
     @pytest.mark.skip
     def test_convergence_run(
@@ -972,13 +1056,14 @@ class TestLaplace:
             print()
             for r in rs:
                 err.append(
-                    self.test_interior_Neumann(
-                        surface,
-                        r,
-                        r,
-                        chunk_size,
-                        True,
-                        D_quad,
+                    self._check_interior_Neumann(
+                        surface=surface,
+                        M=r,
+                        N=r,
+                        chunk_size=chunk_size,
+                        just_err=True,
+                        _D_quad=D_quad,
+                        solve_method="direct",
                     )
                 )
                 print(f"Resolution {r} is done.")

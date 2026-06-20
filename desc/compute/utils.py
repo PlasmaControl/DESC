@@ -706,10 +706,9 @@ def get_transforms(  # noqa: C901
                         ).astype(int)
                         # don't build until we know all the derivs we need
                         transform.change_derivatives(ders, build=False)
-                        if (
-                            c == "Phi"
-                            and p
-                            == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                        if c == "Phi" and p in (
+                            "desc.magnetic_fields._laplace.SourceFreeField",
+                            "desc.magnetic_fields._laplace.FreeSurfaceOuterField",
                         ):
                             transform.build_pinv()
                         c_transform = transform

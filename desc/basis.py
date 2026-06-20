@@ -6,6 +6,7 @@ from math import factorial
 
 import mpmath
 import numpy as np
+from jax.lax import stop_gradient
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.grid import Grid, _Grid
@@ -594,21 +595,39 @@ class DoubleFourierSeries(_Basis):
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
+    stop_gradient : bool
+        Whether to stop gradients through basis evaluations. Default is ``False``.
+        May set to ``True`` if the grid to evaluate on is independent of the
+        optimizable parameters.
 
     """
 
     _fft_poloidal = True
     _fft_toroidal = True
+    _static_attrs = _Basis._static_attrs + ["_stop_gradient"]
 
-    def __init__(self, M, N, NFP=1, sym=False):
+    def __init__(self, M, N, NFP=1, sym=False, stop_gradient=False):
         self._L = 0
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
+        self._stop_gradient = bool(stop_gradient)
         self._modes = self._get_modes(M=self.M, N=self.N)
         super().__init__()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+
+    def _set_up(self):
+        """Do things after loading or changing resolution."""
+        super()._set_up()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+        self._stop_gradient = getattr(self, "_stop_gradient", False)
+
+    @property
+    def gauge_idx(self):
+        """ndarray: Index of constant-potential gauge mode, if present."""
+        return self._gauge_idx
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
@@ -702,10 +721,14 @@ class DoubleFourierSeries(_Basis):
         poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])[:, moutidx]
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])[:, noutidx]
         if grid.is_meshgrid and grid.num_rho == 1:
-            return (poloidal[:, np.newaxis] * toroidal[np.newaxis]).reshape(
+            out = (poloidal[:, np.newaxis] * toroidal[np.newaxis]).reshape(
                 -1, self.num_modes, order="F"
             )
-        return poloidal[toutidx] * toroidal[zoutidx]
+        else:
+            out = poloidal[toutidx] * toroidal[zoutidx]
+        if self._stop_gradient:
+            out = stop_gradient(out)
+        return out
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.

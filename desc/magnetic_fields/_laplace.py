@@ -74,7 +74,11 @@ class SourceFreeField(FourierRZToroidalSurface):
     ):
         self._surface = surface
         self._Phi_basis = DoubleFourierSeries(
-            M=M, N=N, NFP=setdefault(NFP, surface.NFP), sym=sym
+            M=M,
+            N=N,
+            NFP=setdefault(NFP, surface.NFP),
+            sym=sym,
+            stop_gradient=True,
         )
         self.I = I
         self.Y = Y
@@ -310,6 +314,7 @@ class FreeSurfaceOuterField(SourceFreeField):
                 N=setdefault(N_coil, N),
                 NFP=surface.NFP,
                 sym=setdefault(sym_coil, sym),
+                stop_gradient=True,
             )
         self._B_coil = B_coil
 

@@ -1,6 +1,7 @@
 """Batched operations."""
 
 from functools import partial
+from inspect import signature
 
 from jax._src.api import (
     _check_input_dtype_jacfwd,
@@ -33,6 +34,8 @@ from jax.tree_util import (
 from desc.backend import jax, jnp, scan, vmap
 from desc.utils import Index, errorif, identity
 
+_HAS_LAX_RESHAPE_OUT_SHARDING = "out_sharding" in signature(jax.lax.reshape).parameters
+
 try:
     from jax.extend import linear_util as lu
 except ImportError:
@@ -43,6 +46,8 @@ try:
     from jax.sharding import reshard
 except ImportError:
     reshard = None
+
+_SUPPORTS_SHARDED_BATCHING = _HAS_LAX_RESHAPE_OUT_SHARDING and reshard is not None
 
 
 try:
@@ -96,8 +101,6 @@ def _reshape_with_sharding(x, shape, spec, mesh=None):
 
 def _reshard_leaf_to_replicated(x, mesh):
     sharding = NamedSharding(mesh, PartitionSpec(*(None,) * x.ndim))
-    if reshard is None:
-        raise ImportError("jax.sharding.reshard is required for sharded batching.")
     return reshard(x, sharding)
 
 
@@ -465,6 +468,9 @@ def _evaluate_in_chunks(
     *args,
     **kwargs,
 ):
+    if shard_input_data and not _SUPPORTS_SHARDED_BATCHING:
+        shard_input_data = False
+
     if shard_input_data:
         return _evaluate_sharded(
             vmapped_fun,

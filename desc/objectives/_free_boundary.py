@@ -944,8 +944,7 @@ class FreeSurfaceError(_Objective):
         Whether to fix the net toroidal sheet current to zero instead of optimizing it.
     options : LaplaceOptions
         Options for the Laplace solver. Defaults to ``LaplaceOptions()``, which
-        uses GMRES. Set ``options.solve_method`` to ``"fixed_point"`` or
-        ``"direct"`` to use those solvers explicitly.
+        uses GMRES.
 
     """
 

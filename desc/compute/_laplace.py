@@ -60,8 +60,8 @@ class Options(NamedTuple):
     solve_method: str = "gmres"
     """Method to use for the scalar potential solve.
 
-    One of ``"fixed_point"``, ``"gmres"``, or ``"direct"``. Default is
-    ``"gmres"``. If GMRES errors due to incompatibility with old JAX versions,
+    One of ``"gmres"`` or ``"direct"``. Default is ``"gmres"``.
+    If GMRES errors due to incompatibility with old JAX versions,
     ``"fixed_point"`` can be selected instead.
     """
 
@@ -123,7 +123,7 @@ def _D_plus_half(
     basis : DoubleFourierSeries
         If not supplied, then computes (D[Φ] + Φ/2)(x).
         If supplied, then constructs the operator which
-        acts on the spectral coefficients of Φ in the supplied + secular basis.
+        acts on the spectral coefficients of Φ in the supplied basis.
     prune_data : bool
         Whether the data should be pruned. Default is True.
     _D_quad : bool
@@ -201,7 +201,6 @@ def _direct_solve(
     )
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
 
-    insert_gauge = False
     if options.problem in ("exterior Neumann", "interior Dirichlet"):
         # This system is negative definite, but perhaps not symmetric.
         # Lineax assumes negative semidefinite means the operator is symmetric.
@@ -209,18 +208,16 @@ def _direct_solve(
         D -= Phi
     elif options.problem == "interior Neumann" and basis.gauge_idx.size:
         # This system is positive definite, but the same logic above applies.
+        D = jnp.delete(D, basis.gauge_idx, axis=1, assume_unique_indices=True)
         if well_posed:
-            D = D.at[-1].set(0.0).at[-1, basis.gauge_idx].set(1.0)
-            boundary_condition = boundary_condition.at[-1].set(0.0)
-        else:
-            D = jnp.delete(D, basis.gauge_idx, axis=1, assume_unique_indices=True)
-            insert_gauge = True
+            D = D[:-1]
+            boundary_condition = boundary_condition[:-1]
 
     D = lx.MatrixLinearOperator(D)
     Phi_mn = lx.linear_solve(
         D, boundary_condition, solver=lx.AutoLinearSolver(well_posed=well_posed)
     ).value
-    if insert_gauge:
+    if options.problem == "interior Neumann" and basis.gauge_idx.size:
         Phi_mn = jnp.insert(Phi_mn, basis.gauge_idx, 0.0)
 
     return Phi_mn

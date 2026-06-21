@@ -249,7 +249,6 @@ def test_compute_everything():
         for p in things:
 
             names = set(data_index[p].keys()).copy()
-            # not clear why need to discard since these should not be in data_index[p]
             names.discard("potential data")
             names.discard("interpolator")
 

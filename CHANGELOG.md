@@ -1,6 +1,15 @@
 Changelog
 =========
 
+
+Performance Improvements
+
+- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+
+
+v0.17.2
+-------
+
 New Features
 
 - Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.

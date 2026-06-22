@@ -1,10 +1,12 @@
 """Classes for representing flux coordinates."""
 
+import warnings
+
 import numpy as np
 from scipy import special
 
 from desc.backend import jnp, put, repeat
-from desc.utils import check_nonnegint, check_posint, errorif
+from desc.utils import check_nonnegint, check_posint, errorif, warnif
 
 from .core import AbstractGrid
 from .utils import _create_linear_nodes, midpoint_spacing, periodic_spacing
@@ -393,6 +395,39 @@ class AbstractGridFlux(AbstractGrid):
         """ndarray: Indices of nodes at magnetic axis."""
         return self.__dict__.setdefault("_axis", np.array([]))
 
+    @property
+    def node_pattern(self):
+        """str: Pattern for placement of nodes in (rho,theta,zeta)."""
+        warnings.warn(
+            FutureWarning(
+                "Attribute `node_pattern` is deprecated and will be removed in a "
+                + "future release."
+            )
+        )
+        return self.__dict__.setdefault("_node_pattern", "N/A")
+
+    @property
+    def fft_poloidal(self):
+        """bool: Whether this grid is compatible with FFT in the x1 direction."""
+        warnings.warn(
+            FutureWarning(
+                "Attribute `fft_poloidal` is deprecated and will be removed in a "
+                + "future release. Use `fft_x1` instead."
+            )
+        )
+        return self.fft_x1
+
+    @property
+    def fft_toroidal(self):
+        """bool: Whether this grid is compatible with FFT in the x2 direction."""
+        warnings.warn(
+            FutureWarning(
+                "Attribute `fft_toroidal` is deprecated and will be removed in a "
+                + "future release. Use `fft_x2` instead."
+            )
+        )
+        return self.fft_x2
+
 
 class CustomGridFlux(AbstractGridFlux):
     """Collocation grid with custom node placement.
@@ -447,6 +482,12 @@ class CustomGridFlux(AbstractGridFlux):
         jitable=False,
         **kwargs,
     ):
+        warnif(
+            kwargs.pop("period", False),
+            FutureWarning,
+            msg="Argument `period` is deprecated and is now set by `self.period`.",
+        )
+
         nodes = jnp.atleast_2d(jnp.asarray(nodes))
         assert len(nodes.shape) == 2
         assert nodes.shape[1] == 3

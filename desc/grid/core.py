@@ -368,17 +368,17 @@ class AbstractGrid(IOAble, ABC):
     @property
     def L(self):
         """int: x0 coordinate resolution."""
-        return self._L
+        return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
         """int: x1 coordinate resolution."""
-        return self._M
+        return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
         """int: x2 coordinate resolution."""
-        return self._N
+        return self.__dict__.setdefault("_N", 0)
 
     @property
     def nodes(self):

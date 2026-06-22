@@ -1424,10 +1424,10 @@ def plot_fsa(  # noqa: C901
         norm_F = kwargs.pop("norm_F")
         warnings.warn(
             FutureWarning(
-                "Argument norm_F has been deprecated. If you are trying to "
-                + "normalize |F| by magnetic pressure gradient, use  "
-                + "`name=|F|_normalized` instead. If you want to normalize by "
-                + "another quantity, use the `normalize` keyword argument."
+                "Argument `norm_F` is deprecated. If you are trying to normalize |F| "
+                + "by magnetic pressure gradient, use `name=|F|_normalized` instead. "
+                + "If you want to normalize by another quantity, use the `normalize` "
+                + "keyword argument."
             )
         )
         if normalize is None and norm_F:

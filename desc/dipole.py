@@ -963,7 +963,7 @@ def export_dipoles(dipole_set, f):
 
 import csv
 
-def create_dipole(x, y, z, theta, rho, m0, phi):
+def create_dipole(x, y, z, phi, theta, m0, rho):
     return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(eq, filename):

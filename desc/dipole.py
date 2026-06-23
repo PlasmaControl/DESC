@@ -882,7 +882,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         # n surface positions
         xyz = np.column_stack([data["X"], data["Y"], data["Z"]])
 
-        # m-vector of the dipole
+        # m-vector of the dipole, in xyz coordinates
         m_vec = np.array([d.m_xyz for d in dipoles]) 
 
         # m dipole positions

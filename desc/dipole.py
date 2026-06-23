@@ -303,7 +303,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis.lower() == "rpz":
-            phi_coords = coords[:, 1]
+            phi_coords = self.phi
             coords = rpz2xyz(coords)
 
         if params is None:
@@ -966,7 +966,8 @@ def import_dipoles(eq, filename):
         ]
     num=0
     num2=0
-    dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
+    #dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
+    dipole_set = DipoleSet(NFP=1, sym=False)
     for line in csv_data:
         if (line[-1] != 0):
             dipole_set.append( create_dipole(*line))

@@ -19,7 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign
+from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -91,6 +91,7 @@ def biot_savart_general(
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         num = jnp.cross(dr, JdV, axis=-1)
         den = dr_norm**3
         B = safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
@@ -153,9 +154,7 @@ def biot_savart_general_vector_potential(
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        num = JdV
-        den = dr_norm
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        return safediv(JdV, dr_norm).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
@@ -2859,7 +2858,6 @@ def _intfun_wrapper(
     )
 
 
-@jit
 def _odefun(s, rpz, args):
     field, params, scale, source_grid, bs_chunk_size, method = args
     r = rpz[0]
@@ -3040,15 +3038,15 @@ class OmnigenousField(Optimizable, IOAble):
         self._N_x = setdefault(N_x, self.N_x)
 
         # change well parameters and basis
-        rho = (  # Chebyshev-Gauss-Lobatto nodes
-            1 - np.cos(np.arange(old_L_B // 2, old_L_B + 1, 1) * np.pi / old_L_B)
-        ) / 2
+        # Chebyshev-Gauss-Lobatto nodes for radial interpolation
+        rho = (1 - np.cos(np.arange(old_L_B + 1) * np.pi / old_L_B)) / 2
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
         transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
+        # linearly spaced nodes for eta interpolation
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
         eta_new = np.linspace(0, jnp.pi / 2, num=self.M_B)
 

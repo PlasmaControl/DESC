@@ -12,6 +12,8 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+OMEGA_IS_0 = True
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
@@ -34,12 +36,12 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
+            x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
+        x = jnp.linspace(0, 5, 2)
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
@@ -83,8 +85,25 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
-    from jax.scipy.fft import dct, idct
+    from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+
+    # TODO: remove fallback once JAX min version >= 0.10.0
+    if Version(jax.__version__) >= Version("0.10.0"):
+        from jax.scipy.linalg import qr_multiply
+    else:
+
+        def qr_multiply(a, c, mode="right"):
+            """Fallback for ``jax.scipy.linalg.qr_multiply`` (added in JAX 0.10.0)."""
+            Q, R = qr(a, mode="economic")
+            if mode == "right":
+                # 1-D c (all DESC uses) matches the old Q.T @ c; c @ Q keeps
+                # higher-dim c consistent with qr_multiply rather than silently wrong
+                cq = Q.T @ c if c.ndim == 1 else c @ Q
+            else:
+                cq = Q @ c
+            return cq, R
+
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
@@ -530,13 +549,14 @@ else:  # pragma: no cover
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
-    from scipy.fft import dct, idct  # noqa: F401
+    from scipy.fft import dct, dctn, idct, idctn  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
         cho_factor,
         cho_solve,
         qr,
+        qr_multiply,
         solve_triangular,
     )
     from scipy.special import gammaln  # noqa: F401

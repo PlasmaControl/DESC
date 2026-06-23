@@ -66,7 +66,7 @@ from desc.utils import (
 
 from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_grid
 from .coords import (
-    _map_clebsch_coordinates,
+    _map_poloidal_coordinates,
     get_rtz_grid,
     in_plasma,
     is_nested,
@@ -80,6 +80,14 @@ from .utils import (
     parse_profile,
     parse_surface,
 )
+
+_kinetic_profile_names = [
+    "_electron_temperature",
+    "_electron_density",
+    "_ion_temperature",
+    "_ion_density",
+    "_atomic_number",
+]
 
 
 class Equilibrium(Optimizable, _MagneticField):
@@ -131,9 +139,12 @@ class Equilibrium(Optimizable, _MagneticField):
     ion_temperature : Profile or ndarray shape(k,2) (optional)
         Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
         Default is to assume electrons and ions have the same temperature.
+    ion_density : Profile or ndarray shape(k,2) (optional)
+        Ion density (m^-3) profile or array of mode numbers and spectral
+        coefficients. If not supplied, ion density will be computed as ni = ne / Zeff.
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
-        coefficients. Default is 1
+        coefficients. Default is 1.
     anisotropy : Profile or ndarray
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
@@ -183,6 +194,7 @@ class Equilibrium(Optimizable, _MagneticField):
         "_electron_temperature",
         "_electron_density",
         "_ion_temperature",
+        "_ion_density",
         "_atomic_number",
         "_anisotropy",
         "_spectral_indexing",
@@ -226,6 +238,7 @@ class Equilibrium(Optimizable, _MagneticField):
         electron_temperature=None,
         electron_density=None,
         ion_temperature=None,
+        ion_density=None,
         atomic_number=None,
         anisotropy=None,
         surface=None,
@@ -345,6 +358,7 @@ class Equilibrium(Optimizable, _MagneticField):
         self._electron_temperature = None
         self._electron_density = None
         self._ion_temperature = None
+        self._ion_density = None
         self._atomic_number = None
 
         if current is None and iota is None:
@@ -380,6 +394,7 @@ class Equilibrium(Optimizable, _MagneticField):
         )
         self.electron_density = parse_profile(electron_density, "electron density")
         self.ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self.ion_density = parse_profile(ion_density, "ion density")
         self.atomic_number = parse_profile(atomic_number, "atomic number")
         self.pressure = parse_profile(pressure, "pressure")
         self.anisotropy = parse_profile(anisotropy, "anisotropy")
@@ -395,6 +410,7 @@ class Equilibrium(Optimizable, _MagneticField):
             "electron_temperature",
             "electron_density",
             "ion_temperature",
+            "ion_density",
             "atomic_number",
             "anisotropy",
         ]:
@@ -480,6 +496,7 @@ class Equilibrium(Optimizable, _MagneticField):
             "Te_l",
             "ne_l",
             "Ti_l",
+            "ni_l",
             "Zeff_l",
             "a_lmn",
             "Ra_n",
@@ -645,6 +662,7 @@ class Equilibrium(Optimizable, _MagneticField):
             "electron_temperature",
             "electron_density",
             "ion_temperature",
+            "ion_density",
             "atomic_number",
             "anisotropy",
         ]:
@@ -923,6 +941,14 @@ class Equilibrium(Optimizable, _MagneticField):
                 "rho grid point.",
             )
             warnif(
+                self.ion_density is not None
+                and np.any(np.isclose(self.ion_density(rho), 0.0, atol=1e-8)),
+                UserWarning,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion density vanishes at at least one provided"
+                "rho grid point.",
+            )
+            warnif(
                 np.any(np.isclose(self.electron_temperature(rho), 0.0, atol=1e-8)),
                 UserWarning,
                 "Redl formula is undefined where kinetic profiles vanish, "
@@ -952,6 +978,8 @@ class Equilibrium(Optimizable, _MagneticField):
                 inbasis=[inbasis[char] for char in grid.coordinates],
                 outbasis=("rho", "theta", "zeta"),
                 period=grid.period,
+                tol=kwargs.pop("tol", 1e-6),
+                maxiter=kwargs.pop("maxiter", 30),
             )
             grid = Grid(
                 nodes=rtz_nodes,
@@ -1262,7 +1290,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Dictionary of optimizable parameters, eg field.params_dict.
-        method: string
+        method : string
             "biot-savart" or "virtual casing". both methods calculate the magnetic
             field directly from the current density. if you wish to use the curl(A)
             method, create a desc.magnetic_fields.PlasmaField object.
@@ -1273,8 +1301,8 @@ class Equilibrium(Optimizable, _MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
         source_grid : Grid or None, optional
-        Grid used to discretize Equilibrium object. Should be a surface grid for
-        virtual casing method (i.e. rho=[1.0]) and a 3D grid for Biot-Savart method.
+            Grid used to discretize Equilibrium object. Should be a surface grid for
+            virtual casing method (i.e. rho=[1.0]) and a 3D grid for Biot-Savart method.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
@@ -1346,7 +1374,7 @@ class Equilibrium(Optimizable, _MagneticField):
                     source_xyz,
                     J=J,
                     dV=dV,
-                    chunk_size=50,
+                    chunk_size=chunk_size,
                     return_rtz=return_rtz,
                 )
                 if return_rtz:
@@ -1455,9 +1483,7 @@ class Equilibrium(Optimizable, _MagneticField):
         coords = jnp.atleast_2d(coords).astype(jnp.float64)
         eval_xyz = rpz2xyz(coords) if basis.lower() == "rpz" else coords
         if source_grid is None:
-            source_grid = QuadratureGrid(
-                L=self.L_grid, M=self.M_grid, N=self.N_grid, NFP=self.NFP
-            )
+            source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
 
         data = self.compute(
             ["J", "phi", "sqrt(g)", "x"],
@@ -1497,6 +1523,84 @@ class Equilibrium(Optimizable, _MagneticField):
             return A, data
         else:
             return A
+
+    def map_coordinates(
+        self,
+        coords,
+        inbasis,
+        outbasis=("rho", "theta", "zeta"),
+        guess=None,
+        params=None,
+        period=(np.inf, np.inf, np.inf),
+        tol=1e-6,
+        maxiter=30,
+        full_output=False,
+        **kwargs,
+    ):
+        """Transform coordinates given in ``inbasis`` to ``outbasis``.
+
+        Solves for the computational coordinates that correspond to ``inbasis``,
+        then evaluates ``outbasis`` at those locations.
+
+        Performance can often improve significantly given a reasonable initial guess.
+
+        Parameters
+        ----------
+        coords : ndarray
+            Shape (k, 3).
+            2D array of input coordinates. Each row is a different point in space.
+        inbasis, outbasis : tuple of str
+            Labels for input and output coordinates, e.g. ("R", "phi", "Z") or
+            ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+            same as the compute function data key.
+        guess : jnp.ndarray
+            Shape (k, 3).
+            Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+            corresponding to ``coords`` in ``inbasis``. If not given, then heuristics
+            based on ``inbasis`` or a nearest neighbor search on a grid may be used.
+            In general, this must be given to be compatible with JIT.
+        params : dict
+            Values of equilibrium parameters to use, e.g. ``eq.params_dict``.
+        period : tuple of float
+            Assumed periodicity for each quantity in ``inbasis``.
+            Use ``np.inf`` to denote no periodicity.
+            Default is no periodicity.
+        tol : float
+            Stopping tolerance.
+        maxiter : int
+            Maximum number of Newton iterations.
+        full_output : bool, optional
+            If True, also return a tuple where the first element is the residual from
+            the root finding and the second is the number of iterations.
+        kwargs : dict, optional
+            Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
+            ``alpha``.
+
+        Returns
+        -------
+        out : jnp.ndarray
+            Shape (k, 3).
+            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
+            returned for coordinates where root finding did not succeed, possibly
+            because the coordinate is not in the plasma volume.
+        info : tuple
+            2 element tuple containing residuals and number of iterations
+            for each point. Only returned if ``full_output`` is True.
+
+        """
+        return map_coordinates(
+            self,
+            coords,
+            inbasis,
+            outbasis,
+            guess,
+            params,
+            period,
+            tol,
+            maxiter,
+            full_output,
+            **kwargs,
+        )
 
     def _get_rtz_grid(
         self,
@@ -1544,23 +1648,30 @@ class Equilibrium(Optimizable, _MagneticField):
         )
 
     @staticmethod
-    def _map_clebsch_coordinates(
+    def _map_poloidal_coordinates(
         iota,
-        alpha,
+        poloidal,
         zeta,
         L_lmn,
         lmbda,
+        varepsilon=None,
+        inbasis="alpha",
+        outbasis="theta",
         guess=None,
+        *,
         tol=1e-6,
         maxiter=30,
         **kwargs,
     ):
-        return _map_clebsch_coordinates(
+        return _map_poloidal_coordinates(
             iota,
-            alpha,
+            poloidal,
             zeta,
             L_lmn,
             lmbda,
+            varepsilon,
+            inbasis,
+            outbasis,
             guess,
             tol=tol,
             maxiter=maxiter,
@@ -1640,6 +1751,7 @@ class Equilibrium(Optimizable, _MagneticField):
         rcond=None,
         copy=False,
         tol=1e-9,
+        maxiter=30,
     ):
         """Transform this equilibrium to use straight field line PEST coordinates.
 
@@ -1677,6 +1789,8 @@ class Equilibrium(Optimizable, _MagneticField):
         tol : float
             Tolerance for coordinate mapping.
             Default is ``1e-9``.
+        maxiter : int
+            Maximum number of Newton iterations.
 
         Returns
         -------
@@ -1684,7 +1798,9 @@ class Equilibrium(Optimizable, _MagneticField):
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol)
+        return to_sfl(
+            self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol, maxiter=maxiter
+        )
 
     def in_plasma(self, points, M=24):
         """
@@ -1931,6 +2047,18 @@ class Equilibrium(Optimizable, _MagneticField):
         self._pressure = ensure_consistent_profile_eq_resolution(
             self._pressure, self, name="pressure"
         )
+        has_kinetic = any(
+            [getattr(self, name, None) is not None for name in _kinetic_profile_names]
+        )  # don't warn if pressure is being set to None
+        warnif(
+            has_kinetic and new is not None,
+            UserWarning,
+            "Pressure profile is being assigned to an "
+            "equilibrium which already has at least one kinetic profile assigned to"
+            " it. The default is to use the equilibrium's assigned pressure profile"
+            " for all computations. It is recommended to remove the unneeded "
+            "profile(s) to avoid unexpected behavior, by setting them to None",
+        )
 
     @optimizable_parameter
     @property
@@ -1983,6 +2111,16 @@ class Equilibrium(Optimizable, _MagneticField):
             self._electron_temperature, self, name="electron temperature"
         )
 
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron temperature profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
+
     @optimizable_parameter
     @property
     def Te_l(self):
@@ -2012,6 +2150,16 @@ class Equilibrium(Optimizable, _MagneticField):
         self._electron_density = parse_profile(new, "electron density")
         self._electron_density = ensure_consistent_profile_eq_resolution(
             self._electron_density, self, name="electron density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Electron density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter
@@ -2044,6 +2192,15 @@ class Equilibrium(Optimizable, _MagneticField):
         self._ion_temperature = ensure_consistent_profile_eq_resolution(
             self._ion_temperature, self, name="ion temperature"
         )
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
 
     @optimizable_parameter
     @property
@@ -2063,6 +2220,43 @@ class Equilibrium(Optimizable, _MagneticField):
         self.ion_temperature.params = Ti_l
 
     @property
+    def ion_density(self):
+        """Profile: Ion density (m^-3) profile."""
+        return self._ion_density
+
+    @ion_density.setter
+    def ion_density(self, new):
+        self._ion_density = parse_profile(new, "ion density")
+        self._ion_density = ensure_consistent_profile_eq_resolution(
+            self._ion_density, self, name="ion density"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Ion density profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
+        )
+
+    @optimizable_parameter
+    @property
+    def ni_l(self):
+        """ndarray: Coefficients of ion density profile."""
+        return np.empty(0) if self.ion_density is None else self.ion_density.params
+
+    @ni_l.setter
+    def ni_l(self, ni_l):
+        errorif(
+            self.ion_density is None,
+            ValueError,
+            "Attempt to set ion density on an equilibrium with fixed pressure",
+        )
+        self.ion_density.params = ni_l
+
+    @property
     def atomic_number(self):
         """Profile: Effective atomic number (Z_eff) profile."""
         return self._atomic_number
@@ -2072,6 +2266,16 @@ class Equilibrium(Optimizable, _MagneticField):
         self._atomic_number = parse_profile(new, "atomic number")
         self._atomic_number = ensure_consistent_profile_eq_resolution(
             self._atomic_number, self, name="atomic number"
+        )
+
+        warnif(
+            self._pressure is not None,
+            UserWarning,
+            "Atomic number profile is being assigned to an "
+            "equilibrium which already has an existing pressure profile. The default "
+            "is to use the equilibrium's assigned pressure profile for all"
+            " computations. It is recommended to remove the unneeded profile(s) "
+            "to avoid unexpected behavior, by setting them to None.",
         )
 
     @optimizable_parameter

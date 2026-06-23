@@ -86,9 +86,10 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         warnif(
-            self.grid.coordinates != "rtz",
-            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
+            self.grid.coordinates not in ["rtz", "rpz"],
+            msg=f"Expected coordinates rtz or rpz, got {self.grid.coordinates}.",
         )
+
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
@@ -395,10 +396,9 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "RPZ method requires the compatible basis and grid"
-                    + "got {} grid".format(grid)
-                    + " and {} basis".format(basis)
-                    + "falling back to direct1 method",
+                    "RPZ method requires the compatible basis and grid. "
+                    + f"Got {grid} grid and {basis} basis. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -407,10 +407,20 @@ class Transform(IOAble):
         if (grid.L, grid.N) != (basis.L, basis.N):
             warnings.warn(
                 colored(
-                    "RPZ method requires basis and grid to have same L and N"
-                    + "got grid L,N={}".format((grid.L, grid.N))
-                    + " and basis L,N={}".format((basis.L, basis.N))
-                    + "falling back to direct1 method",
+                    "RPZ method requires basis and grid to have same L and N. Got grid "
+                    + f"L,N={(grid.L, grid.N)} and basis L,N={(basis.L, basis.N)}. "
+                    + "Falling back to direct1 method.",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if grid.NFP != basis.NFP:
+            warnings.warn(
+                colored(
+                    "RPZ method requires basis and grid to have the same NFP. "
+                    + f"Got grid NFP {grid.NFP} and basis NFP {basis.NFP}. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -419,9 +429,9 @@ class Transform(IOAble):
         if not grid.can_fft_dct:
             warnings.warn(
                 colored(
-                    "RPZ method requires the r_endpoint and z_endpoint to be True"
-                    + "when defining the CylindricalGrid object"
-                    + "falling back to direct1 method."
+                    "RPZ method does not support 0-resolution grids or custom"
+                    + " node patterns when defining the CylindricalGrid object"
+                    + " falling back to direct1 method."
                     "yellow",
                 )
             )

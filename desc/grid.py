@@ -14,6 +14,7 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "CylindricalGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
@@ -173,6 +174,34 @@ class _Grid(IOAble, ABC):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
+        if self.coordinates == "rtz":
+            nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+            nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+            # reduce weights for duplicated nodes
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            # scale weights sum to full volume
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                    1 / 3
+                )
+
+        elif self.coordinates == "rpz":
+            nodes = self.nodes.copy().astype(float)
+            nodes = nodes % self._period
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (2 * np.pi / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+
         if self.coordinates == "rtz":
             nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
             nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))

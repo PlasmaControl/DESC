@@ -790,7 +790,7 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
         raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
@@ -807,7 +807,7 @@ class VMECIO:
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
@@ -1600,13 +1600,13 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         # Z axis
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         # R axis cosine coefficients
         f.write("  RAXIS_CC = ")

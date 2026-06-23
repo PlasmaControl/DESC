@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.backend import tree_broadcast as jax_tree_broadcast
 from desc.backend import tree_flatten, tree_leaves, tree_map, tree_unflatten
 from desc.batching import vmap_chunked
@@ -270,7 +270,7 @@ class _CoilObjective(_Objective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -278,8 +278,7 @@ class _CoilObjective(_Objective):
             Coil objective value(s).
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
 
         coil = self.things[0]
         data = coil.compute(
@@ -423,7 +422,7 @@ class CoilLength(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -525,7 +524,7 @@ class CoilCurvature(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -625,7 +624,7 @@ class CoilTorsion(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -732,7 +731,7 @@ class CoilCurrentLength(CoilLength):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -831,7 +830,7 @@ class CoilIntegratedCurvature(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -880,6 +879,12 @@ class CoilSetMinDistance(_Objective):
         a large number of coils, or if the resolution is very high, setting this to a
         small value will reduce peak memory usage at the cost of slightly increased
         runtime.
+    num_neighbors : int, optional
+        Limit the pairwise distance computation to the num_neighbors nearest neighbors
+        per coil, determined by centroid distance. This is helpful for reducing memory
+        usage when you have hundreds of small coils, with a recommended value of about
+        num_neighbors = 20. Default value of None or num_neighbors >= num_coils - 1
+        computes the full pairwise distances.
 
     """
 
@@ -889,7 +894,11 @@ class CoilSetMinDistance(_Objective):
         coil=True,
     )
 
-    _static_attrs = _Objective._static_attrs + ["_dist_chunk_size", "_use_softmin"]
+    _static_attrs = _Objective._static_attrs + [
+        "_use_softmin",
+        "_dist_chunk_size",
+        "_num_neighbors",
+    ]
 
     _scalar = False
     _units = "(m)"
@@ -911,6 +920,7 @@ class CoilSetMinDistance(_Objective):
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        num_neighbors=None,
     ):
         from desc.coils import CoilSet
 
@@ -920,6 +930,7 @@ class CoilSetMinDistance(_Objective):
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
         self._dist_chunk_size = dist_chunk_size
+        self._num_neighbors = num_neighbors
         errorif(
             not isinstance(coil, CoilSet),
             ValueError,
@@ -971,7 +982,7 @@ class CoilSetMinDistance(_Objective):
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -979,19 +990,34 @@ class CoilSetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
-        )
+        )  # pts.shape = (num_coils, num_nodes, 3)
+        num_coils = self.dim_f
+
+        if self._num_neighbors is not None and self._num_neighbors < num_coils - 1:
+            # only consider nearest neighbors
+            centroids = jnp.mean(pts, axis=1)  # (num_coils, 3)
+            centroid_dists = safenorm(centroids[:, None] - centroids[None, :], axis=-1)
+            centroid_dists = centroid_dists.at[jnp.diag_indices(num_coils)].set(jnp.inf)
+
+            def get_other_pts(k):
+                neighbors_idx = jax.lax.stop_gradient(
+                    jnp.argsort(centroid_dists[k])[: self._num_neighbors]
+                )
+                return pts[neighbors_idx]
+
+        else:  # consider all other coils
+
+            def get_other_pts(k):
+                return jnp.delete(pts, k, axis=0, assume_unique_indices=True)
 
         def body(k):
-            # pts shape (ncoils, num_nodes, 3)
-            # dist btwn all pts; shape(ncoils,num_nodes,num_nodes)
             # dist[i,j,n] is the distance from the jth point on the kth coil
-            # to the nth point on the ith coil
+            # to the nth point on the ith coil; shape(ncoils,num_nodes,num_nodes)
             coil_pts = pts[k]
-            other_pts = jnp.delete(pts, k, axis=0, assume_unique_indices=True)
+            other_pts = get_other_pts(k)
             dist = safenorm(coil_pts[None, :, None] - other_pts[:, None], axis=-1)
             if self._use_softmin:
                 return softmin(dist, self._softmin_alpha)
@@ -1230,7 +1256,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Only required if ``self._eq_fixed = False``.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -1238,8 +1264,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Minimum/maximum distance from coil to surface for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             coils_params = params_1
         elif self._coils_fixed:
@@ -1530,16 +1555,15 @@ class CoilArclengthVariance(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
         f : float or array of floats
             Coil arclength variance.
         """
-        if constants is None:
-            constants = self.constants
         data = super().compute(params, constants=constants)
+        constants = self._get_deprecated_constants(constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
         return (out * constants["mask"])[self._coilset_tree["coilset_mask"]]
@@ -1748,7 +1772,7 @@ class QuadraticFlux(_Objective):
             Dictionary of the external field's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1756,8 +1780,7 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
@@ -1950,7 +1973,7 @@ class SurfaceQuadraticFlux(_Objective):
             if field_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1958,8 +1981,7 @@ class SurfaceQuadraticFlux(_Objective):
             Bnorm on the QFM surface from the external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._field_fixed else None
         surf_params = params_1
 
@@ -2345,6 +2367,7 @@ class FieldNormalError(_Objective):
     eq_kwargs : dict, optional
         Extra keyword arguments passed to ``eq.compute_magnetic_field``.
     """
+
     _static_attrs = _Objective._static_attrs + [
         "_basis",
         "_bs_chunk_size",
@@ -2469,7 +2492,7 @@ class FieldNormalError(_Objective):
         import numpy as np
 
         from desc.compute import rpz2xyz
-        
+
         # Sample curve positions (DESC curves return rpz by default)
         c_start_rpz = np.array(self._curve_start.compute("x", grid=self._nquad)["x"])
         c_end_rpz = np.array(self._curve_end.compute("x", grid=self._nquad)["x"])
@@ -2685,9 +2708,7 @@ class FieldNormalError(_Objective):
         # Convert to requested coordinate basis
         if self._basis == "rpz":
             pts_rpz = xyz2rpz(pts_flat)
-            nrm_flat = xyz2rpz_vec(
-                nrm_flat, x=pts_flat[:, 0], y=pts_flat[:, 1]
-            )
+            nrm_flat = xyz2rpz_vec(nrm_flat, x=pts_flat[:, 0], y=pts_flat[:, 1])
             pts_flat = pts_rpz
 
         return pts_flat, nrm_flat
@@ -2718,9 +2739,7 @@ class FieldNormalError(_Objective):
 
         # Get surface points/normals — static when curves fixed, dynamic otherwise
         if cs_params is not None:
-            points, normals = self._compute_surface_jax(
-                cs_params, ce_params, constants
-            )
+            points, normals = self._compute_surface_jax(cs_params, ce_params, constants)
         else:
             points = constants["points"]
             normals = constants["normals"]
@@ -2988,7 +3007,7 @@ class ToroidalFlux(_Objective):
             Dictionary of the external field's degrees of freedom, if qfm_surface=True.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2996,8 +3015,7 @@ class ToroidalFlux(_Objective):
             Toroidal flux from coils and external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
@@ -3215,7 +3233,7 @@ class LinkingCurrentConsistency(_Objective):
             Only required if eq_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -3223,8 +3241,7 @@ class LinkingCurrentConsistency(_Objective):
             Linking current error.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             eq_linking_current = constants["eq_linking_current"]
         else:
@@ -3344,7 +3361,7 @@ class CoilSetLinkingNumber(_Objective):
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -3354,8 +3371,7 @@ class CoilSetLinkingNumber(_Objective):
             number of coils linked with that coil.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         link = constants["coilset"]._compute_linking_number(
             params=params, grid=constants["grid"]
         )
@@ -3572,7 +3588,7 @@ class SurfaceCurrentRegularization(_Objective):
             eg FourierCurrentPotential.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -3580,8 +3596,7 @@ class SurfaceCurrentRegularization(_Objective):
             The surface current density magnitude on the source surface.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         surface_data = compute_fun(
             self._surface_current_field,

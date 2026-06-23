@@ -161,15 +161,14 @@ class Transform(IOAble):
 
     def _get_matrices(self):
         """Get matrices to compute all derivatives."""
-        n = 4  # hardcode max derivative order for now
         ndi = self.derivatives[:, 0].max()
         ndj = self.derivatives[:, 1].max()
         ndk = self.derivatives[:, 2].max()
         if self.method == "jitable":
             matrices = {
                 "direct1": {
-                    i: {j: {k: {} for k in range(n + 1)} for j in range(n + 1)}
-                    for i in range(n + 1)
+                    i: {j: {k: {} for k in range(ndk + 1)} for j in range(ndj + 1)}
+                    for i in range(ndi + 1)
                 },
             }
         elif self.method == "fft":
@@ -397,10 +396,9 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "RPZ method requires the compatible basis and grid"
-                    + " got {} grid".format(grid)
-                    + " and {} basis".format(basis)
-                    + "falling back to direct1 method",
+                    "RPZ method requires the compatible basis and grid. "
+                    + f"Got {grid} grid and {basis} basis. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -409,10 +407,9 @@ class Transform(IOAble):
         if (grid.L, grid.N) != (basis.L, basis.N):
             warnings.warn(
                 colored(
-                    "RPZ method requires basis and grid to have same L and N"
-                    + " got grid L,N={}".format((grid.L, grid.N))
-                    + " and basis L,N={}".format((basis.L, basis.N))
-                    + "falling back to direct1 method",
+                    "RPZ method requires basis and grid to have same L and N. Got grid "
+                    + f"L,N={(grid.L, grid.N)} and basis L,N={(basis.L, basis.N)}. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -421,10 +418,9 @@ class Transform(IOAble):
         if grid.NFP != basis.NFP:
             warnings.warn(
                 colored(
-                    "rpz method requires basis and grid to have the same NFP."
-                    + "got {} grid NFP".format(grid.NFP)
-                    + " and basis NFP {}".format(basis.NFP)
-                    + "falling back to direct1 method",
+                    "RPZ method requires basis and grid to have the same NFP. "
+                    + f"Got grid NFP {grid.NFP} and basis NFP {basis.NFP}. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )

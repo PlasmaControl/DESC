@@ -202,6 +202,34 @@ class _Grid(IOAble, ABC):
             if temp_spacing.prod(axis=1).sum():
                 temp_spacing *= (2 * np.pi / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
 
+        if self.coordinates == "rtz":
+            nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+            nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+            # reduce weights for duplicated nodes
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            # scale weights sum to full volume
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                    1 / 3
+                )
+
+        elif self.coordinates == "rpz":
+            nodes = self.nodes.copy().astype(float)
+            nodes = nodes % self._period
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (2 * np.pi / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -1888,6 +1916,10 @@ class CylindricalGrid(_Grid):
     Z: np.ndarray
         vertical coordinates (Default None, in which case
         N must be specified)
+    r_endpoint : bool
+        True to include R=0 and R=1, False otherwise (Default = False)
+    z_endpoint : bool
+        True to include Z=0 and R=1, False otherwise (Default = False)
     """
 
     _fft_poloidal = False
@@ -1902,6 +1934,8 @@ class CylindricalGrid(_Grid):
         R=None,
         phi=None,
         Z=None,
+        r_endpoint=True,
+        z_endpoint=True,
     ):
         assert (L is None) or (R is None), "cannot specify both L and R"
         assert (M is None) or (phi is None), "cannot specify both M and phi"
@@ -1922,6 +1956,8 @@ class CylindricalGrid(_Grid):
             R=R,
             phi=phi,
             Z=Z,
+            r_endpoint=r_endpoint,
+            z_endpoint=z_endpoint,
         )
         self._sort_nodes()
         # For compatibility, these indices are still hardcoded as RTZ
@@ -1945,6 +1981,8 @@ class CylindricalGrid(_Grid):
         R=None,
         phi=None,
         Z=None,
+        r_endpoint=False,
+        z_endpoint=False,
     ):
         """Create grid nodes and weights.
 
@@ -1958,15 +1996,8 @@ class CylindricalGrid(_Grid):
             vertical grid resolution
         NFP : int
             number of field periods (Default = 1)
-        R : np.ndarray
-            radial coordinates (Default None, in which case L
-            must be specified).
-        phi : np.ndarray
-            toroidal coordinates (Default None, in which case
-            M must be specified)
-        Z: np.ndarray
-            vertical coordinates (Default None, in which case
-            N must be specified)
+        axis : bool
+            True to include the magnetic axis, False otherwise (Default = False)
 
         Returns
         -------
@@ -1979,15 +2010,9 @@ class CylindricalGrid(_Grid):
         self._NFP = check_posint(NFP, "NFP", False)
         self._period = (np.inf, 2 * np.pi / self._NFP, np.inf)
 
-        if (L is None) and (R is None):
-            L = 0
-        if (M is None) and (phi is None):
-            M = 0
-        if (N is None) and (Z is None):
-            N = 0
-
         # R (Chebyshev extrema nodes)
-        if None not in [L, M, N]:
+        alpha = 1e-3
+        if r_endpoint and z_endpoint and None not in [L, M, N]:
             if L * M * N > 0:
                 self._can_fft_dct = True
             else:
@@ -1996,7 +2021,9 @@ class CylindricalGrid(_Grid):
             self._can_fft_dct = False
         if L is not None:
             self._L = check_nonnegint(L, "L", False)
-            R = lobatto(L)
+            R = lobatto(L, r_endpoint, alpha)
+        else:
+            self._can_fft_dct = False
 
         dR = _midpoint_spacing(R, jnp=np)
 
@@ -2015,7 +2042,9 @@ class CylindricalGrid(_Grid):
         # Z (Chebyshev extrema nodes)
         if N is not None:
             self._N = check_nonnegint(N, "N", False)
-            Z = lobatto(N)
+            Z = lobatto(N, z_endpoint, alpha)
+        else:
+            self._can_fft_dct = False
 
         dZ = _midpoint_spacing(Z, jnp=np)
 
@@ -2050,6 +2079,8 @@ class CylindricalGrid(_Grid):
                 M=M,
                 N=N,
                 NFP=NFP,
+                r_endpoint=(self._nodes[:, 0] == 0).any(),
+                z_endpoint=(self._nodes[:, 1] == 0).any(),
             )
             self._sort_nodes()
             (
@@ -2428,9 +2459,10 @@ def _midpoint_spacing(x, jnp=jnp):
     return dx
 
 
-def lobatto(res):
-    if res == 0:
-        return np.array([1])
+def lobatto(res, endpoint, alpha=1e-3):
     x = (np.cos(np.arange(res, -1, -1) * np.pi / res) + 1) / 2
     x = np.sort(x, axis=None)
+    if not endpoint:
+        x[0] = x[1] * alpha
+        x[-1] = 1 - (1 - x[-2]) * alpha
     return x

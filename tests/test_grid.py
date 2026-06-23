@@ -541,15 +541,13 @@ class TestGrid:
     @pytest.mark.unit
     def test_cylindrical_grid(self):
         """Test that CylindricalGrid correctly makes meshgrid of Gauss-Lobatto nodes."""
-        from desc.grid import CylindricalGrid
-
-        L = N = 3
+        L = N = 6
         M = 0
         NFP = 1
 
-        grid = CylindricalGrid(L, M, N, NFP=NFP)
+        grid = CylindricalGrid(L, M, N, z_endpoint=False, r_endpoint=False, NFP=NFP)
         Z, phi, R = np.meshgrid(
-            [0, 0.25, 0.75, 1], [0], [0, 0.25, 0.75, 1], indexing="ij"
+            [0.025, 0.25, 0.75, 0.975], [0], [0.025, 0.25, 0.75, 0.975], indexing="ij"
         )
         np.testing.assert_allclose(
             np.stack([R.flatten(), phi.flatten(), Z.flatten()]).T, grid.nodes
@@ -561,7 +559,7 @@ class TestGrid:
         L = M = N = 4
         NFP = 2
 
-        grid = CylindricalGrid(L, M, N, NFP=NFP)
+        grid = CylindricalGrid(L, M, N, z_endpoint=True, r_endpoint=True, NFP=NFP)
         np.testing.assert_allclose((grid.weights * grid.nodes[:, 0]).sum(), np.pi)
 
     @pytest.mark.unit

@@ -10,9 +10,10 @@ from desc.backend import jnp
 from desc.basis import DoubleChebyshevFourierBasis
 from desc.compute.nabla import _curl_cylindrical
 from desc.grid import CylindricalGrid, Grid, QuadratureGrid
-from desc.magnetic_fields import _MagneticField
 from desc.transform import Transform
 from desc.utils import rpz2xyz_vec, xyz2rpz
+
+from ._core import _MagneticField
 
 
 class PlasmaField(_MagneticField):
@@ -42,9 +43,20 @@ class PlasmaField(_MagneticField):
         Size to split computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
+    return_data : bool
+        If True, saves the current density and source grid coordinates
+        used to evaluate the vector potential (useful for things like
+        save_bmw_format).
     """
 
-    _static_attrs = _MagneticField._static_attrs
+    _static_attrs = _MagneticField._static_attrs + [
+        "_A_coeff",
+        "_RA_phi_coeff",
+        "_scales",
+        "_shifts",
+        "_basis",
+        "_NFP",
+    ]
     _io_attrs_ = ["_A_coeff", "_RA_phi_coeff", "_scales", "_shifts", "_basis", "_NFP"]
 
     def __init__(
@@ -55,6 +67,7 @@ class PlasmaField(_MagneticField):
         Z_bounds=[-5, 5],
         A_res=256,
         chunk_size=50,
+        return_data=False,
     ):
         if source_grid is None:
             source_grid = QuadratureGrid(64, 64, 64, eq.NFP)
@@ -65,6 +78,8 @@ class PlasmaField(_MagneticField):
             M=source_grid.N,
             N=A_res,
             NFP=eq.NFP,
+            r_endpoint=True,
+            z_endpoint=True,
         )
         basis = DoubleChebyshevFourierBasis(A_grid.L, A_grid.M, A_grid.N, NFP=eq.NFP)
         in_transform = Transform(
@@ -89,7 +104,13 @@ class PlasmaField(_MagneticField):
             A_coords,
             source_grid=source_grid,
             chunk_size=chunk_size,
+            return_data=return_data,
         )
+
+        if return_data:
+            A, self._data = A
+        else:
+            self._data = {}
 
         self._A_coeff = in_transform.fit(A)
         self._RA_phi_coeff = in_transform.fit(A_coords[:, 0] * A[:, 1])

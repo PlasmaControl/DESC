@@ -7,6 +7,7 @@
 from desc.input_reader import InputReader
 
 from .ascii_io import read_ascii, write_ascii
+from .field_io import write_bmw_file, write_fieldlines_file
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .optimizable_io import IOAble, load
 from .pickle_io import PickleReader, PickleWriter

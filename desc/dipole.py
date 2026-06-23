@@ -72,55 +72,6 @@ def magnetic_dipole_vector_field(
         eval_pts, mag_points, m_vector, chunk_size=chunk_size
     )
 
-def test_magnetic_dipole():
-    mu_0 = 4 * np.pi * 1e-7
-    
-    # single dipole at origin, pointing in z-direction and measured from the z axis
-    mag_points = jnp.array([[0.0, 0.0, 0.0]])
-    m_magnitude = 1.0  
-    theta = 0.0 # +z
-    phi = 0.0
-    
-    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
-    
-    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    
-    r = 1.0
-    B_expected_mag = (mu_0 / (4 * np.pi)) * (2 * m_magnitude / r**3)
-    B_expected = jnp.array([[0.0, 0.0, B_expected_mag]])
-    A_expected = jnp.array([[0.0, 0.0, 0.0]])
-    
-    print(f"calculated magnetic field: {B[0]}")
-    print(f"expected magnetic field: {B_expected[0]}")
-    print(f"calculated vector potential field: {A[0]}")
-    print(f"expected vector potential field: {A_expected[0]}")
-
-    # single dipole at origin, pointing in x-direction and measured from the z axis
-    mag_points = jnp.array([[0.0, 0.0, 0.0]])
-    m_magnitude = 1.0  
-    theta = jnp.pi/2 # +x
-    phi = 0.0
-    
-    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
-    
-    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    
-    r = 1.0
-    B_expected_mag = (mu_0 / (4 * np.pi)) * (-m_magnitude / r**3)
-    B_expected = jnp.array([[B_expected_mag, 0.0, 0.0]])
-    A_expected_mag = (mu_0 / (4 * np.pi)) * (m_magnitude)/(r**2)
-    A_expected = jnp.array([[0.0, A_expected_mag, 0.0]])
-    
-    print(f"calculated magnetic field: {B[0]}")
-    print(f"expected magnetic field: {B_expected[0]}")
-    print(f"calculated vector potential field: {A[0]}")
-    print(f"expected vector potential field: {A_expected[0]}")
-
-if __name__ == "__main__":
-    test_magnetic_dipole()
-    
 
 class _Dipole(_MagneticField, Optimizable, ABC):
     """Implements ideal dipole that can be used in place of _dipole in a MixeddipoleSet"""

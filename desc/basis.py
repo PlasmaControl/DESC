@@ -19,6 +19,7 @@ __all__ = [
     "DoubleFourierSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
+    "DoubleChebyshevFourierBasis",
     "FourierZernikeBasis",
     "ChebyshevPolynomial",
     "ChebyshevDoubleFourierBasis",
@@ -2437,8 +2438,8 @@ def _jacobi(n, alpha, beta, x, dx=0):
 
 @_jacobi.defjvp
 def _jacobi_jvp(dx, x, xdot):
-    (n, alpha, beta, x) = x
-    (*_, xdot) = xdot
+    n, alpha, beta, x = x
+    *_, xdot = xdot
     f = _jacobi(n, alpha, beta, x, dx)
     df = _jacobi(n, alpha, beta, x, dx + 1)
     # in theory n, alpha, beta, dx aren't differentiable (they're integers)

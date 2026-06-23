@@ -86,9 +86,10 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         warnif(
-            self.grid.coordinates != "rtz",
-            msg=f"Expected coordinates rtz got {self.grid.coordinates}.",
+            self.grid.coordinates not in ["rtz", "rpz"],
+            msg=f"Expected coordinates rtz or rpz, got {self.grid.coordinates}.",
         )
+
         # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
@@ -395,10 +396,9 @@ class Transform(IOAble):
         ):
             warnings.warn(
                 colored(
-                    "RPZ method requires the compatible basis and grid"
-                    + "got {} grid".format(grid)
-                    + " and {} basis".format(basis)
-                    + "falling back to direct1 method",
+                    "RPZ method requires the compatible basis and grid. "
+                    + f"Got {grid} grid and {basis} basis. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -407,10 +407,20 @@ class Transform(IOAble):
         if (grid.L, grid.N) != (basis.L, basis.N):
             warnings.warn(
                 colored(
-                    "RPZ method requires basis and grid to have same L and N"
-                    + "got grid L,N={}".format((grid.L, grid.N))
-                    + " and basis L,N={}".format((basis.L, basis.N))
-                    + "falling back to direct1 method",
+                    "RPZ method requires basis and grid to have same L and N. Got grid "
+                    + f"L,N={(grid.L, grid.N)} and basis L,N={(basis.L, basis.N)}. "
+                    + "Falling back to direct1 method.",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        if grid.NFP != basis.NFP:
+            warnings.warn(
+                colored(
+                    "RPZ method requires basis and grid to have the same NFP. "
+                    + f"Got grid NFP {grid.NFP} and basis NFP {basis.NFP}. "
+                    + "Falling back to direct1 method.",
                     "yellow",
                 )
             )
@@ -419,9 +429,9 @@ class Transform(IOAble):
         if not grid.can_fft_dct:
             warnings.warn(
                 colored(
-                    "RPZ method requires the r_endpoint and z_endpoint to be True"
-                    + "when defining the CylindricalGrid object"
-                    + "falling back to direct1 method."
+                    "RPZ method does not support 0-resolution grids or custom"
+                    + " node patterns when defining the CylindricalGrid object"
+                    + " falling back to direct1 method."
                     "yellow",
                 )
             )
@@ -688,7 +698,7 @@ class Transform(IOAble):
                 "Transform must be built with transform.build_pinv() before being used"
             )
 
-        if self.method in ["direct1", "partialrpz"]:
+        if self.method in ["direct1", "jitable", "partialrpz"]:
             # Partial RPZ method just defaults to direct1 because it
             # probably won't be necessary to fit a transform to a grid that
             # doesn't have Chebyshev nodes in the R and Z directions
@@ -752,7 +762,7 @@ class Transform(IOAble):
                 )
             )
 
-        if self.method == "direct1" or self.method == "rpz":
+        if self.method in ["direct1", "jitable", "rpz"]:
             A = self.matrices["direct1"][0][0][0]
             return jnp.matmul(A.T, y)
 
@@ -939,7 +949,10 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``}: method of computing transform."""
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+
+        Transform compute method.
+        """
         return self.__dict__.setdefault("_method", "direct1")
 
     @method.setter

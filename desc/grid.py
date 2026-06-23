@@ -14,6 +14,7 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "CylindricalGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
@@ -173,6 +174,34 @@ class _Grid(IOAble, ABC):
     def _scale_weights(self):
         """Scale weights sum to full volume and reduce duplicate node weights."""
         nodes = self.nodes.copy().astype(float)
+        if self.coordinates == "rtz":
+            nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
+            nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
+            # reduce weights for duplicated nodes
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            # scale weights sum to full volume
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                    1 / 3
+                )
+
+        elif self.coordinates == "rpz":
+            nodes = self.nodes.copy().astype(float)
+            nodes = nodes % self._period
+            _, inverse, counts = np.unique(
+                nodes, axis=0, return_inverse=True, return_counts=True
+            )
+            duplicates = counts[inverse]
+            temp_spacing = self.spacing.copy()
+            temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
+            if temp_spacing.prod(axis=1).sum():
+                temp_spacing *= (2 * np.pi / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+
         if self.coordinates == "rtz":
             nodes = put(nodes, Index[:, 1], nodes[:, 1] % (2 * np.pi))
             nodes = put(nodes, Index[:, 2], nodes[:, 2] % (2 * np.pi / self.NFP))
@@ -797,11 +826,11 @@ class _Grid(IOAble, ABC):
             shape += (-1,)
         x = x.reshape(shape, order="F")
         # swap to change shape from trz/arz to rtz/raz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         return x
 
     def meshgrid_flatten(self, x, order):
@@ -848,9 +877,9 @@ class _Grid(IOAble, ABC):
         newax = tuple(order.index(c) for c in self.coordinates)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         # swap to change shape from rtz/raz to trz/arz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
 
         shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
         if vec:

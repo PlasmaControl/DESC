@@ -2,7 +2,7 @@
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jnp, qr, qr_multiply
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -237,6 +237,7 @@ def lsq_auglag(  # noqa: C901
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
+    f0 = f
     cost = 1 / 2 * jnp.dot(f, f)
     c = constraint_wrapped.fun(z, *args)
     constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
@@ -272,7 +273,9 @@ def lsq_auglag(  # noqa: C901
     if jac_scale:
         scale, scale_inv = compute_jac_scale(J)
     else:
-        x_scale = jnp.broadcast_to(x_scale, z.shape)
+        x_scale = jnp.broadcast_to(x_scale, x0.shape)
+        # add ones for slack variables
+        x_scale = jnp.concatenate([x_scale, jnp.ones(z0.size - x0.size)])
         scale, scale_inv = x_scale, 1 / x_scale
 
     v, dv = cl_scaling_vector(z, g, lb, ub)
@@ -354,6 +357,29 @@ def lsq_auglag(  # noqa: C901
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print(f"{'Alpha Omega':<35}: {alpha_omega:.3e}")
+        print(f"{'Beta Omega':<35}: {beta_omega:.3e}")
+        print(f"{'Alpha Eta':<35}: {alpha_eta:.3e}")
+        print(f"{'Beta Eta':<35}: {beta_eta:.3e}")
+        print(f"{'Omega':<35}: {omega:.3e}")
+        print(f"{'Eta':<35}: {eta:.3e}")
+        print(f"{'Tau':<35}: {beta_eta:.3e}")
+        print("-" * 60, "\n")
+
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
         print_iteration_nonlinear(
@@ -382,15 +408,15 @@ def lsq_auglag(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
+                Qt_La, R = qr_multiply(J_a, L_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -Qt_La)
             else:
-                Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
-            # We don't need the Q and R matrices anymore
-            # Trust region solver will solve the augmented system
-            # with a new Q and R
-            del Q, R
+                # min-norm Newton step uses the QR of J_a.T
+                Q, Rt = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(Rt.T, -L_a, lower=True)
+                del Q, Rt
+                # the tr subproblem still needs the QR of J_a itself
+                Qt_La, R = qr_multiply(J_a, L_a, mode="right")
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -413,7 +439,7 @@ def lsq_auglag(  # noqa: C901
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    p_newton, L_a, J_a, trust_radius, alpha
+                    p_newton, Qt_La, R, trust_radius, alpha
                 )
 
             step = d * step_h  # Trust-region solution in the original space.
@@ -598,6 +624,8 @@ def lsq_auglag(  # noqa: C901
         allx=[z2xs(x)[0] for x in allx],
         alltr=alltr,
     )
+    result["fse"] = f
+    result["f0se"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

@@ -10,16 +10,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import (
-    flatnonzero,
-    fori_loop,
-    jax,
-    jit,
-    jnp,
-    pure_callback,
-    sign,
-    take,
-)
+from desc.backend import fori_loop, jax, jit, jnp, pure_callback, sign
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -626,14 +617,19 @@ def unique_list(thelist):
     inds : list of int
         Indices of unique elements in original list, such that
         unique[inds[i]] == thelist[i]
+    unique_inds : list of int
+        Indices of the original list containing unique elements such that
+        thelist[unique_inds[i]] == unique[i]
     """
     inds = []
     unique = []
+    unique_inds = []
     for i, x in enumerate(thelist):
         if x not in unique:
             unique.append(x)
+            unique_inds.append(i)
         inds.append(unique.index(x))
-    return unique, inds
+    return unique, inds, unique_inds
 
 
 def is_any_instance(things, cls):
@@ -709,49 +705,22 @@ def broadcast_tree(tree_in, tree_out, dtype=int):
         raise ValueError("trees must be nested lists of dicts")
 
 
-@functools.partial(
-    jnp.vectorize, signature="(m),(m)->(n)", excluded={"size", "fill_value"}
-)
-def take_mask(a, mask, /, *, size=None, fill_value=None):
-    """JIT compilable method to return ``a[mask][:size]`` padded by ``fill_value``.
+def flatten_mat(y, axes=2):
+    """Flatten matrix to vector.
 
     Parameters
     ----------
-    a : jnp.ndarray
-        The source array.
-    mask : jnp.ndarray
-        Boolean mask to index into ``a``. Should have same shape as ``a``.
-    size : int
-        Elements of ``a`` at the first size True indices of ``mask`` will be returned.
-        If there are fewer elements than size indicates, the returned array will be
-        padded with ``fill_value``. The size default is ``mask.size``.
-    fill_value : Any
-        When there are fewer than the indicated number of elements, the remaining
-        elements will be filled with ``fill_value``. Defaults to NaN for inexact types,
-        the largest negative value for signed types, the largest positive value for
-        unsigned types, and True for booleans.
+    axes : int
+        Number of trailing axes to flatten into last dimension.
+        Default is two.
 
     Returns
     -------
-    result : jnp.ndarray
-        Shape (size, ).
+    y : jnp.ndarray
+        Shape (*y.shape[:-axes], -1).
 
     """
-    assert a.shape == mask.shape
-    idx = flatnonzero(mask, size=setdefault(size, mask.size), fill_value=mask.size)
-    return take(
-        a,
-        idx,
-        mode="fill",
-        fill_value=fill_value,
-        unique_indices=True,
-        indices_are_sorted=True,
-    )
-
-
-def flatten_matrix(y):
-    """Flatten matrix to vector."""
-    return y.reshape(*y.shape[:-2], -1)
+    return y.reshape(*y.shape[:-axes], -1)
 
 
 # TODO: Eventually remove and use numpy's stuff.
@@ -846,18 +815,6 @@ def jaxify(func, abstract_eval, vectorized=False, abs_step=1e-4, rel_step=0):
         return func
 
     return define_fd_jvp(wrap_pure_callback(func))
-
-
-def atleast_3d_mid(ary):
-    """Like np.atleast_3d but if adds dim at axis 1 for 2d arrays."""
-    ary = jnp.atleast_2d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 2 else ary
-
-
-def atleast_2d_end(ary):
-    """Like np.atleast_2d but if adds dim at axis 1 for 1d arrays."""
-    ary = jnp.atleast_1d(ary)
-    return ary[:, jnp.newaxis] if ary.ndim == 1 else ary
 
 
 def dot(a, b, axis=-1):
@@ -1168,3 +1125,73 @@ def copy_rpz_periods(rpz, NFP):
     z = jnp.tile(z, NFP)
     p = p[None, :] + jnp.linspace(0, 2 * jnp.pi, NFP, endpoint=False)[:, None]
     return jnp.array([r, p.flatten(), z]).T
+
+
+def identity(y):
+    """Returns the input."""
+    return y
+
+
+def apply(d, fun=identity, subset=None, exclude=None):
+    """Applies ``fun`` to ``d``.
+
+    Parameters
+    ----------
+    d : dict
+        Dictionary to map.
+    fun : callable
+        Function to apply to values in dictionary.
+        Default is the identity.
+    subset : list or set or tuple
+        Subset of keys in ``d`` to consider.
+        Default is all keys in ``d``.
+    exclude : collection
+        Stuff in subset to exclude.
+
+    Returns
+    -------
+    d : dict
+        New dictionary with ``fun`` mapped over values with keys in ``subset``
+        and keys not in ``exclude``.
+
+    """
+    if subset is None:
+        subset = d.keys()
+    elif isinstance(subset, str):
+        subset = (subset,)
+    exclude = () if (exclude is None) else exclude
+    return {k: fun(d[k]) for k in subset if k not in exclude}
+
+
+def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
+    """Create x_scale using exponential spectral scaling.
+
+    Parameters
+    ----------
+    modes : dict of ndarray
+        Dictionary mapping parameter names to mode number arrays, each mode number array
+        should be (N,k) where N is the dimension of the given variable and the 2nd axis
+        is the number of indices (usually 3)
+    alpha : float, optional
+        Decay rate of the scaling. Default is 1.2
+    order : int, optional
+        Order of norm to use for multi-index mode numbers. Options are:
+        - 1: Diamond pattern using |l| + |m| + |n|
+        - 2: Circular pattern using sqrt(l² + m² + n²)
+        - np.inf : Square pattern using max(|l|,|m|,|n|)
+        Default is 'np.inf'
+    min_value : float, optional
+        Minimum allowed scale value. Default is 1e-7
+
+    Returns
+    -------
+    dict of ndarray
+        Array of scale values for each parameter
+    """
+    scales = {}
+    for name, md in modes.items():
+        mode_level = jnp.linalg.norm(md, axis=1, ord=order)
+        scales[name] = jnp.maximum(
+            jnp.exp(-alpha * mode_level) / jnp.exp(-alpha), min_value
+        )
+    return scales

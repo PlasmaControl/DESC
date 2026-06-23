@@ -85,7 +85,7 @@ if __name__ == "__main__":
         "test_proximal_freeb_jac_blocked",
         "test_proximal_freeb_jac_batched",
         "test_proximal_jac_ripple",
-        "test_proximal_jac_ripple_spline",
+        "test_proximal_jac_ripple_bounce1d",
         "test_eq_solve",
     ]
 
@@ -107,6 +107,18 @@ if __name__ == "__main__":
         # wait until the child exits, then join the sampler
         child.wait()
         sampler.join()
+
+        # check if one of the processes failed
+        if child.returncode != 0:
+            print(
+                f"ERROR: Subprocess for function {funs[i]} failed with "
+                f"exit code {child.returncode}"
+            )
+            # Raising an exception will cause the main script to fail,
+            # making the overall GitHub Actions job fail.
+            raise subprocess.CalledProcessError(
+                returncode=child.returncode, cmd=funs[i], output=None
+            )
         # save the data
         # make sure memory usage is 0 somewhere and t starts at 0
         data[funs[i]] = {}

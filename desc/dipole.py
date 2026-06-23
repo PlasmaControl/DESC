@@ -289,7 +289,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         z = params.get("z", self.z)
         phi = params.get("phi", self.phi)
         theta = params.get("theta", self.theta)
-        M = params.get("M", self.M)
+        M = params.get("M", params.get("m0", self.m0) * params.get("rho", self.rho))
 
         dipole_pos = jnp.array([[x, y, z]])
 

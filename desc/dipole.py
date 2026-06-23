@@ -72,6 +72,55 @@ def magnetic_dipole_vector_field(
         eval_pts, mag_points, m_vector, chunk_size=chunk_size
     )
 
+def test_magnetic_dipole():
+    mu_0 = 4 * np.pi * 1e-7
+    
+    # single dipole at origin, pointing in z-direction and measured from the z axis
+    mag_points = jnp.array([[0.0, 0.0, 0.0]])
+    m_magnitude = 1.0  
+    theta = 0.0 # +z
+    phi = 0.0
+    
+    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
+    
+    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    
+    r = 1.0
+    B_expected_mag = (mu_0 / (4 * np.pi)) * (2 * m_magnitude / r**3)
+    B_expected = jnp.array([[0.0, 0.0, B_expected_mag]])
+    A_expected = jnp.array([[0.0, 0.0, 0.0]])
+    
+    print(f"calculated magnetic field: {B[0]}")
+    print(f"expected magnetic field: {B_expected[0]}")
+    print(f"calculated vector potential field: {A[0]}")
+    print(f"expected vector potential field: {A_expected[0]}")
+
+    # single dipole at origin, pointing in x-direction and measured from the z axis
+    mag_points = jnp.array([[0.0, 0.0, 0.0]])
+    m_magnitude = 1.0  
+    theta = jnp.pi/2 # +x
+    phi = 0.0
+    
+    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
+    
+    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
+    
+    r = 1.0
+    B_expected_mag = (mu_0 / (4 * np.pi)) * (-m_magnitude / r**3)
+    B_expected = jnp.array([[B_expected_mag, 0.0, 0.0]])
+    A_expected_mag = (mu_0 / (4 * np.pi)) * (m_magnitude)/(r**2)
+    A_expected = jnp.array([[0.0, A_expected_mag, 0.0]])
+    
+    print(f"calculated magnetic field: {B[0]}")
+    print(f"expected magnetic field: {B_expected[0]}")
+    print(f"calculated vector potential field: {A[0]}")
+    print(f"expected vector potential field: {A_expected[0]}")
+
+if __name__ == "__main__":
+    test_magnetic_dipole()
+    
 
 class _Dipole(_MagneticField, Optimizable, ABC):
     """Implements ideal dipole that can be used in place of _dipole in a MixeddipoleSet"""
@@ -254,20 +303,11 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if basis.lower() == "rpz":
-            phi_coords = self.phi
+            phi_coords = coords[:, 1]
             coords = rpz2xyz(coords)
 
-        if params is None:
-            params = {
-                #get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
-                "x": self.x,
-                "y": self.y,  
-                "z": self.z,
-                "phi": self.phi,
-                "theta": self.theta,
-                "m0": self.m0,
-                "rho": self.rho,
-            }
+        #if params is None:
+            #params = {}
 
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
@@ -798,58 +838,51 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     
     from desc.utils import xyz2rpz
     from desc.integrals import compute_B_plasma
-    def calc_g(dipoles,eq):
-        # points_rpz = xyz2rpz(points)
-        # gridpoints = eq.map_coordinates(
-        #     points_rpz,
-        #     inbasis=('R', 'phi', 'Z'),
-        #     outbasis=('rho', 'theta', 'zeta'),
-        # )
-        # grid = Grid(gridpoints)
+    def calc_g(dipoles,eq, M_surf=8, N_surf=12):
+        '''
+        Calculate the inductance matrix
+
+        takes a dipole list
+        and a desc eq object, for computing surface normals
+        '''
 
         mu_0 = 4 * np.pi * 1e-7
-        grid = LinearGrid(M=2, N=2, NFP=2, sym=False, endpoint=False)
+        grid = LinearGrid(M=M_surf, N=N_surf, NFP=eq.NFP, sym=False, endpoint=True)
+
+        # n surface vectors
         n_surf = eq.surface.compute(['n_rho'], grid=grid)['n_rho']
-        g_array = np.zeros((256,12674))
         data = eq.compute(["X", "Y", "Z"], grid=grid)
+
+        # n surface positions
         xyz = np.column_stack([data["X"], data["Y"], data["Z"]])
-        # dipole_x = dipoles.x
-        # dipole_y = dipoles.y
-        # dipole_z = dipoles.z
-        # m_vec = dipoles[:].m_xyz
-        # d_xyz = np.column_stack([dipole_x, dipole_y, dipole_z])
-        # r = xyz - d_xyz
-        # r_mag = np.linalg.norm(r)
 
-        # nums = (mu_0 * 2)/(4*np.pi * r_mag**3)
+        # m-vector of the dipole
+        m_vec = np.array([d.m_xyz for d in dipoles]) 
 
-        # A = np.dot(r,n_surf)*np.dot(r,m_vec)
-        # B = np.dot(n_surf,m_vec)
+        # m dipole positions
+        m_pos = np.array([[d.x, d.y, d.z] for d in dipoles]) 
 
-        # nax = np.newaxis
-        # g_array = nums * (A[:,nax] - B[nax,:])
-
-        for i in range(256):
-            for j in range(12674):
-                m = dipoles[j]
-                m_vec = m.m_xyz
-                d_pos = jnp.array([m.x, m.y, m.z])
-                r = xyz[i] - d_pos 
-                r_mag = np.linalg.norm(r)
-                g_ij = ((mu_0)/(4*np.pi)) * ((3*(np.dot(r,n_surf[i]))*(np.dot(r,m_vec))-(np.dot(n_surf[i],m_vec)))/(r_mag**3))
-                g_array[i][j] = g_ij
-
-        '''
-        (An+Bm)/Cnm
+        # compute (n x m) pairwise distances
         nax = np.newaxis
+        r_ij = xyz[:,nax,:] - m_pos[nax,:,:]
 
-        (A[:,nax] + B[nax,:]) C
+        # take (n x m) scalar magnitude
+        r_mag = np.linalg.norm(r_ij, axis=-1)
 
-        '''
-        return g_array, xyz
+        # get unit vector
+        r_unit = r_ij / r_mag[:,:,nax]
+
+        # these dot products will be used to compute the inductance matrix
+        r_dot_n = np.sum(r_unit * n_surf[:,nax,:], axis=-1)
+        r_dot_m = np.sum(r_unit * m_vec[nax,:,:], axis=-1)
+        n_dot_m = np.sum( n_surf[:,nax,:] * m_vec[nax,:,:], axis=-1)
+
+        # compute: mu0/4pi (3 r.n r.m - n.m) / r^3
+        g_ij = mu_0 / (4*np.pi) * (3 * r_dot_n * r_dot_m - n_dot_m) / r_mag**3
+
+        return g_ij, xyz
 
     # add is_self_intersecting and save_in_makegrid_format later on
-
 
 
     def __add__(self, other):
@@ -904,7 +937,7 @@ def export_dipoles(dipole_set, f):
 
 import csv
 
-def create_dipole(x, y, z, phi, theta, m0, rho):
+def create_dipole(x, y, z, theta, rho, m0, phi):
     return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(eq, filename):
@@ -915,13 +948,15 @@ def import_dipoles(eq, filename):
             (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
+        #print(csv_data)
     num=0
     num2=0
-    #dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
-    dipole_set = DipoleSet(NFP=1, sym=False)
+    dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
+    #print(eq.sym)
     for line in csv_data:
         if (line[-1] != 0):
             dipole_set.append( create_dipole(*line))
+            #print(line)
             num+=1
         num2+=1
     print("rho!=0",num)

@@ -96,11 +96,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
 
 def biot_savart_general_vector_potential(
-    re,
-    rs,
-    J,
-    dV=jnp.array([1.0]),
-    chunk_size=None,
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
 ):
     """Biot-Savart law for arbitrary sources for vector potential.
 
@@ -138,9 +134,7 @@ def biot_savart_general_vector_potential(
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        num = JdV
-        den = dr_norm
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        return safediv(JdV, dr_norm).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
@@ -2688,25 +2682,6 @@ def field_line_integrate(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
     )
     max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
-
-    @jit
-    def odefun(s, rpz, args):
-        rpz = rpz.reshape((3, -1)).T
-        field = args[0]
-        r = rpz[:, 0]
-        br, bp, bz = (
-            scale
-            * field.compute_magnetic_field(
-                rpz,
-                params,
-                basis="rpz",
-                source_grid=source_grid,
-                chunk_size=chunk_size,
-            ).T
-        )
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
 
     # diffrax parameters
     def default_terminating_event(t, y, args, **kwargs):

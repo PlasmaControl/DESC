@@ -36,10 +36,10 @@ def test_magnetic_dipole(theta, phi, expected_B, expected_A):
     """Test one dipole at the origin against analytic field values."""
     mag_points = jnp.array([[0.0, 0.0, 0.0]])
     eval_pts = jnp.array([[0.0, 0.0, 1.0]])
-    M0 = 1.0
+    m0 = 1.0
 
-    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, M0)
-    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, M0)
+    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m0)
+    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m0)
 
     np.testing.assert_allclose(B, np.asarray(expected_B), rtol=1e-12, atol=1e-14)
     np.testing.assert_allclose(A, np.asarray(expected_A), rtol=1e-12, atol=1e-14)

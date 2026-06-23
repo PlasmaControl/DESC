@@ -49,12 +49,16 @@ from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 @partial(jit, static_argnames=["chunk_size"])
 def magnetic_dipole_field(
-    eval_pts, mag_points, phi, theta, M0, *, chunk_size=None
+    eval_pts, mag_points, phi, theta, m0, *, chunk_size=None
 ):
-    m_x = M0 * jnp.sin(theta) * jnp.cos(phi)
-    m_y = M0 * jnp.sin(theta) * jnp.sin(phi)
-    m_z = M0 * jnp.cos(theta)
-    m_vector = jnp.array([m_x, m_y, m_z])
+    m_hat = jnp.array(
+        [
+            jnp.sin(theta) * jnp.cos(phi),
+            jnp.sin(theta) * jnp.sin(phi),
+            jnp.cos(theta),
+        ]
+    )
+    m_vector = m0 * m_hat
     return dipole_field(
         eval_pts, mag_points, m_vector, chunk_size=chunk_size
     )
@@ -62,12 +66,16 @@ def magnetic_dipole_field(
 
 @partial(jit, static_argnames=["chunk_size"])
 def magnetic_dipole_vector_field(
-    eval_pts, mag_points, phi, theta, M0, *, chunk_size=None
+    eval_pts, mag_points, phi, theta, m0, *, chunk_size=None
 ):
-    m_x = M0 * jnp.sin(theta) * jnp.cos(phi)
-    m_y = M0 * jnp.sin(theta) * jnp.sin(phi)
-    m_z = M0 * jnp.cos(theta)
-    m_vector = jnp.array([m_x, m_y, m_z])
+    m_hat = jnp.array(
+        [
+            jnp.sin(theta) * jnp.cos(phi),
+            jnp.sin(theta) * jnp.sin(phi),
+            jnp.cos(theta),
+        ]
+    )
+    m_vector = m0 * m_hat
     return dipole_vector_potential(
         eval_pts, mag_points, m_vector, chunk_size=chunk_size
     )
@@ -225,13 +233,17 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     
     @property
     def m_xyz(self):
-        M0 = self.M0
+        M0 = self.m0 * self.rho
         theta = self._theta
         phi = self._phi
-        m_x = M0 * jnp.sin(theta) * jnp.cos(phi)
-        m_y = M0 * jnp.sin(theta) * jnp.sin(phi)
-        m_z = M0 * jnp.cos(theta)
-        return jnp.array([m_x, m_y, m_z])
+        m_hat = jnp.array(
+            [
+                jnp.sin(theta) * jnp.cos(phi),
+                jnp.sin(theta) * jnp.sin(phi),
+                jnp.cos(theta),
+            ]
+        )
+        return M0 * m_hat
     
     def _compute_A_or_B(
         self,
@@ -291,9 +303,9 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         phi = params.get("phi", self.phi)
         theta = params.get("theta", self.theta)
         if "M0" in params:
-            M0 = params["M0"]
+            m0 = params["M0"]
         else:
-            M0 = params.get("m0", self.m0) * params.get("rho", self.rho)
+            m0 = params.get("m0", self.m0) * params.get("rho", self.rho)
 
         dipole_pos = jnp.array([[x, y, z]])
 
@@ -304,7 +316,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             dipole_pos,
             phi,
             theta, 
-            M0,
+            m0,
             chunk_size=chunk_size, 
         )
 

@@ -306,8 +306,17 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             phi_coords = coords[:, 1]
             coords = rpz2xyz(coords)
 
-        #if params is None:
-            #params = {}
+        if params is None:
+            params = {
+                #get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
+                "x": self.x,
+                "y": self.y,  
+                "z": self.z,
+                "phi": self.phi,
+                "theta": self.theta,
+                "m0": self.m0,
+                "rho": self.rho,
+            }
 
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:

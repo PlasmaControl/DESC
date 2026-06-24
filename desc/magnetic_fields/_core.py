@@ -2635,10 +2635,10 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    method="virtual casing",
     bs_chunk_size=None,
     options=None,
     return_aux=False,
-    method="virtual casing",
 ):
     """Trace field lines by integration, using diffrax package.
 

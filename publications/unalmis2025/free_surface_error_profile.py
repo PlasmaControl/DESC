@@ -11,6 +11,7 @@ Profiling requires python < 3.14.
 import numpy as np
 
 from desc.backend import jax
+from desc.compute._laplace import Options as LaplaceOptions
 from desc.examples import get
 from desc.grid import LinearGrid
 from desc.magnetic_fields import FreeSurfaceOuterField, ToroidalMagneticField
@@ -28,7 +29,7 @@ obj = ObjectiveFunction(
             eq,
             field,
             grid=grid,
-            solve_method="gmres",
+            options=LaplaceOptions(solve_method="gmres"),
             deriv_mode="fwd",
         )
     ]

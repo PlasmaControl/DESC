@@ -944,7 +944,10 @@ class FreeSurfaceError(_Objective):
         Whether to fix the net toroidal sheet current to zero instead of optimizing it.
     options : LaplaceOptions
         Options for the Laplace solver. Defaults to ``LaplaceOptions()``, which
-        uses GMRES.
+        defaults to the GMRES iterative solver. Other options are BiCGStab and direct.
+        Fastest is typically BiCGStab (heed the note in the max_steps option).
+        If an iterative solver errors due to incompatibility with old JAX versions,
+        ``"fixed_point"`` can be selected instead if ``optimistix`` is installed.
 
     """
 

@@ -47,7 +47,11 @@ class Options(NamedTuple):
     max_steps: int = 10
     """Maximum number of steps for iterative linear solve.
 
-    Typically converges in 2 iterations. Default max value is ``10``.
+    For ``"gmres"``, this is the number of restart cycles. Lineax's default
+    restart length is 20, so one GMRES step applies the operator at
+    most 20 times, and ``max_steps=2`` is typically sufficient.
+    For ``"bicgstab"``, each step applies the operator twice, and
+    ``max_steps=50`` is typically sufficient for convergence.
     """
 
     problem: str = "interior Neumann"
@@ -60,9 +64,10 @@ class Options(NamedTuple):
     solve_method: str = "gmres"
     """Method to use for the scalar potential solve.
 
-    One of ``"gmres"`` or ``"direct"``. Default is ``"gmres"``.
-    If GMRES errors due to incompatibility with old JAX versions,
-    ``"fixed_point"`` can be selected instead.
+    One of ``"gmres"``, ``"bicgstab"``, or ``"direct"``. Default is GMRES.
+    Fastest is typically BiCGStab (heed the note in the max_steps option).
+    If an iterative solver errors due to incompatibility with old JAX versions,
+    ``"fixed_point"`` can be selected instead if ``optimistix`` is installed.
     """
 
     full_output: bool = False
@@ -99,9 +104,11 @@ class Options(NamedTuple):
 def _check_solve_method(solve_method):
     """Check that a scalar potential solve method is valid."""
     errorif(
-        solve_method not in {"fixed_point", "gmres", "direct"},
-        msg="solve_method must be one of 'fixed_point', 'gmres', or "
-        f"'direct', got {solve_method!r}.",
+        solve_method not in {"fixed_point", "gmres", "bicgstab", "direct"},
+        msg=(
+            "solve_method must be one of 'fixed_point', 'gmres', 'bicgstab', "
+            f"or 'direct', got {solve_method!r}."
+        ),
     )
 
 
@@ -239,11 +246,12 @@ def _iterative_solve(
     )
     Phi_0 = options.Phi_0
     if Phi_0 is None:
-        Phi_0 = jnp.ones(potential_grid.num_nodes)
+        Phi_0 = jnp.zeros(potential_grid.num_nodes)
     assert Phi_0.size == potential_grid.num_nodes
 
     subtract_phi = options.problem in ("exterior Neumann", "interior Dirichlet")
-    if options.solve_method == "gmres":
+    solvers = {"gmres": lx.GMRES, "bicgstab": lx.BiCGStab}
+    if options.solve_method in solvers:
         operator = lx.FunctionLinearOperator(
             partial(
                 _linear_potential_operator,
@@ -258,9 +266,9 @@ def _iterative_solve(
         solution = lx.linear_solve(
             operator,
             boundary_condition,
-            solver=lx.GMRES(
-                rtol=options.rtol,
+            solver=solvers[options.solve_method](
                 atol=options.atol,
+                rtol=options.rtol,
                 max_steps=options.max_steps,
             ),
             options={"y0": Phi_0},

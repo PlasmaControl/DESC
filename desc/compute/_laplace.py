@@ -13,7 +13,12 @@ from typing import NamedTuple, Optional
 import equinox as eqx
 import jax
 import lineax as lx
-import optimistix as optx
+
+try:
+    import optimistix as optx
+except ImportError:
+    pass
+
 from interpax_fft import rfft_interp2d
 
 from desc.backend import jnp

@@ -726,26 +726,45 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         # field period rotation is easiest in [R,phi,Z] coordinates
         coords_rpz = xyz2rpz(coords_xyz)
-        op = {
-            "B": self[0].compute_magnetic_field,
-            "A": self[0].compute_magnetic_vector_potential,
-        }[compute_A_or_B]
+        kernel = {"B": dipole_field, "A": dipole_vector_potential}[compute_A_or_B]
+
+        # Stack every dipole's position and moment so the kernel can sum over all
+        # sources in a single vectorized call. This replaces a sequential scan
+        # over each dipole (which also re-transformed the eval points once per
+        # dipole) and is mathematically identical, just summed in one shot.
+        #
+        # We stack on the host with NumPy rather than the jitted ``tree_stack``:
+        # routing ~10^5 scalar leaves through jit compiles an enormous XLA graph
+        # (minutes), while NumPy stacking is effectively instant. Fall back to
+        # ``tree_stack`` only if params are traced (e.g. inside an optimizer).
+        try:
+            sources = {
+                k: jnp.asarray(np.array([np.asarray(p[k]) for p in params]))
+                for k in params[0]
+            }
+        except Exception:
+            sources = tree_stack(params)
+        rs = jnp.stack([sources["x"], sources["y"], sources["z"]], axis=-1)
+        if "M0" in sources:
+            M0 = sources["M0"]
+        else:
+            M0 = sources["m0"] * sources["rho"]
+        sin_theta = jnp.sin(sources["theta"])
+        m_hat = jnp.stack(
+            [
+                sin_theta * jnp.cos(sources["phi"]),
+                sin_theta * jnp.sin(sources["phi"]),
+                jnp.cos(sources["theta"]),
+            ],
+            axis=-1,
+        )
+        m = M0[:, jnp.newaxis] * m_hat
 
         # sum the magnetic fields from each field period
         def nfp_loop(k, AB):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
-
-            def body(AB, x):
-                AB += op(
-                    coords_nfp,
-                    params=x,
-                    basis="rpz",
-                    source_grid=source_grid,
-                    chunk_size=chunk_size,
-                )
-                return AB, None
-
-            AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
+            AB_xyz = kernel(rpz2xyz(coords_nfp), rs, m, chunk_size=chunk_size)
+            AB += xyz2rpz_vec(AB_xyz, phi=coords_nfp[:, 1])
             return AB
 
         AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))

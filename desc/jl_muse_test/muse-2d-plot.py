@@ -30,11 +30,13 @@ def compute_average_normalized_field(
     #         B_plasma_chunk_size=B_plasma_chunk_size,
     #     )
     
-    surf_coords = eq.surface.compute(['R', 'phi', 'Z'], grid=grid)
+    # compute everything we need from the surface in a single pass so the
+    # transforms are only built once instead of three separate times.
+    surf_data = eq.surface.compute(['R', 'phi', 'Z', 'X', 'Y', 'n_rho'], grid=grid)
 
     # asked chatgpt to make the surf coords array
-    surf_coords_array = np.column_stack([surf_coords['R'], surf_coords['phi'], surf_coords['Z']])
-    n_surf = eq.surface.compute(['n_rho'], grid=grid)['n_rho']
+    surf_coords_array = np.column_stack([surf_data['R'], surf_data['phi'], surf_data['Z']])
+    n_surf = surf_data['n_rho']
     
     B_PM = field.compute_magnetic_field(surf_coords_array)
     
@@ -56,11 +58,10 @@ def compute_average_normalized_field(
 
     ### total objective: B_normal = [ (B_PM + B_TF) dot n_surf / norm]**2 <- make this zero
 
-    # make plot
-    data = eq.surface.compute(['X','Y','Z'], grid=grid)
-    X = np.asarray(data['X']).reshape(41,41)
-    Y = np.asarray(data['Y']).reshape(41,41)
-    Z = np.asarray(data['Z']).reshape(41,41)
+    # make plot (reuse the surface data computed above)
+    X = np.asarray(surf_data['X']).reshape(41,41)
+    Y = np.asarray(surf_data['Y']).reshape(41,41)
+    Z = np.asarray(surf_data['Z']).reshape(41,41)
 
     pgrid = pv.StructuredGrid(X,Y,Z)
     pgrid.point_data["bn"] = Bn / normalizing_field

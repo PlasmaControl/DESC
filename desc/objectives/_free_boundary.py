@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute._laplace import Options as LaplaceOptions
 from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _compute_RpZ_data as compute_fun_rpz
 from desc.grid import LinearGrid
 from desc.integrals import get_interpolator, virtual_casing_biot_savart
 from desc.io import IOAble
@@ -1374,7 +1375,11 @@ class FreeSurfaceError(_Objective):
 
         outer = compute_fun(
             self._field,
-            ["K_vc", "n_rho x B_coil"] if self._is_neumann else "|K_vc|^2",
+            (
+                ["K_vc", "n_rho x B_coil", "K_vc (periodic)"]
+                if self._is_neumann
+                else "|K_vc|^2"
+            ),
             field_params,
             constants["eval_transforms"],
             constants["profiles"],
@@ -1383,11 +1388,34 @@ class FreeSurfaceError(_Objective):
             B_coil=self._B_coil,
             field_grid=self._coil_grid,
         )
-        if self._is_neumann:
-            outer["K_vc"] -= outer["n_rho x B_coil"]
-            outer["|K_vc|^2"] = dot(outer["K_vc"], outer["K_vc"])
 
-        return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
+        outer_rpz = compute_fun_rpz(
+            self._field,
+            ["B"],
+            field_params,
+            constants["eval_transforms"],
+            constants["profiles"],
+            data=outer,
+            maxiter=self._maxiter,
+            chunk_size=self._chunk_size,
+            B_coil_chunk_size=self._B_coil_chunk_size,
+            B_coil=self._B_coil,
+            field_grid=self._coil_grid,
+            RpZ_data={"R": outer["R"], "Z": outer["Z"], "phi": outer["phi"]},
+            RpZ_grid=constants["eval_transforms"]["grid"],
+            eval_interpolator=outer["interpolator"],
+            B0=self._field._B0,
+            on_boundary=True,
+            **problem,
+        )
+
+        if self._is_neumann:
+            # Compute from equation 4.26 instead of the equation
+            # sandwhiched between 4.23 and 4.24 due to discretization error
+            # in quadrature messing up the optimizer.
+            outer["|B|^2"] = dot(outer_rpz["B"], outer_rpz["B"])
+
+        return (outer["|B|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
             "|e_theta x e_zeta|"
         ]
 

@@ -351,10 +351,14 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         z = params.get("z", self.z)
         phi = params.get("phi", self.phi)
         theta = params.get("theta", self.theta)
+<<<<<<< Updated upstream
         if "M0" in params:
             m0 = params["M0"]
         else:
             m0 = params.get("m0", self.m0) * params.get("rho", self.rho)
+=======
+        M = params.get("M", params.get("m0", self.m0) * params.get("rho", self.rho))
+>>>>>>> Stashed changes
 
         dipole_pos = jnp.array([[x, y, z]])
 

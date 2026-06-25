@@ -191,7 +191,7 @@ def test_objective_compute_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
@@ -212,7 +212,7 @@ def test_objective_compute_atf(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
@@ -233,7 +233,7 @@ def test_objective_jac_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        objective.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=80, iterations=1)
 
@@ -254,7 +254,7 @@ def test_objective_jac_atf(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        objective.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)
 
@@ -333,13 +333,15 @@ def test_proximal_jac_atf(benchmark):
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build()
     x = prox.x(eq)
-    prox.jac_scaled_error(x, prox.constants).block_until_ready()
+    prox.jac_scaled_error(x).block_until_ready()
 
     def run(x, prox):
-        prox.jac_scaled_error(x, prox.constants).block_until_ready()
+        prox.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=20, iterations=1)
 
@@ -361,19 +363,23 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
         constraint,
         eq,
         perturb_options={"verbose": 3},
-        solve_options={"verbose": 3, "maxiter": 0},
+        solve_options={
+            "verbose": 3,
+            "maxiter": 0,
+            "solve_during_proximal_build": False,
+        },
     )
     prox.build(verbose=3)
     x = prox.x(eq)
     # we change x slightly to profile solve/perturb equilibrium too
     # this one will compile everything inside the function
     x = x.at[0].add(np.random.rand() * 0.001)
-    _ = prox.jac_scaled_error(x, prox.constants).block_until_ready()
+    _ = prox.jac_scaled_error(x).block_until_ready()
 
     def run(x, prox):
         # we change x slightly to profile solve/perturb equilibrium too
         x = x.at[0].add(np.random.rand() * 0.001)
-        prox.jac_scaled_error(x, prox.constants).block_until_ready()
+        prox.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
 
@@ -388,16 +394,18 @@ def test_proximal_freeb_compute(benchmark):
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     x = obj.x(eq)
-    obj.compute_scaled_error(x, obj.constants).block_until_ready()
+    obj.compute_scaled_error(x).block_until_ready()
 
     def run(x, obj):
-        obj.compute_scaled_error(x, obj.constants).block_until_ready()
+        obj.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, obj), rounds=50, iterations=1)
 
@@ -412,16 +420,18 @@ def test_proximal_freeb_jac(benchmark):
     field = ToroidalMagneticField(1.0, 1.0)  # just a dummy field for benchmarking
     objective = ObjectiveFunction(BoundaryError(eq, field=field))
     constraint = ObjectiveFunction(ForceBalance(eq))
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     obj = LinearConstraintProjection(
         prox, ObjectiveFunction((FixCurrent(eq), FixPressure(eq), FixPsi(eq)))
     )
     obj.build()
     x = obj.x(eq)
-    obj.jac_scaled_error(x, prox.constants).block_until_ready()
+    obj.jac_scaled_error(x).block_until_ready()
 
     def run(x, obj, prox):
-        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        obj.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, obj, prox), rounds=10, iterations=1)
 
@@ -495,7 +505,7 @@ def test_objective_compute_ripple(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_compute_ripple_spline(benchmark):
+def test_objective_compute_ripple_bounce1d(benchmark):
     """Benchmark computing objective for effective ripple."""
     _test_objective_ripple(benchmark, True, "compute_scaled_error")
 
@@ -509,12 +519,12 @@ def test_objective_grad_ripple(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
-def test_objective_grad_ripple_spline(benchmark):
+def test_objective_grad_ripple_bounce1d(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
     _test_objective_ripple(benchmark, True, "jac_scaled_error")
 
 
-def _test_objective_ripple(benchmark, spline, method):
+def _test_objective_ripple(benchmark, use_bounce1d, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
@@ -526,18 +536,20 @@ def _test_objective_ripple(benchmark, spline, method):
                 num_transit=num_transit,
                 num_well=10 * num_transit,
                 num_quad=16,
-                spline=spline,
-                jac_chunk_size=1,
+                Y_B=64,
+                use_bounce1d=use_bounce1d,
             )
         ]
     )
     constraint = ObjectiveFunction([ForceBalance(eq)])
-    prox = ProximalProjection(objective, constraint, eq)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
     prox.build()
     x = prox.x(eq)
-    _ = getattr(prox, method)(x, prox.constants).block_until_ready()
+    _ = getattr(prox, method)(x).block_until_ready()
 
     def run(x, prox):
-        getattr(prox, method)(x, prox.constants).block_until_ready()
+        getattr(prox, method)(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)

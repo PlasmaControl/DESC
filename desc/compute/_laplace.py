@@ -43,8 +43,8 @@ class Options(NamedTuple):
     Phi_0: Optional[jax.Array] = None
     """Initial guess for iteration."""
 
-    atol: float = 1e-7
-    """Absolute error tolerance for the iterative linear solve. Default is ``1e-7``."""
+    atol: float = 1e-6
+    """Absolute error tolerance for the iterative linear solve. Default is ``1e-6``."""
 
     rtol: float = 1e-6
     """Relative error tolerance for the iterative linear solve. Default is ``1e-6``."""

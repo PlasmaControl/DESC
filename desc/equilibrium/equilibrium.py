@@ -1290,7 +1290,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Dictionary of optimizable parameters, eg field.params_dict.
-        method : string
+        method : str
             "biot-savart" or "virtual casing". both methods calculate the magnetic
             field directly from the current density. if you wish to use the curl(A)
             method, create a desc.magnetic_fields.PlasmaField object.
@@ -1344,6 +1344,7 @@ class Equilibrium(Optimizable, _MagneticField):
             # Default spectral resolution parameters
             if source_grid is None:
                 source_grid = QuadratureGrid(L=64, M=64, N=64, NFP=self.NFP)
+                # TODO: use LinearGrid at rho=1 if method="virtual casing"
 
             # Compute data for Biot-Savart integral
             data = self.compute(

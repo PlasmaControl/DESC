@@ -2032,9 +2032,11 @@ class Bxdl(_Objective):
         Equilibrium to compute the B_plasma contribution from at the curve.
     eq_grid : Grid, optional
         Collocation grid containing the nodes in the equilibrium to compute the plasma
-        magnetic field from.
-        Default grid is: ``QuadratureGrid(L=2*eq.L_grid, M=2*eq.M_grid, N=2 *
-        eq.N_grid, NFP=eq.NFP)``
+        magnetic field from. Default grid is:
+        ``QuadratureGrid(L=2*eq.L_grid, M=2*eq.M_grid, N=2*eq.N_grid, NFP=eq.NFP)``
+        if eq_method="biot-savart" and
+        ``LinearGrid(rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``
+        if eq_method="virtual casing".
     eval_grid : Grid, optional
         Collocation grid for the points to evaluate the objective at on the curve.
         Default grid is determined by the Curve object.
@@ -2050,11 +2052,11 @@ class Bxdl(_Objective):
         Whether to fix the field's DOFs during the optimization. Default is False.
     curve_fixed : bool, optional
         Whether to fix the curve's DOFs during the optimization. Default is True.
-    eq_kwargs : dict, optional
-        Additional keyword arguments to pass to the equilibrium's
-        ``compute_magnetic_field`` method.
     eq_fixed : bool, optional
         True if the equilibrium is fixed in the optimization. Default is True.
+    eq_method : str, optional
+        "biot-savart" or "virtual casing" method for Equilibrium.compute_magnetic_field.
+        Default is "biot-savart" if eq_fixed=True and "virtual casing" otherwise.
 
     """
 
@@ -2074,6 +2076,7 @@ class Bxdl(_Objective):
         "_field_fixed",
         "_curve_fixed",
         "_eq_fixed",
+        "_eq_method",
     ]
 
     def __init__(
@@ -2093,15 +2096,16 @@ class Bxdl(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
-        eq_kwargs={},
         field_fixed=False,
         curve_fixed=True,
         eq_fixed=True,
-        **kwargs,
+        eq_method=None,
     ):
-
         if target is None and bounds is None:
             target = 0
+        if eq_method is None:
+            eq_method = "biot-savart" if eq_fixed else "virtual casing"
+        assert eq_method in ["biot-savart", "virtual casing"]
 
         self._eval_grid = eval_grid
         self._curve = curve
@@ -2110,12 +2114,12 @@ class Bxdl(_Objective):
         self._eq = eq
         self._eq_grid = eq_grid
         self._bs_chunk_size = bs_chunk_size
-        self._eq_kwargs = eq_kwargs
-        things = []
+        self._eq_method = eq_method
         self._field_fixed = field_fixed
         self._curve_fixed = curve_fixed
         self._eq_fixed = eq_fixed
 
+        things = []
         if not field_fixed:
             things += self._field
         if not curve_fixed:
@@ -2180,9 +2184,14 @@ class Bxdl(_Objective):
         B_plasma = None
         if self._eq is not None:
             if self._eq_grid is None:
-                eq_grid = QuadratureGrid(
-                    L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
-                )
+                if self._eq_method == "biot-savart":
+                    eq_grid = QuadratureGrid(
+                        L=2 * eq.L_grid, M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP
+                    )
+                else:
+                    eq_grid = LinearGrid(
+                        rho=[1.0], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                    )
             else:
                 eq_grid = self._eq_grid
             eq_data_keys = ["J", "phi", "sqrt(g)", "x"]
@@ -2195,7 +2204,7 @@ class Bxdl(_Objective):
                     source_grid=eq_grid,
                     basis="rpz",
                     transforms=transforms,
-                    **self._eq_kwargs,
+                    method=self._eq_method,
                 )
         else:
             eq_grid = None
@@ -2256,8 +2265,7 @@ class Bxdl(_Objective):
         if not self._field_fixed:
             field_params = params[:end_index]
 
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._curve_fixed:
             eval_data = constants["eval_data"]
         else:
@@ -2288,7 +2296,7 @@ class Bxdl(_Objective):
                 params=eq_params if not self._eq_fixed else None,
                 basis="rpz",
                 transforms=constants["eq_transforms"],
-                **self._eq_kwargs,
+                method=self._eq_method,
             )
             B_ext = B_ext + B_plasma
         f = safenorm(cross(B_ext, eval_data["frenet_tangent"], axis=-1), axis=-1)

@@ -1,26 +1,52 @@
 """Objectives for solving free boundary equilibria."""
 
 import numpy as np
+from jax.lax import stop_gradient
 from scipy.constants import mu_0
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
+from desc.compute._laplace import Options as LaplaceOptions
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
-from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
+from desc.integrals import get_interpolator, virtual_casing_biot_savart
+from desc.io import IOAble
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective, collect_docs
+from desc.optimizable import Optimizable, optimizable_parameter
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    cross,
+    dot,
     errorif,
     parse_argname_change,
     setdefault,
     warnif,
 )
 
-from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
+
+
+class _FreeSurfaceSheetCurrent(IOAble, Optimizable):
+    """Optimizable toroidal sheet-current parameter for FreeSurfaceError."""
+
+    _io_attrs_ = ["_I_sheet"]
+
+    def __init__(self):
+        self.I_sheet = 0.0
+
+    @optimizable_parameter
+    @property
+    def I_sheet(self):
+        """float: Net toroidal sheet current determining a circulation of Phi."""
+        return self._I_sheet
+
+    @I_sheet.setter
+    def I_sheet(self, new):
+        new = jnp.asarray(new)
+        assert new.size == 1
+        self._I_sheet = new.squeeze()
 
 
 class VacuumBoundaryError(_Objective):
@@ -545,51 +571,20 @@ class BoundaryError(_Objective):
         else:
             source_grid = self._source_grid
 
-        if self._eval_grid is None:
-            eval_grid = source_grid
-        else:
-            eval_grid = self._eval_grid
-
+        eval_grid = setdefault(self._eval_grid, source_grid)
         self._use_same_grid = eval_grid.equiv(source_grid)
 
-        errorif(
-            not np.all(source_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "source_grid contains nodes not on rho=1",
+        ratio_data = (
+            eq.compute(["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid)
+            if (self._st is None or self._sz is None or self._q is None)
+            else {}
         )
-        errorif(
-            not np.all(eval_grid.nodes[:, 0] == 1.0),
-            ValueError,
-            "eval_grid contains nodes not on rho=1",
+        interpolator = get_interpolator(
+            eval_grid, source_grid, ratio_data, st=self._st, sz=self._sz, q=self._q
         )
-        errorif(
-            source_grid.sym,
-            ValueError,
-            "Source grids for singular integrals must be non-symmetric",
-        )
-
-        if self._st is None or self._sz is None or self._q is None:
-            ratio_data = eq.compute(
-                ["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid
-            )
-            st, sz, q = best_params(source_grid, best_ratio(ratio_data))
-            self._st = setdefault(self._st, st)
-            self._sz = setdefault(self._sz, sz)
-            self._q = setdefault(self._q, q)
-
-        try:
-            interpolator = FFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
-        except AssertionError as e:
-            warnif(
-                True,
-                msg="Could not build fft interpolator, switching to dft which is slow."
-                "\nReason: " + str(e),
-            )
-            interpolator = DFTInterpolator(
-                eval_grid, source_grid, self._st, self._sz, self._q
-            )
+        del self._st
+        del self._sz
+        del self._q
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(
@@ -779,7 +774,7 @@ class BoundaryError(_Objective):
         )
         Bjump = Bex_total - Bin_total
         if self._sheet_current:
-            Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
+            Kerr = mu_0 * sheet_eval_data["K"] - cross(eval_data["n_rho"], Bjump)
             Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
             return jnp.concatenate([Bn_err, Bsq_err, Kerr])
         else:
@@ -899,6 +894,515 @@ class BoundaryError(_Objective):
             )
             _print(fmt, fmax, fmin, fmean, f0max, f0min, f0mean, norm, unit)
         return out
+
+
+class FreeSurfaceError(_Objective):
+    """Target for free surface ideal MHD equilirium as described in [1]_.
+
+    References
+    ----------
+    .. [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
+
+    Notes
+    -----
+    Performance is expected to improve significantly by resolving GitHub
+    issues #1034 and #2171.
+
+    If reverse mode differentiation is being used, it is of great benefit for
+    the objective residual to be a lower dimensional item. In such cases, it is
+    better to instead use a loss function that reduces the dimension of the
+    residual before computing the derivative relevant for optimization. This can
+    be a mean squared error over all points of the output grid or mean absolute
+    error over blocks of the grid, etc.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        ``Equilibrium`` to be optimized.
+    field : FreeSurfaceOuterField or SourceFreeField
+        Laplace solver object.
+
+        If is an instance of ``FreeSurfaceOuterField``
+        assumes ``field._B_coil`` is the magnetic field due to coils.
+        If is an instance of ``SourceFreeField`` then assumes ``field._B0`` is
+        the magnetic field due to coils.
+
+        The net toroidal sheet current ``I_sheet`` is an optimizable scalar
+        parameter initialized to zero.
+    grid : Grid
+        Grid for the integral transforms.
+        Tensor-product grid in (θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP) on the boundary.
+        Default is ``LinearGrid(M=eq.M_grid,N=eq.N_grid,NFP=eq.NFP)``.
+    coil_grid : Grid, optional
+        Source grid used to discretize coil magnetic field computation.
+        Default is default grid of coil magnetic field.
+    q : int
+        Order of integration on the local singular grid.
+    fix_I_sheet : bool, optional
+        Whether to fix the net toroidal sheet current to zero instead of optimizing it.
+    options : LaplaceOptions
+        Options for the Laplace solver. Defaults to ``LaplaceOptions()``, which
+        defaults to the GMRES iterative solver. Other options are BiCGStab and direct.
+        Fastest is typically BiCGStab (heed the note in the max_steps option).
+        If an iterative solver errors due to incompatibility with old JAX versions,
+        ``"fixed_point"`` can be selected instead if ``optimistix`` is installed.
+    use_dft : bool
+        Whether to use the DFT interpolator for singular integrals instead of the
+        FFT interpolator. Default is ``False``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _print_value_fmt = "Free surface Error: "
+    _units = "T^2 m^2"
+
+    _static_attrs = _Objective._static_attrs + [
+        "_is_neumann",
+        "_field",
+        "_B_coil",
+        "_use_same_grid",
+        "_q",
+        "_fix_I_sheet",
+        "_use_dft",
+        "_options",
+        "_grad_keys",
+        "_inner_keys",
+        "_reuseable_keys",
+    ]
+
+    _coordinates = "rtz"
+
+    def __init__(
+        self,
+        eq,
+        field,
+        *,
+        grid=None,
+        coil_grid=None,
+        q=None,
+        fix_I_sheet=False,
+        use_dft=False,
+        options=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        jac_chunk_size=None,
+        name="Free surface error",
+        **kwargs,
+    ):
+        if target is None and bounds is None:
+            target = 0.0
+
+        if grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP if eq.N > 0 else 64,
+                sym=False,
+            )
+        assert grid.can_fft2
+        errorif(field.M_Phi > grid.M, msg=f"M_Phi = {field.M_Phi} > {grid.M} = grid.M.")
+        errorif(field.N_Phi > grid.N, msg=f"N_Phi = {field.N_Phi} > {grid.N} = grid.N.")
+
+        self._is_neumann = not hasattr(field, "M_Phi_coil")
+        errorif(
+            not self._is_neumann and field.M_Phi_coil > grid.M,
+            msg=f"M_Phi_coil = {getattr(field, 'M_Phi_coil', 0)} > {grid.M} = grid.M.",
+        )
+        errorif(
+            not self._is_neumann and field.N_Phi_coil > grid.N,
+            msg=f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > {grid.N} = grid.N.",
+        )
+        eval_grid = (
+            grid
+            if (grid.M == field.M_Phi and grid.N == field.N_Phi)
+            else LinearGrid(M=field.M_Phi, N=field.N_Phi, NFP=grid.NFP, sym=False)
+        )
+        assert eval_grid.can_fft2
+
+        errorif(
+            field.M_Phi != eval_grid.M,
+            msg=f"M_Phi = {field.M_Phi} != {eval_grid.M} = eval_grid.M.",
+        )
+        errorif(
+            field.N_Phi != eval_grid.N,
+            msg=f"N_Phi = {field.N_Phi} != {eval_grid.N} = eval_grid.N.",
+        )
+        errorif(
+            not self._is_neumann and field.M_Phi_coil > eval_grid.M,
+            msg=(
+                f"M_Phi_coil = {getattr(field, 'M_Phi_coil', 0)} > "
+                f"{eval_grid.M} = eval_grid.M."
+            ),
+        )
+        errorif(
+            not self._is_neumann and field.N_Phi_coil > eval_grid.N,
+            msg=(
+                f"N_Phi_coil = {getattr(field, 'N_Phi_coil', 0)} > "
+                f"{eval_grid.N} = eval_grid.N."
+            ),
+        )
+
+        self._field = field
+        self._B_coil = field._B0 if self._is_neumann else field._B_coil
+        self._grid = grid
+        self._eval_grid = eval_grid
+        self._coil_grid = coil_grid
+        self._use_same_grid = grid.equiv(eval_grid)
+        self._q = q
+        self._fix_I_sheet = fix_I_sheet
+        self._use_dft = use_dft
+        I_sheet = _FreeSurfaceSheetCurrent()
+        if options is None:
+            options = LaplaceOptions()
+        else:
+            options = LaplaceOptions(*options)
+        options = options._replace(
+            problem="exterior Neumann" if self._is_neumann else "interior Dirichlet"
+        )
+        self._options = tuple(options)  # DESC is dumb and casts NamedTuples to Tuples
+        self._grad_keys = ["grad(theta)", "grad(zeta)", "n_rho"]
+        self._inner_keys = [
+            "|B|^2",
+            "p",
+            "I",
+            "R",
+            "phi",
+            "omega",
+            "Z",
+            "|e_theta x e_zeta|",
+        ] + self._grad_keys
+        self._reuseable_keys = [
+            "0",
+            "R",
+            "phi",
+            "omega",
+            "R_t",
+            "R_z",
+            "Z",
+            "Z_t",
+            "Z_z",
+            "e_theta",
+            "e_theta x e_zeta",
+            "e_zeta",
+            "n_rho",
+            "omega_t",
+            "omega_z",
+            "|e_theta x e_zeta|",
+        ]
+
+        things = [eq] if fix_I_sheet else [eq, I_sheet]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        options = LaplaceOptions(*self._options)
+
+        eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
+        eval_transforms = get_transforms("|K_vc|^2", self._field, grid=self._eval_grid)
+        if self._use_same_grid:
+            source_transforms = eval_transforms
+            grad_transforms = eq_transforms
+        else:
+            source_transforms = get_transforms("Phi_mn", self._field, grid=self._grid)
+            grad_transforms = get_transforms(
+                self._grad_keys + ["phi", "omega", "Z"], eq, grid=self._grid
+            )
+
+        data, _ = self._field.compute(
+            ["interpolator"] if self._is_neumann else ["interpolator", "Y_coil"],
+            grid=self._grid,
+            q=self._q,
+            transforms=source_transforms,
+            B_coil=self._B_coil,
+            options=options,
+            potential_grid=self._eval_grid,
+            use_dft=self._use_dft,
+        )
+        # No net poloidal current in equation 4.13 of [1].
+        self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
+        profiles = get_profiles(self._inner_keys, eq, grid=self._eval_grid)
+        initial_guess = self._compute_initial_guess(
+            eq,
+            source_transforms,
+            eval_transforms,
+            profiles,
+            data["interpolator"],
+            None if self._fix_I_sheet else self.things[1].params_dict,
+        )
+
+        self._constants = {
+            "interpolator": data["interpolator"],
+            "eq_transforms": eq_transforms,
+            "grad_transforms": grad_transforms,
+            "eval_transforms": eval_transforms,
+            "source_transforms": source_transforms,
+            "profiles": profiles,
+            "initial_guess": initial_guess,
+            "quad_weights": np.sqrt(eval_transforms["grid"].weights),
+        }
+        self._dim_f = self._eval_grid.num_nodes
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (
+                np.ones(self._eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def _compute_initial_guess(
+        self,
+        eq,
+        source_transforms,
+        eval_transforms,
+        profiles,
+        interpolator,
+        I_sheet_params=None,
+    ):
+        """Compute the potential used to initialize iterative solves."""
+        options = LaplaceOptions(*self._options)
+        params = eq.params_dict
+        I_sheet = 0.0 if I_sheet_params is None else I_sheet_params["I_sheet"][0]
+        source_grid = self._grid
+        source_keys = self._reuseable_keys + ["grad(theta)", "grad(zeta)", "I"]
+        source_data = eq.compute(
+            source_keys,
+            grid=source_grid,
+        )
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            "I": source_data["I"][source_grid.unique_rho_idx[-1]] + I_sheet,
+            "Y": self._field.Y,
+        }
+        data = {key: source_data[key] for key in self._reuseable_keys}
+        data["interpolator"] = interpolator
+        if not self._use_same_grid:
+            data["potential data"] = eq.compute(["R", "phi", "Z"], grid=self._eval_grid)
+        data["B0*n"] = self._phi_sec_dot_n(field_params, source_data)
+        if self._is_neumann:
+            data, _ = self._field.compute(
+                "B_coil",
+                grid=source_grid,
+                params=field_params,
+                transforms=source_transforms,
+                data=data,
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+            data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+        elif not self._use_same_grid:
+            potential_field_data, _ = self._field.compute(
+                "Phi_coil (periodic)",
+                grid=self._eval_grid,
+                params=field_params,
+                transforms=eval_transforms,
+                data={"Y_coil": self._field.Y},
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+            data["Phi_coil (periodic)"] = potential_field_data["Phi_coil (periodic)"]
+
+        data = compute_fun(
+            self._field,
+            "Phi (periodic)",
+            field_params,
+            eval_transforms,
+            profiles,
+            data=data,
+            options=options._replace(solve_method="gmres"),
+            B_coil=self._B_coil,
+            field_grid=self._coil_grid,
+        )
+        # We differentiate through the solution, not the initial guess,
+        # so we stop the gradient for numerical stability.
+        return stop_gradient(data["Phi (periodic)"])
+
+    def compute(self, params, I_sheet_params=None, constants=None):
+        """Compute boundary error.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        I_sheet_params : dict
+            Dictionary containing the optimizable sheet current ``I_sheet``. If omitted,
+            the sheet current is fixed to zero.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary error [[B² + 2μ₀p]]*area Jacobian in T² m².
+
+        """
+        constants = self._get_deprecated_constants(constants)
+        eq = self.things[0]
+        I_sheet = 0.0 if I_sheet_params is None else I_sheet_params["I_sheet"][0]
+        options = LaplaceOptions(*self._options)._replace(
+            Phi_0=constants["initial_guess"]
+        )
+
+        inner = compute_fun(
+            eq,
+            self._inner_keys,
+            params,
+            constants["eq_transforms"],
+            constants["profiles"],
+        )
+        field_params = {
+            "R_lmn": params["Rb_lmn"],
+            "Z_lmn": params["Zb_lmn"],
+            # This is I_plasma + I_sheet.
+            "I": inner["I"][self._eval_grid.unique_rho_idx[-1]] + I_sheet,
+            "Y": self._field.Y,
+        }
+        outer = {key: inner[key] for key in self._reuseable_keys}
+
+        if self._is_neumann:
+            outer = compute_fun(
+                self._field,
+                "B_coil",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=outer,
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+        elif not self._use_same_grid:
+            outer = compute_fun(
+                self._field,
+                "Phi_coil (periodic)",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=outer,
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )
+
+        potential_data = (
+            None
+            if self._use_same_grid
+            else {key: inner[key] for key in ["R", "phi", "Z"]}
+        )
+
+        if self._use_same_grid:
+            outer["interpolator"] = constants["interpolator"]
+            outer["B0*n"] = self._phi_sec_dot_n(field_params, inner)
+            if self._is_neumann:
+                outer["B0*n"] += dot(outer["B_coil"], inner["n_rho"])
+        else:
+            grads = compute_fun(
+                eq,
+                self._grad_keys + ["phi", "omega", "Z"],
+                params,
+                constants["grad_transforms"],
+                constants["profiles"],
+            )
+            data = {key: grads[key] for key in self._reuseable_keys}
+            data["interpolator"] = constants["interpolator"]
+            if potential_data is not None:
+                data["potential data"] = potential_data
+            if not self._is_neumann:
+                data["Phi_coil (periodic)"] = outer["Phi_coil (periodic)"]
+            data["B0*n"] = self._phi_sec_dot_n(field_params, grads)
+            if self._is_neumann:
+                data = compute_fun(
+                    self._field,
+                    "B_coil",
+                    field_params,
+                    constants["source_transforms"],
+                    constants["profiles"],
+                    data=data,
+                    options=options,
+                    B_coil=self._B_coil,
+                    field_grid=self._coil_grid,
+                )
+                data["B0*n"] += dot(data["B_coil"], data["n_rho"])
+
+            outer["Phi_mn"] = compute_fun(
+                self._field,
+                "Phi_mn",
+                field_params,
+                constants["eval_transforms"],
+                constants["profiles"],
+                data=data,
+                options=options,
+                B_coil=self._B_coil,
+                field_grid=self._coil_grid,
+            )["Phi_mn"]
+
+        outer = compute_fun(
+            self._field,
+            ["K_vc", "n_rho x B_coil"] if self._is_neumann else "|K_vc|^2",
+            field_params,
+            constants["eval_transforms"],
+            constants["profiles"],
+            data=outer,
+            options=options,
+            B_coil=self._B_coil,
+            field_grid=self._coil_grid,
+        )
+        if self._is_neumann:
+            outer["K_vc"] -= outer["n_rho x B_coil"]
+            outer["|K_vc|^2"] = dot(outer["K_vc"], outer["K_vc"])
+
+        return (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
+            "|e_theta x e_zeta|"
+        ]
+
+    @staticmethod
+    def _phi_sec_dot_n(params, grads):
+        return dot(
+            params["I"] * grads["grad(theta)"] + params["Y"] * grads["grad(zeta)"],
+            grads["n_rho"],
+        )
 
 
 class BoundaryErrorNESTOR(_Objective):

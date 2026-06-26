@@ -131,9 +131,7 @@ def test_lstsq():
     # square
     A = rng.standard_normal((5, 5))
     b = rng.standard_normal(5)
-    np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
-    )
+    np.testing.assert_allclose(_lstsq(A, b), np.linalg.solve(A, b), rtol=1e-6)
     # scalar
     A = rng.standard_normal((1, 5))
     b = rng.standard_normal(1)

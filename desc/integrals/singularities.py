@@ -4,7 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 from functools import partial
 
-from interpax_fft import rfft2_modes, rfft2_vander, rfft_interp2d
+from interpax_fft import rfft2_modes, rfft_interp2d
 from scipy.constants import mu_0
 
 from desc.backend import jit, jnp, rfft2
@@ -349,36 +349,41 @@ class DFTInterpolator(_BIESTInterpolator):
 
     """
 
-    _io_attrs_ = _BIESTInterpolator._io_attrs_ + ["_modes_fft", "_modes_rfft"]
+    _io_attrs_ = _BIESTInterpolator._io_attrs_ + [
+        "_modes_z",
+        "_modes_t",
+        "_vander_z",
+        "_vander_t",
+    ]
 
     def __init__(self, eval_grid, source_grid, st, sz, q, **kwargs):
         st = parse_argname_change(st, kwargs, "s", "st")
         super().__init__(eval_grid, source_grid, st, sz, q)
-        self._modes_fft, self._modes_rfft = rfft2_modes(
-            source_grid.num_theta,
+        self._modes_z, self._modes_t = rfft2_modes(
             source_grid.num_zeta,
-            domain_rfft=(0, 2 * jnp.pi / source_grid.NFP),
+            source_grid.num_theta,
+            domain_fft=(0, 2 * jnp.pi / source_grid.NFP),
+            domain_rfft=(0, 2 * jnp.pi),
         )
+        self._vander_z = jnp.exp(1j * eval_grid.unique_zeta[:, None] * self._modes_z)
+        self._vander_t = jnp.exp(1j * eval_grid.unique_theta[:, None] * self._modes_t)
 
     def fourier(self, f):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
-        i = (0, -1) if (self.source_grid.num_zeta % 2 == 0) else 0
+        i = (0, -1) if (self.source_grid.num_theta % 2 == 0) else 0
         return 2 * rfft2(
             self.source_grid.meshgrid_reshape(f, "rtz")[0],
-            axes=(0, 1),
+            axes=(1, 0),
             norm="forward",
-        ).at[:, i].divide(2).reshape(-1, *f.shape[1:])
+        ).at[i].divide(2)
 
     def vander_polar(self, i):
-        """Return Vandermonde matrix for ith polar node."""
-        return rfft2_vander(
-            self.eval_grid.unique_theta + self._shift_t[i],
-            self.eval_grid.unique_zeta + self._shift_z[i],
-            self._modes_fft,
-            self._modes_rfft,
-            inverse_idx_fft=self.eval_grid.inverse_theta_idx,
-            inverse_idx_rfft=self.eval_grid.inverse_zeta_idx,
-        ).reshape(self.eval_grid.num_nodes, -1)
+        """Return shifted 1D Vandermonde matrices for ith polar node."""
+        z = self._vander_z * jnp.exp(1j * self._modes_z * self._shift_z[i])
+        t = self._vander_t * jnp.exp(1j * self._modes_t * self._shift_t[i])
+        z = z[self.eval_grid.inverse_zeta_idx]
+        t = t[self.eval_grid.inverse_theta_idx]
+        return z, t
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
         """Interpolate ``f`` to polar node ``i`` around evaluation grid.
@@ -392,8 +397,8 @@ class DFTInterpolator(_BIESTInterpolator):
         is_fourier : bool
             Whether ``f`` holds Fourier coefficients as returned by
             ``self.fourier``. Default is false.
-        vander : jnp.ndarray
-            Cached value for ``self.vander_polar(i)``.
+        vander : tuple[jnp.ndarray, jnp.ndarray]
+            Optional, cached value of ``vander_polar(i)``.
 
         Returns
         -------
@@ -405,7 +410,10 @@ class DFTInterpolator(_BIESTInterpolator):
             f = self.fourier(f)
         if vander is None:
             vander = self.vander_polar(i)
-        return jnp.real(vander @ f)
+
+        return jnp.einsum(
+            "mn...,zn,tm->tz...", f, *vander, optimize=[(0, 1), (0, 1)]
+        ).real
 
 
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):

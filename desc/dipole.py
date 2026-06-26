@@ -1,13 +1,11 @@
 """Classes for dipoles."""
 
-import numbers
-import os
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
 
 import numpy as np
-from scipy.constants import mu_0
+from desc.integrals import compute_B_plasma
 
 from desc.backend import (
     fori_loop,
@@ -44,13 +42,44 @@ from desc.utils import (
     xyz2rpz,
     xyz2rpz_vec,
 )
-
 from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 @partial(jit, static_argnames=["chunk_size"])
 def magnetic_dipole_field(
     eval_pts, mag_points, phi, theta, m0, *, chunk_size=None
 ):
+    """External magnetic field produced by a magnetic dipole, following [1].
+
+    The magnetic dipole is approximated by a single, dimensionless point.
+
+    References
+    ----------
+    [1] Chow, "Introduction to electromagnetic theory: a modern perspective" (2006)
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    mag_points : array-like shape(m,3)
+        Points in cartesian space defining the location of each point dipole.
+    phi : float
+        Azimuthal orientation of the dipole (in radians).
+    theta : float
+        Polar orientation of the dipole (in radians).   
+    m0 : float
+        Effective dipole moment strength, with radial direction.
+    chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+
+    """
     m_hat = jnp.array(
         [
             jnp.sin(theta) * jnp.cos(phi),
@@ -68,6 +97,39 @@ def magnetic_dipole_field(
 def magnetic_dipole_vector_field(
     eval_pts, mag_points, phi, theta, m0, *, chunk_size=None
 ):
+    """Vector potential of a magnetic dipole, following [1].
+
+    The magnetic dipole is approximated by a single, dimensionless point.
+
+    References
+    ----------
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart
+        fields of a filamentary segment" (2002)
+
+    Parameters
+    ----------
+    eval_pts : array-like shape(n,3)
+        Evaluation points in cartesian coordinates
+    mag_points : array-like shape(m,3)
+        Points in cartesian space defining the location of each point dipole.
+    phi : float
+        Azimuthal orientation of the dipole (in radians).
+    theta : float
+        Polar orientation of the dipole (in radians).   
+    m0 : float
+        Effective dipole moment strength, with radial direction.
+    chunk_size : int or None
+        Unused by this function, only kept for API compatibility.
+        Size to split computation into chunks of evaluation points.
+        If no chunking should be done or the chunk size is the full input
+        then supply ``None``. Default is ``None``.
+
+    Returns
+    -------
+    A : ndarray, shape(n,3)
+        Magnetic vector potential in cartesian components at specified points
+
+    """
     m_hat = jnp.array(
         [
             jnp.sin(theta) * jnp.cos(phi),
@@ -79,59 +141,26 @@ def magnetic_dipole_vector_field(
     return dipole_vector_potential(
         eval_pts, mag_points, m_vector, chunk_size=chunk_size
     )
-
-def test_magnetic_dipole():
-    mu_0 = 4 * np.pi * 1e-7
-    
-    # single dipole at origin, pointing in z-direction and measured from the z axis
-    mag_points = jnp.array([[0.0, 0.0, 0.0]])
-    m_magnitude = 1.0  
-    theta = 0.0 # +z
-    phi = 0.0
-    
-    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
-    
-    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    
-    r = 1.0
-    B_expected_mag = (mu_0 / (4 * np.pi)) * (2 * m_magnitude / r**3)
-    B_expected = jnp.array([[0.0, 0.0, B_expected_mag]])
-    A_expected = jnp.array([[0.0, 0.0, 0.0]])
-    
-    print(f"calculated magnetic field: {B[0]}")
-    print(f"expected magnetic field: {B_expected[0]}")
-    print(f"calculated vector potential field: {A[0]}")
-    print(f"expected vector potential field: {A_expected[0]}")
-
-    # single dipole at origin, pointing in x-direction and measured from the z axis
-    mag_points = jnp.array([[0.0, 0.0, 0.0]])
-    m_magnitude = 1.0  
-    theta = jnp.pi/2 # +x
-    phi = 0.0
-    
-    eval_pts = jnp.array([[0.0, 0.0, 1.0]]) 
-    
-    B = magnetic_dipole_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    A = magnetic_dipole_vector_field(eval_pts, mag_points, phi, theta, m_magnitude)
-    
-    r = 1.0
-    B_expected_mag = (mu_0 / (4 * np.pi)) * (-m_magnitude / r**3)
-    B_expected = jnp.array([[B_expected_mag, 0.0, 0.0]])
-    A_expected_mag = (mu_0 / (4 * np.pi)) * (m_magnitude)/(r**2)
-    A_expected = jnp.array([[0.0, A_expected_mag, 0.0]])
-    
-    print(f"calculated magnetic field: {B[0]}")
-    print(f"expected magnetic field: {B_expected[0]}")
-    print(f"calculated vector potential field: {A[0]}")
-    print(f"expected vector potential field: {A_expected[0]}")
-
-if __name__ == "__main__":
-    test_magnetic_dipole()
     
 
 class _Dipole(_MagneticField, Optimizable, ABC):
-    """Implements ideal dipole that can be used in place of _dipole in a MixeddipoleSet"""
+    """Base class representing an ideal magnetic dipole.
+
+    Represents dipoles as single point with orientation
+
+    Parameters
+    ----------
+    phi : float
+        Azimuthal orientation of the dipole (in radians).
+    theta : float
+        Polar orientation of the dipole (in radians).   
+    m0 : float
+        Effective dipole moment strength, with radial direction.
+    rho : float
+        Dimensionless optimization parameter in range (-1, 1) that defines radial
+        direction and magntiude of the dipole; positive is radially outward, negative is 
+        radially inward.
+    """
     
     _io_attrs_ = _MagneticField._io_attrs_ + ["_x"] + ["_y"] + ["_z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name", "_shift", "_rotmat"] + ["_name"]
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_name"]
@@ -248,7 +277,9 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @optimizable_parameter
     @property
     def rho(self):
-        """float: Dimensionless optimization parameter in range (-1, 1)."""
+        """float: Dimensionless optimization parameter in range (-1, 1) that defines radial
+        direction and magntiude of the dipole; positive is radially outward, negative is 
+        radially inward."""
         return self._rho
 
     @rho.setter
@@ -277,11 +308,13 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     
     @property
     def M0(self):
-        """float: Effective dipole moment strength."""
+        """float: Effective dipole moment strength, with radial direction."""
         return self._m0 * self._rho
     
     @property
     def m_xyz(self):
+        """float: Effective dipole moment strength, with radial direction expressed
+        in an array of its x, y, and z components."""
         M0 = self.m0 * self.rho
         theta = self._theta
         phi = self._phi
@@ -304,6 +337,35 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         compute_A_or_B="B",
         chunk_size=None,
     ):
+        """Compute magnetic field or vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Dipole.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        compute_A_or_B: {"A", "B"}, optional
+            whether to compute the magnetic vector potential "A" or the magnetic field
+            "B". Defaults to "B"
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        """
         errorif(
             compute_A_or_B not in ["A", "B"],
             ValueError,
@@ -358,8 +420,6 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
         dipole_pos = jnp.array([[x, y, z]])
 
-        m_vec = self.m_xyz
-
         AB = op(
             coords,
             dipole_pos,
@@ -382,6 +442,33 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         transforms=None,
         chunk_size=None,
     ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Dipole.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            magnetic field at specified points, in either rpz or xyz coordinates
+
+        """
         return self._compute_A_or_B(
             coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
         )
@@ -395,19 +482,46 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         transforms=None,
         chunk_size=None,
     ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict, optional
+            Parameters to pass to Curve.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize coil. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        vector_potential : ndarray, shape(n,3)
+            Magnetic vector potential at specified points, in either rpz or
+             xyz coordinates.
+
+        """
         return self._compute_A_or_B(
             coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
         )
     
     def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in X,Y,Z coordinates."""
+        """Translate the Dipole by a rigid displacement in X,Y,Z coordinates."""
         self._x += jnp.asarray(displacement)[0]
         self._y += jnp.asarray(displacement)[1]
         self._z += jnp.asarray(displacement)[2]
         self.shift = self.shift + jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
-        """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
+        """Rotate the Dipole by a fixed angle about axis in X,Y,Z coordinates."""
         R = rotation_matrix(axis=axis, angle=angle)
         
         pos = jnp.array([self._x, self._y, self._z])
@@ -427,7 +541,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         self.shift = self.shift @ R.T
 
     def flip(self, normal=[0, 0, 1]):
-        """Flip the curve about the plane with specified normal in X,Y,Z coordinates."""
+        """Flip the Dipole about the plane with specified normal in X,Y,Z coordinates."""
         F = reflection_matrix(normal)
         
         pos = jnp.array([self._x, self._y, self._z])
@@ -456,6 +570,27 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         )
     
 class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
+    """Set of dipoles with shared parameterization.
+
+    Parameters
+    ----------
+    dipoles : Dipole or array-like of Dipoles
+        Collection of dipoles.
+    NFP : int (optional)
+        Number of field periods for enforcing field period symmetry.
+        If NFP > 1, only include the unique coils in the first field period,
+        and the magnetic field will be computed assuming 'virtual' dipoles from the other
+        field periods. Default = 1.
+    sym : bool (optional)
+        Whether to enforce stellarator symmetry. If sym = True, only include the
+        unique dipoles in a half field period, and the magnetic field will be computed
+        assuming 'virtual' dipoles from the other half field period. Default = False.
+    name : str
+        Name of this DipoleSet.
+    check_intersection: bool
+        Whether or not to check the dipoles in the dipoleset for intersections.
+
+    """
     _io_attrs_ = _Dipole._io_attrs_ + ["_dipoles", "_NFP", "_sym"]
     _io_attrs_.remove("_rho")
     _static_attrs = (
@@ -477,7 +612,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
     @property
     def name(self):
-        """str: Name of the curve."""
+        """str: Name of the dipole."""
         return self.__dict__.setdefault("_name", "")
     
     @name.setter
@@ -516,15 +651,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         new = jnp.atleast_1d(new).flatten()
         new = jnp.broadcast_to(new, (len(old),))
         new = tree_unflatten(tree, new)
-
-
-
-
-        # note to find out what cur is and maybe make an edit here
-
-
-
-
         for dipole, cur in zip(self.dipoles, new):
             dipole.rho = cur
 
@@ -550,6 +676,32 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     def compute(
         self, names, grid=None, params=None, transforms=None, data=None, **kwargs
     ):
+        """Compute the quantity given by name on grid, for each dipole in the dipoleset.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid or int, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
+            If an integer, uses that many equally spaced points.
+        params : dict of ndarray or array-like
+            Parameters from the equilibrium. Defaults to attributes of self.
+            If array-like, should be 1 value per coil.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        data : dict of ndarray or array-like
+            Data computed so far, generally output from other compute functions
+            If array-like, should be 1 value per dipole.
+
+        Returns
+        -------
+        data : list of dict of ndarray
+            Computed quantity and intermediate variables, for each dipoles in the set.
+            List entries map to dipoles in dipoleset, each dict contains data for an
+            individual dipole.
+
+        """
         if params is None:
             params = [
                 get_params(names, dipole, basis=kwargs.get("basis", "rpz"))
@@ -789,6 +941,32 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         transforms=None,
         chunk_size=None,
     ):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all dipoles or one for each.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize dipoles. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        field : ndarray, shape(n,3)
+            Magnetic field at specified nodes, in [R,phi,Z] or [X,Y,Z] coordinates.
+
+        """
         return self._compute_A_or_B(
             coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
         )
@@ -802,60 +980,69 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         transforms=None,
         chunk_size=None,
     ):
+        """Compute magnetic vector potential at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(n,3)
+            Nodes to evaluate potential at in [R,phi,Z] or [X,Y,Z] coordinates.
+        params : dict or array-like of dict, optional
+            Parameters to pass to dipoles, either the same for all dipoles or one for each.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates and returned magnetic field.
+        source_grid : Grid, int or None, optional
+            Grid used to discretize dipoles. If an integer, uses that many equally spaced
+            points. Should NOT include endpoint at 2pi.
+        transforms : dict of Transform or array-like
+            Transforms for R, Z, lambda, etc. Default is to build from grid.
+        chunk_size : int or None
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
+
+        Returns
+        -------
+        vector_potential : ndarray, shape(n,3)
+            magnetic vector potential at specified points, in either rpz
+            or xyz coordinates
+
+        """
         return self._compute_A_or_B(
             coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
         )
 
     @classmethod
-    def linspaced_angular(
-        cls,
-        dipole,
-        rho=None,
-        axis=[0, 0, 1],
-        angle=2 * np.pi,
-        n=10,
-        endpoint=False,
-        check_intersection=True,
-    ):
-        assert isinstance(dipole, _Dipole) and not isinstance(dipole, DipoleSet)
-        if rho is None:
-            rho = dipole.rho
-        rhos = jnp.broadcast_to(rho, (n,))
-        phi = jnp.linspace(0, angle, n, endpoint=endpoint)
-        dipoles = []
-        for i in range(n):
-            dipolei = dipole.copy()
-            dipolei.rotate(axis=axis, angle=phi[i])
-            dipolei.rho = rhos[i]
-            dipoles.append(dipolei)
-        return cls(*dipoles, check_intersection=check_intersection)
-
-    @classmethod
-    def linspaced_linear(
-        cls,
-        dipole,
-        rho=None,
-        displacement=[2, 0, 0],
-        n=4,
-        endpoint=False,
-        check_intersection=True,
-    ):
-        assert isinstance(dipole, _Dipole) and not isinstance(dipole, DipoleSet)
-        if rho is None:
-            rho = dipole.rho
-        rhos = jnp.broadcast_to(rho, (n,))
-        displacement = jnp.asarray(displacement)
-        a = jnp.linspace(0, 1, n, endpoint=endpoint)
-        dipoles = []
-        for i in range(n):
-            dipolei = dipole.copy()
-            dipolei.translate(a[i] * displacement)
-            dipolei.rho = rhos[i]
-            dipoles.append(dipolei)
-        return cls(*dipoles, check_intersection=check_intersection)
-
-    @classmethod
     def from_symmetry(cls, dipoles, NFP=1, sym=False):
+        """Create a dipole group by reflection and symmetry.
+
+        Given dipoles over one field period, repeat dipoles NFP times between
+        0 and 2pi to form full dipole set.
+
+        Or, given dipoles over 1/2 of a field period, repeat dipoles 2*NFP times
+        between 0 and 2pi to form full stellarator symmetric dipole set.
+
+        Parameters
+        ----------
+        dipoles : Dipole, DipoleSet
+            Dipole or collection of dipoles in one field period or half field period.
+        NFP : int (optional)
+            Number of field periods for enforcing field period symmetry.
+            The dipoles will be duplicated NFP times. Default = 1.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry.
+            If True, the dipoles will be duplicated 2*NFP times. Default = False.
+        check_intersection : bool
+            whether to check the resulting dipoles for intersecting coils.
+
+        Returns
+        -------
+        coilset : CoilSet
+            A new coil set with NFP=1 and sym=False that is equivalent to the unique
+            coils with field period symmetry and stellarator symmetry.
+            The total number of coils in the new coil set is:
+            len(coilset) = len(coils) * NFP * (int(sym) + 1)
+
+        """
         if not isinstance(dipoles, DipoleSet):
             dipoles = DipoleSet(dipoles)
         dipoleset = []
@@ -881,8 +1068,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         return cls(*dipoleset)
     
-    from desc.utils import xyz2rpz
-    from desc.integrals import compute_B_plasma
     def calc_g(dipoles,eq, M_surf=8, N_surf=12):
         '''
         Calculate the inductance matrix
@@ -969,6 +1154,22 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         )
     
 def export_dipoles(dipole_set, f):
+    '''
+    Exports dipoles to a CSV file.
+
+    Writes the data of each dipole to a comma-separated file with a header row.
+
+    Parameters
+    ----------
+    dipole_set : DipoleSet
+        Object containing a list of dipoles.
+    f : str or path-like
+        Path to the output file.
+
+    Format
+    -------------
+    x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)
+    '''
     d = dipole_set.dipoles
 
     outfile = open(f, 'w')
@@ -983,9 +1184,16 @@ def export_dipoles(dipole_set, f):
 import csv
 
 def create_dipole(x, y, z, phi, theta, m0, rho):
+    '''
+    Creates a Dipole object using given data
+    '''
     return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(eq, filename):
+    '''
+    Creates a DipoleSet object using data from a given CSV file containing
+    each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
+    '''
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
 
@@ -993,18 +1201,9 @@ def import_dipoles(eq, filename):
             (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
-        #print(csv_data)
-    num=0
-    num2=0
     dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
-    #print(eq.sym)
     for line in csv_data:
         if (line[-1] != 0):
             dipole_set.append( create_dipole(*line))
-            #print(line)
-            num+=1
-        num2+=1
-    print("rho!=0",num)
-    print("total",num2)
 
     return dipole_set

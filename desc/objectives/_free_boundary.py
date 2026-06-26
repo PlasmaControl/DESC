@@ -948,6 +948,9 @@ class FreeSurfaceError(_Objective):
         Fastest is typically BiCGStab (heed the note in the max_steps option).
         If an iterative solver errors due to incompatibility with old JAX versions,
         ``"fixed_point"`` can be selected instead if ``optimistix`` is installed.
+    use_dft : bool
+        Whether to use the DFT interpolator for singular integrals instead of the
+        FFT interpolator. Default is ``False``.
 
     """
 
@@ -967,6 +970,7 @@ class FreeSurfaceError(_Objective):
         "_use_same_grid",
         "_q",
         "_fix_I_sheet",
+        "_use_dft",
         "_options",
         "_grad_keys",
         "_inner_keys",
@@ -984,6 +988,7 @@ class FreeSurfaceError(_Objective):
         coil_grid=None,
         q=None,
         fix_I_sheet=False,
+        use_dft=False,
         options=None,
         target=None,
         bounds=None,
@@ -998,7 +1003,6 @@ class FreeSurfaceError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0.0
-        assert fix_I_sheet in {True, False}
 
         if grid is None:
             grid = LinearGrid(
@@ -1059,6 +1063,7 @@ class FreeSurfaceError(_Objective):
         self._use_same_grid = grid.equiv(eval_grid)
         self._q = q
         self._fix_I_sheet = fix_I_sheet
+        self._use_dft = use_dft
         I_sheet = _FreeSurfaceSheetCurrent()
         if options is None:
             options = LaplaceOptions()
@@ -1145,6 +1150,7 @@ class FreeSurfaceError(_Objective):
             B_coil=self._B_coil,
             options=options,
             potential_grid=self._eval_grid,
+            use_dft=self._use_dft,
         )
         # No net poloidal current in equation 4.13 of [1].
         self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]

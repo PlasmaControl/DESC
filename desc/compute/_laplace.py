@@ -411,6 +411,10 @@ def _interp(x, input_grid, output_grid):
     warn_fft="""bool :
         Whether to warn if the interpolation will be lossy. Default is ``True``.
         """,
+    use_dft="""bool :
+        Whether to use the DFT interpolator instead of the FFT interpolator.
+        Default is ``False``.
+        """,
 )
 def _interpolator(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency

@@ -41,8 +41,8 @@ prox = ProximalProjection(
 prox.build()
 x = prox.x(eq)
 
-err = prox.compute_scaled_error(x, prox.constants).block_until_ready()
+err = prox.compute_scaled_error(x).block_until_ready()
 
 with jax.profiler.trace("/tmp/profile-data"):
     with jax.profiler.TraceAnnotation("Benchmarking FreeSurfaceError"):
-        err = prox.compute_scaled_error(x, prox.constants).block_until_ready()
+        err = prox.compute_scaled_error(x).block_until_ready()

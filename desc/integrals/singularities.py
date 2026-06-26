@@ -383,7 +383,8 @@ class DFTInterpolator(_BIESTInterpolator):
         """Return shifted 1D Vandermonde matrices for ith polar node."""
         z = self._vander_z * jnp.exp(1j * self._modes_z * self._shift_z[i])
         t = self._vander_t * jnp.exp(1j * self._modes_t * self._shift_t[i])
-        t = t[self.eval_grid.inverse_theta_idx]
+        if not self.eval_grid.is_meshgrid:
+            t = t[self.eval_grid.inverse_theta_idx]
         return z, t
 
     def __call__(self, f, i, *, is_fourier=False, vander=None):
@@ -412,12 +413,20 @@ class DFTInterpolator(_BIESTInterpolator):
         if vander is None:
             vander = self.vander_polar(i)
 
-        z, t = vander
-        return jnp.einsum(
-            "am...,am->a...",
-            jnp.einsum("mn...,an->am...", f, z)[self.eval_grid.inverse_zeta_idx],
-            t,
-        ).real
+        if self.eval_grid.is_meshgrid:
+            return jnp.einsum(
+                "mn...,zn,tm->tz...",
+                f,
+                *vander,
+                optimize=[(0, 1), (0, 1)],
+            ).real.reshape(self.eval_grid.num_nodes, *f.shape[2:], order="F")
+        else:
+            z, t = vander
+            return jnp.einsum(
+                "am...,am->a...",
+                jnp.einsum("mn...,zn->zm...", f, z)[self.eval_grid.inverse_zeta_idx],
+                t,
+            ).real
 
 
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):

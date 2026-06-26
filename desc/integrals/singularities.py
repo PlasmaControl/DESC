@@ -370,18 +370,19 @@ class DFTInterpolator(_BIESTInterpolator):
 
     def fourier(self, f):
         """Return Fourier transform of ``f`` as expected by this interpolator."""
-        i = (0, -1) if (self.source_grid.num_theta % 2 == 0) else 0
-        return 2 * rfft2(
+        f = 2 * rfft2(
             self.source_grid.meshgrid_reshape(f, "rtz")[0],
             axes=(1, 0),
             norm="forward",
-        ).at[i].divide(2)
+        ).at[0].divide(2)
+        if self.source_grid.num_theta % 2 == 0:
+            f = f.at[-1].divide(2)
+        return f
 
     def vander_polar(self, i):
         """Return shifted 1D Vandermonde matrices for ith polar node."""
         z = self._vander_z * jnp.exp(1j * self._modes_z * self._shift_z[i])
         t = self._vander_t * jnp.exp(1j * self._modes_t * self._shift_t[i])
-        z = z[self.eval_grid.inverse_zeta_idx]
         t = t[self.eval_grid.inverse_theta_idx]
         return z, t
 
@@ -411,8 +412,11 @@ class DFTInterpolator(_BIESTInterpolator):
         if vander is None:
             vander = self.vander_polar(i)
 
+        z, t = vander
         return jnp.einsum(
-            "mn...,zn,tm->tz...", f, *vander, optimize=[(0, 1), (0, 1)]
+            "am...,am->a...",
+            jnp.einsum("mn...,an->am...", f, z)[self.eval_grid.inverse_zeta_idx],
+            t,
         ).real
 
 

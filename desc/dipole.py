@@ -1036,11 +1036,11 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         Returns
         -------
-        coilset : CoilSet
-            A new coil set with NFP=1 and sym=False that is equivalent to the unique
-            coils with field period symmetry and stellarator symmetry.
-            The total number of coils in the new coil set is:
-            len(coilset) = len(coils) * NFP * (int(sym) + 1)
+        dipoleset : DipoleSet
+            A new dipole set with NFP=1 and sym=False that is equivalent to the unique
+            dipoles with field period symmetry and stellarator symmetry.
+            The total number of dipoles in the new dipole set is:
+            len(dipoleset) = len(dipoles) * NFP * (int(sym) + 1)
 
         """
         if not isinstance(dipoles, DipoleSet):

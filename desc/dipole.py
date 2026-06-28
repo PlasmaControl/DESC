@@ -1189,7 +1189,7 @@ def create_dipole(x, y, z, phi, theta, m0, rho):
     '''
     return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
 
-def import_dipoles(eq, filename):
+def import_dipoles(NFP, sym, filename):
     '''
     Creates a DipoleSet object using data from a given CSV file containing
     each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
@@ -1201,7 +1201,7 @@ def import_dipoles(eq, filename):
             (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
-    dipole_set = DipoleSet(NFP=eq.NFP, sym=eq.sym)
+    dipole_set = DipoleSet(NFP=NFP, sym=sym)
     for line in csv_data:
         if (line[-1] != 0):
             dipole_set.append( create_dipole(*line))

@@ -26,7 +26,6 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms
-from desc.diffmat_utils import DiffMat
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -2146,7 +2145,7 @@ class TestObjectiveFunction:
         eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
         obj.build()
-        diffmat = DiffMat()
+        diffmat = None
         lam = eq.compute(
             ["ideal ballooning lambda"],
             grid=Grid.create_meshgrid(

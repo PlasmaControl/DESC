@@ -9,6 +9,41 @@ from .least_squares import lsqtr
 from .optimizer import register_optimizer
 from .stochastic import sgd
 
+# List of all optax optimizers to register
+# You may use the following test to update the list accordingly
+# https://github.com/PlasmaControl/DESC/pull/2041#issuecomment-3813092445
+_all_optax_optimizers = [
+    "adabelief",
+    "adadelta",
+    "adafactor",
+    "adagrad",
+    "adam",
+    "adamax",
+    "adamaxw",
+    "adamw",
+    "adan",
+    "amsgrad",
+    "fromage",
+    "lamb",
+    "lars",
+    "lbfgs",
+    "lion",
+    "nadam",
+    "nadamw",
+    "noisy_sgd",
+    "novograd",
+    "optimistic_adam_v2",
+    "optimistic_gradient_descent",
+    "polyak_sgd",
+    "radam",
+    "rmsprop",
+    "rprop",
+    "sgd",
+    "sign_sgd",
+    "sm3",
+    "yogi",
+]
+
 
 @register_optimizer(
     name=["fmin-auglag", "fmin-auglag-bfgs"],
@@ -376,9 +411,18 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum"
-    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    name=["sgd", "optax-custom"] + ["optax-" + opt for opt in _all_optax_optimizers],
+    description=[
+        "Stochastic gradient descent with Nesterov momentum. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+        "Wrapper for custom ``optax`` optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    ]
+    + [
+        f"``optax`` wrapper for {opt}. See "
+        + f"https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.{opt}"  # noqa: E501
+        for opt in _all_optax_optimizers
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -400,15 +444,20 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use.
-    x_scale : array_like or ‘jac’, optional
+        Name of the method to use. Available options are `'sgd'`.
+        Additionally, ``optax`` optimizers can be used by specifying the method as
+        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid ``optax``
+        optimizer. Hyperparameters for the ``optax`` optimizer must be passed via the
+        ``'optax-options'`` key of ``options`` dictionary. A custom ``optax``
+        optimizer can be used by specifying the method as ``'optax-custom'`` and
+        passing the ``optax`` optimizer via the ``'update-rule'`` key of
+        ``'optax-options'`` in the ``options`` dictionary.
+    x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
-        reformulating the problem in scaled variables xs = x / x_scale. An alternative
-        view is that the size of a trust region along jth dimension is proportional to
-        x_scale[j]. Improved convergence may be achieved by setting x_scale such that
-        a step of a given size along any of the scaled variables has a similar effect
-        on the cost function. If set to ‘jac’, the scale is iteratively updated using
-        the inverse norms of the columns of the Jacobian matrix.
+        reformulating the problem in scaled variables xs = x / x_scale. Improved
+        convergence may be achieved by setting x_scale such that a step of a given
+        size along any of the scaled variables has a similar effect on the cost
+        function. Defaults to 'auto', meaning no scaling.
     verbose : int
         * 0  : work silently.
         * 1 : display a termination report.
@@ -438,6 +487,7 @@ def _optimize_desc_stochastic(
         grad=objective.grad,
         args=(objective.constants,),
         method=method,
+        x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],

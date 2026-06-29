@@ -39,7 +39,7 @@ On Your Local Machine
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda create --name desc-env 'python>=3.10, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 
@@ -89,17 +89,18 @@ On Your Local Machine
                 # run jupyter
                 uv run --with jupyter jupyter lab
 
-    .. tab-item:: CPU+GPU (partial support)
+    .. tab-item:: CPU+GPU (without FINUFFT)
 
         For GPU support, you must install the JAX library as discussed in `JAX installation docs <https://github.com/google/jax#installation>`__.
         For example, below are the instructions to install on compatible devices with an NVIDIA GPU.
-        These instructions install GPU support for a subset of the features in DESC.
+        These instructions do not install GPU support for ``jax-finufft`` which is used in ``Bounce2D`` computations
+        such as ``GammaC`` and ``EffectiveRipple`` objectives. Set ``nufft_eps=0`` in these objectives if necessary.
 
         .. code-block:: sh
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env 'python>=3.10, <=3.13'
+            conda create --name desc-env 'python>=3.10, <=3.14'
             conda activate desc-env
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             pip install --editable .
@@ -165,7 +166,7 @@ On Most Linux Computing Clusters
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.13'
+                conda create --name desc-env 'python>=3.10, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 
@@ -190,9 +191,10 @@ On Most Linux Computing Clusters
 
         .. dropdown:: Perlmutter (NERSC)
 
-            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Sep 24, 2025
+            These instructions were verified to work on the Perlmutter supercomputer at NERSC on Feb 11, 2026
             for both CPU and GPU runs.
-            They do not install FINUFFT with GPU support.
+            These instructions do not install GPU support for ``jax-finufft`` which is used in ``Bounce2D`` computations
+            such as ``GammaC`` and ``EffectiveRipple`` objectives. Set ``nufft_eps=0`` in these objectives if necessary.
 
             .. code-block:: sh
 
@@ -214,9 +216,9 @@ On Most Linux Computing Clusters
                 pip install --no-cache-dir --editable .
                 pip install --no-cache-dir "jax[cuda12]==0.6.2"
 
-            The `--no-cache-dir` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
+            The ``--no-cache-dir`` avoids conflicts with existing DESC environments or other software that use CUDA on your system.
 
-            Before running a DESC script, you may also need to execute `unset LD_LIBRARY_PATH` either in your interactive node (for interactive jobs)
+            Before running a DESC script, you may also need to execute ``unset LD_LIBRARY_PATH`` either in your interactive node (for interactive jobs)
             or in your SLURM script (for submitted jobs).
 
         .. dropdown:: Della and Stellar Clusters (Princeton)

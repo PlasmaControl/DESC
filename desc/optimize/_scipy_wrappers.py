@@ -22,6 +22,7 @@ from .utils import (
 @register_optimizer(
     name=[
         "scipy-bfgs",
+        "scipy-l-bfgs-b",
         "scipy-CG",
         "scipy-Newton-CG",
         "scipy-dogleg",
@@ -31,6 +32,8 @@ from .utils import (
     ],
     description=[
         "BFGS quasi-newton method with line search. "
+        + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
+        "L-BFGS-B quasi-newton method with line search. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html",
         "Nonlinear conjugate gradient method. "
         + "See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-cg.html",
@@ -49,7 +52,7 @@ from .utils import (
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[False, False, True, True, True, True, True],
+    hessian=[False, False, False, True, True, True, True, True],
     GPU=False,
 )
 def _optimize_scipy_minimize(  # noqa: C901
@@ -99,10 +102,19 @@ def _optimize_scipy_minimize(  # noqa: C901
     options = {} if options is None else options
     options.setdefault("maxiter", stoptol["maxiter"])
     options.setdefault("disp", False)
+    if method == "scipy-l-bfgs-b":
+        # disp deprecated in scipy>=1.16.0 for this method and
+        # has no effect anyways, so safe to remove
+        options.pop("disp")
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
-    if isinstance(x_scale, str) and x_scale == "auto":
+    # don't call hess if the method is approximating the hessian, since we probably
+    # are avoiding it due to it being expensive
+    use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
+    if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
         H = hess(x0)
         scale, _ = compute_hess_scale(H)
+    elif isinstance(x_scale, str):
+        scale = 1.0  # don't do any auto scaling if our optimizer does not use hessian
     else:
         scale = x_scale
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
@@ -128,7 +140,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x, objective.constants)
+            f = fun(x)
             func_allf.append(f)
         return f
 
@@ -141,7 +153,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x, objective.constants)
+            g = grad(x)
             grad_allf.append(g)
         return g * scale
 
@@ -154,11 +166,11 @@ def _optimize_scipy_minimize(  # noqa: C901
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x, objective.constants)
+            H = hess(x)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
-    hess_wrapped = None if method in ["scipy-bfgs", "scipy-CG"] else hess_wrapped
+    hess_wrapped = None if not use_hessian else hess_wrapped
 
     def callback(xs):
         x1 = xs * scale
@@ -365,14 +377,14 @@ def _optimize_scipy_least_squares(  # noqa: C901
     def fun_wrapped(x):
         # record all the xs and fs we see
         fun_allx.append(x)
-        f = jnp.atleast_1d(fun(x, objective.constants))
+        f = jnp.atleast_1d(fun(x))
         fun_allf.append(f)
         return f
 
     def jac_wrapped(x):
         # record all the xs and jacobians we see
         jac_allx.append(x)
-        J = jac(x, objective.constants)
+        J = jac(x)
         jac_allf.append(J)
         callback(x)
         return J
@@ -453,6 +465,8 @@ def _optimize_scipy_least_squares(  # noqa: C901
         result["nfev"] = len(fun_allx)
         result["njev"] = len(jac_allx)
         result["nit"] = len(jac_allx)
+        result["fse"] = result["fun"]
+        result["f0se"] = fun_allf[0]
     except StopIteration:
         x = jac_allx[-1]
         f = f_where_x(x, fun_allx, fun_allf, dim=1)
@@ -473,6 +487,8 @@ def _optimize_scipy_least_squares(  # noqa: C901
             message=message[0],
             allx=jac_allx,
         )
+        result["fse"] = f
+        result["f0se"] = fun_allf[0]
 
     if verbose > 0:
         if result["success"]:
@@ -584,7 +600,7 @@ def _optimize_scipy_constrained(  # noqa: C901
                 f = np.array([])
             if not f.size:
                 cfun_allx.append(x)
-                f = constraint.compute_scaled(x, constraint.constants)
+                f = constraint.compute_scaled(x)
                 cfun_allf.append(f)
             return f
 
@@ -596,7 +612,7 @@ def _optimize_scipy_constrained(  # noqa: C901
                 J = np.array([[]])
             if not J.size:
                 cjac_allx.append(x)
-                J = constraint.jac_scaled(x, constraint.constants)
+                J = constraint.jac_scaled(x)
                 cjac_allf.append(J)
             return J * scale
 
@@ -613,7 +629,7 @@ def _optimize_scipy_constrained(  # noqa: C901
 
     def constraint_violation(xs):
         if constraint is not None:
-            f = constraint.compute_scaled_error(xs * scale, constraint.constants)
+            f = constraint.compute_scaled_error(xs * scale)
         else:
             f = 0.0
         return jnp.max(jnp.abs(f))
@@ -649,7 +665,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             f = np.array([])
         if not f.size:
             func_allx.append(x)
-            f = fun(x, objective.constants)
+            f = fun(x)
             func_allf.append(f)
         return f
 
@@ -662,7 +678,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             g = np.array([])
         if not g.size:
             grad_allx.append(x)
-            g = grad(x, objective.constants)
+            g = grad(x)
             grad_allf.append(g)
         return g * scale
 
@@ -675,7 +691,7 @@ def _optimize_scipy_constrained(  # noqa: C901
             H = np.array([[]])
         if not H.size:
             hess_allx.append(x)
-            H = hess(x, objective.constants)
+            H = hess(x)
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 

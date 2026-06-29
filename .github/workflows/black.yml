@@ -13,7 +13,7 @@ jobs:
         python-version: ['3.10']
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -28,7 +28,7 @@ jobs:
 
       - name: Restore Python environment cache
         id: restore-env
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

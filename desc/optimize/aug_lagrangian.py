@@ -334,7 +334,9 @@ def fmin_auglag(  # noqa: C901
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
-        x_scale = jnp.broadcast_to(x_scale, z.shape)
+        x_scale = jnp.broadcast_to(x_scale, x0.shape)
+        # add ones for slack variables
+        x_scale = jnp.concatenate([x_scale, jnp.ones(z0.size - x0.size)])
         scale, scale_inv = x_scale, 1 / x_scale
 
     v, dv = cl_scaling_vector(z, g, lb, ub)

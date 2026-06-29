@@ -33,6 +33,11 @@ class GammaC(_Objective):
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 3 below refers to that implementation.
+
     References
     ----------
     [1] Poloidal motion of trapped particle orbits in real-space coordinates.
@@ -197,7 +202,7 @@ class GammaC(_Objective):
             ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
+            Defaults to ``self.constants``. (Deprecated)
 
         Returns
         -------
@@ -208,8 +213,7 @@ class GammaC(_Objective):
         if self._use_bounce1d:
             return self._compute_bounce1d(params, constants)
 
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(
@@ -283,8 +287,7 @@ class GammaC(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_bounce1d(self, params, constants=None):
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(

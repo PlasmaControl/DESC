@@ -4,24 +4,29 @@ Differentiation‑matrix utilities for spectral methods in **DESC**.
 
 =================================================================
 
-This module provides vectorized, JAX‑friendly helpers for constructing first‑ and
-second‑order differentiation matrices using either Chebyshev–Lobatto or Fourier
-collocation points.  All routines are **pure** and **stateless** – they rely only
-on `jax.numpy` and therefore can be freely composed, JIT‑compiled, or parallelised
-with `jax.vmap` / `jax.pmap` inside larger optimisation loops.
+This module provides vectorized, JAX-friendly helpers for constructing first-order
+differentiation matrices using Fourier, Legendre-Lobatto, Gauss-Radau-Jacobi,
+B-spline, finite-difference, and coupled Zernike-Fourier discretizations.
 
 The implementations follow the formulas in
   **Trefethen, L. N. (2000). *Spectral Methods in MATLAB*. SIAM** and
   **Canuto et al. (2006). *Spectral Methods – Fundamentals in Single Domains*.**
 
 """
+
 from functools import partial
 
 import numpy as np
 
 from desc.backend import jit, jnp
-from desc.integrals.quad_utils import leggauss_lob
+from desc.integrals.quad_utils import (
+    _bspline_clamped_uniform_knots,
+    bspline_nodes_weights,
+    gauss_radau_jacobi,
+    leggauss_lob,
+)
 from desc.io import IOAble
+from desc.utils import check_posint, errorif
 
 
 class DiffMat(IOAble):
@@ -231,6 +236,46 @@ def fourier_diffmat(n: int):
     return D, W
 
 
+def fourier_diffmat_truncated(n: int, M=None):
+    """Return a Fourier differentiation matrix truncated at wavenumber ``M``.
+
+    The collocation grid and quadrature weights are identical to
+    :func:`fourier_diffmat`, but modes above ``M`` are mapped to zero. Omitting
+    ``M`` retains every resolvable non-Nyquist mode and reproduces
+    :func:`fourier_diffmat`.
+
+    Parameters
+    ----------
+    n : int
+        Number of equally spaced collocation points on ``[0, 2*pi)``.
+    M : int, optional
+        Highest retained wavenumber. Must satisfy
+        ``1 <= M <= (n - 1) // 2``.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        Differentiation and diagonal quadrature matrices, each with shape
+        ``(n, n)``.
+    """
+    n = check_posint(n, "n", False)
+    max_mode = (n - 1) // 2
+    errorif(max_mode < 1, ValueError, "n must be at least 3.")
+    M = max_mode if M is None else check_posint(M, "M", False)
+    errorif(
+        M > max_mode,
+        ValueError,
+        f"M must not exceed (n - 1) // 2 = {max_mode}.",
+    )
+
+    i, j = jnp.mgrid[0:n, 0:n]
+    modes = jnp.arange(1, M + 1)
+    phase = (2.0 * jnp.pi / n) * (i - j)[:, :, None] * modes[None, None, :]
+    D = -(2.0 / n) * jnp.sum(modes[None, None, :] * jnp.sin(phase), axis=-1)
+    W = jnp.diag(jnp.full(n, 2.0 * jnp.pi / n))
+    return D, W
+
+
 ########################################################################
 # ------------------- FINITE-DIFFERENCE MATRIX ----------------------- #
 ########################################################################
@@ -313,3 +358,198 @@ def finite_difference_diffmat(N, h, dtype=jnp.float64):
     W = W.at[jnp.diag_indices(N)].set(H * h)
 
     return D / h, W
+
+
+########################################################################
+# ------------------------ JACOBI MATRICES --------------------------- #
+########################################################################
+
+
+def jacobi_diffmat(N, alpha=0.0, beta=1.0):
+    """Return a differentiation matrix on left-Gauss-Radau-Jacobi nodes.
+
+    Parameters
+    ----------
+    N : int
+        Number of nodes, at least 2.
+    alpha, beta : float
+        Jacobi weight exponents, both greater than -1.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        First-derivative and diagonal quadrature matrices with shape ``(N, N)``.
+    """
+    nodes, weights = gauss_radau_jacobi(N, alpha, beta)
+    barycentric_weights = _barycentric_weights(nodes)
+    difference = nodes[:, None] - nodes[None, :]
+    safe_difference = difference + jnp.eye(N)
+    D = barycentric_weights[None, :] / barycentric_weights[:, None] / safe_difference
+    D = D.at[jnp.diag_indices(N)].set(0.0)
+    D = D.at[jnp.diag_indices(N)].set(-jnp.sum(D, axis=1))
+    W = jnp.diag(weights)
+    return D, W
+
+
+########################################################################
+# ----------------------- B-SPLINE MATRICES -------------------------- #
+########################################################################
+
+
+def _bspline_basis_and_deriv(x, knots, degree):
+    """Evaluate a B-spline basis and its first derivative at ``x``."""
+    x = jnp.atleast_1d(x)
+    number_of_basis_functions = knots.size - degree - 1
+    left = knots[:-1]
+    right = knots[1:]
+
+    basis = (x[:, None] >= left[None, :]) & (x[:, None] < right[None, :])
+    final_nonempty_interval = (right == knots[-1]) & (left < right)
+    basis = basis | ((x[:, None] == knots[-1]) & final_nonempty_interval[None, :])
+    basis = basis.astype(x.dtype)
+
+    def safe_divide(numerator, denominator):
+        safe_denominator = jnp.where(denominator == 0, 1, denominator)
+        return jnp.where(
+            denominator == 0,
+            0.0,
+            numerator / safe_denominator,
+        )
+
+    def elevate(current_basis, current_degree):
+        i = jnp.arange(current_basis.shape[1] - 1)
+        left_denominator = knots[i + current_degree] - knots[i]
+        right_denominator = knots[i + current_degree + 1] - knots[i + 1]
+        left_coefficient = safe_divide(
+            x[:, None] - knots[i][None, :],
+            left_denominator[None, :],
+        )
+        right_coefficient = safe_divide(
+            knots[i + current_degree + 1][None, :] - x[:, None],
+            right_denominator[None, :],
+        )
+        return (
+            left_coefficient * current_basis[:, :-1]
+            + right_coefficient * current_basis[:, 1:]
+        )
+
+    degree_minus_one_basis = basis
+    for current_degree in range(1, degree):
+        degree_minus_one_basis = elevate(degree_minus_one_basis, current_degree)
+    basis = elevate(degree_minus_one_basis, degree)
+
+    i = jnp.arange(number_of_basis_functions)
+    left_denominator = knots[i + degree] - knots[i]
+    right_denominator = knots[i + degree + 1] - knots[i + 1]
+    derivative = degree * (
+        safe_divide(
+            degree_minus_one_basis[:, :-1],
+            left_denominator[None, :],
+        )
+        - safe_divide(
+            degree_minus_one_basis[:, 1:],
+            right_denominator[None, :],
+        )
+    )
+    return basis, derivative
+
+
+def bspline_diffmat(N, degree=4):
+    """Return a B-spline collocation differentiation matrix and weights.
+
+    Greville abscissae of a clamped-uniform knot vector provide one node per
+    basis function. The derivative matrix collocates the analytic B-spline
+    derivative, and the diagonal weights are the exact basis integrals.
+
+    Parameters
+    ----------
+    N : int
+        Number of basis functions and collocation nodes.
+    degree : int
+        Polynomial degree. ``N`` must be at least ``degree + 1``.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        Differentiation and diagonal quadrature matrices with shape ``(N, N)``.
+    """
+    nodes, weights = bspline_nodes_weights(N, degree)
+    knots = _bspline_clamped_uniform_knots(N, degree)
+    basis, derivative = _bspline_basis_and_deriv(nodes, knots, degree)
+    D = jnp.linalg.solve(basis.T, derivative.T).T
+    W = jnp.diag(weights)
+    return D, W
+
+
+########################################################################
+# ----------------- ZERNIKE-FOURIER MATRICES ------------------------ #
+########################################################################
+
+
+def zernike_fourier_diffmat(
+    rho,
+    theta,
+    L=-1,
+    M=-1,
+    spectral_indexing="ansi",
+):
+    """Return coupled radial and poloidal Zernike-Fourier derivatives.
+
+    A single pseudo-inverse fits nodal values to a Zernike basis, after which
+    radial and poloidal derivative evaluations produce two coupled real-space
+    operators. The returned matrices follow the node ordering of the
+    :class:`~desc.grid.LinearGrid` constructed from ``rho`` and ``theta``.
+
+    Parameters
+    ----------
+    rho, theta : array-like
+        One-dimensional radial and poloidal collocation nodes.
+    L, M : int
+        Zernike radial and poloidal resolutions. A value of ``-1`` chooses a
+        resolution from the supplied node counts.
+    spectral_indexing : {"ansi", "fringe"}
+        Zernike spectral indexing convention.
+
+    Returns
+    -------
+    D_rho, D_theta : tuple[jax.Array]
+        Coupled first-derivative matrices, each with shape
+        ``(rho.size * theta.size, rho.size * theta.size)``.
+    """
+    from desc.basis import ZernikePolynomial
+    from desc.grid import LinearGrid
+    from desc.transform import Transform
+
+    rho = jnp.atleast_1d(rho)
+    theta = jnp.atleast_1d(theta)
+    errorif(
+        rho.ndim != 1 or theta.ndim != 1,
+        ValueError,
+        "rho and theta must be one-dimensional.",
+    )
+    errorif(
+        rho.size < 1 or theta.size < 1,
+        ValueError,
+        "rho and theta cannot be empty.",
+    )
+    M = max((theta.size - 1) // 2, 0) if M == -1 else M
+    L = 2 * (rho.size - 1) if L == -1 else L
+
+    grid = LinearGrid(rho=rho, theta=theta, NFP=1, sym=False)
+    basis = ZernikePolynomial(
+        L=L,
+        M=M,
+        spectral_indexing=spectral_indexing,
+    )
+    transform = Transform(
+        grid,
+        basis,
+        derivs=1,
+        build=True,
+        build_pinv=True,
+        method="direct1",
+    )
+    inverse = jnp.asarray(transform.matrices["pinv"])
+    D_rho = jnp.asarray(transform.matrices["direct1"][1][0][0]) @ inverse
+    D_theta = jnp.asarray(transform.matrices["direct1"][0][1][0]) @ inverse
+    return D_rho, D_theta

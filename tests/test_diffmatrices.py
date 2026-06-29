@@ -7,6 +7,7 @@ Using tensor product approach in 3D:
 - Fourier methods in y dimension
 - Fourier methods in z dimension
 """
+
 import os
 
 import matplotlib.pyplot as plt
@@ -16,12 +17,23 @@ import pytest
 from desc.backend import jax, jnp, vmap
 from desc.diffmat_utils import (
     DiffMat,
+    bspline_diffmat,
     finite_difference_diffmat,
     fourier_diffmat,
+    fourier_diffmat_truncated,
     fourier_pts,
+    jacobi_diffmat,
     legendre_diffmat,
+    zernike_fourier_diffmat,
 )
-from desc.integrals.quad_utils import automorphism_staircase1, leggauss_lob
+from desc.grid import LinearGrid
+from desc.integrals.quad_utils import (
+    automorphism_staircase1,
+    bspline_nodes_weights,
+    gauss_radau_jacobi,
+    leggauss_lob,
+    zernike_nodes_weights,
+)
 
 NFP = 5
 
@@ -285,9 +297,7 @@ def test_tensor_mixed_derivative(
     # record it (pytest will still assert below)
     collected_errors.append((dx_order, dy_order, dz_order, n, error))
 
-    assert (
-        error < tol
-    ), f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
+    assert error < tol, f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
         error {error:.2e} exceeds tol {tol}"
 
 
@@ -371,8 +381,96 @@ def test_fourier_pts_excludes_periodic_endpoint():
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("n", [8, 9])
+def test_truncated_fourier_diffmat(n):
+    """Truncated Fourier matrices retain only the requested wavenumbers."""
+    full, weights = fourier_diffmat(n)
+    untruncated, untruncated_weights = fourier_diffmat_truncated(n)
+    np.testing.assert_allclose(untruncated, full, atol=1e-14)
+    np.testing.assert_allclose(untruncated_weights, weights)
+
+    points = fourier_pts(n)
+    truncated, _ = fourier_diffmat_truncated(n, M=2)
+    function = jnp.sin(2 * points) + jnp.cos(points)
+    derivative = 2 * jnp.cos(2 * points) - jnp.sin(points)
+    np.testing.assert_allclose(truncated @ function, derivative, atol=1e-14)
+    np.testing.assert_allclose(truncated @ jnp.sin(3 * points), 0, atol=1e-14)
+
+    with pytest.raises(ValueError, match="must not exceed"):
+        fourier_diffmat_truncated(n, M=(n - 1) // 2 + 1)
+
+
+@pytest.mark.unit
+def test_jacobi_diffmat_and_quadrature():
+    """Gauss-Radau-Jacobi nodes, weights, and derivatives are consistent."""
+    N, alpha, beta = 8, 0.4, -0.6
+    nodes, weights = gauss_radau_jacobi(N, alpha, beta)
+    derivative, weight_matrix = jacobi_diffmat(N, alpha, beta)
+
+    assert nodes[0] == -1
+    assert jnp.all(jnp.diff(nodes) > 0)
+    assert jnp.all(weights > 0)
+    np.testing.assert_allclose(jnp.diag(weight_matrix), weights)
+    np.testing.assert_allclose(
+        derivative @ nodes**4,
+        4 * nodes**3,
+        atol=1e-13,
+    )
+
+
+@pytest.mark.unit
+def test_bspline_diffmat_and_quadrature():
+    """B-spline Greville nodes reproduce represented polynomial derivatives."""
+    nodes, weights = bspline_nodes_weights(10, degree=4)
+    derivative, weight_matrix = bspline_diffmat(10, degree=4)
+
+    assert nodes[0] == -1
+    assert nodes[-1] == 1
+    assert jnp.all(weights > 0)
+    np.testing.assert_allclose(weights.sum(), 2)
+    np.testing.assert_allclose(jnp.diag(weight_matrix), weights)
+    np.testing.assert_allclose(
+        derivative @ nodes**3,
+        3 * nodes**2,
+        atol=1e-13,
+    )
+
+
+@pytest.mark.unit
+def test_zernike_fourier_diffmat_and_quadrature():
+    """Coupled Zernike-Fourier matrices differentiate a represented mode."""
+    rho, w_rho, theta, w_theta = zernike_nodes_weights(3, 5)
+    derivative_rho, derivative_theta = zernike_fourier_diffmat(rho, theta)
+    grid = LinearGrid(rho=rho, theta=theta, NFP=1, sym=False)
+    r, t = grid.nodes[:, 0], grid.nodes[:, 1]
+    function = r**2 * jnp.cos(2 * t)
+
+    assert jnp.all(w_rho > 0)
+    np.testing.assert_allclose(w_theta.sum(), 2 * jnp.pi)
+    np.testing.assert_allclose(
+        derivative_rho @ function,
+        2 * r * jnp.cos(2 * t),
+        atol=1e-13,
+    )
+    np.testing.assert_allclose(
+        derivative_theta @ function,
+        -2 * r**2 * jnp.sin(2 * t),
+        atol=1e-13,
+    )
+
+
+@pytest.mark.unit
+def test_staircase_automorphism_epsilon_floor():
+    """The epsilon option shifts the staircase map away from zero."""
+    points = jnp.linspace(-1, 1, 8)
+    original = automorphism_staircase1(points)
+    shifted = automorphism_staircase1(points, eps=0.05)
+    np.testing.assert_allclose(shifted, 0.05 + 0.95 * original)
+
+
+@pytest.mark.unit
 def test_diffmat_from_zeta_grid():
-    """DiffMat factory creates matching matrices and is a registered PyTree."""
+    """Diffmat factory creates matching matrices and is a registered PyTree."""
     zeta = jnp.linspace(-jnp.pi, jnp.pi, 16)
     diffmat = DiffMat.from_zeta_grid(zeta)
 
@@ -387,7 +485,7 @@ def test_diffmat_from_zeta_grid():
 
 @pytest.mark.unit
 def test_diffmat_io(tmp_path):
-    """DiffMat uses DESC's standard IOAble serialization."""
+    """Diffmat uses DESC's standard IOAble serialization."""
     diffmat = DiffMat.from_zeta_grid(jnp.linspace(-jnp.pi, jnp.pi, 8))
     path = tmp_path / "diffmat.h5"
     diffmat.save(path)
@@ -400,7 +498,7 @@ def test_diffmat_io(tmp_path):
 
 @pytest.mark.unit
 def test_diffmat_rejects_empty_or_unpaired_matrices():
-    """DiffMat must represent an actual, internally consistent discretization."""
+    """Diffmat must represent an actual, internally consistent discretization."""
     with pytest.raises(ValueError, match="requires at least one"):
         DiffMat()
     with pytest.raises(ValueError, match="provided together"):

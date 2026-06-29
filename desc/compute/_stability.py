@@ -381,20 +381,24 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
     description="Normalized squared ideal ballooning growth rate",
     dim=4,
     params=[],
-    transforms={"grid": [], "diffmat": []},
+    transforms={"grid": []},
     profiles=[],
     coordinates="rtz",
     data=["c ballooning", "f ballooning", "g ballooning"],
     source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
     Neigvals="int: number of largest eigenvalues to return, default value is 1.`"
     "If `Neigvals=2` eigenvalues are `[-1, 0, 1]` we get `[1, 0]`",
+    diffmat="optional DiffMat with matrices matching the source grid's zeta nodes",
 )
 @partial(jit, static_argnames=["Neigvals"])
 def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     """Eigenvalues of ideal-ballooning equation.
 
-    A finite-difference method is used to calculate the maximum
-    growth rate against the infinite-n ideal ballooning mode.
+    By default, a second-order tridiagonal finite-difference method is used to
+    calculate the maximum growth rate against the infinite-n ideal ballooning
+    mode. If a ``DiffMat`` is supplied, its zeta differentiation and quadrature
+    matrices define the discretization instead.
+
     The equation being solved is
 
     d/dζ(g dX/dζ) + c X = λ f X, g, f > 0
@@ -426,11 +430,17 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     f = reshape(data["f ballooning"])
     g = reshape(data["g ballooning"])
 
-    if transforms["diffmat"].D_zeta is not None:
+    diffmat = transforms.get("diffmat")
+    if diffmat is not None and diffmat.D_zeta is not None:
+        if diffmat.D_zeta.shape != (num_zeta, num_zeta):
+            raise ValueError(
+                "D_zeta and W_zeta must match the source grid's zeta resolution."
+            )
 
-        # Check that the gradients of D_zeta are not calculated
-        D_zeta = transforms["diffmat"].D_zeta
-        W_zeta = transforms["diffmat"].W_zeta
+        # Differentiation matrices define the numerical discretization, not
+        # optimization variables.
+        D_zeta = jax.lax.stop_gradient(diffmat.D_zeta)
+        W_zeta = jax.lax.stop_gradient(diffmat.W_zeta)
 
         # W_zeta is purely diagonal for all the quadratures used
         # This will give wrong answers for a non-diagonal W_zeta

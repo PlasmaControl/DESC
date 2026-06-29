@@ -92,22 +92,17 @@ def compute(  # noqa: C901
                     DeprecationWarning,
                 )
 
-    # RG: normalize transforms so diffmat is passed via transforms, not as a kwarg ---
-    # We only absorb 'diffmat'. We intentionally DO NOT move 'grid' from kwargs into
-    # transforms here, because Equilibrium.compute's existing plumbing correctly
-    # constructs/wraps the source_grid when grid is passed as a kwarg.
+    # ``diffmat`` is transform-like data, but is supplied as a compute keyword.
+    # Preserve a matrix object already installed by ``get_transforms`` and support
+    # callers that supply their own transforms dictionary.
+    diffmat = kwargs.get("diffmat")
     if transforms is None:
         transforms = {}
-    else:
+    if diffmat is not None and "diffmat" not in transforms:
         transforms = dict(transforms)
-
-    # Always remove `diffmat` from kwargs so it never reaches the bad-kwarg check,
-    # regardless of whether get_transforms already set transforms["diffmat"].
-    dm_kw = kwargs.pop("diffmat", None)
-
-    # If get_transforms didn't already provide transforms["diffmat"], wire it now:
-    if "diffmat" not in transforms and dm_kw is not None:
-        transforms["diffmat"] = dm_kw
+        transforms["diffmat"] = (
+            diffmat if isinstance(diffmat, DiffMat) else DiffMat(**diffmat)
+        )
 
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
@@ -571,8 +566,7 @@ def get_transforms(  # noqa: C901
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
 
-    # We do not build a Transform, just ensure the dict is present.
-    # If not in transforms, Look in kwargs here.
+    # DiffMat contains pre-built matrices rather than a DESC Transform.
     if "diffmat" in kwargs and kwargs["diffmat"] is not None:
         dm = kwargs["diffmat"]
         transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
@@ -666,14 +660,6 @@ def get_transforms(  # noqa: C901
                 build_pinv=False,
                 method=method,
             )
-        elif c == "diffmat":
-            errorif(
-                "diffmat" not in transforms,
-                ValueError,
-                "Compute requested 'diffmat' but none was provided. "
-                "Call eq.compute(..., diffmat=DiffMat(...)) or set eq.diffmat first.",
-            )
-
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

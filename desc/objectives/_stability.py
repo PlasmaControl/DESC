@@ -385,9 +385,12 @@ class BallooningStability(_Objective):
     Neigvals : int
         Number of top eigenvalues to select.
         Default is 1.
-    diffmat: DiffMat
-        DiffMat object.
-        Default is an object containing None.
+    diffmat : DiffMat, optional
+        Differentiation and quadrature matrices for the zeta nodes used by the
+        objective. If ``None``, the default second-order tridiagonal discretization
+        is used. For the default zeta grid, a compatible fourth-order pair can be
+        created with ``DiffMat.from_zeta_grid(jnp.linspace(-nturns * jnp.pi,
+        nturns * jnp.pi, nturns * nzetaperturn))``.
     lambda0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
@@ -407,7 +410,6 @@ class BallooningStability(_Objective):
     _static_attrs = _Objective._static_attrs + [
         "_iota_keys",
         "_Neigvals",
-        "_diffmat",
         "_nturns",
         "_nzetaperturn",
         "_add_lcfs",
@@ -433,7 +435,7 @@ class BallooningStability(_Objective):
         nzetaperturn=200,
         zeta0=None,
         Neigvals=1,
-        diffmat=DiffMat(),
+        diffmat=None,
         lambda0=0.0,
         w0=1.0,
         w1=10.0,
@@ -446,6 +448,15 @@ class BallooningStability(_Objective):
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
         self._Neigvals = Neigvals
+        if diffmat is not None and not isinstance(diffmat, DiffMat):
+            raise TypeError("diffmat must be a DiffMat or None.")
+        if diffmat is not None and diffmat.D_zeta is None:
+            raise ValueError("BallooningStability requires D_zeta and W_zeta.")
+        if diffmat is not None and diffmat.D_zeta.shape != (
+            nturns * nzetaperturn,
+            nturns * nzetaperturn,
+        ):
+            raise ValueError("D_zeta and W_zeta must match nturns * nzetaperturn.")
         self._diffmat = diffmat
         self._lambda0 = lambda0
         self._w0 = w0
@@ -504,7 +515,6 @@ class BallooningStability(_Objective):
             self._iota_keys + ["ideal ballooning lambda"], eq, iota_grid
         )
         self._constants = {
-            "diffmat": self._diffmat,
             "lambda0": self._lambda0,
             "w0": self._w0,
             "w1": self._w1,
@@ -573,6 +583,9 @@ class BallooningStability(_Objective):
         }
         data["iota"] = grid.expand(iota)
         data["a"] = iota_data["a"]
+        # The raz -> rtz map changes theta as the equilibrium evolves but preserves
+        # the zeta nodes. Only D_zeta is used here, so a matrix built for the
+        # objective's fixed zeta grid remains valid throughout optimization.
         data = compute_fun(
             eq,
             ["ideal ballooning lambda"],
@@ -581,7 +594,7 @@ class BallooningStability(_Objective):
                 ["ideal ballooning lambda"],
                 eq,
                 grid,
-                diffmat=constants["diffmat"],
+                diffmat=self._diffmat,
                 jitable=True,
             ),
             profiles=constants["profiles"],

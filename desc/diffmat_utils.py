@@ -17,17 +17,33 @@ The implementations follow the formulas in
 """
 from functools import partial
 
-from jax import tree_util
+import numpy as np
 
 from desc.backend import jit, jnp
 from desc.integrals.quad_utils import leggauss_lob
+from desc.io import IOAble
 
 
-@tree_util.register_pytree_node_class
-class DiffMat:
-    """Single-resolution constant matrices."""
+class DiffMat(IOAble):
+    """Differentiation and quadrature matrices for a tensor-product grid.
 
-    __slots__ = ("D_rho", "D_theta", "D_zeta", "W_rho", "W_theta", "W_zeta", "_token")
+    At least one differentiation/quadrature matrix pair must be supplied. The
+    matrices must be built for the nodes on which they will be used; in particular,
+    ``D_zeta`` and ``W_zeta`` must match the zeta nodes in the grid passed to
+    :meth:`Equilibrium.compute <desc.equilibrium.Equilibrium.compute>`.
+    Use :meth:`from_zeta_grid` to construct a compatible fourth-order
+    finite-difference pair for a uniform zeta grid.
+
+    Parameters
+    ----------
+    D_rho, D_theta, D_zeta : array-like, optional
+        Differentiation matrices for each coordinate.
+    W_rho, W_theta, W_zeta : array-like, optional
+        Quadrature matrices corresponding to each differentiation matrix.
+    """
+
+    _io_attrs_ = ["D_rho", "D_theta", "D_zeta", "W_rho", "W_theta", "W_zeta"]
+    _static_attrs = ["_token"]
 
     def __init__(
         self,
@@ -37,59 +53,96 @@ class DiffMat:
         D_zeta=None,
         W_rho=None,
         W_theta=None,
-        W_zeta=None
+        W_zeta=None,
     ):
-        self.D_rho = D_rho  # (Nr×Nr) jax.Array or None
-        self.D_theta = D_theta  # (Nt×Nt) jax.Array or None
-        self.D_zeta = D_zeta  # (Nz×Nz) jax.Array or None
-        self.W_rho = W_rho
-        self.W_theta = W_theta
-        self.W_zeta = W_zeta
+        self.D_rho = None if D_rho is None else jnp.asarray(D_rho)
+        self.D_theta = None if D_theta is None else jnp.asarray(D_theta)
+        self.D_zeta = None if D_zeta is None else jnp.asarray(D_zeta)
+        self.W_rho = None if W_rho is None else jnp.asarray(W_rho)
+        self.W_theta = None if W_theta is None else jnp.asarray(W_theta)
+        self.W_zeta = None if W_zeta is None else jnp.asarray(W_zeta)
+        self._set_up()
 
-        # Stable identity for hashing(JIT-safe)
+    def _set_up(self):
+        """Validate the matrices and create JAX's static structure token."""
+        matrix_pairs = (
+            ("rho", self.D_rho, self.W_rho),
+            ("theta", self.D_theta, self.W_theta),
+            ("zeta", self.D_zeta, self.W_zeta),
+        )
+        if all(D is None and W is None for _, D, W in matrix_pairs):
+            raise ValueError(
+                "DiffMat requires at least one differentiation/quadrature matrix "
+                "pair. Omit diffmat to use the default finite-difference solver."
+            )
+        for coordinate, D, W in matrix_pairs:
+            if (D is None) != (W is None):
+                raise ValueError(
+                    f"D_{coordinate} and W_{coordinate} must be provided together."
+                )
+            if D is not None and (
+                D.ndim != 2
+                or W.ndim != 2
+                or D.shape[0] != D.shape[1]
+                or W.shape != D.shape
+            ):
+                raise ValueError(
+                    f"D_{coordinate} and W_{coordinate} must be square matrices "
+                    "with matching shapes."
+                )
+
+        # Matrix values are dynamic PyTree leaves. The token describes only their
+        # static structure, so equal-shaped matrices share compiled code safely.
         self._token = (
             "DiffMat",
-            (None if self.D_zeta is None else getattr(self.D_zeta, "shape", None)),
             (None if self.D_rho is None else getattr(self.D_rho, "shape", None)),
             (None if self.D_theta is None else getattr(self.D_theta, "shape", None)),
+            (None if self.D_zeta is None else getattr(self.D_zeta, "shape", None)),
             (None if self.W_rho is None else getattr(self.W_rho, "shape", None)),
             (None if self.W_theta is None else getattr(self.W_theta, "shape", None)),
             (None if self.W_zeta is None else getattr(self.W_zeta, "shape", None)),
         )
 
-    # JAX PyTree protocol
-    def tree_flatten(self):
-        """Flatten PyTree."""
-        children = (
-            self.D_rho,
-            self.D_theta,
-            self.D_zeta,
-            self.W_rho,
-            self.W_theta,
-            self.W_zeta,
-        )
-        aux = self._token
-        return children, aux
-
     @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        """Unflatten PyTree."""
-        D_rho, D_theta, D_zeta, W_rho, W_theta, W_zeta = children
-        dm = cls(
-            D_rho=D_rho,
-            D_theta=D_theta,
-            D_zeta=D_zeta,
-            W_rho=W_rho,
-            W_theta=W_theta,
-            W_zeta=W_zeta,
+    def from_zeta_grid(cls, zeta):
+        """Create a ``DiffMat`` for a uniform zeta grid.
+
+        This convenience constructor uses the fourth-order summation-by-parts
+        finite-difference stencil returned by :func:`finite_difference_diffmat`.
+        Pass the resulting object with the same ``zeta`` nodes:
+
+        .. code-block:: python
+
+            zeta = jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 600)
+            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+            diffmat = DiffMat.from_zeta_grid(zeta)
+            data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
+
+        Parameters
+        ----------
+        zeta : array-like
+            One-dimensional, uniformly spaced zeta nodes. At least 8 nodes are
+            required by the boundary stencil.
+        """
+        zeta = jnp.asarray(zeta)
+        if zeta.ndim != 1:
+            raise ValueError("zeta must be one-dimensional.")
+        if zeta.size < 8:
+            raise ValueError("At least 8 zeta nodes are required.")
+        spacing = np.diff(np.asarray(zeta))
+        if not np.allclose(spacing, spacing[0]):
+            raise ValueError("zeta nodes must be uniformly spaced.")
+        D_zeta, W_zeta = finite_difference_diffmat(
+            zeta.size, spacing[0], dtype=zeta.dtype
         )
-        dm._token = aux_data
-        return dm
+        return cls(D_zeta=D_zeta, W_zeta=W_zeta)
 
     def __hash__(self):
+        """Hash the static matrix structure."""
         return hash(self._token)
 
     def __eq__(self, other):
+        """Compare the static matrix structure."""
         return isinstance(other, DiffMat) and self._token == other._token
 
 
@@ -145,9 +198,7 @@ def fourier_pts(n: int, domain=None):
     """
     if domain is None:
         domain = [0, 2 * jnp.pi]
-    a, b = domain
-    h = (b - a) / n
-    return jnp.arange(n) * h + a
+    return jnp.linspace(domain[0], domain[1], n, endpoint=False)
 
 
 def fourier_diffmat(n: int):

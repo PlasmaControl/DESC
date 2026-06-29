@@ -14,7 +14,8 @@ import numpy as np
 import pytest
 
 from desc.backend import jax, jnp, vmap
-from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
+from desc.diffmat_utils import (
+    DiffMat,
     finite_difference_diffmat,
     fourier_diffmat,
     fourier_pts,
@@ -33,15 +34,6 @@ def _eval_3D(f, x, y, z, NFP):
             lambda y_val: vmap(lambda x_val: f(x_val, y_val, z_val, NFP))(x)
         )(y)
     )(z)
-
-
-# --no-verify a = 0.015  # [0.0, 0.1]
-# --no-verify #0.5 * (x + 1) + a * jnp.sin(jnp.pi * (x + 1))
-# --no-verify 0.5 * (x + 1) - 0.3 * (1 - x**16) * jnp.cos(0.5 * jnp.pi * (x - 1.8))
-# --no-verify map_term1 = 0.5 * (x + 1)
-# --no-verify exp_term = jnp.exp(0.3 * (x - 1) ** 2)
-# --no-verify map_term2 = 0.3 * (1 - x**16) *exp_term * jnp.cos(0.5*jnp.pi*(x-1.8))
-# --no-verify return map_term1 - map_term2
 
 
 def _tensor_product_derivative_3D(  # noqa: C901
@@ -77,7 +69,7 @@ def _tensor_product_derivative_3D(  # noqa: C901
         z collocation points
     """
     # Generate collocation points
-    x_cheb, w = leggauss_lob(nx)
+    x_cheb, _ = leggauss_lob(nx)
     y_four = fourier_pts(ny)
     z_four = fourier_pts(nz)
 
@@ -128,11 +120,6 @@ def _tensor_product_derivative_3D(  # noqa: C901
         D, _ = fourier_diffmat(nz)
         Dz = (D @ D) * NFP**2
 
-    # Create identity matrices for tensor product
-    Ix = jnp.eye(nx)
-    Iy = jnp.eye(ny)
-    Iz = jnp.eye(nz)
-
     # Tensor product approach using Kronecker products
     # Following the approach in the 2D code
 
@@ -166,7 +153,7 @@ def _tensor_product_derivative_3D(  # noqa: C901
         D = Dz
     else:
         # Identity (no derivative)
-        D = jnp.kron(Iz, jnp.kron(Iy, Ix))
+        D = jnp.kron(Dz, jnp.kron(Dy, Dx))
 
     # Clean up small values
     D = jnp.where(jnp.abs(D) < 1e-12, 0.0, D)
@@ -371,6 +358,53 @@ def test_summation_by_parts():
     np.testing.assert_allclose(W0 @ D0 + (W0 @ D0).T, B, atol=1e-15)
     np.testing.assert_allclose(W1 @ D1 + (W1 @ D1).T, B, atol=5e-13)
     np.testing.assert_allclose(W2 @ D2 + (W2 @ D2).T, 0, atol=1e-16)
+
+
+@pytest.mark.unit
+def test_fourier_pts_excludes_periodic_endpoint():
+    """Fourier nodes span the requested domain without duplicating its endpoint."""
+    points = fourier_pts(8, domain=(-1.0, 3.0))
+    expected = jnp.linspace(-1.0, 3.0, 8, endpoint=False)
+
+    np.testing.assert_allclose(points, expected)
+    assert points[-1] < 3.0
+
+
+@pytest.mark.unit
+def test_diffmat_from_zeta_grid():
+    """DiffMat factory creates matching matrices and is a registered PyTree."""
+    zeta = jnp.linspace(-jnp.pi, jnp.pi, 16)
+    diffmat = DiffMat.from_zeta_grid(zeta)
+
+    assert diffmat.D_zeta.shape == (zeta.size, zeta.size)
+    assert diffmat.W_zeta.shape == diffmat.D_zeta.shape
+    leaves, tree = jax.tree_util.tree_flatten(diffmat)
+    assert len(leaves) == 2
+    rebuilt = jax.tree_util.tree_unflatten(tree, leaves)
+    np.testing.assert_allclose(rebuilt.D_zeta, diffmat.D_zeta)
+    np.testing.assert_allclose(rebuilt.W_zeta, diffmat.W_zeta)
+
+
+@pytest.mark.unit
+def test_diffmat_io(tmp_path):
+    """DiffMat uses DESC's standard IOAble serialization."""
+    diffmat = DiffMat.from_zeta_grid(jnp.linspace(-jnp.pi, jnp.pi, 8))
+    path = tmp_path / "diffmat.h5"
+    diffmat.save(path)
+    rebuilt = DiffMat.load(path)
+
+    np.testing.assert_allclose(rebuilt.D_zeta, diffmat.D_zeta)
+    np.testing.assert_allclose(rebuilt.W_zeta, diffmat.W_zeta)
+    assert rebuilt == diffmat
+
+
+@pytest.mark.unit
+def test_diffmat_rejects_empty_or_unpaired_matrices():
+    """DiffMat must represent an actual, internally consistent discretization."""
+    with pytest.raises(ValueError, match="requires at least one"):
+        DiffMat()
+    with pytest.raises(ValueError, match="provided together"):
+        DiffMat(D_zeta=jnp.eye(8))
 
 
 # To view the plots, run pytest -s

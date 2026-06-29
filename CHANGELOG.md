@@ -83,6 +83,7 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
+- Adds Fourier, Legendre-Lobatto, and finite-difference differentiation matrices in ``desc.diffmat_utils``. Custom zeta differentiation and quadrature matrices can be passed to the ideal-ballooning solver with ``DiffMat``; omitting ``diffmat`` keeps the existing second-order tridiagonal solver.
 
 Bug Fixes
 
@@ -118,10 +119,6 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
-- Adds Fourier, Legendre-Lobatto, and finite-difference differentiation matrices
-  in ``desc.diffmat_utils``. Custom zeta differentiation and quadrature matrices
-  can be passed to the ideal-ballooning solver with ``DiffMat``; omitting
-  ``diffmat`` keeps the existing second-order tridiagonal solver.
 - Adds support for optimization targeting individual coils in a coilset.
   - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
   - Able to set weights to zero, excluding certain coils from the objective.

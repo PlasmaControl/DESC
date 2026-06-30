@@ -14,7 +14,7 @@ from desc.compute import data_index
 from desc.compute.utils import _grow_seeds
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
 from desc.utils import dot, errorif, getsource
@@ -230,7 +230,7 @@ def assert_is_continuous(
 
     num_points = 12
     rho = np.linspace(start=0, stop=delta, num=num_points)
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGridFlux(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
     axis = grid.nodes[:, 0] == 0
     assert axis.any() and not axis.all()
     integrate = surface_integrals_map(grid, expand_out=False)
@@ -294,11 +294,11 @@ class TestAxisLimits:
         deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()
-        grid = LinearGrid(L=2, M=1, N=1, axis=False)
+        grid = LinearGridFlux(L=2, M=1, N=1, axis=False)
         assert not grid.axis.size
         data = eq.compute(name, grid=grid).keys()
         assert name in data and deps < data and axis_limit_deps.isdisjoint(data)
-        grid = LinearGrid(L=2, M=1, N=1, axis=True)
+        grid = LinearGridFlux(L=2, M=1, N=1, axis=True)
         assert grid.axis.size
         data = eq.compute(name, grid=grid)
         assert name in data and deps | axis_limit_deps < data.keys()
@@ -337,7 +337,7 @@ class TestAxisLimits:
         """Test direction of magnetic field at axis limit."""
 
         def test(eq):
-            grid = LinearGrid(rho=0, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGridFlux(rho=0, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
             assert grid.axis.size
             data = eq.compute(
                 ["b", "n_theta", "n_rho", "e_zeta", "g_zz", "B"], grid=grid
@@ -419,7 +419,7 @@ def _reverse_mode_unsafe_names():
 def test_reverse_mode_ad_axis(name):
     """Asserts that the rho=0 axis limits are reverse mode differentiable."""
     eq = get("ESTELL")
-    grid = LinearGrid(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    grid = LinearGridFlux(rho=0.0, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(2, 2, 2, 4, 4, 4)
 

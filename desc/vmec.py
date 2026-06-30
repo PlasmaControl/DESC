@@ -16,7 +16,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import CustomGridFlux, LinearGridFlux
 from desc.integrals import surface_averages
 from desc.objectives import (
     ObjectiveFunction,
@@ -322,10 +322,10 @@ class VMECIO:
         if verbose > 0:
             print("Computing data")
 
-        grid_axis = LinearGrid(M=M_grid, N=N_grid, rho=np.array([0.0]), NFP=NFP)
-        grid_lcfs = LinearGrid(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
-        grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
-        grid_full = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_full)
+        grid_axis = LinearGridFlux(M=M_grid, N=N_grid, rho=np.array([0.0]), NFP=NFP)
+        grid_lcfs = LinearGridFlux(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGridFlux(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
+        grid_full = LinearGridFlux(M=M_grid, N=N_grid, NFP=NFP, rho=r_full)
 
         data_quad = eq.compute(
             [
@@ -1522,7 +1522,7 @@ class VMECIO:
         else:
             # if kinetic profiles or non-power series or spline,
             #  fit pressure to power series
-            grid = LinearGrid(L=eq.L_grid, axis=True)
+            grid = LinearGridFlux(L=eq.L_grid, axis=True)
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])
             p = grid.compress(data["p"])
@@ -1841,19 +1841,19 @@ class VMECIO:
         rr = np.sqrt(idxes / Nr_vmec)
         rt = np.linspace(0, 2 * np.pi, num_theta)
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
+        r_grid = LinearGridFlux(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
         # straight field line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
+        t_grid = LinearGridFlux(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
         # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
 
         # find theta angles corresponding to desired theta* angles
-        v_grid = Grid(
+        v_grid = CustomGridFlux(
             equil.map_coordinates(t_grid.nodes, inbasis=("rho", "theta_PEST", "zeta"))
         )
         r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)

@@ -15,6 +15,14 @@ v0.17.2
 
 New Features
 
+- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
+
+
+v0.17.2
+-------
+
+New Features
+
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
@@ -55,7 +63,6 @@ v0.17.1
 Bug Fixes
 
 - Fixes incorrect units in the documentation of some curvature variables.
-
 
 
 v0.17.0
@@ -125,8 +132,6 @@ New Features
   - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
   - Able to set weights to zero, excluding certain coils from the objective.
 
-
-
 Bug Fixes
 
 - Fixes straight field line equilibrium conversion, see #1880
@@ -183,6 +188,7 @@ Backend
 
 - Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
 - No longer closes over the field in ``desc.magnetic_fields._core.field_line_integrate``, which can dramatically reduce compile times when the field being traced has large size attributes (for example, when using a ``desc.magnetic_fields._core.SplineMagneticField`` object).
+
 
 v0.14.2
 -------
@@ -293,7 +299,6 @@ Breaking Changes
 - Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
 
 
-
 v0.13.0
 -------
 
@@ -318,13 +323,13 @@ New Features
 - Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
 - Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
 
-
 Bug Fixes
 
 - Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version.
 - Changes ``FixLambdaGauge`` constraint to now enforce zero flux surface average for lambda, instead of enforcing lambda(rho,0,0)=0 as it was incorrectly doing before.
 - Fixes bug in ``softmin/softmax`` implementation.
 - Fixes bug that occured when using ``ProximalProjection`` with a scalar optimization algorithm.
+
 
 v0.12.3
 -------
@@ -352,8 +357,6 @@ Bug Fixes
 Deprecations
 
 - ``deriv_mode="looped"`` in ``ObjectiveFunction`` is deprecated and will be removed in a future version in favored of ``deriv_mode="batched"`` with ``jac_chunk_size=1``,
-
-
 
 
 v0.12.2
@@ -530,6 +533,7 @@ Breaking Changes
 - Renames the method for comparing equivalence between DESC objects from `eq` to `equiv`
 to avoid confusion with the common shorthand for `Equilibrium`.
 - Minimum Python version is now 3.9
+
 
 v0.10.4
 -------

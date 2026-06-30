@@ -2145,17 +2145,16 @@ class TestObjectiveFunction:
         eq = get("W7-X")
         obj = desc.objectives.BallooningStability(eq=eq)
         obj.build()
+        diffmat = None
         lam = eq.compute(
             ["ideal ballooning lambda"],
-            Grid.create_meshgrid(
-                [
-                    obj._constants["rho"],
-                    obj._constants["alpha"],
-                    obj._constants["zeta"],
-                ],
+            grid=Grid.create_meshgrid(
+                [obj.constants["rho"], obj.constants["alpha"], obj.constants["zeta"]],
                 coordinates="raz",
             ),
+            diffmat=diffmat,
         )["ideal ballooning lambda"]
+
         lambda0, w0, w1 = (
             obj._constants["lambda0"],
             obj._constants["w0"],

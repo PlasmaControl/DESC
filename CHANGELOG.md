@@ -86,6 +86,7 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
+- Adds Fourier, Legendre-Lobatto, and finite-difference differentiation matrices in ``desc.diffmat_utils``. Custom zeta differentiation and quadrature matrices can be passed to the ideal-ballooning solver with ``DiffMat``; omitting ``diffmat`` keeps the existing second-order tridiagonal solver.
 
 Bug Fixes
 

@@ -2147,7 +2147,7 @@ class TestObjectiveFunction:
         obj.build()
         lam = eq.compute(
             ["ideal ballooning lambda"],
-            Grid.create_meshgrid(
+            grid=Grid.create_meshgrid(
                 [
                     obj._constants["rho"],
                     obj._constants["alpha"],
@@ -2156,6 +2156,7 @@ class TestObjectiveFunction:
                 coordinates="raz",
             ),
         )["ideal ballooning lambda"]
+
         lambda0, w0, w1 = (
             obj._constants["lambda0"],
             obj._constants["w0"],

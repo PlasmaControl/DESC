@@ -287,6 +287,7 @@ _class_inheritance = {
     ],
     "desc.magnetic_fields._core.OmnigenousField": [],
 }
+_topological_order = {}
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = {"basis"}

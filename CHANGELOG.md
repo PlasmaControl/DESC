@@ -1,6 +1,13 @@
 Changelog
 =========
 
+Bug Fixes
+
+- Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
+
+v0.17.2
+-------
+
 New Features
 
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
@@ -20,7 +27,6 @@ Bug Fixes
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 - Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
 - `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.
-- Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
 
 Performance Improvements
 

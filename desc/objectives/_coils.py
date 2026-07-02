@@ -172,7 +172,7 @@ class _CoilObjective(_Objective):
                 "objective_mask": slice(None),
             }
             if np.any([w == 0 for w in tree_leaves(self._weight)]):
-                coilset_mask = self._coilset_broadcast(self._weight)
+                coilset_mask = self._coilset_broadcast(self._weight, target="Coil")
                 objective_mask = self._coilset_broadcast(
                     self._weight, self._broadcast_input
                 )

@@ -32,7 +32,7 @@ jobs:
                  {group: 8, python_version: '3.14'}]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Filter changes
         id: changes
@@ -127,7 +127,7 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           name: codecov-umbrella
           files: ./cov.xml

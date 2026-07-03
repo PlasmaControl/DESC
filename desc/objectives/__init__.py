@@ -45,7 +45,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._neoclassical import EffectiveRipple, TrappedResonance
+from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,
@@ -56,6 +56,7 @@ from ._omnigenity import (
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
 from ._stability import BallooningStability, MagneticWell, MercierStability
+from ._trapped_resonance import TrappedResonance
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,

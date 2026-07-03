@@ -18,9 +18,8 @@ from ..integrals.quad_utils import automorphism_sin, get_quadrature, grad_automo
 class TrappedResonance(_Objective):
     """Trapped energetic particle resonance penalty.
 
-    Creates bump function about a specified number of lowest order resonances
-    (m/n) for trapped energetic particle motion. Vicinity to these rational
-    values is penalized.
+    Penalizes rational crossings of Omega_eta (the ratio between precessional motion and bounce frequency)
+    to minimize trapped energetic particle radial motion due to resonances with magnetic field perturbations from omnigenity.
 
     Parameters
     ----------
@@ -42,9 +41,89 @@ class TrappedResonance(_Objective):
         normalized bump function. Default is ``"linear"``.
     Delta_Omega : float, optional
         Half-width of the resonance interval for ``weight_method="bump"``.
-        If ``None``, defaults to 2× the mean |Ω[i+1]-Ω[i]| spacing.
+        If ``None``, defaults to wd_blur × the max |Ω[i+1]-Ω[i]| spacing.
         Ignored when ``weight_method="linear"``.
+    wd_blur : float, optional
+        Factor multiplying Delta_Omega in case where Delta_Omega = ``None`` (see Delta_Omega).
+        Otherwise is ignored.
+        Defaults to 1.25.
+    num_transit : float, optional
+        2π * num_transits sets the extent of zeta for bounce integration.
+        Defaults to 5.
+    num_quad : int, optional
+        Number of quadrature points utilized for any integration in this objective.
+        Defaults to 32.
+    num_pitch : int, optional
+        Number of trapped particle pitches/Bcrit to consider, calculated in evenly-spaced intervals between Bmin,Bmax on each flux surface.
+        Defaults to 16.
+    KE_frac : array, optional
+        Fraction of 3.5 MeV to use for the energetic particle kinetic energy.
+        Defaults to np.array([1]).
+    knots_per_transit : int, optional
+        knots_per_transit * num_transits gives how many points to use in zeta grid.
+        Defaults to 100.
+    batch : bool, optional
+        Whether or not to calculate multiple trapped particles simultaneously, especially for bounce integration.
+        Defaults to True.
+    num_well : int or None, optional
+        Specify to return the first ``num_well`` pairs of bounce points for each
+        pitch and field line. Default is ``None``, which will detect all wells,
+        but due to current limitations in JAX this will have worse performance.
+        Specifying a number that tightly upper bounds the number of wells will
+        increase performance. In general, an upper bound on the number of wells
+        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        toroidal Fourier resolution of B, respectively, in straight-field line
+        PEST coordinates, and ι is the rotational transform normalized by 2π.
+        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        The ``check_points`` or ``plot`` method is useful to select a reasonable
+        value.
 
+        If there were fewer wells detected along a field line than the size of the
+        last axis of the returned arrays, then that axis is padded with zero.
+
+        Defaults to None
+    pitch_invs : array or None, optional
+        If not None, sets pitch_invs (Bcrits) to specified value. If None, let's
+        compute specify a linspace of num_pitch between Bmin and Bmax of each
+        flux surface. Also causes ``compute`` to skip the phase-space average and
+        return the raw per-(rho, pitch, well) resonance-physics dictionary instead
+        of the phase-space-averaged objective.
+        Defaults to None.
+    N : int, optional
+        Generalized omnigenous helicity. Each B contour closes on itself after traversing the torus M times toroidally and N times poloidally.
+        Defaults to 0, which is a quasi-axisymmetric configuration.
+    M : int, optional
+        Generalized omnigenous helicity. Each B contour closes on itself after traversing the torus M times toroidally and N times poloidally.
+        Defaults to 1, which is a quasi-axisymmetric configuration.
+    p_max : int, optional
+        Maximum numerator of rational Omega_eta considered. Rational Omega_eta will be considered for all combinations of p/q up to p_max/q_max.
+        Defaults to 10.
+    q_max : int, optional
+        Maximum denominator of rational Omega_eta considered. Rational Omega_eta will be considered for all combinations of p/q up to p_max/q_max.
+        Defaults to 10.
+    res_range_min : float, optional
+        Minimum value of rational Omega_eta to consider regardless of p and q.
+        Defaults to -4.
+    res_range_max : float, optional
+        Maximum value of rational Omega_eta to consider regardless of p and q.
+        Defaults to 4.
+    fill_value : float, optional
+        Value to set bounce integration outputs to if no well is found. Cannot use jnp.nan to retain optimization abilities.
+        Cannot use 0 for confusion with other quantities and averages.
+        Defaults to 11.0.
+    stab_sacrifice : bool, optional
+        If ``True``, multiply the island-width term by ``Omega_prime_s**2`` in the
+        objective. If ``False``, omit that factor to preserve numerical stability.
+        Defaults to ``False``.
+    cropping_DOmega : bool, optional
+        If ``True``, Delta_Omega calculation is clipped by 0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta).
+        This must be when using the ``bump`` weighting method and Delta_Omega = None case.
+        Otherwise this quantity is ignored.
+        Defaults to ``False``.
+    bt_filter_flag : bool, optional
+        If ``True``, zero out wells whose poloidal bounce width exceeds 2.5π
+        (barely-trapped filter) before the resonance physics calculation.
+        Defaults to ``False``.
     """
 
     _scalar = False
@@ -52,9 +131,7 @@ class TrappedResonance(_Objective):
     _units = "~"
     _print_value_fmt = "Trapped EP Resonance Penalty: "
 
-    _static_attrs = _Objective._static_attrs + [
-        "_hyperparameters", "_keys_1dr", "_key",
-    ]
+    _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]
 
     def __init__(
         self,
@@ -64,19 +141,23 @@ class TrappedResonance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        num_rho=10,
-        num_eta=10,
-        KE_frac=np.array([1]),
-        *,
-        num_transit=5,
-        knots_per_transit=100,
-        num_quad=32,
-        num_pitch=16,
-        batch=True,
         name="TrappedResonance",
         jac_chunk_size=None,
+        verbose=False,
+        pitch_batch_size=1,
+        surf_batch_size=1,
+        num_rho=10,
+        num_eta=10,
+        weight_method="linear",
+        Delta_Omega=None,
+        wd_blur=1.25,
+        num_transit=5,
+        num_quad=32,
+        num_pitch=16,
+        KE_frac=np.array([1]),
+        knots_per_transit=100,
+        batch=True,
+        num_well=None,
         pitch_invs=None,
         N=0,
         M=1,
@@ -84,14 +165,9 @@ class TrappedResonance(_Objective):
         q_max=10,
         res_range_min=-4,
         res_range_max=4,
-        verbose=False,
-        pitch_batch_size=1,
-        surf_batch_size=1,
-        weight_method="linear",
-        Delta_Omega=None,
         fill_value=11,
-        wd_blur=1.25,
         stab_sacrifice=False,
+        cropping_DOmega=False,
         bt_filter_flag=False,
     ):
         if target is None and bounds is None:
@@ -130,10 +206,11 @@ class TrappedResonance(_Objective):
             "fill_value": fill_value,
             "wd_blur": wd_blur,
             "stab_sacrifice": stab_sacrifice,
+            "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
         }
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
-        self._key = "f_tr2"
+        self._key = "trapped EP resonance"
 
         super().__init__(
             things=[eq],
@@ -167,7 +244,7 @@ class TrappedResonance(_Objective):
             rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
         )
         self._constants["quad"] = get_quadrature(
-            leggauss(self._hyperparameters.pop("num_quad")),
+            leggauss(self._hyperparameters["num_quad"]),
             (automorphism_sin, grad_automorphism_sin),
         )
         rho_res = 1.0 / self._num_rho

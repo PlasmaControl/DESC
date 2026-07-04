@@ -2739,6 +2739,16 @@ def _field_line_integrate(
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
     """
+    # For filamentary coils, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing the coil geometry (which is independent of the evaluation
+    # points) at every step of every field line. Duck-typed to avoid a circular
+    # import of desc.coils.
+    if hasattr(field, "_as_precomputed_source"):
+        field = field._as_precomputed_source(source_grid, params)
+        params = None
+        source_grid = None
+
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()

@@ -26,7 +26,11 @@ from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
-from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
+from desc.magnetic_fields import (
+    SumMagneticField,
+    VerticalMagneticField,
+    field_line_integrate,
+)
 from desc.objectives import LinkingCurrentConsistency
 from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
@@ -1465,6 +1469,49 @@ def test_linking_number():
     # due to alternating orientation of the coils due to symmetry.
     expected = [1, -1] * 5
     np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3)
+
+
+@pytest.mark.unit
+def test_precomputed_biot_savart_source():
+    """Test precomputed coil sources against the standard evaluation."""
+    coil = FourierPlanarCoil(current=1e6, center=[10, 1, 0])
+    # NFP > 1 with sym=True exercises the source-side rotation/reflection expansion
+    coilset = CoilSet(coil, NFP=5, sym=True)
+    s = np.linspace(0, 2 * np.pi, 40, endpoint=False)
+    # SplineXYZCoil exercises the Hanson-Hirshman segment group
+    spline_coil = SplineXYZCoil(
+        current=3e5, X=10 + 2 * np.cos(s), Y=np.zeros_like(s), Z=2 * np.sin(s)
+    )
+    mixed = MixedCoilSet(coilset, spline_coil, check_intersection=False)
+
+    rng = np.random.default_rng(0)
+    pts = np.column_stack(
+        [rng.uniform(9, 11, 10), rng.uniform(0, 2 * np.pi, 10), rng.uniform(-1, 1, 10)]
+    )
+    for field in [coil, coilset, mixed]:
+        source = field._as_precomputed_source()
+        np.testing.assert_allclose(
+            source.compute_magnetic_field(pts),
+            field.compute_magnetic_field(pts),
+            rtol=1e-10,
+            atol=1e-14,
+        )
+        np.testing.assert_allclose(
+            source.compute_magnetic_vector_potential(pts),
+            field.compute_magnetic_vector_potential(pts),
+            rtol=1e-10,
+            atol=1e-14,
+        )
+
+    # field_line_integrate takes the precomputed path automatically for coil
+    # fields; wrapping in SumMagneticField forces the generic path
+    r0 = np.array([10.1, 10.3])
+    z0 = np.zeros_like(r0)
+    phis = np.linspace(0, 2 * np.pi / 5, 3)
+    r_new, z_new = field_line_integrate(r0, z0, phis, coilset)
+    r_old, z_old = field_line_integrate(r0, z0, phis, SumMagneticField(coilset))
+    np.testing.assert_allclose(r_new, r_old, rtol=1e-6, atol=1e-8)
+    np.testing.assert_allclose(z_new, z_old, rtol=1e-6, atol=1e-8)
 
 
 @pytest.mark.unit

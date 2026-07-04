@@ -91,6 +91,7 @@ from desc.objectives import (
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
+    TrappedResonance,
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
@@ -3282,6 +3283,13 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is TrappedResonance:
+        kwargs["num_rho"] = 3
+        kwargs["num_eta"] = 4
+        kwargs["num_transit"] = 2
+        kwargs["knots_per_transit"] = 20
+        kwargs["num_pitch"] = 4
+        kwargs["num_quad"] = 8
     return objective(eq=eq, **kwargs)
 
 
@@ -3327,6 +3335,9 @@ class TestComputeScalarResolution:
         DeflationOperator,
         # need to avoid blowup near the axis
         MercierStability,
+        # resonance detection converges slower with grid resolution than the
+        # shared tolerance allows within this sweep's reduced resolution range
+        TrappedResonance,
         # we do not test these since they depend too much on what the user wants
         ExternalObjective,
         LinearObjectiveFromUser,
@@ -3844,6 +3855,7 @@ class TestObjectiveNaNGrad:
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,
         ToroidalFlux,
+        TrappedResonance,
         VacuumBoundaryError,
         # we do not test these since they depend too much on what the user wants
         ExternalObjective,
@@ -4248,6 +4260,27 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_trapped_resonance(self):
+        """TrappedResonance."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="linear")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "linear weighting"
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="bump")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "bump weighting"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

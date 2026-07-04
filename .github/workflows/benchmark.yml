@@ -24,6 +24,7 @@ jobs:
     permissions:
       pull-requests: write  # allows posting the benchmark comment on the PR
       contents: read        # allows checkout; prevents the token from pushing code or modifying workflows if exfiltrated by fork code
+      actions: read         # allows `gh cache list`; all other scopes default to none
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:

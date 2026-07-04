@@ -474,8 +474,6 @@ def _resonance_physics(
         w_raw = rho_res * C_norm * jnp.abs(dOmega_drho[..., None]) * jnp.exp(exp_arg)
         # Weight is non-zero only if in interval and valid 
         res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0)
-        # Normalize res_weight to sum to 1 
-        # res_weight = safediv(res_weight, res_weight.sum(axis=0), fill=0.0)
     else:
         # Double-where: use Omega_safe (0 at invalid entries) so that
         # safediv never sees fill_value operands, preventing NaN gradients.

@@ -8,18 +8,22 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
+from ..integrals.quad_utils import (
+    automorphism_sin,
+    get_quadrature,
+    grad_automorphism_sin,
+)
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
-
-from ..integrals.quad_utils import automorphism_sin, get_quadrature, grad_automorphism_sin
 
 
 # New resonance objective from John Anthony Labbate
 class TrappedResonance(_Objective):
     """Trapped energetic particle resonance penalty.
 
-    Penalizes rational crossings of Omega_eta (the ratio between precessional motion and bounce frequency)
-    to minimize trapped energetic particle radial motion due to resonances with magnetic field perturbations from omnigenity.
+    Penalizes rational crossings of Omega_eta (the ratio between precessional
+    motion and bounce frequency) to minimize trapped energetic particle radial
+    motion due to resonances with magnetic field perturbations from omnigenity.
 
     Parameters
     ----------
@@ -44,8 +48,8 @@ class TrappedResonance(_Objective):
         If ``None``, defaults to wd_blur × the max |Ω[i+1]-Ω[i]| spacing.
         Ignored when ``weight_method="linear"``.
     wd_blur : float, optional
-        Factor multiplying Delta_Omega in case where Delta_Omega = ``None`` (see Delta_Omega).
-        Otherwise is ignored.
+        Factor multiplying Delta_Omega in case where Delta_Omega = ``None``
+        (see Delta_Omega). Otherwise is ignored.
         Defaults to 1.25.
     num_transit : float, optional
         2π * num_transits sets the extent of zeta for bounce integration.
@@ -54,7 +58,8 @@ class TrappedResonance(_Objective):
         Number of quadrature points utilized for any integration in this objective.
         Defaults to 32.
     num_pitch : int, optional
-        Number of trapped particle pitches/Bcrit to consider, calculated in evenly-spaced intervals between Bmin,Bmax on each flux surface.
+        Number of trapped particle pitches/Bcrit to consider, calculated in
+        evenly-spaced intervals between Bmin,Bmax on each flux surface.
         Defaults to 16.
     KE_frac : array, optional
         Fraction of 3.5 MeV to use for the energetic particle kinetic energy.
@@ -63,7 +68,8 @@ class TrappedResonance(_Objective):
         knots_per_transit * num_transits gives how many points to use in zeta grid.
         Defaults to 100.
     batch : bool, optional
-        Whether or not to calculate multiple trapped particles simultaneously, especially for bounce integration.
+        Whether or not to calculate multiple trapped particles simultaneously,
+        especially for bounce integration.
         Defaults to True.
     num_well : int or None, optional
         Specify to return the first ``num_well`` pairs of bounce points for each
@@ -90,16 +96,20 @@ class TrappedResonance(_Objective):
         of the phase-space-averaged objective.
         Defaults to None.
     N : int, optional
-        Generalized omnigenous helicity. Each B contour closes on itself after traversing the torus M times toroidally and N times poloidally.
+        Generalized omnigenous helicity. Each B contour closes on itself after
+        traversing the torus M times toroidally and N times poloidally.
         Defaults to 0, which is a quasi-axisymmetric configuration.
     M : int, optional
-        Generalized omnigenous helicity. Each B contour closes on itself after traversing the torus M times toroidally and N times poloidally.
+        Generalized omnigenous helicity. Each B contour closes on itself after
+        traversing the torus M times toroidally and N times poloidally.
         Defaults to 1, which is a quasi-axisymmetric configuration.
     p_max : int, optional
-        Maximum numerator of rational Omega_eta considered. Rational Omega_eta will be considered for all combinations of p/q up to p_max/q_max.
+        Maximum numerator of rational Omega_eta considered. Rational Omega_eta
+        will be considered for all combinations of p/q up to p_max/q_max.
         Defaults to 10.
     q_max : int, optional
-        Maximum denominator of rational Omega_eta considered. Rational Omega_eta will be considered for all combinations of p/q up to p_max/q_max.
+        Maximum denominator of rational Omega_eta considered. Rational Omega_eta
+        will be considered for all combinations of p/q up to p_max/q_max.
         Defaults to 10.
     res_range_min : float, optional
         Minimum value of rational Omega_eta to consider regardless of p and q.
@@ -108,17 +118,19 @@ class TrappedResonance(_Objective):
         Maximum value of rational Omega_eta to consider regardless of p and q.
         Defaults to 4.
     fill_value : float, optional
-        Value to set bounce integration outputs to if no well is found. Cannot use jnp.nan to retain optimization abilities.
-        Cannot use 0 for confusion with other quantities and averages.
+        Value to set bounce integration outputs to if no well is found. Cannot
+        use ``jnp.nan`` to retain optimization abilities. Cannot use 0 for
+        confusion with other quantities and averages.
         Defaults to 11.0.
     stab_sacrifice : bool, optional
         If ``True``, multiply the island-width term by ``Omega_prime_s**2`` in the
         objective. If ``False``, omit that factor to preserve numerical stability.
         Defaults to ``False``.
     cropping_DOmega : bool, optional
-        If ``True``, Delta_Omega calculation is clipped by 0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta).
-        This must be when using the ``bump`` weighting method and Delta_Omega = None case.
-        Otherwise this quantity is ignored.
+        If ``True``, Delta_Omega calculation is clipped by
+        ``0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta)``.
+        This must be when using the ``bump`` weighting method and
+        ``Delta_Omega = None`` case. Otherwise this quantity is ignored.
         Defaults to ``False``.
     bt_filter_flag : bool, optional
         If ``True``, zero out wells whose poloidal bounce width exceeds 2.5π
@@ -282,16 +294,18 @@ class TrappedResonance(_Objective):
         p_arr = np.zeros(n_res_max, dtype=int)
         res_arr_set = 0
 
-        for p in range(0,p_max+1):
-            for q in range(1,q_max+1):
-                condition = np.logical_and(p/q >= res_range_min, p/q <= res_range_max)
+        for p in range(0, p_max + 1):
+            for q in range(1, q_max + 1):
+                condition = np.logical_and(
+                    p / q >= res_range_min, p / q <= res_range_max
+                )
                 if condition:
-                    res_arr[res_arr_set] = p/q
+                    res_arr[res_arr_set] = p / q
                     q_arr[res_arr_set] = q
                     p_arr[res_arr_set] = p
-                    res_arr_set+=1
+                    res_arr_set += 1
                     if p != 0:
-                        res_arr[res_arr_set] = -p/q
+                        res_arr[res_arr_set] = -p / q
                         q_arr[res_arr_set] = q
                         p_arr[res_arr_set] = -p
                         res_arr_set += 1
@@ -300,9 +314,9 @@ class TrappedResonance(_Objective):
         q_arr = q_arr[:res_arr_set]
         p_arr = p_arr[:res_arr_set]
 
-        self._hyperparameters['q_arr'] = q_arr
-        self._hyperparameters['res_arr'] = res_arr
-        self._hyperparameters['p_arr'] = p_arr
+        self._hyperparameters["q_arr"] = q_arr
+        self._hyperparameters["res_arr"] = res_arr
+        self._hyperparameters["p_arr"] = p_arr
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")

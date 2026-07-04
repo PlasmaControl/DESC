@@ -433,8 +433,10 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-        self._print_value_fmt = "Quasi-symmetry ({},{}) two-term normalized error: ".format(
-            self.helicity[0], self.helicity[1]
+        self._print_value_fmt = (
+            "Quasi-symmetry ({},{}) two-term normalized error: ".format(
+                self.helicity[0], self.helicity[1]
+            )
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -522,8 +524,10 @@ class QuasisymmetryTwoTermNormalized(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            self._print_value_fmt = "Quasi-symmetry ({},{}) two-term normalized error: ".format(
-                self.helicity[0], self.helicity[1]
+            self._print_value_fmt = (
+                "Quasi-symmetry ({},{}) two-term normalized error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
             )
 
 

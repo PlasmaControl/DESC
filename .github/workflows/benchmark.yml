@@ -21,6 +21,9 @@ jobs:
   benchmark:
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run_benchmarks') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # allows posting the benchmark comment on the PR
+      contents: read        # allows checkout; prevents the token from pushing code or modifying workflows if exfiltrated by fork code
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
@@ -38,6 +41,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          allow-unsafe-pr-checkout: true
 
       - name: Filter changes
         id: changes

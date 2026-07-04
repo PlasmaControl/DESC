@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import pytest
+from orthax.legendre import leggauss
 from packaging.version import Version
 from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
@@ -25,12 +26,18 @@ from desc.coils import (
     MixedCoilSet,
     initialize_modular_coils,
 )
-from desc.compute import get_transforms
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
+from desc.integrals.quad_utils import (
+    automorphism_sin,
+    get_quadrature,
+    grad_automorphism_sin,
+)
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -2141,6 +2148,80 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_objective_against_compute_trapped_resonance(self):
+        """Test TrappedResonance objective matches a direct compute call."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        num_rho = 3
+        num_eta = 8
+        num_transit = 4
+        knots_per_transit = 60
+        num_quad = 16
+        opts = dict(
+            # settings coarser than this detect no resonance crossings at all,
+            # making the objective identically zero and the comparison trivial.
+            num_pitch=8,
+            KE_frac=np.array([1]),
+            N=0,
+            M=1,
+            # a single p/q=0/1 resonance keeps res_arr/q_arr/p_arr trivial
+            # to reproduce by hand outside of TrappedResonance.build().
+            p_max=0,
+            q_max=1,
+            res_range_min=-1,
+            res_range_max=1,
+            weight_method="linear",
+        )
+
+        rho = np.linspace(0, 1, num_rho + 1)[1:]
+        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        quad = get_quadrature(
+            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+        )
+        keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
+        profiles = get_profiles(keys_1dr + ["trapped EP resonance"], eq, grid)
+        data = compute_fun(
+            eq, keys_1dr, eq.params_dict, get_transforms(keys_1dr, eq, grid), profiles
+        )
+        data = compute_fun(
+            eq,
+            "trapped EP resonance",
+            eq.params_dict,
+            get_transforms("trapped EP resonance", eq, grid, jitable=True),
+            profiles,
+            data=data,
+            quad=quad,
+            nfp=eq.NFP,
+            eq=eq,
+            zeta=zeta,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            rho_res=1.0 / num_rho,
+            eta_res=2 * np.pi / num_eta,
+            res_arr=np.array([0.0]),
+            q_arr=np.array([1]),
+            p_arr=np.array([0]),
+            **opts,
+        )
+        expected = grid.compress(data["trapped EP resonance"])
+
+        obj = TrappedResonance(
+            eq,
+            num_rho=num_rho,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            knots_per_transit=knots_per_transit,
+            num_quad=num_quad,
+            **opts,
+        )
+        obj.build(verbose=0)
+        actual = obj.compute(eq.params_dict)
+        np.testing.assert_allclose(actual, expected)
+
+    @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
@@ -3284,12 +3365,14 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is TrappedResonance:
+        # Settings coarser than this detect no resonance crossings at all,
+        # making the objective identically zero and the test meaningless.
         kwargs["num_rho"] = 3
-        kwargs["num_eta"] = 4
-        kwargs["num_transit"] = 2
-        kwargs["knots_per_transit"] = 20
-        kwargs["num_pitch"] = 4
-        kwargs["num_quad"] = 8
+        kwargs["num_eta"] = 8
+        kwargs["num_transit"] = 4
+        kwargs["knots_per_transit"] = 60
+        kwargs["num_pitch"] = 8
+        kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
 
 

@@ -654,7 +654,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]

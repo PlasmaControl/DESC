@@ -165,7 +165,7 @@ class QuasisymmetryBoozer(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -173,8 +173,7 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -334,7 +333,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -342,8 +341,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -631,7 +629,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -639,8 +637,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -832,7 +829,7 @@ class Omnigenity(_Objective):
         )
         errorif(
             jnp.any(field.B_lm[: field.M_B] < 0),
-            "|B| on axis must be positive! Check B_lm input.",
+            msg="|B| on axis must be positive! Check B_lm input.",
         )
 
         timer = Timer()
@@ -914,7 +911,7 @@ class Omnigenity(_Objective):
             freedom, eg OmnigenousField.params_dict. Otherwise None.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -922,8 +919,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # sort parameters
         if self._eq_fixed:
@@ -1112,7 +1108,7 @@ class Isodynamicity(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1120,8 +1116,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

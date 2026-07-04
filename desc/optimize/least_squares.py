@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jnp, qr, qr_multiply
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -176,6 +176,7 @@ def lsqtr(  # noqa: C901
     x = make_strictly_feasible(x, lb, ub)
 
     f = fun(x, *args)
+    f0 = f
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
@@ -258,6 +259,22 @@ def lsqtr(  # noqa: C901
     actual_reduction = jnp.inf
     reduction_ratio = 0
 
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print("-" * 60, "\n")
+
     if verbose > 1:
         print_header_nonlinear()
         print_iteration_nonlinear(
@@ -269,7 +286,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = 0.0  # "Levenberg-Marquardt" parameter
+    alpha = jnp.float64(0.0)  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 
@@ -285,20 +302,20 @@ def lsqtr(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ f_a)
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -Qt_fa)
             else:
-                Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
-            # We don't need the Q and R matrices anymore
-            # Trust region solver will solve the augmented system
-            # with a new Q and R
-            del Q, R
+                # min-norm Newton step uses the QR of J_a.T
+                Q, Rt = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(Rt.T, -f_a, lower=True)
+                del Q, Rt
+                # the tr subproblem still needs the QR of J_a itself
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
 
         actual_reduction = -1
 
         # theta controls step back step ratio from the bounds.
-        theta = max(0.995, 1 - g_norm)
+        theta = jnp.float64(max(0.995, 1 - g_norm))
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
@@ -315,7 +332,7 @@ def lsqtr(  # noqa: C901
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    p_newton, f_a, J_a, trust_radius, alpha
+                    p_newton, Qt_fa, R, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 
@@ -451,6 +468,8 @@ def lsqtr(  # noqa: C901
         allx=allx,
         alltr=alltr,
     )
+    result["fse"] = f
+    result["f0se"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

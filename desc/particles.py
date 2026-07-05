@@ -4,6 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 
 import equinox as eqx
+import numpy as np
 from diffrax import (
     AbstractTerm,
     Event,
@@ -16,18 +17,81 @@ from diffrax import (
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
 from desc.backend import jax, jnp, tree_map
+from desc.basis import _PrecomputedFourierZernikeBasis
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_profiles, get_transforms
+from desc.compute.utils import get_derivs, get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot, errorif, safediv, setdefault
+from desc.transform import Transform
+from desc.utils import cross, dot, errorif, safediv, setdefault, warnif
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
+
+# data needed by VacuumGuidingCenterTrajectory in flux coordinates
+_GC_FLUX_DATA_KEYS = [
+    "B",
+    "|B|",
+    "grad(|B|)",
+    "e^rho",
+    "e^theta",
+    "e^zeta",
+    "b",
+]
+
+
+def _precompute_zernike_bases(eq):
+    """Precompute polynomial coefficient Zernike bases of an Equilibrium.
+
+    Used to speed up the repeated single-point basis evaluations during
+    particle tracing, see ``_PrecomputedFourierZernikeBasis``.
+    """
+    warnif(
+        max(eq.R_basis.L, eq.Z_basis.L, eq.L_basis.L) > 24,
+        UserWarning,
+        "Evaluating the polynomial coefficient form of the Zernike radial basis "
+        "in double precision loses accuracy for L > 24. Consider using "
+        "zernike_mode='jacobi' for particle tracing instead.",
+    )
+    bases = {"R": _PrecomputedFourierZernikeBasis(eq.R_basis)}
+    # Z and L bases are usually identical, share the tables and the transform
+    if eq.Z_basis.equiv(eq.L_basis):
+        bases["Z"] = bases["L"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
+    else:
+        bases["Z"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
+        bases["L"] = _PrecomputedFourierZernikeBasis(eq.L_basis)
+    return bases
+
+
+def _get_precomputed_transforms(bases, eq, grid, data_keys):
+    """Build the transforms dict for compute_fun from precomputed bases.
+
+    Equivalent to ``get_transforms(data_keys, eq, grid, jitable=True)``, but
+    evaluates with the precomputed polynomial coefficient bases and shares one
+    transform between quantities with the same basis (e.g. Z and lambda).
+    """
+    derivs = get_derivs(data_keys, eq, has_axis=False)
+    transforms = {"grid": grid}
+    for c in ["R", "Z", "L"]:
+        for cc in transforms:
+            if bases[c] is getattr(transforms[cc], "basis", None):
+                transforms[c] = transforms[cc]
+                break
+        else:  # if we didn't exit the loop early
+            ders = np.unique(
+                np.vstack(
+                    [derivs[cc] for cc in ["R", "Z", "L"] if bases[cc] is bases[c]]
+                ),
+                axis=0,
+            ).astype(int)
+            transforms[c] = Transform(
+                grid, bases[c], derivs=ders, build=True, method="jitable"
+            )
+    return transforms
 
 
 class AbstractTrajectoryModel(AbstractTerm, ABC):
@@ -202,17 +266,15 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             spacing=jnp.zeros((3,)).T,
             jitable=True,
         )
-        data_keys = [
-            "B",
-            "|B|",
-            "grad(|B|)",
-            "e^rho",
-            "e^theta",
-            "e^zeta",
-            "b",
-        ]
+        data_keys = _GC_FLUX_DATA_KEYS
 
-        transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        # precomputed polynomial coefficient bases for fast basis evaluation,
+        # built once outside the ODE solve (see zernike_mode in trace_particles)
+        zernike_bases = kwargs.get("zernike_bases", None)
+        if zernike_bases is None:
+            transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        else:
+            transforms = _get_precomputed_transforms(zernike_bases, eq, grid, data_keys)
         profiles = {"current": eq.current, "iota": eq.iota}
         if iota is not None:
             profiles["iota"] = iota
@@ -983,6 +1045,7 @@ def trace_particles(
     options=None,
     throw=True,
     return_aux=False,
+    zernike_mode="poly",
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1033,6 +1096,10 @@ def trace_particles(
                 Iota profile of the Equilibrium, if not already assigned.
             - source_grid: Grid
                 Source grid to use for field computation during Biot-Savart.
+            - zernike_bases : dict of _PrecomputedFourierZernikeBasis
+                Precomputed polynomial coefficient bases for R, Z and lambda, as
+                returned by ``desc.particles._precompute_zernike_bases``. If
+                given, this is used and ``zernike_mode`` is ignored.
     throw : bool, optional
         Whether to throw an error if the integration fails. If False, will return NaN
         for the points where the integration failed. Defaults to True.
@@ -1042,6 +1109,16 @@ def trace_particles(
         from `diffrax.diffeqsolve`. Defaults to False. `ts` may become useful if
         `SaveAt(steps=True)` is used (see `_trace_particles`). Note that `x`, `v` and
         `ts` will be padded with NaNs to `max_steps` size in that case.
+    zernike_mode : {"poly", "jacobi"}
+        How to evaluate the Zernike radial basis when tracing in an Equilibrium
+        with ``frame="flux"``. ``"poly"`` (default) precomputes the polynomial
+        coefficients of the basis functions once before the integration, so
+        that the ODE right hand side evaluates the basis with dense matrix
+        products, which is usually much faster. Note that the polynomial
+        coefficient form loses accuracy for radial resolution L > 24 (a warning
+        is thrown). ``"jacobi"`` evaluates the basis with the stable Jacobi
+        recurrence of ``zernike_radial`` at every step. Ignored if
+        ``zernike_bases`` is given in ``options``.
 
     Returns
     -------
@@ -1057,6 +1134,21 @@ def trace_particles(
         params = field.params_dict
     if not options:
         options = {}
+
+    errorif(
+        zernike_mode not in ["poly", "jacobi"],
+        ValueError,
+        f"zernike_mode must be 'poly' or 'jacobi', got {zernike_mode}",
+    )
+    if (
+        zernike_mode == "poly"
+        and isinstance(field, Equilibrium)
+        and model.frame == "flux"
+    ):
+        # precompute polynomial coefficient tables for the Zernike radial basis
+        # once, outside the ODE solve, so that the RHS evaluates the basis with
+        # dense matrix products instead of the sequential Jacobi recurrence
+        options.setdefault("zernike_bases", _precompute_zernike_bases(field))
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])

@@ -4,6 +4,7 @@ Changelog
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+- Speeds up ``trace_particles`` in flux coordinates by precomputing the polynomial coefficients of the Zernike radial basis functions once before the integration, so that the ODE right hand side evaluates the basis with dense matrix products instead of running the sequential Jacobi recurrence of ``zernike_radial`` at every solver step, and by sharing the basis evaluation between ``Z`` and ``lambda``. Controlled by the new ``zernike_mode`` keyword argument, ``"poly"`` (default, warns if ``L > 24`` where the polynomial coefficient form loses accuracy) or ``"jacobi"`` (the previous behavior).
 
 Bug Fixes
 

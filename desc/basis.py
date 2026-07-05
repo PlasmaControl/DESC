@@ -1363,6 +1363,95 @@ class FourierZernikeBasis(_Basis):
             self._set_up()
 
 
+class _PrecomputedFourierZernikeBasis(FourierZernikeBasis):
+    """FourierZernikeBasis with precomputed radial polynomial coefficients.
+
+    Private class, used by ``desc.particles`` for repeated evaluation at a few
+    points, e.g. at every step of an ODE integration. The standard basis
+    evaluates the radial part with ``zernike_radial``, which runs a sequential
+    Jacobi recurrence at every call — a poor fit for GPU when evaluating a
+    handful of points thousands of times. This class instead precomputes the
+    exact polynomial coefficients of the radial part once at creation and keeps
+    them on the device, so that each evaluation is a single dense matrix
+    product with the powers of rho.
+
+    Note that evaluating the polynomial coefficient form in float64 loses
+    accuracy for l > ~24 (see ``zernike_radial_poly``), for higher resolution
+    use the standard basis.
+
+    Parameters
+    ----------
+    basis : FourierZernikeBasis
+        Basis to copy the modes from.
+    dr_max : int
+        Maximum radial derivative order to precompute coefficients for.
+        Evaluation falls back to the standard ``zernike_radial`` path for
+        higher orders.
+    """
+
+    _io_attrs_ = FourierZernikeBasis._io_attrs_ + ["_radial_coeffs"]
+
+    def __init__(self, basis, dr_max=2):
+        self._L = basis.L
+        self._M = basis.M
+        self._N = basis.N
+        self._NFP = basis.NFP
+        self._sym = basis.sym
+        self._spectral_indexing = basis.spectral_indexing
+        self._modes = basis.modes
+        # copy the derived attributes instead of calling _Basis.__init__, both
+        # because they are already computed and because recomputing them uses
+        # jnp operations that are not safe if this class is created inside jit
+        self._unique_L_idx = basis.unique_L_idx
+        self._inverse_L_idx = basis.inverse_L_idx
+        self._unique_M_idx = basis.unique_M_idx
+        self._inverse_M_idx = basis.inverse_M_idx
+        self._unique_N_idx = basis.unique_N_idx
+        self._inverse_N_idx = basis.inverse_N_idx
+        self._unique_LM_idx = basis.unique_LM_idx
+        self._inverse_LM_idx = basis.inverse_LM_idx
+        # Polynomial coefficients of the radial part for the unique (l,m) pairs
+        # and radial derivative orders 0..dr_max, in descending powers of rho.
+        # The coefficients are integers that depend only on the static mode
+        # numbers, computed once with exact arithmetic in numpy.
+        lm = self.modes[self.unique_LM_idx, :2]
+        c = zernike_radial_coeffs(lm[:, 0], lm[:, 1], exact=True)
+        self._radial_coeffs = jnp.asarray(
+            np.stack([_polyder_exact(c, dr).astype(float) for dr in range(dr_max + 1)])
+        )
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluate basis functions at specified nodes. See FourierZernikeBasis.
+
+        The radial part is evaluated as a dense product of the precomputed
+        polynomial coefficients with the powers of rho. AD through this at
+        exactly rho=0 gives NaN from the power rule on the constant term,
+        callers should clamp rho away from zero.
+        """
+        if modes is not None or derivatives[0] >= self._radial_coeffs.shape[0]:
+            return super().evaluate(grid, derivatives, modes)
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+
+        r, t, z = grid.nodes.T
+        _, m, n = self.modes.T
+
+        coeffs = self._radial_coeffs[derivatives[0]]
+        lmax = coeffs.shape[-1] - 1
+        rho_pows = r[:, np.newaxis] ** jnp.arange(lmax, -1, -1)
+        radial = rho_pows @ coeffs.T
+        poloidal = fourier(t[:, np.newaxis], m[self.unique_M_idx], dt=derivatives[1])
+        toroidal = fourier(
+            z[:, np.newaxis], n[self.unique_N_idx], NFP=self.NFP, dt=derivatives[2]
+        )
+
+        radial = radial[:, self.inverse_LM_idx]
+        poloidal = poloidal[:, self.inverse_M_idx]
+        toroidal = toroidal[:, self.inverse_N_idx]
+
+        return radial * poloidal * toroidal
+
+
 class ChebyshevPolynomial(_Basis):
     """Shifted Chebyshev polynomial of the first kind.
 

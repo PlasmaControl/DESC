@@ -26,7 +26,6 @@ from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.transform import Transform
 from desc.utils import cross, dot, errorif, safediv, setdefault, warnif
 
 JOULE_PER_EV = 11606 * Boltzmann
@@ -67,6 +66,105 @@ def _precompute_zernike_bases(eq):
     return bases
 
 
+class _StackedTransform:
+    """Transform-like class evaluating all derivative orders in one operation.
+
+    Private, duck-typed stand-in for ``desc.transform.Transform``, used by
+    ``_get_precomputed_transforms`` for repeated single-point evaluation during
+    particle tracing. ``Transform`` builds one matrix per derivative order,
+    each with its own radial, poloidal and toroidal factor evaluations, and
+    ``transform`` does one matrix-vector product per derivative order — many
+    tiny kernels per ODE step. This class instead computes each factor once for
+    all derivative orders (the basis functions of all orders are combinations
+    of only ``dr x dt x dz`` factor sets) and assembles the matrices of all
+    derivative orders in a single fused operation. ``transform`` evaluates all
+    derivative orders of a coefficient vector in a single matrix-vector
+    product, cached per coefficient vector, so repeated calls for the other
+    derivative orders are free.
+
+    Parameters
+    ----------
+    grid : Grid
+        Nodes to evaluate at.
+    basis : _PrecomputedFourierZernikeBasis
+        Basis with precomputed radial polynomial coefficients.
+    derivs : ndarray of int, shape(num_derivatives,3)
+        Orders of derivatives needed, in (rho, theta, zeta).
+    """
+
+    def __init__(self, grid, basis, derivs):
+        self._grid = grid
+        self._basis = basis
+        derivs = np.atleast_2d(derivs).astype(int)
+        self._idx = {(d[0], d[1], d[2]): i for i, d in enumerate(derivs.tolist())}
+        self._cache = {}
+
+        coeffs = basis._radial_coeffs  # (n_dr, K_lm, lmax + 1)
+        n_dr, K_lm, _ = coeffs.shape
+        lmax = coeffs.shape[-1] - 1
+        errorif(
+            derivs[:, 0].max() >= n_dr,
+            NotImplementedError,
+            f"basis has radial coefficients up to derivative order {n_dr - 1}, "
+            f"got {derivs[:, 0].max()}",
+        )
+        r, t, z = grid.nodes.T
+        _, m, n = basis.modes.T
+
+        # radial factors of all radial derivative orders in a single matrix
+        # product, with shape num_nodes x n_dr x K_lm
+        rho_pows = r[:, np.newaxis] ** jnp.arange(lmax, -1, -1)
+        radial = (rho_pows @ coeffs.reshape((-1, lmax + 1)).T).reshape((-1, n_dr, K_lm))
+
+        def fourier_all(x, mm, NFP, n_dt):
+            # same expression as desc.basis.fourier, with the derivative
+            # order broadcast on a new axis. shape (num_nodes, n_dt, K)
+            dt = jnp.arange(n_dt)[:, np.newaxis]
+            m_pos = (mm >= 0).astype(int)
+            m_abs = jnp.abs(mm) * NFP
+            shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
+            return m_abs**dt * jnp.sin(m_abs * x[:, np.newaxis, np.newaxis] + shift)
+
+        poloidal = fourier_all(t, m[basis.unique_M_idx], 1, derivs[:, 1].max() + 1)
+        toroidal = fourier_all(
+            z, n[basis.unique_N_idx], basis.NFP, derivs[:, 2].max() + 1
+        )
+
+        # select the derivative order of each factor for each requested
+        # derivative combination and gather back to the full mode set, then
+        # combine in one fused product. shape (num_nodes, num_derivs, num_modes)
+        dr, dt, dz = derivs.T
+        self._A = (
+            radial[:, dr][:, :, basis.inverse_LM_idx]
+            * poloidal[:, dt][:, :, basis.inverse_M_idx]
+            * toroidal[:, dz][:, :, basis.inverse_N_idx]
+        )
+
+    @property
+    def basis(self):
+        """_PrecomputedFourierZernikeBasis: basis being evaluated."""
+        return self._basis
+
+    @property
+    def grid(self):
+        """Grid: nodes being evaluated at."""
+        return self._grid
+
+    def transform(self, c, dr=0, dt=0, dz=0):
+        """Transform from spectral to physical space. See Transform.transform.
+
+        The values at the nodes are computed for all derivative orders in a
+        single matrix-vector product on the first call with a given
+        coefficient vector, and cached (the cache is only valid within a
+        single jit trace, as is this whole class).
+        """
+        val = self._cache.get(id(c))
+        if val is None or val[0] is not c:
+            val = (c, self._A @ c)
+            self._cache[id(c)] = val
+        return val[1][:, self._idx[(dr, dt, dz)]]
+
+
 def _get_precomputed_transforms(bases, eq, grid, data_keys):
     """Build the transforms dict for compute_fun from precomputed bases.
 
@@ -88,9 +186,7 @@ def _get_precomputed_transforms(bases, eq, grid, data_keys):
                 ),
                 axis=0,
             ).astype(int)
-            transforms[c] = Transform(
-                grid, bases[c], derivs=ders, build=True, method="jitable"
-            )
+            transforms[c] = _StackedTransform(grid, bases[c], derivs=ders)
     return transforms
 
 

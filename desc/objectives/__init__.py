@@ -53,7 +53,6 @@ from ._omnigenity import (
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
-    QuasisymmetryTwoTermNormalized,
 )
 from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent

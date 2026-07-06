@@ -3,6 +3,7 @@
 import os
 import pathlib
 import shutil
+from io import BytesIO
 
 import h5py
 import numpy as np
@@ -809,3 +810,14 @@ def test_io_OmnigenousField(tmpdir_factory):
     data2 = field2.compute(["|B|", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
+
+
+@pytest.mark.unit
+def test_io_file_like_object(tmpdir_factory):
+    """Test loading an equilibrium from a file-like object (BytesIO)"""
+    file_path = "./tests/inputs/iotest_HELIOTRON.h5"
+    with open(file_path, "rb") as f:
+        file_like_obj = BytesIO(f.read())
+    eq_from_file = load(file_path)
+    eq_from_bytesio = load(file_like_obj, "hdf5")
+    assert eq_from_file.equiv(eq_from_bytesio)

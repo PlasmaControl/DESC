@@ -93,6 +93,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
+    else:
+        cols = np.arange(constraint.dim_x)
     assert A.shape[1] == xp.size
 
     # check for degenerate rows and delete if necessary
@@ -153,12 +155,16 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(D * xp, False)
+    x_full = put(x0, cols, D * xp)
+    f = np.asarray(constraint.compute_scaled_error(x_full))
+    offset = 0
     for con in constraint.objectives:
-        xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
-        y1 = con.compute_unscaled(*xpi)
+        # get portion of the error corresponding to this constraint
+        dim = con.dim_f
+        y1 = con._unshift(con._unscale(f[offset : offset + dim]))
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
+        offset += dim
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical

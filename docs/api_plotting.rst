@@ -93,6 +93,6 @@ of Paraview. Please see the README of the `desc.external` for more details.
     :toctree: _api/external
     :recursive:
 
-    desc.external.export_coils_to_paraview
-    desc.external.export_surface_to_paraview
-    desc.external.export_volume_to_paraview
+    desc.external.paraview.export_coils_to_paraview
+    desc.external.paraview.export_surface_to_paraview
+    desc.external.paraview.export_volume_to_paraview

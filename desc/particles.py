@@ -16,7 +16,7 @@ from diffrax import (
 from interpax import Interpolator3D
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jit, jnp, tree_map
+from desc.backend import jax, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -44,7 +44,17 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     # is a subclass of diffrax.AbstractTerm which is an Equinox.Module. The following
     # attributes need to be defined as static fields for JAX transformation.
     _frame: str = eqx.field(static=True)
+    # Velocity coordinates used by the model, in order.
+    #     Options are:
+    #     "v" : modulus of velocity
+    #     "vpar" : velocity in direction of local magnetic field.
+    #     "vperp" : modulus of velocity perpendicular to local magnetic field.
+    #     "vR" : velocity in lab frame R direction
+    #     "vP" : velocity in lab frame phi direction
+    #     "vZ" : velocity in lab frame Z direction
     vcoords: list[str] = eqx.field(static=True)
+    # Additional arguments needed by the model.
+    # Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
     args: list[str] = eqx.field(static=True)
 
     @property
@@ -57,30 +67,6 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
 
         """
         return self._frame
-
-    @property
-    @abstractmethod
-    def vcoords(self):  # noqa : F811
-        """Velocity coordinates used by the model, in order.
-
-        Options are:
-        "v" : modulus of velocity
-        "vpar" : velocity in direction of local magnetic field.
-        "vperp" : modulus of velocity perpendicular to local magnetic field.
-        "vR" : velocity in lab frame R direction
-        "vP" : velocity in lab frame phi direction
-        "vZ" : velocity in lab frame Z direction
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def args(self):  # noqa : F811
-        """Additional arguments needed by the model.
-
-        Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
-        """
-        pass
 
     @abstractmethod
     def vf(self, t, x, args):
@@ -145,7 +131,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Coordinate frame of the model."""
         return self._frame
 
-    @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
@@ -472,7 +457,8 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         q=2,
     ):
         rho0, theta0, zeta0, xi0, E, m, q = map(
-            jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
+            lambda x: jnp.atleast_1d(jnp.asarray(x)),
+            (rho0, theta0, zeta0, xi0, E, m, q),
         )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
@@ -604,7 +590,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
-        R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
+        R0, phi0, Z0, xi0, E, m, q = map(
+            lambda x: jnp.atleast_1d(jnp.asarray(x)), (R0, phi0, Z0, xi0, E, m, q)
+        )
         R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
         self.m = m * proton_mass
         self.q = q * elementary_charge
@@ -747,7 +735,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         is_curve_magnetic_axis=False,
     ):
         self.curve = curve
-        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        E, m, q = map(lambda x: jnp.atleast_1d(jnp.asarray(x)), (E, m, q))
         self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
         self.m = jnp.broadcast_to(m, (N,)) * proton_mass
         self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
@@ -906,7 +894,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         is_surface_from_eq=False,
     ):
         self.surface = surface
-        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        E, m, q = map(lambda x: jnp.atleast_1d(jnp.asarray(x)), (E, m, q))
         self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
         self.m = jnp.broadcast_to(m, (N,)) * proton_mass
         self.q = jnp.broadcast_to(q, (N,)) * elementary_charge

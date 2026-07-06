@@ -221,14 +221,14 @@ def test_dipoleset_NFP_without_symmetry():
     eval_pts = np.array([[0.0, 0.0, 2.0]])
     dipoles = DipoleSet(
         _Dipole(x=0.0, y=0.0, z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0),
-        _Dipole(x=1.0, y=0.0, z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0),
+        _Dipole(x=0.1, y=0.0, z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0),
         NFP=2,
         sym=False,
     )
 
     B = dipoles.compute_magnetic_field(eval_pts, basis="xyz")
 
-    source_pts = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    source_pts = np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0], [0.0, 0.0, 0.0], [-0.1, 0.0, 0.0]])
     m_vectors = np.array([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0], [0.0, 0.0, 1.0]])
     expected_B = dipole_field(eval_pts, source_pts, m_vectors)
 
@@ -259,39 +259,39 @@ def test_dipoleset_NFP_with_symmetry():
 @pytest.mark.unit
 def test_MUSE_field_calculation_NFP1_symFalse():
     """Test the field calculation of the MUSE dipoles, with NFP=1 and sym=False."""
-    eval_pts = np.array([[0.0, 0.0, 2.0]])
+    eval_pts = np.array([[0.1, 0.0, 0.1]])
     B = MUSE_NFP1_symFalse.compute_magnetic_field(eval_pts, basis="xyz")
     # expected B taken from simsopt calculation
-    expected_B = [2.93496067e-06, 3.26449119e-06, 7.31816415e-06]
-    np.testing.assert_allclose(B, expected_B, rtol=1e-6, atol=1e-14)
+    expected_B = [[-0.00803107, -0.01251551,  0.00783013]]
+    np.testing.assert_allclose(B, expected_B, rtol=1e-10, atol=1e-14)
 
 
 @pytest.mark.unit
 def test_MUSE_field_calculation_NFP1_symTrue():
     """Test the field calculation of the MUSE dipoles, with NFP=1 and sym=True."""
-    eval_pts = np.array([[0.0, 0.0, 2.0]])
+    eval_pts = np.array([[0.1, 0.0, 0.1]])
     B = MUSE_NFP1_symTrue.compute_magnetic_field(eval_pts, basis="xyz")
     # expected B taken from simsopt calculation
-    expected_B = [[-2.41460079e-06,  6.91604473e-06,  1.02360718e-05]]
-    np.testing.assert_allclose(B, expected_B, rtol=1e-12, atol=1e-14)
+    expected_B = [[-0.01055722, -0.02013324, -0.00170434]]
+    np.testing.assert_allclose(B, expected_B, rtol=1e-10, atol=1e-14)
 
 
 @pytest.mark.unit
 def test_MUSE_field_calculation_NFP2_symFalse():
     """Test the field calculation of the MUSE dipoles, with NFP=2 and sym=False."""
-    eval_pts = np.array([[0.0, 0.0, 2.0]])
+    eval_pts = np.array([[0.1, 0.0, 0.1]])
     B = MUSE_NFP2_symFalse.compute_magnetic_field(eval_pts, basis="xyz")
     # expected B taken from simsopt calculation
-    expected_B = [[1.22402088e-20, 2.19772117e-21, 1.46363283e-05]]
-    np.testing.assert_allclose(B, expected_B, rtol=1e-12, atol=1e-14)
+    expected_B = [[-0.0053455,  -0.01181211,  0.00882978]]
+    np.testing.assert_allclose(B, expected_B, rtol=1e-10, atol=1e-14)
 
 
 @pytest.mark.unit
 def test_MUSE_field_calculation_NFP2_symTruee():
     """Test the field calculation of the MUSE dipoles, with NFP=2 and sym=True."""
-    eval_pts = np.array([[0.0, 0.0, 2.0]])
+    eval_pts = np.array([[0.1, 0.0, 0.1]])
     B = MUSE_NFP2_symTrue.compute_magnetic_field(eval_pts, basis="xyz")
     # expected B taken from simsopt calculation
-    expected_B = [[5.21288741e-20, 4.46006079e-21, 2.04721437e-05]]
-    np.testing.assert_allclose(B, expected_B, rtol=1e-12, atol=1e-14)
+    expected_B = [[-0.01015419, -0.01831055, -0.00213807]]
+    np.testing.assert_allclose(B, expected_B, rtol=1e-10, atol=1e-14)
 

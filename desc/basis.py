@@ -1606,19 +1606,20 @@ def _polyder_exact(p, m):
     return p
 
 
-@jit
+@functools.partial(jit, static_argnums=1)
 def _polyder_jax(p, m):
     p = jnp.atleast_2d(jnp.asarray(p))
-    m = jnp.asarray(m).astype(int)
+    m = int(m)
     order = p.shape[1] - 1
     D = jnp.arange(order, -1, -1)
 
-    def body(i, Di):
-        return Di * jnp.maximum(D - i, 1)
+    # unrolled loop, m is small so this is cheap to compile and avoids a
+    # sequential while loop in the compiled graph
+    Di = jnp.ones_like(D)
+    for i in range(m):
+        Di = Di * jnp.maximum(D - i, 1)
 
-    D = fori_loop(0, m, body, jnp.ones_like(D))
-
-    p = jnp.roll(D * p, m, axis=1)
+    p = jnp.roll(Di * p, m, axis=1)
     idx = jnp.arange(p.shape[1])
     p = jnp.where(idx < m, 0, p)
 
@@ -1673,10 +1674,11 @@ def _polyval_jax(p, x):
     nx = len(x)  # number of coordinates
     y = jnp.zeros((npoly, nx))
 
-    def body(k, y):
-        return y * x + jnp.atleast_2d(p[:, k]).T
-
-    y = fori_loop(0, order, body, y)
+    # unrolled Horner scheme, the polynomial order is static and small so this
+    # is cheap to compile and avoids a sequential while loop in the compiled
+    # graph
+    for k in range(order):
+        y = y * x + jnp.atleast_2d(p[:, k]).T
 
     return y.astype(float)
 

@@ -152,12 +152,6 @@ Performance Improvements
 - Non-uniform FFTs (NUFFTS) are now used by default for computing bounce integrals, see #1834. NUFFT functionality is added through `jax-finufft` package. If the GPU installation fails, users can fall back to the older (much slower) implementation by setting `nufft_eps=0` in the computation of the related quantities.
 
 
-Performance Improvements
-
-- [Partial summation in coordinate mapping](https://github.com/PlasmaControl/DESC/pull/1826).
-- [NUFFTS](https://github.com/PlasmaControl/DESC/pull/1834) are now used by default for computing bounce integrals.
-
-
 v0.15.0
 -------
 

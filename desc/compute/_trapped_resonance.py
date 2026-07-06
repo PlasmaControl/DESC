@@ -46,52 +46,6 @@ def _masked_sum(x, mask, axis=None):
     return jnp.sum(jnp.where(mask, x, jnp.zeros_like(x)), axis=axis)
 
 
-def _shift_rho(x, n):
-    """Shift ``x`` along the leading (rho) axis: ``result[i] = x[i - n]``.
-
-    Vacated entries at the boundary are zero-padded.
-    """
-    if n > 0:
-        pad = jnp.zeros((n,) + x.shape[1:], dtype=x.dtype)
-        return jnp.concatenate([pad, x[:-n]], axis=0)
-    pad = jnp.zeros((-n,) + x.shape[1:], dtype=x.dtype)
-    return jnp.concatenate([x[-n:], pad], axis=0)
-
-
-def _hermite_crossing(Omega_lo, Omega_hi, m_lo, m_hi, rho_res, res_broad, t0):
-    """Newton-refine where a cubic Hermite interpolant of Omega crosses res.
-
-    ``Omega_lo``, ``Omega_hi`` are the interpolant's values at the interval's
-    lower/upper endpoint (t=0, t=1); ``m_lo``, ``m_hi`` are Catmull-Rom
-    tangent estimates (in units of Omega per unit rho) at those endpoints,
-    from a 4-point stencil. Returns t in [0, 1] such that H(t) ≈ res_broad,
-    refined from the linear estimate ``t0`` by a fixed number of Newton steps.
-    """
-    Omega_lo = Omega_lo[..., None]
-    Omega_hi = Omega_hi[..., None]
-    d_lo = (m_lo * rho_res)[..., None]
-    d_hi = (m_hi * rho_res)[..., None]
-
-    def H(t):
-        h00 = 2 * t**3 - 3 * t**2 + 1
-        h10 = t**3 - 2 * t**2 + t
-        h01 = -2 * t**3 + 3 * t**2
-        h11 = t**3 - t**2
-        return h00 * Omega_lo + h10 * d_lo + h01 * Omega_hi + h11 * d_hi
-
-    def dH(t):
-        dh00 = 6 * t**2 - 6 * t
-        dh10 = 3 * t**2 - 4 * t + 1
-        dh01 = -6 * t**2 + 6 * t
-        dh11 = 3 * t**2 - 2 * t
-        return dh00 * Omega_lo + dh10 * d_lo + dh01 * Omega_hi + dh11 * d_hi
-
-    t = t0
-    for _ in range(4):
-        t = jnp.clip(t - safediv(H(t) - res_broad, dH(t), fill=0.0), 0.0, 1.0)
-    return t
-
-
 def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
     """Build a DESC grid with per-rho alpha values derived from uniform eta."""
     from desc.equilibrium.coords import map_coordinates
@@ -589,92 +543,16 @@ def _resonance_physics(
             ((Omega_next_lin >= res_broad) & (res_broad >= Omega_broad_safe))
             | ((Omega_next_lin <= res_broad) & (res_broad <= Omega_broad_safe))
         )
+        w_next = safediv(
+            Omega_next_lin - res_broad, Omega_next_lin - Omega_broad_safe, fill=0.0
+        )
         between_prev = valid_prev_lin & (
             ((Omega_prev_lin >= res_broad) & (res_broad >= Omega_broad_safe))
             | ((Omega_prev_lin <= res_broad) & (res_broad <= Omega_broad_safe))
         )
-
-        # Linear (2-point secant) fractional crossing location, used both as
-        # the fallback where a 4-point stencil isn't available, and as the
-        # Newton initial guess where it is. Fill values are chosen so that a
-        # degenerate (flat) interval gives the same zero weight as the
-        # original linear-only scheme.
-        t_next_lin = safediv(
-            res_broad - Omega_broad_safe, Omega_next_lin - Omega_broad_safe, fill=1.0
+        w_prev = safediv(
+            Omega_prev_lin - res_broad, Omega_prev_lin - Omega_broad_safe, fill=0.0
         )
-        t_prev_lin = safediv(
-            res_broad - Omega_prev_lin, Omega_broad_safe - Omega_prev_lin, fill=0.0
-        )
-
-        # 4-point stencil (Catmull-Rom cubic Hermite) refinement of the
-        # crossing location, smoothing over local curvature that a 2-point
-        # secant can't see. This only changes the interpolated *location* of
-        # an already-detected crossing (`between_next`/`between_prev` above
-        # are unchanged); it requires 4 consecutive valid points and falls
-        # back to the linear estimate elsewhere, including whenever
-        # num_rho < 4.
-        Omega_m1 = _shift_rho(Omega_safe_lin, 1)
-        Omega_p1 = _shift_rho(Omega_safe_lin, -1)
-        Omega_m2 = _shift_rho(Omega_safe_lin, 2)
-        Omega_p2 = _shift_rho(Omega_safe_lin, -2)
-        valid_m1 = _shift_rho(valid_prime, 1)
-        valid_p1 = _shift_rho(valid_prime, -1)
-        valid_m2 = _shift_rho(valid_prime, 2)
-        valid_p2 = _shift_rho(valid_prime, -2)
-
-        n_rho = Omega.shape[0]
-        idx = jnp.arange(n_rho)[:, None, None]
-        has_stencil_next = (
-            (idx >= 1)
-            & (idx <= n_rho - 3)
-            & valid_m1
-            & valid_prime
-            & valid_p1
-            & valid_p2
-        )[..., None]
-        has_stencil_prev = (
-            (idx >= 2)
-            & (idx <= n_rho - 2)
-            & valid_m2
-            & valid_m1
-            & valid_prime
-            & valid_p1
-        )[..., None]
-
-        m_next_lo = safediv(Omega_p1 - Omega_m1, 2 * rho_res)  # tangent at i
-        m_next_hi = safediv(Omega_p2 - Omega_safe_lin, 2 * rho_res)  # tangent at i+1
-        m_prev_lo = safediv(Omega_safe_lin - Omega_m2, 2 * rho_res)  # tangent at i-1
-        m_prev_hi = m_next_lo  # tangent at i, reused from the "next" stencil
-
-        t_next = jnp.where(
-            has_stencil_next,
-            _hermite_crossing(
-                Omega_safe_lin,
-                Omega_p1,
-                m_next_lo,
-                m_next_hi,
-                rho_res,
-                res_broad,
-                t_next_lin,
-            ),
-            t_next_lin,
-        )
-        t_prev = jnp.where(
-            has_stencil_prev,
-            _hermite_crossing(
-                Omega_m1,
-                Omega_safe_lin,
-                m_prev_lo,
-                m_prev_hi,
-                rho_res,
-                res_broad,
-                t_prev_lin,
-            ),
-            t_prev_lin,
-        )
-        w_next = 1.0 - jnp.clip(t_next, 0.0, 1.0)
-        w_prev = jnp.clip(t_prev, 0.0, 1.0)
-
         res_weight = jnp.where(
             between_next, w_next, jnp.where(between_prev, w_prev, 0.0)
         )

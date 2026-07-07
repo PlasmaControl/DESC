@@ -56,7 +56,9 @@ class VMECIO:
         NOTE: This is only a fit, so the DESC Equilibrium returned is not
         expected to be in force balance. It is recommended to solve the
         Equilibrium once loaded before using the Equilibrium for any
-        analysis.
+        analysis. Current-density quantities computed from the loaded fit may
+        not reproduce the VMEC current harmonics until the equilibrium is
+        solved or otherwise refined.
 
         Parameters
         ----------
@@ -734,7 +736,7 @@ class VMECIO:
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
+        jcurv.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
         jcurv[:] = surface_averages(
             grid_full,
@@ -1331,7 +1333,7 @@ class VMECIO:
         # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
-            currumns[0, :] = -(
+            currvmns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta*sqrt(g)")

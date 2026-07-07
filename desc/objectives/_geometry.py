@@ -309,6 +309,258 @@ class Elongation(_Objective):
         )
 
 
+class SLAMElongation(_Objective):
+    """Elongation of constant Cartesian-X cross sections.
+
+    For each requested plane ``X = X0`` the surface points are viewed along the
+    Cartesian X axis and the elongation of the resulting (Y, Z) cross section is
+    measured. Unlike :class:`Elongation` (which measures the elongation of the
+    constant-toroidal-angle R-Z cross section), this slices the geometry with
+    vertical Cartesian planes -- useful for mirror-like configurations where the
+    physically meaningful cross sections are perpendicular to a Cartesian axis.
+
+    The metric is a smooth, jit-compatible surrogate for "slice, fit an ellipse,
+    read off the ellipticity":
+
+    1. Each grid point is weighted by a Gaussian in ``|X - X0|`` (a differentiable
+       replacement for a hard ``|X - X0| < tol`` mask, which would have a
+       data-dependent number of points and could not be jitted) times the surface
+       area element ``|e_theta x e_zeta|`` (so the result is a geometric integral
+       over the cut, independent of how the ``(theta, zeta)`` grid samples it).
+    2. The weighted 2x2 covariance of ``(Y, Z)`` is formed and its eigenvalues
+       ``l1 >= l2`` are taken in closed form.
+    3. The plane elongation is ``sqrt(l1 / l2)`` (exact ``a/b`` for a true
+       ellipse).
+
+    The objective returns the maximum elongation over all requested planes as a
+    single scalar.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    X0 : float or array-like
+        Cartesian X location(s) [meters] of the plane(s) at which to measure the
+        cross-section elongation.
+    bandwidth : float
+        Width of the Gaussian selection kernel as a fraction of the current
+        X-extent of the surface. Default 0.01 (matching a thin slab). The result
+        is insensitive to this over a broad range.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(M=4*eq.M, N=4*eq.N)`` for a ``FourierRZToroidalSurface`` (a
+        fine grid is recommended so each plane is well sampled). Note the grid
+        should be dense enough in both ``theta`` and ``zeta`` for the cross
+        sections to be resolved.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: The maximum over planes is taken inside the objective.",
+    )
+
+    _scalar = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "SLAM elongation: "
+
+    def __init__(
+        self,
+        eq,
+        X0,
+        bandwidth=0.01,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="SLAM elongation",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
+        self._bandwidth = bandwidth
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface, has no radial resolution.
+                # use a fine grid so each constant-X plane is well sampled.
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 4,
+                    N=eq.N * 4,
+                    NFP=eq.NFP,
+                    sym=False,
+                )
+        else:
+            grid = self._grid
+
+        self._dim_f = 1
+        self._data_keys = ["X", "Y", "Z", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "X0": self._X0,
+            "bandwidth": self._bandwidth,
+        }
+
+        # Sanity-check the grid against the requested planes: a constant Cartesian
+        # X cross section only exists where the surface actually spans X0, and it
+        # needs a range of toroidal angles (not a single zeta plane) to be
+        # resolved. Warn early rather than silently returning garbage.
+        X_build = compute_fun(
+            eq,
+            ["X"],
+            params=eq.params_dict,
+            transforms=transforms,
+            profiles=profiles,
+        )["X"]
+        Xmin, Xmax = float(jnp.min(X_build)), float(jnp.max(X_build))
+        warnif(
+            grid.num_zeta < 4,
+            UserWarning,
+            f"SLAMElongation grid samples only {grid.num_zeta} toroidal (zeta) "
+            "plane(s). A constant-Cartesian-X cross section needs a range of "
+            "toroidal angles to be resolved; pass a grid spanning many zeta "
+            "values (e.g. zeta=np.linspace(...)).",
+        )
+        out_of_range = [float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)]
+        warnif(
+            len(out_of_range) > 0,
+            UserWarning,
+            f"SLAMElongation X0={out_of_range} lie outside the surface's "
+            f"X-range [{Xmin:.4g}, {Xmax:.4g}] on the given grid, so those planes "
+            "have no cross section. Elongation there defaults to ~1; check X0 and "
+            "the grid.",
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the maximum constant-X cross-section elongation.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        elongation : float
+            Maximum cross-section elongation over the requested planes,
+            dimensionless.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        X = data["X"]
+        Y = data["Y"]
+        Z = data["Z"]
+        dA = data["|e_theta x e_zeta|"]
+
+        # Gaussian selection width, as a fraction of the current X-extent, so the
+        # relative slab thickness is preserved as the shape changes. Floor it so a
+        # degenerate (near-zero X-extent) grid cannot drive sigma -> 0.
+        Xspan = jnp.max(X) - jnp.min(X)
+        sigma = constants["bandwidth"] * jnp.maximum(Xspan, jnp.finfo(X.dtype).eps)
+
+        def plane_elongation(x0):
+            # log-weights: smooth X-selection + log(area element). Working in log
+            # space and subtracting the max keeps the weights in (0, 1] so their
+            # sum can never underflow to 0 (which would give 0/0 = NaN when a
+            # plane is out of range or the grid is too sparse). The global shift
+            # cancels in the normalized covariance, so the result is unchanged.
+            log_w = -0.5 * ((X - x0) / sigma) ** 2 + jnp.log(dA)
+            w = jnp.exp(log_w - jnp.max(log_w))
+            W = jnp.sum(w)
+            Ybar = jnp.sum(w * Y) / W
+            Zbar = jnp.sum(w * Z) / W
+            dY = Y - Ybar
+            dZ = Z - Zbar
+            cyy = jnp.sum(w * dY * dY) / W
+            czz = jnp.sum(w * dZ * dZ) / W
+            cyz = jnp.sum(w * dY * dZ) / W
+            # closed-form eigenvalues of [[cyy, cyz], [cyz, czz]] (smooth).
+            # disc <= half_tr for a PSD covariance, so l1 >= l2 >= 0.
+            half_tr = (cyy + czz) / 2
+            disc = jnp.sqrt(((cyy - czz) / 2) ** 2 + cyz**2)
+            l1 = half_tr + disc  # major variance
+            l2 = half_tr - disc  # minor variance
+            # floor the minor variance relative to the major one so a degenerate
+            # (line-like or single-point) cut yields a finite elongation, not inf,
+            # and add a tiny absolute term so an all-zero-variance cut (a plane
+            # that has drifted fully out of range) yields ~1 rather than 0/0.
+            tiny = jnp.finfo(X.dtype).tiny
+            l2 = jnp.maximum(l2, 1e-12 * l1) + tiny
+            return jnp.sqrt((l1 + tiny) / l2)
+
+        elongation = vmap(plane_elongation)(constants["X0"])
+        return jnp.max(elongation)
+
+
 class Volume(_Objective):
     """Plasma volume.
 

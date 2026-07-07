@@ -48,6 +48,7 @@ from ._geometry import (
     PlasmaVesselDistance,
     PrincipalCurvature,
     SLAMElongation,
+    SurfaceArea,
     Volume,
 )
 from ._neoclassical import EffectiveRipple

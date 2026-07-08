@@ -53,12 +53,11 @@ class VMECIO:
         boundary is loaded and the DESC Equilibrium R,Z are constrained to
         match the given VMEC boundary.
 
-        NOTE: This is only a fit, so the DESC Equilibrium returned is not
-        expected to be in force balance. It is recommended to solve the
-        Equilibrium once loaded before using the Equilibrium for any
-        analysis. Current-density quantities computed from the loaded fit may
-        not reproduce the VMEC current harmonics until the equilibrium is
-        solved or otherwise refined.
+        NOTE: This is only a fit of the VMEC R, Z and lambda, so the DESC
+        Equilibrium returned is not expected to be in force balance. It is
+        recommended to solve the Equilibrium once loaded before using the
+        Equilibrium for any analysis or computing any derived quantities in
+        DESC (e.g. anything that is not just R, Z or lambda).
 
         Parameters
         ----------

@@ -6,6 +6,10 @@ Performance Improvements
 - More efficient `ProximalProjection` jacobians especially if the `ForceBalance` constraint uses a small `jac_chunk_size`.
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
 
+Bug Fixes
+
+- Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+
 
 v0.17.2
 -------

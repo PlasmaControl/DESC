@@ -373,6 +373,164 @@ class QuasisymmetryTwoTerm(_Objective):
             )
 
 
+class QuasisymmetryTwoTermNormalized(_Objective):
+    """Quasi-symmetry two-term error normalized by psi_r (= dPsi/drho ∝ rho).
+
+    Returns f_C / psi_r at each grid node, removing the psi_r ∝ rho factor
+    that is built into f_C and that causes QuasisymmetryTwoTerm to preferentially
+    penalize outer flux surfaces.  The result has units T^2/m^2 and treats all
+    flux surfaces equally.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+        Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    helicity : tuple, optional
+        Type of quasi-symmetry (M, N).
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _coordinates = "rtz"
+    _units = "(T^2/m^2)"
+    _print_value_fmt = "Quasi-symmetry two-term normalized error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        helicity=(1, 0),
+        name="QS two-term normalized",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self.helicity = helicity
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+        self._print_value_fmt = (
+            "Quasi-symmetry ({},{}) two-term normalized error: ".format(
+                self.helicity[0], self.helicity[1]
+            )
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays."""
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
+
+        warnif(
+            (grid.num_theta * (1 + eq.sym)) < 2 * eq.M,
+            RuntimeWarning,
+            "QuasisymmetryTwoTermNormalized objective grid requires poloidal "
+            "resolution for surface averages",
+        )
+        warnif(
+            grid.num_zeta < 2 * eq.N,
+            RuntimeWarning,
+            "QuasisymmetryTwoTermNormalized objective grid requires toroidal "
+            "resolution for surface averages",
+        )
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["f_C", "psi_r"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "helicity": self.helicity,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # f_C has units T^3, psi_r has units T*m^2 (Wb), so f_C/psi_r ~ T^2/m^2
+            self._normalization = scales["B"] ** 2 / scales["a"] ** 2
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute psi_r-normalized quasi-symmetry two-term errors.
+
+        Returns
+        -------
+        f : ndarray
+            f_C / psi_r at each node (T^2/m^2).
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            helicity=constants["helicity"],
+        )
+        return data["f_C"] / data["psi_r"]
+
+    @property
+    def helicity(self):
+        """tuple: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        if hasattr(self, "_helicity") and self._helicity != helicity:
+            self._built = False
+        self._helicity = helicity
+        if hasattr(self, "_print_value_fmt"):
+            self._print_value_fmt = (
+                "Quasi-symmetry ({},{}) two-term normalized error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+            )
+
+
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error.
 

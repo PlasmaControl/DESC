@@ -58,8 +58,9 @@ def test_vmec_input(tmpdir_factory):
     correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
 
     # check DESC input file matches known correct one line-by-line
-    # above InputReader(cl_args=[str(tmp_path)]) generates a DESC input file
-    # inside unknown tmp folder, we re create the input file here at a specific
+    # above InputReader(cl_args=[str(tmp_path)]) uses a temp buffer
+    # instead of the old behavior of writing an intermediate file (#2148)
+    # so we re-create the input file here at a specific
     # location, so that we can compare
     path_converted_file = tmpdir.join("input.DSHAPE_converted")
     with pytest.warns(UserWarning):
@@ -252,7 +253,7 @@ def test_from_input_file_equilibrium_desc_vmec_DSHAPE(tmp_path):
     with pytest.warns(UserWarning, match="Left handed"):
         eq = Equilibrium.from_input_file(desc_path, **kwargs)
 
-    # load VMEC input from a read-only directory to ensure temp file handling works
+    # load VMEC input from a read-only directory to ensure temp buffer works
     # Related to issue #2139
     vmec_src = ".//tests//inputs//input.DSHAPE"
     locked_dir = tmp_path / "locked"

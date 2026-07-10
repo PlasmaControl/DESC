@@ -561,6 +561,268 @@ class SLAMElongation(_Objective):
         return jnp.max(elongation)
 
 
+
+class SLAMCenter(_Objective):
+    """Center (centroid) of constant Cartesian-X cross sections.
+
+    For each requested plane ``X = X0`` the surface points are viewed along the
+    Cartesian X axis and the centroid ``(Ybar, Zbar)`` of the resulting (Y, Z)
+    cross section is measured. This lets you pin the center of a Cartesian-X
+    slice to a prescribed location -- e.g. ``Y = -R0``, ``Z = 0`` -- which is
+    useful for mirror-like configurations where the physically meaningful cross
+    sections are perpendicular to a Cartesian axis.
+
+    The centroid is computed with the same smooth, jit-compatible slicing used by
+    :class:`SLAMElongation`:
+
+    1. Each grid point is weighted by a Gaussian in ``|X - X0|`` (a differentiable
+       replacement for a hard ``|X - X0| < tol`` mask, which would have a
+       data-dependent number of points and could not be jitted) times the surface
+       area element ``|e_theta x e_zeta|`` (so the result is a geometric integral
+       over the cut, independent of how the ``(theta, zeta)`` grid samples it).
+    2. The area-weighted means ``Ybar = <Y>`` and ``Zbar = <Z>`` are the centroid
+       of the cut.
+
+    The objective drives, for each requested plane, its ``(Ybar, Zbar)`` centroid
+    toward the user-supplied target center ``(Y0, Z0)``. The residual is the
+    flattened vector of length ``2 * len(X0)``, ordered
+    ``[Ybar_0, Zbar_0, Ybar_1, Zbar_1, ...]``, and its target is
+    ``[Y0_0, Z0_0, Y0_1, Z0_1, ...]``.
+
+    A constant-Cartesian-X plane cuts a full torus in *two* cross sections (the
+    ``+Y`` and ``-Y`` branches); their centroids would average out. To pin the
+    center of a single branch (e.g. ``Y0 = -R0 + delta``, ``Z0 = 0``), pass a
+    ``grid`` whose ``zeta`` range covers only that branch (e.g.
+    ``zeta`` in ``(pi, 2*pi)`` for the ``-Y`` side). The zeta restriction is the
+    caller's responsibility, done through the supplied ``grid``.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    X0 : float or array-like
+        Cartesian X location(s) [meters] of the plane(s) at which to measure the
+        cross-section center.
+    Y0, Z0 : float or array-like
+        Target Cartesian ``(Y, Z)`` center [meters] for each plane. Broadcast to
+        the shape of ``X0`` (a single scalar applies to every plane). For a
+        limiter-centered slice this is typically ``Y0 = -R0 + delta`` with
+        ``delta`` a small negative number proportional to the limiter radius, and
+        ``Z0 = 0``.
+    bandwidth : float
+        Width of the Gaussian selection kernel as a fraction of the current
+        X-extent of the surface. Default 0.01 (matching a thin slab). The result
+        is insensitive to this over a broad range.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Should be restricted
+        in ``zeta`` to a single (``+Y`` or ``-Y``) branch so the two Cartesian-X
+        cross sections do not average together (see above). Defaults to a full
+        ``LinearGrid(M=4*eq.M, N=4*eq.N)`` for a ``FourierRZToroidalSurface``,
+        which covers *both* branches -- pass your own zeta-restricted grid for a
+        single-branch center.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=[Y0, Z0]`` from the supplied ``Y0``/``Z0``.",
+        bounds_default="``target=[Y0, Z0]``.",
+    )
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "SLAM center: "
+
+    def __init__(
+        self,
+        eq,
+        X0,
+        Y0,
+        Z0,
+        bandwidth=0.01,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="SLAM center",
+        jac_chunk_size=None,
+    ):
+        self._grid = grid
+        self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
+        # target center(s); broadcast Y0/Z0 to one value per plane
+        Y0 = jnp.broadcast_to(jnp.asarray(Y0, dtype=float), self._X0.shape)
+        Z0 = jnp.broadcast_to(jnp.asarray(Z0, dtype=float), self._X0.shape)
+        # residual order matches compute(): [Y0_0, Z0_0, Y0_1, Z0_1, ...]
+        center_target = jnp.stack([Y0, Z0], axis=-1).flatten()
+        if target is None and bounds is None:
+            target = center_target
+        self._bandwidth = bandwidth
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                # if not an Equilibrium, is a Surface, has no radial resolution.
+                # use a fine grid so each constant-X plane is well sampled.
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 4,
+                    N=eq.N * 4,
+                    NFP=eq.NFP,
+                    sym=False,
+                )
+        else:
+            grid = self._grid
+
+        # two components (Ybar, Zbar) per requested plane
+        self._dim_f = 2 * self._X0.size
+        self._data_keys = ["X", "Y", "Z", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "X0": self._X0,
+            "bandwidth": self._bandwidth,
+        }
+
+        # Sanity-check the grid against the requested planes: a constant Cartesian
+        # X cross section only exists where the surface actually spans X0, and it
+        # needs a range of toroidal angles (not a single zeta plane) to be
+        # resolved. Warn early rather than silently returning garbage.
+        X_build = compute_fun(
+            eq,
+            ["X"],
+            params=eq.params_dict,
+            transforms=transforms,
+            profiles=profiles,
+        )["X"]
+        Xmin, Xmax = float(jnp.min(X_build)), float(jnp.max(X_build))
+        warnif(
+            grid.num_zeta < 4,
+            UserWarning,
+            f"SLAMCenter grid samples only {grid.num_zeta} toroidal (zeta) "
+            "plane(s). A constant-Cartesian-X cross section needs a range of "
+            "toroidal angles to be resolved; pass a grid spanning many zeta "
+            "values (e.g. zeta=np.linspace(...)).",
+        )
+        out_of_range = [float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)]
+        warnif(
+            len(out_of_range) > 0,
+            UserWarning,
+            f"SLAMCenter X0={out_of_range} lie outside the surface's "
+            f"X-range [{Xmin:.4g}, {Xmax:.4g}] on the given grid, so those planes "
+            "have no cross section; the reported center there is unreliable. "
+            "Check X0 and the grid.",
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the constant-X cross-section center(s).
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        center : ndarray
+            Flattened ``(Ybar, Zbar)`` centroid of each requested plane, ordered
+            ``[Ybar_0, Zbar_0, Ybar_1, Zbar_1, ...]`` [meters], length
+            ``2 * len(X0)``.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        X = data["X"]
+        Y = data["Y"]
+        Z = data["Z"]
+        dA = data["|e_theta x e_zeta|"]
+
+        # Gaussian selection width, as a fraction of the current X-extent, so the
+        # relative slab thickness is preserved as the shape changes. Floor it so a
+        # degenerate (near-zero X-extent) grid cannot drive sigma -> 0.
+        Xspan = jnp.max(X) - jnp.min(X)
+        sigma = constants["bandwidth"] * jnp.maximum(Xspan, jnp.finfo(X.dtype).eps)
+
+        def plane_center(x0):
+            # log-weights: smooth X-selection + log(area element). Working in log
+            # space and subtracting the max keeps the weights in (0, 1] so their
+            # sum can never underflow to 0 (which would give 0/0 = NaN when a
+            # plane is out of range or the grid is too sparse). The global shift
+            # cancels in the normalized mean, so the centroid is unchanged.
+            log_w = -0.5 * ((X - x0) / sigma) ** 2 + jnp.log(dA)
+            w = jnp.exp(log_w - jnp.max(log_w))
+            W = jnp.sum(w)
+            Ybar = jnp.sum(w * Y) / W
+            Zbar = jnp.sum(w * Z) / W
+            return jnp.array([Ybar, Zbar])
+
+        # shape (n_planes, 2) -> flatten to [Ybar_0, Zbar_0, Ybar_1, Zbar_1, ...]
+        centers = vmap(plane_center)(constants["X0"])
+        return centers.flatten()
+
+
 class Volume(_Objective):
     """Plasma volume.
 

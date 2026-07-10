@@ -698,6 +698,38 @@ class BoundaryError(_Objective):
             self._constants["eval_data"]=eval_data
             self._constants["Bplasma"]=Bplasma
 
+            # sheet current stuff 
+            if self._sheet_current:
+                p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+                sheet_params = {
+                    "R_lmn": self._eq.params_dict["Rb_lmn"],
+                    "Z_lmn": self._eq.params_dict["Zb_lmn"],
+                    "I": self._eq.params_dict["I"],
+                    "G": self._eq.params_dict["G"],
+                    "Phi_mn": self._eq.params_dict["Phi_mn"],
+                }
+                sheet_source_data = compute_fun(
+                    p,
+                    self._sheet_data_keys,
+                    params=sheet_params,
+                    transforms=self._constants["sheet_source_transforms"],
+                    profiles={},
+                )
+                sheet_eval_data = (
+                    sheet_source_data
+                    if self._use_same_grid
+                    else compute_fun(
+                        p,
+                        self._sheet_data_keys,
+                        params=sheet_params,
+                        transforms=self._constants["sheet_eval_transforms"],
+                        profiles={},
+                    )
+                )
+
+                self._constants["sheet_eval_data"]=sheet_eval_data
+                source_data["K_vc"] += sheet_source_data["K"]
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -727,7 +759,7 @@ class BoundaryError(_Objective):
         Parameters
         ----------
         eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict, if equilibrium is not fixed
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
         constants : dict
@@ -744,12 +776,17 @@ class BoundaryError(_Objective):
         """
         if field_params == ():  # common case for field_fixed=True
             field_params = None
+        if eq_params == ():
+            eq_params = None
+
         constants = self._get_deprecated_constants(constants)
         
         if self._eq_fixed:
             source_data = constants["source_data"]
             eval_data = constants["eval_data"]
-            Bplasma = constants["source_data"]
+            Bplasma = constants["Bplasma"]
+            if self._sheet_current:
+                sheet_eval_data = constants["sheet_eval_data"]
         else:
             source_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
@@ -779,34 +816,34 @@ class BoundaryError(_Objective):
             # need extra factor of B/2 bc we're evaluating on plasma surface
             Bplasma = Bplasma + eval_data["B"] / 2
 
-        if self._sheet_current:
-            p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
-            sheet_params = {
-                "R_lmn": eq_params["Rb_lmn"],
-                "Z_lmn": eq_params["Zb_lmn"],
-                "I": eq_params["I"],
-                "G": eq_params["G"],
-                "Phi_mn": eq_params["Phi_mn"],
-            }
-            sheet_source_data = compute_fun(
-                p,
-                self._sheet_data_keys,
-                params=sheet_params,
-                transforms=constants["sheet_source_transforms"],
-                profiles={},
-            )
-            sheet_eval_data = (
-                sheet_source_data
-                if self._use_same_grid
-                else compute_fun(
+            if self._sheet_current:
+                p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+                sheet_params = {
+                    "R_lmn": eq_params["Rb_lmn"],
+                    "Z_lmn": eq_params["Zb_lmn"],
+                    "I": eq_params["I"],
+                    "G": eq_params["G"],
+                    "Phi_mn": eq_params["Phi_mn"],
+                }
+                sheet_source_data = compute_fun(
                     p,
                     self._sheet_data_keys,
                     params=sheet_params,
-                    transforms=constants["sheet_eval_transforms"],
+                    transforms=constants["sheet_source_transforms"],
                     profiles={},
                 )
-            )
-            source_data["K_vc"] += sheet_source_data["K"]
+                sheet_eval_data = (
+                    sheet_source_data
+                    if self._use_same_grid
+                    else compute_fun(
+                        p,
+                        self._sheet_data_keys,
+                        params=sheet_params,
+                        transforms=constants["sheet_eval_transforms"],
+                        profiles={},
+                    )
+                )
+                source_data["K_vc"] += sheet_source_data["K"]
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the

@@ -1843,10 +1843,12 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if dx1:
             rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
 
-        # if field period symmetry, add rotated coils from other field periods
-        rpz0 = rpz
-        for k in range(1, self.NFP):
-            rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
+        # if field period symmetry, add rotated coils from other field periods.
+        # a single broadcasted add instead of a loop of concatenations keeps the
+        # traced computation graph small, for faster compile times at high NFP
+        phi_offset = 2 * jnp.pi * jnp.arange(self.NFP) / self.NFP
+        rpz = rpz[None] + phi_offset[:, None, None, None] * jnp.array([0, 1, 0])
+        rpz = rpz.reshape(self.NFP * rpz.shape[1], *rpz.shape[2:])
         if dx1:
             rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
 

@@ -2064,6 +2064,7 @@ class ToroidalFlux(_Objective):
     )
 
     _static_attrs = _Objective._static_attrs + [
+        "_bs_chunk_size",
         "_eq_fixed",
         "_field_fixed",
         "_use_vector_potential",

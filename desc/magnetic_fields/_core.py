@@ -84,15 +84,22 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # since dr x J = (rs - re) x J = rs x J - re x J, the pairwise cross product
+    # can be avoided: rs x J is per-source data, and the sums over sources become
+    # weighted sums with the scalar weights 1/|dr|^3. This keeps the pairwise
+    # intermediates to a single (n_eval, n_src) array instead of several
+    # (n_eval, n_src, 3) arrays, reducing memory, especially under AD.
+    K = jnp.cross(rs, JdV, axis=-1)
 
     def biot(re):
-        dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        d2 = jnp.sum(dr * dr, axis=-1)
+        w = safediv(1.0, d2 * jnp.sqrt(d2))[..., jnp.newaxis]
+        B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
+        return B * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def biot_savart_general_vector_potential(

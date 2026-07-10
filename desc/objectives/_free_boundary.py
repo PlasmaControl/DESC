@@ -478,6 +478,7 @@ class BoundaryError(_Objective):
         eval_grid=None,
         field_grid=None,
         field_fixed=False,
+        eq_fixed=False,
         name="Boundary error",
         jac_chunk_size=None,
         *,
@@ -487,12 +488,20 @@ class BoundaryError(_Objective):
     ):
         if target is None and bounds is None:
             target = 0
+        self._eq = eq
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q
         self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
+        errorif(
+            field_fixed and eq_fixed,
+            ValueError,
+            "At least one of eq_fixed or field_fixed must be false.",
+        ) 
+        self._field_fixed = field_fixed
+        self._eq_fixed = eq_fixed
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
             B_plasma_chunk_size, kwargs, "loop", "B_plasma_chunk_size"
@@ -501,7 +510,9 @@ class BoundaryError(_Objective):
             B_plasma_chunk_size = None
         self._B_plasma_chunk_size = B_plasma_chunk_size
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
-        things = [eq]
+        things = []
+        if not eq_fixed:
+            things.append(self._eq)
         if not field_fixed:
             things.append(self._field)
         super().__init__(
@@ -628,6 +639,9 @@ class BoundaryError(_Objective):
 
         neq = 3 if self._sheet_current else 2  # number of equations we're using
 
+        if self._eq_fixed:
+            eq = self._eq
+
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
@@ -650,6 +664,39 @@ class BoundaryError(_Objective):
                     self._sheet_data_keys, obj=eq.surface, grid=eval_grid
                 )
             )
+
+        if self._eq_fixed:
+            source_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=self._eq.params_dict,
+                transforms=source_transforms,
+                profiles=source_profiles,
+            )
+            eval_data = (
+                source_data
+                if self._use_same_grid
+                else compute_fun(
+                    "desc.equilibrium.equilibrium.Equilibrium",
+                    self._eq_data_keys,
+                    params=self._eq.params_dict,
+                    transforms=eval_transforms,
+                    profiles=eval_profiles,
+                )
+            )
+
+            Bplasma = virtual_casing_biot_savart(
+                eval_data,
+                source_data,
+                interpolator,
+                chunk_size=self._B_plasma_chunk_size,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + eval_data["B"] / 2
+
+            self._constants["source_data"]=source_data
+            self._constants["eval_data"]=eval_data
+            self._constants["Bplasma"]=Bplasma
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -698,24 +745,40 @@ class BoundaryError(_Objective):
         if field_params == ():  # common case for field_fixed=True
             field_params = None
         constants = self._get_deprecated_constants(constants)
-        source_data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
-            self._eq_data_keys,
-            params=eq_params,
-            transforms=constants["source_transforms"],
-            profiles=constants["source_profiles"],
-        )
-        eval_data = (
-            source_data
-            if self._use_same_grid
-            else compute_fun(
+        
+        if self._eq_fixed:
+            source_data = constants["source_data"]
+            eval_data = constants["eval_data"]
+            Bplasma = constants["source_data"]
+        else:
+            source_data = compute_fun(
                 "desc.equilibrium.equilibrium.Equilibrium",
                 self._eq_data_keys,
                 params=eq_params,
-                transforms=constants["eval_transforms"],
-                profiles=constants["eval_profiles"],
+                transforms=constants["source_transforms"],
+                profiles=constants["source_profiles"],
             )
-        )
+            eval_data = (
+                source_data
+                if self._use_same_grid
+                else compute_fun(
+                    "desc.equilibrium.equilibrium.Equilibrium",
+                    self._eq_data_keys,
+                    params=eq_params,
+                    transforms=constants["eval_transforms"],
+                    profiles=constants["eval_profiles"],
+                )
+            )
+
+            Bplasma = virtual_casing_biot_savart(
+                eval_data,
+                source_data,
+                constants["interpolator"],
+                chunk_size=self._B_plasma_chunk_size,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + eval_data["B"] / 2
+
         if self._sheet_current:
             p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
             sheet_params = {
@@ -745,14 +808,6 @@ class BoundaryError(_Objective):
             )
             source_data["K_vc"] += sheet_source_data["K"]
 
-        Bplasma = virtual_casing_biot_savart(
-            eval_data,
-            source_data,
-            constants["interpolator"],
-            chunk_size=self._B_plasma_chunk_size,
-        )
-        # need extra factor of B/2 bc we're evaluating on plasma surface
-        Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.

@@ -1154,6 +1154,12 @@ def _trace_particles(
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
 
+    # field is fixed during the integration, so we can precompute the constant
+    # geometry information, and use it inside the loop
+    if hasattr(field, "_as_precomputed_source"):
+        grid = options.pop("source_grid", None)
+        field = field._as_precomputed_source(grid, params)
+
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
     with warnings.catch_warnings():

@@ -25,6 +25,7 @@ New Features
 - Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number. Also adds compute functions for ``"ni_rr"`` and ``"Zeff_rr"``.
 - Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
   If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
+- Option for ``eq_fixed`` added to ``BoundaryError`` to remove equilibrium as a degree of freedom from boundary error objective. 
 
 Bug Fixes
 

@@ -447,6 +447,7 @@ class BoundaryError(_Objective):
         "_B_plasma_chunk_size",
         "_bs_chunk_size",
         "_eq_data_keys",
+        "_eq_fixed",
         "_field_fixed",
         "_q",
         "_sheet_current",
@@ -499,7 +500,7 @@ class BoundaryError(_Objective):
             field_fixed and eq_fixed,
             ValueError,
             "At least one of eq_fixed or field_fixed must be false.",
-        ) 
+        )
         self._field_fixed = field_fixed
         self._eq_fixed = eq_fixed
         self._bs_chunk_size = bs_chunk_size
@@ -694,13 +695,16 @@ class BoundaryError(_Objective):
             # need extra factor of B/2 bc we're evaluating on plasma surface
             Bplasma = Bplasma + eval_data["B"] / 2
 
-            self._constants["source_data"]=source_data
-            self._constants["eval_data"]=eval_data
-            self._constants["Bplasma"]=Bplasma
+            self._constants["source_data"] = source_data
+            self._constants["eval_data"] = eval_data
+            self._constants["Bplasma"] = Bplasma
 
-            # sheet current stuff 
+            # sheet current stuff
             if self._sheet_current:
-                p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+                p = (
+                    "desc.magnetic_fields._current_potential."
+                    "FourierCurrentPotentialField"
+                )
                 sheet_params = {
                     "R_lmn": self._eq.params_dict["Rb_lmn"],
                     "Z_lmn": self._eq.params_dict["Zb_lmn"],
@@ -727,7 +731,7 @@ class BoundaryError(_Objective):
                     )
                 )
 
-                self._constants["sheet_eval_data"]=sheet_eval_data
+                self._constants["sheet_eval_data"] = sheet_eval_data
                 source_data["K_vc"] += sheet_source_data["K"]
 
         timer.stop("Precomputing transforms")
@@ -759,7 +763,8 @@ class BoundaryError(_Objective):
         Parameters
         ----------
         eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict, if equilibrium is not fixed
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict,
+            if equilibrium is not fixed
         field_params : dict
             Dictionary of field parameters, if field is not fixed.
         constants : dict
@@ -780,7 +785,7 @@ class BoundaryError(_Objective):
             eq_params = None
 
         constants = self._get_deprecated_constants(constants)
-        
+
         if self._eq_fixed:
             source_data = constants["source_data"]
             eval_data = constants["eval_data"]
@@ -817,7 +822,10 @@ class BoundaryError(_Objective):
             Bplasma = Bplasma + eval_data["B"] / 2
 
             if self._sheet_current:
-                p = "desc.magnetic_fields._current_potential.FourierCurrentPotentialField"
+                p = (
+                    "desc.magnetic_fields._current_potential."
+                    "FourierCurrentPotentialField"
+                )
                 sheet_params = {
                     "R_lmn": eq_params["Rb_lmn"],
                     "Z_lmn": eq_params["Zb_lmn"],

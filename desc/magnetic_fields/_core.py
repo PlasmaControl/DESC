@@ -2625,6 +2625,7 @@ def field_line_integrate(
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     options=None,
@@ -2664,6 +2665,15 @@ def field_line_integrate(
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf, np.inf)
+    use_precomputed_source : bool
+        For filamentary coils, precompute the Biot-Savart source data (positions,
+        tangents and currents of all coils, including virtual coils from symmetry)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the coil
+        geometry coil by coil. This is usually much faster, also under
+        differentiation, since the coil geometry and its derivatives are computed
+        once instead of at every step. Set to False to evaluate the field the
+        standard way. Default is True.
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
@@ -2720,6 +2730,7 @@ def field_line_integrate(
         stepsize_controller=stepsize_controller,
         event=event,
         adjoint=adjoint,
+        use_precomputed_source=use_precomputed_source,
         chunk_size=chunk_size,
         bs_chunk_size=bs_chunk_size,
         options=options,
@@ -2742,6 +2753,7 @@ def _field_line_integrate(
     event,
     adjoint,
     options,
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     return_aux=False,
@@ -2772,7 +2784,7 @@ def _field_line_integrate(
     # recomputing the coil geometry (which is independent of the evaluation
     # points) at every step of every field line. Duck-typed to avoid a circular
     # import of desc.coils.
-    if hasattr(field, "_as_precomputed_source"):
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
         field = field._as_precomputed_source(source_grid, params)
         params = None
         source_grid = None

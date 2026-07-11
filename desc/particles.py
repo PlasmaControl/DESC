@@ -979,6 +979,7 @@ def trace_particles(
     bounds=None,
     solver=Tsit5(scan_kind="bounded"),
     adjoint=RecursiveCheckpointAdjoint(),
+    use_precomputed_source=True,
     chunk_size=None,
     options=None,
     throw=True,
@@ -1024,6 +1025,15 @@ def trace_particles(
         How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use `diffrax.ForwardMode()`.
+    use_precomputed_source : bool
+        For filamentary coils, precompute the Biot-Savart source data (positions,
+        tangents and currents of all coils, including virtual coils from symmetry)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the coil
+        geometry coil by coil. This is usually much faster, also under
+        differentiation, since the coil geometry and its derivatives are computed
+        once instead of at every step. Set to False to evaluate the field the
+        standard way. Default is True.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1096,6 +1106,7 @@ def trace_particles(
         adjoint=adjoint,
         event=Event(default_event),
         options=options,
+        use_precomputed_source=use_precomputed_source,
         chunk_size=chunk_size,
         throw=throw,
         return_aux=return_aux,
@@ -1117,6 +1128,7 @@ def _trace_particles(
     adjoint,
     event,
     options,
+    use_precomputed_source=True,
     chunk_size=None,
     throw=False,
     return_aux=False,
@@ -1154,9 +1166,9 @@ def _trace_particles(
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
 
-    # field is fixed during the integration, so we can precompute the constant
-    # geometry information, and use it inside the loop
-    if hasattr(field, "_as_precomputed_source"):
+    # the coil geometry is independent of the evaluation points, so we can
+    # precompute the constant source information once, and use it inside the loop
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
         grid = options.pop("source_grid", None)
         field = field._as_precomputed_source(grid, params)
 

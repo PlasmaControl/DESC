@@ -179,18 +179,6 @@ class VacuumBoundaryError(_Objective):
         profiles = get_profiles(self._eq_data_keys, obj=eq, grid=grid)
         transforms = get_transforms(self._eq_data_keys, obj=eq, grid=grid)
 
-        # if the field is fixed, we can precompute the coil geometry
-        # needed for the Biot-Savart
-        if self._field_fixed:
-            self._field = [
-                (
-                    f._as_precomputed_source(self._field_grid)
-                    if hasattr(f, "_as_precomputed_source")
-                    else f
-                )
-                for f in self._field
-            ]
-
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
@@ -234,8 +222,6 @@ class VacuumBoundaryError(_Objective):
             √g[[B²]] in T^2*m^2.
 
         """
-        from desc.magnetic_fields import SumMagneticField
-
         if field_params == ():  # common case for field_fixed=True
             field_params = None
         constants = self._get_deprecated_constants(constants)
@@ -247,26 +233,9 @@ class VacuumBoundaryError(_Objective):
             profiles=constants["profiles"],
         )
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
-        # if field is not fixed, we need to pass new params to the field object.
-        # this method is still faster because it avoids Biot-Savart in a for-loop
-        # and converts it to a single big Biot-Savart that can be
-        # computed faster on GPU.
-        if not self._field_fixed:
-            field = SumMagneticField(
-                [
-                    (
-                        f._as_precomputed_source(self._field_grid, par)
-                        if hasattr(f, "_as_precomputed_source")
-                        else f
-                    )
-                    for f, par in zip(self._field, field_params)
-                ]
-            )
-        else:
-            field = constants["field"]
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = field.compute_magnetic_field(
+        Bext = constants["field"].compute_magnetic_field(
             x,
             source_grid=self._field_grid,
             basis="rpz",
@@ -524,7 +493,6 @@ class BoundaryError(_Objective):
         self._q = q
         self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
-        self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
         B_plasma_chunk_size = parse_argname_change(
             B_plasma_chunk_size, kwargs, "loop", "B_plasma_chunk_size"
@@ -660,18 +628,6 @@ class BoundaryError(_Objective):
 
         neq = 3 if self._sheet_current else 2  # number of equations we're using
 
-        # if the field is fixed, we can precompute the coil geometry
-        # needed for the Biot-Savart
-        if self._field_fixed:
-            self._field = [
-                (
-                    f._as_precomputed_source(self._field_grid)
-                    if hasattr(f, "_as_precomputed_source")
-                    else f
-                )
-                for f in self._field
-            ]
-
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
@@ -739,8 +695,6 @@ class BoundaryError(_Objective):
             √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
-        from desc.magnetic_fields import SumMagneticField
-
         if field_params == ():  # common case for field_fixed=True
             field_params = None
         constants = self._get_deprecated_constants(constants)
@@ -800,25 +754,9 @@ class BoundaryError(_Objective):
         # need extra factor of B/2 bc we're evaluating on plasma surface
         Bplasma = Bplasma + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-        # if field is not fixed, we need to pass new params to the field object.
-        # this method is still faster because it avoids Biot-Savart in a for-loop
-        # and converts it to a single big Biot-Savart that can be
-        # computed faster on GPU.
-        if not self._field_fixed:
-            field = [
-                (
-                    f._as_precomputed_source(self._field_grid, par)
-                    if hasattr(f, "_as_precomputed_source")
-                    else f
-                )
-                for f, par in zip(self._field, field_params)
-            ]
-            field = SumMagneticField(field)
-        else:
-            field = constants["field"]
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = field.compute_magnetic_field(
+        Bext = constants["field"].compute_magnetic_field(
             x,
             source_grid=self._field_grid,
             basis="rpz",

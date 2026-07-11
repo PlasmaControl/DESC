@@ -1692,6 +1692,8 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
+        from desc.magnetic_fields import SumMagneticField
+
         eq = self._eq
 
         if self._eval_grid is None:
@@ -1742,6 +1744,8 @@ class QuadraticFlux(_Objective):
         )
 
         self._constants = {
+            "field": SumMagneticField(self._field),
+            "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
             "eval_transforms": eval_transforms,
@@ -1776,8 +1780,6 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        from desc.magnetic_fields import SumMagneticField
-
         constants = self._get_deprecated_constants(constants)
 
         # B_plasma from equilibrium precomputed
@@ -1786,23 +1788,10 @@ class QuadraticFlux(_Objective):
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
-        # this method is still faster because it avoids Biot-Savart in a for-loop
-        # and converts it to a single big Biot-Savart that can be
-        # computed faster on GPU.
-        field = SumMagneticField(
-            [
-                (
-                    f._as_precomputed_source(self._field_grid, params=par)
-                    if hasattr(f, "_as_precomputed_source")
-                    else f
-                )
-                for f, par in zip(self._field, field_params)
-            ]
-        )
         # B_ext is not pre-computed because field is not fixed
-        B_ext = field.compute_magnetic_field(
+        B_ext = constants["field"].compute_magnetic_field(
             x,
-            source_grid=self._field_grid,
+            source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
             chunk_size=self._bs_chunk_size,
@@ -1952,12 +1941,9 @@ class SurfaceQuadraticFlux(_Objective):
             profiles=eval_profiles,
         )
 
-        # if the field is fixed, we can precompute the coil geometry
-        # needed for the Biot-Savart
-        if self._field_fixed and hasattr(self._field, "_as_precomputed_source"):
-            self._field = self._field._as_precomputed_source(self._field_grid)
-
         self._constants = {
+            "field": self._field,
+            "field_grid": self._field_grid,
             "quad_weights": w,
             "eval_data": eval_data,
             "eval_transforms": eval_transforms,
@@ -2008,19 +1994,10 @@ class SurfaceQuadraticFlux(_Objective):
         )
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         if field_params is None:
-            field_params = getattr(self._field, "params_dict", None)
-        # convert to a precomputed source with the new field params, unless this
-        # was already done in build (field fixed). This method is still faster
-        # because it avoids Biot-Savart in a for-loop and converts it to a single
-        # big Biot-Savart that can be computed faster on GPU.
-        field = (
-            self._field._as_precomputed_source(self._field_grid, field_params)
-            if hasattr(self._field, "_as_precomputed_source")
-            else self._field
-        )
-        B_ext = field.compute_magnetic_field(
+            field_params = constants["field"].params_dict
+        B_ext = constants["field"].compute_magnetic_field(
             x,
-            source_grid=self._field_grid,
+            source_grid=constants["field_grid"],
             basis="rpz",
             params=field_params,
             chunk_size=self._bs_chunk_size,
@@ -2236,12 +2213,12 @@ class ToroidalFlux(_Objective):
 
         plasma_coords = jnp.array([data["R"], data["phi"], data["Z"]]).T
 
-        if self._field_fixed and hasattr(self._field, "_as_precomputed_source"):
-            self._field = self._field._as_precomputed_source(self._field_grid)
         self._constants = {
             "plasma_coords": plasma_coords,
             "equil_data": data,
             "quad_weights": 1.0,
+            "field": self._field,
+            "field_grid": self._field_grid,
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "eval_grid": eval_grid,
@@ -2275,12 +2252,8 @@ class ToroidalFlux(_Objective):
         """
         constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._eq_fixed else params_1
-        # if the field was converted to a precomputed source in build, it has no
-        # params_dict, but its params are baked in and ignored at evaluation
         field_params = (
-            getattr(self._field, "params_dict", None)
-            if self._field_fixed
-            else field_params
+            constants["field"].params_dict if self._field_fixed else field_params
         )
         surf_params = params_1 if not self._eq_fixed else None
 
@@ -2299,20 +2272,11 @@ class ToroidalFlux(_Objective):
 
         grid = constants["eval_grid"]
 
-        # convert to a precomputed source with the new field params, unless this
-        # was already done in build (field fixed). This method is still faster
-        # because it avoids Biot-Savart in a for-loop and converts it to a single
-        # big Biot-Savart that can be computed faster on GPU.
-        field = (
-            self._field._as_precomputed_source(self._field_grid, field_params)
-            if hasattr(self._field, "_as_precomputed_source")
-            else self._field
-        )
         if self._use_vector_potential:
-            A = field.compute_magnetic_vector_potential(
+            A = constants["field"].compute_magnetic_vector_potential(
                 plasma_coords,
                 basis="rpz",
-                source_grid=self._field_grid,
+                source_grid=constants["field_grid"],
                 params=field_params,
                 chunk_size=self._bs_chunk_size,
             )
@@ -2320,10 +2284,10 @@ class ToroidalFlux(_Objective):
             A_dot_e_theta = jnp.sum(A * data["e_theta"], axis=1)
             Psi = jnp.sum(grid.spacing[:, 1] * A_dot_e_theta)
         else:
-            B = field.compute_magnetic_field(
+            B = constants["field"].compute_magnetic_field(
                 plasma_coords,
                 basis="rpz",
-                source_grid=self._field_grid,
+                source_grid=constants["field_grid"],
                 params=field_params,
                 chunk_size=self._bs_chunk_size,
             )

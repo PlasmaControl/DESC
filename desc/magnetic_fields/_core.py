@@ -19,6 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
+from desc import config as desc_config
 from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
@@ -84,15 +85,33 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # since dr x J = (rs - re) x J = rs x J - re x J, the pairwise cross product
+    # can be avoided: rs x J is per-source data, and the sums over sources become
+    # weighted sums with the scalar weights 1/|dr|^3. This keeps the pairwise
+    # intermediates to a single (n_eval, n_src) array instead of several
+    # (n_eval, n_src, 3) arrays, reducing memory, especially under AD.
+    K = jnp.cross(rs, JdV, axis=-1)
 
     def biot(re):
-        dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        d2 = jnp.sum(dr * dr, axis=-1)
+        w = safediv(1.0, d2 * jnp.sqrt(d2))
+        # the two weighted sums over sources are computed differently depending
+        # on the device. On GPU the multiply+reduce fuses into a single kernel,
+        # avoiding cuBLAS launch overhead which dominates for few evaluation
+        # points (e.g. field line tracing). On CPU dot_general dispatches to an
+        # optimized GEMM library, much faster than the XLA:CPU codegen for the
+        # batched multiply+reduce. This is decided while tracing, so only one
+        # version is compiled and compile time is unaffected.
+        if desc_config.get("kind") == "gpu":
+            w = w[..., jnp.newaxis]
+            B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
+        else:
+            B = w @ K - jnp.cross(re, w @ JdV, axis=-1)
+        return B * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def biot_savart_general_vector_potential(
@@ -131,12 +150,21 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        # the sum over sources is a weighted sum with the scalar weights 1/|dr|,
+        # keeping the pairwise intermediates to a single (n_eval, n_src) array
+        # instead of several (n_eval, n_src, 3) arrays, reducing memory.
+        # see biot_savart_general for why the sum is device dependent
+        dr = rs - re[..., jnp.newaxis, :]
+        d2 = jnp.sum(dr * dr, axis=-1)
+        w = safediv(1.0, jnp.sqrt(d2))
+        if desc_config.get("kind") == "gpu":
+            A = (w[..., jnp.newaxis] * JdV).sum(axis=-2)
+        else:
+            A = w @ JdV
+        return A * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):

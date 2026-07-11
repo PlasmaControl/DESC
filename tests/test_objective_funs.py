@@ -611,6 +611,40 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
 
     @pytest.mark.unit
+    def test_boundary_error_things_fixed(self):
+        """Test that BoundaryError runs correctly for eq_fixed/field_fixed combos."""
+        eq = Equilibrium(iota=PowerSeriesProfile(0))
+        eq.solve()
+        field = ToroidalMagneticField(B0=1, R0=1)
+
+        def test(eq_fixed=False, field_fixed=False):
+            obj = BoundaryError(
+                eq,
+                field,
+                eq_fixed=eq_fixed,
+                field_fixed=field_fixed,
+            )
+            obj.build()
+            if eq_fixed:
+                f = obj.compute_unscaled(*obj.xs(field))
+            elif field_fixed:
+                f = obj.compute_unscaled(*obj.xs(eq))
+            else:
+                f = obj.compute_unscaled(*obj.xs(eq, field))
+            n = len(f) // 2
+            # first n should be B*n errors
+            np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+            # next n should be B^2 errors
+            np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+
+        test(eq_fixed=False, field_fixed=False)
+        test(eq_fixed=True)
+        test(field_fixed=True)
+
+        with pytest.raises(ValueError, match="At least one"):
+            BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
     def test_boundary_error_vacuum(self):
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)

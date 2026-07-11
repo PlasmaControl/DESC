@@ -542,7 +542,7 @@ class BoundaryError(_Objective):
         """
         from desc.magnetic_fields import SumMagneticField
 
-        eq = self.things[0]
+        eq = self._eq
 
         if self._source_grid is None:
             # for axisymmetry we still need to know about toroidal effects, so its
@@ -757,16 +757,19 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, eq_params, *field_params, constants=None):
+    def compute(self, params_1, params_2=None, constants=None):
         """Compute boundary force error.
 
         Parameters
         ----------
-        eq_params : dict
-            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict,
-            if equilibrium is not fixed
-        field_params : dict
-            Dictionary of field parameters, if field is not fixed.
+        params_1 : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg ``Equilibrium.params_dict``
+            Only required if ``self._eq_fixed = False``.
+        params_2 : dict
+            Dictionary of field degrees of freedom, eg ``Field.params_dict`` if
+            self._coils_fixed is False, else is the equilibrium or surface degrees of
+            freedom
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)
@@ -779,10 +782,14 @@ class BoundaryError(_Objective):
             √g||μ₀𝐊 − 𝐧 × [𝐁]|| in T*m^2
 
         """
-        if field_params == ():  # common case for field_fixed=True
+        if self._eq_fixed:
+            field_params = params_1
+        elif self._field_fixed:
+            eq_params = params_1
             field_params = None
-        if eq_params == ():
-            eq_params = None
+        else:
+            eq_params = params_1
+            field_params = params_2
 
         constants = self._get_deprecated_constants(constants)
 

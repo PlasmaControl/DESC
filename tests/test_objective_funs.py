@@ -2171,7 +2171,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     @pytest.mark.parametrize("solve_method", ["fixed_point", "gmres", "direct"])
     def test_objective_against_compute_free_surface_error(self, solve_method):
-        """Test FreeSurfaceError against the underlying |K_vc|^2 compute quantity."""
+        """Test FreeSurfaceError against an explicit physical-trace reconstruction."""
         eq = get("W7-X")
         grid = LinearGrid(rho=np.array([1.0]), M=4, N=4, NFP=eq.NFP, sym=False)
         B = ToroidalMagneticField(5, 1)
@@ -2202,9 +2202,13 @@ class TestObjectiveFunction:
         }
         outer_data = {key: inner[key] for key in obj._reuseable_keys}
         outer_data["interpolator"] = obj._constants["interpolator"]
-        outer_data["B0*n"] = obj._phi_sec_dot_n(field_params, inner)
+        B_I_unit = obj._toroidal_current_unit_field(
+            eq.params_dict, inner, obj._constants
+        )
+        B_I = obj._normalize_toroidal_current_field(B_I_unit, field_params["I"], inner)
+        outer_data["B0*n"] = obj._phi_sec_dot_n(field_params, inner, B_I=B_I)
         outer, _ = field.compute(
-            "|K_vc|^2",
+            "K_vc",
             grid=grid,
             params=field_params,
             transforms=obj._constants["eval_transforms"],
@@ -2212,17 +2216,66 @@ class TestObjectiveFunction:
             override_grid=False,
             options=LaplaceOptions(*obj._options)._replace(
                 solve_method=solve_method,
-                Phi_0=obj._constants["initial_guess"],
+                Phi_tilde_0=obj._constants["initial_guess"],
             ),
             B_coil=B,
         )
-        expected = (outer["|K_vc|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]) * inner[
-            "|e_theta x e_zeta|"
-        ]
+        outer["B x n"] = outer["K_vc"] + jnp.cross(
+            B_I + field_params["Y"] * inner["grad(phi)"],
+            inner["n_rho"],
+        )
+        outer["|B x n|^2"] = jnp.sum(outer["B x n"] ** 2, axis=-1)
+        expected = (
+            outer["|B x n|^2"] - inner["|B|^2"] - 2 * mu_0 * inner["p"]
+        ) * inner["|e_theta x e_zeta|"]
 
         np.testing.assert_allclose(
             obj.compute(eq.params_dict, obj.things[1].params_dict), expected
         )
+
+    @pytest.mark.unit
+    def test_free_surface_error_uses_physical_toroidal_current_period(self):
+        """The I-period uses an axis-filament field, not I grad(theta)."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=3, N=3, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface, M=grid.M, N=grid.N, B_coil=ToroidalMagneticField(5, 1)
+        )
+        obj = FreeSurfaceError(eq, field, grid=grid)
+        geometry = eq.compute(
+            [
+                "R",
+                "phi",
+                "Z",
+                "e_theta",
+                "n_rho",
+                "grad(theta)",
+                "grad(phi)",
+            ],
+            grid=grid,
+        )
+        constants = obj._build_toroidal_current_data(eq)
+        period = 1.7
+        B_I = obj._normalize_toroidal_current_field(
+            obj._toroidal_current_unit_field(eq.params_dict, geometry, constants),
+            period,
+            geometry,
+        )
+
+        physical_trace = obj._phi_sec_dot_n({"I": period, "Y": 0.0}, geometry, B_I=B_I)
+        coordinate_trace = jnp.sum(
+            period * geometry["grad(theta)"] * geometry["n_rho"], axis=-1
+        )
+
+        # On every poloidal loop the normalized physical representative has
+        # circulation 2*pi*period.
+        np.testing.assert_allclose(
+            jnp.sum(B_I * geometry["e_theta"], axis=-1).mean(),
+            period,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        assert not np.allclose(physical_trace, coordinate_trace, rtol=1e-3, atol=1e-3)
 
     @pytest.mark.unit
     def test_free_surface_error_optimizes_sheet_current(self):
@@ -4155,6 +4208,30 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "free surface error"
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("flag", [True, False])
+    def test_objective_no_nanjac_free_surface_error_gmres_fwd(self, flag):
+        """GMRES supports the forward-mode Jacobian used for optimization."""
+        eq = get("W7-X")
+        B = ToroidalMagneticField(5, 1)
+        field = (
+            FreeSurfaceOuterField(eq.surface, 2, 2, B_coil=B)
+            if flag
+            else SourceFreeField(eq.surface, 2, 2, B0=B)
+        )
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                grid=LinearGrid(M=3, N=3, NFP=eq.NFP),
+                deriv_mode="fwd",
+                options=LaplaceOptions(solve_method="gmres"),
+            )
+        )
+        obj.build()
+        jac = obj.jac_unscaled(obj.x())
+        assert not np.any(np.isnan(jac)), "free surface error"
 
     @pytest.mark.unit
     def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):

@@ -763,13 +763,13 @@ class BoundaryError(_Objective):
         Parameters
         ----------
         params_1 : dict
-            Dictionary of equilibrium or surface degrees of freedom,
-            eg ``Equilibrium.params_dict``
-            Only required if ``self._eq_fixed = False``.
+            Dictionary of equilibrium degrees of freedom, eg
+            ``Equilibrium.params_dict`` if self._eq_fixed is False, else is the field
+            degrees of freedom
         params_2 : dict
-            Dictionary of field degrees of freedom, eg ``Field.params_dict`` if
-            self._coils_fixed is False, else is the equilibrium or surface degrees of
-            freedom
+            Dictionary of field degrees of freedom,
+            eg ``CoilSet.params_dict``
+            Only required if ``self._field_fixed = False``.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)

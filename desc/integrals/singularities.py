@@ -413,20 +413,21 @@ class DFTInterpolator(_BIESTInterpolator):
         if vander is None:
             vander = self.vander_polar(i)
 
+        z, t = vander
         if self.eval_grid.is_meshgrid:
             return jnp.einsum(
                 "mn...,zn,tm->tz...",
                 f,
-                *vander,
+                z,
+                t,
                 optimize=[(0, 1), (0, 1)],
             ).real.reshape(self.eval_grid.num_nodes, *f.shape[2:], order="F")
-        else:
-            z, t = vander
-            return jnp.einsum(
-                "am...,am->a...",
-                jnp.einsum("mn...,zn->zm...", f, z)[self.eval_grid.inverse_zeta_idx],
-                t,
-            ).real
+
+        return jnp.einsum(
+            "am...,am->a...",
+            jnp.einsum("mn...,zn->zm...", f, z)[self.eval_grid.inverse_zeta_idx],
+            t,
+        ).real
 
 
 def _prune_data(eval_data, eval_grid, source_data, source_grid, kernel):

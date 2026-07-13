@@ -269,9 +269,17 @@ def test_perturb_1(benchmark):
     def setup():
         jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective(eq)
-        objective.build()
-        constraints = get_fixed_boundary_constraints(eq)
+        obj = ObjectiveFunction(ForceBalance(eq))
+        con = get_fixed_boundary_constraints(eq)
+        con = maybe_add_self_consistency(eq, con)
+        con = ObjectiveFunction(con)
+        obj.build()
+        con.build()
+        # pass in built LinearConstraintProjection to skip
+        # heavy build phase which we already benchmark in
+        # a different test
+        lc = LinearConstraintProjection(obj, con)
+        lc.build()
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
@@ -279,8 +287,8 @@ def test_perturb_1(benchmark):
 
         args = (
             eq,
-            objective,
-            constraints,
+            lc,
+            None,
         )
         kwargs = {
             "deltas": deltas,
@@ -302,9 +310,17 @@ def test_perturb_2(benchmark):
     def setup():
         jax.clear_caches()
         eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective(eq)
-        objective.build()
-        constraints = get_fixed_boundary_constraints(eq)
+        obj = ObjectiveFunction(ForceBalance(eq))
+        con = get_fixed_boundary_constraints(eq)
+        con = maybe_add_self_consistency(eq, con)
+        con = ObjectiveFunction(con)
+        obj.build()
+        con.build()
+        # pass in built LinearConstraintProjection to skip
+        # heavy build phase which we already benchmark in
+        # a different test
+        lc = LinearConstraintProjection(obj, con)
+        lc.build()
         tr_ratio = [0.01, 0.25, 0.25]
         dp = np.zeros_like(eq.p_l)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
@@ -312,8 +328,8 @@ def test_perturb_2(benchmark):
 
         args = (
             eq,
-            objective,
-            constraints,
+            lc,
+            None,
         )
         kwargs = {
             "deltas": deltas,
@@ -565,7 +581,7 @@ def test_objective_quadratic_flux_jac(benchmark):
     # for loops and hence the performance of the field computation
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=20)
+    field_grid = LinearGrid(N=30)
     modular = initialize_modular_coils(eq, num_coils=10, r_over_a=2).to_FourierXYZ(
         N=8, grid=field_grid, check_intersection=False
     )
@@ -582,5 +598,34 @@ def test_objective_quadratic_flux_jac(benchmark):
 
     def run(x, objective):
         objective.jac_scaled_error(x).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_quadratic_flux_compute(benchmark):
+    """Benchmark computing QuadraticFlux."""
+    # NFP and sym of the equilibrium as well as the number of coils affect the number of
+    # for loops and hence the performance of the field computation
+    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
+    eq = desc.examples.get("precise_QH")
+    field_grid = LinearGrid(N=30)
+    modular = initialize_modular_coils(eq, num_coils=10, r_over_a=2).to_FourierXYZ(
+        N=8, grid=field_grid, check_intersection=False
+    )
+    saddle = initialize_saddle_coils(
+        eq, num_coils=1, r_over_a=1.0, offset=1.0, position="outer"
+    )
+    field = MixedCoilSet(modular, saddle, check_intersection=False)
+    objective = ObjectiveFunction(
+        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
+    )
+    objective.build()
+    x = objective.x()
+    _ = objective.compute_scaled_error(x).block_until_ready()
+
+    def run(x, objective):
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)

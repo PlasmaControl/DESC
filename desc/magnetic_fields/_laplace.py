@@ -532,8 +532,8 @@ class FreeSurfaceOuterField(SourceFreeField):
 
     """
 
-    _io_attrs_ = SourceFreeField._io_attrs_ + ["_varphi_basis", "_B_coil"]
-    _immediate_attributes_ = ["_varphi_basis", "_B_coil"]
+    _io_attrs_ = SourceFreeField._io_attrs_ + ["_varphi_tilde_basis", "_B_coil"]
+    _immediate_attributes_ = ["_varphi_tilde_basis", "_B_coil"]
 
     def __init__(
         self,
@@ -563,9 +563,9 @@ class FreeSurfaceOuterField(SourceFreeField):
             Y_coil,
         )
         if M_coil is None and N_coil is None and sym_coil is None:
-            self._varphi_basis = self._Phi_tilde_basis
+            self._varphi_tilde_basis = self._Phi_tilde_basis
         else:
-            self._varphi_basis = DoubleFourierSeries(
+            self._varphi_tilde_basis = DoubleFourierSeries(
                 M=setdefault(M_coil, M),
                 N=setdefault(N_coil, N),
                 NFP=surface.NFP,
@@ -586,29 +586,22 @@ class FreeSurfaceOuterField(SourceFreeField):
     @property
     def varphi_tilde_basis(self):
         """DoubleFourierSeries: Basis for globally defined coil-potential remainder."""
-        return self._varphi_basis
+        return self._varphi_tilde_basis
 
     @property
     def sym_varphi_tilde(self):
         """str: Symmetry of tilde-varphi (no symmetry if False)."""
-        return self._varphi_basis.sym
+        return self._varphi_tilde_basis.sym
 
     @property
     def M_varphi_tilde(self):
         """int: Poloidal resolution of tilde-varphi."""
-        return self._varphi_basis.M
+        return self._varphi_tilde_basis.M
 
     @property
     def N_varphi_tilde(self):
         """int: Toroidal resolution of tilde-varphi."""
-        return self._varphi_basis.N
-
-    # Backward-compatible aliases for the names used before the coil-potential
-    # decomposition was aligned with equations 5.10 and 5.15 in [1]_.
-    varphi_basis = varphi_tilde_basis
-    sym_varphi = sym_varphi_tilde
-    M_varphi = M_varphi_tilde
-    N_varphi = N_varphi_tilde
+        return self._varphi_tilde_basis.N
 
     def compute(
         self,

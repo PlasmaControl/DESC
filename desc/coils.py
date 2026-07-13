@@ -3501,7 +3501,9 @@ def initialize_saddle_coils(
     return windowpane_coilset
 
 
-def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+def initialize_helical_coils(
+    eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100, check_intersection=True
+):
     """Initialize a CoilSet of helical coils for stage 2 optimization.
 
     The coils will be roughly a constant distance from the plasma surface as they wind
@@ -3529,6 +3531,8 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
     npts : int
         How many points to use when creating the coils. Equilibria with very high NFP
         may need more points.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
 
     Returns
     -------
@@ -3580,4 +3584,4 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
             2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
         )
         coils.append(coil)
-    return CoilSet(*coils)
+    return CoilSet(*coils, check_intersection=check_intersection)

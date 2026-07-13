@@ -566,9 +566,9 @@ def test_objective_quadratic_flux_jac(benchmark):
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
     field_grid = LinearGrid(N=20)
-    modular = initialize_modular_coils(
-        eq, num_coils=10, r_over_a=2, check_intersection=False
-    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
+    modular = initialize_modular_coils(eq, num_coils=10, r_over_a=2).to_FourierXYZ(
+        N=8, grid=field_grid, check_intersection=False
+    )
     saddle = initialize_saddle_coils(
         eq, num_coils=1, r_over_a=1.0, offset=1.0, position="outer"
     )
@@ -577,7 +577,7 @@ def test_objective_quadratic_flux_jac(benchmark):
         QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
     )
     objective.build()
-    x = objective.x(eq)
+    x = objective.x()
     _ = objective.jac_scaled_error(x).block_until_ready()
 
     def run(x, objective):

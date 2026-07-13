@@ -577,7 +577,6 @@ def test_objective_quadratic_flux_jac(benchmark):
         position="outer",
         check_intersection=False,
     )
-    # these coils intersect but that is fine for benchmark
     field = MixedCoilSet(modular, saddle, check_intersection=False)
     objective = ObjectiveFunction(
         QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
@@ -612,7 +611,6 @@ def test_objective_quadratic_flux_compute(benchmark):
         position="outer",
         check_intersection=False,
     )
-    # these coils intersect but that is fine for benchmark
     field = MixedCoilSet(modular, saddle, check_intersection=False)
     objective = ObjectiveFunction(
         QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)

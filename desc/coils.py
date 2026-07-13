@@ -3356,7 +3356,7 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     return ratio.sum()
 
 
-def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
+def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=True):
     """Initialize a CoilSet of modular coils for stage 2 optimization.
 
     The coils will be planar, circular coils centered on the equilibrium magnetic axis,
@@ -3377,6 +3377,8 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
         Minor radius of the coils, in units of equilibrium minor radius. Note that for
         strongly shaped equilibria this may need to be large to avoid having the coils
         intersect the plasma.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
 
     Returns
     -------
@@ -3404,11 +3406,15 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
             basis="rpz",
         )
         unique_coils.append(coil)
-    coilset = CoilSet(unique_coils, NFP=eq.NFP, sym=eq.sym)
+    coilset = CoilSet(
+        unique_coils, NFP=eq.NFP, sym=eq.sym, check_intersection=check_intersection
+    )
     return coilset
 
 
-def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="outer"):
+def initialize_saddle_coils(
+    eq, num_coils, r_over_a=0.5, offset=2.0, position="outer", check_intersection=True
+):
     """Initialize a CoilSet of saddle coils for stage 2 optimization.
 
     The coils will be planar, circular coils positioned around the plasma without
@@ -3435,6 +3441,8 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
         Placement of coils relative to plasma. "outer" will place coils on the outboard
         side, "inner" on the inboard side, "top" will place coils above the plasma,
         "bottom" will place them below.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
 
     Returns
     -------
@@ -3480,7 +3488,12 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
         )
         windowpane_coils.append(coil)
 
-    windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
+    windowpane_coilset = CoilSet(
+        windowpane_coils,
+        NFP=int(eq.NFP),
+        sym=eq.sym,
+        check_intersection=check_intersection,
+    )
     return windowpane_coilset
 
 

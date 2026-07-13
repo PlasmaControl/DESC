@@ -9,6 +9,7 @@ desc.set_device("cpu")
 import desc.examples
 from desc.backend import jax
 from desc.basis import FourierZernikeBasis
+from desc.coils import MixedCoilSet, initialize_modular_coils, initialize_saddle_coils
 from desc.equilibrium import Equilibrium
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.magnetic_fields import ToroidalMagneticField
@@ -20,6 +21,7 @@ from desc.objectives import (
     FixPsi,
     ForceBalance,
     ObjectiveFunction,
+    QuadraticFlux,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -553,3 +555,32 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
         getattr(prox, method)(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_quadratic_flux_jac(benchmark):
+    """Benchmark computing jacobian of QuadraticFlux."""
+    # NFP and sym of the equilibrium as well as the number of coils affect the number of
+    # for loops and hence the performance of the field computation
+    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
+    eq = desc.examples.get("precise_QH")
+    field_grid = LinearGrid(N=20)
+    modular = initialize_modular_coils(
+        eq, num_coils=10, r_over_a=2, check_intersection=False
+    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
+    saddle = initialize_saddle_coils(
+        eq, num_coils=1, r_over_a=1.0, offset=1.0, position="outer"
+    )
+    field = MixedCoilSet(modular, saddle, check_intersection=False)
+    objective = ObjectiveFunction(
+        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
+    )
+    objective.build()
+    x = objective.x(eq)
+    _ = objective.jac_scaled_error(x).block_until_ready()
+
+    def run(x, objective):
+        objective.jac_scaled_error(x).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)

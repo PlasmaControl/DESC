@@ -566,12 +566,18 @@ def test_objective_quadratic_flux_jac(benchmark):
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
     field_grid = LinearGrid(N=30)
-    modular = initialize_modular_coils(eq, num_coils=10, r_over_a=2).to_FourierXYZ(
-        N=8, grid=field_grid, check_intersection=False
-    )
+    modular = initialize_modular_coils(
+        eq, num_coils=10, r_over_a=2.5, check_intersection=False
+    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
     saddle = initialize_saddle_coils(
-        eq, num_coils=1, r_over_a=1.0, offset=1.0, position="outer"
+        eq,
+        num_coils=6,
+        r_over_a=0.8,
+        offset=3.5,
+        position="outer",
+        check_intersection=False,
     )
+    # these coils intersect but that is fine for benchmark
     field = MixedCoilSet(modular, saddle, check_intersection=False)
     objective = ObjectiveFunction(
         QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
@@ -594,13 +600,19 @@ def test_objective_quadratic_flux_compute(benchmark):
     # for loops and hence the performance of the field computation
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=30)
-    modular = initialize_modular_coils(eq, num_coils=10, r_over_a=2).to_FourierXYZ(
-        N=8, grid=field_grid, check_intersection=False
-    )
+    field_grid = LinearGrid(N=50)
+    modular = initialize_modular_coils(
+        eq, num_coils=10, r_over_a=2.5, check_intersection=False
+    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
     saddle = initialize_saddle_coils(
-        eq, num_coils=1, r_over_a=1.0, offset=1.0, position="outer"
+        eq,
+        num_coils=6,
+        r_over_a=0.8,
+        offset=3.5,
+        position="outer",
+        check_intersection=False,
     )
+    # these coils intersect but that is fine for benchmark
     field = MixedCoilSet(modular, saddle, check_intersection=False)
     objective = ObjectiveFunction(
         QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)

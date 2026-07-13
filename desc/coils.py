@@ -2058,16 +2058,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         if not isinstance(coils, CoilSet):
             try:
-                coils = CoilSet(coils)
+                coils = CoilSet(coils, check_intersection=check_intersection)
             except (TypeError, ValueError):
                 # likely there are multiple coil types,
                 # so make a MixedCoilSet
-                coils = MixedCoilSet(coils)
+                coils = MixedCoilSet(coils, check_intersection=check_intersection)
         if not isinstance(coils, MixedCoilSet):
             # only need to check this for a CoilSet, not MixedCoilSet
             [_check_type(coil, coils[0]) for coil in coils]
 
-        coilset = []
+        # add operator trigger CoilSet creation that we cannot pass check_intersection
+        # to. Instead collect coils in a list
+        base_coils = [coil for coil in coils]
         if sym:
             # first reflect/flip original coilset
             # ie, given coils [1, 2, 3] at angles [pi/6, pi/2, 5pi/6]
@@ -2081,12 +2083,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 fcoil.flip([0, 0, 1])
                 fcoil.current = -1 * coil.current
                 flipped_coils.append(fcoil)
-            coils = coils + flipped_coils
+            base_coils = base_coils + flipped_coils
         # next rotate the coilset for each field period
+        coilset = []
         for k in range(0, NFP):
-            rotated_coils = coils.copy()
-            rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
-            coilset += rotated_coils
+            for coil in base_coils:
+                rcoil = coil.copy()
+                rcoil.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
+                coilset.append(rcoil)
 
         return cls(*coilset, check_intersection=check_intersection)
 

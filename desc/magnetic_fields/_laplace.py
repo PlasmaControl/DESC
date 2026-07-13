@@ -507,14 +507,14 @@ class FreeSurfaceOuterField(SourceFreeField):
         boundary density. Default is ``sin`` when the surface is stellarator
         symmetric and ``False`` otherwise.
     M_coil : int
-        Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
-        Default is ``M``.
+        Poloidal Fourier resolution of the globally defined remainder of the
+        coil potential on ∂𝒳. Default is ``M``.
     N_coil : int
-        Poloidal Fourier resolution to interpolate coil potential on ∂𝒳.
-        Default is ``N``.
+        Toroidal Fourier resolution of the globally defined remainder of the
+        coil potential on ∂𝒳. Default is ``N``.
     sym_coil : str
-        Symmetry for Fourier basis interpolating the periodic part of the
-        coil potential. Default is ``sym``.
+        Symmetry for Fourier basis interpolating the globally defined remainder
+        of the coil potential. Default is ``sym``.
     B_coil : _MagneticField
         Magnetic field from coil current sources.
         This must be smooth and divergence free for correctness.
@@ -584,24 +584,31 @@ class FreeSurfaceOuterField(SourceFreeField):
             setattr(object.__getattribute__(self, "_surface"), name, value)
 
     @property
-    def varphi_basis(self):
-        """DoubleFourierSeries: Basis for periodic part of coil potential."""
+    def varphi_tilde_basis(self):
+        """DoubleFourierSeries: Basis for globally defined coil-potential remainder."""
         return self._varphi_basis
 
     @property
-    def sym_varphi(self):
-        """str: Symmetry of periodic part of varphi (no symmetry if False)."""
+    def sym_varphi_tilde(self):
+        """str: Symmetry of tilde-varphi (no symmetry if False)."""
         return self._varphi_basis.sym
 
     @property
-    def M_varphi(self):
-        """int: Poloidal resolution of periodic part of varphi."""
+    def M_varphi_tilde(self):
+        """int: Poloidal resolution of tilde-varphi."""
         return self._varphi_basis.M
 
     @property
-    def N_varphi(self):
-        """int: Toroidal resolution of periodic part of varphi."""
+    def N_varphi_tilde(self):
+        """int: Toroidal resolution of tilde-varphi."""
         return self._varphi_basis.N
+
+    # Backward-compatible aliases for the names used before the coil-potential
+    # decomposition was aligned with equations 5.10 and 5.15 in [1]_.
+    varphi_basis = varphi_tilde_basis
+    sym_varphi = sym_varphi_tilde
+    M_varphi = M_varphi_tilde
+    N_varphi = N_varphi_tilde
 
     def compute(
         self,
@@ -617,12 +624,16 @@ class FreeSurfaceOuterField(SourceFreeField):
     ):
         """Compute the quantity given by name on grid."""
         errorif(
-            self.M_varphi > grid.M,
-            msg=f"Got M_varphi = {self.M_varphi} > {grid.M} = grid.M.",
+            self.M_varphi_tilde > grid.M,
+            msg=(
+                f"Got M_varphi_tilde = {self.M_varphi_tilde} > " f"{grid.M} = grid.M."
+            ),
         )
         errorif(
-            self.N_varphi > grid.N,
-            msg=f"Got N_varphi = {self.N_varphi} > {grid.N} = grid.N.",
+            self.N_varphi_tilde > grid.N,
+            msg=(
+                f"Got N_varphi_tilde = {self.N_varphi_tilde} > " f"{grid.N} = grid.N."
+            ),
         )
         kwargs.setdefault("B_coil", self._B_coil)
         if self.Y is None and (params is None or params.get("Y", None) is None):

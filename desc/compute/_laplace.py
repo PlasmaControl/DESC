@@ -969,21 +969,28 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="varphi_periodic_mn",
-    label="(\\varphi_{\\mathrm{periodic}})_{m n}",
+    name="varphi_tilde_mn",
+    label="\\widetilde{\\varphi}_{m n}",
     units="T m",
     units_long="Tesla meter",
-    description="Fourier coefficients of periodic part of coil scalar potential",
+    description="Fourier coefficients of globally defined coil-potential remainder",
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"varphi": [[0, 0, 0]]},
+    transforms={"varphi_tilde": [[0, 0, 0]]},
     profiles=[],
-    data=["n_rho x B_coil", "n_rho x grad(theta)", "n_rho x grad(zeta)", "Y_coil"],
+    data=[
+        "n_rho x B_coil",
+        "n_rho x grad(theta)",
+        "n_rho x grad(zeta)",
+        "n_rho",
+        "grad(phi)",
+        "Y_coil",
+    ],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
-def _varphi_periodic_mn(params, transforms, profiles, data, **kwargs):
-    """Returns coil potential harmonics.
+def _varphi_tilde_mn(params, transforms, profiles, data, **kwargs):
+    """Return harmonics of the globally defined coil-potential remainder.
 
     ``B_coil`` must be smooth and divergence free for correctness of inversion.
     TODO: Compute this from scalar potential integral, without inversion.
@@ -991,7 +998,7 @@ def _varphi_periodic_mn(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     assert grid.num_rho == 1
 
-    basis = transforms["varphi"].basis
+    basis = transforms["varphi_tilde"].basis
     # TODO: could compute these in objective build
     #       and avoid computing if they are passed in as kwargs
     _t = basis.evaluate(grid, [0, 1, 0])[:, None]
@@ -1005,35 +1012,38 @@ def _varphi_periodic_mn(params, transforms, profiles, data, **kwargs):
         mat = jnp.delete(mat, basis.gauge_idx, axis=1, assume_unique_indices=True)
     mat = lx.MatrixLinearOperator(mat)
 
-    # Equation 5.16 in [1]_.
-    varphi_periodic_mn = lx.linear_solve(
+    # Equation 5.22 in [1]_.
+    varphi_tilde_mn = lx.linear_solve(
         mat,
-        (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
+        (
+            data["n_rho x B_coil"]
+            - data["Y_coil"] * cross(data["n_rho"], data["grad(phi)"])
+        ).ravel(),
         solver=lx.AutoLinearSolver(well_posed=None),
     ).value
     if basis.gauge_idx.size:
-        varphi_periodic_mn = jnp.insert(varphi_periodic_mn, basis.gauge_idx, 0.0)
+        varphi_tilde_mn = jnp.insert(varphi_tilde_mn, basis.gauge_idx, 0.0)
 
-    data["varphi_periodic_mn"] = varphi_periodic_mn
+    data["varphi_tilde_mn"] = varphi_tilde_mn
     return data
 
 
 @register_compute_fun(
-    name="varphi_periodic",
-    label="\\varphi_{\\mathrm{periodic}}",
+    name="varphi_tilde",
+    label="\\widetilde{\\varphi}",
     units="T m",
     units_long="Tesla meter",
-    description="Periodic part of magnetic scalar potential of coil field",
+    description="Globally defined remainder of the coil scalar potential",
     dim=1,
     coordinates="tz",
     params=[],
-    transforms={"varphi": [[0, 0, 0]]},
+    transforms={"varphi_tilde": [[0, 0, 0]]},
     profiles=[],
-    data=["varphi_periodic_mn"],
+    data=["varphi_tilde_mn"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
-def _varphi_periodic(params, transforms, profiles, data, **kwargs):
-    data["varphi_periodic"] = transforms["varphi"].transform(data["varphi_periodic_mn"])
+def _varphi_tilde(params, transforms, profiles, data, **kwargs):
+    data["varphi_tilde"] = transforms["varphi_tilde"].transform(data["varphi_tilde_mn"])
     return data
 
 
@@ -1076,25 +1086,26 @@ def _varphi_secular(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="varphi_tilde",
-    label="\\widetilde{\\varphi}",
+    name="varphi_periodic",
+    label="\\varphi_{\\mathrm{periodic}}",
     units="T m",
     units_long="Tesla meter",
-    description="Globally defined remainder of the coil scalar potential",
+    description="Coordinate-periodic part of the coil scalar potential",
     dim=1,
     coordinates="tz",
     params=["Y"],
     transforms={},
     profiles=[],
-    data=["varphi_periodic", "omega", "potential data"],
+    data=["varphi_tilde", "omega", "potential data"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
-def _varphi_tilde(params, transforms, profiles, data, **kwargs):
+def _varphi_periodic(params, transforms, profiles, data, **kwargs):
     if "potential data" in data:
         omega = data["potential data"]["omega"]
     else:
         omega = data["omega"]
-    data["varphi_tilde"] = data["varphi_periodic"] - params["Y"] * omega
+    # Equations 5.10, 5.13, and 5.15 in [1]_, with phi = zeta + omega.
+    data["varphi_periodic"] = data["varphi_tilde"] + params["Y"] * omega
     return data
 
 
@@ -1109,11 +1120,12 @@ def _varphi_tilde(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    data=["varphi_periodic", "varphi_coordinate_secular"],
+    data=["varphi_tilde", "varphi_secular"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _varphi(params, transforms, profiles, data, **kwargs):
-    data["varphi"] = data["varphi_periodic"] + data["varphi_coordinate_secular"]
+    # Equation 5.15 in [1]_.
+    data["varphi"] = data["varphi_tilde"] + data["varphi_secular"]
     return data
 
 
@@ -1191,7 +1203,7 @@ def _gamma_potential(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     options = kwargs.get("options", Options())
     data["Phi_tilde(x)"] = data["Phi_tilde"]
-    # Left hand side of equation 5.15 in [1]_ computed by evaluating
+    # Left hand side of equation 5.20 in [1]_ computed by evaluating
     # the right hand side. This is used for testing.
     data["γ potential"] = data["Phi_tilde"] - _D_plus_half(
         data,

@@ -817,18 +817,10 @@ class TestLaplace:
         monkeypatch.setattr(laplace_compute, "_direct_solve", direct_solve)
         data = {
             "S[B0*n]": jnp.array([1.0, 2.0]),
-            "varphi_periodic": jnp.array([0.3, 0.4]),
-            "Y_coil": 2.0,
-            # Use different source- and potential-grid values to ensure the
-            # correction is evaluated on the boundary-condition grid.
-            "omega": jnp.zeros(2),
-            "potential data": {"omega": jnp.array([0.1, -0.2])},
+            "varphi_tilde": jnp.array([0.1, 0.8]),
             "interpolator": None,
         }
         transforms = {"Phi_tilde": type("Transform", (), {"basis": None})()}
-
-        laplace_compute._varphi_tilde({"Y": 2.0}, {}, {}, data)
-        np.testing.assert_allclose(data["varphi_tilde"], jnp.array([0.1, 0.8]))
 
         laplace_compute._dipole_density_mn_free_surface(
             {"Y": 2.0},
@@ -844,6 +836,50 @@ class TestLaplace:
         )
 
     @pytest.mark.unit
+    def test_varphi_tilde_inversion_removes_physical_secular_field(self, monkeypatch):
+        """Equation 5.22 removes Y grad(phi), including nonzero grad(omega)."""
+        eq = get("W7-X")
+        grid = LinearGrid(rho=np.array([1.0]), M=1, N=1, NFP=eq.NFP, sym=False)
+        field = FreeSurfaceOuterField(
+            eq.surface,
+            M=1,
+            N=1,
+            sym=False,
+            B_coil=ToroidalMagneticField(5, 1),
+        )
+        basis = field.varphi_tilde_basis
+        captured = {}
+
+        def linear_solve(operator, rhs, **kwargs):
+            captured["rhs"] = rhs
+            value = jnp.zeros(basis.num_modes - basis.gauge_idx.size)
+            return type("Solution", (), {"value": value})()
+
+        monkeypatch.setattr(laplace_compute.lx, "linear_solve", linear_solve)
+        n_rho = jnp.tile(jnp.array([1.0, 0.0, 0.0]), (grid.num_nodes, 1))
+        grad_phi = jnp.tile(jnp.array([0.0, 2.0, 3.0]), (grid.num_nodes, 1))
+        n_rho_x_B_coil = jnp.tile(jnp.array([0.0, 5.0, 7.0]), (grid.num_nodes, 1))
+        data = {
+            "n_rho x B_coil": n_rho_x_B_coil,
+            "n_rho x grad(theta)": jnp.tile(
+                jnp.array([0.0, 1.0, 0.0]), (grid.num_nodes, 1)
+            ),
+            "n_rho x grad(zeta)": jnp.zeros((grid.num_nodes, 3)),
+            "n_rho": n_rho,
+            "grad(phi)": grad_phi,
+            "Y_coil": 2.0,
+        }
+        transforms = {
+            "grid": grid,
+            "varphi_tilde": type("Transform", (), {"basis": basis})(),
+        }
+
+        laplace_compute._varphi_tilde_mn({}, transforms, {}, data)
+
+        expected = n_rho_x_B_coil - 2.0 * jnp.cross(n_rho, grad_phi)
+        np.testing.assert_allclose(captured["rhs"], expected.ravel())
+
+    @pytest.mark.unit
     def test_coil_potential_decomposition_names(self):
         """Each named coil-potential component has its mathematical meaning."""
         data = {
@@ -851,12 +887,12 @@ class TestLaplace:
             "zeta": jnp.array([0.3, 0.5]),
             "omega": jnp.array([0.1, -0.2]),
             "phi": jnp.array([0.4, 0.3]),
-            "varphi_periodic": jnp.array([1.0, 2.0]),
+            "varphi_tilde": jnp.array([0.8, 2.4]),
         }
         params = {"Y": data["Y_coil"]}
         laplace_compute._varphi_coordinate_secular(params, {}, {}, data)
         laplace_compute._varphi_secular(params, {}, {}, data)
-        laplace_compute._varphi_tilde(params, {}, {}, data)
+        laplace_compute._varphi_periodic(params, {}, {}, data)
         laplace_compute._varphi({}, {}, {}, data)
 
         np.testing.assert_allclose(
@@ -864,16 +900,16 @@ class TestLaplace:
         )
         np.testing.assert_allclose(data["varphi_secular"], data["Y_coil"] * data["phi"])
         np.testing.assert_allclose(
-            data["varphi_tilde"],
-            data["varphi_periodic"] - data["Y_coil"] * data["omega"],
+            data["varphi_periodic"],
+            data["varphi_tilde"] + data["Y_coil"] * data["omega"],
+        )
+        np.testing.assert_allclose(
+            data["varphi"],
+            data["varphi_tilde"] + data["varphi_secular"],
         )
         np.testing.assert_allclose(
             data["varphi"],
             data["varphi_periodic"] + data["varphi_coordinate_secular"],
-        )
-        np.testing.assert_allclose(
-            data["varphi"] - data["varphi_secular"],
-            data["varphi_tilde"],
             atol=1e-14,
         )
 
@@ -935,7 +971,11 @@ class TestLaplace:
         )
         assert field.M != grid.M and field.N != grid.N
 
-        keys = ["Phi_tilde error", "num_steps"] if just_err else "γ potential"
+        keys = (
+            ["Phi_tilde error", "num_steps"]
+            if just_err
+            else ["γ potential", "varphi_periodic"]
+        )
         data, _ = field.compute(
             keys,
             grid,
@@ -956,6 +996,7 @@ class TestLaplace:
             if just_err:
                 return data["num_steps"], data["Phi_tilde error"]
         np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
+        np.testing.assert_allclose(data["varphi_tilde"], data["Z"])
         np.testing.assert_allclose(data["varphi_periodic"], data["Z"])
         np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
 
@@ -1154,7 +1195,7 @@ class TestLaplace:
         assert np.all(np.isfinite(data["Phi_tilde_mn"]))
 
     @pytest.mark.unit
-    def test_varphi_periodic_mn_fixes_constant_gauge(self):
+    def test_varphi_tilde_mn_fixes_constant_gauge(self):
         """Test coil potential solve fixes the constant potential gauge."""
         eq = get("W7-X")
         grid = LinearGrid(rho=np.array([1.0]), M=2, N=2, NFP=eq.NFP, sym=False)
@@ -1167,26 +1208,31 @@ class TestLaplace:
         )
         data, _ = field.compute(
             [
-                "varphi_periodic_mn",
+                "varphi_tilde_mn",
+                "varphi_tilde",
                 "varphi_periodic",
                 "varphi_coordinate_secular",
                 "varphi_secular",
-                "varphi_tilde",
                 "varphi",
             ],
             grid,
         )
-        constant_idx = field.varphi_basis.gauge_idx
+        constant_idx = field.varphi_tilde_basis.gauge_idx
         assert constant_idx.size
-        np.testing.assert_allclose(data["varphi_periodic_mn"][constant_idx], 0)
-        assert np.all(np.isfinite(data["varphi_periodic_mn"]))
+        np.testing.assert_allclose(data["varphi_tilde_mn"][constant_idx], 0)
+        assert np.all(np.isfinite(data["varphi_tilde_mn"]))
+        np.testing.assert_allclose(
+            data["varphi_periodic"],
+            data["varphi_tilde"] + data["Y_coil"] * data["omega"],
+        )
+        np.testing.assert_allclose(
+            data["varphi"],
+            data["varphi_tilde"] + data["varphi_secular"],
+            atol=1e-14,
+        )
         np.testing.assert_allclose(
             data["varphi"],
             data["varphi_periodic"] + data["varphi_coordinate_secular"],
-        )
-        np.testing.assert_allclose(
-            data["varphi"] - data["varphi_secular"],
-            data["varphi_tilde"],
             atol=1e-14,
         )
 

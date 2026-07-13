@@ -1037,14 +1037,20 @@ class FreeSurfaceError(_Objective):
             msg=f"N_Phi_tilde = {field.N_Phi_tilde} > {grid.N} = grid.N.",
         )
 
-        self._is_neumann = not hasattr(field, "M_varphi")
+        self._is_neumann = not hasattr(field, "M_varphi_tilde")
         errorif(
-            not self._is_neumann and field.M_varphi > grid.M,
-            msg=f"M_varphi = {getattr(field, 'M_varphi', 0)} > {grid.M} = grid.M.",
+            not self._is_neumann and field.M_varphi_tilde > grid.M,
+            msg=(
+                f"M_varphi_tilde = {getattr(field, 'M_varphi_tilde', 0)} > "
+                f"{grid.M} = grid.M."
+            ),
         )
         errorif(
-            not self._is_neumann and field.N_varphi > grid.N,
-            msg=f"N_varphi = {getattr(field, 'N_varphi', 0)} > {grid.N} = grid.N.",
+            not self._is_neumann and field.N_varphi_tilde > grid.N,
+            msg=(
+                f"N_varphi_tilde = {getattr(field, 'N_varphi_tilde', 0)} > "
+                f"{grid.N} = grid.N."
+            ),
         )
         eval_grid = (
             grid
@@ -1071,16 +1077,16 @@ class FreeSurfaceError(_Objective):
             ),
         )
         errorif(
-            not self._is_neumann and field.M_varphi > eval_grid.M,
+            not self._is_neumann and field.M_varphi_tilde > eval_grid.M,
             msg=(
-                f"M_varphi = {getattr(field, 'M_varphi', 0)} > "
+                f"M_varphi_tilde = {getattr(field, 'M_varphi_tilde', 0)} > "
                 f"{eval_grid.M} = eval_grid.M."
             ),
         )
         errorif(
-            not self._is_neumann and field.N_varphi > eval_grid.N,
+            not self._is_neumann and field.N_varphi_tilde > eval_grid.N,
             msg=(
-                f"N_varphi = {getattr(field, 'N_varphi', 0)} > "
+                f"N_varphi_tilde = {getattr(field, 'N_varphi_tilde', 0)} > "
                 f"{eval_grid.N} = eval_grid.N."
             ),
         )
@@ -1162,7 +1168,7 @@ class FreeSurfaceError(_Objective):
         options = LaplaceOptions(*self._options)
 
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
-        eval_keys = ["K_vc"] + ([] if self._is_neumann else ["varphi_periodic"])
+        eval_keys = ["K_vc"] + ([] if self._is_neumann else ["varphi_tilde"])
         eval_transforms = get_transforms(eval_keys, self._field, grid=self._eval_grid)
         if self._use_same_grid:
             source_transforms = eval_transforms
@@ -1185,7 +1191,8 @@ class FreeSurfaceError(_Objective):
             potential_grid=self._eval_grid,
             use_dft=self._use_dft,
         )
-        # No net poloidal current in equation 4.13 of [1].
+        # Equations 4.13-4.16 in [1]_ assign only the toroidal period to the
+        # exterior-Neumann harmonic field; the supplied coil field carries Y.
         self._field.Y = 0.0 if self._is_neumann else data["Y_coil"]
         profiles = get_profiles(self._inner_keys, eq, grid=self._eval_grid)
         toroidal_current_data = self._build_toroidal_current_data(eq)
@@ -1327,7 +1334,7 @@ class FreeSurfaceError(_Objective):
             data["B0*n"] += dot(data["B_coil"], data["n_rho"])
         elif not self._use_same_grid:
             potential_field_data, _ = self._field.compute(
-                "varphi_periodic",
+                "varphi_tilde",
                 grid=self._eval_grid,
                 params=field_params,
                 transforms=eval_transforms,
@@ -1336,7 +1343,7 @@ class FreeSurfaceError(_Objective):
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
-            data["varphi_periodic"] = potential_field_data["varphi_periodic"]
+            data["varphi_tilde"] = potential_field_data["varphi_tilde"]
 
         data = compute_fun(
             self._field,
@@ -1416,7 +1423,7 @@ class FreeSurfaceError(_Objective):
         elif not self._use_same_grid:
             outer = compute_fun(
                 self._field,
-                "varphi_periodic",
+                "varphi_tilde",
                 field_params,
                 constants["eval_transforms"],
                 constants["profiles"],
@@ -1450,7 +1457,7 @@ class FreeSurfaceError(_Objective):
             if potential_data is not None:
                 data["potential data"] = potential_data
             if not self._is_neumann:
-                data["varphi_periodic"] = outer["varphi_periodic"]
+                data["varphi_tilde"] = outer["varphi_tilde"]
             B_I_unit_source = self._toroidal_current_unit_field(
                 params, grads, constants
             )

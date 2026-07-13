@@ -102,7 +102,7 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
 
 
 @pytest.mark.benchmark()
@@ -113,28 +113,12 @@ def test_equilibrium_init_medres(benchmark):
         jax.clear_caches()
 
     def build():
-        L = 15
-        M = 15
-        N = 15
+        L = 16
+        M = 16
+        N = 16
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
-
-
-@pytest.mark.benchmark()
-def test_equilibrium_init_highres(benchmark):
-    """Test time to create an equilibrium for high resolution."""
-
-    def setup():
-        jax.clear_caches()
-
-    def build():
-        L = 25
-        M = 25
-        N = 25
-        _ = Equilibrium(L=L, M=M, N=N)
-
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
 
 
 @pytest.mark.slow

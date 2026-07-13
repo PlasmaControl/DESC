@@ -1086,14 +1086,15 @@ def _varphi_secular(params, transforms, profiles, data, **kwargs):
     params=["Y"],
     transforms={},
     profiles=[],
-    data=["varphi_periodic", "omega"],
+    data=["varphi_periodic", "omega", "potential data"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _varphi_tilde(params, transforms, profiles, data, **kwargs):
-    potential_data = data.get("potential data", data)
-    data["varphi_tilde"] = (
-        data["varphi_periodic"] - params["Y"] * potential_data["omega"]
-    )
+    if "potential data" in data:
+        omega = data["potential data"]["omega"]
+    else:
+        omega = data["omega"]
+    data["varphi_tilde"] = data["varphi_periodic"] - params["Y"] * omega
     return data
 
 
@@ -1124,7 +1125,7 @@ def _varphi(params, transforms, profiles, data, **kwargs):
     description="Fourier coefficients of the globally defined dipole density",
     dim=1,
     coordinates="tz",
-    params=["Y"],
+    params=[],
     transforms={"Phi_tilde": [[0, 0, 0]]},
     profiles=[],
     data=list(set(_kernel_dipole_plus_half.keys) - {"Phi_tilde"})

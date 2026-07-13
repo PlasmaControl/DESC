@@ -1162,7 +1162,7 @@ class FreeSurfaceError(_Objective):
         options = LaplaceOptions(*self._options)
 
         eq_transforms = get_transforms(self._inner_keys, eq, grid=self._eval_grid)
-        eval_keys = ["K_vc"] + ([] if self._is_neumann else ["varphi (periodic)"])
+        eval_keys = ["K_vc"] + ([] if self._is_neumann else ["varphi_periodic"])
         eval_transforms = get_transforms(eval_keys, self._field, grid=self._eval_grid)
         if self._use_same_grid:
             source_transforms = eval_transforms
@@ -1327,7 +1327,7 @@ class FreeSurfaceError(_Objective):
             data["B0*n"] += dot(data["B_coil"], data["n_rho"])
         elif not self._use_same_grid:
             potential_field_data, _ = self._field.compute(
-                "varphi (periodic)",
+                "varphi_periodic",
                 grid=self._eval_grid,
                 params=field_params,
                 transforms=eval_transforms,
@@ -1336,7 +1336,7 @@ class FreeSurfaceError(_Objective):
                 B_coil=self._B_coil,
                 field_grid=self._coil_grid,
             )
-            data["varphi (periodic)"] = potential_field_data["varphi (periodic)"]
+            data["varphi_periodic"] = potential_field_data["varphi_periodic"]
 
         data = compute_fun(
             self._field,
@@ -1416,7 +1416,7 @@ class FreeSurfaceError(_Objective):
         elif not self._use_same_grid:
             outer = compute_fun(
                 self._field,
-                "varphi (periodic)",
+                "varphi_periodic",
                 field_params,
                 constants["eval_transforms"],
                 constants["profiles"],
@@ -1450,7 +1450,7 @@ class FreeSurfaceError(_Objective):
             if potential_data is not None:
                 data["potential data"] = potential_data
             if not self._is_neumann:
-                data["varphi (periodic)"] = outer["varphi (periodic)"]
+                data["varphi_periodic"] = outer["varphi_periodic"]
             B_I_unit_source = self._toroidal_current_unit_field(
                 params, grads, constants
             )

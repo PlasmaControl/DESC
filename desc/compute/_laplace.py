@@ -969,8 +969,8 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="varphi_mn",
-    label="\\varphi_{m n}",
+    name="varphi_periodic_mn",
+    label="(\\varphi_{\\mathrm{periodic}})_{m n}",
     units="T m",
     units_long="Tesla meter",
     description="Fourier coefficients of periodic part of coil scalar potential",
@@ -982,7 +982,7 @@ def _Y_coil(params, transforms, profiles, data, **kwargs):
     data=["n_rho x B_coil", "n_rho x grad(theta)", "n_rho x grad(zeta)", "Y_coil"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
-def _varphi_mn(params, transforms, profiles, data, **kwargs):
+def _varphi_periodic_mn(params, transforms, profiles, data, **kwargs):
     """Returns coil potential harmonics.
 
     ``B_coil`` must be smooth and divergence free for correctness of inversion.
@@ -1006,21 +1006,21 @@ def _varphi_mn(params, transforms, profiles, data, **kwargs):
     mat = lx.MatrixLinearOperator(mat)
 
     # Equation 5.16 in [1]_.
-    varphi_mn = lx.linear_solve(
+    varphi_periodic_mn = lx.linear_solve(
         mat,
         (data["n_rho x B_coil"] - data["Y_coil"] * data["n_rho x grad(zeta)"]).ravel(),
         solver=lx.AutoLinearSolver(well_posed=None),
     ).value
     if basis.gauge_idx.size:
-        varphi_mn = jnp.insert(varphi_mn, basis.gauge_idx, 0.0)
+        varphi_periodic_mn = jnp.insert(varphi_periodic_mn, basis.gauge_idx, 0.0)
 
-    data["varphi_mn"] = varphi_mn
+    data["varphi_periodic_mn"] = varphi_periodic_mn
     return data
 
 
 @register_compute_fun(
-    name="varphi (periodic)",
-    label="(n \\times \\nabla)^{-1} (n \\times B_{\\text{coil}})",
+    name="varphi_periodic",
+    label="\\varphi_{\\mathrm{periodic}}",
     units="T m",
     units_long="Tesla meter",
     description="Periodic part of magnetic scalar potential of coil field",
@@ -1029,36 +1029,77 @@ def _varphi_mn(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"varphi": [[0, 0, 0]]},
     profiles=[],
-    data=["varphi_mn"],
+    data=["varphi_periodic_mn"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _varphi_periodic(params, transforms, profiles, data, **kwargs):
-    data["varphi (periodic)"] = transforms["varphi"].transform(data["varphi_mn"])
+    data["varphi_periodic"] = transforms["varphi"].transform(data["varphi_periodic_mn"])
     return data
 
 
 @register_compute_fun(
-    name="varphi (secular)",
-    label="(n \\times \\nabla)^{-1} (n \\times B_{\\text{coil}})",
+    name="varphi_coordinate_secular",
+    label="Y_{\\mathrm{coil}}\\zeta",
     units="T m",
     units_long="Tesla meter",
-    description="Secular part of magnetic scalar potential of coil field",
+    description="Coordinate-secular term in the boundary trace of the coil potential",
     dim=1,
     coordinates="z",
-    params=[],
+    params=["Y"],
     transforms={},
     profiles=[],
-    data=["zeta", "Y_coil"],
+    data=["zeta"],
+    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+)
+def _varphi_coordinate_secular(params, transforms, profiles, data, **kwargs):
+    data["varphi_coordinate_secular"] = params["Y"] * data["zeta"]
+    return data
+
+
+@register_compute_fun(
+    name="varphi_secular",
+    label="\\varphi_{\\mathrm{secular}}",
+    units="T m",
+    units_long="Tesla meter",
+    description="Physical secular potential of the coil field",
+    dim=1,
+    coordinates="tz",
+    params=["Y"],
+    transforms={},
+    profiles=[],
+    data=["phi"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _varphi_secular(params, transforms, profiles, data, **kwargs):
-    data["varphi (secular)"] = data["Y_coil"] * data["zeta"]
+    data["varphi_secular"] = params["Y"] * data["phi"]
+    return data
+
+
+@register_compute_fun(
+    name="varphi_tilde",
+    label="\\widetilde{\\varphi}",
+    units="T m",
+    units_long="Tesla meter",
+    description="Globally defined remainder of the coil scalar potential",
+    dim=1,
+    coordinates="tz",
+    params=["Y"],
+    transforms={},
+    profiles=[],
+    data=["varphi_periodic", "omega"],
+    parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+)
+def _varphi_tilde(params, transforms, profiles, data, **kwargs):
+    potential_data = data.get("potential data", data)
+    data["varphi_tilde"] = (
+        data["varphi_periodic"] - params["Y"] * potential_data["omega"]
+    )
     return data
 
 
 @register_compute_fun(
     name="varphi",
-    label="(n \\times \\nabla)^{-1} (n \\times B_{\\text{coil}})",
+    label="\\varphi",
     units="T m",
     units_long="Tesla meter",
     description="Magnetic scalar potential of coil field",
@@ -1067,11 +1108,11 @@ def _varphi_secular(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    data=["varphi (periodic)", "varphi (secular)"],
+    data=["varphi_periodic", "varphi_coordinate_secular"],
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
 )
 def _varphi(params, transforms, profiles, data, **kwargs):
-    data["varphi"] = data["varphi (periodic)"] + data["varphi (secular)"]
+    data["varphi"] = data["varphi_periodic"] + data["varphi_coordinate_secular"]
     return data
 
 
@@ -1087,7 +1128,7 @@ def _varphi(params, transforms, profiles, data, **kwargs):
     transforms={"Phi_tilde": [[0, 0, 0]]},
     profiles=[],
     data=list(set(_kernel_dipole_plus_half.keys) - {"Phi_tilde"})
-    + ["varphi (periodic)", "omega", "S[B0*n]", "interpolator"],
+    + ["varphi_tilde", "S[B0*n]", "interpolator"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.magnetic_fields._laplace.FreeSurfaceOuterField",
@@ -1099,13 +1140,7 @@ def _dipole_density_mn_free_surface(params, transforms, profiles, data, **kwargs
     options = kwargs.get("options", Options())._replace(problem="interior Dirichlet")
     _check_solve_method(options.solve_method)
 
-    # varphi (periodic) is the full periodic part of the coordinate split
-    # after subtracting Y_coil * zeta. The Green representation instead uses
-    # tilde-varphi relative to the physical harmonic field Y_coil * grad(phi),
-    # whose boundary potential is Y_coil * (zeta + omega).
-    potential_data = data.get("potential data", data)
-    varphi_tilde = data["varphi (periodic)"] - params["Y"] * potential_data["omega"]
-    boundary_condition = data["S[B0*n]"] - varphi_tilde
+    boundary_condition = data["S[B0*n]"] - data["varphi_tilde"]
     if options.solve_method == "direct":
         data["Phi_tilde_mn"] = _direct_solve(
             boundary_condition,
@@ -1138,7 +1173,7 @@ def _dipole_density_mn_free_surface(params, transforms, profiles, data, **kwargs
     label="\\gamma",
     units="T m",
     units_long="Tesla meter",
-    description="Double layer potential with dipole density -Φ",
+    description="Double layer potential with dipole density -Φ̃",
     dim=1,
     coordinates="tz",
     params=[],

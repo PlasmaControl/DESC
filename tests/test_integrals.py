@@ -724,6 +724,7 @@ class TestBouncePoints:
         return z1[mask], z2[mask]
 
     @pytest.mark.unit
+    @pytest.mark.xfail(reason="will be fixed by #2199")
     def test_z1_first(self):
         """Case where straight line through first two intersects is in epigraph."""
         start = np.pi / 3

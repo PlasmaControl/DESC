@@ -613,9 +613,11 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_boundary_error_things_fixed(self):
         """Test that BoundaryError runs correctly for eq_fixed/field_fixed combos."""
-        eq = Equilibrium(iota=PowerSeriesProfile(0))
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
         eq.solve()
-        field = ToroidalMagneticField(B0=1, R0=1)
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
+        field=[coilset, ToroidalMagneticField(B0=0, R0=1)]
 
         def test(eq_fixed=False, field_fixed=False):
             obj = BoundaryError(
@@ -626,11 +628,12 @@ class TestObjectiveFunction:
             )
             obj.build()
             if eq_fixed:
-                f = obj.compute_unscaled(*obj.xs(field))
+                f = obj.compute(*[ff.params_dict for ff in field])
             elif field_fixed:
-                f = obj.compute_unscaled(*obj.xs(eq))
+                f = obj.compute(eq.params_dict)
             else:
-                f = obj.compute_unscaled(*obj.xs(eq, field))
+                f = obj.compute(eq.params_dict, *[ff.params_dict for ff in field])
+            f=obj.compute_scaled_error(*obj.xs())
             n = len(f) // 2
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)

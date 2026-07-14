@@ -757,7 +757,7 @@ class BoundaryError(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_1, params_2=None, constants=None):
+    def compute(self, *params, constants=None):
         """Compute boundary force error.
 
         Parameters
@@ -783,14 +783,14 @@ class BoundaryError(_Objective):
 
         """
         if self._eq_fixed:
-            field_params = params_1
+            field_params = params
+            eq_params = None
         elif self._field_fixed:
-            eq_params = params_1
+            eq_params = params[0]
             field_params = None
         else:
-            eq_params = params_1
-            field_params = params_2
-
+            eq_params = params[0]
+            field_params = params[1:]
         constants = self._get_deprecated_constants(constants)
 
         if self._eq_fixed:

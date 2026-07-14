@@ -632,7 +632,9 @@ class TestObjectiveFunction:
             elif field_fixed:
                 f = obj.compute_scaled_error(eq.params_dict)
             else:
-                f = obj.compute_scaled_error(eq.params_dict, *[ff.params_dict for ff in field])
+                f = obj.compute_scaled_error(
+                    eq.params_dict, *[ff.params_dict for ff in field]
+                )
             n = len(f) // 2
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -648,8 +650,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_boundary_error_things_fixed_sheet_current(self):
-        """Test that BoundaryError runs correctly for eq_fixed/field_fixed combos,
-        with sheet currents."""
+        """Test BoundaryError for eq_fixed/field_fixed combos, with sheet currents."""
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
         field = [coilset, ToroidalMagneticField(B0=0, R0=1)]
@@ -672,7 +673,9 @@ class TestObjectiveFunction:
             elif field_fixed:
                 f = obj.compute_scaled_error(eq.params_dict)
             else:
-                f = obj.compute_scaled_error(eq.params_dict, *[ff.params_dict for ff in field])
+                f = obj.compute_scaled_error(
+                    eq.params_dict, *[ff.params_dict for ff in field]
+                )
             n = len(f) // 3
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)

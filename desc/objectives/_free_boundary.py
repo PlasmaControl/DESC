@@ -640,9 +640,6 @@ class BoundaryError(_Objective):
 
         neq = 3 if self._sheet_current else 2  # number of equations we're using
 
-        if self._eq_fixed:
-            eq = self._eq
-
         self._constants = {
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
@@ -762,14 +759,12 @@ class BoundaryError(_Objective):
 
         Parameters
         ----------
-        params_1 : dict
-            Dictionary of equilibrium degrees of freedom, eg
-            ``Equilibrium.params_dict`` if self._eq_fixed is False, else is the field
-            degrees of freedom
-        params_2 : dict
-            Dictionary of field degrees of freedom,
-            eg ``CoilSet.params_dict``
-            Only required if ``self._field_fixed = False``.
+        params : dict
+            1 or more dictionaries of params assigned in order of self.things,
+            respecting which degrees of freedom are fixed (via `eq_fixed`
+            and `field_fixed`). If eq_fixed, `params` are field_params, if
+            neither are fixed, `params[0]` takes equilibrium params, `params[1:]`
+            are field params)./
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)

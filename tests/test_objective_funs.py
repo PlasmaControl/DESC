@@ -627,14 +627,7 @@ class TestObjectiveFunction:
                 field_fixed=field_fixed,
             )
             obj.build()
-            if eq_fixed:
-                f = obj.compute_scaled_error(*[ff.params_dict for ff in field])
-            elif field_fixed:
-                f = obj.compute_scaled_error(eq.params_dict)
-            else:
-                f = obj.compute_scaled_error(
-                    eq.params_dict, *[ff.params_dict for ff in field]
-                )
+            f = obj.compute_scaled_error(*obj.xs())
             n = len(f) // 2
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -668,14 +661,7 @@ class TestObjectiveFunction:
                 field_fixed=field_fixed,
             )
             obj.build()
-            if eq_fixed:
-                f = obj.compute_scaled_error(*[ff.params_dict for ff in field])
-            elif field_fixed:
-                f = obj.compute_scaled_error(eq.params_dict)
-            else:
-                f = obj.compute_scaled_error(
-                    eq.params_dict, *[ff.params_dict for ff in field]
-                )
+            f = obj.compute_scaled_error(*obj.xs())
             n = len(f) // 3
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)

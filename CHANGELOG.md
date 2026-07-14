@@ -1,6 +1,11 @@
 Changelog
 =========
 
+New Features
+
+- Added option for ``eq_fixed`` added to ``BoundaryError`` to remove equilibrium as a degree of freedom from boundary error objective.
+
+
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
@@ -27,7 +32,6 @@ New Features
 - Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number. Also adds compute functions for ``"ni_rr"`` and ``"Zeff_rr"``.
 - Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
   If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
-- Option for ``eq_fixed`` added to ``BoundaryError`` to remove equilibrium as a degree of freedom from boundary error objective. 
 
 Bug Fixes
 

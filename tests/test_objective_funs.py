@@ -617,7 +617,7 @@ class TestObjectiveFunction:
         eq.solve()
         coil = FourierXYZCoil(5e5)
         coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
-        field=[coilset, ToroidalMagneticField(B0=0, R0=1)]
+        field = [coilset, ToroidalMagneticField(B0=0, R0=1)]
 
         def test(eq_fixed=False, field_fixed=False):
             obj = BoundaryError(
@@ -628,12 +628,11 @@ class TestObjectiveFunction:
             )
             obj.build()
             if eq_fixed:
-                f = obj.compute(*[ff.params_dict for ff in field])
+                f = obj.compute_scaled_error(*[ff.params_dict for ff in field])
             elif field_fixed:
-                f = obj.compute(eq.params_dict)
+                f = obj.compute_scaled_error(eq.params_dict)
             else:
-                f = obj.compute(eq.params_dict, *[ff.params_dict for ff in field])
-            f=obj.compute_scaled_error(*obj.xs())
+                f = obj.compute_scaled_error(eq.params_dict, *[ff.params_dict for ff in field])
             n = len(f) // 2
             # first n should be B*n errors
             np.testing.assert_allclose(f[:n], 0, atol=1e-4)
@@ -643,6 +642,44 @@ class TestObjectiveFunction:
         test(eq_fixed=False, field_fixed=False)
         test(eq_fixed=True)
         test(field_fixed=True)
+
+        with pytest.raises(ValueError, match="At least one"):
+            BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
+    def test_boundary_error_things_fixed_sheet_current(self):
+        """Test that BoundaryError runs correctly for eq_fixed/field_fixed combos,
+        with sheet currents."""
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
+        field = [coilset, ToroidalMagneticField(B0=0, R0=1)]
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
+        eq.solve()
+
+        def test(eq_fixed=False, field_fixed=False):
+            obj = BoundaryError(
+                eq,
+                field,
+                eq_fixed=eq_fixed,
+                field_fixed=field_fixed,
+            )
+            obj.build()
+            if eq_fixed:
+                f = obj.compute_scaled_error(*[ff.params_dict for ff in field])
+            elif field_fixed:
+                f = obj.compute_scaled_error(eq.params_dict)
+            else:
+                f = obj.compute_scaled_error(eq.params_dict, *[ff.params_dict for ff in field])
+            n = len(f) // 3
+            # first n should be B*n errors
+            np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+            # next n should be B^2 errors
+            np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+            # last n should be K errors
+            np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
 
         with pytest.raises(ValueError, match="At least one"):
             BoundaryError(eq, field, eq_fixed=True, field_fixed=True)

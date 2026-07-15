@@ -2,7 +2,8 @@
 
 import warnings
 
-from desc.backend import jnp, vmap
+from desc.backend import jnp
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
@@ -546,6 +547,10 @@ class Omnigenity(_Objective):
         computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
@@ -585,6 +590,7 @@ class Omnigenity(_Objective):
         field_fixed=False,
         name="omnigenity",
         jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -598,6 +604,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._surf_batch_size = surf_batch_size
         if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
@@ -717,6 +724,7 @@ class Omnigenity(_Objective):
             "field_transforms": field_transforms,
             "quad_weights": w,
             "helicity": self.helicity,
+            "surf_batch_size": self._surf_batch_size,
         }
 
         if self._eq_fixed:
@@ -727,6 +735,7 @@ class Omnigenity(_Objective):
                 params=self._eq.params_dict,
                 transforms=self._constants["eq_transforms"],
                 profiles=self._constants["eq_profiles"],
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["eq_data"] = eq_data
         if self._field_fixed:
@@ -738,6 +747,7 @@ class Omnigenity(_Objective):
                 transforms=self._constants["field_transforms"],
                 profiles={},
                 helicity=self._constants["helicity"],
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["field_data"] = field_data
 
@@ -797,6 +807,7 @@ class Omnigenity(_Objective):
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
+                surf_batch_size=constants["surf_batch_size"],
             )
 
         # compute field data
@@ -822,6 +833,7 @@ class Omnigenity(_Objective):
                 profiles={},
                 helicity=constants["helicity"],
                 iota=eq_data["iota"][eq_grid.unique_rho_idx],
+                surf_batch_size=constants["surf_batch_size"],
             )
             theta_B = field_data["theta_B"]
             zeta_B = field_data["zeta_B"]
@@ -848,7 +860,11 @@ class Omnigenity(_Objective):
             (field_grid.num_rho, -1)
         )
         B_mn = eq_data["|B|_mn_B"].reshape((eq_grid.num_rho, -1))
-        B_eta_alpha = vmap(_compute_B_eta_alpha)(theta_B, zeta_B, B_mn)
+        B_eta_alpha = vmap_chunked(
+            _compute_B_eta_alpha,
+            in_axes=(0, 0, 0),
+            chunk_size=constants["surf_batch_size"],
+        )(theta_B, zeta_B, B_mn)
         B_eta_alpha = B_eta_alpha.reshape(
             (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
         )

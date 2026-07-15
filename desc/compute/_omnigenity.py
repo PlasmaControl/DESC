@@ -935,6 +935,9 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["eta"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
@@ -955,7 +958,9 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
         return interp1d(x, eta_input, B, method="monotonic-0")
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    B = vmap_chunked(_interp)(jnp.abs(eta), B_input.T)  # shape (nr, nt*nz)
+    B = vmap_chunked(_interp, in_axes=(0, 0), chunk_size=kwargs.get("surf_batch_size"))(
+        jnp.abs(eta), B_input.T
+    )  # shape (nr, nt*nz)
     B = B.reshape(
         (
             transforms["grid"].num_rho,

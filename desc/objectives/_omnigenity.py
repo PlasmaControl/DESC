@@ -31,6 +31,10 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
@@ -58,6 +62,7 @@ class QuasisymmetryBoozer(_Objective):
         N_booz=None,
         name="QS Boozer",
         jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -65,6 +70,7 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
+        self.surf_batch_size = surf_batch_size
         super().__init__(
             things=eq,
             target=target,
@@ -142,6 +148,7 @@ class QuasisymmetryBoozer(_Objective):
             "profiles": profiles,
             "matrix": matrix,
             "idx": idx,
+            "surf_batch_size": self.surf_batch_size,
         }
 
         timer.stop("Precomputing transforms")
@@ -180,6 +187,7 @@ class QuasisymmetryBoozer(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            surf_batch_size=constants["surf_batch_size"],
         )
         B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
         B_mn = constants["matrix"] @ B_mn.T

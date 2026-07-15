@@ -14,8 +14,6 @@ class AbstractGrid(IOAble, ABC):
 
     _io_attrs_ = [
         "_coordinates",
-        "_bounds",
-        "_period",
         "_L",
         "_M",
         "_N",
@@ -36,7 +34,6 @@ class AbstractGrid(IOAble, ABC):
 
     _static_attrs = [
         "_coordinates",
-        "_bounds",
         "_L",
         "_M",
         "_N",

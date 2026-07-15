@@ -485,7 +485,7 @@ class CustomGridFlux(AbstractGridFlux):
         warnif(
             kwargs.pop("period", False),
             FutureWarning,
-            msg="Argument `period` is deprecated and is now set by `self.period`.",
+            msg="Argument `period` is deprecated and is now set by `coordinates`.",
         )
 
         nodes = jnp.atleast_2d(jnp.asarray(nodes))
@@ -1007,6 +1007,7 @@ class QuadratureGridFlux(AbstractGridFlux):
         self._is_meshgrid = True
         self._fft_x1 = True
         self._fft_x2 = True
+        self._can_fft2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature CustomGridFlux
         self._sort_nodes()
@@ -1171,6 +1172,7 @@ class ConcentricGridFlux(AbstractGridFlux):
         self._is_meshgrid = False
         self._fft_x1 = False
         self._fft_x2 = True
+        self._can_fft2 = False
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )

@@ -474,7 +474,9 @@ class CustomGridFlux(AbstractGridFlux):
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
-    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_source_grid"]
+    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_coordinates", "_source_grid"]
+
+    _static_attrs = AbstractGridFlux._static_attrs + ["_coordinates"]
 
     def __init__(
         self,

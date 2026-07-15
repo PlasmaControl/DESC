@@ -13,6 +13,7 @@ class AbstractGrid(IOAble, ABC):
     """Base class for collocation grids."""
 
     _io_attrs_ = [
+        "_coordinates",
         "_L",
         "_M",
         "_N",
@@ -32,6 +33,7 @@ class AbstractGrid(IOAble, ABC):
     ]
 
     _static_attrs = [
+        "_coordinates",
         "_L",
         "_M",
         "_N",

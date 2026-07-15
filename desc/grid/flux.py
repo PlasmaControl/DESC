@@ -203,7 +203,14 @@ class AbstractGridFlux(AbstractGrid):
         x0 = {"r": "rho"}[self.coordinates[0]]
         x1 = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
         x2 = {"z": "zeta"}[self.coordinates[2]]
-        return {x0: "x0", x1: "x1", x2: "x2"}[label]
+        return {
+            "radial": "x0",
+            "poloidal": "x1",
+            "toroidal": "x2",
+            x0: "x0",
+            x1: "x1",
+            x2: "x2",
+        }[label]
 
     def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
@@ -746,6 +753,7 @@ class LinearGridFlux(AbstractGridFlux):
     """
 
     _io_attrs_ = AbstractGridFlux._io_attrs_ + [
+        "_endpoint",
         "_poloidal_endpoint",
         "_toroidal_endpoint",
     ]

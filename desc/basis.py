@@ -680,8 +680,8 @@ class DoubleFourierSeries(_Basis):
         except AttributeError:
             zidx = zoutidx = np.arange(grid.num_nodes)
         try:
-            tidx = grid.unique_poloidal_idx
-            toutidx = grid.inverse_poloidal_idx
+            tidx = grid.unique_x1_idx
+            toutidx = grid.inverse_x1_idx
         except AttributeError:
             tidx = toutidx = np.arange(grid.num_nodes)
 

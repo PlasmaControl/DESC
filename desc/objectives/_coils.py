@@ -1679,7 +1679,7 @@ class QuadraticFlux(_Objective):
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
-            "Detected FourierRZToroidalSurface object. If attempting to find a QFM"
+            "Detected FourierRZToroidalSurface object. If attempting to find a QFM "
             + "surface, please use SurfaceQuadraticFlux objective instead.",
         )
         super().__init__(

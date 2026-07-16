@@ -45,7 +45,7 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
-    _static_attrs = _Objective._static_attrs + ["_helicity"]
+    _static_attrs = _Objective._static_attrs + ["_helicity", "_surf_batch_size"]
 
     def __init__(
         self,
@@ -71,7 +71,7 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.surf_batch_size = surf_batch_size
+        self._surf_batch_size = surf_batch_size
         super().__init__(
             things=eq,
             target=target,
@@ -149,7 +149,7 @@ class QuasisymmetryBoozer(_Objective):
             "profiles": profiles,
             "matrix": matrix,
             "idx": idx,
-            "surf_batch_size": self.surf_batch_size,
+            "surf_batch_size": self._surf_batch_size,
         }
 
         timer.stop("Precomputing transforms")
@@ -564,6 +564,7 @@ class Omnigenity(_Objective):
         "_field_data_keys",
         "_field_fixed",
         "_helicity",
+        "_surf_batch_size",
     ]
 
     _coordinates = "rtz"

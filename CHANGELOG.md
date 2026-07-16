@@ -3,7 +3,7 @@ Changelog
 
 New Features
 
-- Added option for ``eq_fixed`` added to ``BoundaryError`` to remove equilibrium as a degree of freedom from boundary error objective.
+- Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
 
 
 Performance Improvements

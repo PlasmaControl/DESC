@@ -629,16 +629,14 @@ def test_ascii_io(tmpdir_factory):
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
     np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
     rho = np.linspace(0, 1, 20)
-    # this eq's iota is not well represented
-    # by an even PowerSeries
+    # this eq's iota is not well represented by an even PowerSeries
     np.testing.assert_allclose(
         eq1.compute("iota", grid=LinearGrid(rho=rho))["iota"],
         eq2.iota(rho),
         rtol=8e-2,
         atol=1e-3,
     )
-    # this eq's pressure is not well represented
-    # by power series at the edges
+    # this eq's pressure is not well represented by power series at the edges
     rho = np.linspace(0.1, 0.9, 20)
     np.testing.assert_allclose(
         eq1.compute("p", grid=LinearGrid(rho=rho))["p"],

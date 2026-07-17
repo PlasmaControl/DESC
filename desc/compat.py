@@ -179,9 +179,9 @@ def rescale(
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but rescaled to the desired size and magnetic field strength.
-        The profiles will now be ``ScaledProfile` classes, with the ``scale`` being
-        the rescaling parameter computed in this function.
+        Equilibrium input rescaled to the desired size and magnetic field strength.
+        If scale_pressure is True, the profiles (besides iota) will become
+        ``ScaledProfile` classes, which may change the size of its parameters array.
 
     """
     # maybe it's iterable:
@@ -252,9 +252,11 @@ def rescale(
         if eq.pressure is not None:
             eq.pressure *= cB**2
         else:
-            eq.electron_density *= cB
             eq.electron_temperature *= cB
+            eq.electron_density *= cB
             eq.ion_temperature *= cB
+            if eq.ion_density is not None:
+                eq.ion_density *= cB
 
     # scale current profile
     if eq.current is not None:

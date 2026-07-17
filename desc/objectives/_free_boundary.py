@@ -411,6 +411,8 @@ class BoundaryError(_Objective):
     field_fixed : bool
         Whether to assume the field is fixed. For free boundary solve, should
         be fixed. For single stage optimization, should be False (default).
+    eq_fixed : bool
+        Whether to assume the equilibrium is fixed. Default is False.
     bs_chunk_size : int or None
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
@@ -760,11 +762,10 @@ class BoundaryError(_Objective):
         Parameters
         ----------
         params : dict
-            1 or more dictionaries of params assigned in order of self.things,
-            respecting which degrees of freedom are fixed (via `eq_fixed`
-            and `field_fixed`). If eq_fixed, `params` are field_params, if
-            neither are fixed, `params[0]` takes equilibrium params, `params[1:]`
-            are field params)./
+            One or two dictionaries of parameters. If field_fixed=True, then it is the
+            equilibrium parameters, e.g. Equilibrium.params_dict. If eq_fixed=True, then
+            it is the field parameters, e.g. MagneticField.params_dict. Otherwise it is
+            both sets of parameters listed in order of self.things (eq, field).
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)

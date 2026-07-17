@@ -76,11 +76,13 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
+        rtol = 1e-4 if "Gamma_" in name else 1e-8  # jax-finufft version differences
+        atol = 1e-8
         errorif(
             not np.all(
                 (
-                    np.isclose(res, 0, rtol=1e-8, atol=1e-8)
-                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=1e-8, atol=1e-8)[
+                    np.isclose(res, 0, rtol=rtol, atol=atol)
+                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=rtol, atol=atol)[
                         :, np.newaxis
                     ]
                 )

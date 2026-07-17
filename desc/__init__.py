@@ -90,10 +90,46 @@ def set_device(kind="cpu", gpuid=None):
     if kind == "gpu":
         # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        import nvgpu
+        # pynvml namespace is exposed through nvidia-ml-py
+        from pynvml import (
+            nvmlDeviceGetCount,
+            nvmlDeviceGetHandleByIndex,
+            nvmlDeviceGetMemoryInfo,
+            nvmlDeviceGetName,
+            nvmlDeviceGetUUID,
+            nvmlInit,
+            nvmlMemory_v2,
+            nvmlShutdown,
+        )
+
+        def _gpu_info():
+            """Equivalent to nvgpu.gpu_info() using nvidia-ml-py."""
+            nvmlInit()
+            try:
+                info = []
+                for device_idx in range(nvmlDeviceGetCount()):
+                    handle = nvmlDeviceGetHandleByIndex(device_idx)
+                    # Use nvmlMemory_v2 to account for system-reserved memory
+                    mem = nvmlDeviceGetMemoryInfo(handle, version=nvmlMemory_v2)
+                    _bytes_to_mib = 1024 * 1024
+                    mem_used = mem.used // _bytes_to_mib
+                    mem_total = mem.total // _bytes_to_mib
+                    info.append(
+                        {
+                            "index": str(device_idx),
+                            "type": nvmlDeviceGetName(handle),
+                            "uuid": nvmlDeviceGetUUID(handle),
+                            "mem_used": mem_used,
+                            "mem_total": mem_total,
+                            "mem_used_percent": 100.0 * mem_used / mem_total,
+                        }
+                    )
+                return info
+            finally:
+                nvmlShutdown()
 
         try:
-            devices = nvgpu.gpu_info()
+            devices = _gpu_info()
         except FileNotFoundError:
             devices = []
         if len(devices) == 0:

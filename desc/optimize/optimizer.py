@@ -485,7 +485,11 @@ def _print_output(things, things0, objective, constraints, result):
     print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
     print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    fse = result.get("fse", None)
+    f0se = result.get("f0se", None)
+    values = objective.print_value(
+        x=objective.x(*state), x0=objective.x(*state_0), fse=fse, f0se=f0se
+    )
     for con in constraints:
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
@@ -586,17 +590,13 @@ def _maybe_wrap_nonlinear_constraints(
             )
         return objective, nonlinear_constraints
     if wrapper is None and not optimizers[method]["equality_constraints"]:
-        warnings.warn(
-            FutureWarning(
-                f"""
+        warnings.warn(FutureWarning(f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
                 In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
-                """
-            )
-        )
+                """))
         wrapper = "proximal"
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})

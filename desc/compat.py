@@ -420,6 +420,7 @@ def contract_equilibrium(
     current = scale_profile(eq.current, inner_rho)
     electron_density = scale_profile(eq.electron_density, inner_rho)
     electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    ion_density = scale_profile(eq.ion_density, inner_rho)
     ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
     atomic_number = scale_profile(eq.atomic_number, inner_rho)
     anisotropy = scale_profile(eq.anisotropy, inner_rho)
@@ -435,6 +436,7 @@ def contract_equilibrium(
         current=current,
         electron_density=electron_density,
         electron_temperature=electron_temperature,
+        ion_density=ion_density,
         ion_temperature=ion_temperature,
         atomic_number=atomic_number,
         anisotropy=anisotropy,

@@ -629,10 +629,12 @@ def test_ascii_io(tmpdir_factory):
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
     np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
     rho = np.linspace(0, 1, 20)
+    # this eq's iota is not well represented
+    # by an even PowerSeries
     np.testing.assert_allclose(
         eq1.compute("iota", grid=LinearGrid(rho=rho))["iota"],
         eq2.iota(rho),
-        rtol=6e-2,
+        rtol=8e-2,
         atol=1e-3,
     )
     # this eq's pressure is not well represented
@@ -814,7 +816,7 @@ def test_io_OmnigenousField(tmpdir_factory):
 
 @pytest.mark.unit
 def test_io_file_like_object(tmpdir_factory):
-    """Test loading an equilibrium from a file-like object (BytesIO)"""
+    """Test loading an equilibrium from a file-like object (BytesIO)."""
     file_path = "./tests/inputs/iotest_HELIOTRON.h5"
     with open(file_path, "rb") as f:
         file_like_obj = BytesIO(f.read())

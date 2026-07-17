@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put, qr
+from desc.backend import jit, jnp, put, qr_multiply
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1349,7 +1349,7 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
 
 @jit_if_possible(static_argnames=("op", "inv_method"))
 def _proximal_jvp_f_pure(
-  constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op, inv_method="svd"
+    constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op, inv_method="svd"
 ):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
@@ -1377,8 +1377,8 @@ def _proximal_jvp_f_pure(
         sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
         return vtf.T @ (sfi * (uf.T @ Fc))
     elif inv_method == "qr":
-        Q, R = qr(Fxh, mode="economic")
-        return solve_triangular_regularized(R, Q.T @ Fc)
+        Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
+        return solve_triangular_regularized(R, Qt_fc)
 
 
 @jit_if_possible

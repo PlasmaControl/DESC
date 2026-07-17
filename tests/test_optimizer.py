@@ -73,6 +73,7 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
+from desc.optimize.utils import estimate_singular_value
 from desc.utils import get_all_instances
 
 
@@ -1323,11 +1324,30 @@ def test_proximal_jacobian():
     Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
-    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-    jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+
+    def lm_regularized_inv(Fxh):
+        # replicates the default 'qr' method: Levenberg-Marquardt style
+        # regularization lam = smin^2, with the same estimates of smin/smax
+        R = jnp.linalg.qr(Fxh, mode="r")
+        smin = estimate_singular_value(R, mode="min")
+        smax = estimate_singular_value(R, mode="max")
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        lam = np.maximum(smin, cutoff * smax) ** 2
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sfi = sf / (sf**2 + lam)
+        return vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+    def svd_reg_inv(Fxh):
+        # the 'svd' method (previous default) that 'qr' is designed to closely
+        # mimic: SVD pseudo-inverse with singular values shifted by the smallest
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        return vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+    jac_scaled = -Gxh @ (lm_regularized_inv(Fxh) @ Fc) + Gc
+    jac_scaled_old = -Gxh @ (svd_reg_inv(Fxh) @ Fc) + Gc
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
@@ -1335,11 +1355,8 @@ def test_proximal_jacobian():
     Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
-    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-    jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+    jac_unscaled = -Gxh @ (lm_regularized_inv(Fxh) @ Fc) + Gc
+    jac_unscaled_old = -Gxh @ (svd_reg_inv(Fxh) @ Fc) + Gc
 
     jvp0 = jac_scaled @ v
     jvp1 = prox1.jvp_scaled(v, x)
@@ -1375,8 +1392,19 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
 
-    # Test different inversion methods give same result.
-    # Note: svd-reg is expected to be different due to regularization
+    # the new default 'qr' method should stay close to the old default regularized
+    # SVD method ('svd-reg'), though not identical since the regularization filters
+    # differ away from the smallest singular value
+    err_scaled = np.linalg.norm(jac_scaled - jac_scaled_old) / np.linalg.norm(
+        jac_scaled_old
+    )
+    err_unscaled = np.linalg.norm(jac_unscaled - jac_unscaled_old) / np.linalg.norm(
+        jac_unscaled_old
+    )
+    np.testing.assert_array_less(err_scaled, 0.15)
+    np.testing.assert_array_less(err_unscaled, 0.15)
+
+    # Test the regularized SVD inversion method.
     # Above jac1 is obtained with default 'qr' method, we only need to test 'svd' here.
     eq_svd = eq.copy()
     con_svd = ObjectiveFunction(ForceBalance(eq_svd), use_jit=False)
@@ -1394,7 +1422,8 @@ def test_proximal_jacobian():
     )
     prox_svd.build()
     jac_svd = prox_svd.jac_unscaled(x)
-    np.testing.assert_allclose(jac1, jac_svd, rtol=1e-12, atol=1e-12)
+    # 'svd' uses the regularized pseudo-inverse, same as jac_unscaled_old above
+    np.testing.assert_allclose(jac_unscaled_old, jac_svd, rtol=1e-12, atol=1e-12)
 
 
 @pytest.mark.slow

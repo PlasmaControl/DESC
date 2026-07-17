@@ -89,7 +89,6 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
 
-
 Bug Fixes
 
 - No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).

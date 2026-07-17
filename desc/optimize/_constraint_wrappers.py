@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
-from .utils import f_where_x, solve_triangular_regularized
+from .utils import estimate_singular_value, f_where_x, solve_triangular_regularized
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -574,7 +574,13 @@ class ProximalProjection(ObjectiveFunction):
         during the projection step.
     inv_method : str
         Method to use for computing the pseudo-inverse of the constraint Jacobian.
-        Options are 'svd' (default) and 'qr'.
+        Options are:
+
+        - ``'qr'`` (default): QR factorization with a small Levenberg-Marquardt
+          style Tikhonov regularization, scaled by an estimate of the smallest
+          singular value to closely match ``'svd'`` at a fraction of the cost.
+        - ``'svd'``: SVD pseudo-inverse with the singular values shifted by
+          the smallest one (the behavior of previous DESC versions).
     name : str
         Name of the objective function.
     """
@@ -598,8 +604,7 @@ class ProximalProjection(ObjectiveFunction):
         assert inv_method in [
             "svd",
             "qr",
-            "svd-reg",
-        ], f"inv_method should be either 'svd', 'svd-reg' or 'qr', got {inv_method}."
+        ], f"inv_method should be either 'svd' or 'qr', got {inv_method}."
         for con in constraint.objectives:
             errorif(
                 not con._equilibrium,
@@ -1368,17 +1373,23 @@ def _proximal_jvp_f_pure(
     if inv_method == "svd":
         cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
         uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-        return vtf.T @ (sfi * (uf.T @ Fc))
-    elif inv_method == "svd-reg":  # this option will be deleted
-        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
         sf += sf[-1]
         sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
         return vtf.T @ (sfi * (uf.T @ Fc))
     elif inv_method == "qr":
         Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
-        return solve_triangular_regularized(R, Qt_fc)
+        # Levenberg-Marquardt regularization with alpha=smin is equivalent to
+        # above regularization. Use power iteration to estimate smin/smax
+        smin = estimate_singular_value(R, mode="min")
+        smax = estimate_singular_value(R, mode="max")
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        sqrt_lam = jnp.maximum(smin, cutoff * smax)
+        n = R.shape[1]
+        # solve the regularized system
+        stacked = jnp.vstack([R, sqrt_lam * jnp.eye(n, dtype=R.dtype)])
+        rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
+        Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
+        return solve_triangular_regularized(Rs, Qst_rhs)
 
 
 @jit_if_possible

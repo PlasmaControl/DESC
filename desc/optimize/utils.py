@@ -5,7 +5,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, put, solve_triangular
+from desc.backend import cond, fori_loop, jit, jnp, put, solve_triangular
 from desc.utils import Index
 
 
@@ -551,3 +551,55 @@ def solve_triangular_regularized(R, b, lower=False):
     Rs = R * dri[:, None]
     b = dri * b
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
+
+
+@functools.partial(jit, static_argnames=("mode", "n_iter"))
+def estimate_singular_value(R, mode, n_iter=4):
+    """Estimate the smallest or largest singular value of an upper triangular R.
+
+    For ``mode="max"``, uses power iteration with only matrix-vector products.
+    For ``mode="min"``, uses inverse power iteration, i.e. estimates
+    ``1 / ||R^-1||_2`` by probe vectors, using only triangular solves. Neither
+    forms ``R^T R`` or ``R^-1``, so each iteration costs O(n^2), much cheaper
+    than the full SVD.
+
+    Parameters
+    ----------
+    R : ndarray, shape(n,n)
+        Upper triangular matrix, e.g. from a QR factorization. For
+        ``mode="max"`` any matrix is allowed.
+    mode : {"min", "max"}
+        Which extreme singular value to estimate.
+    n_iter : int
+        Number of power iterations to perform.
+
+    Returns
+    -------
+    s : float
+        Estimate of the smallest/largest singular value of R
+    """
+    assert mode in ["min", "max"], f"mode should be either 'min' or 'max', got {mode}"
+    n = R.shape[1]
+    # fixed pseudo-random start vector, to avoid being (nearly) orthogonal to
+    # the desired singular vector while keeping the function pure
+    v = jnp.cos(jnp.arange(n, dtype=R.dtype))
+    v = v / jnp.linalg.norm(v)
+
+    if mode == "min":
+
+        def body(_, v):
+            # one step of inverse iteration, y = R^-1 R^-T v by triangular solves
+            w = solve_triangular_regularized(R.T, v, lower=True)
+            y = solve_triangular_regularized(R, w)
+            return y / jnp.linalg.norm(y)
+
+    else:
+
+        def body(_, v):
+            # one step of power iteration, y = R^T R v by matrix-vector products
+            y = R.T @ (R @ v)
+            return y / jnp.linalg.norm(y)
+
+    v = fori_loop(0, n_iter, body, v)
+    # Rayleigh quotient, v approximates the corresponding right singular vector
+    return jnp.linalg.norm(R @ v)

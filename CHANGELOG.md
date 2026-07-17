@@ -10,6 +10,8 @@ Bug Fixes
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
 - Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
   asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Fixes bug in ``reactor_QA.py`` script where the current profile was allowed to have a nonzero rho^1 component, which resulted in annonphysical profile near-axis.
+  - Updates the ``desc.examples`` ``"reactor_QA"`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
 
 
 v0.17.2

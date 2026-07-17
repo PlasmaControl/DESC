@@ -180,8 +180,9 @@ def rescale(
     -------
     eq : Equilibrium or iterable of Equilibrium
         Equilibrium input rescaled to the desired size and magnetic field strength.
-        If scale_pressure is True, the profiles (besides iota) will become
-        ``ScaledProfile` classes, which may change the size of its parameters array.
+        The current profile (but not iota) will become a ``ScaledProfile``, which may
+        change the size of its parameters array. If scale_pressure is True, then the
+        pressure or kinetic profiles will also be converted to ``ScaledProfile`` types.
 
     """
     # maybe it's iterable:

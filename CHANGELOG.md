@@ -4,6 +4,7 @@ Changelog
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+- Switches to QR decomposition in the matrix inversion required for implicit differentiation used in optimizations where equilibrium force balance is enforced as a non-linear constraint (i.e. ``proximal-`` methods). Although the method is designed to closely match the previous SVD based algorithm, there can be slight numerical differences. The old behavior can be obtained by passing ``options = {"prox_inv_method": "svd"}`` to the optimizer.
 
 Bug Fixes
 

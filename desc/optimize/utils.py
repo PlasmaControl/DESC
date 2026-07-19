@@ -557,11 +557,9 @@ def solve_triangular_regularized(R, b, lower=False):
 def estimate_singular_value(R, mode, n_iter=4):
     """Estimate the smallest or largest singular value of an upper triangular R.
 
-    For ``mode="max"``, uses power iteration with only matrix-vector products.
-    For ``mode="min"``, uses inverse power iteration, i.e. estimates
-    ``1 / ||R^-1||_2`` by probe vectors, using only triangular solves. Neither
-    forms ``R^T R`` or ``R^-1``, so each iteration costs O(n^2), much cheaper
-    than the full SVD.
+    For ``mode="max"``, uses power iteration. For ``mode="min"``, uses inverse
+    power iteration. This is much cheaper than the full SVD, if the exact singular
+    values are not necessary.
 
     Parameters
     ----------
@@ -585,21 +583,18 @@ def estimate_singular_value(R, mode, n_iter=4):
     v = jnp.cos(jnp.arange(n, dtype=R.dtype))
     v = v / jnp.linalg.norm(v)
 
-    if mode == "min":
+    def smin(_, v):
+        # one step of inverse iteration, y = R^-1 R^-T v by triangular solves
+        w = solve_triangular_regularized(R.T, v, lower=True)
+        y = solve_triangular_regularized(R, w)
+        return y / jnp.linalg.norm(y)
 
-        def body(_, v):
-            # one step of inverse iteration, y = R^-1 R^-T v by triangular solves
-            w = solve_triangular_regularized(R.T, v, lower=True)
-            y = solve_triangular_regularized(R, w)
-            return y / jnp.linalg.norm(y)
+    def smax(_, v):
+        # one step of power iteration, y = R^T R v by matrix-vector products
+        y = R.T @ (R @ v)
+        return y / jnp.linalg.norm(y)
 
-    else:
-
-        def body(_, v):
-            # one step of power iteration, y = R^T R v by matrix-vector products
-            y = R.T @ (R @ v)
-            return y / jnp.linalg.norm(y)
-
+    body = smin if mode == "min" else smax
     v = fori_loop(0, n_iter, body, v)
     # Rayleigh quotient, v approximates the corresponding right singular vector
     return jnp.linalg.norm(R @ v)

@@ -1378,15 +1378,15 @@ def _proximal_jvp_f_pure(
         return vtf.T @ (sfi * (uf.T @ Fc))
     elif inv_method == "qr":
         Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
-        # Levenberg-Marquardt regularization with alpha=smin is equivalent to
+        # Levenberg-Marquardt regularization with alpha=smin² is similar to
         # above regularization. Use power iteration to estimate smin/smax
         smin = estimate_singular_value(R, mode="min")
         smax = estimate_singular_value(R, mode="max")
         cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-        sqrt_lam = jnp.maximum(smin, cutoff * smax)
+        sqrt_alpha = jnp.maximum(smin, cutoff * smax)
         n = R.shape[1]
         # solve the regularized system
-        stacked = jnp.vstack([R, sqrt_lam * jnp.eye(n, dtype=R.dtype)])
+        stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
         rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
         Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
         return solve_triangular_regularized(Rs, Qst_rhs)

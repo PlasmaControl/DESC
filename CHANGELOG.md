@@ -1,6 +1,20 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+
+Bug Fixes
+
+- Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
+  asymmetric ``currvmns`` magnetic-axis extrapolation.
+
+
+v0.17.2
+-------
+
 New Features
 
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
@@ -9,8 +23,8 @@ New Features
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
 - Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
-    - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
-- Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number.
+- The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
+- Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number. Also adds compute functions for ``"ni_rr"`` and ``"Zeff_rr"``.
 - Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
   If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
 
@@ -18,6 +32,9 @@ Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
+- Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
+- `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.
+- Fixes a bug in `desc.magnetic_fields.field_integrate` when calling with an integer `bs_chunk_size`.
 
 Performance Improvements
 
@@ -27,6 +44,11 @@ Performance Improvements
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
 - Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+- ``ObjectiveFunction.print_value`` can now use the previously computed ``compute_scaled_error`` values to print. For bounded objectives, we fall back to computing ``compute_unscaled``. Additionally, ``compute_scaled_error`` and array splitting are used in other parts of the code to prevent recompilation for one-time tasks, which makes initialization faster.
+
+Deprecations
+
+- `constants` argument of `compute`, `jvp`, `jac`, `grad` and `hess` methods (including all of their variants) to all objective classes (including `ObjectiveFunction` and wrappers) is deprecated and will be removed in a future release. This argument was not necessary, and the code will still work if user doesn't pass it. Users should update their custom objectives for this change. In addition, `constants` property of the `ObjectiveFunction` and all sub-classes of `_Objective` is deprecated.
 
 
 v0.17.1

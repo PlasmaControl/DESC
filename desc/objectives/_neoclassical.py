@@ -23,6 +23,11 @@ class EffectiveRipple(_Objective):
     coefficients in the banana regime. To ensure low neoclassical transport,
     a stellarator is typically optimized so that ε < 0.02.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
+
     References
     ----------
     [1] Evaluation of 1/ν neoclassical transport in stellarators.
@@ -162,7 +167,7 @@ class EffectiveRipple(_Objective):
             ``Equilibrium.params_dict``.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to ``self.constants``.
+            Defaults to ``self.constants``. (Deprecated)
 
         Returns
         -------
@@ -173,8 +178,7 @@ class EffectiveRipple(_Objective):
         if self._use_bounce1d:
             return self._compute_bounce1d(params, constants)
 
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(
@@ -252,8 +256,7 @@ class EffectiveRipple(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _compute_bounce1d(self, params, constants=None):
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         eq = self.things[0]
 
         data = compute_fun(

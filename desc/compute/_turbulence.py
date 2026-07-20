@@ -9,10 +9,6 @@ References
 .. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
        bounce-averaging algorithm and its applications,"
        J. Plasma Physics. https://doi:10.1017/S0022377826101652.
-.. [4] R. J. J. Mackenbach, P. Helander, M. Landreman, S. Brunner, and
-       J. H. E. Proll, "On the curvature-driven ion-temperature-gradient
-       instability and its available energy," J. Plasma Phys. 91, E144 (2025).
-       https://doi.org/10.1017/S0022377825100846.
 
 """
 

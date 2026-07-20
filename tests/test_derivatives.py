@@ -1,10 +1,5 @@
 """Tests for jax autodiff wrappers and finite differences."""
 
-import os
-import subprocess
-import sys
-import textwrap
-
 import numpy as np
 import pytest
 from numpy.random import default_rng
@@ -13,18 +8,6 @@ from desc.backend import jnp
 from desc.derivatives import AutoDiffDerivative
 
 from .utils import FiniteDiffDerivative
-
-
-def _run_forced_cpu_devices(code, num_devices=4):
-    env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = ""
-    env["XLA_FLAGS"] = f"--xla_force_host_platform_device_count={num_devices}"
-    subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code)],
-        check=True,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        env=env,
-    )
 
 
 class TestDerivative:

@@ -94,15 +94,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
     def biot(re):
         dr = rs - re[..., jnp.newaxis, :]
-        d2 = jnp.sum(dr * dr, axis=-1)
-        w = safediv(1.0, d2 * jnp.sqrt(d2))
-        # the two weighted sums over sources are computed differently depending
-        # on the device. On GPU the multiply+reduce fuses into a single kernel,
-        # avoiding cuBLAS launch overhead which dominates for few evaluation
-        # points (e.g. field line tracing). On CPU dot_general dispatches to an
-        # optimized GEMM library, much faster than the XLA:CPU codegen for the
-        # batched multiply+reduce. This is decided while tracing, so only one
-        # version is compiled and compile time is unaffected.
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1) ** 3)
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
         if desc_config.get("kind") == "gpu":
             w = w[..., jnp.newaxis]
             B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
@@ -150,13 +144,10 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        # the sum over sources is a weighted sum with the scalar weights 1/|dr|,
-        # keeping the pairwise intermediates to a single (n_eval, n_src) array
-        # instead of several (n_eval, n_src, 3) arrays, reducing memory.
-        # see biot_savart_general for why the sum is device dependent
         dr = rs - re[..., jnp.newaxis, :]
-        d2 = jnp.sum(dr * dr, axis=-1)
-        w = safediv(1.0, jnp.sqrt(d2))
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1))
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
         if desc_config.get("kind") == "gpu":
             A = (w[..., jnp.newaxis] * JdV).sum(axis=-2)
         else:

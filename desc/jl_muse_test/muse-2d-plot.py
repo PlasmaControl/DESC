@@ -103,7 +103,7 @@ def compute_average_normalized_field(
     plt.figure()
     plt.contourf(zeta, theta, B_total_dot_n, levels=100)
     plt.colorbar()
-    plt.title("total")
+    plt.title("total combined error from TF+PM")
     plt.xlabel("toroidal angle")
     plt.ylabel("poloidal angle")
 
@@ -114,7 +114,7 @@ def compute_average_normalized_field(
 
 coilset = load('tf_coils_desc.h5')
 fig = pv.Plotter()
-one_period = import_dipoles(eq, 'muse_dipoles_desc.csv')
+one_period = import_dipoles(NFP=2, sym=True, filename='muse_dipoles_desc.csv')
 #dipole_set = DipoleSet.from_symmetry(one_period, NFP=eq.NFP, sym=eq.sym)
 
 b1 = compute_average_normalized_field(one_period, coilset, eq, fig)

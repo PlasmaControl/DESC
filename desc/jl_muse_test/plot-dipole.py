@@ -6,13 +6,14 @@ from desc.integrals import compute_B_plasma
 from desc.plotting import plot_dipoles, plot_3d, plot_comparison, plot_coils2
 from desc.io import load
 import sys
+import matplotlib.pyplot as plt
 
 
 eq = load('input.muse-fixedb_output.h5')[-1]
 
 
 def compute_average_normalized_field(
-    field, coils, eq, p, vacuum=False, chunk_size=None, B_plasma_chunk_size=None
+    field, coils, eq, vacuum=False, chunk_size=None, B_plasma_chunk_size=None
 ):
     
     # compute Bn as error field on surface
@@ -67,7 +68,7 @@ def compute_average_normalized_field(
     # )
     
 
-    pl.add_mesh(pgrid, scalars="bn_error", cmap="viridis")
+    #pl.add_mesh(pgrid, scalars="bn_error", cmap="viridis")
 
     return np.mean(np.abs(Bn)) / normalizing_field
 
@@ -76,9 +77,9 @@ def compute_average_normalized_field(
 fin = sys.argv[1]
 
 data = np.genfromtxt(fin, delimiter=',', skip_header=1)
-x,y,z,m,phi,theta = data.T
+x,y,z,phi,theta,m,rho = data.T
 
-idx_nonzero = np.argwhere(np.array(m!=0, int))[:,0]
+idx_nonzero = np.argwhere(np.array(rho!=0, int))[:,0]
 points = np.transpose([x,y,z])[idx_nonzero]
 cloud = pv.PolyData(points)
 
@@ -98,7 +99,46 @@ pl.add_points(
     render_points_as_spheres=True,
     cmap="viridis",
 )
+p = pv.Plotter()
+plot_dipoles(one_period, p)
 
 pl.add_scalar_bar()
 pl.camera.azimuth = 90
 pl.show()
+
+
+#from desc.dipole import DipoleSet
+#data = np.load('surface_points_XYZ.npy')
+
+#g, dat = DipoleSet.calc_g(one_period,eq)
+
+#data = np.load('B_mag_pms_on_lineargrid_simsopt.npy')
+#np.savetxt('B_mag_pms_on_lineargrid_simsopt.txt', data)
+
+# g_array = np.save('G_mat.npy', g)
+# data0 = np.load('G_mat.npy')
+# np.savetxt('G_mat.txt', data0)
+#fig, ax = plt.subplots(figsize=(7, 6))
+
+#np.savetxt('surface_points_XYZ.txt', data)
+
+# plotpoints = pv.Plotter()
+# cloud1 = pv.PolyData(data.reshape(-1, 3))
+# plotpoints.add_points(
+#     cloud1,
+#     #    scalars="values",
+#     point_size=8,
+#     render_points_as_spheres=True,
+#     cmap="viridis",
+#     color = 'red'
+# )
+# cloud2 = pv.PolyData(dat.reshape(-1, 3))
+# plotpoints.add_points(
+#     cloud2,
+#     #    scalars="values",
+#     point_size=8,
+#     render_points_as_spheres=True,
+#     cmap="viridis",
+#     color = 'blue'
+# )
+# plotpoints.show()

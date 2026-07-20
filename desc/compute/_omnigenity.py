@@ -363,7 +363,8 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_Boozer_DESC",
-    label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
+    label="\\frac{\\partial(\\theta_B,\\zeta_B)}"
+    "{\\partial(\\theta_{DESC},\\zeta_{DESC})}",
     units="~",
     units_long="None",
     description="Jacobian determinant from Boozer coordinates (rho, theta_B, zeta_B)"

@@ -5,8 +5,9 @@ from packaging import version
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
-from desc.utils import errorif, warnif
+from desc.utils import errorif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 
@@ -21,20 +22,21 @@ class EffectiveRipple(_Objective):
     coefficients in the banana regime. To ensure low neoclassical transport,
     a stellarator is typically optimized so that ε < 10⁻².
 
+    The objective is presented in [1]_, [2]_, and the computation is presented in [2]_.
+
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
-    The reference 2 below refers to that implementation.
 
     References
     ----------
-    [1] Evaluation of 1/ν neoclassical transport in stellarators.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-        https://doi.org/10.1063/1.873749.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and M. F. Heyn,
+           "Evaluation of 1/ν neoclassical transport in stellarators,"
+           Phys. Plasmas 6, 4622-4632 (1999).
+           https://doi.org/10.1063/1.873749.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 
@@ -55,6 +57,7 @@ class EffectiveRipple(_Objective):
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Effective ripple ε: "
+    _compute_fun = staticmethod(compute_fun)
 
     def __init__(
         self,
@@ -90,17 +93,7 @@ class EffectiveRipple(_Objective):
             "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
             "EffectiveRipple.",
         )
-        try:
-            import jax_finufft  # noqa: F401
-        except Exception:
-            warnif(
-                nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed properly.\n"
-                "Setting parameter nufft_eps to zero.\n"
-                "Performance may be somewhat slower.\n",
-            )
-            nufft_eps = 0.0
-        nufft_eps = float(nufft_eps)
+        nufft_eps = check_nufft(nufft_eps)
 
         if target is None and bounds is None:
             target = 0.0
@@ -168,34 +161,4 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        constants = self._get_deprecated_constants(constants)
-        eq = self.things[0]
-
-        data = compute_fun(
-            eq, "iota", params, constants["transforms"], constants["profiles"]
-        )
-        delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
-            # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-8,
-        )[..., ::-1]
-
-        data = compute_fun(
-            eq,
-            "effective ripple",
-            params,
-            constants["transforms"],
-            constants["profiles"],
-            data,
-            angle=delta,
-            alpha=constants["alpha"],
-            quad=constants["quad"],
-            _vander=constants["_vander"],
-            **self._hyperparam,
-        )
-        return constants["transforms"]["grid"].compress(data["effective ripple"])
+        return Options._compute_objective(self, params, constants, "effective ripple")

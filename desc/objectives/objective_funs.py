@@ -172,7 +172,6 @@ doc_bounce = """
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
-        Default is single field line.
         On irrational magnetic surfaces, it is sufficient to integrate along a
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along

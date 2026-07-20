@@ -5,8 +5,9 @@ from packaging import version
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals._interp_utils import check_nufft
 from desc.integrals.bounce_integral import Options
-from desc.utils import errorif, warnif
+from desc.utils import errorif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 
@@ -25,26 +26,25 @@ class GammaC(_Objective):
     The radial electric field has a negligible effect, since fast particles
     have high energy with collisionless orbits, so it is assumed to be zero.
 
+    The objective is presented in [1]_ and [2]_, and the computation is
+    presented in [3]_.
+
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
-    The reference 3 below refers to that implementation.
 
     References
     ----------
-    [1] Poloidal motion of trapped particle orbits in real-space coordinates.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
-        Phys. Plasmas 1 May 2008; 15 (5): 052501.
-        https://doi.org/10.1063/1.2912456.
-        Equation 61.
-
-    [2] A model for the fast evaluation of prompt losses of energetic ions in
-        stellarators. Equation 16.
-        J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
-        https://doi.org/10.1088/1741-4326/ac2994.
-
-    [3] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and G. O. Leitold,
+           "Poloidal motion of trapped particle orbits in real-space coordinates,"
+           Phys. Plasmas 15, 052501 (2008). https://doi.org/10.1063/1.2912456.
+    .. [2] J. L. Velasco, I. Calvo, S. Mulas, E. Sanchez, F. I. Parra, A. Cappa,
+           and the W7-X Team, "A model for the fast evaluation of prompt losses of
+           energetic ions in stellarators," Nucl. Fusion 61, 116059 (2021).
+           https://doi.org/10.1088/1741-4326/ac2994.
+    .. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
 
     """
 
@@ -76,6 +76,7 @@ class GammaC(_Objective):
     _coordinates = "r"
     _units = "~"
     _print_value_fmt = "Γ_c: "
+    _compute_fun = staticmethod(compute_fun)
 
     def __init__(
         self,
@@ -111,17 +112,7 @@ class GammaC(_Objective):
             ValueError,
             "JAX version >= 0.11.0 required for fwd deriv mode for objective: GammaC.",
         )
-        try:
-            import jax_finufft  # noqa: F401
-        except Exception:
-            warnif(
-                nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed properly.\n"
-                "Setting parameter nufft_eps to zero.\n"
-                "Performance may be somewhat slower.\n",
-            )
-            nufft_eps = 0.0
-        nufft_eps = float(nufft_eps)
+        nufft_eps = check_nufft(nufft_eps)
 
         if target is None and bounds is None:
             target = 0.0
@@ -192,34 +183,187 @@ class GammaC(_Objective):
             Γ_c as a function of the flux surface label.
 
         """
-        constants = self._get_deprecated_constants(constants)
-        eq = self.things[0]
+        return Options._compute_objective(self, params, constants, self._key)
 
-        data = compute_fun(
-            eq, "iota", params, constants["transforms"], constants["profiles"]
-        )
-        delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
-            # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-8,
-        )[..., ::-1]
 
-        data = compute_fun(
-            eq,
-            self._key,
-            params,
-            constants["transforms"],
-            constants["profiles"],
-            data,
-            angle=delta,
-            alpha=constants["alpha"],
-            quad=constants["quad"],
-            _vander=constants["_vander"],
-            **self._hyperparam,
+class GammaLoss(_Objective):
+    """Fast ion prompt-loss proxy based on superbanana classification.
+
+    The ``kind`` argument selects model I, ``"delta"``, which classifies a pitch
+    value as lost if there exists an outward superbanana somewhere on the flux
+    surface, or model II, ``"alpha"``, which classifies a subset of alpha values
+    as lost between consecutive inward and outward superbanana branches.
+
+    The objective is presented in [1]_, and the computation is presented in [2]_.
+    This objective computes the particle drifts using a flux tube model;
+    and therefore, has a meaningless ergodic limit. An optimization should be
+    evaluated by measuring improvement over a fixed number of field period
+    transits. By default, the number of field period transits is set to
+    ``eq.NFP + 2``. To cover the surface, it is reccommended to increase the
+    number of field lines instead of the number of transits.
+
+    References
+    ----------
+    .. [1] J. L. Velasco, I. Calvo, S. Mulas, E. Sanchez, F. I. Parra, A. Cappa,
+           and the W7-X Team, "A model for the fast evaluation of prompt losses of
+           energetic ions in stellarators," Nucl. Fusion 61, 116059 (2021).
+           https://doi.org/10.1088/1741-4326/ac2994.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+
+    """
+
+    _bounce_doc_head, _bounce_doc_marker, _bounce_doc_tail = doc_bounce.partition(
+        "    Parameters\n    ----------\n"
+    )
+    __doc__ = (
+        __doc__.rstrip()
+        + _bounce_doc_head
+        + _bounce_doc_marker
+        + """
+    kind : {"delta", "alpha"}
+        Select ``"delta"`` for Γ_δ or ``"alpha"`` for Γ_α.
+        """.rstrip()
+        + "\n"
+        + _bounce_doc_tail
+        + """
+    gamma_threshold : float
+        Threshold for superbanana classification. Must be in ``(0,1)``.
+        Default is 0.2.
+        """.rstrip()
+        + collect_docs(
+            target_default="``target=0``.",
+            bounds_default="``target=0``.",
+            normalize_detail=" Note: Has no effect for this objective.",
+            normalize_target_detail=" Note: Has no effect for this objective.",
+            jac_chunk_size=False,
         )
-        return constants["transforms"]["grid"].compress(data[self._key])
+    )
+
+    _static_attrs = _Objective._static_attrs + ["_hyperparam", "_key"]
+
+    _coordinates = "r"
+    _units = "~"
+    _print_value_fmt = "Γ: "
+    _compute_fun = staticmethod(compute_fun)
+
+    @staticmethod
+    def _default_alpha(eq, num_alpha=16):
+        """Return default field-line labels for prompt-loss objectives."""
+        return jnp.linspace(0, (1 + int(eq.sym)) * jnp.pi, num_alpha, endpoint=False)
+
+    def __init__(
+        self,
+        kind,
+        eq,
+        *,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name=None,
+        grid=None,
+        X=32,
+        Y=32,
+        Y_B=None,
+        alpha=None,
+        num_field_periods=None,
+        num_well=None,
+        num_quad=32,
+        num_pitch=65,
+        pitch_batch_size=None,
+        surf_batch_size=1,
+        nufft_eps=1e-7,
+        spline=True,
+        gamma_threshold=0.2,
+    ):
+        errorif(
+            kind not in ("delta", "alpha"),
+            ValueError,
+            f"Expected kind to be 'delta' or 'alpha', got {kind}.",
+        )
+        errorif(
+            deriv_mode == "fwd",
+            ValueError,
+            "Reverse mode should be used for the objective: GammaLoss.",
+        )
+        nufft_eps = check_nufft(nufft_eps)
+
+        if target is None and bounds is None:
+            target = 0.0
+
+        self._grid = grid
+        if alpha is None:
+            alpha = GammaLoss._default_alpha(eq)
+        if num_field_periods is None:
+            num_field_periods = eq.NFP + 2
+        self._constants = {"quad_weights": 1.0, "alpha": alpha}
+        self._hyperparam = {
+            "X": X,
+            "Y": Y,
+            "Y_B": Y_B,
+            "num_field_periods": num_field_periods,
+            "num_well": num_well,
+            "num_quad": num_quad,
+            "num_pitch": num_pitch,
+            "pitch_batch_size": pitch_batch_size,
+            "surf_batch_size": surf_batch_size,
+            "nufft_eps": nufft_eps,
+            "spline": spline,
+            "gamma_threshold": gamma_threshold,
+        }
+        self._key = {"delta": "Gamma_delta", "alpha": "Gamma_alpha"}[kind]
+        self._print_value_fmt = {"delta": "Γ_δ: ", "alpha": "Γ_α: "}[kind]
+        if name is None:
+            name = self._key
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=None,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        Options._build_objective(self, self._key, eta=-1)
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the selected fast ion prompt-loss proxy.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, e.g.
+            ``Equilibrium.params_dict``.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to ``self.constants``.
+
+        Returns
+        -------
+        Gamma_loss : ndarray
+            Γ_δ or Γ_α as a function of the flux surface label.
+
+        """
+        return Options._compute_objective(self, params, constants, self._key)

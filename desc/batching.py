@@ -245,12 +245,7 @@ def vmap_chunked(
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
-        _evaluate_in_chunks,
-        f,
-        chunk_size,
-        argnums,
-        reduction,
-        chunk_reduction,
+        _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
     )
 
 

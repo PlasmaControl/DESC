@@ -1,5 +1,8 @@
 """Objectives for neoclassical transport."""
 
+import jax
+from packaging import version
+
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
@@ -84,10 +87,11 @@ class EffectiveRipple(_Objective):
         **kwargs,
     ):
         errorif(
-            deriv_mode == "fwd",
+            deriv_mode == "fwd"
+            and (version.parse(jax.__version__) < version.parse("0.11.0")),
             ValueError,
-            "Reverse mode recommended for the objective: EffectiveRipple.\n"
-            "Make an issue if you need forward mode.",
+            "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
+            "EffectiveRipple.",
         )
         nufft_eps = check_nufft(nufft_eps)
 

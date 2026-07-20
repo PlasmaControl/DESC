@@ -6,6 +6,7 @@ from math import factorial
 
 import mpmath
 import numpy as np
+from jax.lax import stop_gradient
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
 from desc.grid import Grid, _Grid
@@ -421,7 +422,7 @@ class PowerSeries(_Basis):
         else:
             lidx = loutidx = np.arange(len(modes))
         if (derivatives[1] != 0) or (derivatives[2] != 0):
-            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, self.num_modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
 
@@ -537,7 +538,7 @@ class FourierSeries(_Basis):
         else:
             nidx = noutidx = np.arange(len(modes))
         if (derivatives[0] != 0) or (derivatives[1] != 0):
-            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, self.num_modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
 
@@ -594,21 +595,39 @@ class DoubleFourierSeries(_Basis):
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
+    stop_gradient : bool
+        Whether to stop gradients through basis evaluations. Default is ``False``.
+        May set to ``True`` if the grid to evaluate on is independent of the
+        optimizable parameters.
 
     """
 
     _fft_poloidal = True
     _fft_toroidal = True
+    _static_attrs = _Basis._static_attrs + ["_stop_gradient"]
 
-    def __init__(self, M, N, NFP=1, sym=False):
+    def __init__(self, M, N, NFP=1, sym=False, stop_gradient=False):
         self._L = 0
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
+        self._stop_gradient = bool(stop_gradient)
         self._modes = self._get_modes(M=self.M, N=self.N)
         super().__init__()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+
+    def _set_up(self):
+        """Do things after loading or changing resolution."""
+        super()._set_up()
+        self._gauge_idx = np.asarray(self.get_idx(error=False)).squeeze()
+        self._stop_gradient = getattr(self, "_stop_gradient", False)
+
+    @property
+    def gauge_idx(self):
+        """ndarray: Index of constant-potential gauge mode, if present."""
+        return self._gauge_idx
 
     def _get_modes(self, M, N):
         """Get mode numbers for double Fourier series.
@@ -635,7 +654,13 @@ class DoubleFourierSeries(_Basis):
         z = np.zeros_like(m)
         return np.array([z, m, n]).T
 
-    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+    def evaluate(
+        self,
+        grid,
+        derivatives=np.array([0, 0, 0]),
+        modes=None,
+        **kwargs,
+    ):
         """Evaluate basis functions at specified nodes.
 
         Parameters
@@ -644,7 +669,7 @@ class DoubleFourierSeries(_Basis):
             Node coordinates, in (rho,theta,zeta).
         derivatives : ndarray of int, shape(num_derivatives,3)
             Order of derivatives to compute in (rho,theta,zeta).
-        modes : ndarray of in, shape(num_modes,3), optional
+        modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
         Returns
@@ -670,7 +695,7 @@ class DoubleFourierSeries(_Basis):
             midx = moutidx = np.arange(len(modes))
             nidx = noutidx = np.arange(len(modes))
         if derivatives[0] != 0:
-            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, self.num_modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
 
@@ -688,17 +713,22 @@ class DoubleFourierSeries(_Basis):
         _, t, z = grid.nodes.T
         _, m, n = modes.T
 
-        t = t[tidx]
-        z = z[zidx]
+        t = kwargs["t"] if "t" in kwargs else t[tidx]
+        z = kwargs["z"] if "z" in kwargs else z[zidx]
         m = m[midx]
         n = n[nidx]
 
-        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
-        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
-        poloidal = poloidal[toutidx][:, moutidx]
-        toroidal = toroidal[zoutidx][:, noutidx]
-
-        return poloidal * toroidal
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])[:, moutidx]
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])[:, noutidx]
+        if grid.is_meshgrid and grid.num_rho == 1:
+            out = (poloidal[:, np.newaxis] * toroidal[np.newaxis]).reshape(
+                -1, self.num_modes, order="F"
+            )
+        else:
+            out = poloidal[toutidx] * toroidal[zoutidx]
+        if self._stop_gradient:
+            out = stop_gradient(out)
+        return out
 
     def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
@@ -881,7 +911,7 @@ class ZernikePolynomial(_Basis):
             lmidx = lmoutidx = np.arange(len(modes))
             midx = moutidx = np.arange(len(modes))
         if derivatives[2] != 0:
-            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, self.num_modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
 
@@ -1437,7 +1467,7 @@ class ChebyshevPolynomial(_Basis):
         else:
             lidx = loutidx = np.arange(len(modes))
         if (derivatives[1] != 0) or (derivatives[2] != 0):
-            return jnp.zeros((grid.num_nodes, modes.shape[0]))
+            return jnp.zeros((grid.num_nodes, self.num_modes))
         if not len(modes):
             return np.array([]).reshape((grid.num_nodes, 0))
 

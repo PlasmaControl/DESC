@@ -48,24 +48,24 @@ def assign_alias_data(
 
 
 def register_compute_fun(  # noqa: C901
+    *,
     name,
+    aliases=None,
     label,
     units,
     units_long,
     description,
     dim,
+    coordinates,
     params,
     transforms,
     profiles,
-    coordinates,
     data,
     axis_limit_data=None,
-    aliases=None,
-    parameterization="desc.equilibrium.equilibrium.Equilibrium",
     resolution_requirement="",
     grid_requirement=None,
     source_grid_requirement=None,
-    *,
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
     public=True,
     **kwargs,
 ):
@@ -76,6 +76,9 @@ def register_compute_fun(  # noqa: C901
     name : str
         Name of the quantity. This will be used as the key used to compute the
         quantity in `compute` and its name in the data dictionary.
+    aliases : list of str
+        Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
+        data.
     label : str
         Title of the quantity in LaTeX format.
     units : str
@@ -87,25 +90,19 @@ def register_compute_fun(  # noqa: C901
     dim : int
         Dimension of the quantity: 0-D (global qty), 1-D (local scalar qty),
         or 3-D (local vector qty).
+    coordinates : str
+        Coordinate dependency. IE, "rtz" for a function of rho, theta, zeta, or "r" for
+        a flux function, etc.
     params : list of str
         Parameters of equilibrium needed to compute quantity, eg "R_lmn", "Z_lmn"
     transforms : dict
         Dictionary of keys and derivative orders [rho, theta, zeta] for R, Z, etc.
     profiles : list of str
         Names of profiles needed, eg "iota", "pressure"
-    coordinates : str
-        Coordinate dependency. IE, "rtz" for a function of rho, theta, zeta, or "r" for
-        a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
     axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
-    aliases : list of str
-        Aliases of `name`. Will be stored in the data dictionary as a copy of `name`s
-        data.
-    parameterization : str or list of str
-        Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
-        or `'desc.equilibrium.Equilibrium'`.
     resolution_requirement : str
         Resolution requirements in coordinates. I.e. "r" expects radial resolution
         in the grid. Likewise, "rtz" is shorthand for "rho, theta, zeta" and indicates
@@ -128,6 +125,9 @@ def register_compute_fun(  # noqa: C901
         which will allow accessing the Clebsch-Type rho, alpha, zeta coordinates in
         ``transforms["grid"].source_grid``` that correspond to the DESC rho, theta,
         zeta coordinates in ``transforms["grid"]``.
+    parameterization : str or list of str
+        Name of desc types the method is valid for. eg `'desc.geometry.FourierXYZCurve'`
+        or `'desc.equilibrium.Equilibrium'`.
     public : bool
         Whether to include this quantity in the public documentation.
         Default is true.
@@ -286,6 +286,15 @@ _class_inheritance = {
         "desc.geometry.core.Curve",
     ],
     "desc.magnetic_fields._core.OmnigenousField": [],
+    "desc.magnetic_fields._laplace.SourceFreeField": [
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+    ],
+    "desc.magnetic_fields._laplace.FreeSurfaceOuterField": [
+        "desc.magnetic_fields._laplace.SourceFreeField",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.Surface",
+    ],
 }
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}

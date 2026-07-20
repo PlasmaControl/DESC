@@ -64,6 +64,10 @@ v0.17.0
 -------
 
 New Features
+------------
+- Automatically-differentiable, non-singular Laplace BIE solver.
+- Improved performance and accuracy of DFT and FFT interpolation in singular integrals and free surface optimization.
+- [Plumbing for new magnetic field API](https://github.com/PlasmaControl/DESC/issues/1807).
 
 - Adds particle tracing capabilities in ``desc.particles`` module.
     - Particle tracing is done via ``desc.particles.trace_particles`` function.

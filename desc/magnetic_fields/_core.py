@@ -85,11 +85,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
-    # since dr x J = (rs - re) x J = rs x J - re x J, the pairwise cross product
-    # can be avoided: rs x J is per-source data, and the sums over sources become
-    # weighted sums with the scalar weights 1/|dr|^3. This keeps the pairwise
-    # intermediates to a single (n_eval, n_src) array instead of several
-    # (n_eval, n_src, 3) arrays, reducing memory, especially under AD.
+    # For AD purposes, computing rs x J part of the following
+    # relation : dr x J = (rs - re) x J = rs x J - re x J
+    # is much faster.
     K = jnp.cross(rs, JdV, axis=-1)
 
     def biot(re):

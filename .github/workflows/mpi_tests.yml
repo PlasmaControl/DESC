@@ -1,0 +1,141 @@
+name: MPI tests
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mpi_tests:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Filter changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            has_changes:
+              - 'desc/**'
+              - 'tests/test_mpi*'
+              - 'requirements.txt'
+              - 'devtools/dev-requirements.txt'
+              - 'setup.cfg'
+              - '.github/workflows/mpi_tests.yml'
+
+      - name: Check for relevant changes
+        id: check_changes
+        run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check full Python version
+        run: |
+          python --version
+          python_version=$(python --version 2>&1 | cut -d' ' -f2)
+          echo "Python version: $python_version"
+          echo "version=$python_version" >> $GITHUB_ENV
+
+      - name: Install MPI (OpenMPI + compiler)
+        if: env.has_changes == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenmpi-dev openmpi-bin
+
+      - name: Set up virtual environment
+        run: |
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.9.2
+          # install mpi4py after OpenMPI is available
+          pip install mpi4py
+
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          mpirun --version
+          pip list
+
+      - name: Test with pytest (MPI setup)
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          python -m pytest -v -m mpi_setup\
+            --durations=0 \
+            --cov-report xml:cov.xml \
+            --cov-config=setup.cfg \
+            --cov=desc/ \
+            --db ./prof.db
+
+      - name: Test with pytest (MPI run)
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          # ensure each MPI rank writes to a different coverage file
+          mpirun -n 3 --oversubscribe \
+            bash -c 'COVERAGE_FILE=.coverage.$OMPI_COMM_WORLD_RANK \
+                     python -m pytest -v -m mpi_run \
+                       --durations=0 \
+                       --cov=desc/ \
+                       --cov-config=setup.cfg \
+                       --cov-append \
+                       --cov-report='
+
+      - name: Run MPI tutorials
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-eq-solve.py
+          mpirun -n 2 --oversubscribe python docs/notebooks/tutorials/mpi-tutorials/mpi-proximal.py
+
+      - name: Combine coverage files
+        if: always() && env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          coverage combine
+          coverage xml -o cov.xml
+
+      - name: save coverage file
+        if: always() && env.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpi_test_artifact-${{ matrix.python-version }}
+          path: |
+            ./cov.xml
+            ./mpl_results.html
+            ./prof.db
+
+      - name: Upload coverage
+        if: env.has_changes == 'true'
+        id : codecov
+        uses: codecov/codecov-action@v5
+        with:
+          name: codecov-umbrella
+          files: ./cov.xml
+          fail_ci_if_error: true
+          verbose: true

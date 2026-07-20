@@ -1,0 +1,163 @@
+"""Compute functions for turbulent transport."""
+
+from functools import partial
+
+import numpy as np
+from jax.lax import stop_gradient
+from orthax import orthgauss
+from orthax.recurrence import GeneralizedLaguerre
+
+from desc.backend import jit, jnp
+
+from ..integrals.bounce_integral import Bounce2D, Options
+from ..utils import apply, safediv
+from ._fast_ion import _radial_drift
+from .data_index import register_compute_fun
+
+
+def _G_hat_half(data, B, pitch):
+    return safediv(1.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
+
+
+def _binormal_drift_wb_inverse(data, B, pitch):
+    # TODO (#465), multiply by (omega + zeta) instead of zeta
+    gbdrift_secular = data["gbdrift (secular)/phi"] * data["zeta"]
+    cvdrift = data["cvdrift (periodic)"] + gbdrift_secular
+    gbdrift = data["gbdrift (periodic)"] + gbdrift_secular
+    g = jnp.sqrt(jnp.abs(1 - pitch * B))
+    return (cvdrift - 0.5 * gbdrift) * g + safediv(0.5 * gbdrift, g)
+
+
+def _ae(G, G_ω_α, G_ω_ψ, data, energy):
+    shape = (-1,) + (1,) * G.ndim
+
+    G = G[..., None, :]  # This is sqrt G hat.
+    # scale by conjugate widths
+    G_ω_α = G_ω_α[..., None, :] * data["ae psi width"].reshape(shape)
+    G_ω_ψ = G_ω_ψ[..., None, :] * data["ae alpha width"].reshape(shape)
+    η_n = data["ae grad(density)"].reshape(shape)
+    η_T = data["ae grad(temperature)"].reshape(shape)
+    C = η_n - 1.5 * η_T
+    energy = energy[..., None]
+
+    drift = jnp.hypot(G_ω_α, G_ω_ψ)
+    drive = jnp.hypot(G * (η_T + safediv(C, energy)) - G_ω_α, G_ω_ψ)
+
+    return G_ω_α * C + (G_ω_α * η_T + safediv(drift * (drive - drift), G)) * energy
+
+
+def _energy_quad(deg):
+    # The energy integral has weight E^(5/2) exp(-E), but
+    # ω_* = η_T + C / E makes AE(E) ~ C/E for E near zero.
+    return stop_gradient(orthgauss(deg, GeneralizedLaguerre(np.array([1.5]))))
+
+
+@register_compute_fun(
+    name="available energy",
+    label="\\widehat{A}",
+    units="~",
+    units_long="None",
+    description="Dimensionless available energy of trapped electrons",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "min_tz |B|",
+        "max_tz |B|",
+        "psi_r",
+        "rho",
+        "ne",
+        "ne_r",
+        "Te",
+        "Te_r",
+        "cvdrift (periodic)",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+        "|grad(psi)|*kappa_g",
+        "V_psi",
+    ]
+    + Bounce2D.required_names,
+    resolution_requirement="tz",
+    grid_requirement={"can_fft2": True},
+    radial_scale="float : Multiplier for the radial correlation length.",
+    binormal_scale="float : Multiplier for the binormal correlation length.",
+    energy_quad="tuple : Optional nodes and weights for fixed energy quadrature.",
+    **Options._doc,
+)
+@partial(
+    jit,
+    static_argnames=Options._static_argnames,
+)
+def _available_energy(params, transforms, profiles, data, **kwargs):
+    """Dimensionless available energy of trapped electrons.
+
+    References
+    ----------
+    .. [1] R. J. J. Mackenbach et al., J. Plasma Phys. 89, 905890513 (2023).
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode
+           differentiable bounce-averaging algorithm and its applications,"
+           Journal of Plasma Physics.
+
+    Parameters
+    ----------
+    radial_scale, binormal_scale : float
+        Correlation-length multipliers. Default is 1.0.
+
+    """
+    # noqa: unused dependency
+    radial_scale = kwargs.get("radial_scale", 1.0)
+    binormal_scale = kwargs.get("binormal_scale", 1.0)
+    energy_quad = kwargs.get("energy_quad", None)
+    if energy_quad is None:
+        energy_quad = _energy_quad(32)
+
+    grid = transforms["grid"]
+    opts = Options.guess(-1, grid, **kwargs)
+
+    def foreach_surface(data):
+        pitch_inv, weight = Bounce2D.pitch_quad(
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
+        )
+        weight /= pitch_inv**2
+        ae_data = Bounce2D(grid, data, data["angle"], **opts).integrate(
+            [_G_hat_half, _binormal_drift_wb_inverse, _radial_drift],
+            pitch_inv,
+            data,
+            names,
+            num_well=opts.num_well,
+            loop=opts.loop,
+        )
+
+        return jnp.sum(
+            _ae(*ae_data, data, energy_quad[0]).sum(-1).mean(-3).dot(energy_quad[1])
+            * weight,
+            axis=-1,
+        )
+
+    names = (
+        "cvdrift (periodic)",
+        "gbdrift (periodic)",
+        "gbdrift (secular)/phi",
+        "|grad(psi)|*kappa_g",
+    )
+    out = Bounce2D.batch(
+        foreach_surface,
+        apply(data, subset=names),
+        data,
+        kwargs["angle"],
+        grid,
+        opts.surf_batch_size,
+        surface_data={
+            "ae grad(density)": radial_scale * safediv(data["ne_r"], data["ne"]),
+            "ae psi width": radial_scale * data["psi_r"],
+            "ae alpha width": binormal_scale * safediv(1.0, data["rho"]),
+            "ae grad(temperature)": radial_scale * safediv(data["Te_r"], data["Te"]),
+        },
+    )
+    assert out.ndim == 1
+
+    scalar = jnp.sqrt(jnp.pi) * grid.NFP / (3 * opts.num_field_periods)
+    data["available energy"] = grid.expand(scalar * out) / data["V_psi"]
+    return data

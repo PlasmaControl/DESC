@@ -2,7 +2,7 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import NamedTuple
+from typing import NamedTuple, Union
 
 import equinox as eqx
 from adv_jax_math import batch_map, sparse_pullback
@@ -274,7 +274,7 @@ class Bounce2D(_Bounce):
     _modes_t: jax.Array
     _c: dict[str, jax.Array]
     _theta: PiecewiseChebyshevSeries
-    _B: jax.Array or PiecewiseChebyshevSeries
+    _B: Union[jax.Array, PiecewiseChebyshevSeries]
     _nufft_eps: float = eqx.field(static=True)
 
     def __init__(
@@ -367,8 +367,18 @@ class Bounce2D(_Bounce):
                 self._modes_z,
             )
 
+    # TODO(#2152): clean this up when angle is removed.
     @staticmethod
-    def batch(fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True):
+    def batch(
+        fun,
+        fun_data,
+        desc_data,
+        angle,
+        grid,
+        surf_batch_size=1,
+        sparse=True,
+        surface_data=None,
+    ):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -409,6 +419,9 @@ class Bounce2D(_Bounce):
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.
+        surface_data : dict[str, jnp.ndarray]
+            Data constant on each flux surface. These are compressed over ``rho``
+            and added to ``fun_data`` instead of reshaped and Fourier transformed.
 
         Returns
         -------
@@ -418,8 +431,12 @@ class Bounce2D(_Bounce):
         for name in Bounce2D.required_names:
             fun_data[name] = desc_data[name]
         fun_data.pop("iota", None)
+
         for name in fun_data:
             fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
+        if surface_data is not None:
+            fun_data.update(apply(surface_data, grid.compress))
+
         fun_data["iota"] = grid.compress(desc_data["iota"])
         fun_data["min_tz |B|"] = grid.compress(desc_data["min_tz |B|"])
         fun_data["max_tz |B|"] = grid.compress(desc_data["max_tz |B|"])

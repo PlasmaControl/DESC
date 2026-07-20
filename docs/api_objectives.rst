@@ -73,6 +73,16 @@ Neoclassical
     desc.objectives.EffectiveRipple
 
 
+Turbulence
+----------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.AvailableEnergy
+
+
 Omnigenity
 ----------
 .. autosummary::

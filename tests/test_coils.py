@@ -1521,8 +1521,12 @@ def test_precomputed_biot_savart_source():
     r0 = np.array([10.1, 10.3])
     z0 = np.zeros_like(r0)
     phis = np.linspace(0, 2 * np.pi / 5, 3)
-    r_new, z_new = field_line_integrate(r0, z0, phis, coilset)
-    r_old, z_old = field_line_integrate(r0, z0, phis, SumMagneticField(coilset))
+    r_new, z_new = field_line_integrate(
+        r0, z0, phis, coilset, use_precomputed_source=True
+    )
+    r_old, z_old = field_line_integrate(
+        r0, z0, phis, coilset, use_precomputed_source=False
+    )
     np.testing.assert_allclose(r_new, r_old, rtol=1e-6, atol=1e-8)
     np.testing.assert_allclose(z_new, z_old, rtol=1e-6, atol=1e-8)
 

@@ -1025,15 +1025,13 @@ def trace_particles(
         How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use `diffrax.ForwardMode()`.
-    use_precomputed_source : bool
-        For filamentary coils, precompute the Biot-Savart source data (positions,
-        tangents and currents of all coils, including virtual coils from symmetry)
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
         once before the integration, so that each ODE step only evaluates the
-        Biot-Savart kernel from the merged sources instead of recomputing the coil
-        geometry coil by coil. This is usually much faster, also under
-        differentiation, since the coil geometry and its derivatives are computed
-        once instead of at every step. Set to False to evaluate the field the
-        standard way. Default is True.
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Not used for tracing from Equilibrium field.
+        Default is True.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.

@@ -4,7 +4,7 @@ Changelog
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
-- Speeds up ``field_line_integrate`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by discretizing the coil geometry once before the integration, expanded over field periods and stellarator symmetry, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry (and looping over field periods and coils) at every solver step.
+- Speeds up ``field_line_integrate`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry (and looping over field periods and coils) at every solver step.
 
 Bug Fixes
 

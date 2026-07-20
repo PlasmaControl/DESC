@@ -2665,15 +2665,13 @@ def field_line_integrate(
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf, np.inf)
-    use_precomputed_source : bool
-        For filamentary coils, precompute the Biot-Savart source data (positions,
-        tangents and currents of all coils, including virtual coils from symmetry)
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
         once before the integration, so that each ODE step only evaluates the
-        Biot-Savart kernel from the merged sources instead of recomputing the coil
-        geometry coil by coil. This is usually much faster, also under
-        differentiation, since the coil geometry and its derivatives are computed
-        once instead of at every step. Set to False to evaluate the field the
-        standard way. Default is True.
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Only used if underlying field implements
+        the precomputation via `_as_precomputed_source` method. Default is True.
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.

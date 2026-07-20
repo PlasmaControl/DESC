@@ -66,9 +66,7 @@ v0.17.0
 New Features
 ------------
 - Automatically-differentiable, non-singular Laplace BIE solver.
-- Improved performance and accuracy of FFT interpolation in singular integrals
-  ([1](https://github.com/f0uriest/interpax/pull/116), [2](https://github.com/f0uriest/interpax/pull/117)).
-  This is useful for free surface optimization.
+- Improved performance and accuracy of DFT and FFT interpolation in singular integrals and free surface optimization.
 - [Plumbing for new magnetic field API](https://github.com/PlasmaControl/DESC/issues/1807).
 
 - Adds particle tracing capabilities in ``desc.particles`` module.

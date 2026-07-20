@@ -1,4 +1,4 @@
-"""Tests for compatability functions."""
+"""Tests for compatibility functions."""
 
 import numpy as np
 import pytest

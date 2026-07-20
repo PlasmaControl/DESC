@@ -36,7 +36,7 @@ class AbstractGridFlux(AbstractGrid):
         # ensure things that should be ints are ints
         self._NFP = int(self._NFP)
 
-        # backwards compatability
+        # backwards compatibility
         if hasattr(self, "_unique_rho_idx"):
             self._unique_x0_idx = self._unique_rho_idx
             del self._unique_rho_idx

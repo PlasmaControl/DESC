@@ -1503,6 +1503,19 @@ def test_precomputed_biot_savart_source():
             atol=1e-14,
         )
 
+    # MixedCoilSet accepts one source grid per member coil
+    grids = [LinearGrid(N=40), None]
+    source = mixed._as_precomputed_source(source_grid=grids)
+    np.testing.assert_allclose(
+        source.compute_magnetic_field(pts),
+        mixed.compute_magnetic_field(pts, source_grid=grids),
+        rtol=1e-10,
+        atol=1e-14,
+    )
+    # CoilSet requires a single shared grid
+    with pytest.raises(ValueError, match="single source_grid"):
+        coilset._as_precomputed_source(source_grid=[LinearGrid(N=40)])
+
     # field_line_integrate takes the precomputed path automatically for coil
     # fields; wrapping in SumMagneticField forces the generic path
     r0 = np.array([10.1, 10.3])

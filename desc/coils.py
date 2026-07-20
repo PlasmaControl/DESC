@@ -1844,8 +1844,6 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
 
         # if field period symmetry, add rotated coils from other field periods.
-        # a single broadcasted add instead of a loop of concatenations keeps the
-        # traced computation graph small, for faster compile times at high NFP
         phi_offset = 2 * jnp.pi * jnp.arange(self.NFP) / self.NFP
         rpz = rpz[None] + phi_offset[:, None, None, None] * jnp.array([0, 1, 0])
         rpz = rpz.reshape(self.NFP * rpz.shape[1], *rpz.shape[2:])
@@ -2013,7 +2011,24 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Computes the geometry of the all coils once, so that repeated field evaluations
         (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None, optional
+            Grid used to discretize coils. The same grid is used for every coil,
+            since all coils in a CoilSet have the same parametrization and
+            resolution. Use a MixedCoilSet for per-coil grids.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
         """
+        errorif(
+            isinstance(source_grid, (list, tuple)),
+            ValueError,
+            "CoilSet uses a single source_grid for all coils, since they all have "
+            + "the same parametrization and resolution. Use a MixedCoilSet for "
+            + "per-coil grids.",
+        )
         errorif(
             getattr(source_grid, "NFP", 1) != 1,
             ValueError,
@@ -3068,11 +3083,21 @@ class MixedCoilSet(CoilSet):
 
         Computes the coil geometry once so that repeated field evaluations
         (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None or array-like, optional
+            Grid used to discretize coils. If array-like, should be 1 value per
+            coil. If None, defaults to the default grid of each coil.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
         """
         params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
         sources = [
-            coil._as_precomputed_source(source_grid, par)
-            for coil, par in zip(self.coils, params)
+            coil._as_precomputed_source(grd, par)
+            for coil, grd, par in zip(self.coils, source_grid, params)
         ]
 
         def cat(arrs):

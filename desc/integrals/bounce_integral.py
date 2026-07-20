@@ -376,7 +376,7 @@ class Bounce2D(_Bounce):
         grid,
         surf_batch_size=1,
         sparse=True,
-        shard_input_data=False,
+        shard=False,
     ):
         """Compute function ``fun`` over phase space in batches.
 
@@ -418,7 +418,7 @@ class Bounce2D(_Bounce):
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.
-        shard_input_data : bool
+        shard : bool
             Whether to shard batched input data across devices before applying
             chunked batching.
             Default is ``False``.
@@ -444,7 +444,7 @@ class Bounce2D(_Bounce):
                 fun_data,
                 surf_batch_size,
                 strip_dim0=True,
-                shard_input_data=shard_input_data,
+                shard=shard,
             )
 
         return batch_map(
@@ -452,7 +452,7 @@ class Bounce2D(_Bounce):
             fun_data,
             surf_batch_size,
             strip_dim0=True,
-            shard_input_data=shard_input_data,
+            shard=shard,
         )
 
     @staticmethod
@@ -1853,7 +1853,7 @@ class Options(NamedTuple):
             Default is ``1``.
             Only consider increasing if ``pitch_batch_size`` is ``None``.
             """,
-        "shard_input_data": """bool :
+        "shard": """bool :
             Whether to shard batched input data across devices before applying
             chunked batching.
             """,
@@ -1887,7 +1887,7 @@ class Options(NamedTuple):
         "num_quad",
         "num_well",
         "pitch_batch_size",
-        "shard_input_data",
+        "shard",
         "spline",
         "surf_batch_size",
         "Y_B",
@@ -1901,7 +1901,7 @@ class Options(NamedTuple):
     pitch_batch_size: int
     pitch_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
-    shard_input_data: bool
+    shard: bool
     spline: bool
     surf_batch_size: int
     vander: tuple[jnp.ndarray]
@@ -1922,7 +1922,7 @@ class Options(NamedTuple):
         num_well=None,
         pitch_batch_size=None,
         quad=None,
-        shard_input_data=False,
+        shard=False,
         spline=True,
         surf_batch_size=1,
         Y_B=None,
@@ -1974,7 +1974,7 @@ class Options(NamedTuple):
             pitch_batch_size=pitch_batch_size,
             pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
             quad=Options._quad(eta, num_quad) if quad is None else quad,
-            shard_input_data=shard_input_data,
+            shard=shard,
             spline=spline,
             surf_batch_size=surf_batch_size,
             vander=kwargs.get("_vander", None),

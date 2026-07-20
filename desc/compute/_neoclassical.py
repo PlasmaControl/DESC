@@ -136,7 +136,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         angle,
         grid,
         opts.surf_batch_size,
-        shard_input_data=opts.shard_input_data,
+        shard=opts.shard,
     )
     assert out.ndim == 1
     data["effective ripple 3/2"] = scalar * (

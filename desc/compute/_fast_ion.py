@@ -190,7 +190,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         angle,
         grid,
         opts.surf_batch_size,
-        shard_input_data=opts.shard_input_data,
+        shard=opts.shard,
     )
     assert out.ndim == 1
     data["Gamma_c"] = (
@@ -277,7 +277,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         grid,
         surf_batch_size=1,
         sparse=False,  # don't know of any applications that differentiate anyway
-        shard_input_data=opts.shard_input_data,
+        shard=opts.shard,
     )
     return data
 
@@ -369,7 +369,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         angle,
         grid,
         opts.surf_batch_size,
-        shard_input_data=opts.shard_input_data,
+        shard=opts.shard,
     )
     assert out.ndim == 1
     data["Gamma_c Velasco"] = (

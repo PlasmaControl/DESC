@@ -42,6 +42,7 @@ updates:
           - "orthax"
           - "quadax"
           - "jax-finufft"
+          - "adv-jax-math"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

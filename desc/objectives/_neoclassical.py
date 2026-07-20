@@ -1,5 +1,8 @@
 """Objectives for neoclassical transport."""
 
+import jax
+from packaging import version
+
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals.bounce_integral import Options
@@ -17,6 +20,11 @@ class EffectiveRipple(_Objective):
     The effective ripple (ε) proxy estimates the neoclassical transport
     coefficients in the banana regime. To ensure low neoclassical transport,
     a stellarator is typically optimized so that ε < 10⁻².
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     References
     ----------
@@ -76,10 +84,11 @@ class EffectiveRipple(_Objective):
         **kwargs,
     ):
         errorif(
-            deriv_mode == "fwd",
+            deriv_mode == "fwd"
+            and (version.parse(jax.__version__) < version.parse("0.11.0")),
             ValueError,
-            "Reverse mode recommended for the objective: EffectiveRipple.\n"
-            "Make an issue if you need forward mode.",
+            "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
+            "EffectiveRipple.",
         )
         try:
             import jax_finufft  # noqa: F401

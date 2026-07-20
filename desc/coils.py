@@ -654,7 +654,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
@@ -1555,7 +1555,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def current(self, new):
         # new must be a 1D iterable regardless of the tree structure of the CoilSet
         old, tree = tree_flatten(self.current)
-        new = jnp.atleast_1d(new).flatten()
+        new = jnp.atleast_1d(jnp.asarray(new)).flatten()
         new = jnp.broadcast_to(new, (len(old),))
         new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):

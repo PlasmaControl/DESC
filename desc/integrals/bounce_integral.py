@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import NamedTuple
 
 import equinox as eqx
+from adv_jax_math import batch_map, sparse_pullback
 from interpax import CubicHermiteSpline, PPoly
 from interpax_fft import (
     FourierChebyshevSeries,
@@ -25,8 +26,6 @@ from orthax.chebyshev import chebvander
 from orthax.legendre import leggauss
 
 from desc.backend import jax, jnp, rfft2
-from desc.batching import batch_map
-from desc.derivatives import sparse_pullback
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import (
     _bounce_points,
@@ -179,6 +178,11 @@ class Bounce2D(_Bounce):
     The bounce integral is defined up to a sign. We choose the sign that corresponds to
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     References
     ----------

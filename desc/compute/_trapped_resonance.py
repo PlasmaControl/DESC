@@ -358,17 +358,19 @@ def _resonance_physics(
             ``Omega_prime_s**2`` if ``stab_sacrifice``. Phase-space averaged
             elsewhere to form the "trapped EP resonance" objective.
         Omega : jnp.ndarray, shape (rho, pitch, well)
-            Normalized precession frequency
+            Normalized precession frequency, i.e. Omega_eta,
             ``eta_drift_avg / omega_bounce_avg``, compared against the
             rational ratios in ``res_arr`` to locate resonances.
         omega_bounce_avg : jnp.ndarray, shape (rho, pitch, well)
             Alpha-averaged bounce frequency ``2π / tau_bounce``.
         eta_drift_avg : jnp.ndarray, shape (rho, pitch, well)
-            Alpha-averaged drift frequency of the field-line label eta.
+            Alpha-averaged eta precession frequency ω_η (the numerator of
+            ``Omega``/Omega_eta).
         omega_bounce : jnp.ndarray, shape (rho, alpha, pitch, well)
             Bounce frequency per field line, before alpha-averaging.
         eta_drift : jnp.ndarray, shape (rho, alpha, pitch, well)
-            Drift frequency of eta per field line, before alpha-averaging.
+            Eta precession frequency ω_η per field line, before
+            alpha-averaging.
         Omega_prime_s : jnp.ndarray, shape (rho, pitch, well)
             Radial derivative dOmega/ds, where s = rho², via finite
             differences in rho.

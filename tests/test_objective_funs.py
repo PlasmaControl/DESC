@@ -27,12 +27,15 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_profiles, get_transforms
+from desc.compute._trapped_resonance import _build_eta_grid
+from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.integrals import Bounce2D
+from desc.integrals import Bounce1D, Bounce2D
 from desc.integrals.quad_utils import (
     automorphism_sin,
     get_quadrature,
@@ -2183,20 +2186,100 @@ class TestObjectiveFunction:
         )
         keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         profiles = get_profiles(keys_1dr + ["trapped EP resonance"], eq, grid)
+        params = eq.params_dict
         data = compute_fun(
-            eq, keys_1dr, eq.params_dict, get_transforms(keys_1dr, eq, grid), profiles
+            eq, keys_1dr, params, get_transforms(keys_1dr, eq, grid), profiles
         )
+
+        # Build the eta/PSA grids and evaluate field data on them by hand,
+        # mirroring what TrappedResonance.compute() does internally: the
+        # "trapped EP resonance" compute function must stay pure w.r.t.
+        # params/transforms/profiles/data, so it no longer builds these
+        # grids itself (that requires the full Equilibrium object).
+        iotas = grid.compress(data["iota"])
+        rhos = grid.compress(grid.nodes[:, 0])
+        M, N, nfp = opts["M"], opts["N"], eq.NFP
+        eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        ft_denom = N * nfp - iotas * M
+        alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
+        eta_grid = eta_desc_grid.source_grid
+
+        alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        psa_desc_grid = eq._get_rtz_grid(
+            rhos, alpha_psa, zeta, coordinates="raz", iota=iotas, params=params
+        )
+        psa_grid = psa_desc_grid.source_grid
+
+        eta_data_keys = list(Bounce1D.required_names) + [
+            "cvdrift0",
+            "gbdrift (periodic)",
+            "cvdrift (periodic)",
+            "iota",
+            "min_tz |B|",
+            "max_tz |B|",
+        ]
+        psa_bounce_keys = list(Bounce1D.required_names) + [
+            "min_tz |B|",
+            "max_tz |B|",
+            "|B|",
+        ]
+        all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
+        internal_profiles = get_profiles(all_needed_keys, eq)
+        base_data = compute_fun(
+            eq,
+            all_needed_keys,
+            params,
+            get_transforms(all_needed_keys, eq, grid, jitable=True),
+            internal_profiles,
+            data=data,
+        )
+        _p = _parse_parameterization(eq)
+        seed_1d = {
+            key: val
+            for key, val in base_data.items()
+            if data_index.get(_p, {}).get(key, {}).get("coordinates", "") == "r"
+        }
+        eta_seed = {
+            key: eta_desc_grid.copy_data_from_other(val, grid)
+            for key, val in seed_1d.items()
+        }
+        data_eta = compute_fun(
+            eq,
+            eta_data_keys,
+            params,
+            get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
+            internal_profiles,
+            data=eta_seed,
+        )
+        psa_seed = {
+            key: psa_desc_grid.copy_data_from_other(val, grid)
+            for key, val in seed_1d.items()
+        }
+        data_psa = compute_fun(
+            eq,
+            psa_bounce_keys,
+            params,
+            get_transforms(psa_bounce_keys, eq, psa_desc_grid, jitable=True),
+            internal_profiles,
+            data=psa_seed,
+        )
+
         data = compute_fun(
             eq,
             "trapped EP resonance",
-            eq.params_dict,
+            params,
             get_transforms("trapped EP resonance", eq, grid, jitable=True),
             profiles,
             data=data,
             quad=quad,
             nfp=eq.NFP,
-            eq=eq,
             zeta=zeta,
+            eta_grid=eta_grid,
+            psa_grid=psa_grid,
+            data_eta=data_eta,
+            data_psa=data_psa,
             num_eta=num_eta,
             num_transit=num_transit,
             rho_res=1.0 / num_rho,

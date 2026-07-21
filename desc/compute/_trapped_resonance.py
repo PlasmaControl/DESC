@@ -598,15 +598,19 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     """Trapped particle resonance penalty.
 
     Three stages:
-      0. Construct 3D eta and PSA grids; evaluate field data on them.
       1. Bounce integrals  (per-surface, via ``_compute1D`` / ``batch_map``)
       2. Resonance physics  (cross-surface, via ``_resonance_physics``)
       3. Phase-space average (via ``_phase_space_average``)
+
+    The eta/PSA grids and the field data evaluated on them (``eta_grid``,
+    ``psa_grid``, ``data_eta``, ``data_psa``) are built by the caller (see
+    ``TrappedResonance.compute``) rather than here, since building them
+    requires the full ``Equilibrium`` object, which compute functions must
+    stay pure with respect to (only ``params``/``transforms``/``profiles``/
+    ``data``) to remain properly differentiable and dispatchable for any
+    parameterization.
     """
     from quadax import simpson
-
-    from .utils import _compute as compute_fun
-    from .utils import _parse_parameterization, get_profiles, get_transforms
 
     num_pitch = kwargs.get("num_pitch", None)
     num_well = 1
@@ -627,99 +631,19 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     Delta_Omega = kwargs.get("Delta_Omega", None)
     wd_blur = kwargs.get("wd_blur", 1.25)
     fill_value = kwargs.get("fill_value", 11)
-    eq = kwargs.get("eq", None)
     zeta = kwargs.get("zeta", None)
     stab_sacrifice = kwargs.get("stab_sacrifice", False)
     bt_filter_flag = kwargs.get("bt_filter_flag", False)
     cropping_DOmega = kwargs.get("cropping_DOmega", False)
+    eta_grid = kwargs.get("eta_grid", None)
+    psa_grid = kwargs.get("psa_grid", None)
+    data_eta = kwargs.get("data_eta", None)
+    data_psa = kwargs.get("data_psa", None)
 
-    # --- 0. Build 3D grids and evaluate field data on them ---
     base_grid = transforms["grid"]
     iotas = base_grid.compress(data["iota"])
     rhos = base_grid.compress(base_grid.nodes[:, 0])
-
     eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
-    ft_denom = N * nfp - iotas * M
-    alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
-
-    eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
-    eta_grid = eta_desc_grid.source_grid
-
-    alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
-    psa_desc_grid = eq._get_rtz_grid(
-        rhos,
-        alpha_psa,
-        zeta,
-        coordinates="raz",
-        iota=iotas,
-        params=params,
-    )
-    psa_grid = psa_desc_grid.source_grid
-
-    eta_data_keys = list(Bounce1D.required_names) + [
-        "cvdrift0",
-        "gbdrift (periodic)",
-        "cvdrift (periodic)",
-        "iota",
-        "min_tz |B|",
-        "max_tz |B|",
-    ]
-    psa_bounce_keys = list(Bounce1D.required_names) + [
-        "min_tz |B|",
-        "max_tz |B|",
-        "|B|",
-    ]
-    all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
-
-    # Pre-compute all transitive dependencies on the base grid (which has
-    # spacing for surface integrals).  This gives us 1D intermediates like
-    # iota_den, iota_num, Psi, etc. that the 3D grids cannot compute.
-    internal_profiles = get_profiles(all_needed_keys, eq)
-    base_data = compute_fun(
-        eq,
-        all_needed_keys,
-        params,
-        get_transforms(all_needed_keys, eq, base_grid, jitable=True),
-        internal_profiles,
-        data=data,
-    )
-
-    # Seed only per-surface (coordinates="r") quantities onto the 3D grids.
-    # 3D quantities will be recomputed with proper angular resolution.
-    from .data_index import data_index as _data_index
-
-    _p = _parse_parameterization(eq)
-    seed_1d = {}
-    for key, val in base_data.items():
-        entry = _data_index.get(_p, {}).get(key, None)
-        if entry is not None and entry.get("coordinates", "") == "r":
-            seed_1d[key] = val
-
-    eta_seed = {
-        key: eta_desc_grid.copy_data_from_other(val, base_grid)
-        for key, val in seed_1d.items()
-    }
-    data_eta = compute_fun(
-        eq,
-        eta_data_keys,
-        params,
-        get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
-        internal_profiles,
-        data=eta_seed,
-    )
-
-    psa_seed = {
-        key: psa_desc_grid.copy_data_from_other(val, base_grid)
-        for key, val in seed_1d.items()
-    }
-    data_psa = compute_fun(
-        eq,
-        psa_bounce_keys,
-        params,
-        get_transforms(psa_bounce_keys, eq, psa_desc_grid, jitable=True),
-        internal_profiles,
-        data=psa_seed,
-    )
 
     # --- 1. Bounce integrals on the eta grid ---
     # Build a global pitch grid from the base grid's min/max |B|, which is
@@ -732,8 +656,8 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     # Note simpson2 rounds num_pitch to an odd count and adds 2 boundary points,
     # so the actual pitch count may differ slightly from num_pitch.
     if pitch_invs is None:
-        B_min_base = base_grid.compress(base_data["min_tz |B|"])  # (num_rho,)
-        B_max_base = base_grid.compress(base_data["max_tz |B|"])  # (num_rho,)
+        B_min_base = base_grid.compress(data["min_tz |B|"])  # (num_rho,)
+        B_max_base = base_grid.compress(data["max_tz |B|"])  # (num_rho,)
         B_min_scalar = jnp.min(B_min_base)
         B_max_scalar = jnp.max(B_max_base)
         p_global, w_global = Bounce1D.get_pitch_inv_quad(

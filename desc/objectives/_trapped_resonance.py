@@ -3,9 +3,14 @@
 import numpy as np
 from orthax.legendre import leggauss
 
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
+from desc.compute._trapped_resonance import _build_eta_grid
+from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _parse_parameterization
 from desc.grid import LinearGrid
+from desc.integrals.bounce_integral import Bounce1D
 from desc.utils import Timer
 
 from ..integrals.quad_utils import (
@@ -357,6 +362,105 @@ class TrappedResonance(_Objective):
         if "quad2" in constants:
             quad2["quad2"] = constants["quad2"]
 
+        # Build the eta/PSA grids and evaluate field data on them here (rather
+        # than inside the "trapped EP resonance" compute function), since doing
+        # so needs the full Equilibrium object and compute functions must stay
+        # pure w.r.t. params/transforms/profiles/data. Must be rebuilt every
+        # call since the grids depend on iota, itself a function of params.
+        base_grid = self._grid_1dr
+        iotas = base_grid.compress(data["iota"])
+        rhos = base_grid.compress(base_grid.nodes[:, 0])
+        M = self._hyperparameters["M"]
+        N = self._hyperparameters["N"]
+        nfp = eq.NFP
+        zeta = constants.get("zeta", None)
+        # Use the static hyperparameters copy, not self._num_eta directly:
+        # self._num_eta isn't in _static_attrs, so under jit-tracing (e.g.
+        # during grad) it becomes a traced leaf, and jnp.linspace requires a
+        # concrete `num`.
+        num_eta = self._hyperparameters["num_eta"]
+
+        eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        ft_denom = N * nfp - iotas * M
+        alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
+        eta_grid = eta_desc_grid.source_grid
+
+        alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        psa_desc_grid = eq._get_rtz_grid(
+            rhos,
+            alpha_psa,
+            zeta,
+            coordinates="raz",
+            iota=iotas,
+            params=params,
+        )
+        psa_grid = psa_desc_grid.source_grid
+
+        eta_data_keys = list(Bounce1D.required_names) + [
+            "cvdrift0",
+            "gbdrift (periodic)",
+            "cvdrift (periodic)",
+            "iota",
+            "min_tz |B|",
+            "max_tz |B|",
+        ]
+        psa_bounce_keys = list(Bounce1D.required_names) + [
+            "min_tz |B|",
+            "max_tz |B|",
+            "|B|",
+        ]
+        all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
+
+        # Pre-compute all transitive dependencies on the base grid (which has
+        # spacing for surface integrals).  This gives us 1D intermediates like
+        # iota_den, iota_num, Psi, etc. that the 3D grids cannot compute.
+        internal_profiles = get_profiles(all_needed_keys, eq)
+        base_data = compute_fun(
+            eq,
+            all_needed_keys,
+            params,
+            get_transforms(all_needed_keys, eq, base_grid, jitable=True),
+            internal_profiles,
+            data=data,
+        )
+
+        # Seed only per-surface (coordinates="r") quantities onto the 3D grids.
+        # 3D quantities will be recomputed with proper angular resolution.
+        _p = _parse_parameterization(eq)
+        seed_1d = {}
+        for key, val in base_data.items():
+            entry = data_index.get(_p, {}).get(key, None)
+            if entry is not None and entry.get("coordinates", "") == "r":
+                seed_1d[key] = val
+
+        eta_seed = {
+            key: eta_desc_grid.copy_data_from_other(val, base_grid)
+            for key, val in seed_1d.items()
+        }
+        data_eta = compute_fun(
+            eq,
+            eta_data_keys,
+            params,
+            get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
+            internal_profiles,
+            data=eta_seed,
+        )
+
+        psa_seed = {
+            key: psa_desc_grid.copy_data_from_other(val, base_grid)
+            for key, val in seed_1d.items()
+        }
+        data_psa = compute_fun(
+            eq,
+            psa_bounce_keys,
+            params,
+            get_transforms(psa_bounce_keys, eq, psa_desc_grid, jitable=True),
+            internal_profiles,
+            data=psa_seed,
+        )
+
         data = compute_fun(
             eq,
             self._key,
@@ -366,8 +470,11 @@ class TrappedResonance(_Objective):
             data=data,
             quad=constants["quad"],
             nfp=eq.NFP,
-            eq=eq,
-            zeta=constants.get("zeta", None),
+            zeta=zeta,
+            eta_grid=eta_grid,
+            psa_grid=psa_grid,
+            data_eta=data_eta,
+            data_psa=data_psa,
             **quad2,
             **self._hyperparameters,
             **self._params2,

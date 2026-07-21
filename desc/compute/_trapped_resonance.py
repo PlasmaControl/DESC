@@ -376,9 +376,8 @@ def _resonance_physics(
             differences in rho.
         res_weight : jnp.ndarray, shape (rho, pitch, well, res)
             Weight assigning each (rho, pitch, well) to each resonance in
-            ``res_arr``, via 2-point linear interpolation (optionally
-            Hermite-refined) or a smooth bump function, depending on
-            ``weight_method``.
+            ``res_arr``, via 2-point linear interpolation or a smooth bump
+            function, depending on ``weight_method``.
         f_q_abs : jnp.ndarray, shape (rho, pitch, well, res)
             Magnitude of the q-th eta-Fourier harmonic of the bounce-averaged
             radial (s) drift.

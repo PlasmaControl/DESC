@@ -141,6 +141,9 @@ def _evaluate_in_chunks(
     *args,
     **kwargs,
 ):
+    if chunk_size is None:
+        return chunk_reduction(vmapped_fun(*args, **kwargs))
+
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))

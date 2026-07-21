@@ -103,6 +103,7 @@ class GammaC(_Objective):
         nufft_eps=1e-7,
         spline=True,
         Nemov=True,
+        shard=False,
         **kwargs,
     ):
         errorif(
@@ -142,6 +143,7 @@ class GammaC(_Objective):
             "surf_batch_size": surf_batch_size,
             "nufft_eps": nufft_eps,
             "spline": spline,
+            "shard": shard,
         }
         self._key = "Gamma_c" if Nemov else "Gamma_c Velasco"
 

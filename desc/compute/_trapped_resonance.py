@@ -166,15 +166,6 @@ def _compute1D(
     return out
 
 
-def _s_drift_integrand(data, B, pitch):
-    """Radial drift integrand for bounce integration.
-
-    Used in ``_trapped_EP_resonance``. Four times ``_radial_drift``
-    (see ``_fast_ion.py``).
-    """
-    return 4 * _radial_drift(data, B, pitch)
-
-
 def _alpha_drift_integrand(data, B, pitch):
     """Cross-field-line drift integrand for bounce integration.
 
@@ -713,14 +704,14 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
         bounce = Bounce1D(eta_grid, data_in, quad, is_reshaped=True)
         points = bounce.points(data_in["pitch_inv"], num_well=num_well)
         v_tau, _alpha_drift, _s_drift = bounce.integrate(
-            [_v_tau, _alpha_drift_integrand, _s_drift_integrand],
+            [_v_tau, _alpha_drift_integrand, _radial_drift],
             data_in["pitch_inv"],
             data_in,
             ["cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)"],
             num_well=num_well,
         )
         _alpha_drift = safediv(_alpha_drift, v_tau)
-        _s_drift = safediv(_s_drift, v_tau)
+        _s_drift = 4 * safediv(_s_drift, v_tau)
         return _alpha_drift, _s_drift, points, v_tau, data_in
 
     alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute1D(

@@ -746,8 +746,6 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     ``data``) to remain properly differentiable and dispatchable for any
     parameterization.
     """
-    from quadax import simpson
-
     num_pitch = kwargs.get("num_pitch", None)
     num_well = 1
     M = kwargs.get("M", 1)

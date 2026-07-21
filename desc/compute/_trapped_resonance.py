@@ -316,7 +316,8 @@ def _resonance_physics(
     rho_res : float
         Radial grid spacing.
     KE_frac : float
-        Fraction of 3.5 MeV kinetic energy.
+        Fraction of the 3.5 MeV D-T fusion alpha-particle birth energy to use
+        for the energetic particle kinetic energy.
     nfp : int
         Number of field periods.
     M, N : int
@@ -354,9 +355,11 @@ def _resonance_physics(
         ``f_q_abs``, ``Delta_s``,  ``s_res``,
         ``f_res``.
     """
-    m_alpha = 6.6446573450e-27
-    e_charge = 1.602e-19
-    Z = 2
+    m_alpha = 6.6446573450e-27  # alpha particle (⁴He nucleus) mass, kg
+    e_charge = 1.602e-19  # elementary charge, C
+    Z = 2  # alpha particle charge number
+    # 5.6076e-13 J = 3.5 MeV, the birth energy of alpha particles from D-T
+    # fusion; KE_frac is the fraction of that birth energy being considered.
     KE = KE_frac * 5.6076e-13
     v2 = 2 * KE / m_alpha
 

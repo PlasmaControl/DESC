@@ -138,7 +138,7 @@ class TrappedResonance(_Objective):
         ``Delta_Omega = None`` case. Otherwise this quantity is ignored.
         Defaults to ``False``.
     bt_filter_flag : bool, optional
-        If ``True``, zero out wells whose poloidal bounce width exceeds 2.5π
+        If ``True``, zero out wells whose poloidal bounce width exceeds 2π
         (barely-trapped filter) before the resonance physics calculation.
         Defaults to ``False``.
     """

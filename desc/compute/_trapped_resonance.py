@@ -702,7 +702,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     )
 
     # --- 1b. Barely-trapped filter ---
-    # Zero out wells whose poloidal bounce width delta_chi > 2.5*pi.
+    # Zero out wells whose poloidal bounce width delta_chi > 2*pi.
     if bt_filter_flag:
         points_0 = points[0]  # zeta at bounce start, shape (rho, alpha, pitch, well)
         points_1 = points[1]  # zeta at bounce end

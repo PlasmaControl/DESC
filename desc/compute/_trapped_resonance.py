@@ -12,17 +12,6 @@ from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
 
-def _alpha_mean(f):
-    """Simple mean over field lines.
-
-    Simple mean rather than integrating over α and dividing by 2π
-    (i.e. f.T.dot(dα) / dα.sum()), because when the toroidal angle extends
-    beyond one transit we need to weight all field lines uniformly, regardless
-    of their spacing wrt α.
-    """
-    return f.mean(axis=0)
-
-
 def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
     # τ is the bounce time, and I is defined in Nemov et al. eq. 36.
@@ -174,33 +163,6 @@ def _compute1D(
     out = batch_map(fun, fun_data, surf_batch_size)
 
     return out
-
-
-@register_compute_fun(
-    name="<L|r,a>",
-    label="\\int_{\\zeta_{\\mathrm{min}}}^{\\zeta_{\\mathrm{max}}}"
-    " \\frac{d\\zeta}{|B^{\\zeta}|}",
-    units="m / T",
-    units_long="Meter / tesla",
-    description="(Mean) proper length of field line(s)",
-    dim=1,
-    params=[],
-    transforms={"grid": []},
-    profiles=[],
-    coordinates="r",
-    data=["B^zeta"],
-    resolution_requirement="z",
-    source_grid_requirement={"coordinates": "raz", "is_meshgrid": True},
-)
-def _L_ra_fsa(data, transforms, profiles, **kwargs):
-    grid = transforms["grid"].source_grid
-    L_ra = simpson(
-        y=grid.meshgrid_reshape(1 / data["B^zeta"], "arz"),
-        x=grid.compress(grid.nodes[:, 2], surface_label="zeta"),
-        axis=-1,
-    )
-    data["<L|r,a>"] = grid.expand(jnp.abs(_alpha_mean(L_ra)))
-    return data
 
 
 def _s_drift_integrand(data, B, pitch):

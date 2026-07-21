@@ -188,6 +188,113 @@ _bounce1D_doc = {
     "quad": _bounce_doc["quad"],
 }
 
+_resonance_doc = {
+    "M": """int :
+        Generalized omnigenous helicity. Each B contour closes on itself after
+        traversing the torus M times toroidally and N times poloidally.
+        """,
+    "N": """int :
+        Generalized omnigenous helicity. Each B contour closes on itself after
+        traversing the torus M times toroidally and N times poloidally.
+        """,
+    "nfp": """int :
+        Number of field periods.
+        """,
+    "KE_frac": """jnp.ndarray :
+        Fraction of the 3.5 MeV D-T fusion alpha-particle birth energy to use
+        for the energetic particle kinetic energy.
+        """,
+    "pitch_invs": """jnp.ndarray or None :
+        If not ``None``, sets pitch_invs (Bcrits) to the specified value, and
+        causes this function to skip the phase-space average and return the
+        raw per-(rho, pitch, well) resonance-physics dictionary instead of the
+        phase-space-averaged objective. If ``None``, uses a linspace of
+        num_pitch between Bmin and Bmax of each flux surface.
+        """,
+    "rho_res": """float :
+        Radial grid spacing.
+        """,
+    "eta_res": """float :
+        Grid spacing for eta.
+        """,
+    "res_arr": """jnp.ndarray :
+        Resonance frequency ratios p/q to check Omega_eta against, for all
+        combinations of p/q up to p_max/q_max within
+        [res_range_min, res_range_max].
+        """,
+    "p_arr": """jnp.ndarray :
+        Numerators of the resonance ratios in ``res_arr``.
+        """,
+    "q_arr": """jnp.ndarray :
+        Denominators (toroidal mode numbers) of the resonance ratios in
+        ``res_arr``.
+        """,
+    "weight_method": """str :
+        ``"linear"`` or ``"bump"`` resonance weighting.
+        """,
+    "Delta_Omega": """float or None :
+        Half-width of the resonance interval for ``weight_method="bump"``.
+        If ``None``, defaults to wd_blur × the max |Ω[i+1]-Ω[i]| spacing.
+        Ignored when ``weight_method="linear"``.
+        """,
+    "wd_blur": """float :
+        Multiplicative blur factor used to compute bump half-width from
+        adjacent-surface Omega spacing when ``Delta_Omega`` is not provided.
+        """,
+    "fill_value": """float :
+        Value to set bounce integration outputs to if no well is found.
+        Cannot use ``jnp.nan`` to retain optimization abilities. Cannot use 0
+        for confusion with other quantities and averages.
+        """,
+    "stab_sacrifice": """bool :
+        If ``True``, multiply the island-width term by ``Omega_prime_s**2``
+        in the objective. If ``False``, omit that factor to preserve
+        numerical stability.
+        """,
+    "bt_filter_flag": """bool :
+        If ``True``, zero out wells whose poloidal bounce width exceeds 2π
+        (barely-trapped filter) before the resonance physics calculation.
+        """,
+    "cropping_DOmega": """bool :
+        If ``True``, Delta_Omega calculation is clipped by
+        ``0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta)``.
+        Only used with the ``bump`` weighting method and
+        ``Delta_Omega = None``. Otherwise this quantity is ignored.
+        """,
+    "num_transit": """int :
+        Number of toroidal transits spanned by ``zeta``. Used to normalize
+        the field-line length by the length of a single transit.
+        """,
+    "num_eta": """int :
+        Number of uniformly spaced eta points in [0, 2π). Alpha values are
+        derived per rho surface via ``alpha = eta * (N*nfp - iota*M) / nfp``.
+        """,
+    "zeta": """jnp.ndarray :
+        Toroidal angle values spanning ``num_transit`` toroidal transits,
+        used for field-line integration and to compute the field-line length.
+        """,
+    "_eta_grid": """Grid :
+        Field-line-following grid with per-rho alpha values derived from
+        uniform eta, built by ``TrappedResonance.compute``. This private
+        parameter is intended to be used only by developers for objectives.
+        """,
+    "_psa_grid": """Grid :
+        Field-line-following grid uniform in alpha, used for the phase-space
+        average, built by ``TrappedResonance.compute``. This private
+        parameter is intended to be used only by developers for objectives.
+        """,
+    "_data_eta": """dict[str, jnp.ndarray] :
+        Field data evaluated on ``_eta_grid``, built by
+        ``TrappedResonance.compute``. This private parameter is intended to
+        be used only by developers for objectives.
+        """,
+    "_data_psa": """dict[str, jnp.ndarray] :
+        Field data evaluated on ``_psa_grid``, built by
+        ``TrappedResonance.compute``. This private parameter is intended to
+        be used only by developers for objectives.
+        """,
+}
+
 
 def _phase_space_average(
     vtau_out,
@@ -621,6 +728,7 @@ def _resonance_physics(
     grid_requirement={"is_meshgrid": True},
     public=False,
     **_bounce1D_doc,
+    **_resonance_doc,
 )
 def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     """Trapped particle resonance penalty.
@@ -630,8 +738,8 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
       2. Resonance physics  (cross-surface, via ``_resonance_physics``)
       3. Phase-space average (via ``_phase_space_average``)
 
-    The eta/PSA grids and the field data evaluated on them (``eta_grid``,
-    ``psa_grid``, ``data_eta``, ``data_psa``) are built by the caller (see
+    The eta/PSA grids and the field data evaluated on them (``_eta_grid``,
+    ``_psa_grid``, ``_data_eta``, ``_data_psa``) are built by the caller (see
     ``TrappedResonance.compute``) rather than here, since building them
     requires the full ``Equilibrium`` object, which compute functions must
     stay pure with respect to (only ``params``/``transforms``/``profiles``/
@@ -663,10 +771,10 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     stab_sacrifice = kwargs.get("stab_sacrifice", False)
     bt_filter_flag = kwargs.get("bt_filter_flag", False)
     cropping_DOmega = kwargs.get("cropping_DOmega", False)
-    eta_grid = kwargs.get("eta_grid", None)
-    psa_grid = kwargs.get("psa_grid", None)
-    data_eta = kwargs.get("data_eta", None)
-    data_psa = kwargs.get("data_psa", None)
+    eta_grid = kwargs.get("_eta_grid", None)
+    psa_grid = kwargs.get("_psa_grid", None)
+    data_eta = kwargs.get("_data_eta", None)
+    data_psa = kwargs.get("_data_psa", None)
 
     base_grid = transforms["grid"]
     iotas = base_grid.compress(data["iota"])

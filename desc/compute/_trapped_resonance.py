@@ -16,7 +16,7 @@ from .data_index import register_compute_fun
 def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
     # τ is the bounce time, and I is defined in Nemov et al. eq. 36.
-    return safediv(2.0, jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30)))
+    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 
 def _jnpmean_nz(x, axis=0, fill=jnp.nan):

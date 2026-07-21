@@ -171,13 +171,13 @@ def _alpha_drift_integrand(data, B, pitch):
 
     Used in ``_trapped_EP_resonance``.
     """
-    return safediv(
+    return (
         2
         * (
             data["gbdrift (periodic)"] * pitch * B
             + 2 * (1 - pitch * B) * data["cvdrift (periodic)"]
-        ),
-        jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30)),
+        )
+        / jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30))
     )
 
 
@@ -679,13 +679,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     # --- 1. Bounce integrals on the eta grid ---
     # Build a global pitch grid from the base grid's min/max |B|, which is
     # computed from the equilibrium's full Fourier resolution and is independent
-    # of num_transit.  This avoids the pitch grid shifting with num_transit
-    # when the eta-grid field lines sample more of the surface at higher nt.
-    # Use Bounce1D.get_pitch_inv_quad with simp=True (genuine Simpson quadrature)
-    # so the returned weight is paired correctly with the pitch values, rather
-    # than discarding the quadrature weight and re-deriving a uniform one.
-    # Note simpson2 rounds num_pitch to an odd count and adds 2 boundary points,
-    # so the actual pitch count may differ slightly from num_pitch.
+    # of num_transit.
     if pitch_invs is None:
         B_min_base = base_grid.compress(data["min_tz |B|"])  # (num_rho,)
         B_max_base = base_grid.compress(data["max_tz |B|"])  # (num_rho,)
@@ -797,14 +791,11 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
             )
 
-        # Field-line length ∫dl/B = ∫dζ/B^ζ, matching both the
-        # registered "fieldline length" quantity (_geometry.py) and the dl/dζ
-        # Jacobian Bounce1D.integrate applies internally. Integrate over the
-        # full multi-transit ζ domain and mean over α
+        # Normalize by length of single toroidal transit.
+        # Field-line length ∫dl/B = ∫dζ/B^ζ
         Bzeta_psa = Bounce1D.reshape(psa_grid, data_psa["B^zeta"])
         num_transit = kwargs.get("num_transit", 1)
         n_1t = len(zeta) // num_transit
-        # Normalize by length of single toroidal transit.
         fl_length = jnp.abs(
             simpson(1 / Bzeta_psa[..., :n_1t], x=zeta[:n_1t], axis=-1).mean(axis=1)
         )

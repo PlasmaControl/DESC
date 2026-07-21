@@ -182,7 +182,6 @@ def _alpha_drift_integrand(data, B, pitch):
 
 
 _bounce1D_doc = {
-    "num_well": _bounce_doc["num_well"],
     "num_quad": _bounce_doc["num_quad"],
     "num_pitch": _bounce_doc["num_pitch"],
     "surf_batch_size": _bounce_doc["surf_batch_size"],
@@ -567,7 +566,7 @@ def _resonance_physics(
     ft_prefactor = eta_res / jnp.pi
     f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
     f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
-    f_q_abs = 0.5 * jnp.sqrt(jnp.maximum(f_q_c**2 + f_q_s**2, 1e-30))
+    f_q_abs = 0.5 * jnp.sqrt(f_q_c**2 + f_q_s**2)
     f_q_abs_sq = 0.5**2 * (f_q_c**2 + f_q_s**2)
 
     # Filter FT results to valid points.
@@ -576,9 +575,7 @@ def _resonance_physics(
     # Island widths
     q_iw = q_arr[None, None, None, :]
     denom = jnp.pi * q_iw * jnp.abs(Omega_prime_s[..., None])
-    Delta_s_profile = 4 * jnp.sqrt(
-        jnp.maximum(safediv(f_q_abs, denom, fill=0.0), 1e-30)
-    )
+    Delta_s_profile = 4 * jnp.sqrt(safediv(f_q_abs, denom, fill=0.0))
     Delta_s_4_profile = 4**4 * safediv(f_q_abs_sq, denom**2, fill=0.0)
     Delta_s_4_sum = (Delta_s_4_profile * res_weight).sum(axis=-1)
 

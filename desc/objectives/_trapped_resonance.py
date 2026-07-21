@@ -76,23 +76,6 @@ class TrappedResonance(_Objective):
         Whether or not to calculate multiple trapped particles simultaneously,
         especially for bounce integration.
         Defaults to True.
-    num_well : int or None, optional
-        Specify to return the first ``num_well`` pairs of bounce points for each
-        pitch and field line. Default is ``None``, which will detect all wells,
-        but due to current limitations in JAX this will have worse performance.
-        Specifying a number that tightly upper bounds the number of wells will
-        increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
-        toroidal Fourier resolution of B, respectively, in straight-field line
-        PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
-        The ``check_points`` or ``plot`` method is useful to select a reasonable
-        value.
-
-        If there were fewer wells detected along a field line than the size of the
-        last axis of the returned arrays, then that axis is padded with zero.
-
-        Defaults to None
     pitch_invs : array or None, optional
         If not None, sets pitch_invs (Bcrits) to specified value. If None, let's
         compute specify a linspace of num_pitch between Bmin and Bmax of each
@@ -174,7 +157,6 @@ class TrappedResonance(_Objective):
         KE_frac=np.array([1]),
         knots_per_transit=100,
         batch=True,
-        num_well=None,
         pitch_invs=None,
         N=0,
         M=1,

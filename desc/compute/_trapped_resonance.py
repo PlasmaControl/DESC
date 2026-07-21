@@ -8,6 +8,7 @@ from desc.grid import Grid
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D
 from ..utils import safediv
+from ._fast_ion import _radial_drift
 from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
@@ -168,12 +169,10 @@ def _compute1D(
 def _s_drift_integrand(data, B, pitch):
     """Radial drift integrand for bounce integration.
 
-    Used in ``_trapped_EP_resonance``.
+    Used in ``_trapped_EP_resonance``. Four times ``_radial_drift``
+    (see ``_fast_ion.py``).
     """
-    return safediv(
-        2 * data["cvdrift0"] * (2 - pitch * B),
-        jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30)),
-    )
+    return 4 * _radial_drift(data, B, pitch)
 
 
 def _alpha_drift_integrand(data, B, pitch):

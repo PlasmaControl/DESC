@@ -349,11 +349,47 @@ def _resonance_physics(
     Returns
     -------
     result : dict
-        Dictionary with keys: ``f_res``, ``Omega``, ``omega_bounce_avg``,
-        ``eta_drift_avg``, ``omega_bounce``, ``eta_drift``,
-        ``Omega_prime_s``, ``res_weight``, ``f_q_c``, ``f_q_s``,
-        ``f_q_abs``, ``Delta_s``,  ``s_res``,
-        ``f_res``.
+        Dictionary containing:
+
+        f_res : jnp.ndarray, shape (rho, pitch, well)
+            Per-(rho, pitch, well) resonance objective contribution: island
+            width to the 4th power, summed over resonances in ``res_arr``
+            and weighted by ``res_weight``, optionally scaled by
+            ``Omega_prime_s**2`` if ``stab_sacrifice``. Phase-space averaged
+            elsewhere to form the "trapped EP resonance" objective.
+        Omega : jnp.ndarray, shape (rho, pitch, well)
+            Normalized precession frequency
+            ``eta_drift_avg / omega_bounce_avg``, compared against the
+            rational ratios in ``res_arr`` to locate resonances.
+        omega_bounce_avg : jnp.ndarray, shape (rho, pitch, well)
+            Alpha-averaged bounce frequency ``2π / tau_bounce``.
+        eta_drift_avg : jnp.ndarray, shape (rho, pitch, well)
+            Alpha-averaged drift frequency of the field-line label eta.
+        omega_bounce : jnp.ndarray, shape (rho, alpha, pitch, well)
+            Bounce frequency per field line, before alpha-averaging.
+        eta_drift : jnp.ndarray, shape (rho, alpha, pitch, well)
+            Drift frequency of eta per field line, before alpha-averaging.
+        Omega_prime_s : jnp.ndarray, shape (rho, pitch, well)
+            Radial derivative dOmega/ds, where s = rho², via finite
+            differences in rho.
+        res_weight : jnp.ndarray, shape (rho, pitch, well, res)
+            Weight assigning each (rho, pitch, well) to each resonance in
+            ``res_arr``, via 2-point linear interpolation (optionally
+            Hermite-refined) or a smooth bump function, depending on
+            ``weight_method``.
+        f_q_abs : jnp.ndarray, shape (rho, pitch, well, res)
+            Magnitude of the q-th eta-Fourier harmonic of the bounce-averaged
+            radial (s) drift.
+        Delta_s : jnp.ndarray, shape (pitch, well, res)
+            Resonance-weighted island width (s = rho² units), summed over
+            rho; a diagnostic quantity.
+        Delta_s_prof : jnp.ndarray, shape (rho, pitch, well, res)
+            Per-surface island width (s = rho² units) at each resonance.
+        s_res : jnp.ndarray, shape (pitch, well, res)
+            Resonance-weighted mean s = rho² location of each resonance.
+        valid_prime : jnp.ndarray, shape (rho, pitch, well)
+            Boolean mask, ``True`` where a trapped particle exists at all
+            alpha/eta and both ``Omega`` and ``Omega_prime_s`` are defined.
     """
     m_alpha = 6.6446573450e-27  # alpha particle (⁴He nucleus) mass, kg
     e_charge = 1.602e-19  # elementary charge, C

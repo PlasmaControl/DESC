@@ -36,7 +36,7 @@ class AbstractGridFlux(AbstractGrid):
         # ensure things that should be ints are ints
         self._NFP = int(self._NFP)
 
-        # backwards compatability
+        # backwards compatibility
         if hasattr(self, "_unique_rho_idx"):
             self._unique_x0_idx = self._unique_rho_idx
             del self._unique_rho_idx
@@ -203,7 +203,14 @@ class AbstractGridFlux(AbstractGrid):
         x0 = {"r": "rho"}[self.coordinates[0]]
         x1 = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
         x2 = {"z": "zeta"}[self.coordinates[2]]
-        return {x0: "x0", x1: "x1", x2: "x2"}[label]
+        return {
+            "radial": "x0",
+            "poloidal": "x1",
+            "toroidal": "x2",
+            x0: "x0",
+            x1: "x1",
+            x2: "x2",
+        }[label]
 
     def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
@@ -485,7 +492,7 @@ class CustomGridFlux(AbstractGridFlux):
         warnif(
             kwargs.pop("period", False),
             FutureWarning,
-            msg="Argument `period` is deprecated and is now set by `self.period`.",
+            msg="Argument `period` is deprecated and is now set by `coordinates`.",
         )
 
         nodes = jnp.atleast_2d(jnp.asarray(nodes))
@@ -746,6 +753,7 @@ class LinearGridFlux(AbstractGridFlux):
     """
 
     _io_attrs_ = AbstractGridFlux._io_attrs_ + [
+        "_endpoint",
         "_poloidal_endpoint",
         "_toroidal_endpoint",
     ]
@@ -1007,6 +1015,7 @@ class QuadratureGridFlux(AbstractGridFlux):
         self._is_meshgrid = True
         self._fft_x1 = True
         self._fft_x2 = True
+        self._can_fft2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature CustomGridFlux
         self._sort_nodes()
@@ -1171,6 +1180,7 @@ class ConcentricGridFlux(AbstractGridFlux):
         self._is_meshgrid = False
         self._fft_x1 = False
         self._fft_x2 = True
+        self._can_fft2 = False
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern
         )

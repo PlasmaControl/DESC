@@ -75,7 +75,7 @@ class AbstractGridToroidalSurface(AbstractGrid):
             return label
         x1 = {"t": "theta"}[self.coordinates[1]]
         x2 = {"z": "zeta"}[self.coordinates[2]]
-        return {x1: "x1", x2: "x2"}[label]
+        return {"poloidal": "x1", "toroidal": "x2", x1: "x1", x2: "x2"}[label]
 
     @property
     def coordinates(self):
@@ -187,6 +187,7 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
     """
 
     _io_attrs_ = AbstractGridToroidalSurface._io_attrs_ + [
+        "_endpoint",
         "_poloidal_endpoint",
         "_toroidal_endpoint",
     ]

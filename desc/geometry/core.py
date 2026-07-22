@@ -20,7 +20,6 @@ from desc.grid import (
     AbstractGridFlux,
     AbstractGridToroidalSurface,
     LinearGridCurve,
-    LinearGridFlux,
     LinearGridToroidalSurface,
     QuadratureGridFlux,
 )
@@ -323,7 +322,7 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGridCurve(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
@@ -576,15 +575,12 @@ class Surface(IOAble, Optimizable, ABC):
             if (
                 (grid.N >= 2 * self.N + 5)
                 and (grid.M > 2 * self.M + 5)
-                and isinstance(grid, LinearGridFlux)
+                and isinstance(grid, LinearGridToroidalSurface)
             ):
                 calc0d = False
             else:
-                grid0d = LinearGridFlux(
-                    rho=np.array(self.rho),
-                    M=2 * self.M + 5,
-                    N=2 * self.N + 5,
-                    NFP=self.NFP,
+                grid0d = LinearGridToroidalSurface(
+                    M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP
                 )
         elif (
             calc0d and override_grid and hasattr(self, "zeta")

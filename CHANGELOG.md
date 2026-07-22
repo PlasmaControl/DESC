@@ -1,18 +1,23 @@
 Changelog
 =========
 
+New Features
+
+- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
 
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
 
+Bug Fixes
 
-v0.17.2
--------
+- Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
+  asymmetric ``currvmns`` magnetic-axis extrapolation.
 
-New Features
+Deprecations
 
-- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatable with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
+- ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
 
 
 v0.17.2

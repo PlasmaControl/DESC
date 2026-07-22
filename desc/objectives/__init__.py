@@ -48,6 +48,7 @@ from ._geometry import (
 )
 from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
+    DirectParticleTracing,
     Isodynamicity,
     Omnigenity,
     QuasisymmetryBoozer,

@@ -242,7 +242,7 @@ def test_eq_solve():
 @pytest.mark.memory
 def test_objective_quadratic_flux_jac():
     """Benchmark computing jacobian of QuadraticFlux."""
-    run, x = _test_quadratic_flux(30, "jac")
+    run, x = _test_quadratic_flux(50, "jac")
     for _ in range(3):
         _ = run(x)
 

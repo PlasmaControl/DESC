@@ -1079,7 +1079,7 @@ def test_constrained_AL_lsq():
         ctol=ctol,
         x_scale="auto",
         copy=True,
-        options={},
+        options={"tr_method": "svd"},
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]

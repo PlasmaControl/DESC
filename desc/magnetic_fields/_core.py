@@ -29,7 +29,6 @@ from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
-from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
@@ -59,13 +58,13 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     ----------
     re : ndarray
         Shape (n_eval_pts, 3).
-        Evaluation points to evaluate B at, in cartesian.
+        Evaluation points to evaluate B at, in Cartesian coordinates.
     rs : ndarray
         Shape (n_src_pts, 3).
-        Source points for current density J, in cartesian.
+        Source points for current density J, in Cartesian coordinates.
     J : ndarray
         Shape (n_src_pts, 3).
-        Current density vector at source points, in cartesian.
+        Current density vector at source points, in Cartesian components.
     dV : ndarray
         Shape (n_src_pts, ).
         Volume element at source points
@@ -78,7 +77,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     -------
     B : ndarray
         Shape(n_eval_pts, 3).
-        Magnetic field in cartesian components at specified points.
+        Magnetic field in Cartesian components at specified points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -87,8 +86,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
 
     def biot(re):
         dr = rs - re
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
+        den = dr_norm**3
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
@@ -104,13 +104,13 @@ def biot_savart_general_vector_potential(
     ----------
     re : ndarray
         Shape (n_eval_pts, 3).
-        Evaluation points to evaluate B at, in cartesian.
+        Evaluation points to evaluate B at, in Cartesian coordinates.
     rs : ndarray
         Shape (n_src_pts, 3).
-        Source points for current density J, in cartesian.
+        Source points for current density J, in Cartesian coordinates.
     J : ndarray
         Shape (n_src_pts, 3).
-        Current density vector at source points, in cartesian.
+        Current density vector at source points, in Cartesian components.
     dV : ndarray
         Shape (n_src_pts, ).
         Volume element at source points
@@ -119,11 +119,12 @@ def biot_savart_general_vector_potential(
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``None``.
 
+
     Returns
     -------
     A : ndarray
         Shape(n_eval_pts, 3).
-        Magnetic vector potential in cartesian components at specified points.
+        Magnetic vector potential in Cartesian components at specified points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -132,8 +133,8 @@ def biot_savart_general_vector_potential(
 
     def biot(re):
         dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        return safediv(JdV, dr_norm).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
     return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
@@ -166,6 +167,8 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
         Bnormal distribution from the BNORM Fourier coefficients,
         evaluated on the given eval_grid
     """
+    from desc.equilibrium import EquilibriaFamily, Equilibrium
+
     if isinstance(surface, EquilibriaFamily):
         surface = surface[-1]
     if isinstance(surface, Equilibrium):
@@ -286,7 +289,7 @@ class _MagneticField(IOAble, ABC):
 
         Returns
         -------
-        field : ndarray, shape(N,3)
+        field : ndarray, shape(n,3)
             magnetic field at specified points
 
         """
@@ -327,7 +330,7 @@ class _MagneticField(IOAble, ABC):
 
         Returns
         -------
-        A : ndarray, shape(N,3)
+        A : ndarray, shape(n,3)
             magnetic vector potential at specified points
 
         """
@@ -391,6 +394,8 @@ class _MagneticField(IOAble, ABC):
             given as a ``(grid.num_nodes , 3)`` shaped array.
 
         """
+        from desc.equilibrium import EquilibriaFamily, Equilibrium
+
         calc_Bplasma = False
         if isinstance(surface, EquilibriaFamily):
             surface = surface[-1]
@@ -489,7 +494,10 @@ class _MagneticField(IOAble, ABC):
         Returns
         -------
         None
+
         """
+        from desc.equilibrium import EquilibriaFamily, Equilibrium
+
         if sym != "sin":
             raise UserWarning(
                 "BNORM code assumes that |B| has sin symmetry,"
@@ -1049,6 +1057,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         transforms=None,
         compute_A_or_B="B",
         chunk_size=None,
+        method="virtual casing",
     ):
         """Compute magnetic field or vector potential at a set of points.
 
@@ -1108,9 +1117,14 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         op = {"B": "compute_magnetic_field", "A": "compute_magnetic_vector_potential"}[
             compute_A_or_B
         ]
+        from desc.equilibrium import Equilibrium
 
         AB = 0
         for i, (field, g, tr) in enumerate(zip(self._fields, source_grid, transforms)):
+            if isinstance(field, Equilibrium) and compute_A_or_B == "B":
+                kwargs = {"method": method}
+            else:
+                kwargs = {}
             AB += getattr(field, op)(
                 coords,
                 params[i % len(params)],
@@ -1118,6 +1132,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
                 source_grid=g,
                 transforms=tr,
                 chunk_size=chunk_size,
+                **kwargs,
             )
         return AB
 
@@ -1129,6 +1144,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        method="virtual casing",
     ):
         """Compute magnetic field at a set of points.
 
@@ -1164,6 +1180,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
             transforms,
             compute_A_or_B="B",
             chunk_size=chunk_size,
+            method=method,
         )
 
     def compute_magnetic_vector_potential(

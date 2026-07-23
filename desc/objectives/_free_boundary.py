@@ -685,19 +685,6 @@ class BoundaryError(_Objective):
                 )
             )
 
-            Bplasma = virtual_casing_biot_savart(
-                eval_data,
-                source_data,
-                interpolator,
-                chunk_size=self._B_plasma_chunk_size,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + eval_data["B"] / 2
-
-            self._constants["source_data"] = source_data
-            self._constants["eval_data"] = eval_data
-            self._constants["Bplasma"] = Bplasma
-
             # sheet current stuff
             if self._sheet_current:
                 p = (
@@ -733,6 +720,19 @@ class BoundaryError(_Objective):
                 self._constants["sheet_eval_data"] = sheet_eval_data
                 source_data["K_vc"] += sheet_source_data["K"]
 
+            Bplasma = virtual_casing_biot_savart(
+                eval_data,
+                source_data,
+                interpolator,
+                chunk_size=self._B_plasma_chunk_size,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + eval_data["B"] / 2
+
+            self._constants["source_data"] = source_data
+            self._constants["eval_data"] = eval_data
+            self._constants["Bplasma"] = Bplasma
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -762,10 +762,11 @@ class BoundaryError(_Objective):
         Parameters
         ----------
         params : dict
-            One or two dictionaries of parameters. If field_fixed=True, then it is the
-            equilibrium parameters, e.g. Equilibrium.params_dict. If eq_fixed=True, then
-            it is the field parameters, e.g. MagneticField.params_dict. Otherwise it is
-            both sets of parameters listed in order of self.things (eq, field).
+            One or more dictionaries of parameters. If field_fixed=True, then params[0]
+            is the equilibrium parameters, e.g. Equilibrium.params_dict. If
+            eq_fixed=True, then params[0:] are field parameters, e.g.
+            MagneticField.params_dict. Otherwise, params[0] are the equilibrium
+            params and params[1:] are the field params.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)
@@ -815,15 +816,6 @@ class BoundaryError(_Objective):
                 )
             )
 
-            Bplasma = virtual_casing_biot_savart(
-                eval_data,
-                source_data,
-                constants["interpolator"],
-                chunk_size=self._B_plasma_chunk_size,
-            )
-            # need extra factor of B/2 bc we're evaluating on plasma surface
-            Bplasma = Bplasma + eval_data["B"] / 2
-
             if self._sheet_current:
                 p = (
                     "desc.magnetic_fields._current_potential."
@@ -855,6 +847,15 @@ class BoundaryError(_Objective):
                     )
                 )
                 source_data["K_vc"] += sheet_source_data["K"]
+
+            Bplasma = virtual_casing_biot_savart(
+                eval_data,
+                source_data,
+                constants["interpolator"],
+                chunk_size=self._B_plasma_chunk_size,
+            )
+            # need extra factor of B/2 bc we're evaluating on plasma surface
+            Bplasma = Bplasma + eval_data["B"] / 2
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the

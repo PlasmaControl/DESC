@@ -10,7 +10,7 @@ Bug Fixes
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
 - Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
   asymmetric ``currvmns`` magnetic-axis extrapolation.
-
+- Bug (#2120) in ``desc.magnetic_fields.OmnigenousField`` computing NaNs when the ``B_lm`` corresponded to flat magnetic wells fixed by ``interpax`` ``v0.3.14``, updated tests to exercise this.
 
 v0.17.2
 -------

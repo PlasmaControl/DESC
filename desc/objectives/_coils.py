@@ -127,17 +127,15 @@ class _CoilObjective(_Objective):
         def _build_coilset_tree():
             """Unpacks the input coilset, builds coilset tree and mask.
 
-            Returns
-            -------
-            params_tree : dict
-                params_tree["coils"] contains a nested list of 0s representing
-                individual coils and the coilsets to which they belong. Similarly,
-                params_tree["nodes"] lists the grid nodes associated with each coil.
-                params_tree["coilset_mask"] contains the indices in
-                [0,self._num_coils-1] for which the corresponding weight is positive.
-                params_tree["objective_mask"] contains the indices in [0,self._dim_f-1]
-                for which the corresponding weight is positive. If all weights are
-                positive (i.e. no masking needed), contains default slice(None).
+            Sets self._coilset_tree, a dict. self._coilset_tree["coils"] contains
+            a nested list of 0s representing individual coils and the coilsets
+            to which they belong. Similarly, self._coilset_tree["nodes"] lists
+            the grid nodes associated with each coil. self._coilset_tree["coilset_mask"]
+            contains the indices in [0,self._num_coils-1] for which the corresponding
+            weight is positive. self._coilset_tree["objective_mask"] contains the
+            indices in [0,self._dim_f-1] for which the corresponding weight is
+            positive. If all weights are positive (i.e. no masking needed), contains
+            default slice(None).
             """
             # Local import to avoid circular import
             from desc.coils import CoilSet, MixedCoilSet, _Coil

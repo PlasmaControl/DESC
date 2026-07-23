@@ -634,7 +634,9 @@ class TestCoilSet:
         #  of the coils in each field period lie nearly
         # in the same physical space (intersecting at 2 points) after reflection
         with pytest.warns(UserWarning) as warninfo:
-            _ = CoilSet.from_symmetry(coils_list_sym, NFP=4, sym=True)
+            _ = CoilSet.from_symmetry(
+                coils_list_sym, NFP=4, sym=True, check_intersection=True
+            )
         assert "nearly intersecting" in str(warninfo[0].message)
 
     @pytest.mark.unit
@@ -765,8 +767,7 @@ class TestCoilSet:
         coil2 = FourierPlanarCoil(center=[100, 0, 0])
         coils2 = coils1 + [coil2]
         assert coils2[-1] is coil2
-        with pytest.warns(UserWarning, match="nearly intersecting"):
-            coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
+        coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):

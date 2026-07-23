@@ -95,7 +95,7 @@ class FusionPower(_Objective):
             (eq.ion_density is None)
             and (eq.electron_density is None or eq.atomic_number is None),
             ValueError,
-            "Equilibrium must have an ion density profile.",
+            "Equilibrium must have an ion density profile. Please assign either an `ion_density` profile or `electron_density` and `atomic_number` profiles.",
         )
         errorif(
             eq.ion_temperature is None,

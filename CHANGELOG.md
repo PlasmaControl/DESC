@@ -14,9 +14,7 @@ Bug Fixes
 
 Breaking Changes
 
-- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom
-  subclasses with `_broadcast_input="Node"` that previously used `coilset_mask` should
-  switch to `objective_mask`.
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="Node"` that previously used `coilset_mask` should switch to `objective_mask`.
 
 v0.17.2
 -------
@@ -95,9 +93,8 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
 - Adds support for optimization targeting individual coils in a coilset.
-  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
-  - Able to set weights to zero, excluding certain coils from the objective.
-
+    - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+    - Able to set weights to zero, excluding certain coils from the objective.
 
 Bug Fixes
 

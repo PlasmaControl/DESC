@@ -56,7 +56,7 @@ class _CoilObjective(_Objective):
         floats. Set weight to zero to exclude given coils from optimization.
 
     Subclasses must define a static attribute "_broadcast_input." Equals
-    "Coil" if the objective returns a single scalar per coil, and "Node"
+    "coil" if the objective returns a single scalar per coil, and "node"
     if it returns a scalar at every grid point. To be compatible with
     masking, compute function should apply the mask
     self._coilset_tree["objective_mask"] before returning data.
@@ -170,7 +170,7 @@ class _CoilObjective(_Objective):
                 "objective_mask": slice(None),
             }
             if np.any([w == 0 for w in tree_leaves(self._weight)]):
-                coilset_mask = self._coilset_broadcast(self._weight, target="Coil")
+                coilset_mask = self._coilset_broadcast(self._weight, target="coil")
                 objective_mask = self._coilset_broadcast(
                     self._weight, self._broadcast_input
                 )
@@ -218,7 +218,7 @@ class _CoilObjective(_Objective):
             self._coilset_tree["objective_mask"]
         ]
 
-        if self._broadcast_input == "Node":
+        if self._broadcast_input == "node":
             grid_nodes_unmasked = [
                 grid[i].num_nodes for i in self._coilset_tree["coilset_mask"]
             ]
@@ -319,7 +319,7 @@ class _CoilObjective(_Objective):
         # objective should be rebuilt to account for masking
         self._built = False
 
-    def _coilset_broadcast(self, x, target="Coil"):
+    def _coilset_broadcast(self, x, target="coil"):
         """Broadcast an array to dimensions consistent with "target".
 
         Parameters
@@ -327,7 +327,7 @@ class _CoilObjective(_Objective):
         x : float or list[float]
             Must be broadcastable to the structure of self._things[0].
         target: str, optional
-            Optional string taking values "Coil" or "Node". Defaults to "Coil".
+            Optional string taking values "coil" or "node". Defaults to "coil".
 
         Returns
         -------
@@ -335,7 +335,7 @@ class _CoilObjective(_Objective):
             Float inputs are returned unchanged, and list inputs are
             expanded to size self._dim_f.
         """
-        assert target in ["Node", "Coil"]
+        assert target in ["node", "coil"]
 
         # No need to broadcast if input is a scalar
         arr_flat = tree_leaves(x)
@@ -343,7 +343,7 @@ class _CoilObjective(_Objective):
             return np.atleast_1d(arr_flat[0])
 
         arr = jax_tree_broadcast(x, self._coilset_tree["coils"])
-        if target == "Node":
+        if target == "node":
             arr = tree_map(lambda a, b: [a] * b, arr, self._coilset_tree["nodes"])
         arr, _ = tree_flatten(arr)
         return np.asarray(arr)[self._coilset_tree["objective_mask"]]
@@ -371,7 +371,7 @@ class CoilLength(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
     _print_value_fmt = "Coil length: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -475,7 +475,7 @@ class CoilCurvature(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil curvature: "
-    _broadcast_input = "Node"
+    _broadcast_input = "node"
 
     def __init__(
         self,
@@ -575,7 +575,7 @@ class CoilTorsion(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil torsion: "
-    _broadcast_input = "Node"
+    _broadcast_input = "node"
 
     def __init__(
         self,
@@ -675,7 +675,7 @@ class CoilCurrentLength(CoilLength):
     _scalar = False
     _units = "(A*m)"
     _print_value_fmt = "Coil current length: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -783,7 +783,7 @@ class CoilIntegratedCurvature(_CoilObjective):
     _scalar = False  # not always a scalar, if a coilset is passed in
     _units = "(dimensionless)"
     _print_value_fmt = "Integrated curvature: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -1485,7 +1485,7 @@ class CoilArclengthVariance(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m^2)"
     _print_value_fmt = "Coil Arclength Variance: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,

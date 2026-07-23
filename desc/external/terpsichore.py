@@ -14,7 +14,7 @@ from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compat import flip_theta
 from desc.compute.utils import get_transforms
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.objectives import ExternalObjective
 from desc.objectives.objective_funs import collect_docs
 from desc.transform import Transform
@@ -251,7 +251,7 @@ def _write_wout(
     file.createDimension("dim_00100", 100)
     file.createDimension("dim_00200", 200)
 
-    grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
+    grid_half = LinearGridFlux(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
     data_half = eq.compute(
         [
             "B_rho",
@@ -891,8 +891,8 @@ class TERPSICHORE(ExternalObjective):
         )
 
         # check if theta needs to be flipped so that theta=0 is on the outboard midplane
-        grid0 = LinearGrid(rho=0.0, M=0, N=0)
-        grid1 = LinearGrid(rho=1.0, M=0, N=0)
+        grid0 = LinearGridFlux(rho=0.0, M=0, N=0)
+        grid1 = LinearGridFlux(rho=1.0, M=0, N=0)
         R0 = self._eq.compute("R", grid0)["R"][0]  # R(rho=0)
         R1 = self._eq.compute("R", grid1)["R"][0]  # R(rho=1,theta=0,phi=0)
         self._fun_kwargs["theta0_outboard"] = bool(R1 > R0)
@@ -912,8 +912,8 @@ class TERPSICHORE(ExternalObjective):
         s_full = np.linspace(0, 1, surfs)
         s_half = s_full[0:-1] + 0.5 / (surfs - 1)
         r_half = np.sqrt(s_half)
-        grid_lcfs = LinearGrid(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
-        grid_half = LinearGrid(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
+        grid_lcfs = LinearGridFlux(M=M_grid, N=N_grid, rho=np.array([1.0]), NFP=NFP)
+        grid_half = LinearGridFlux(M=M_grid, N=N_grid, NFP=NFP, rho=r_half)
         self._fun_kwargs["data_transforms"] = get_transforms(
             keys=[
                 "B_rho",

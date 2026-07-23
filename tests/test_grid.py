@@ -13,6 +13,7 @@ from desc.grid import (
     LinearGridFlux,
     LinearGridToroidalSurface,
     QuadratureGridFlux,
+    QuadratureGridCylindrical,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -512,6 +513,22 @@ class TestGrid:
         ).T
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
+    
+    @pytest.mark.unit
+    def test_cylindrical_grid(self):
+        """Test that QuadratureGridCylindrical correctly makes meshgrid of Gauss-Lobatto nodes."""
+
+        L = N = 3
+        M = 0
+        NFP = 1
+
+        grid = QuadratureGridCylindrical(L, M, N, NFP=NFP)
+        Z, phi, R = np.meshgrid(
+            [0, 0.25, 0.75, 1], [0], [0, 0.25, 0.75, 1], indexing="ij"
+        )
+        np.testing.assert_allclose(
+            np.stack([R.flatten(), phi.flatten(), Z.flatten()]).T, grid.nodes
+        )
 
     @pytest.mark.unit
     def test_quad_grid_volume_integration(self):
@@ -538,6 +555,15 @@ class TestGrid:
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         np.testing.assert_allclose(vol, vol_quad)
+
+    @pytest.mark.unit
+    def test_cylindrical_grid_volume_integration(self):
+        """Test that cylindrical grid gives correct volume integrals."""
+        L = M = N = 4
+        NFP = 2
+
+        grid = QuadratureGridCylindrical(L, M, N, NFP=NFP)
+        np.testing.assert_allclose((grid.weights * grid.nodes[:, 0]).sum(), np.pi)
 
     @pytest.mark.unit
     def test_repr(self):
@@ -639,6 +665,37 @@ class TestGrid:
         lg = LinearGridCurve(2)
         lg.change_resolution(3, 4)
         test(lg, 3, 4)
+
+    @pytest.mark.unit
+    def test_change_resolution_cylindrical(self):
+        """Test changing grid resolution for cylindrical grids."""
+    
+        def test(grid, *desired_resolution):
+            assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
+            assert grid.num_r == grid.unique_r_idx.size
+            assert grid.num_phi == grid.unique_phi_idx.size
+            assert grid.num_z == grid.unique_z_idx.size
+            np.testing.assert_equal(
+                (grid.unique_r_idx, grid.inverse_r_idx),
+                np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_phi_idx, grid.inverse_phi_idx),
+                np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_z_idx, grid.inverse_z_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_phi_idx[-1], 1],
+                (grid.num_phi - 1) / grid.num_phi * 2 * np.pi / grid.NFP,
+            )
+
+        qg = QuadratureGridCylindrical(2, 3, 4)
+        qg.change_resolution(3, 4, 5, 6)
+        test(qg, 3, 4, 5, 6)
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):

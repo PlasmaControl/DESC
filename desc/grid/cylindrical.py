@@ -1,21 +1,12 @@
 """Classes for representing cylindrical coordinates."""
 
-import warnings
-
 import numpy as np
-from scipy import special
 
-from desc.backend import jnp, put, repeat
+from desc.backend import jnp, repeat
 from desc.utils import check_nonnegint, check_posint, errorif, warnif
 
 from .core import AbstractGrid
-from .utils import _create_linear_nodes, midpoint_spacing, periodic_spacing
-
-# CHECK TO MAKE SURE SCALE WEIGHTS ARE CORRECT FOR CYLINDRICAL GRID
-# ADD SYMMETRY
-# ADD COMMENT ASKING ABOUT rpz or RpZ
-# add real space bounds to easily rescale to physical space
-
+from .utils import midpoint_spacing, periodic_spacing
 
 class AbstractGridCylindrical(AbstractGrid):
     """Base class for collocation grids in cylindrical coordinates.

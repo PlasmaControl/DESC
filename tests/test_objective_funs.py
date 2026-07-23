@@ -4571,6 +4571,7 @@ def test_deflation_operator_all_Nones():
 @pytest.mark.unit
 def test_coil_objective_input(DummyMixedCoilSet):
     """Tests broadcasting for inputs to _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     weight = [1.0, 2.0, 3.0, 4.0]
@@ -4602,7 +4603,9 @@ def test_coil_objective_input(DummyMixedCoilSet):
 @pytest.mark.unit
 def test_coil_objective_indices(DummyMixedCoilSet):
     """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [single coil, single coil, single coil]
     coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
 
     weight = [0, [1, 0, 0], 1, 1]
@@ -4613,32 +4616,75 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     compA = objA.compute_scaled_error(None)
     compB = objB.compute_scaled_error(None)
     np.testing.assert_allclose(compA, compB, atol=1e-13)
+    assert objA.dim_f == 3
+
+    objC = CoilCurvature(coilsetA, weight=weight, normalize=False)
+    objD = CoilCurvature(coilsetB, normalize=False)
+    objC.build()
+    objD.build()
+    compC = objC.compute_scaled_error(None)
+    compD = objD.compute_scaled_error(None)
+    np.testing.assert_allclose(compC, compD, atol=1e-13)
+    assert objC.dim_f == objD.dim_f
+
+    objE = CoilTorsion(coilsetA, weight=weight, normalize=False)
+    objF = CoilTorsion(coilsetB, normalize=False)
+    objE.build()
+    objF.build()
+    compE = objE.compute_scaled_error(None)
+    compF = objF.compute_scaled_error(None)
+    np.testing.assert_allclose(compE, compF, atol=1e-13)
+    assert objE.dim_f == objF.dim_f
 
 
 @pytest.mark.unit
 def test_coil_objective_setter(DummyMixedCoilSet):
     """Tests setters for _CoilObjectives."""
-    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
-    obj = CoilLength(coilset)
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [coilset with 1 coil, coilset with 3 coils]
+    coilsetB = MixedCoilSet((coilsetA[0], coilsetA[1]), check_intersection=False)
 
-    weight = [1.0, 1.0, 0.0, 0.0]
-    weight_expanded = [1.0, 1.0, 1.0, 1.0]
-    obj.weight = weight
-    obj.build()
-    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    objA = CoilLength(coilsetA)
+    objB = CoilLength(coilsetB)
+
+    weightA = [1.0, 2.0, 0.0, 0.0]
+    weightB = [1.0, 2.0]
+    weight_expanded = [1.0, 2.0, 2.0, 2.0]
+    objA.weight = weightA
+    objB.weight = weightB
+    objA.build()
+    objB.build()
+    np.testing.assert_allclose(objA.weight, objB.weight, atol=1e-13)
+    np.testing.assert_allclose(objA.weight, weight_expanded, atol=1e-13)
 
     bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
     target = [[4.0], 5.0, 8.0, 9.0]
     target_expanded = [4.0, 5.0, 5.0, 5.0]
 
-    obj.bounds = bounds
-    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
-    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    objA.bounds = bounds
+    np.testing.assert_allclose(objA.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(objA.bounds[1], bounds_expanded[1], atol=1e-13)
 
-    obj.bounds = None
-    obj.target = target
-    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)
+    objA.bounds = None
+    objA.target = target
+    np.testing.assert_allclose(objA.target, target_expanded, atol=1e-13)
+
+    objC = CoilCurvature(coilsetA)
+    objD = CoilCurvature(coilsetB)
+
+    objC.weight = weightA
+    objD.weight = weightB
+    objC.build()
+    objD.build()
+    objC.bounds = bounds
+    objC.target = target
+    num_nodes = len(objD.weight)
+    np.testing.assert_allclose(objC.weight, objD.weight, atol=1e-13)
+    assert len(objC.weight) == num_nodes
+    assert len(objC.bounds[0]) == num_nodes
+    assert len(objC.target) == num_nodes
 
 
 @pytest.mark.unit

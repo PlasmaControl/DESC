@@ -8,12 +8,13 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import (
     ConcentricGridFlux,
+    CustomGridCylindrical,
     CustomGridFlux,
     LinearGridCurve,
     LinearGridFlux,
     LinearGridToroidalSurface,
-    QuadratureGridFlux,
     QuadratureGridCylindrical,
+    QuadratureGridFlux,
     dec_to_cf,
     find_least_rational_surfaces,
     find_most_rational_surfaces,
@@ -513,7 +514,7 @@ class TestGrid:
         ).T
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
-    
+
     @pytest.mark.unit
     def test_cylindrical_grid(self):
         """Test that QuadratureGridCylindrical correctly makes meshgrid of Gauss-Lobatto nodes."""
@@ -566,8 +567,20 @@ class TestGrid:
         np.testing.assert_allclose((grid.weights * grid.nodes[:, 0]).sum(), np.pi)
 
     @pytest.mark.unit
-    def test_repr(self):
-        """Test string representations of grid objects."""
+    def test_repr_cylindrical(self):
+        """Test string representations of cylindrical grid objects."""
+        qg = QuadratureGridCylindrical(2, 3, 4)
+        s = str(qg)
+        assert "QuadratureGridCylindrical" in s
+        assert "is_meshgrid=True" in s
+        assert "NFP=1" in s
+        assert "L=2" in s
+        assert "M=3" in s
+        assert "N=4" in s
+    
+    @pytest.mark.unit
+    def test_repr_flux(self):
+        """Test string representations of flux grid objects."""
         qg = ConcentricGridFlux(2, 3, 4)
         s = str(qg)
         assert "ConcentricGridFlux" in s
@@ -669,7 +682,7 @@ class TestGrid:
     @pytest.mark.unit
     def test_change_resolution_cylindrical(self):
         """Test changing grid resolution for cylindrical grids."""
-    
+
         def test(grid, *desired_resolution):
             assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
             assert grid.num_r == grid.unique_r_idx.size
@@ -875,6 +888,77 @@ class TestGrid:
         np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_rho_idx)
         np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_alpha_idx)
         np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_zeta_idx)
+
+        # cylindrical grid
+        R = np.linspace(0, 1, 4)
+        phi = np.linspace(0, 2 * np.pi, 2)
+        Z = np.linspace(0, 1, 3)
+        grid = CustomGridCylindrical.create_meshgrid([R, phi, Z])
+        # treating R = rho, phi = theta, Z = zeta just for grid construction
+        grid1 = LinearGridFlux(rho=R, theta=phi, zeta=Z)
+        # atol=1e-12 bc default grid shifts points away from the axis a tiny bit
+        np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
+        # want radial/poloidal/toroidal nodes sorted in the same order for both
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_r_idx)
+        np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_phi_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_z_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_r_idx)
+        np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_phi_idx)
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_z_idx)
+        
+    @pytest.mark.unit
+    def test_meshgrid_reshape_cylindrical(self):
+        """Test that reshaping meshgrids works correctly for cylindrical grids."""
+        grid = QuadratureGridCylindrical(2, 3, 4)
+
+        R = grid.nodes[grid.unique_r_idx, 0]
+        phi = grid.nodes[grid.unique_phi_idx, 1]
+        Z = grid.nodes[grid.unique_z_idx, 2]
+
+        # user regular allclose for broadcasting to work correctly
+        # reshaping rpz should have R along first axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 0], "rpz"), R[:, None, None]
+        )
+        # reshaping rzp should have phi along last axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes[:, 1], "rzp"), phi[None, None, :]
+        )
+        # reshaping pzr should have zeta along 2nd axis
+        assert np.allclose(
+            grid.meshgrid_reshape(grid.nodes, "pzr")[:, :, :, 2], Z[None, :, None]
+        )
+
+        # coordinates are rtz, not raz
+        with pytest.raises(ValueError):
+            grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
+
+
+        R = np.linspace(0, 1, 3)
+        phi = np.linspace(0, 2 * np.pi, 4)
+        Z = np.linspace(0, 1, 5)
+        grid = CustomGridCylindrical.create_meshgrid([R, phi, Z])
+        R, phi, Z = grid.nodes.T
+        # functions of Z should separate along first two axes
+        # since those are contiguous, this should work
+        f = grid.meshgrid_reshape(Z, "rpz").reshape(-1, Z.size)
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        # likewise for R
+        f = grid.meshgrid_reshape(R, "rpz").reshape(R.size, -1)
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+
+        # test reshaping result won't mix data
+        f = grid.meshgrid_reshape(phi**2 + Z, "rpz")
+        for i in range(1, f.shape[0]):
+            np.testing.assert_allclose(f[i - 1], f[i])
+        f = grid.meshgrid_reshape(R**2 + Z, "rpz")
+        for i in range(1, f.shape[1]):
+            np.testing.assert_allclose(f[:, i - 1], f[:, i])
+        f = grid.meshgrid_reshape(R**2 + phi, "rpz")
+        for i in range(1, f.shape[-1]):
+            np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
     @pytest.mark.unit
     def test_meshgrid_reshape_flux(self):
@@ -1091,7 +1175,59 @@ def test_find_least_rational_surfaces():
 
 
 @pytest.mark.unit
-def test_custom_jitable_grid_indexing():
+def test_custom_jitable_grid_indexing_cylindrical():
+    """Test that unique/inverse indices are set correctly when jitable=True."""
+
+    R = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
+    phi = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
+    Z = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)])
+    grid1 = CustomGridCylindrical(np.array([R, phi, Z]).T, jitable=False)
+    grid2 = CustomGridCylindrical(np.array([R, phi, Z]).T, jitable=True)
+    grid3 = CustomGridCylindrical(
+        np.array([R, phi, Z]).T, jitable=True, _unique_x0_idx=[0, 10]
+    )
+    np.testing.assert_allclose(grid1.nodes, grid2.nodes)
+
+    x = np.random.random(grid1.num_nodes)
+
+    # these shouldn't error
+    _ = grid1.unique_r_idx
+    _ = grid1.unique_phi_idx
+    _ = grid1.unique_z_idx
+    _ = grid1.inverse_r_idx
+    _ = grid1.inverse_phi_idx
+    _ = grid1.inverse_z_idx
+    _ = grid3.unique_r_idx
+
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_r_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_phi_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.unique_z_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_r_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_phi_idx
+    with pytest.raises(AttributeError):
+        _ = grid2.inverse_z_idx
+
+    assert not hasattr(grid1, "weights")
+    assert not hasattr(grid1, "spacing")
+    assert not hasattr(grid1, "source_grid")
+    assert not hasattr(grid2, "num_r")
+    assert not hasattr(grid2, "num_phi")
+    assert not hasattr(grid2, "num_z")
+
+    y1 = grid1.copy_data_from_other(x, grid2, "R")
+    y2 = grid2.copy_data_from_other(x, grid1, "R")
+    y3 = grid3.copy_data_from_other(x, grid1, "R")
+
+    np.testing.assert_allclose(y1, y2)
+    np.testing.assert_allclose(y1, y3)
+
+@pytest.mark.unit
+def test_custom_jitable_grid_indexing_flux():
     """Test that unique/inverse indices are set correctly when jitable=True."""
     eq = get("NCSX")
     with pytest.warns(UserWarning, match="Reducing radial"):
@@ -1151,3 +1287,4 @@ def test_custom_jitable_grid_indexing():
         _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
     b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
     np.testing.assert_allclose(b1, b3)
+

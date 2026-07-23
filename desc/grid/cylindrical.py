@@ -26,7 +26,7 @@ class AbstractGridCylindrical(AbstractGrid):
             + " at "
             + str(hex(id(self)))
             + f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}, "
-            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid})"
+            + f"NFP={self.NFP}, is_meshgrid={self.is_meshgrid})"
         )
 
     def _set_up(self):
@@ -40,10 +40,10 @@ class AbstractGridCylindrical(AbstractGrid):
         """Get general label that specifies the direction of given coordinate label."""
         if label in {"x0", "x1", "x2"}:
             return label
-        x0 = {"r": "R"}[self.coordinates[0]]
+        x0 = {"r": "r"}[self.coordinates[0]]
         x1 = {"p": "phi"}[self.coordinates[1]]
-        x2 = {"z": "Z"}[self.coordinates[2]]
-        return {x0: "x0", x1: "x1", x2: "x2"}[label]
+        x2 = {"z": "z"}[self.coordinates[2]]
+        return {x0: "x0", x1: "x1", x2: "x2"}[label.lower()]
 
     @property
     def coordinates(self):

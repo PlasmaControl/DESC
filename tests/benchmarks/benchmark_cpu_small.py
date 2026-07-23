@@ -557,15 +557,12 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
 
 
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_quadratic_flux_jac(benchmark):
-    """Benchmark computing jacobian of QuadraticFlux."""
+def _test_quadratic_flux(N, method):
     # NFP and sym of the equilibrium as well as the number of coils affect the number of
     # for loops and hence the performance of the field computation
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=30)
+    field_grid = LinearGrid(N=N)
     modular = initialize_modular_coils(
         eq, num_coils=10, r_over_a=2.5, check_intersection=False
     ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
@@ -583,43 +580,26 @@ def test_objective_quadratic_flux_jac(benchmark):
     )
     objective.build()
     x = objective.x()
-    _ = objective.jac_scaled_error(x).block_until_ready()
+    fun = getattr(objective, method + "_scaled_error")
+    _ = fun(x).block_until_ready()
 
-    def run(x, objective):
-        objective.jac_scaled_error(x).block_until_ready()
+    def run(x):
+        fun(x).block_until_ready()
 
-    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+    return run, x
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_quadratic_flux_jac(benchmark):
+    """Benchmark computing jacobian of QuadraticFlux."""
+    run, x = _test_quadratic_flux(30, "jac")
+    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_quadratic_flux_compute(benchmark):
     """Benchmark computing QuadraticFlux."""
-    # NFP and sym of the equilibrium as well as the number of coils affect the number of
-    # for loops and hence the performance of the field computation
-    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
-    eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=50)
-    modular = initialize_modular_coils(
-        eq, num_coils=10, r_over_a=2.5, check_intersection=False
-    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
-    saddle = initialize_saddle_coils(
-        eq,
-        num_coils=6,
-        r_over_a=0.8,
-        offset=3.5,
-        position="outer",
-        check_intersection=False,
-    )
-    field = MixedCoilSet(modular, saddle, check_intersection=False)
-    objective = ObjectiveFunction(
-        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
-    )
-    objective.build()
-    x = objective.x()
-    _ = objective.compute_scaled_error(x).block_until_ready()
-
-    def run(x, objective):
-        objective.compute_scaled_error(x).block_until_ready()
-
-    benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)
+    run, x = _test_quadratic_flux(100, "compute")
+    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)

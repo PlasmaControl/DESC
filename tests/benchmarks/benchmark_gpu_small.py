@@ -1,6 +1,13 @@
-"""Benchmarks for timing comparison on gpu (that are small enough to run on CI).
+"""Benchmarks for timing comparison on gpu.
 
 You may need to append the ``--no-verify`` flag when commiting this file to git.
+When running this script, you may need to add:
+
+> import desc import set_device
+> set_device("gpu")
+
+to the top of conftest.py. Since that file is imported before everything in pytest,
+it triggers the set_device("cpu") route.
 """
 
 import numpy as np
@@ -12,7 +19,6 @@ desc.set_device("gpu")
 import desc.examples
 from desc.backend import jax
 from desc.basis import FourierZernikeBasis
-from desc.coils import MixedCoilSet, initialize_modular_coils, initialize_saddle_coils
 from desc.equilibrium import Equilibrium
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.magnetic_fields import ToroidalMagneticField
@@ -24,7 +30,6 @@ from desc.objectives import (
     FixPsi,
     ForceBalance,
     ObjectiveFunction,
-    QuadraticFlux,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -33,6 +38,8 @@ from desc.objectives import (
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 from desc.perturbations import perturb
 from desc.transform import Transform
+
+from .benchmark_cpu_small import _test_quadratic_flux
 
 
 @pytest.mark.benchmark()
@@ -564,65 +571,13 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
 @pytest.mark.benchmark
 def test_objective_quadratic_flux_jac(benchmark):
     """Benchmark computing jacobian of QuadraticFlux."""
-    # NFP and sym of the equilibrium as well as the number of coils affect the number of
-    # for loops and hence the performance of the field computation
-    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
-    eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=30)
-    modular = initialize_modular_coils(
-        eq, num_coils=10, r_over_a=2.5, check_intersection=False
-    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
-    saddle = initialize_saddle_coils(
-        eq,
-        num_coils=6,
-        r_over_a=0.8,
-        offset=3.5,
-        position="outer",
-        check_intersection=False,
-    )
-    field = MixedCoilSet(modular, saddle, check_intersection=False)
-    objective = ObjectiveFunction(
-        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
-    )
-    objective.build()
-    x = objective.x()
-    _ = objective.jac_scaled_error(x).block_until_ready()
-
-    def run(x, objective):
-        objective.jac_scaled_error(x).block_until_ready()
-
-    benchmark.pedantic(run, args=(x, objective), rounds=10, iterations=1)
+    run, x = _test_quadratic_flux(30, "jac")
+    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_quadratic_flux_compute(benchmark):
     """Benchmark computing QuadraticFlux."""
-    # NFP and sym of the equilibrium as well as the number of coils affect the number of
-    # for loops and hence the performance of the field computation
-    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
-    eq = desc.examples.get("precise_QH")
-    field_grid = LinearGrid(N=50)
-    modular = initialize_modular_coils(
-        eq, num_coils=10, r_over_a=2.5, check_intersection=False
-    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
-    saddle = initialize_saddle_coils(
-        eq,
-        num_coils=6,
-        r_over_a=0.8,
-        offset=3.5,
-        position="outer",
-        check_intersection=False,
-    )
-    field = MixedCoilSet(modular, saddle, check_intersection=False)
-    objective = ObjectiveFunction(
-        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
-    )
-    objective.build()
-    x = objective.x()
-    _ = objective.compute_scaled_error(x).block_until_ready()
-
-    def run(x, objective):
-        objective.compute_scaled_error(x).block_until_ready()
-
-    benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)
+    run, x = _test_quadratic_flux(50, "compute")
+    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)

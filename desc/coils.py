@@ -30,7 +30,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -252,6 +252,117 @@ def biot_savart_vector_potential_quad(
     )
 
 
+class _PrecomputedBiotSavartField(_MagneticField):
+    """Wrapper for fast evaluation of Biot-Savart by precomputing source data.
+
+    For magnetic field class that needs to compute source data first (i.e. filamentary
+    coils or FourierCurrentPotentialField), this helper class gives the option to
+    precompute the source data, store it, and then evaluate the Biot-Savart kernel
+    without needing loop over coils or recompute the source data. This is useful for
+    repeated evaluations of the magnetic field, such as in field line integration.
+    This also improves the speed of Biot-Savart evaluation on GPU, since it can use
+    the GPU more efficiently by eliminating for-loops and using vectorized operations.
+
+    Parameters
+    ----------
+    src_pts : ndarray, shape(m,3) or None
+        Quadrature source points, in cartesian coordinates.
+    src_J : ndarray, shape(m,3) or None
+        ``current * x_s * ds`` at the source points, in cartesian coordinates.
+    seg_start, seg_end : ndarray, shape(k,3) or None
+        Start and end points of straight segments, in cartesian coordinates.
+    seg_current : ndarray, shape(k,) or None
+        Current through each segment, in Amperes.
+    """
+
+    _io_attrs_ = _MagneticField._io_attrs_ + [
+        "_src_pts",
+        "_src_J",
+        "_seg_start",
+        "_seg_end",
+        "_seg_current",
+    ]
+
+    def __init__(
+        self, src_pts=None, src_J=None, seg_start=None, seg_end=None, seg_current=None
+    ):
+        self._src_pts = src_pts
+        self._src_J = src_J
+        self._seg_start = seg_start
+        self._seg_end = seg_end
+        self._seg_current = seg_current
+
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute field from the precomputed sources. See _MagneticField.
+
+        ``params``, ``source_grid`` and ``transforms`` are ignored, the sources
+        are fixed at creation.
+        """
+        quad_op, seg_op = {
+            "B": (biot_savart_general, biot_savart_hh),
+            "A": (
+                biot_savart_general_vector_potential,
+                biot_savart_vector_potential_hh,
+            ),
+        }[compute_A_or_B]
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis.lower() == "rpz":
+            phi = coords[:, 1]
+            coords = rpz2xyz(coords)
+        AB = jnp.zeros_like(coords)
+        if self._src_pts is not None:
+            AB += quad_op(coords, self._src_pts, self._src_J, chunk_size=chunk_size)
+        if self._seg_start is not None:
+            AB += seg_op(
+                coords,
+                self._seg_start,
+                self._seg_end,
+                self._seg_current[:, jnp.newaxis],
+                chunk_size=chunk_size,
+            )
+        if basis.lower() == "rpz":
+            AB = xyz2rpz_vec(AB, phi=phi)
+        return AB
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points. See _MagneticField."""
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points. See _MagneticField."""
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
+
+
 class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
@@ -445,6 +556,41 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if basis.lower() == "rpz":
             AB = xyz2rpz_vec(AB, phi=phi)
         return AB
+
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Convert the coil into a _PrecomputedBiotSavartField.
+
+        Computes the coil geometry once so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+        """
+        NFP = getattr(self, "NFP", 1)
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        else:
+            errorif(
+                getattr(source_grid, "NFP", 1) not in [1, NFP],
+                ValueError,
+                f"source_grid for coils must have NFP=1 or NFP={NFP}",
+            )
+        assert isinstance(source_grid, _Grid)
+        if params is None:
+            current = self.current
+        else:
+            params = params.copy()
+            current = params.pop("current", self.current)
+        if isinstance(self, SplineXYZCoil):
+            x = self._compute_position(params, source_grid, basis="xyz")[0]
+            return _PrecomputedBiotSavartField(
+                seg_start=x,
+                seg_end=jnp.roll(x, -1, axis=0),
+                seg_current=current * jnp.ones(x.shape[0]),
+            )
+        x, x_s = self._compute_position(params, source_grid, dx1=True, basis="xyz")
+        ds = source_grid.spacing[:, 2]
+        return _PrecomputedBiotSavartField(
+            src_pts=x[0],
+            src_J=current * x_s[0] * ds[:, None],
+        )
 
     def compute_magnetic_field(
         self,
@@ -1565,7 +1711,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Return an array of all the currents (including those in virtual coils)."""
         if currents is None:
             currents = self.current
-        currents = jnp.asarray(currents)
+        # coil currents from params_dict have shape (1,), flatten to make sure
+        # the result is 1D with one entry per coil
+        currents = jnp.asarray(currents).flatten()
         if self.sym:
             currents = jnp.concatenate([currents, -1 * currents[::-1]])
         return jnp.tile(currents, self.NFP)
@@ -1695,10 +1843,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if dx1:
             rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
 
-        # if field period symmetry, add rotated coils from other field periods
-        rpz0 = rpz
-        for k in range(1, self.NFP):
-            rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
+        # if field period symmetry, add rotated coils from other field periods.
+        phi_offset = 2 * jnp.pi * jnp.arange(self.NFP) / self.NFP
+        rpz = rpz[None] + phi_offset[:, None, None, None] * jnp.array([0, 1, 0])
+        rpz = rpz.reshape(self.NFP * rpz.shape[1], *rpz.shape[2:])
         if dx1:
             rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
 
@@ -1857,6 +2005,59 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if basis.lower() == "xyz":
             AB = rpz2xyz_vec(AB, x=coords[:, 0], y=coords[:, 1])
         return AB
+
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Convert the coils into a _PrecomputedBiotSavartField.
+
+        Computes the geometry of the all coils once, so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None, optional
+            Grid used to discretize coils. The same grid is used for every coil,
+            since all coils in a CoilSet have the same parametrization and
+            resolution. Use a MixedCoilSet for per-coil grids.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
+        """
+        errorif(
+            isinstance(source_grid, (list, tuple)),
+            ValueError,
+            "CoilSet uses a single source_grid for all coils, since they all have "
+            + "the same parametrization and resolution. Use a MixedCoilSet for "
+            + "per-coil grids.",
+        )
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for CoilSet must have NFP=1",
+        )
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
+        assert isinstance(source_grid, _Grid)
+        if params is None:
+            current = self._all_currents()
+        else:
+            params = [par.copy() for par in self._make_arraylike(params)]
+            current = self._all_currents(
+                [par.pop("current", coil.current) for par, coil in zip(params, self)]
+            )
+        if isinstance(self[0], SplineXYZCoil):
+            x = self._compute_position(params, source_grid, basis="xyz")
+            return _PrecomputedBiotSavartField(
+                seg_start=x.reshape(-1, 3),
+                seg_end=jnp.roll(x, -1, axis=1).reshape(-1, 3),
+                seg_current=jnp.repeat(current, x.shape[1]),
+            )
+        x, x_s = self._compute_position(params, source_grid, dx1=True, basis="xyz")
+        ds = source_grid.spacing[:, 2]
+        src_J = current[:, None, None] * x_s * ds[None, :, None]
+        return _PrecomputedBiotSavartField(
+            src_pts=x.reshape(-1, 3),
+            src_J=src_J.reshape(-1, 3),
+        )
 
     def compute_magnetic_field(
         self,
@@ -2876,6 +3077,42 @@ class MixedCoilSet(CoilSet):
                     coords, par, basis, grd, transforms=tr, chunk_size=chunk_size
                 )
         return AB
+
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Discretize the coils into a _PrecomputedBiotSavartField. Private.
+
+        Computes the coil geometry once so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None or array-like, optional
+            Grid used to discretize coils. If array-like, should be 1 value per
+            coil. If None, defaults to the default grid of each coil.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
+        """
+        params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
+        sources = [
+            coil._as_precomputed_source(grd, par)
+            for coil, grd, par in zip(self.coils, source_grid, params)
+        ]
+
+        def cat(arrs):
+            arrs = [a for a in arrs if a is not None]
+            return jnp.concatenate(arrs) if arrs else None
+
+        # combine the sources of each member. we can have a mix of coils including
+        # SplineXYZCoil and others that have different methods for Biot-Savart
+        return _PrecomputedBiotSavartField(
+            src_pts=cat([s._src_pts for s in sources]),
+            src_J=cat([s._src_J for s in sources]),
+            seg_start=cat([s._seg_start for s in sources]),
+            seg_end=cat([s._seg_end for s in sources]),
+            seg_current=cat([s._seg_current for s in sources]),
+        )
 
     def compute_magnetic_field(
         self,

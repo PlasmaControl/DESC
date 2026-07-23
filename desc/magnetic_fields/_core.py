@@ -19,6 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
+from desc import config as desc_config
 from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
@@ -84,15 +85,25 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # For AD purposes, computing rs x J part of the following
+    # relation : dr x J = (rs - re) x J = rs x J - re x J
+    # is much faster.
+    K = jnp.cross(rs, JdV, axis=-1)
 
     def biot(re):
-        dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1) ** 3)
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            w = w[..., jnp.newaxis]
+            B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
+        else:
+            B = w @ K - jnp.cross(re, w @ JdV, axis=-1)
+        return B * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def biot_savart_general_vector_potential(
@@ -131,12 +142,18 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1))
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            A = (w[..., jnp.newaxis] * JdV).sum(axis=-2)
+        else:
+            A = w @ JdV
+        return A * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -2597,6 +2614,7 @@ def field_line_integrate(
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     options=None,
@@ -2636,6 +2654,13 @@ def field_line_integrate(
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf, np.inf)
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Only used if underlying field implements
+        the precomputation via `_as_precomputed_source` method. Default is True.
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
@@ -2692,6 +2717,7 @@ def field_line_integrate(
         stepsize_controller=stepsize_controller,
         event=event,
         adjoint=adjoint,
+        use_precomputed_source=use_precomputed_source,
         chunk_size=chunk_size,
         bs_chunk_size=bs_chunk_size,
         options=options,
@@ -2714,6 +2740,7 @@ def _field_line_integrate(
     event,
     adjoint,
     options,
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     return_aux=False,
@@ -2739,6 +2766,16 @@ def _field_line_integrate(
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
     """
+    # For filamentary coils, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing the coil geometry (which is independent of the evaluation
+    # points) at every step of every field line. Duck-typed to avoid a circular
+    # import of desc.coils.
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
+        field = field._as_precomputed_source(source_grid, params)
+        params = None
+        source_grid = None
+
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()

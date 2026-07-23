@@ -852,7 +852,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         npts=128,
         stell_sym=False,
         plot_kwargs={"figsize": (8, 6)},
-        check_intersection=True,
+        check_intersection=False,
     ):
         """Find helical or modular coils from this surface current potential.
 

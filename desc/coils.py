@@ -1494,6 +1494,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     """
 
@@ -1505,7 +1506,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         + ["_NFP", "_sym", "_name"]
     )
 
-    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=False):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1946,7 +1947,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         angle=2 * np.pi,
         n=10,
         endpoint=False,
-        check_intersection=True,
+        check_intersection=False,
     ):
         """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
@@ -1966,6 +1967,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Whether to include a coil at final rotation angle. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1989,7 +1991,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         displacement=[2, 0, 0],
         n=4,
         endpoint=False,
-        check_intersection=True,
+        check_intersection=False,
     ):
         """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
@@ -2008,6 +2010,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Whether to include a coil at final displacement location. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -2025,7 +2028,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=True):
+    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=False):
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -2046,6 +2049,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             If True, the coils will be duplicated 2*NFP times. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         Returns
         -------
@@ -2095,7 +2099,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coilset, check_intersection=check_intersection)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=True):
+    def from_makegrid_coilfile(
+        cls, coil_file, method="cubic", check_intersection=False
+    ):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -2122,6 +2128,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         coils = []  # list of SplineXYZCoils, ignoring coil groups
@@ -2345,7 +2352,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             f.writelines(lines)
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierPlanarCoil.
 
@@ -2366,6 +2373,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2384,7 +2392,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierXY(
-        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -2410,6 +2418,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2428,7 +2437,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2450,6 +2459,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2466,7 +2476,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -2483,6 +2493,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for the new CoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2501,7 +2512,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=False
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -2528,6 +2539,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for the new CoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2690,12 +2702,13 @@ class MixedCoilSet(CoilSet):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     """
 
     _io_attrs_ = CoilSet._io_attrs_
 
-    def __init__(self, *coils, name="", check_intersection=True):
+    def __init__(self, *coils, name="", check_intersection=False):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
@@ -2965,7 +2978,7 @@ class MixedCoilSet(CoilSet):
         )
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2986,6 +2999,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3003,7 +3017,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierXY(
-        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -3029,6 +3043,7 @@ class MixedCoilSet(CoilSet):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3046,7 +3061,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -3068,6 +3083,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3083,7 +3099,7 @@ class MixedCoilSet(CoilSet):
         ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -3100,6 +3116,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3115,7 +3132,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=False
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -3142,6 +3159,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3178,7 +3196,7 @@ class MixedCoilSet(CoilSet):
 
     @classmethod
     def from_makegrid_coilfile(  # noqa: C901
-        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
+        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=False
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
 
@@ -3215,6 +3233,7 @@ class MixedCoilSet(CoilSet):
             return the coils as just a single MixedCoilSet.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
 
         """
@@ -3360,7 +3379,7 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     return ratio.sum()
 
 
-def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=True):
+def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=False):
     """Initialize a CoilSet of modular coils for stage 2 optimization.
 
     The coils will be planar, circular coils centered on the equilibrium magnetic axis,
@@ -3383,6 +3402,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=Tru
         intersect the plasma.
     check_intersection : bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------
@@ -3417,7 +3437,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=Tru
 
 
 def initialize_saddle_coils(
-    eq, num_coils, r_over_a=0.5, offset=2.0, position="outer", check_intersection=True
+    eq, num_coils, r_over_a=0.5, offset=2.0, position="outer", check_intersection=False
 ):
     """Initialize a CoilSet of saddle coils for stage 2 optimization.
 
@@ -3447,6 +3467,7 @@ def initialize_saddle_coils(
         "bottom" will place them below.
     check_intersection : bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------
@@ -3502,7 +3523,7 @@ def initialize_saddle_coils(
 
 
 def initialize_helical_coils(
-    eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100, check_intersection=True
+    eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100, check_intersection=False
 ):
     """Initialize a CoilSet of helical coils for stage 2 optimization.
 
@@ -3533,6 +3554,7 @@ def initialize_helical_coils(
         may need more points.
     check_intersection : bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------

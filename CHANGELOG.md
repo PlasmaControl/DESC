@@ -4,6 +4,7 @@ Changelog
 New Features
 
 - Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
+- Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
 
 Performance Improvements
 

@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jit, jnp, put, qr_multiply
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
-from .utils import f_where_x
+from .utils import estimate_singular_value, f_where_x, solve_triangular_regularized
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -572,6 +572,15 @@ class ProximalProjection(ObjectiveFunction):
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+    inv_method : str
+        Method to use for computing the pseudo-inverse of the constraint Jacobian.
+        Options are:
+
+        - ``'qr'`` (default): QR factorization with a small Levenberg-Marquardt
+          style Tikhonov regularization, scaled by an estimate of the smallest
+          singular value to closely match ``'svd'`` at a fraction of the cost.
+        - ``'svd'``: SVD pseudo-inverse with the singular values shifted by
+          the smallest one (the behavior of previous DESC versions).
     name : str
         Name of the objective function.
     """
@@ -583,14 +592,19 @@ class ProximalProjection(ObjectiveFunction):
         eq,
         perturb_options=None,
         solve_options=None,
+        inv_method="qr",
         name="ProximalProjection",
     ):
-        assert isinstance(objective, ObjectiveFunction), (
-            "objective should be instance of ObjectiveFunction." ""
-        )
-        assert isinstance(constraint, ObjectiveFunction), (
-            "constraint should be instance of ObjectiveFunction." ""
-        )
+        assert isinstance(
+            objective, ObjectiveFunction
+        ), "objective should be instance of ObjectiveFunction."
+        assert isinstance(
+            constraint, ObjectiveFunction
+        ), "constraint should be instance of ObjectiveFunction."
+        assert inv_method in [
+            "svd",
+            "qr",
+        ], f"inv_method should be either 'svd' or 'qr', got {inv_method}."
         for con in constraint.objectives:
             errorif(
                 not con._equilibrium,
@@ -618,6 +632,7 @@ class ProximalProjection(ObjectiveFunction):
         solve_options.setdefault("verbose", 0)
         self._perturb_options = perturb_options
         self._solve_options = solve_options
+        self._inv_method = inv_method
         self._built = False
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
@@ -1262,6 +1277,7 @@ class ProximalProjection(ObjectiveFunction):
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
             op,
+            inv_method=self._inv_method,
         )
         # broadcasting against multiple things
         dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
@@ -1318,9 +1334,11 @@ class ProximalProjection(ObjectiveFunction):
 # define these helper functions that are stateless so we can safely jit them
 
 
-def jit_if_possible(func):
+def jit_if_possible(func=None, *, static_argnames=("op",)):
     """Jit a function if use_jit."""
-    jitted_func = functools.partial(jit, static_argnames=["op"])(func)
+    if func is None:
+        return functools.partial(jit_if_possible, static_argnames=static_argnames)
+    jitted_func = functools.partial(jit, static_argnames=list(static_argnames))(func)
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -1334,8 +1352,10 @@ def jit_if_possible(func):
     return wrapper
 
 
-@jit_if_possible
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
+@jit_if_possible(static_argnames=("op", "inv_method"))
+def _proximal_jvp_f_pure(
+    constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op, inv_method="svd"
+):
     # Note: This function is called by _get_tangent which is vectorized over v
     # (v is called dc in this function). So, dc is expected to be 1D array
     # of same size as full equilibrium state vector. This function returns a 1D array.
@@ -1350,11 +1370,26 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
     # for the relation between Rb_lmn and R_lmn.
     Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    return vtf.T @ (sfi * (uf.T @ Fc))
+    if inv_method == "svd":
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        return vtf.T @ (sfi * (uf.T @ Fc))
+    elif inv_method == "qr":
+        Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
+        # Levenberg-Marquardt regularization with alpha=smin² is similar to
+        # above regularization. Use power iteration to estimate smin/smax
+        smin = estimate_singular_value(R, mode="min")
+        smax = estimate_singular_value(R, mode="max")
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        sqrt_alpha = jnp.maximum(smin, cutoff * smax)
+        n = R.shape[1]
+        # solve the regularized system
+        stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
+        rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
+        Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
+        return solve_triangular_regularized(Rs, Qst_rhs)
 
 
 @jit_if_possible

@@ -17,7 +17,7 @@ from scipy.optimize import (
 )
 
 import desc.examples
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, qr_multiply, vmap
 from desc.coils import (
     FourierPlanarCoil,
     FourierRZCoil,
@@ -73,6 +73,7 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
+from desc.optimize.utils import estimate_singular_value, solve_triangular_regularized
 from desc.utils import get_all_instances
 
 
@@ -1323,12 +1324,35 @@ def test_proximal_jacobian():
     Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
-    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-    jac_scaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+
+    def lm_regularized_solve(Fxh, Fc):
+        # replicates the default qr method
+        # Vectorized over columns of Fc.
+        def solve(fc):
+            Qt_fc, R = qr_multiply(Fxh, fc, mode="right")
+            smin = estimate_singular_value(R, mode="min")
+            smax = estimate_singular_value(R, mode="max")
+            cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+            sqrt_alpha = jnp.maximum(smin, cutoff * smax)
+            n = R.shape[1]
+            # solve the regularized system
+            stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
+            rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
+            Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
+            return solve_triangular_regularized(Rs, Qst_rhs)
+
+        return vmap(solve, in_axes=1, out_axes=1)(Fc)
+
+    def svd_reg_inv(Fxh):
+        # the svd method (previous default)
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        return vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+    jac_scaled = -Gxh @ lm_regularized_solve(Fxh, Fc) + Gc
+    jac_scaled_old = -Gxh @ (svd_reg_inv(Fxh) @ Fc) + Gc
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
@@ -1336,12 +1360,8 @@ def test_proximal_jacobian():
     Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
-    cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-    Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
-    jac_unscaled = -Gxh @ (Fxh_inv @ Fc) + Gc
+    jac_unscaled = -Gxh @ lm_regularized_solve(Fxh, Fc) + Gc
+    jac_unscaled_old = -Gxh @ (svd_reg_inv(Fxh) @ Fc) + Gc
 
     jvp0 = jac_scaled @ v
     jvp1 = prox1.jvp_scaled(v, x)
@@ -1376,6 +1396,38 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+    # the new default 'qr' method should stay close to the old default regularized
+    # SVD method, though not identical since the regularization differes slightly
+    err_scaled = np.linalg.norm(jac_scaled - jac_scaled_old) / np.linalg.norm(
+        jac_scaled_old
+    )
+    err_unscaled = np.linalg.norm(jac_unscaled - jac_unscaled_old) / np.linalg.norm(
+        jac_unscaled_old
+    )
+    np.testing.assert_array_less(err_scaled, 1e-1)
+    np.testing.assert_array_less(err_unscaled, 1e-1)
+
+    # Test the regularized SVD inversion method.
+    # Above jac1 is obtained with default 'qr' method, we only need to test 'svd' here.
+    eq_svd = eq.copy()
+    con_svd = ObjectiveFunction(ForceBalance(eq_svd), use_jit=False)
+    obj_svd = ObjectiveFunction(
+        (
+            QuasisymmetryTripleProduct(eq_svd, deriv_mode="fwd"),
+            AspectRatio(eq_svd, deriv_mode="fwd"),
+            Volume(eq_svd, deriv_mode="fwd"),
+        ),
+        deriv_mode="batched",
+        use_jit=True,
+    )
+    prox_svd = ProximalProjection(
+        obj_svd, con_svd, eq_svd, perturb_options, solve_options, inv_method="svd"
+    )
+    prox_svd.build()
+    jac_svd = prox_svd.jac_unscaled(x)
+    # 'svd' uses the regularized pseudo-inverse, same as jac_unscaled_old above
+    np.testing.assert_allclose(jac_unscaled_old, jac_svd, rtol=1e-12, atol=1e-12)
 
 
 @pytest.mark.slow

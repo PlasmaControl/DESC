@@ -19,6 +19,15 @@ For information on using conda, see `here <https://conda.io/projects/conda/en/la
     For instructions to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__.
     To use WSL in VS code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
 
+.. attention::
+
+        If you don't require the full history of the github repo when cloning, the depth=1 option can reduce the
+        quantity of older data downloaded when cloning the repository:
+
+        .. code-block:: sh
+
+            git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+
 
 On Your Local Machine
 *********************
@@ -226,7 +235,7 @@ On Most Linux Computing Clusters
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
             If this does not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
 
-            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
+            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2026 July 23.
 
             .. code-block:: sh
 
@@ -243,7 +252,8 @@ On Most Linux Computing Clusters
 
                 export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 pip install --editable .
-                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+                CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=80" pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+
 
             Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
             in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.

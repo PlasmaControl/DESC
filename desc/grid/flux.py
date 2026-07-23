@@ -354,7 +354,7 @@ class AbstractGridFlux(AbstractGrid):
 
     @property
     def inverse_poloidal_idx(self):
-        """ndarray: Indices the recover the unique poloidal angle coordinates."""
+        """ndarray: Indices that recover the unique poloidal angle coordinates."""
         return self.inverse_x1_idx
 
     @property

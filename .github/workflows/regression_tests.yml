@@ -26,11 +26,11 @@ jobs:
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Filter changes
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             has_changes:
@@ -60,7 +60,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
@@ -121,7 +121,7 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           name: codecov-umbrella
           files: ./cov.xml

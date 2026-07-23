@@ -215,10 +215,13 @@ class InputReader:
             isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
-                path = self.input_path + "_desc"
-                InputReader.vmec_to_desc_input(self.input_path, path)
-                print("Generated DESC input file {}:".format(path))
-                return self.parse_inputs(path)
+                # use a buffer here to avoid having to read/write a file
+                # unnecessarily
+                buffer = io.StringIO()
+                InputReader.vmec_to_desc_input(self.input_path, buffer)
+                buffer.seek(0)
+                desc_file = buffer
+                return self.parse_inputs(desc_file)
 
             # extract numbers & words
             match = re.search(r"[!#]", line)
@@ -680,9 +683,11 @@ class InputReader:
 
         """
         # open the file, unless its already open
+        opened_here = False
         if not isinstance(filename, io.IOBase):
             filename = os.path.expanduser(filename)
             f = open(filename, "w+")
+            opened_here = True
         else:
             f = filename
         f.seek(0)
@@ -783,7 +788,11 @@ class InputReader:
         for n, R0, Z0 in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
-        f.close()
+        # only close the file if we opened it here, as we also
+        # can use this function to write to an already open file
+        # or to an in-memory buffer
+        if opened_here:
+            f.close()
 
     @staticmethod
     def desc_output_to_input(  # noqa: C901 - fxn too complex

@@ -949,6 +949,33 @@ class FourierXYZCoil(_Coil, FourierXYZCurve):
             name=name,
         )
 
+    @classmethod
+    def from_simsopt(coil_simsopt, name=""):
+        """Load a simsopt coil as a FourierXYZCoil.
+
+        Parameters
+        ----------
+        coil_simsopt : simsopt.field.Coil
+            A simsopt coil
+        name : str
+            Name for this coil.
+
+        Returns
+        -------
+        coil : FourierXYZCoil
+            A FourierXYZCoil.
+        """
+        current = coil_simsopt.current.get_value()
+        curve = FourierXYZCurve.from_simsopt(coil_simsopt.curve)
+        return FourierXYZCoil(
+            current=current,
+            X_n=curve.X_n,
+            Y_n=curve.Y_n,
+            Z_n=curve.Z_n,
+            modes=curve.X_basis.modes[:, 2],
+            name=name,
+        )
+
 
 class FourierPlanarCoil(_Coil, FourierPlanarCurve):
     """Coil that lies in a plane.

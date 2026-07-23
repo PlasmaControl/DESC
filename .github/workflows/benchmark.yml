@@ -21,6 +21,10 @@ jobs:
   benchmark:
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run_benchmarks') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # allows posting the benchmark comment on the PR
+      contents: read        # allows checkout; prevents the token from pushing code or modifying workflows if exfiltrated by fork code
+      actions: read         # allows `gh cache list`; all other scopes default to none
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
@@ -38,6 +42,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          allow-unsafe-pr-checkout: true
 
       - name: Filter changes
         id: changes
@@ -50,6 +55,7 @@ jobs:
               - 'tests/benchmarks/compare_bench_results.py'
               - 'setup.cfg'
               - '.github/workflows/benchmark.yml'
+              - 'requirements.txt'
 
       - name: Check for relevant changes
         id: check_changes
@@ -70,7 +76,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
@@ -118,6 +124,38 @@ jobs:
       - name: Checkout benchmarks from PR head
         if: env.has_changes == 'true'
         run: git checkout ${{ github.event.pull_request.head.sha }} -- tests/benchmarks
+
+      - name: Remove PR virtual environment before master setup
+        if: env.has_changes == 'true'
+        run: rm -rf .venv-${{ env.version }}
+
+      - name: Restore Python environment cache
+        if: env.has_changes == 'true'
+        id: restore-env2
+        uses: actions/cache/restore@v6
+        with:
+          path: .venv-${{ env.version }}
+          key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
+
+      - name: Set up virtual environment if not restored from cache
+        if: steps.restore-env2.outputs.cache-hit != 'true' && env.has_changes == 'true'
+        run: |
+          gh cache list
+          python -m venv .venv-${{ env.version }}
+          source .venv-${{ env.version }}/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r devtools/dev-requirements.txt
+          pip install matplotlib==3.10.8
+
+      - name: Action Details
+        if: env.has_changes == 'true'
+        run: |
+          source .venv-${{ env.version }}/bin/activate
+          which python
+          python --version
+          pwd
+          lscpu
+          pip list
 
       - name: Benchmark with pytest-benchmark (MASTER)
         if: env.has_changes == 'true'

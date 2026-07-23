@@ -40,9 +40,9 @@ class AbstractGridCylindrical(AbstractGrid):
         """Get general label that specifies the direction of given coordinate label."""
         if label in {"x0", "x1", "x2"}:
             return label
-        x0 = {"r": "r"}[self.coordinates[0]]
-        x1 = {"phi": "phi"}[self.coordinates[1]]
-        x2 = {"z": "z"}[self.coordinates[2]]
+        x0 = {"r": "R"}[self.coordinates[0]]
+        x1 = {"p": "phi"}[self.coordinates[1]]
+        x2 = {"z": "Z"}[self.coordinates[2]]
         return {x0: "x0", x1: "x1", x2: "x2"}[label]
 
     @property

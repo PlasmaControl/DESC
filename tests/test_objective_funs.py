@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import pytest
+from orthax.legendre import leggauss
 from packaging.version import Version
 from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
@@ -25,12 +26,21 @@ from desc.coils import (
     MixedCoilSet,
     initialize_modular_coils,
 )
-from desc.compute import get_transforms
+from desc.compute import get_profiles, get_transforms
+from desc.compute._trapped_resonance import _build_eta_grid
+from desc.compute.data_index import data_index
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.integrals import Bounce2D
+from desc.integrals import Bounce1D, Bounce2D
+from desc.integrals.quad_utils import (
+    automorphism_sin,
+    get_quadrature,
+    grad_automorphism_sin,
+)
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -91,6 +101,7 @@ from desc.objectives import (
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
+    TrappedResonance,
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
@@ -2140,6 +2151,160 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_objective_against_compute_trapped_resonance(self):
+        """Test TrappedResonance objective matches a direct compute call."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        num_rho = 3
+        num_eta = 8
+        num_transit = 4
+        knots_per_transit = 60
+        num_quad = 16
+        opts = dict(
+            # settings coarser than this detect no resonance crossings at all,
+            # making the objective identically zero and the comparison trivial.
+            num_pitch=8,
+            KE_frac=np.array([1]),
+            N=0,
+            M=1,
+            # a single p/q=0/1 resonance keeps res_arr/q_arr/p_arr trivial
+            # to reproduce by hand outside of TrappedResonance.build().
+            p_max=0,
+            q_max=1,
+            res_range_min=-1,
+            res_range_max=1,
+            weight_method="linear",
+        )
+
+        rho = np.linspace(0, 1, num_rho + 1)[1:]
+        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        quad = get_quadrature(
+            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+        )
+        keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
+        profiles = get_profiles(keys_1dr + ["trapped EP resonance"], eq, grid)
+        params = eq.params_dict
+        data = compute_fun(
+            eq, keys_1dr, params, get_transforms(keys_1dr, eq, grid), profiles
+        )
+
+        # Build the eta/PSA grids and evaluate field data on them by hand,
+        # mirroring what TrappedResonance.compute() does internally: the
+        # "trapped EP resonance" compute function must stay pure w.r.t.
+        # params/transforms/profiles/data, so it no longer builds these
+        # grids itself (that requires the full Equilibrium object).
+        iotas = grid.compress(data["iota"])
+        rhos = grid.compress(grid.nodes[:, 0])
+        M, N, nfp = opts["M"], opts["N"], eq.NFP
+        eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        ft_denom = N * nfp - iotas * M
+        alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
+        eta_grid = eta_desc_grid.source_grid
+
+        alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        psa_desc_grid = eq._get_rtz_grid(
+            rhos, alpha_psa, zeta, coordinates="raz", iota=iotas, params=params
+        )
+        psa_grid = psa_desc_grid.source_grid
+
+        eta_data_keys = list(Bounce1D.required_names) + [
+            "cvdrift0",
+            "gbdrift (periodic)",
+            "cvdrift (periodic)",
+            "iota",
+            "min_tz |B|",
+            "max_tz |B|",
+        ]
+        psa_bounce_keys = list(Bounce1D.required_names) + [
+            "min_tz |B|",
+            "max_tz |B|",
+            "|B|",
+        ]
+        all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
+        internal_profiles = get_profiles(all_needed_keys, eq)
+        base_data = compute_fun(
+            eq,
+            all_needed_keys,
+            params,
+            get_transforms(all_needed_keys, eq, grid, jitable=True),
+            internal_profiles,
+            data=data,
+        )
+        _p = _parse_parameterization(eq)
+        seed_1d = {
+            key: val
+            for key, val in base_data.items()
+            if data_index.get(_p, {}).get(key, {}).get("coordinates", "") == "r"
+        }
+        eta_seed = {
+            key: eta_desc_grid.copy_data_from_other(val, grid)
+            for key, val in seed_1d.items()
+        }
+        data_eta = compute_fun(
+            eq,
+            eta_data_keys,
+            params,
+            get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
+            internal_profiles,
+            data=eta_seed,
+        )
+        psa_seed = {
+            key: psa_desc_grid.copy_data_from_other(val, grid)
+            for key, val in seed_1d.items()
+        }
+        data_psa = compute_fun(
+            eq,
+            psa_bounce_keys,
+            params,
+            get_transforms(psa_bounce_keys, eq, psa_desc_grid, jitable=True),
+            internal_profiles,
+            data=psa_seed,
+        )
+
+        data = compute_fun(
+            eq,
+            "trapped EP resonance",
+            params,
+            get_transforms("trapped EP resonance", eq, grid, jitable=True),
+            profiles,
+            data=data,
+            quad=quad,
+            nfp=eq.NFP,
+            zeta=zeta,
+            _eta_grid=eta_grid,
+            _psa_grid=psa_grid,
+            _data_eta=data_eta,
+            _data_psa=data_psa,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            rho_res=1.0 / num_rho,
+            eta_res=2 * np.pi / num_eta,
+            res_arr=np.array([0.0]),
+            q_arr=np.array([1]),
+            p_arr=np.array([0]),
+            **opts,
+        )
+        expected = grid.compress(data["trapped EP resonance"])
+
+        obj = TrappedResonance(
+            eq,
+            num_rho=num_rho,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            knots_per_transit=knots_per_transit,
+            num_quad=num_quad,
+            **opts,
+        )
+        obj.build(verbose=0)
+        actual = obj.compute(eq.params_dict)
+        np.testing.assert_allclose(actual, expected)
+
+    @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
@@ -3282,6 +3447,21 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is TrappedResonance:
+        # Settings coarser than this detect no resonance crossings at all,
+        # making the objective identically zero and the test meaningless.
+        # p_max/q_max are reduced from the default 10/10: summing over fewer
+        # resonances is markedly less sensitive to which crossings a coarse
+        # rho grid happens to catch (empirically ~16% -> ~8% spread across
+        # the resolution sweep in TestComputeScalarResolution).
+        kwargs["num_rho"] = 10
+        kwargs["num_eta"] = 10
+        kwargs["num_transit"] = 4
+        kwargs["knots_per_transit"] = 60
+        kwargs["num_pitch"] = 8
+        kwargs["num_quad"] = 16
+        kwargs["p_max"] = 4
+        kwargs["q_max"] = 4
     return objective(eq=eq, **kwargs)
 
 
@@ -3737,6 +3917,10 @@ class TestComputeScalarResolution:
     )
     def test_compute_scalar_resolution_others(self, objective):
         """All other objectives."""
+        # TrappedResonance sums over discrete resonance crossings, which is
+        # inherently more sensitive to grid resolution than the smooth
+        # surface-averaged integrals most other objectives compute.
+        rtol = {TrappedResonance: 1e-1}.get(objective, 6e-2)
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             # just change eq resolution and let objective pick the right grid type
@@ -3751,7 +3935,7 @@ class TestComputeScalarResolution:
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(
-            f, f[-1], rtol=6e-2, atol=1e-4 if np.max(f) < 1e-3 else 0
+            f, f[-1], rtol=rtol, atol=1e-4 if np.max(f) < 1e-3 else 0
         )
 
     @pytest.mark.regression
@@ -3844,6 +4028,7 @@ class TestObjectiveNaNGrad:
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,
         ToroidalFlux,
+        TrappedResonance,
         VacuumBoundaryError,
         # we do not test these since they depend too much on what the user wants
         ExternalObjective,
@@ -4248,6 +4433,27 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_trapped_resonance(self):
+        """TrappedResonance."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="linear")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "linear weighting"
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="bump")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "bump weighting"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

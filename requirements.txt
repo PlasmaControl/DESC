@@ -1,5 +1,5 @@
 jax >= 0.6.2, != 0.7.1, < 0.10.0
-adv-jax-math >= 1.0, <= 1.0
+adv-jax-math >= 1.0, <= 1.1
 colorama <= 0.4.6
 diffrax >= 0.6.0, <= 0.7.2
 equinox >=0.11.10, <=0.13.8

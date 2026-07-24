@@ -1213,9 +1213,13 @@ class CustomGridFlux(AbstractGridFlux):
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
 
-        self._L = self.num_x0 - 1
-        self._M = self.num_x1 - 1 if self.sym else self.num_x1 // 2
-        self._N = self.num_x2 // 2
+        self._L = self.num_x0 - 1 if hasattr(self, "num_x0") else 0
+        self._M = (
+            (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
+            if hasattr(self, "num_x1")
+            else 0
+        )
+        self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
 
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 

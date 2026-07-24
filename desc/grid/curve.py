@@ -336,8 +336,8 @@ class CustomGridCurve(AbstractGridCurve):
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
 
-        # assign with logic in setter method if possible else 0
         self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
+
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 
     def _create_nodes(self, nodes):

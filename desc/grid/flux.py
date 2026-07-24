@@ -436,276 +436,6 @@ class AbstractGridFlux(AbstractGrid):
         return self.fft_x2
 
 
-class CustomGridFlux(AbstractGridFlux):
-    """Collocation grid with custom node placement.
-
-    Unlike subclasses LinearGridFlux and ConcentricGridFlux, the base CustomGridFlux
-    allows the user to pass in a custom set of collocation nodes.
-
-    Parameters
-    ----------
-    nodes : ndarray of float, size(num_nodes,3)
-        Node coordinates, in (rho,theta,zeta)
-    spacing : ndarray of float, size(num_nodes, 3)
-        Spacing between nodes in each direction.
-    weights : ndarray of float, size(num_nodes, )
-        Quadrature weights for each node.
-    coordinates : str
-        Coordinates that are specified by the nodes.
-        raz : rho, alpha, zeta
-        rvp : rho, theta_PEST, phi
-        rtz : rho, theta, zeta
-    NFP : int
-        Number of field periods (Default = 1).
-        Change this only if your nodes are placed within one field period.
-    source_grid : AbstractGridFlux
-        Grid from which coordinates were mapped from.
-    sort : bool
-        Whether to sort the nodes for use with FFT method.
-    is_meshgrid : bool
-        Whether this grid is a tensor-product grid.
-        Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
-        denotes whether any coordinate can be iterated over along the relevant axis of
-        the reshaped grid: nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
-    jitable : bool
-        Whether to skip certain checks and conditionals that don't work under jit.
-        Allows grid to be created on the fly with custom nodes, but weights,
-        symmetry etc. may be wrong if grid contains duplicate nodes.
-    """
-
-    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_source_grid"]
-
-    _fft_x1 = False
-    _fft_x2 = False
-    _can_fft2 = False
-
-    def __init__(
-        self,
-        nodes,
-        *,
-        spacing=None,
-        weights=None,
-        coordinates="rtz",
-        NFP=1,
-        source_grid=None,
-        sort=False,
-        is_meshgrid=False,
-        jitable=False,
-        **kwargs,
-    ):
-        warnif(
-            kwargs.pop("period", False),
-            FutureWarning,
-            msg="Argument `period` is deprecated and is now set by `coordinates`.",
-        )
-
-        nodes = jnp.atleast_2d(jnp.asarray(nodes))
-        assert len(nodes.shape) == 2
-        assert nodes.shape[1] == 3
-        self._nodes = self._create_nodes(nodes)
-
-        if spacing is not None:
-            spacing = jnp.atleast_2d(jnp.asarray(spacing))
-            assert len(spacing.shape) == 2
-            assert spacing.shape[1] == 3
-            self._spacing = spacing.reshape(self.nodes.shape).astype(float)
-        else:
-            self._spacing = None
-
-        self._weights = (
-            jnp.atleast_1d(jnp.asarray(weights))
-            .reshape(self.nodes.shape[0])
-            .astype(float)
-            if weights is not None
-            else None
-        )
-
-        self._coordinates = coordinates
-        self._source_grid = source_grid
-        self._NFP = check_posint(NFP, "NFP", False)
-        self._is_meshgrid = bool(is_meshgrid)
-        if sort:
-            self._sort_nodes()
-
-        setable_attr = [
-            "_unique_x0_idx",
-            "_unique_x1_idx",
-            "_unique_x2_idx",
-            "_inverse_x0_idx",
-            "_inverse_x1_idx",
-            "_inverse_x2_idx",
-        ]
-        if jitable:
-            # Do not do anything with symmetry since that changes the number of nodes.
-            # Avoid point at the axis for now.
-            r, t, z = self._nodes.T
-            r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
-            self._nodes = jnp.column_stack([r, t, z])
-            self._axis = np.array([], dtype=int)
-            # allow for user supplied indices/inverse indices for special cases
-            for attr in setable_attr:
-                if attr in kwargs:
-                    setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
-        else:
-            for attr in setable_attr:
-                kwargs.pop(attr, None)
-            self._axis = self._find_axis()
-            (
-                self._unique_x0_idx,
-                self._inverse_x0_idx,
-                self._unique_x1_idx,
-                self._inverse_x1_idx,
-                self._unique_x2_idx,
-                self._inverse_x2_idx,
-            ) = self._find_unique_inverse_nodes()
-
-        self._L = self.num_x0 - 1
-        self._M = self.num_x1 - 1 if self.sym else self.num_x1 // 2
-        self._N = self.num_x2 // 2
-
-        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
-
-    def _create_nodes(self, nodes):
-        """Allow for custom node creation.
-
-        Parameters
-        ----------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        Returns
-        -------
-        nodes : ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
-
-        """
-        # do not alter nodes given by the user for custom grids
-        return nodes.reshape((-1, 3)).astype(float)
-
-    def _sort_nodes(self):
-        """Sort nodes for use with FFT."""
-        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
-        self._nodes = self.nodes[sort_idx]
-        try:
-            self._spacing = self.spacing[sort_idx]
-        except AttributeError:
-            pass
-        try:
-            self._weights = self.weights[sort_idx]
-        except AttributeError:
-            pass
-
-    @staticmethod
-    def create_meshgrid(
-        nodes,
-        spacing=None,
-        coordinates="rtz",
-        NFP=1,
-        jitable=True,
-        **kwargs,
-    ):
-        """Create a tensor-product grid from the given coordinates in a jitable manner.
-
-        Parameters
-        ----------
-        nodes : list of ndarray
-            Three arrays, one for each coordinate.
-            Unique values of each coordinate sorted in increasing order.
-        spacing : list of ndarray
-            Three arrays, one for each coordinate.
-            Weights for integration. Defaults to a midpoint rule.
-        coordinates : str
-            Coordinates that are specified by the ``nodes[0]``, ``nodes[1]``,
-            and ``nodes[2]``, respectively.
-            raz : rho, alpha, zeta
-            rvp : rho, theta_PEST, phi
-            rtz : rho, theta, zeta
-        NFP : int
-            Number of field periods (Default = 1).
-            Only makes sense to change from 1 if last coordinate is periodic
-            with some constant divided by ``NFP`` and the nodes are placed
-            within one field period.
-        jitable : bool
-            Whether to skip certain checks and conditionals that don't work under jit.
-            Allows grid to be created on the fly with custom nodes, but weights,
-            symmetry etc. may be wrong if grid contains duplicate nodes.
-
-        Returns
-        -------
-        grid : CustomGridFlux
-            Meshgrid.
-
-        """
-        NFP = check_posint(NFP, "NFP", False)
-        if coordinates[1] == "a":
-            period = (np.inf, np.inf, 2 * np.pi / NFP)
-        else:
-            period = (np.inf, 2 * np.pi, 2 * np.pi / NFP)
-
-        x0, x1, x2 = jnp.atleast_1d(*nodes)
-        if spacing is None:
-            dx0 = midpoint_spacing(x0)
-            dx1 = periodic_spacing(x1, period[1])[1]
-            dx2 = periodic_spacing(x2, period[2])[1] * NFP
-        else:
-            dx0, dx1, dx2 = spacing
-
-        xx1, xx0, xx2 = jnp.meshgrid(x1, x0, x2, indexing="ij")
-
-        nodes = jnp.column_stack(
-            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
-        )
-        xx1, xx0, xx2 = jnp.meshgrid(dx1, dx0, dx2, indexing="ij")
-
-        spacing = jnp.column_stack(
-            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
-        )
-        weights = (
-            spacing.prod(axis=1)
-            if period[1] * period[2] == 4 * np.pi**2 / NFP
-            # Doesn't make sense to assign weights if the coordinates aren't periodic
-            # since it's not clear how to form a surface and hence its enclosed volume.
-            else None
-        )
-
-        unique_x0_idx = jnp.arange(x0.size) * x1.size
-        unique_x1_idx = jnp.arange(x1.size)
-        unique_x2_idx = jnp.arange(x2.size) * x0.size * x1.size
-        inverse_x0_idx = jnp.tile(
-            repeat(
-                unique_x0_idx // x1.size, x1.size, total_repeat_length=x0.size * x1.size
-            ),
-            x2.size,
-        )
-        inverse_x1_idx = jnp.tile(unique_x1_idx, x0.size * x2.size)
-        inverse_x2_idx = repeat(
-            unique_x2_idx // (x0.size * x1.size), (x0.size * x1.size)
-        )
-        return CustomGridFlux(
-            nodes=nodes,
-            spacing=spacing,
-            weights=weights,
-            coordinates=coordinates,
-            NFP=NFP,
-            sort=False,
-            is_meshgrid=True,
-            jitable=jitable,
-            _unique_x0_idx=unique_x0_idx,
-            _unique_x1_idx=unique_x1_idx,
-            _unique_x2_idx=unique_x2_idx,
-            _inverse_x0_idx=inverse_x0_idx,
-            _inverse_x1_idx=inverse_x1_idx,
-            _inverse_x2_idx=inverse_x2_idx,
-            **kwargs,
-        )
-
-    @property
-    def source_grid(self):
-        """Coordinates from which this grid was mapped from."""
-        errorif(self._source_grid is None, AttributeError)
-        return self._source_grid
-
-
 class LinearGridFlux(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
@@ -1358,3 +1088,273 @@ class ConcentricGridFlux(AbstractGridFlux):
     def node_pattern(self):
         """str: Pattern for placement of nodes in (rho,theta,zeta)."""
         return self._node_pattern
+
+
+class CustomGridFlux(AbstractGridFlux):
+    """Collocation grid with custom node placement.
+
+    Unlike subclasses LinearGridFlux and ConcentricGridFlux, the base CustomGridFlux
+    allows the user to pass in a custom set of collocation nodes.
+
+    Parameters
+    ----------
+    nodes : ndarray of float, size(num_nodes,3)
+        Node coordinates, in (rho,theta,zeta)
+    spacing : ndarray of float, size(num_nodes, 3)
+        Spacing between nodes in each direction.
+    weights : ndarray of float, size(num_nodes, )
+        Quadrature weights for each node.
+    coordinates : str
+        Coordinates that are specified by the nodes.
+        raz : rho, alpha, zeta
+        rvp : rho, theta_PEST, phi
+        rtz : rho, theta, zeta
+    NFP : int
+        Number of field periods (Default = 1).
+        Change this only if your nodes are placed within one field period.
+    source_grid : AbstractGridFlux
+        Grid from which coordinates were mapped from.
+    sort : bool
+        Whether to sort the nodes for use with FFT method.
+    is_meshgrid : bool
+        Whether this grid is a tensor-product grid.
+        Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
+        denotes whether any coordinate can be iterated over along the relevant axis of
+        the reshaped grid: nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
+    jitable : bool
+        Whether to skip certain checks and conditionals that don't work under jit.
+        Allows grid to be created on the fly with custom nodes, but weights,
+        symmetry etc. may be wrong if grid contains duplicate nodes.
+    """
+
+    _io_attrs_ = AbstractGridFlux._io_attrs_ + ["_source_grid"]
+
+    _fft_x1 = False
+    _fft_x2 = False
+    _can_fft2 = False
+
+    def __init__(
+        self,
+        nodes,
+        *,
+        spacing=None,
+        weights=None,
+        coordinates="rtz",
+        NFP=1,
+        source_grid=None,
+        sort=False,
+        is_meshgrid=False,
+        jitable=False,
+        **kwargs,
+    ):
+        warnif(
+            kwargs.pop("period", False),
+            FutureWarning,
+            msg="Argument `period` is deprecated and is now set by `coordinates`.",
+        )
+
+        nodes = jnp.atleast_2d(jnp.asarray(nodes))
+        assert len(nodes.shape) == 2
+        assert nodes.shape[1] == 3
+        self._nodes = self._create_nodes(nodes)
+
+        if spacing is not None:
+            spacing = jnp.atleast_2d(jnp.asarray(spacing))
+            assert len(spacing.shape) == 2
+            assert spacing.shape[1] == 3
+            self._spacing = spacing.reshape(self.nodes.shape).astype(float)
+        else:
+            self._spacing = None
+
+        self._weights = (
+            jnp.atleast_1d(jnp.asarray(weights))
+            .reshape(self.nodes.shape[0])
+            .astype(float)
+            if weights is not None
+            else None
+        )
+
+        self._coordinates = coordinates
+        self._source_grid = source_grid
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._is_meshgrid = bool(is_meshgrid)
+        if sort:
+            self._sort_nodes()
+
+        setable_attr = [
+            "_unique_x0_idx",
+            "_unique_x1_idx",
+            "_unique_x2_idx",
+            "_inverse_x0_idx",
+            "_inverse_x1_idx",
+            "_inverse_x2_idx",
+        ]
+        if jitable:
+            # Do not do anything with symmetry since that changes the number of nodes.
+            # Avoid point at the axis for now.
+            r, t, z = self._nodes.T
+            r = jnp.where(r == 0, kwargs.pop("axis_shift", 1e-12), r)
+            self._nodes = jnp.column_stack([r, t, z])
+            self._axis = np.array([], dtype=int)
+            # allow for user supplied indices/inverse indices for special cases
+            for attr in setable_attr:
+                if attr in kwargs:
+                    setattr(self, attr, jnp.asarray(kwargs.pop(attr)))
+        else:
+            for attr in setable_attr:
+                kwargs.pop(attr, None)
+            self._axis = self._find_axis()
+            (
+                self._unique_x0_idx,
+                self._inverse_x0_idx,
+                self._unique_x1_idx,
+                self._inverse_x1_idx,
+                self._unique_x2_idx,
+                self._inverse_x2_idx,
+            ) = self._find_unique_inverse_nodes()
+
+        self._L = self.num_x0 - 1
+        self._M = self.num_x1 - 1 if self.sym else self.num_x1 // 2
+        self._N = self.num_x2 // 2
+
+        errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
+
+    def _create_nodes(self, nodes):
+        """Allow for custom node creation.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        Returns
+        -------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+
+        """
+        # do not alter nodes given by the user for custom grids
+        return nodes.reshape((-1, 3)).astype(float)
+
+    def _sort_nodes(self):
+        """Sort nodes for use with FFT."""
+        sort_idx = np.lexsort((self.nodes[:, 1], self.nodes[:, 0], self.nodes[:, 2]))
+        self._nodes = self.nodes[sort_idx]
+        try:
+            self._spacing = self.spacing[sort_idx]
+        except AttributeError:
+            pass
+        try:
+            self._weights = self.weights[sort_idx]
+        except AttributeError:
+            pass
+
+    @staticmethod
+    def create_meshgrid(
+        nodes,
+        spacing=None,
+        coordinates="rtz",
+        NFP=1,
+        jitable=True,
+        **kwargs,
+    ):
+        """Create a tensor-product grid from the given coordinates in a jitable manner.
+
+        Parameters
+        ----------
+        nodes : list of ndarray
+            Three arrays, one for each coordinate.
+            Unique values of each coordinate sorted in increasing order.
+        spacing : list of ndarray
+            Three arrays, one for each coordinate.
+            Weights for integration. Defaults to a midpoint rule.
+        coordinates : str
+            Coordinates that are specified by the ``nodes[0]``, ``nodes[1]``,
+            and ``nodes[2]``, respectively.
+            raz : rho, alpha, zeta
+            rvp : rho, theta_PEST, phi
+            rtz : rho, theta, zeta
+        NFP : int
+            Number of field periods (Default = 1).
+            Only makes sense to change from 1 if last coordinate is periodic
+            with some constant divided by ``NFP`` and the nodes are placed
+            within one field period.
+        jitable : bool
+            Whether to skip certain checks and conditionals that don't work under jit.
+            Allows grid to be created on the fly with custom nodes, but weights,
+            symmetry etc. may be wrong if grid contains duplicate nodes.
+
+        Returns
+        -------
+        grid : CustomGridFlux
+            Meshgrid.
+
+        """
+        NFP = check_posint(NFP, "NFP", False)
+        if coordinates[1] == "a":
+            period = (np.inf, np.inf, 2 * np.pi / NFP)
+        else:
+            period = (np.inf, 2 * np.pi, 2 * np.pi / NFP)
+
+        x0, x1, x2 = jnp.atleast_1d(*nodes)
+        if spacing is None:
+            dx0 = midpoint_spacing(x0)
+            dx1 = periodic_spacing(x1, period[1])[1]
+            dx2 = periodic_spacing(x2, period[2])[1] * NFP
+        else:
+            dx0, dx1, dx2 = spacing
+
+        xx1, xx0, xx2 = jnp.meshgrid(x1, x0, x2, indexing="ij")
+
+        nodes = jnp.column_stack(
+            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
+        )
+        xx1, xx0, xx2 = jnp.meshgrid(dx1, dx0, dx2, indexing="ij")
+
+        spacing = jnp.column_stack(
+            [xx0.flatten(order="F"), xx1.flatten(order="F"), xx2.flatten(order="F")]
+        )
+        weights = (
+            spacing.prod(axis=1)
+            if period[1] * period[2] == 4 * np.pi**2 / NFP
+            # Doesn't make sense to assign weights if the coordinates aren't periodic
+            # since it's not clear how to form a surface and hence its enclosed volume.
+            else None
+        )
+
+        unique_x0_idx = jnp.arange(x0.size) * x1.size
+        unique_x1_idx = jnp.arange(x1.size)
+        unique_x2_idx = jnp.arange(x2.size) * x0.size * x1.size
+        inverse_x0_idx = jnp.tile(
+            repeat(
+                unique_x0_idx // x1.size, x1.size, total_repeat_length=x0.size * x1.size
+            ),
+            x2.size,
+        )
+        inverse_x1_idx = jnp.tile(unique_x1_idx, x0.size * x2.size)
+        inverse_x2_idx = repeat(
+            unique_x2_idx // (x0.size * x1.size), (x0.size * x1.size)
+        )
+        return CustomGridFlux(
+            nodes=nodes,
+            spacing=spacing,
+            weights=weights,
+            coordinates=coordinates,
+            NFP=NFP,
+            sort=False,
+            is_meshgrid=True,
+            jitable=jitable,
+            _unique_x0_idx=unique_x0_idx,
+            _unique_x1_idx=unique_x1_idx,
+            _unique_x2_idx=unique_x2_idx,
+            _inverse_x0_idx=inverse_x0_idx,
+            _inverse_x1_idx=inverse_x1_idx,
+            _inverse_x2_idx=inverse_x2_idx,
+            **kwargs,
+        )
+
+    @property
+    def source_grid(self):
+        """Coordinates from which this grid was mapped from."""
+        errorif(self._source_grid is None, AttributeError)
+        return self._source_grid

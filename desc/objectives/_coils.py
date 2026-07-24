@@ -97,13 +97,6 @@ class _CoilObjective(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-        # Broadcasting overwrites weight, target, and bounds,
-        # so store the user inputs separately
-        self._weight_input = self._weight
-        self._target_input = self._target
-        self._bounds_input = self._bounds
-        self._grid_input = grid
-
     def build(self, use_jit=True, verbose=1):  # noqa:C901
         """Build constant arrays.
 
@@ -176,18 +169,16 @@ class _CoilObjective(_Objective):
                 "coilset_mask": np.arange(self._num_coils),
                 "objective_mask": slice(None),
             }
-            if np.any([w == 0 for w in tree_leaves(self._weight_input)]):
-                coilset_mask = self._coilset_broadcast(
-                    self._weight_input, target="coil"
-                )
+            if np.any([w == 0 for w in tree_leaves(self._weight)]):
+                coilset_mask = self._coilset_broadcast(self._weight, target="coil")
                 objective_mask = self._coilset_broadcast(
-                    self._weight_input, self._broadcast_input
+                    self._weight, self._broadcast_input
                 )
                 self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask)[0]
                 self._coilset_tree["objective_mask"] = np.nonzero(objective_mask)[0]
 
         coil = self.things[0]
-        grid = self._grid_input
+        grid = self._grid
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
@@ -243,18 +234,14 @@ class _CoilObjective(_Objective):
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
 
-        self._weight = self._coilset_broadcast(
-            self._weight_input, self._broadcast_input
-        )
-        if self._bounds_input is not None:
+        self._weight = self._coilset_broadcast(self._weight, self._broadcast_input)
+        if self._bounds is not None:
             self._bounds = (
-                self._coilset_broadcast(self._bounds_input[0], self._broadcast_input),
-                self._coilset_broadcast(self._bounds_input[1], self._broadcast_input),
+                self._coilset_broadcast(self._bounds[0], self._broadcast_input),
+                self._coilset_broadcast(self._bounds[1], self._broadcast_input),
             )
-        elif self._target_input is not None:
-            self._target = self._coilset_broadcast(
-                self._target_input, self._broadcast_input
-            )
+        elif self._target is not None:
+            self._target = self._coilset_broadcast(self._target, self._broadcast_input)
 
         timer = Timer()
         if verbose > 0:
@@ -310,30 +297,26 @@ class _CoilObjective(_Objective):
     def bounds(self, bounds):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         if bounds is not None:
-            self._bounds_input = bounds
             self._bounds = (
                 self._coilset_broadcast(bounds[0], self._broadcast_input),
                 self._coilset_broadcast(bounds[1], self._broadcast_input),
             )
         else:
-            self._bounds_input = None
             self._bounds = None
         self._check_dimensions()
 
     @_Objective.target.setter
     def target(self, target):
         if target is not None:
-            self._target_input = target
             self._target = self._coilset_broadcast(target, self._broadcast_input)
         else:
-            self._target_input = None
             self._target = None
         self._check_dimensions()
 
     @_Objective.weight.setter
     def weight(self, weight):
         assert np.all(np.asarray(tree_leaves(weight)) >= 0)
-        self._weight_input = weight
+        self._weight = weight
         # objective should be rebuilt to account for masking
         self._built = False
 

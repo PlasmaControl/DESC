@@ -64,11 +64,6 @@ class _CoilObjective(_Objective):
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
     _static_attrs = _Objective._static_attrs + ["_coilset_tree", "_broadcast_input"]
-    _io_attrs_ = _Objective._io_attrs_ + [
-        "_weight_input",
-        "_target_input",
-        "_bounds_input",
-    ]
 
     def __init__(
         self,
@@ -107,6 +102,7 @@ class _CoilObjective(_Objective):
         self._weight_input = self._weight
         self._target_input = self._target
         self._bounds_input = self._bounds
+        self._grid_input = grid
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
         """Build constant arrays.
@@ -191,7 +187,7 @@ class _CoilObjective(_Objective):
                 self._coilset_tree["objective_mask"] = np.nonzero(objective_mask)[0]
 
         coil = self.things[0]
-        grid = self._grid
+        grid = self._grid_input
 
         # get individual coils from coilset
         coils, structure = tree_flatten(coil, is_leaf=_is_single_coil)
@@ -360,7 +356,7 @@ class _CoilObjective(_Objective):
         target = target.lower()
         assert target in ["node", "coil"]
 
-        if isinstance(x, (np.array, jnp.array)):
+        if isinstance(x, (np.ndarray, jnp.ndarray)):
             x = x.tolist()
 
         # No need to broadcast if input is a scalar

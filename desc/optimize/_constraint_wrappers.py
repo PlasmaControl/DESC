@@ -1386,7 +1386,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     # whole tangent computation is jitted as one program, we rely on the compiler to
     # hoist this loop-invariant SVD out of the batched scan/vmap rather than
     # recomputing it for every tangent.
-    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants)
+    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants).T
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
@@ -1398,7 +1398,7 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    return uf @ (sfi * (vtf @ Fc))
+    return vtf.T @ (sfi * (uf.T @ Fc))
 
 
 @jit_if_possible

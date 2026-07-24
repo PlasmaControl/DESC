@@ -1303,7 +1303,6 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
     return wrapper
 
 
-@jit_if_possible(static_argnames=("op", "dimc_per_thing", "eq_idx"))
 def _proximal_get_tangents(
     constraint,
     xf,
@@ -1316,54 +1315,23 @@ def _proximal_get_tangents(
     eq_idx,
     op="scaled_error",
 ):
-    jvpfun = lambda u: _get_tangent(
-        constraint,
-        u,
-        xf,
-        constants,
-        eq_feasible_tangents,
-        dxdc,
-        feasible_tangents,
-        dimc_per_thing,
-        eq_idx,
-        op,
-    )
-    return batched_vectorize(
-        jvpfun,
-        signature="(n)->(k)",
-        chunk_size=constraint._jac_chunk_size,
-    )(v)
-
-
-def _get_tangent(
-    constraint,
-    v,
-    xf,
-    constants,
-    eq_feasible_tangents,
-    dxdc,
-    feasible_tangents,
-    dimc_per_thing,
-    eq_idx,
-    op,
-):
-    # Note: This function is vectorized over v. So, v is expected to be 1D array
-    # of size prox.dim_x.
-
     # v contains prox._args DoFs from eq and other objects (like coils, surfaces
-    # etc), we want jvp_f to only get parts from equilibrium, not other things
-    vs = jnp.split(v, np.cumsum(dimc_per_thing))
+    # etc), we want jvp_f to only get parts from equilibrium, not other things. So,
+    # we split v here and only pass the equilibrium part to the (jitted) constraint
+    # JVP in _get_tangent. We handle padding for other params in this function.
+    vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
     # This is (dF/dx)⁻¹ * dF/dc  # noqa : E800
-    dfdc = _proximal_jvp_f_pure(
-        constraint, xf, constants, vs[eq_idx], eq_feasible_tangents, dxdc, op
+    dfdc = _get_tangent(
+        constraint, vs[eq_idx], xf, constants, eq_feasible_tangents, dxdc, op
     )
     # broadcasting against multiple things
-    dfdcs = [jnp.zeros(dim) for dim in dimc_per_thing]
-    dfdcs[eq_idx] = dfdc
     # note that dfdc.size != vs[eq_idx].size
     # dfdc has the size of reduced state vector of the equilibrium
     # but vs[eq_idx] has the size of prox._args DoFs
-    dfdc = jnp.concatenate(dfdcs)
+    dfdc = jnp.concatenate(
+        [dfdc if i == eq_idx else jnp.zeros_like(vs[i]) for i in range(len(vs))],
+        axis=-1,
+    )
 
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
     # where G is the objective function. Since DESC stores x and c in the same
@@ -1380,12 +1348,31 @@ def _get_tangent(
     dxdcv = jnp.concatenate(
         [
             *vs[:eq_idx],
-            dxdc @ vs[eq_idx],  # Rb_lmn, Zb_lmn to full eq state vector
+            vs[eq_idx] @ dxdc.T,  # Rb_lmn, Zb_lmn to full eq state vector
             *vs[eq_idx + 1 :],
-        ]
+        ],
+        axis=-1,
     )
-    tangent = dxdcv - feasible_tangents @ dfdc
-    return tangent
+    tangents = dxdcv - dfdc @ feasible_tangents.T
+    return tangents
+
+
+@jit_if_possible
+def _get_tangent(
+    constraint, v, xf, constants, eq_feasible_tangents, dxdc, op="scaled_error"
+):
+    # Note: This function is vectorized over v. So, v is expected to be 1D array
+    # of size of the equilibrium DoFs (prox._args). It only holds the equilibrium
+    # part of the tangent directions; the other things are handled eagerly by
+    # _proximal_get_tangents.
+    jvpfun = lambda dc: _proximal_jvp_f_pure(
+        constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op
+    )
+    return batched_vectorize(
+        jvpfun,
+        signature="(n)->(k)",
+        chunk_size=constraint._jac_chunk_size,
+    )(v)
 
 
 def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):

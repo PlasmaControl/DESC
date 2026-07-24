@@ -4575,6 +4575,7 @@ def test_coil_objective_input(DummyMixedCoilSet):
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     weight = [1.0, 2.0, 3.0, 4.0]
+    weight_np = np.asarray(weight)
     weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
     bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
@@ -4586,6 +4587,15 @@ def test_coil_objective_input(DummyMixedCoilSet):
     np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
     np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
     np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    obj_weight_1 = obj.weight
+    # test idempotency
+    obj.build()
+    obj_weight_2 = obj.weight
+    np.testing.assert_allclose(obj_weight_1, obj_weight_2, atol=1e-13)
+    # test list vs. np array input
+    obj = CoilLength(coilset, bounds=bounds, weight=weight_np)
+    obj.build()
+    np.testing.assert_allclose(obj.weight, obj_weight_1, atol=1e-13)
 
     obj = CoilLength(coilset, target=target)
     obj.build()
@@ -4596,13 +4606,19 @@ def test_coil_objective_input(DummyMixedCoilSet):
     assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
     assert np.size(obj._weight) == 1
 
+    weight = [0.0, 2.0, 3.0, 4.0]
     obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
     obj.build()
+    obj_weight_1 = obj.weight
+    # test idempotency
+    obj.build()
+    obj_weight_2 = obj.weight
+    np.testing.assert_allclose(obj_weight_1, obj_weight_2, atol=1e-13)
 
 
 @pytest.mark.unit
 def test_coil_objective_indices(DummyMixedCoilSet):
-    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    """Tests that "weights" with zeros correctly masks _CoilObjectives errors."""
     # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
     # Consists of [single coil, single coil, single coil]
@@ -4644,19 +4660,22 @@ def test_coil_objective_setter(DummyMixedCoilSet):
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
     # Consists of [coilset with 1 coil, coilset with 3 coils]
     coilsetB = MixedCoilSet((coilsetA[0], coilsetA[1]), check_intersection=False)
+    coilsetC = MixedCoilSet((coilsetA[2], coilsetA[3]), check_intersection=False)
 
     objA = CoilLength(coilsetA)
     objB = CoilLength(coilsetB)
 
     weightA = [1.0, 2.0, 0.0, 0.0]
     weightB = [1.0, 2.0]
-    weight_expanded = [1.0, 2.0, 2.0, 2.0]
+    weightC = [0.0, 0.0, 2.0, 1.0]
+    weightD = [2.0, 1.0]
+    weightAB_expanded = [1.0, 2.0, 2.0, 2.0]
     objA.weight = weightA
     objB.weight = weightB
     objA.build()
     objB.build()
     np.testing.assert_allclose(objA.weight, objB.weight, atol=1e-13)
-    np.testing.assert_allclose(objA.weight, weight_expanded, atol=1e-13)
+    np.testing.assert_allclose(objA.weight, weightAB_expanded, atol=1e-13)
 
     bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
@@ -4682,9 +4701,17 @@ def test_coil_objective_setter(DummyMixedCoilSet):
     objC.target = target
     num_nodes = len(objD.weight)
     np.testing.assert_allclose(objC.weight, objD.weight, atol=1e-13)
+
     assert len(objC.weight) == num_nodes
     assert len(objC.bounds[0]) == num_nodes
     assert len(objC.target) == num_nodes
+
+    # change masking of built objective, rebuild, compare against fresh objective
+    objC.weight = weightC
+    objD = CoilCurvature(coilsetC, weight=weightD)
+    objC.build()
+    objD.build()
+    np.testing.assert_allclose(objC.weight, objD.weight, atol=1e-13)
 
 
 @pytest.mark.unit

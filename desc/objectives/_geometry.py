@@ -38,8 +38,9 @@ class AspectRatio(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for
+        ``Equilibrium`` or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)``
+        for ``FourierRZToroidalSurface``.
 
     """
 
@@ -183,9 +184,9 @@ class Elongation(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N)`` for
-        ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for
+        ``Equilibrium`` or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)``
+        for ``FourierRZToroidalSurface``.
 
     """
 
@@ -327,8 +328,9 @@ class Volume(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for
+        ``Equilibrium`` or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)``
+        for ``FourierRZToroidalSurface``.
 
     """
 
@@ -852,8 +854,9 @@ class MeanCurvature(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)`` for
+        ``FourierRZToroidalSurface``.
 
     """
 
@@ -993,8 +996,9 @@ class PrincipalCurvature(_Objective):
         will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N)`` for ``FourierRZToroidalSurface``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for ``Equilibrium``
+        or ``LinearGridFlux(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)`` for
+        ``FourierRZToroidalSurface``.
 
     """
 
@@ -1130,7 +1134,7 @@ class BScaleLength(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
 
     """
 
@@ -1401,8 +1405,9 @@ class MirrorRatio(_Objective):
         Equilibrium or OmnigenousField that will be optimized to satisfy the Objective.
     grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid)`` for ``Equilibrium``
-        or ``LinearGridFlux(theta=2*eq.M_B, N=2*eq.N_x)`` for ``OmnigenousField``.
+        ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for ``Equilibrium``
+        or ``LinearGridFlux(theta=2*eq.M_B, N=2*eq.N_x, NFP=eq.NFP)`` for
+        ``OmnigenousField``.
 
     """
 

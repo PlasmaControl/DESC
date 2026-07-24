@@ -212,17 +212,17 @@ class _Basis(IOAble, ABC):
 
     @property
     def L(self):
-        """int: Maximum radial resolution."""
+        """int: Maximum x0 resolution."""
         return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
-        """int:  Maximum poloidal resolution."""
+        """int:  Maximum x1 resolution."""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """int: Maximum toroidal resolution."""
+        """int: Maximum x2 resolution."""
         return self.__dict__.setdefault("_N", 0)
 
     @property
@@ -267,37 +267,37 @@ class _Basis(IOAble, ABC):
 
     @property
     def unique_L_idx(self):
-        """ndarray: Indices of unique radial modes."""
+        """ndarray: Indices of unique x0 modes."""
         return self._unique_L_idx
 
     @property
     def unique_M_idx(self):
-        """ndarray: Indices of unique poloidal modes."""
+        """ndarray: Indices of unique x1 modes."""
         return self._unique_M_idx
 
     @property
     def unique_N_idx(self):
-        """ndarray: Indices of unique toroidal modes."""
+        """ndarray: Indices of unique x2 modes."""
         return self._unique_N_idx
 
     @property
     def unique_LM_idx(self):
-        """ndarray: Indices of unique radial/poloidal mode pairs."""
+        """ndarray: Indices of unique x0/x1 mode pairs."""
         return self._unique_LM_idx
 
     @property
     def inverse_L_idx(self):
-        """ndarray: Indices of unique_L_idx that recover the radial modes."""
+        """ndarray: Indices of unique_L_idx that recover the x0 modes."""
         return self._inverse_L_idx
 
     @property
     def inverse_M_idx(self):
-        """ndarray: Indices of unique_M_idx that recover the poloidal modes."""
+        """ndarray: Indices of unique_M_idx that recover the x1 modes."""
         return self._inverse_M_idx
 
     @property
     def inverse_N_idx(self):
-        """ndarray: Indices of unique_N_idx that recover the toroidal modes."""
+        """ndarray: Indices of unique_N_idx that recover the x2 modes."""
         return self._inverse_N_idx
 
     @property

@@ -2329,12 +2329,13 @@ class LinkingCurrentConsistency(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     coil : CoilSet
         Coil(s) that are to be optimized.
-    grid : AbstractGridCurve, optional
+    grid : AbstractGridFlux, optional
         Collocation grid containing the nodes to evaluate plasma current at. Defaults to
         ``LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)``.
     eq_fixed : bool
         Whether the equilibrium is assumed fixed (should be true for stage 2, false
         for single stage).
+
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(

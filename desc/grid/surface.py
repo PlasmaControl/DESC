@@ -16,6 +16,8 @@ class AbstractGridToroidalSurface(AbstractGrid):
 
     _static_attrs = AbstractGrid._static_attrs + ["_NFP", "_sym"]
 
+    _L = 0
+
     def __repr__(self):
         """str: String form of the object."""
         return (
@@ -239,6 +241,13 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
+        self._M = (
+            (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
+            if self._M is None
+            else self._M
+        )
+        self._N = self.num_x2 // 2 if self._N is None else self._N
+
     def _create_nodes(
         self,
         M=None,
@@ -393,19 +402,30 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
         Number of field periods (Default = 1).
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    is_meshgrid : bool
+        Whether this grid is a tensor-product grid.
+        Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
+        denotes whether any coordinate can be iterated over along the relevant axis of
+        the reshaped grid: nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights,
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
+    _fft_x1 = False
+    _fft_x2 = False
+    _can_fft2 = False
+
     def __init__(
         self,
         nodes,
+        *,
         spacing=None,
         weights=None,
         NFP=1,
         sort=False,
+        is_meshgrid=False,
         jitable=False,
         **kwargs,
     ):
@@ -435,6 +455,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
         )
 
         self._NFP = check_posint(NFP, "NFP", False)
+        self._is_meshgrid = bool(is_meshgrid)
         if sort:
             self._sort_nodes()
 
@@ -463,13 +484,9 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
                 self._inverse_x2_idx,
             ) = self._find_unique_inverse_nodes()
 
-        # assign with logic in setter method if possible else 0
-        self._M = (
-            (self.num_x1 - 1 if self.sym else self.num_x1 // 2)
-            if hasattr(self, "num_x1")
-            else 0
-        )
-        self._N = self.num_x2 // 2 if hasattr(self, "num_x2") else 0
+        self._M = self.num_x1 - 1 if self.sym else self.num_x1 // 2
+        self._N = self.num_x2 // 2
+
         errorif(len(kwargs), ValueError, f"Got unexpected kwargs {kwargs.keys()}.")
 
     def _create_nodes(self, nodes):

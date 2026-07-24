@@ -16,6 +16,9 @@ class AbstractGridCurve(AbstractGrid):
 
     _static_attrs = AbstractGrid._static_attrs + ["_NFP"]
 
+    _L = 0
+    _M = 0
+
     def __repr__(self):
         """str: String form of the object."""
         return (
@@ -23,7 +26,7 @@ class AbstractGridCurve(AbstractGrid):
             + " at "
             + str(hex(id(self)))
             + f" (coordinates={self.coordinates}, N={self.N}, NFP={self.NFP}, "
-            + f"is_meshgrid={self.is_meshgrid}"
+            + f"is_meshgrid={self.is_meshgrid})"
         )
 
     def _set_up(self):
@@ -141,6 +144,8 @@ class LinearGridCurve(AbstractGridCurve):
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
 
+        self._N = self.num_x2 // 2 if self._N is None else self._N
+
     def _create_nodes(self, N=None, NFP=1, endpoint=False, s=0.0):
         """Create grid nodes and spacing.
 
@@ -249,19 +254,30 @@ class CustomGridCurve(AbstractGridCurve):
         Number of field periods (Default = 1).
     sort : bool
         Whether to sort the nodes for use with FFT method.
+    is_meshgrid : bool
+        Whether this grid is a tensor-product grid.
+        Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
+        denotes whether any coordinate can be iterated over along the relevant axis of
+        the reshaped grid: nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights,
         symmetry etc. may be wrong if grid contains duplicate nodes.
     """
 
+    _fft_x1 = False
+    _fft_x2 = False
+    _can_fft2 = False
+
     def __init__(
         self,
         nodes,
+        *,
         spacing=None,
         weights=None,
         NFP=1,
         sort=False,
+        is_meshgrid=False,
         jitable=False,
         **kwargs,
     ):
@@ -291,6 +307,7 @@ class CustomGridCurve(AbstractGridCurve):
         )
 
         self._NFP = check_posint(NFP, "NFP", False)
+        self._is_meshgrid = bool(is_meshgrid)
         if sort:
             self._sort_nodes()
 

@@ -14,7 +14,7 @@ Bug Fixes
 
 Breaking Changes
 
-- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="Node"` that previously used `coilset_mask` should switch to `objective_mask`.
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
 
 v0.17.2
 -------

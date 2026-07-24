@@ -578,5 +578,5 @@ def test_objective_quadratic_flux_jac(benchmark):
 @pytest.mark.benchmark
 def test_objective_quadratic_flux_compute(benchmark):
     """Benchmark computing QuadraticFlux."""
-    run, x = _test_quadratic_flux(50, "compute")
-    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)
+    run, x = _test_quadratic_flux(100, "compute")
+    benchmark.pedantic(run, args=(x,), rounds=50, iterations=1)

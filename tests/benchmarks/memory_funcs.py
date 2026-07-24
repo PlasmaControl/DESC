@@ -39,6 +39,8 @@ from desc.objectives import (
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
 
+from .benchmark_cpu_small import _test_quadratic_flux
+
 
 @pytest.mark.memory
 def test_objective_jac_w7x():
@@ -237,6 +239,14 @@ def test_eq_solve():
     )
 
 
+@pytest.mark.memory
+def test_objective_quadratic_flux_jac():
+    """Benchmark computing jacobian of QuadraticFlux."""
+    run, x = _test_quadratic_flux(50, "jac")
+    for _ in range(3):
+        _ = run(x)
+
+
 if __name__ == "__main__":
     func = str(sys.argv[1])
     print(f"Running {func}...")
@@ -258,5 +268,7 @@ if __name__ == "__main__":
         test_proximal_jac_ripple_bounce1d()
     elif func == "test_eq_solve":
         test_eq_solve()
+    elif func == "test_objective_quadratic_flux_jac":
+        test_objective_quadratic_flux_jac()
     else:
         print(f"Invalid function name {func}.")

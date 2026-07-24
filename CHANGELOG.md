@@ -1,6 +1,11 @@
 Changelog
 =========
 
+New Features
+
+- Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
+- Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
+
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
@@ -12,6 +17,7 @@ Bug Fixes
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
 - Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
   asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
 
 
 v0.17.2

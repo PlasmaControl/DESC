@@ -450,10 +450,14 @@ def _resonance_physics(
 
         f_res : jnp.ndarray, shape (rho, pitch, well)
             Per-(rho, pitch, well) resonance objective contribution: island
-            width to the 4th power, summed over resonances in ``res_arr``
-            and weighted by ``res_weight``, optionally scaled by
-            ``Omega_prime_s**2`` if ``stab_sacrifice``. Phase-space averaged
-            elsewhere to form the "trapped EP resonance" objective.
+            width squared, summed over resonances in ``res_arr`` and weighted
+            by ``res_weight``, optionally scaled by ``Omega_prime_s`` if
+            ``stab_sacrifice``. Phase-space averaged elsewhere to form the
+            "trapped EP resonance" objective. The least-squares objective
+            built on top of this squares its residual again, so the net
+            penalty is (island width)^4, optionally scaled by
+            ``Omega_prime_s**2``, matching the pre-existing scaling without
+            squaring it twice.
         Omega : jnp.ndarray, shape (rho, pitch, well)
             Normalized precession frequency, i.e. Omega_eta,
             ``eta_drift_avg / omega_bounce_avg``, compared against the
@@ -673,8 +677,16 @@ def _resonance_physics(
     ft_prefactor = eta_res / jnp.pi
     f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
     f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
-    f_q_abs = 0.5 * jnp.sqrt(f_q_c**2 + f_q_s**2)
-    f_q_abs_sq = 0.5**2 * (f_q_c**2 + f_q_s**2)
+    # Guard the sqrt like safediv guards division: f_q_c == f_q_s == 0 exactly
+    # at every invalid (rho, pitch, well) (s_drift is zeroed there before the
+    # FT), and a bare sqrt has a NaN gradient (0/0) at that point even though
+    # its value is fine, since d(sqrt(u))/du = 1/(2 sqrt(u)). This matters now
+    # that f_q_abs itself (not just its square) feeds into f_res below, so its
+    # gradient is no longer multiplied away by an outer square.
+    f_q_r2 = f_q_c**2 + f_q_s**2
+    is_zero = f_q_r2 == 0
+    f_q_abs = 0.5 * jnp.sqrt(jnp.where(is_zero, 1.0, f_q_r2))
+    f_q_abs = jnp.where(is_zero, 0.0, f_q_abs)
 
     # Filter FT results to valid points.
     f_q_abs = jnp.where(valid_prime[..., None], f_q_abs, 0.0)
@@ -683,13 +695,20 @@ def _resonance_physics(
     q_iw = q_arr[None, None, None, :]
     denom = jnp.pi * q_iw * jnp.abs(Omega_prime_s[..., None])
     Delta_s_profile = 4 * jnp.sqrt(safediv(f_q_abs, denom, fill=0.0))
-    Delta_s_4_profile = 4**4 * safediv(f_q_abs_sq, denom**2, fill=0.0)
-    Delta_s_4_sum = (Delta_s_4_profile * res_weight).sum(axis=-1)
+    # Delta_s_profile ** 2, computed directly from f_q_abs (rather than by
+    # squaring Delta_s_profile) so no sqrt is taken of a quantity
+    # (f_q_abs / denom) that can be exactly zero, which would otherwise give
+    # a NaN gradient. The least-squares objective built on top of this
+    # compute function squares its residual again, so returning the island
+    # width squared here (rather than to the 4th power) avoids penalizing
+    # island width to the 8th power overall.
+    Delta_s_sq_profile = 16 * safediv(f_q_abs, denom, fill=0.0)
+    Delta_s_sq_sum = (Delta_s_sq_profile * res_weight).sum(axis=-1)
 
     if stab_sacrifice:
-        f_res = Delta_s_4_sum * Omega_prime_s**2
+        f_res = Delta_s_sq_sum * Omega_prime_s
     else:
-        f_res = Delta_s_4_sum
+        f_res = Delta_s_sq_sum
 
     # Sum over radius to get weighted island width and resonance location.
     Delta_s = (Delta_s_profile * res_weight).sum(axis=0)

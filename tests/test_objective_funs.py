@@ -3917,23 +3917,59 @@ class TestComputeScalarResolution:
     )
     def test_compute_scalar_resolution_others(self, objective):
         """All other objectives."""
-        # TrappedResonance sums over discrete resonance crossings, which is
-        # inherently more sensitive to grid resolution than the smooth
-        # surface-averaged integrals most other objectives compute.
-        rtol = {TrappedResonance: 1e-1}.get(objective, 6e-2)
+        rtol = 6e-2
         f = np.zeros_like(self.res_array, dtype=float)
-        for i, res in enumerate(self.res_array):
-            # just change eq resolution and let objective pick the right grid type
-            self.eq.change_resolution(
-                L_grid=int(self.eq.L * res),
-                M_grid=int(self.eq.M * res),
-                N_grid=int(self.eq.N * res),
+        if objective is TrappedResonance:
+            # TrappedResonance sums over discrete resonance crossings, which
+            # are sensitive to grid resolution if the equilibrium's actual
+            # symmetry doesn't match the objective's N, M helicity: even
+            # tiny (~1e-4 relative) resolution-dependent noise in iota/|B|
+            # can then flip which crossings get caught. HELIOTRON (the
+            # shared self.eq below) is not quasi-axisymmetric, so it is a
+            # poor match for N=0, M=1 (QA); a genuinely QA equilibrium
+            # brings the resolution sensitivity in line with other
+            # objectives (< 1% here, vs. up to ~40% on HELIOTRON). Built
+            # directly here (rather than through
+            # _reduced_resolution_objective) so the higher num_rho/num_eta
+            # needed to resolve crossings on this equilibrium don't affect
+            # other tests that share that helper.
+            eq = get("precise_QA")
+            kwargs = dict(
+                num_rho=20,
+                num_eta=20,
+                num_transit=4,
+                knots_per_transit=60,
+                num_pitch=8,
+                num_quad=16,
+                p_max=4,
+                q_max=4,
+                N=0,
+                M=1,
             )
-            obj = ObjectiveFunction(
-                _reduced_resolution_objective(self.eq, objective), use_jit=False
-            )
-            obj.build(verbose=0)
-            f[i] = obj.compute_scalar(obj.x())
+            for i, res in enumerate(self.res_array):
+                eq.change_resolution(
+                    L_grid=int(eq.L * res),
+                    M_grid=int(eq.M * res),
+                    N_grid=int(eq.N * res),
+                )
+                obj = ObjectiveFunction(
+                    TrappedResonance(eq=eq, **kwargs), use_jit=False
+                )
+                obj.build(verbose=0)
+                f[i] = obj.compute_scalar(obj.x())
+        else:
+            for i, res in enumerate(self.res_array):
+                # just change eq resolution, let objective pick the grid type
+                self.eq.change_resolution(
+                    L_grid=int(self.eq.L * res),
+                    M_grid=int(self.eq.M * res),
+                    N_grid=int(self.eq.N * res),
+                )
+                obj = ObjectiveFunction(
+                    _reduced_resolution_objective(self.eq, objective), use_jit=False
+                )
+                obj.build(verbose=0)
+                f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(
             f, f[-1], rtol=rtol, atol=1e-4 if np.max(f) < 1e-3 else 0
         )

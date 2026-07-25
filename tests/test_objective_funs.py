@@ -4236,7 +4236,7 @@ class TestObjectiveNaNGrad:
     @pytest.mark.unit
     @pytest.mark.parametrize("solve_method", ["gmres", "bicgstab"])
     @pytest.mark.skipif(
-        Version(jax.__version__).release != (0, 9, 2),
+        Version(jax.__version__).release < (0, 9, 2),
         reason="DESC only backports this JAX scan-transpose fix to JAX 0.9.2",
     )
     def test_objective_no_nanjac_free_surface_error_iterative_rev(self, solve_method):

@@ -129,7 +129,7 @@ On Your Local Machine
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.13' 'fftw' 'gxx<12'
+            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.14' 'fftw' 'gxx<12'
             conda activate desc-env
 
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
@@ -137,7 +137,7 @@ On Your Local Machine
 
             export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
             pip install --editable .
-            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0, <= 1.3.1'
 
         Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
         in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
@@ -252,8 +252,7 @@ On Most Linux Computing Clusters
 
                 export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 pip install --editable .
-                CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=80" pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
-
+                CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=80" pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0, <= 1.3.1'
 
             Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
             in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.

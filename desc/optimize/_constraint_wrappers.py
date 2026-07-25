@@ -1362,10 +1362,8 @@ def _proximal_get_tangents(
 def _get_tangent(
     constraint, v, xf, constants, eq_feasible_tangents, dxdc, op="scaled_error"
 ):
-    # Note: This function is vectorized over v. So, v is expected to be 1D array
-    # of size of the equilibrium DoFs (prox._args). It only holds the equilibrium
-    # part of the tangent directions; the other things are handled eagerly by
-    # _proximal_get_tangents.
+    # Note: v only holds the equilibrium part of the tangent directions;
+    # the other things are handled eagerly by _proximal_get_tangents.
     jvpfun = lambda dc: _proximal_jvp_f_pure(
         constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op
     )

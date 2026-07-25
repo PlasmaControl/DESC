@@ -1303,7 +1303,7 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
     return wrapper
 
 
-@jit_if_possible(static_argnames=("dimc_per_thing", "op"))
+@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
 def _proximal_get_tangents(
     constraint,
     xf,

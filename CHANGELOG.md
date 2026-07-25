@@ -8,8 +8,8 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
-- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
-  asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary file under `./tmp/`.
 
 
 v0.17.2
@@ -50,13 +50,6 @@ Deprecations
 
 - `constants` argument of `compute`, `jvp`, `jac`, `grad` and `hess` methods (including all of their variants) to all objective classes (including `ObjectiveFunction` and wrappers) is deprecated and will be removed in a future release. This argument was not necessary, and the code will still work if user doesn't pass it. Users should update their custom objectives for this change. In addition, `constants` property of the `ObjectiveFunction` and all sub-classes of `_Objective` is deprecated.
 
-
-v0.17.1
--------
-
-Bug Fixes
-
-- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary file under `./tmp/`.
 
 v0.17.1
 -------

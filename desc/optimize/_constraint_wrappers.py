@@ -5,7 +5,6 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, put
-from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -758,23 +757,13 @@ class ProximalProjection(ObjectiveFunction):
         # we will need to set this static attribute, only possible if tuple
         self._dimc_per_thing = tuple(self._dimc_per_thing)
 
-        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
-        self._feasible_tangents = jnp.eye(self._objective.dim_x)
-        self._feasible_tangents = jnp.split(
-            self._feasible_tangents, np.cumsum(self._dimx_per_thing), axis=-1
-        )
-        # dg/dxeq_reduced = dg/dx_eq_unscaled @ dx_eq_unscaled/dxeq_reduced # noqa: E800
-        # x_eq_unscaled = Deq(xp_eq + Zeq @ xeq_reduced)                    # noqa: E800
-        # So, the feasible tangents (aka. dx_eq_unscaled/dx_reduced) is Deq@Zeq
-        # Since here we are setting the feasible direction for eq parameters only,
-        # we need to add 0 rows for eq fixed parameters and non-eq parameters which we
-        # handle by below operation
-        self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
-            :, self._eq_unfixed_idx
-        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
-        self._feasible_tangents = jnp.concatenate(
-            [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
-        )
+        # Note: we used to build here the full state vector version of the feasible
+        # tangents, i.e. eye(objective.dim_x) with the equilibrium block replaced by
+        # Deq@Zeq (aka. dx_eq_unscaled/dxeq_reduced, see LinearConstraintProjection)
+        # and 0 rows for the eq fixed parameters. Its equilibrium block is exactly
+        # self._eq_solve_objective._feasible_tangents and all its other blocks are
+        # identity, so _proximal_get_tangents works with the (much smaller)
+        # equilibrium block directly instead of forming a dim_x by dim_x matrix here.
 
         ## history and caching
         # first, ensure equilibrium is solved to the
@@ -1076,7 +1065,6 @@ class ProximalProjection(ObjectiveFunction):
             constants[1],
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
-            self._feasible_tangents,
             self._dimc_per_thing,
             self._eq_idx,
             "scaled_error",
@@ -1228,7 +1216,7 @@ class ProximalProjection(ObjectiveFunction):
         # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
 
         # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
-        # First we will compute the tangent direction (see _get_tangent for details),
+        # First we will compute the tangent direction (see _proximal_get_tangents),
         # then we will compute the Jacobian.
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, [None, None])
@@ -1243,7 +1231,6 @@ class ProximalProjection(ObjectiveFunction):
             constants[1],
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
-            self._feasible_tangents,
             self._dimc_per_thing,
             self._eq_idx,
             op,
@@ -1311,29 +1298,10 @@ def _proximal_get_tangents(
     constants,
     eq_feasible_tangents,
     dxdc,
-    feasible_tangents,
     dimc_per_thing,
     eq_idx,
     op="scaled_error",
 ):
-    # v contains prox._args DoFs from eq and other objects (like coils, surfaces
-    # etc), we want jvp_f to only get parts from equilibrium, not other things. So,
-    # we split v here and only pass the equilibrium part to the (jitted) constraint
-    # JVP in _get_tangent. We handle padding for other params in this function.
-    vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
-    # This is (dF/dx)⁻¹ * dF/dc  # noqa : E800
-    dfdc = _get_tangent(
-        constraint, vs[eq_idx], xf, constants, eq_feasible_tangents, dxdc, op
-    )
-    # broadcasting against multiple things
-    # note that dfdc.size != vs[eq_idx].size
-    # dfdc has the size of reduced state vector of the equilibrium
-    # but vs[eq_idx] has the size of prox._args DoFs
-    dfdc = jnp.concatenate(
-        [dfdc if i == eq_idx else jnp.zeros_like(vs[i]) for i in range(len(vs))],
-        axis=-1,
-    )
-
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
     # where G is the objective function. Since DESC stores x and c in the same
     # vector, instead of multiple JVP calls, we will just find a tangent direction
@@ -1346,58 +1314,57 @@ def _proximal_get_tangents(
     # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
     # Note: We will never form full Jacobian J, we will just compute the above
     # expression by JVPs.
-    dxdcv = jnp.concatenate(
-        [
-            *vs[:eq_idx],
-            vs[eq_idx] @ dxdc.T,  # Rb_lmn, Zb_lmn to full eq state vector
-            *vs[eq_idx + 1 :],
-        ],
-        axis=-1,
+
+    # The tangent directions are a linear function of v, so instead of vectorizing
+    # the (expensive) constraint JVPs and the linear solve over the directions in v,
+    # we form the matrix dxeq/dc once and get the tangents for every direction in v
+    # with a single matmul. This makes the cost of this function independent of the
+    # number of directions in v.
+    dxeqdc = _proximal_dxeqdc(constraint, xf, constants, eq_feasible_tangents, dxdc, op)
+    # v contains prox._args DoFs from eq and other objects (like coils, surfaces
+    # etc). Only the equilibrium block of the state vector changes when the
+    # equilibrium is re-solved, so the tangents of the other things are just v
+    # itself and we only have to correct the equilibrium block.
+    vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
+    return jnp.concatenate(
+        [*vs[:eq_idx], vs[eq_idx] @ dxeqdc.T, *vs[eq_idx + 1 :]], axis=-1
     )
-    tangents = dxdcv - dfdc @ feasible_tangents.T
-    return tangents
 
 
 @jit_if_possible
-def _get_tangent(
-    constraint, v, xf, constants, eq_feasible_tangents, dxdc, op="scaled_error"
+def _proximal_dxeqdc(
+    constraint, xf, constants, eq_feasible_tangents, dxdc, op="scaled_error"
 ):
-    # Note: v only holds the equilibrium part of the tangent directions;
-    # the other things are handled eagerly by _proximal_get_tangents.
-    jvpfun = lambda dc: _proximal_jvp_f_pure(
-        constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op
-    )
-    return batched_vectorize(
-        jvpfun,
-        signature="(n)->(k)",
-        chunk_size=constraint._jac_chunk_size,
-    )(v)
+    # Returns dxeq/dc = dxdc - feasible_tangents @ (dF/dx)⁻¹ @ dF/dc, of shape
+    # (dim_x_eq, dim_c). This is the change of the full equilibrium state vector per
+    # unit change of the proximal DoFs c, once the equilibrium is re-solved.
 
-
-def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dxdc, op):
-    # Note: This function is called by _get_tangent which is vectorized over v
-    # (v is called dc in this function). So, dc is expected to be 1D array
-    # of same size as full equilibrium state vector. This function returns a 1D array.
-
-    # here we are forming (dF/dx)⁻¹ @ dF/dc
-    # where Fxh is dF/dxᵀ and Fc is dF/dc.
-    # Note: Fxh and its SVD do not depend on dc (the vectorized argument). Since the
-    # whole tangent computation is jitted as one program, we rely on the compiler to
-    # hoist this loop-invariant SVD out of the batched scan/vmap rather than
-    # recomputing it for every tangent.
-    Fxh = getattr(constraint, "jvp_" + op)(eq_feasible_tangents.T, xf, constants).T
+    # here Fxh is dF/dx in the reduced (feasible) coordinates of the equilibrium and
+    # Fc is dF/dc. Both are Jacobians of the same function at the same point, so we
+    # get them from a single batched JVP call and let the constraint's own
+    # jac_chunk_size take care of the batching. Doing it this way also means the
+    # SVD below is computed once by construction, instead of relying on the compiler
+    # to hoist it out of a vectorized loop.
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
     # For example, if we want the derivative wrt Rb_023, we should take the derivative
     # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
     # for the relation between Rb_lmn and R_lmn.
-    Fc = getattr(constraint, "jvp_" + op)(dxdc @ dc, xf, constants)
+    dim_x_reduced = eq_feasible_tangents.shape[-1]
+    tangents = jnp.concatenate([eq_feasible_tangents.T, dxdc.T], axis=0)
+    J = getattr(constraint, "jvp_" + op)(tangents, xf, constants)
+    Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    return vtf.T @ (sfi * (uf.T @ Fc))
+    # this is (dF/dx)⁻¹ @ dF/dc for all the directions in c at once  # noqa : E800
+    dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
+    # feasible_tangents maps the reduced equilibrium state vector back to the full
+    # one, the eq block of ProximalProjection._feasible_tangents used to do this
+    # padded with zeros for the other things, which is not needed here.
+    return dxdc - eq_feasible_tangents @ dfdc
 
 
 @jit_if_possible

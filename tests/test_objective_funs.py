@@ -4234,6 +4234,30 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(jac)), "free surface error"
 
     @pytest.mark.unit
+    @pytest.mark.parametrize("solve_method", ["gmres", "bicgstab"])
+    @pytest.mark.skipif(
+        Version(jax.__version__).release != (0, 9, 2),
+        reason="DESC only backports this JAX scan-transpose fix to JAX 0.9.2",
+    )
+    def test_objective_no_nanjac_free_surface_error_iterative_rev(self, solve_method):
+        """Reverse mode can transpose field-period and chunked integral scans."""
+        eq = get("W7-X")
+        B = ToroidalMagneticField(5, 1)
+        field = FreeSurfaceOuterField(eq.surface, 2, 2, B_coil=B)
+        obj = ObjectiveFunction(
+            FreeSurfaceError(
+                eq,
+                field,
+                grid=LinearGrid(M=2, N=2, NFP=eq.NFP, sym=False),
+                deriv_mode="rev",
+                options=LaplaceOptions(solve_method=solve_method, chunk_size=5),
+            )
+        )
+        obj.build()
+        jac = obj.jac_unscaled(obj.x())
+        assert np.all(np.isfinite(jac)), "free surface error"
+
+    @pytest.mark.unit
     def test_objective_no_nanjac_boundary_error_kinetic_profiles(self):
         """Test BoundaryError with kinetic profiles. Related to GH Issue #1712."""
         eq = get("DSHAPE")

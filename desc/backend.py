@@ -132,6 +132,30 @@ if use_jax:  # noqa: C901
     from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
 
+    # Backport the scan-transpose fix from JAX 0.10.0 to JAX 0.9.2, which
+    # passes stale primitive linearity metadata to the transpose rule. This
+    # fails when jax.linear_transpose supplies a gradient accumulator for an
+    # operand that was originally recorded as nonlinear.
+    if Version(jax.__version__).release == (0, 9, 2):
+        from jax._src.interpreters import ad as _jax_ad
+        from jax._src.lax.control_flow import loops as _jax_loops
+
+        _jax_scan_transpose = _jax_ad.fancy_transposes[_jax_loops.scan_p]
+        if not getattr(_jax_scan_transpose, "_desc_linearity_backport", False):
+
+            @functools.wraps(_jax_scan_transpose)
+            def _scan_transpose_backport(
+                cts, *args, _transpose=_jax_scan_transpose, **params
+            ):
+                params["linear"] = tuple(
+                    isinstance(arg, _jax_ad.GradAccum) for arg in args
+                )
+                return _transpose(cts, *args, **params)
+
+            _scan_transpose_backport._desc_linearity_backport = True
+            _jax_loops._scan_transpose_fancy = _scan_transpose_backport
+            _jax_ad.fancy_transposes[_jax_loops.scan_p] = _scan_transpose_backport
+
     # TODO: remove fallback once JAX min version >= 0.10.0
     if Version(jax.__version__) >= Version("0.10.0"):
         from jax.scipy.linalg import qr_multiply

@@ -4,6 +4,8 @@ Changelog
 Performance Improvements
 
 - Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+- Adds ``surf_batch_size`` kwarg to Boozer and omnigenous field compute variables, to allow for tuning of the memory usage when computing these quantities by choosing how many surfaces to simultaneously compute.
+  - Also adds ``surf_batch_size`` as an additional kwarg to ``make_boozmn_output``, as well as the objectives ``Omnigenity`` and ``QuasisymmetryBoozer``
 
 Bug Fixes
 

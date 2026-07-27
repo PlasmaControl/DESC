@@ -9,6 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
+from ..diffmat_utils import DiffMat
 from ..utils import errorif, rpz2xyz, rpz2xyz_vec
 from .data_index import allowed_kwargs, data_index, deprecated_names
 
@@ -67,12 +68,14 @@ def compute(  # noqa: C901
 
     """
     basis = kwargs.pop("basis", "rpz").lower()
+
     errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     if basis == "xyz" and "phi" not in names:
         names = names + ["phi"]
+
     # this allows the DeprecationWarning to be thrown in this file
     with warnings.catch_warnings():
         warnings.simplefilter("always", DeprecationWarning)
@@ -88,6 +91,19 @@ def compute(  # noqa: C901
                     "instead.",
                     DeprecationWarning,
                 )
+
+    # ``diffmat`` is transform-like data, but is supplied as a compute keyword.
+    # Preserve a matrix object already installed by ``get_transforms`` and support
+    # callers that supply their own transforms dictionary.
+    diffmat = kwargs.get("diffmat")
+    if transforms is None:
+        transforms = {}
+    if diffmat is not None and "diffmat" not in transforms:
+        transforms = dict(transforms)
+        transforms["diffmat"] = (
+            diffmat if isinstance(diffmat, DiffMat) else DiffMat(**diffmat)
+        )
+
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -513,7 +529,7 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
-def get_transforms(
+def get_transforms(  # noqa: C901
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):
     """Get transforms needed to compute a given quantity on a given grid.
@@ -549,6 +565,12 @@ def get_transforms(
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
+
+    # DiffMat contains pre-built matrices rather than a DESC Transform.
+    if "diffmat" in kwargs and kwargs["diffmat"] is not None:
+        dm = kwargs["diffmat"]
+        transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
+
     for c in derivs.keys():
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")

@@ -140,6 +140,8 @@ class _CoilObjective(_Objective):
             # Local import to avoid circular import
             from desc.coils import CoilSet, MixedCoilSet, _Coil
 
+            tol = 1e-12
+
             def expand(t, idx=0):
                 if isinstance(t, MixedCoilSet):
                     return expand(t.coils, idx)
@@ -169,13 +171,17 @@ class _CoilObjective(_Objective):
                 "coilset_mask": np.arange(self._num_coils),
                 "objective_mask": slice(None),
             }
-            if np.any([w == 0 for w in tree_leaves(self._weight)]):
+            if np.any(
+                np.isclose([w for w in tree_leaves(self._weight)], 0.0, atol=tol)
+            ):
                 coilset_mask = self._coilset_broadcast(self._weight, target="coil")
                 objective_mask = self._coilset_broadcast(
                     self._weight, self._broadcast_input
                 )
-                self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask)[0]
-                self._coilset_tree["objective_mask"] = np.nonzero(objective_mask)[0]
+                self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask > tol)[0]
+                self._coilset_tree["objective_mask"] = np.nonzero(objective_mask > tol)[
+                    0
+                ]
 
         coil = self.things[0]
         grid = self._grid

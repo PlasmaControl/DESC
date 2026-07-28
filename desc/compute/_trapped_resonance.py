@@ -887,12 +887,16 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     Y_B = kwargs.get("Y_B", None)
     spline = kwargs.get("spline", True)
     vander = kwargs.get("_vander", None)
-    # The radial drift bounce integral is a near-total cancellation: the
-    # omnigenity optimization it is meant to measure drives it toward zero, so
-    # ∫|f| / |∫f| reaches 1e2--1e7. Any interpolation error is amplified by
-    # that factor, and Bounce2D's default NUFFT precision (1e-6) is far too
-    # loose -- it leaves the result with no correct digits and no convergence
-    # under refinement. 1e-10 recovers agreement with Bounce1D to ~5e-4.
+    # Tighter than Bounce2D's usual default. The radial drift bounce integral
+    # is a near-total cancellation -- the omnigenity optimization it measures
+    # drives it toward zero, so ∫|f| / |∫f| reaches 1e2--1e7 -- and any
+    # interpolation error is amplified by that factor. On the raw integral,
+    # 1e-6 leaves no correct digits and does not converge under refinement.
+    # The objective is less exposed, since the ratio and the phase-space
+    # average cancel much of the error, but 1e-6 still roughly doubles the
+    # disagreement with Bounce1D (3.1e-2 vs 2.0e-2 on precise_QA, relative to
+    # the summed objective). 1e-8 was converged there; the extra order is
+    # margin for equilibria whose cancellation is worse.
     nufft_eps = kwargs.get("nufft_eps", 1e-10)
 
     base_grid = transforms["grid"]

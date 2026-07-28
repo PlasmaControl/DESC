@@ -1,13 +1,17 @@
 """Benchmarks for timing comparison on gpu.
 
 You may need to append the ``--no-verify`` flag when commiting this file to git.
-When running this script, you may need to add:
+When running this script, you need to add:
 
 > import desc import set_device
 > set_device("gpu")
 
 to the top of conftest.py. Since that file is imported before everything in pytest,
-it triggers the set_device("cpu") route.
+it triggers the set_device("cpu") route. Or you can use the following command to run
+pytest without conftest.
+
+> pytest benchmark_gpu_small.py --noconftest
+
 """
 
 import numpy as np

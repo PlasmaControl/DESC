@@ -20,6 +20,8 @@ if sys.argv[2] in ["GPU", "gpu"]:
 
     set_device("gpu")
 
+from benchmark_cpu_small import _test_quadratic_flux
+
 import desc.examples
 from desc.backend import jax
 from desc.grid import LinearGrid
@@ -38,8 +40,6 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.optimize import LinearConstraintProjection, ProximalProjection
-
-from .benchmark_cpu_small import _test_quadratic_flux
 
 
 @pytest.mark.memory

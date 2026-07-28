@@ -90,7 +90,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (PR)
+      - name: Run Benchmarks (PR)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
@@ -140,7 +140,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (MASTER)
+      - name: Run Benchmarks (MASTER)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate

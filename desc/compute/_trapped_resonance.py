@@ -171,13 +171,13 @@ def _alpha_drift_integrand(data, B, pitch):
 
     Used in ``_trapped_EP_resonance``.
     """
-    return (
+    return safediv(
         2
         * (
             data["gbdrift (periodic)"] * pitch * B
             + 2 * (1 - pitch * B) * data["cvdrift (periodic)"]
-        )
-        / jnp.sqrt(jnp.maximum(jnp.abs(1 - pitch * B), 1e-30))
+        ),
+        jnp.sqrt(jnp.abs(1 - pitch * B)),
     )
 
 

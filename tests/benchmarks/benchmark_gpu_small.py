@@ -574,7 +574,7 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
 @pytest.mark.benchmark
 def test_objective_quadratic_flux_jac(benchmark):
     """Benchmark computing jacobian of QuadraticFlux."""
-    run, x = _test_quadratic_flux(30, "jac")
+    run, x = _test_quadratic_flux(20, "jac")
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)
 
 

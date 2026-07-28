@@ -10,8 +10,10 @@ from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization
 from desc.grid import LinearGrid
-from desc.integrals.bounce_integral import Bounce1D
+from desc.integrals._bounce_utils import Y_B_rule, get_vander_spline
+from desc.integrals.bounce_integral import Bounce1D, Bounce2D
 from desc.utils import Timer
+from interpax_fft import cheb_pts, fourier_pts
 
 from ..integrals.quad_utils import (
     automorphism_sin,
@@ -131,7 +133,16 @@ class TrappedResonance(_Objective):
     _units = "~"
     _print_value_fmt = "Trapped EP Resonance Penalty: "
 
-    _static_attrs = _Objective._static_attrs + ["_hyperparameters", "_keys_1dr", "_key"]
+    _static_attrs = _Objective._static_attrs + [
+        "_hyperparameters",
+        "_keys_1dr",
+        "_key",
+        # Selects which branch ``compute`` takes, so it must stay concrete
+        # under jit rather than becoming a traced leaf.
+        "_use_bounce1d",
+        "_X",
+        "_Y",
+    ]
 
     def __init__(
         self,
@@ -168,9 +179,16 @@ class TrappedResonance(_Objective):
         stab_sacrifice=False,
         cropping_DOmega=False,
         bt_filter_flag=False,
+        use_bounce1d=False,
+        X=32,
+        Y=32,
+        Y_B=None,
+        spline=True,
+        nufft_eps=1e-10,
     ):
         if target is None and bounds is None:
             target = 1e-8
+        self._use_bounce1d = bool(use_bounce1d)
         self._num_rho = int(num_rho)
         self._num_eta = int(num_eta)
         if self._num_eta < 2:
@@ -207,7 +225,14 @@ class TrappedResonance(_Objective):
             "stab_sacrifice": stab_sacrifice,
             "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
+            "use_bounce1d": self._use_bounce1d,
         }
+        if not self._use_bounce1d:
+            self._hyperparameters["Y_B"] = Y_B
+            self._hyperparameters["spline"] = spline
+            self._hyperparameters["nufft_eps"] = nufft_eps
+            self._X = int(X)
+            self._Y = int(Y)
         self._keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
         self._key = "trapped EP resonance"
 
@@ -239,13 +264,46 @@ class TrappedResonance(_Objective):
         self._constants["rho"] = rho
         self._dim_f = rho.size
 
+        # Bounce2D interpolates from a 2D Fourier series, so it needs a grid
+        # that can be FFT'd in both angles; stellarator symmetry would only
+        # cover half the poloidal domain.
         self._grid_1dr = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            rho=rho,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym if self._use_bounce1d else False,
         )
         self._constants["quad"] = get_quadrature(
             leggauss(self._hyperparameters["num_quad"]),
             (automorphism_sin, grad_automorphism_sin),
         )
+        if not self._use_bounce1d:
+            assert self._grid_1dr.can_fft2
+            # Nodes at which the poloidal angle map is interpolated, and the
+            # transform used to solve for it. Mirrors ``Bounce2D._build``.
+            self._constants["x"] = fourier_pts(self._X)
+            self._constants["y"] = cheb_pts(self._Y, (0, 2 * np.pi / eq.NFP))[::-1]
+            self._constants["lambda"] = get_transforms(
+                "lambda",
+                eq,
+                grid=LinearGrid(
+                    rho=rho,
+                    M=eq.L_basis.M,
+                    zeta=self._constants["y"],
+                    NFP=eq.NFP,
+                ),
+            )["L"]
+            spline = self._hyperparameters["spline"]
+            Y_B = self._hyperparameters["Y_B"]
+            if Y_B is None:
+                Y_B = Y_B_rule(self._grid_1dr, spline)
+                self._hyperparameters["Y_B"] = Y_B
+            self._constants["_vander"] = (
+                get_vander_spline(self._grid_1dr, self._Y, Y_B, eq.NFP)
+                if spline
+                else {}
+            )
         rho_res = 1.0 / self._num_rho
         eta_res = 2 * np.pi / self._num_eta
         self._params2 = {
@@ -365,6 +423,60 @@ class TrappedResonance(_Objective):
         eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
         ft_denom = N * nfp - iotas * M
         alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        if not self._use_bounce1d:
+            # Bounce2D interpolates onto field lines from a 2D Fourier series,
+            # so everything is evaluated once on the tensor-product (θ, ζ) grid
+            # and no field line grids are built at all. This is what removes
+            # the memory cost of the Bounce1D path, whose grids scale with
+            # num_eta * knots_per_transit * num_transit.
+            fft_keys = list(Bounce2D.required_names) + [
+                "cvdrift0",
+                "gbdrift (periodic)",
+                "cvdrift (periodic)",
+                "min_tz |B|",
+                "max_tz |B|",
+            ]
+            data_fft = compute_fun(
+                eq,
+                fft_keys,
+                params,
+                get_transforms(fft_keys, eq, base_grid, jitable=True),
+                get_profiles(fft_keys, eq),
+                data=data,
+            )
+            # Poloidal angle map, rebuilt every call since it depends on iota.
+            angle = eq._map_poloidal_coordinates(
+                iotas,
+                constants["x"],
+                constants["y"],
+                params["L_lmn"],
+                constants["lambda"],
+                outbasis="delta",
+                tol=1e-8,
+            )[..., ::-1]
+
+            data = compute_fun(
+                eq,
+                self._key,
+                params,
+                get_transforms(self._key, eq, base_grid, jitable=True),
+                constants["profiles"],
+                data=data,
+                quad=constants["quad"],
+                nfp=nfp,
+                zeta=zeta,
+                _angle=angle,
+                _fft_grid=base_grid,
+                _data_fft=data_fft,
+                _vander=constants["_vander"],
+                **quad2,
+                **self._hyperparameters,
+                **self._params2,
+            )
+            if self._hyperparameters.get("pitch_invs", None) is not None:
+                return data[self._key]
+            return base_grid.compress(data[self._key])
 
         eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
         eta_grid = eta_desc_grid.source_grid

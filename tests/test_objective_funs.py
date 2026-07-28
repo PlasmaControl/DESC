@@ -2176,6 +2176,10 @@ class TestObjectiveFunction:
             res_range_min=-1,
             res_range_max=1,
             weight_method="linear",
+            # This test reproduces the Bounce1D field line grids by hand below,
+            # so it pins that backend. The Bounce2D default builds no such
+            # grids and is covered by the objective's own tests.
+            use_bounce1d=True,
         )
 
         rho = np.linspace(0, 1, num_rho + 1)[1:]

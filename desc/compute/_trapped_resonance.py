@@ -6,7 +6,7 @@ from desc.backend import jnp
 from desc.grid import Grid
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce1D
+from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..utils import safediv
 from ._fast_ion import _radial_drift
 from ._neoclassical import _bounce_doc
@@ -99,6 +99,92 @@ def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
         _unique_rho_idx=unique_rho_idx,
         _inverse_rho_idx=inverse_rho_idx,
     )
+
+
+def _compute2D(
+    fun,
+    fun_data,
+    data,
+    grid,
+    angle,
+    alpha_per_rho,
+    num_pitch,
+    surf_batch_size=1,
+    simp=True,
+    pitch_invs=None,
+    pitch_inv_weight=None,
+):
+    """Compute Bounce2D integral quantity with ``fun``.
+
+    The Bounce2D analogue of ``_compute1D``. ``fun_data`` and ``data`` are
+    given on a tensor-product (θ, ζ) grid rather than on a field line grid,
+    and are Fourier transformed here for ``Bounce2D`` to interpolate onto
+    field lines internally. This is what avoids materializing the large
+    field-line grids that ``Bounce1D`` requires.
+
+    Parameters
+    ----------
+    fun : callable
+        Function to compute. Receives the batched data dictionary, whose
+        arrays hold Fourier transforms (pass ``is_fourier=True`` to
+        ``Bounce2D``).
+    fun_data : dict[str, jnp.ndarray]
+        Data to Fourier transform and pass to ``fun``. Modified in place.
+    data : dict[str, jnp.ndarray]
+        DESC data dict evaluated on ``grid``.
+    grid : Grid
+        Tensor-product (ρ, θ, ζ) grid satisfying ``can_fft2``.
+    angle : jnp.ndarray
+        Shape (num ρ, X, Y). Angle returned by ``Bounce2D.angle``.
+    alpha_per_rho : jnp.ndarray
+        Shape (num ρ, num α). Field line labels, which differ between flux
+        surfaces because they derive from the omnigenity angle η. Stored
+        with ρ leading so that ``batch_map`` slices it consistently with the
+        rest of the data; ``fun`` transposes it back to (num α, num ρ).
+    num_pitch : int
+        Resolution for quadrature over velocity coordinate.
+    surf_batch_size : int
+        Number of flux surfaces with which to compute simultaneously.
+    simp : bool
+        Whether to use an open Simpson rule instead of uniform weights.
+    pitch_invs : jnp.ndarray
+        If specified, use these pitch_inv values rather than ``num_pitch``.
+    pitch_inv_weight : jnp.ndarray
+        Quadrature weight paired with ``pitch_invs``.
+
+    """
+    for name in Bounce2D.required_names:
+        fun_data[name] = data[name]
+    fun_data.pop("iota", None)
+    for name in fun_data:
+        fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
+    fun_data["iota"] = grid.compress(data["iota"])
+    fun_data["angle"] = angle
+    fun_data["alpha_per_rho"] = alpha_per_rho
+    if pitch_invs is None:
+        # A single B_crit set is shared across flux surfaces, so broadcast the
+        # global extrema rather than using each surface's own.
+        num_rho = grid.num_rho
+        B_min = jnp.min(grid.compress(data["min_tz |B|"]))
+        B_max = jnp.max(grid.compress(data["max_tz |B|"]))
+        (
+            fun_data["pitch_inv"],
+            fun_data["pitch_inv weight"],
+        ) = Bounce2D.get_pitch_inv_quad(
+            jnp.full(num_rho, B_min), jnp.full(num_rho, B_max), num_pitch, simp=simp
+        )
+    else:
+        n = len(pitch_invs)
+        fun_data["pitch_inv"] = jnp.broadcast_to(pitch_invs, (grid.num_rho, n))
+        fun_data["pitch_inv weight"] = jnp.broadcast_to(
+            (
+                jnp.ones(n) * (2 * jnp.pi / n)
+                if pitch_inv_weight is None
+                else pitch_inv_weight
+            ),
+            (grid.num_rho, n),
+        )
+    return batch_map(fun, fun_data, surf_batch_size)
 
 
 def _compute1D(
@@ -743,7 +829,7 @@ def _resonance_physics(
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota", "min_tz |B|", "max_tz |B|", "Psi"],
+    data=["iota", "min_tz |B|", "max_tz |B|", "Psi", "V_psi"],
     grid_requirement={"is_meshgrid": True},
     public=False,
     **_bounce1D_doc,
@@ -792,6 +878,22 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     psa_grid = kwargs.get("_psa_grid", None)
     data_eta = kwargs.get("_data_eta", None)
     data_psa = kwargs.get("_data_psa", None)
+    num_transit = kwargs.get("num_transit", 1)
+    use_bounce1d = kwargs.get("use_bounce1d", False)
+    # Bounce2D path only.
+    angle = kwargs.get("_angle", None)
+    fft_grid = kwargs.get("_fft_grid", None)
+    data_fft = kwargs.get("_data_fft", None)
+    Y_B = kwargs.get("Y_B", None)
+    spline = kwargs.get("spline", True)
+    vander = kwargs.get("_vander", None)
+    # The radial drift bounce integral is a near-total cancellation: the
+    # omnigenity optimization it is meant to measure drives it toward zero, so
+    # ∫|f| / |∫f| reaches 1e2--1e7. Any interpolation error is amplified by
+    # that factor, and Bounce2D's default NUFFT precision (1e-6) is far too
+    # loose -- it leaves the result with no correct digits and no convergence
+    # under refinement. 1e-10 recovers agreement with Bounce1D to ~5e-4.
+    nufft_eps = kwargs.get("nufft_eps", 1e-10)
 
     base_grid = transforms["grid"]
     iotas = base_grid.compress(data["iota"])
@@ -816,34 +918,81 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
         pitch_invs_use = pitch_invs
         pitch_inv_weight_use = None
 
-    def drifts(data_in):
-        bounce = Bounce1D(eta_grid, data_in, quad, is_reshaped=True)
-        points = bounce.points(data_in["pitch_inv"], num_well=num_well)
-        v_tau, _alpha_drift, _s_drift = bounce.integrate(
-            [_v_tau, _alpha_drift_integrand, _radial_drift],
-            data_in["pitch_inv"],
-            data_in,
-            ["cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)"],
-            num_well=num_well,
-        )
-        _alpha_drift = safediv(_alpha_drift, v_tau)
-        _s_drift = 4 * safediv(_s_drift, v_tau)
-        return _alpha_drift, _s_drift, points, v_tau, data_in
+    drift_names = ["cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)"]
 
-    alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute1D(
-        drifts,
-        {
-            "cvdrift0": data_eta["cvdrift0"],
-            "gbdrift (periodic)": data_eta["gbdrift (periodic)"],
-            "cvdrift (periodic)": data_eta["cvdrift (periodic)"],
-        },
-        data_eta,
-        eta_grid,
-        num_pitch,
-        surf_batch_size,
-        pitch_invs=pitch_invs_use,
-        pitch_inv_weight=pitch_inv_weight_use,
-    )
+    if use_bounce1d:
+
+        def drifts(data_in):
+            bounce = Bounce1D(eta_grid, data_in, quad, is_reshaped=True)
+            points = bounce.points(data_in["pitch_inv"], num_well=num_well)
+            v_tau, _alpha_drift, _s_drift = bounce.integrate(
+                [_v_tau, _alpha_drift_integrand, _radial_drift],
+                data_in["pitch_inv"],
+                data_in,
+                drift_names,
+                num_well=num_well,
+            )
+            _alpha_drift = safediv(_alpha_drift, v_tau)
+            _s_drift = 4 * safediv(_s_drift, v_tau)
+            return _alpha_drift, _s_drift, points, v_tau, data_in
+
+        alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute1D(
+            drifts,
+            {name: data_eta[name] for name in drift_names},
+            data_eta,
+            eta_grid,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs_use,
+            pitch_inv_weight=pitch_inv_weight_use,
+        )
+    else:
+        # eta -> alpha, which differs between flux surfaces because it depends
+        # on iota. Carried with rho leading so ``batch_map`` slices it with the
+        # rest of the data; ``Bounce2D`` wants (num alpha, num rho).
+        ft_denom = N * nfp - iotas * M
+        alpha_eta = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        def drifts(data_in):
+            bounce = Bounce2D(
+                fft_grid,
+                data_in,
+                data_in["angle"],
+                Y_B,
+                data_in["alpha_per_rho"].T,
+                num_transit,
+                quad,
+                nufft_eps=nufft_eps,
+                is_fourier=True,
+                spline=spline,
+                vander=vander,
+            )
+            points = bounce.points(data_in["pitch_inv"], num_well=num_well)
+            v_tau, _alpha_drift, _s_drift = bounce.integrate(
+                [_v_tau, _alpha_drift_integrand, _radial_drift],
+                data_in["pitch_inv"],
+                data_in,
+                drift_names,
+                num_well=num_well,
+                nufft_eps=nufft_eps,
+                is_fourier=True,
+            )
+            _alpha_drift = safediv(_alpha_drift, v_tau)
+            _s_drift = 4 * safediv(_s_drift, v_tau)
+            return _alpha_drift, _s_drift, points, v_tau, data_in
+
+        alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute2D(
+            drifts,
+            {name: data_fft[name] for name in drift_names},
+            data_fft,
+            fft_grid,
+            angle,
+            alpha_eta,
+            num_pitch,
+            surf_batch_size,
+            pitch_invs=pitch_invs_use,
+            pitch_inv_weight=pitch_inv_weight_use,
+        )
 
     # --- 1b. Barely-trapped filter ---
     # Zero out wells whose poloidal bounce width delta_chi > 2*pi.
@@ -884,43 +1033,104 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     # --- 3. Phase-space average on the PSA grid (uniform in alpha) ---
     # Skip PSA when custom pitch_invs are provided.
     if pitch_invs is None:
-        num_alpha_psa = psa_grid.num_poloidal
+        if use_bounce1d:
+            num_alpha_psa = psa_grid.num_poloidal
 
-        def drifts_vtau(data_local):
-            bounce = Bounce1D(psa_grid, data_local, quad, is_reshaped=True)
-            v_tau = bounce.integrate(
-                [_v_tau],
-                data_local["pitch_inv"],
-                data_local,
-                [],
-                num_well=num_well,
-            )[0]
-            return v_tau, data_local
+            def drifts_vtau(data_local):
+                bounce = Bounce1D(psa_grid, data_local, quad, is_reshaped=True)
+                v_tau = bounce.integrate(
+                    [_v_tau],
+                    data_local["pitch_inv"],
+                    data_local,
+                    [],
+                    num_well=num_well,
+                )[0]
+                return v_tau, data_local
 
-        vtau_psa, _data_psa = _compute1D(
-            drifts_vtau,
-            {},
-            data_psa,
-            psa_grid,
-            num_pitch,
-            surf_batch_size,
-            pitch_invs=pitch_invs_use,
-            pitch_inv_weight=pitch_inv_weight_use,
-        )
-        num_rho_psa = psa_grid.num_rho
-        if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
-            vtau_psa = vtau_psa.reshape(
-                num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+            vtau_psa, _data_psa = _compute1D(
+                drifts_vtau,
+                {},
+                data_psa,
+                psa_grid,
+                num_pitch,
+                surf_batch_size,
+                pitch_invs=pitch_invs_use,
+                pitch_inv_weight=pitch_inv_weight_use,
             )
+            num_rho_psa = psa_grid.num_rho
+            if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
+                vtau_psa = vtau_psa.reshape(
+                    num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+                )
+        else:
+            # The phase-space average is taken over field lines uniform in
+            # alpha, unlike the eta grid above, so the labels are the same on
+            # every surface. Reuses the same (θ, ζ) data and angle.
+            num_alpha_psa = num_eta
+            alpha_psa = jnp.broadcast_to(
+                jnp.linspace(0, 2 * jnp.pi, num_alpha_psa, endpoint=False),
+                (rhos.size, num_alpha_psa),
+            )
+
+            def drifts_vtau(data_local):
+                bounce = Bounce2D(
+                    fft_grid,
+                    data_local,
+                    data_local["angle"],
+                    Y_B,
+                    data_local["alpha_per_rho"].T,
+                    num_transit,
+                    quad,
+                    nufft_eps=nufft_eps,
+                    is_fourier=True,
+                    spline=spline,
+                    vander=vander,
+                )
+                v_tau = bounce.integrate(
+                    [_v_tau],
+                    data_local["pitch_inv"],
+                    data_local,
+                    [],
+                    num_well=num_well,
+                    nufft_eps=nufft_eps,
+                    is_fourier=True,
+                )[0]
+                return v_tau, data_local
+
+            vtau_psa, _data_psa = _compute2D(
+                drifts_vtau,
+                {},
+                data_fft,
+                fft_grid,
+                angle,
+                alpha_psa,
+                num_pitch,
+                surf_batch_size,
+                pitch_invs=pitch_invs_use,
+                pitch_inv_weight=pitch_inv_weight_use,
+            )
+            num_rho_psa = rhos.size
+            # Batching can return the flux surface and field line axes flattened
+            # together. ``_phase_space_average`` averages over field lines on
+            # axis 1, so restore them; otherwise it silently reduces over the
+            # wrong axis and only the magnitude is wrong.
+            if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
+                vtau_psa = vtau_psa.reshape(
+                    num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+                )
 
         # Normalize by length of single toroidal transit.
         # Field-line length ∫dl/B = ∫dζ/B^ζ
-        Bzeta_psa = Bounce1D.reshape(psa_grid, data_psa["B^zeta"])
-        num_transit = kwargs.get("num_transit", 1)
-        n_1t = len(zeta) // num_transit
-        fl_length = jnp.abs(
-            simpson(1 / Bzeta_psa[..., :n_1t], x=zeta[:n_1t], axis=-1).mean(axis=1)
-        )
+        if use_bounce1d:
+            Bzeta_psa = Bounce1D.reshape(psa_grid, data_psa["B^zeta"])
+            n_1t = len(zeta) // num_transit
+            fl_length = jnp.abs(
+                simpson(1 / Bzeta_psa[..., :n_1t], x=zeta[:n_1t], axis=-1).mean(axis=1)
+            )
+        else:
+            # V_psi = ∬ |𝐁⋅∇ζ|⁻¹ dα dζ over (α, ζ) ∈ [0, 2π)², so the
+            # alpha-averaged single transit field line length is V_psi / 2π.
+            fl_length = base_grid.compress(data["V_psi"]) / (2 * jnp.pi)
 
         f_res_avg = _phase_space_average(
             vtau_psa,

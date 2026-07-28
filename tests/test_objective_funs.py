@@ -4162,17 +4162,18 @@ class TestObjectiveNaNGrad:
             NFP=1,
             sym=True,
         )
+
         eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
         field = OmnigenousField(
-            L_B=0,
-            M_B=2,
+            L_B=1,
+            M_B=3,
             L_x=1,
             M_x=1,
             N_x=1,
             NFP=eq.NFP,
             helicity=helicity,
-            B_lm=np.array([0.8, 1.2]),
         )
+
         obj = ObjectiveFunction(Omnigenity(eq=eq, field=field))
         obj.build()
         g = obj.grad(obj.x())

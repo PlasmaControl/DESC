@@ -2309,6 +2309,46 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(actual, expected)
 
     @pytest.mark.unit
+    def test_trapped_resonance_bounce2d_matches_bounce1d(self):
+        """Test TrappedResonance agrees between its two bounce backends."""
+        eq = get("precise_QA")
+        opts = dict(
+            # Coarser than this detects no resonance crossings at all, which
+            # would make the comparison pass vacuously on two zero arrays.
+            # num_transit must be 4: at 2 the field line samples the surface
+            # too sparsely to resolve Omega, for any num_rho.
+            num_rho=20,
+            num_eta=10,
+            num_transit=4,
+            knots_per_transit=60,
+            num_pitch=8,
+            num_quad=16,
+            p_max=4,
+            q_max=4,
+            N=0,
+            M=1,
+        )
+        f = {}
+        for use_bounce1d in (True, False):
+            obj = TrappedResonance(eq, use_bounce1d=use_bounce1d, **opts)
+            ObjectiveFunction(obj, use_jit=False).build(verbose=0)
+            f[use_bounce1d] = np.asarray(obj.compute(eq.params_dict)).ravel()
+        b1d, b2d = f[True], f[False]
+
+        assert np.count_nonzero(b1d) > 3, "no resonance crossings detected"
+        # Both backends should mark the same surfaces as resonant.
+        np.testing.assert_array_equal(b1d != 0, b2d != 0)
+        # Compare the summed objective rather than per-surface values. The
+        # pointwise relative error is dominated by the near-zero entries,
+        # where the radial drift bounce integral is a near-total cancellation
+        # (∫|f| / |∫f| reaches 1e2--1e7) and any two methods disagree by tens
+        # of percent. The sum is what the optimizer sees; it agrees to ~2%
+        # here, well inside each backend's own ~16% sensitivity to
+        # num_transit. The tolerance still catches gross errors, such as a
+        # phase space average reduced over the wrong axis.
+        np.testing.assert_allclose(b2d.sum(), b1d.sum(), rtol=0.1)
+
+    @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")

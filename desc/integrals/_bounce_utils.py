@@ -689,9 +689,7 @@ def get_alphas(alpha, iota, num_transit, NFP):
     alpha : jnp.ndarray
         Shape (num α, ) or (num α, num ρ).
         Starting field line poloidal labels {αᵢ₀}. If two-dimensional, then
-        the labels may differ between flux surfaces, which is required when
-        they are parameterized by a quantity that depends on the rotational
-        transform (e.g. the omnigenity angle η).
+        the labels may differ between flux surfaces. 
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.

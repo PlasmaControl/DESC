@@ -14,12 +14,16 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
 - Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
   asymmetric ``currvmns`` magnetic-axis extrapolation.
 - Bug (#2120) in ``desc.magnetic_fields.OmnigenousField`` computing NaNs when the ``B_lm`` corresponded to flat magnetic wells fixed by ``interpax`` ``v0.3.14``, updated tests to exercise this.
 - Fixes bug in ``reactor_QA.py`` script where the current profile was allowed to have a nonzero rho^1 component, which resulted in an unphysical profile near-axis.
     - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
 
+Breaking Changes
+
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
 
 v0.17.2
 -------
@@ -97,6 +101,9 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
+- Adds support for optimization targeting individual coils in a coilset.
+    - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+    - Able to set weights to zero, excluding certain coils from the objective.
 
 Bug Fixes
 
@@ -132,9 +139,6 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
-- Adds support for optimization targeting individual coils in a coilset.
-  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
-  - Able to set weights to zero, excluding certain coils from the objective.
 
 
 

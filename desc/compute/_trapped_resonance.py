@@ -12,6 +12,10 @@ from ._fast_ion import _radial_drift
 from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
 
+# Number of wells retained per (rho, alpha, pitch). The objective needs this to
+# size its residual vector when returning pointwise values.
+_NUM_WELL = 1
+
 
 def _v_tau(data, B, pitch):
     # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
@@ -390,12 +394,19 @@ def _phase_space_average(
     fl_length,
     num_alpha=None,
     fill_value=jnp.nan,
+    pointwise=False,
 ):
     """Phase-space average of f_res.
 
     Computes <f_res> = Σ_w ∫dα ∫dλ v·τ_b · f / (2 ∫dα ∫dl/B).
     Pitch quadrature uses Gauss-Legendre weights from
     ``Bounce1D.get_pitch_inv_quad``.
+
+    With ``pointwise``, the phase space sum is not performed here. Writing the
+    average as ∑ⱼ Wⱼ fⱼ over phase space points j, this returns √Wⱼ fⱼ instead,
+    so that a least squares objective summing the squares of those residuals
+    forms ∑ⱼ Wⱼ fⱼ². Squaring the average instead gives (∑ⱼ Wⱼ fⱼ)², which
+    carries cross terms between distinct phase space points.
 
     Parameters
     ----------
@@ -422,7 +433,8 @@ def _phase_space_average(
 
     Returns
     -------
-    f_res_avg : jnp.ndarray, shape (rho,)
+    f_res_avg : jnp.ndarray
+        Shape (rho,), or (rho, alpha, pitch, well) if ``pointwise``.
     """
     if num_alpha is None:
         num_alpha = vtau_out.shape[1]
@@ -436,6 +448,26 @@ def _phase_space_average(
     pitch_mask = _is_valid_value(pitch_inv_4d, fill_value)
     integrand_mask = _is_valid_value(vtau_out, fill_value) & pitch_mask
     safe_pitch_inv = jnp.where(pitch_mask, pitch_inv_4d, jnp.ones_like(pitch_inv_4d))
+
+    if pointwise:
+        # Weight carried by each phase space point, with the denominator of the
+        # average folded in so that the squares sum to the same quantity.
+        weight = jnp.where(
+            integrand_mask,
+            vtau_out
+            * pitch_inv_weight[:, jnp.newaxis, :, jnp.newaxis]
+            / safe_pitch_inv**2,
+            0.0,
+        )
+        weight = safediv(weight, (2 * num_alpha * fl_length)[:, None, None, None])
+        # Every factor above is non-negative, but the weight is exactly zero
+        # wherever a point is masked out, and √ has an infinite derivative
+        # there. Guard it the same way as f_q_abs.
+        is_zero = weight == 0
+        root_w = jnp.sqrt(jnp.where(is_zero, 1.0, weight))
+        root_w = jnp.where(is_zero, 0.0, root_w)
+        return root_w * f_res_clean[:, jnp.newaxis, :, :]
+
     pitch_integrated = _masked_sum(
         integrand
         * pitch_inv_weight[:, jnp.newaxis, :, jnp.newaxis]
@@ -852,7 +884,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     parameterization.
     """
     num_pitch = kwargs.get("num_pitch", None)
-    num_well = 1
+    num_well = _NUM_WELL
     M = kwargs.get("M", 1)
     N = kwargs.get("N", 1)
     nfp = kwargs.get("nfp", None)
@@ -873,6 +905,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     zeta = kwargs.get("zeta", None)
     stab_sacrifice = kwargs.get("stab_sacrifice", False)
     bt_filter_flag = kwargs.get("bt_filter_flag", False)
+    pointwise = kwargs.get("pointwise", True)
     cropping_DOmega = kwargs.get("cropping_DOmega", False)
     eta_grid = kwargs.get("_eta_grid", None)
     psa_grid = kwargs.get("_psa_grid", None)
@@ -1144,8 +1177,13 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
             fl_length,
             num_alpha=num_alpha_psa,
             fill_value=fill_value,
+            pointwise=pointwise,
         )
-        data["trapped EP resonance"] = base_grid.expand(f_res_avg)
+        # Pointwise residuals are not per flux surface, so they are returned
+        # flat for the least squares objective to square and sum.
+        data["trapped EP resonance"] = (
+            f_res_avg.reshape(-1) if pointwise else base_grid.expand(f_res_avg)
+        )
     else:  # Custom pitch_invs specified: skip phase-space average,
         # just return the raw resonance physics results
         data["trapped EP resonance"] = {

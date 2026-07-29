@@ -2282,7 +2282,9 @@ class TestObjectiveFunction:
             p_arr=np.array([0]),
             **opts,
         )
-        expected = grid.compress(data["trapped EP resonance"])
+        # Pointwise residuals are not per node, so they are not compressed
+        # onto the flux surface grid.
+        expected = data["trapped EP resonance"]
 
         obj = TrappedResonance(
             eq,
@@ -2320,10 +2322,17 @@ class TestObjectiveFunction:
             f[use_bounce1d] = np.asarray(obj.compute(eq.params_dict)).ravel()
         b1d, b2d = f[True], f[False]
 
-        assert np.count_nonzero(b1d) > 3, "no resonance crossings detected"
+        # Residuals are pointwise, so aggregate back to flux surfaces: the
+        # least squares objective forms the sum of squares, and individual
+        # points near the resonance threshold can be caught by one backend and
+        # not the other without that mattering.
+        s1d = (b1d**2).reshape(opts["num_rho"], -1).sum(axis=1)
+        s2d = (b2d**2).reshape(opts["num_rho"], -1).sum(axis=1)
+
+        assert np.count_nonzero(s1d) > 3, "no resonance crossings detected"
         # Both backends should mark the same surfaces as resonant.
-        np.testing.assert_array_equal(b1d != 0, b2d != 0)
-        np.testing.assert_allclose(b2d.sum(), b1d.sum(), rtol=0.1)
+        np.testing.assert_array_equal(s1d != 0, s2d != 0)
+        np.testing.assert_allclose(s2d.sum(), s1d.sum(), rtol=0.1)
 
     @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):

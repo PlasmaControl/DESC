@@ -405,6 +405,9 @@ def lsqtr(  # noqa: C901
             allx.append(x)
             f = f_new
             cost = cost_new
+            # Delete old arrays before computing new one
+            # otherwise the peak is bigger by 1 J-sized array
+            del J_h, J_a
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)

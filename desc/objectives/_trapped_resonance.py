@@ -264,9 +264,6 @@ class TrappedResonance(_Objective):
         self._constants["rho"] = rho
         self._dim_f = rho.size
 
-        # Bounce2D interpolates from a 2D Fourier series, so it needs a grid
-        # that can be FFT'd in both angles; stellarator symmetry would only
-        # cover half the poloidal domain.
         self._grid_1dr = LinearGrid(
             rho=rho,
             M=eq.M_grid,
@@ -402,11 +399,6 @@ class TrappedResonance(_Objective):
         if "quad2" in constants:
             quad2["quad2"] = constants["quad2"]
 
-        # Build the eta/PSA grids and evaluate field data on them here (rather
-        # than inside the "trapped EP resonance" compute function), since doing
-        # so needs the full Equilibrium object and compute functions must stay
-        # pure w.r.t. params/transforms/profiles/data. Must be rebuilt every
-        # call since the grids depend on iota, itself a function of params.
         base_grid = self._grid_1dr
         iotas = base_grid.compress(data["iota"])
         rhos = base_grid.compress(base_grid.nodes[:, 0])
@@ -414,10 +406,6 @@ class TrappedResonance(_Objective):
         N = self._hyperparameters["N"]
         nfp = eq.NFP
         zeta = constants.get("zeta", None)
-        # Use the static hyperparameters copy, not self._num_eta directly:
-        # self._num_eta isn't in _static_attrs, so under jit-tracing (e.g.
-        # during grad) it becomes a traced leaf, and jnp.linspace requires a
-        # concrete `num`.
         num_eta = self._hyperparameters["num_eta"]
 
         eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
@@ -425,11 +413,6 @@ class TrappedResonance(_Objective):
         alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
 
         if not self._use_bounce1d:
-            # Bounce2D interpolates onto field lines from a 2D Fourier series,
-            # so everything is evaluated once on the tensor-product (θ, ζ) grid
-            # and no field line grids are built at all. This is what removes
-            # the memory cost of the Bounce1D path, whose grids scale with
-            # num_eta * knots_per_transit * num_transit.
             fft_keys = list(Bounce2D.required_names) + [
                 "cvdrift0",
                 "gbdrift (periodic)",

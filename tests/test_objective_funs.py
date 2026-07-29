@@ -2163,22 +2163,15 @@ class TestObjectiveFunction:
         knots_per_transit = 60
         num_quad = 16
         opts = dict(
-            # settings coarser than this detect no resonance crossings at all,
-            # making the objective identically zero and the comparison trivial.
             num_pitch=8,
             KE_frac=np.array([1]),
             N=0,
             M=1,
-            # a single p/q=0/1 resonance keeps res_arr/q_arr/p_arr trivial
-            # to reproduce by hand outside of TrappedResonance.build().
             p_max=0,
             q_max=1,
             res_range_min=-1,
             res_range_max=1,
             weight_method="linear",
-            # This test reproduces the Bounce1D field line grids by hand below,
-            # so it pins that backend. The Bounce2D default builds no such
-            # grids and is covered by the objective's own tests.
             use_bounce1d=True,
         )
 
@@ -2196,10 +2189,6 @@ class TestObjectiveFunction:
         )
 
         # Build the eta/PSA grids and evaluate field data on them by hand,
-        # mirroring what TrappedResonance.compute() does internally: the
-        # "trapped EP resonance" compute function must stay pure w.r.t.
-        # params/transforms/profiles/data, so it no longer builds these
-        # grids itself (that requires the full Equilibrium object).
         iotas = grid.compress(data["iota"])
         rhos = grid.compress(grid.nodes[:, 0])
         M, N, nfp = opts["M"], opts["N"], eq.NFP
@@ -2313,10 +2302,6 @@ class TestObjectiveFunction:
         """Test TrappedResonance agrees between its two bounce backends."""
         eq = get("precise_QA")
         opts = dict(
-            # Coarser than this detects no resonance crossings at all, which
-            # would make the comparison pass vacuously on two zero arrays.
-            # num_transit must be 4: at 2 the field line samples the surface
-            # too sparsely to resolve Omega, for any num_rho.
             num_rho=20,
             num_eta=10,
             num_transit=4,
@@ -2338,14 +2323,6 @@ class TestObjectiveFunction:
         assert np.count_nonzero(b1d) > 3, "no resonance crossings detected"
         # Both backends should mark the same surfaces as resonant.
         np.testing.assert_array_equal(b1d != 0, b2d != 0)
-        # Compare the summed objective rather than per-surface values. The
-        # pointwise relative error is dominated by the near-zero entries,
-        # where the radial drift bounce integral is a near-total cancellation
-        # (∫|f| / |∫f| reaches 1e2--1e7) and any two methods disagree by tens
-        # of percent. The sum is what the optimizer sees; it agrees to ~2%
-        # here, well inside each backend's own ~16% sensitivity to
-        # num_transit. The tolerance still catches gross errors, such as a
-        # phase space average reduced over the wrong axis.
         np.testing.assert_allclose(b2d.sum(), b1d.sum(), rtol=0.1)
 
     @pytest.mark.unit
@@ -3492,12 +3469,6 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is TrappedResonance:
-        # Settings coarser than this detect no resonance crossings at all,
-        # making the objective identically zero and the test meaningless.
-        # p_max/q_max are reduced from the default 10/10: summing over fewer
-        # resonances is markedly less sensitive to which crossings a coarse
-        # rho grid happens to catch (empirically ~16% -> ~8% spread across
-        # the resolution sweep in TestComputeScalarResolution).
         kwargs["num_rho"] = 10
         kwargs["num_eta"] = 10
         kwargs["num_transit"] = 4
@@ -3964,19 +3935,6 @@ class TestComputeScalarResolution:
         rtol = 6e-2
         f = np.zeros_like(self.res_array, dtype=float)
         if objective is TrappedResonance:
-            # TrappedResonance sums over discrete resonance crossings, which
-            # are sensitive to grid resolution if the equilibrium's actual
-            # symmetry doesn't match the objective's N, M helicity: even
-            # tiny (~1e-4 relative) resolution-dependent noise in iota/|B|
-            # can then flip which crossings get caught. HELIOTRON (the
-            # shared self.eq below) is not quasi-axisymmetric, so it is a
-            # poor match for N=0, M=1 (QA); a genuinely QA equilibrium
-            # brings the resolution sensitivity in line with other
-            # objectives (< 1% here, vs. up to ~40% on HELIOTRON). Built
-            # directly here (rather than through
-            # _reduced_resolution_objective) so the higher num_rho/num_eta
-            # needed to resolve crossings on this equilibrium don't affect
-            # other tests that share that helper.
             eq = get("precise_QA")
             kwargs = dict(
                 num_rho=20,

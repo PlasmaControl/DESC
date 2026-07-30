@@ -213,8 +213,7 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         self._endpoint = bool(endpoint)
         self._is_meshgrid = True
         # these are default values that may get overwritten in _create_nodes
-        self._fft_x1 = False
-        self._fft_x2 = False
+        self._fft = [False, False, False]
         self._can_fft2 = not sym and not endpoint
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
@@ -287,11 +286,11 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         zeta_period = self.period[2]
 
         # theta
-        t, dt, self._fft_x1 = _create_linear_nodes(
+        t, dt, self._fft[1] = _create_linear_nodes(
             M, theta, theta_period, endpoint, sym=self.sym
         )
         # zeta
-        z, dz, self._fft_x2 = _create_linear_nodes(
+        z, dz, self._fft[2] = _create_linear_nodes(
             N, zeta, zeta_period, endpoint, NFP=NFP
         )
 

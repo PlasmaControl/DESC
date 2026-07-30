@@ -26,8 +26,7 @@ class AbstractGrid(IOAble, ABC):
         "_inverse_x1_idx",
         "_inverse_x2_idx",
         "_is_meshgrid",
-        "_fft_x1",
-        "_fft_x2",
+        "_fft",
         "_can_fft2",
     ]
 
@@ -37,8 +36,7 @@ class AbstractGrid(IOAble, ABC):
         "_M",
         "_N",
         "_is_meshgrid",
-        "_fft_x1",
-        "_fft_x2",
+        "_fft",
         "_can_fft2",
     ]
 
@@ -520,18 +518,26 @@ class AbstractGrid(IOAble, ABC):
         return self.__dict__.setdefault("_is_meshgrid", False)
 
     @property
+    def fft(self):
+        """tuple: Whether this grid is compatible with FFT in each direction."""
+        if not hasattr(self, "_fft"):
+            self._fft = [False, False, False]
+        return self._fft
+
+    @property
+    def fft_x0(self):
+        """bool: whether this grid is compatible with FFT in the x0 direction."""
+        return self.fft[0]
+
+    @property
     def fft_x1(self):
         """bool: whether this grid is compatible with FFT in the x1 direction."""
-        if not hasattr(self, "_fft_x1"):
-            self._fft_x1 = False
-        return self._fft_x1
+        return self.fft[1]
 
     @property
     def fft_x2(self):
         """bool: whether this grid is compatible with FFT in the x2 direction."""
-        if not hasattr(self, "_fft_x2"):
-            self._fft_x2 = False
-        return self._fft_x2
+        return self.fft[2]
 
     @property
     def can_fft2(self):

@@ -382,8 +382,7 @@ class QuadratureGridCylindrical(AbstractGridCylindrical):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._is_meshgrid = True
-        self._fft_x1 = True
-        self._fft_x2 = False
+        self._fft = [False, True, False]
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         self._sort_nodes()
         (

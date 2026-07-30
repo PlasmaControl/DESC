@@ -128,6 +128,11 @@ doc_device_id = """
         are on different devices, the ObjectiveFunction will run each sub-objective
         on the device specified in the sub-objective.
 """
+doc_rank = """
+    rank : int, optional
+        MPI rank to run the objective on. Defaults to 0. Objectives on the same
+        rank should have the same `device_id`.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -139,6 +144,7 @@ docs = {
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
     "device_id": doc_device_id,
+    "rank": doc_rank,
 }
 
 doc_bounce = """
@@ -374,6 +380,7 @@ class ObjectiveFunction(IOAble):
         "_objectives",
         "_use_jit",
     ]
+    # these will be updated for MPI later
     _static_attrs = [
         "_built",
         "_compile_mode",
@@ -395,7 +402,6 @@ class ObjectiveFunction(IOAble):
         name="ObjectiveFunction",
         jac_chunk_size="auto",
         mpi=None,
-        rank_per_objective=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -423,24 +429,16 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
+        ranks = [obj._rank for obj in objectives]
         device_ids = [obj._device_id for obj in objectives]
-        self._is_mpi = len(set(device_ids)) > 1
+        self._is_mpi = len(set(ranks)) > 1
         if mpi is not None:
             # for multiple node cases, each process sees 1 CPU
             # for those cases we cannot put objectives on different devices
             # instead we will run each objective on the given rank
             self._is_mpi = True
-            self._rank_per_objective = (
-                rank_per_objective
-                if rank_per_objective is not None
-                else np.arange(len(objectives))
-            )
+            self._rank_per_objective = ranks
             self._rank_per_objective = np.asarray(self._rank_per_objective)
-            assert len(objectives) == len(self._rank_per_objective), (
-                "rank_per_objective must have one entry per objective. Got "
-                f"{len(self._rank_per_objective)} entries for "
-                f"{len(objectives)} objectives."
-            )
             # here, we guess the number of devices per node by max(device_ids) + 1
             # device id can be same for different devices on different nodes, these will
             # have different ranks, for the check, we take the mod for mapping
@@ -474,6 +472,7 @@ class ObjectiveFunction(IOAble):
                 f"index is {max(self._rank_per_objective)}), but {self.size} MPI "
                 f"rank(s) are running. These must match. "
             )
+            # TODO: probably want to relx this for constraints.
             errorif(
                 n_ranks_needed < self.size,
                 ValueError,
@@ -1651,6 +1650,7 @@ class _Objective(IOAble, ABC):
         "_units",
         "_device",
         "_device_id",
+        "_rank",
         "_static_attrs",
     ]
 
@@ -1667,6 +1667,7 @@ class _Objective(IOAble, ABC):
         name=None,
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -1681,6 +1682,7 @@ class _Objective(IOAble, ABC):
 
         self._jac_chunk_size = jac_chunk_size
         self._device_id = device_id
+        self._rank = rank
         # This will help the data placement if we have multiple GPU devices.
         # Linear objectives have a separate ObjectiveFunction, hence they cannot use the
         # "with" context manager of the main objective.

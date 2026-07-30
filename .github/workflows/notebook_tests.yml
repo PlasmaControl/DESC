@@ -25,7 +25,7 @@ jobs:
         group: [1, 2, 3]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Filter changes
         id: changes
@@ -59,7 +59,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}

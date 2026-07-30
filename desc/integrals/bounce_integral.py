@@ -166,6 +166,11 @@ class Bounce2D(Bounce):
     the particle's guiding center trajectory traveling in the direction of increasing
     field-line-following coordinate ζ.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
+
     Refrences
     ---------
     Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm

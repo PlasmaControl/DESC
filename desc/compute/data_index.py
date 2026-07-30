@@ -255,6 +255,7 @@ _class_inheritance = {
     "desc.geometry.surface.ZernikeRZToroidalSection": [
         "desc.geometry.core.Surface",
     ],
+    "desc.dipole._Dipole": [],
     "desc.coils.FourierRZCoil": [
         "desc.geometry.curve.FourierRZCurve",
         "desc.geometry.core.Curve",

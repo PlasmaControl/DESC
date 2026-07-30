@@ -1,5 +1,7 @@
 """Classes for dipoles."""
 
+import pdb
+
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
@@ -21,7 +23,7 @@ from desc.backend import (
 )
 from desc.compute import get_params
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     dipole_field,
@@ -35,6 +37,7 @@ from desc.utils import (
     errorif,
     flatten_list,
     reflection_matrix,
+    rotation_matrix,
     rpz2xyz,
     rpz2xyz_vec,
     safenorm,
@@ -43,6 +46,17 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 from desc.utils import errorif, reflection_matrix, rotation_matrix
+
+
+import numbers
+from desc.compute import compute as compute_fun
+from desc.compute import data_index
+from desc.compute.utils import (
+    _parse_parameterization,
+    get_data_deps,
+    get_params,
+    get_transforms,
+)
 
 @partial(jit, static_argnames=["chunk_size"])
 def magnetic_dipole_field(
@@ -162,13 +176,13 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         radially inward.
     """
     
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_x"] + ["_y"] + ["_z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name", "_shift", "_rotmat"] + ["_name"]
+    _io_attrs_ = _MagneticField._io_attrs_ + ["_X"] + ["_Y"] + ["_Z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name", "_shift", "_rotmat"] + ["_name"]
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_name"]
 
-    def __init__(self, x=0.0, y=0.0, z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0, name=""):
-        self._x = jnp.float64(float(np.squeeze(x)))
-        self._y = jnp.float64(float(np.squeeze(y)))
-        self._z = jnp.float64(float(np.squeeze(z)))
+    def __init__(self, X=0.0, Y=0.0, Z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0, name=""):
+        self._X = jnp.float64(float(np.squeeze(X)))
+        self._Y = jnp.float64(float(np.squeeze(Y)))
+        self._Z = jnp.float64(float(np.squeeze(Z)))
         self._phi = jnp.float64(float(np.squeeze(phi)))
         self._theta = jnp.float64(float(np.squeeze(theta)))
         self._m0 = jnp.float64(float(np.squeeze(m0)))
@@ -210,36 +224,36 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @optimizable_parameter
     @property
-    def x(self):
+    def X(self):
         """float: X-coordinate of dipole position."""
-        return self._x
+        return self._X
 
-    @x.setter
-    def x(self, new):
+    @X.setter
+    def X(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._x = jnp.float64(float(np.squeeze(new)))
+        self._X = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
-    def y(self):
+    def Y(self):
         """float: Y-coordinate of dipole position."""
-        return self._y
+        return self._Y
 
-    @y.setter
-    def y(self, new):
+    @Y.setter
+    def Y(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._y = jnp.float64(float(np.squeeze(new)))
+        self._Y = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
-    def z(self):
+    def Z(self):
         """float: Z-coordinate of dipole position."""
-        return self._z
+        return self._Z
 
-    @z.setter
-    def z(self, new):
+    @Z.setter
+    def Z(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        self._z = jnp.float64(float(np.squeeze(new)))
+        self._Z = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -303,8 +317,8 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @property
     def position(self):
-        """ndarray: Position of dipole as [x, y, z]."""
-        return jnp.array([self._x, self._y, self._z])
+        """ndarray: Position of dipole as [X,Y,Z]."""
+        return jnp.array([self._X, self._Y, self._Z])
     
     @property
     def M0(self):
@@ -380,18 +394,23 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             phi_coords = coords[:, 1]
             coords = rpz2xyz(coords)
 
+        # if params is None:
+        #     params = {
+        #         get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
+        #         # "x": self.x,
+        #         # "y": self.y,  
+        #         # "z": self.z,
+        #         # "phi": self.phi,
+        #         # "theta": self.theta,
+        #         # "m0": self.m0,
+        #         # "rho": self.rho,
+        #         # "M0": self.M0,
+        #     }
+
         if params is None:
-            params = {
-                #get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
-                "x": self.x,
-                "y": self.y,  
-                "z": self.z,
-                "phi": self.phi,
-                "theta": self.theta,
-                "m0": self.m0,
-                "rho": self.rho,
-                "M0": self.M0,
-            }
+            rho = self.rho
+        else:
+            rho = params.pop("rho", self.rho)
 
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
@@ -408,24 +427,44 @@ class _Dipole(_MagneticField, Optimizable, ABC):
                 f"source_grid for coils must have NFP=1 or NFP={NFP}",
             )
 
-        x = params.get("x", self.x)
-        y = params.get("y", self.y)
-        z = params.get("z", self.z)
-        phi = params.get("phi", self.phi)
-        theta = params.get("theta", self.theta)
-        if "M0" in params:
-            m0 = params["M0"]
+        if not params or not transforms:
+            data = self.compute(
+                ["X", "Y", "Z", "phi", "theta", "m0", "rho"],
+                grid=source_grid,
+                params=params,
+                transforms=transforms,
+                basis="xyz",
+            )
         else:
-            m0 = params.get("m0", self.m0) * params.get("rho", self.rho)
+            data = compute_fun(
+                self,
+                names=["X", "Y", "Z", "phi", "theta", "m0", "rho"],
+                params=params,
+                transforms=transforms,
+                profiles={},
+            )
+            # data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
+            # data["x"] = rpz2xyz(data["x"])
+            rho = data["rho"]
 
-        dipole_pos = jnp.array([[x, y, z]])
+        # x = params.get("x", self.x)
+        # y = params.get("y", self.y)
+        # z = params.get("z", self.z)
+        # phi = params.get("phi", self.phi)
+        # theta = params.get("theta", self.theta)
+        # if "M0" in params:
+        #     m0 = params["M0"]
+        # else:
+        #     m0 = params.get("m0", self.m0) * params.get("rho", self.rho)
+
+        dipole_pos = jnp.array([[data["X"], data["Y"], data["Z"]]])
 
         AB = op(
             coords,
             dipole_pos,
-            phi,
-            theta, 
-            m0,
+            data["phi"],
+            data["theta"], 
+            data["m0"]*rho,
             chunk_size=chunk_size, 
         )
 
@@ -515,20 +554,20 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     
     def translate(self, displacement=[0, 0, 0]):
         """Translate the Dipole by a rigid displacement in X,Y,Z coordinates."""
-        self._x += jnp.asarray(displacement)[0]
-        self._y += jnp.asarray(displacement)[1]
-        self._z += jnp.asarray(displacement)[2]
+        self._X += jnp.asarray(displacement)[0]
+        self._Y += jnp.asarray(displacement)[1]
+        self._Z += jnp.asarray(displacement)[2]
         self.shift = self.shift + jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the Dipole by a fixed angle about axis in X,Y,Z coordinates."""
         R = rotation_matrix(axis=axis, angle=angle)
         
-        pos = jnp.array([self._x, self._y, self._z])
+        pos = jnp.array([self._X, self._Y, self._Z])
         new_pos = R @ pos
-        self._x = new_pos[0]
-        self._y = new_pos[1]
-        self._z = new_pos[2]
+        self._X = new_pos[0]
+        self._Y = new_pos[1]
+        self._Z = new_pos[2]
         
         m_vec = self.m_xyz
         new_m = R @ m_vec
@@ -544,11 +583,11 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         """Flip the Dipole about the plane with specified normal in X,Y,Z coordinates."""
         F = reflection_matrix(normal)
         
-        pos = jnp.array([self._x, self._y, self._z])
+        pos = jnp.array([self._X, self._Y, self._Z])
         new_pos = F @ pos
-        self._x = new_pos[0]
-        self._y = new_pos[1]
-        self._z = new_pos[2]
+        self._X = new_pos[0]
+        self._Y = new_pos[1]
+        self._Z = new_pos[2]
         
         m_vec = self.m_xyz
         new_m = F @ m_vec
@@ -560,13 +599,122 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         self.rotmat = (F @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ F.T
 
+    def compute(
+            self,
+            names,
+            grid=None,
+            params=None,
+            transforms=None,
+            data=None,
+            override_grid=True,
+            **kwargs,
+        ):
+            """Compute the quantity given by name on grid.
+
+            Parameters
+            ----------
+            names : str or array-like of str
+                Name(s) of the quantity(s) to compute.
+            grid : Grid or int, optional
+                Grid of coordinates to evaluate at. Defaults to a Linear grid.
+                If an integer, uses that many equally spaced points.
+            params : dict of ndarray
+                Parameters from the equilibrium. Defaults to attributes of self.
+            transforms : dict of Transform
+                Transforms for R, Z, lambda, etc. Default is to build from grid
+            data : dict of ndarray
+                Data computed so far, generally output from other compute functions.
+                Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+                v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+                of the cylindrical coordinates R, ϕ, Z.
+            override_grid : bool
+                If True, override the user supplied grid if necessary and use a full
+                resolution grid to compute quantities and then downsample to user requested
+                grid. If False, uses only the user specified grid, which may lead to
+                inaccurate values for surface or volume averages.
+
+            Returns
+            -------
+            data : dict of ndarray
+                Computed quantity and intermediate variables.
+
+            """
+            if isinstance(names, str):
+                names = [names]
+            if grid is None:
+                grid = LinearGrid(N=2 * 15 * getattr(self, "NFP", 1) + 5)
+            elif isinstance(grid, numbers.Integral):
+                grid = LinearGrid(N=grid)
+            errorif(
+                not isinstance(grid, _Grid),
+                TypeError,
+                f"grid argument must be a Grid object or an integer, got type {type(grid)}",
+            )
+
+            if params is None:
+                params = get_params(names, obj=self, basis=kwargs.get("basis", "rpz"))
+            if transforms is None:
+                transforms = get_transforms(
+                    names,
+                    obj=self,
+                    grid=grid,
+                    jitable=True,
+                )
+            if data is None:
+                data = {}
+            profiles = {}
+
+            p = _parse_parameterization(self)
+            deps = list(set(get_data_deps(names, obj=p) + names))
+            dep0d = [
+                dep
+                for dep in deps
+                if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+            ]
+            calc0d = bool(len(dep0d))
+            # see if the grid we're already using will work for desired qtys
+            if calc0d and (grid.N >= 2 * 15 + 5) and isinstance(grid, LinearGrid):
+                calc0d = False
+
+            if calc0d and override_grid:
+                grid0d = LinearGrid(N=2 * 15 * getattr(self, "NFP", 1) + 5)
+                data0d = compute_fun(
+                    self,
+                    dep0d,
+                    params=params,
+                    transforms=get_transforms(
+                        dep0d,
+                        obj=self,
+                        grid=grid0d,
+                        jitable=True,
+                        **kwargs,
+                    ),
+                    profiles={},
+                    data=None,
+                    **kwargs,
+                )
+                # these should all be 0d quantities so don't need to compress/expand
+                data0d = {key: val for key, val in data0d.items() if key in dep0d}
+                data.update(data0d)
+
+            data = compute_fun(
+                self,
+                names,
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                **kwargs,
+            )
+            return data
+
     def __repr__(self):
         """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, x={}, y={}, z={}, phi={}, theta={}, m0={}, rho={})".format(self.name, self.x, self.y, self.z, self.phi, self.theta, self.m0, self.rho)
+            + " (name={}, x={}, y={}, z={}, phi={}, theta={}, m0={}, rho={})".format(self.name, self.X, self.Y, self.Z, self.phi, self.theta, self.m0, self.rho)
         )
     
 class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
@@ -842,19 +990,19 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         assert basis.lower() in ["rpz", "xyz"]
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
-            params = [{
-                #get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
-                "x": dipole.x,
-                "y": dipole.y,  
-                "z": dipole.z,
-                "phi": dipole.phi,
-                "theta": dipole.theta,
-                "m0": dipole.m0,
-                "rho": dipole.rho,
-                "M0": dipole.M0,
-            }
-            for dipole in self
-            ]
+            params = [
+                get_params(["X", "Y", "Z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self]
+            #     "x": dipole.x,
+            #     "y": dipole.y,  
+            #     "z": dipole.z,
+            #     "phi": dipole.phi,
+            #     "theta": dipole.theta,
+            #     "m0": dipole.m0,
+            #     "rho": dipole.rho,
+            #     "M0": dipole.M0,
+            # }
+            # for dipole in self
+            # ]
             for par, dipole in zip(params, self):
                 par["rho"] = dipole.rho
 
@@ -891,16 +1039,17 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         # ``tree_stack`` only if params are traced (e.g. inside an optimizer).
         try:
             sources = {
-                k: jnp.asarray(np.array([np.asarray(p[k]) for p in params]))
+                k: jnp.asarray(np.array([np.asarray(p[k]) for p in params])).reshape(len(params))
                 for k in params[0]
             }
         except Exception:
             sources = tree_stack(params)
-        rs = jnp.stack([sources["x"], sources["y"], sources["z"]], axis=-1)
+        rs = jnp.stack([sources["X"], sources["Y"], sources["Z"]], axis=-1)
         if "M0" in sources:
             M0 = sources["M0"]
         else:
             M0 = sources["m0"] * sources["rho"]
+        #pdb.set_trace()
         sin_theta = jnp.sin(sources["theta"])
         m_hat = jnp.stack(
             [
@@ -1090,7 +1239,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         m_vec = np.array([d.m_xyz for d in dipoles]) 
 
         # m dipole positions
-        m_pos = np.array([[d.x, d.y, d.z] for d in dipoles]) 
+        m_pos = np.array([[d.X, d.Y, d.Z] for d in dipoles]) 
 
         # compute (n x m) pairwise distances
         nax = np.newaxis
@@ -1150,7 +1299,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " ((name={}, with {} submembers), x={}, y={}, z={}, phi={}, theta={}, m0={}, rho={})".format(self.name, len(self), self.x, self.y, self.z, self.phi, self.theta, self.m0, self.rho)
+            + " (name={}, with {} submembers)".format(self.name, len(self))
         )
     
 def export_dipoles(dipole_set, f):
@@ -1174,20 +1323,20 @@ def export_dipoles(dipole_set, f):
 
     outfile = open(f, 'w')
 
-    print("x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)", file=outfile)
+    print("x (m), y (m), z (m), phi (rad), theta (rad), m0, rho (unitless)", file=outfile)
     
     for i in range(len(d)):
-        print(f"{d[i].x}, {d[i].y}, {d[i].z}, {d[i].rho}, {d[i].phi}, {d[i].theta}", file=outfile)
+        print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho}", file=outfile)
 
     outfile.close()
 
 import csv
 
-def create_dipole(x, y, z, phi, theta, m0, rho):
+def create_dipole(X, Y, Z, phi, theta, m0, rho):
     '''
     Creates a Dipole object using given data
     '''
-    return _Dipole(x=x, y=y,z=z, phi=phi, theta=theta, m0=m0, rho=rho)
+    return _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, rho=rho)
 
 def import_dipoles(NFP, sym, filename):
     '''

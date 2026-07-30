@@ -19,6 +19,7 @@ colorama.init()
 __all__ = [
     "basis",
     "coils",
+    "dipole"
     "compute",
     "continuation",
     "derivatives",

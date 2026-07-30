@@ -31,6 +31,7 @@ from . import (
     _basis_vectors,
     _bootstrap,
     _core,
+    _dipole,
     _curve,
     _equil,
     _fast_ion,

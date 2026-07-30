@@ -423,6 +423,7 @@ class PowerSeries(_Basis):
 
     _fft = [False, True, True]  # trivially true in poloidal and toroidal directions
     _dct = [False, False, False]
+    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, L, sym="even"):
         self._L = check_nonnegint(L, "L", False)
@@ -536,6 +537,7 @@ class FourierSeries(_Basis):
 
     _fft = [False, True, True]  # trivially true in poloidal direction
     _dct = [False, False, False]
+    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, N, NFP=1, sym=False):
         self._L = 0
@@ -660,6 +662,7 @@ class DoubleFourierSeries(_Basis):
 
     _fft = [False, True, True]
     _dct = [False, False, False]
+    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
@@ -825,6 +828,7 @@ class ZernikePolynomial(_Basis):
 
     _fft = [False, False, True]
     _dct = [False, False, False]
+    _tensor_product = False
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1025,6 +1029,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
     _fft = [False, True, True]
     _dct = [True, False, False]
+    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1204,6 +1209,7 @@ class DoubleChebyshevFourierBasis(_Basis):
 
     _fft = [False, True, False]
     _dct = [True, False, True]
+    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1412,6 +1418,7 @@ class FourierZernikeBasis(_Basis):
 
     _fft = [False, False, True]
     _dct = [False, False, False]
+    _tensor_product = False
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1627,6 +1634,7 @@ class ChebyshevPolynomial(_Basis):
 
     _fft = [False, True, True]  # trivially true
     _dct = [True, False, False]
+    _tensor_product = True
 
     def __init__(self, L):
         self._L = check_nonnegint(L, "L", False)

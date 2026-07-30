@@ -27,6 +27,7 @@ class AbstractGrid(IOAble, ABC):
         "_inverse_x2_idx",
         "_is_meshgrid",
         "_fft",
+        "_dct",
         "_can_fft2",
     ]
 
@@ -37,7 +38,7 @@ class AbstractGrid(IOAble, ABC):
         "_N",
         "_is_meshgrid",
         "_fft",
-        "_can_fft2",
+        "_dct" "_can_fft2",
     ]
 
     def __repr__(self):
@@ -516,6 +517,28 @@ class AbstractGrid(IOAble, ABC):
         nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
         """
         return self.__dict__.setdefault("_is_meshgrid", False)
+
+    @property
+    def dct(self):
+        """list: Whether this grid is compatible with DCT in each direction."""
+        if not hasattr(self, "_dct"):
+            self._dct = [False, False, False]
+        return self._dct
+
+    @property
+    def dct_x0(self):
+        """bool: whether this grid is compatible with DCT in the x0 direction."""
+        return self.dct[0]
+
+    @property
+    def dct_x1(self):
+        """bool: whether this grid is compatible with DCT in the x1 direction."""
+        return self.dct[1]
+
+    @property
+    def dct_x2(self):
+        """bool: whether this grid is compatible with DCT in the x2 direction."""
+        return self.dct[2]
 
     @property
     def fft(self):

@@ -410,7 +410,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         if params is None:
             rho = self.rho
         else:
-            rho = params.pop("rho", self.rho)
+            rho = params.get("rho", self.rho)
 
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:

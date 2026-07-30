@@ -25,15 +25,26 @@ class InputReader:
     ----------
     cl_args : None, str, or list (Default = None)
         command line arguments to parse
+        If these are not None, then it is assumed that this
+        is being invoked as a call of desc from the command
+        line. In that case, if called on a vmec input file, the
+        corresponding converted DESC input file will be saved
+        automatically.
+    save_converted_vmec_input : bool (Default = False)
+        If True, then if a VMEC input file is converted to
+        DESC input, will save the input file. False by default,
+        but True when DESC module is invoked from the command line
+        on an input file like ``python -m desc input.vmec``.
 
     """
 
-    def __init__(self, cl_args=None):
+    def __init__(self, cl_args=None, save_converted_vmec_input=False):
         """Initialize InputReader instance."""
         self._args = None
         self._inputs = None
         self._input_path = None
         self._output_path = None
+        self._save_converted_vmec_input = save_converted_vmec_input
 
         if cl_args is not None:
             if isinstance(cl_args, os.PathLike):
@@ -216,12 +227,19 @@ class InputReader:
             if isVMEC:
                 print("Converting VMEC input to DESC input")
                 # use a buffer here to avoid having to read/write a file
-                # unnecessarily
-                buffer = io.StringIO()
-                InputReader.vmec_to_desc_input(self.input_path, buffer)
-                buffer.seek(0)
-                desc_file = buffer
-                return self.parse_inputs(desc_file)
+                # unless specified by flag
+                path = (
+                    self.input_path + "_desc"
+                    if self._save_converted_vmec_input
+                    else io.StringIO()
+                )
+                InputReader.vmec_to_desc_input(self.input_path, path)
+                if self._save_converted_vmec_input:
+                    print("Generated DESC input file {}:".format(path))
+                else:
+                    # put buffer back to start so it may be read again
+                    path.seek(0)
+                return self.parse_inputs(path)
 
             # extract numbers & words
             match = re.search(r"[!#]", line)

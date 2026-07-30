@@ -43,8 +43,12 @@ def test_vmec_input(tmpdir_factory):
     tmp_path = tmpdir.join("input.DSHAPE")
     shutil.copyfile(input_path, tmp_path)
     with pytest.warns(UserWarning):
-        ir = InputReader(cl_args=[str(tmp_path)])
+        ir = InputReader(cl_args=[str(tmp_path)], save_converted_vmec_input=True)
+        # this mimics the CLI behavior, which has this
+        # True by default
     vmec_inputs = ir.inputs
+    # ir makes a VMEC file automatically if called with cl_args
+    path_converted_file = tmpdir.join("input.DSHAPE_desc")
     # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
@@ -58,13 +62,6 @@ def test_vmec_input(tmpdir_factory):
     correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
 
     # check DESC input file matches known correct one line-by-line
-    # above InputReader(cl_args=[str(tmp_path)]) uses a temp buffer
-    # instead of the old behavior of writing an intermediate file (#2148)
-    # so we re-create the input file here at a specific
-    # location, so that we can compare
-    path_converted_file = tmpdir.join("input.DSHAPE_converted")
-    with pytest.warns(UserWarning):
-        InputReader.vmec_to_desc_input(input_path, str(path_converted_file))
     with open(correct_file_path) as f:
         lines_correct = f.readlines()
     with open(path) as f:

@@ -7,6 +7,10 @@ on:
     types: [opened, synchronize]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   memory-benchmark:
     runs-on: ubuntu-latest
@@ -44,7 +48,7 @@ jobs:
         run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes}}" >> $GITHUB_ENV
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -90,7 +94,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (PR)
+      - name: Run Benchmarks (PR)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
@@ -115,7 +119,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env2
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
@@ -140,7 +144,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (MASTER)
+      - name: Run Benchmarks (MASTER)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate

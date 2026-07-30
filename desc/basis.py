@@ -254,6 +254,28 @@ class _Basis(IOAble, ABC):
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     @property
+    def dct(self):
+        """list: Whether this basis is compatible with DCT in (x0,x1,x2) directions."""
+        if not hasattr(self, "_dct"):
+            self._dct = [False, False, False]
+        return self._dct
+
+    @property
+    def dct_x0(self):
+        """bool: whether this basis is compatible with DCT in the x0 direction."""
+        return self.dct[0]
+
+    @property
+    def dct_x1(self):
+        """bool: whether this basis is compatible with DCT in the x1 direction."""
+        return self.dct[1]
+
+    @property
+    def dct_x2(self):
+        """bool: whether this basis is compatible with DCT in the x2 direction."""
+        return self.dct[2]
+
+    @property
     def fft(self):
         """list: Whether this basis is compatible with FFT in (x0,x1,x2) directions."""
         if not hasattr(self, "_fft"):
@@ -314,6 +336,13 @@ class _Basis(IOAble, ABC):
     def inverse_LM_idx(self):
         """ndarray: Indices of unique_LM_idx that recover the LM mode pairs."""
         return self._inverse_LM_idx
+
+    @property
+    def tensor_product(self):
+        """bool: Whether this basis is a tensor product of 1D bases."""
+        if not hasattr(self, "_tensor_product"):
+            self._tensor_product = False
+        return self._tensor_product
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -393,6 +422,7 @@ class PowerSeries(_Basis):
     """
 
     _fft = [False, True, True]  # trivially true in poloidal and toroidal directions
+    _dct = [False, False, False]
 
     def __init__(self, L, sym="even"):
         self._L = check_nonnegint(L, "L", False)
@@ -505,6 +535,7 @@ class FourierSeries(_Basis):
     """
 
     _fft = [False, True, True]  # trivially true in poloidal direction
+    _dct = [False, False, False]
 
     def __init__(self, N, NFP=1, sym=False):
         self._L = 0
@@ -628,6 +659,7 @@ class DoubleFourierSeries(_Basis):
     """
 
     _fft = [False, True, True]
+    _dct = [False, False, False]
 
     def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
@@ -792,6 +824,7 @@ class ZernikePolynomial(_Basis):
     """
 
     _fft = [False, False, True]
+    _dct = [False, False, False]
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -991,6 +1024,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
     """
 
     _fft = [False, True, True]
+    _dct = [True, False, False]
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1169,6 +1203,7 @@ class DoubleChebyshevFourierBasis(_Basis):
     """
 
     _fft = [False, True, False]
+    _dct = [True, False, True]
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1376,6 +1411,7 @@ class FourierZernikeBasis(_Basis):
     """
 
     _fft = [False, False, True]
+    _dct = [False, False, False]
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1590,6 +1626,7 @@ class ChebyshevPolynomial(_Basis):
     """
 
     _fft = [False, True, True]  # trivially true
+    _dct = [True, False, False]
 
     def __init__(self, L):
         self._L = check_nonnegint(L, "L", False)

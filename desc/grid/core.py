@@ -519,7 +519,7 @@ class AbstractGrid(IOAble, ABC):
 
     @property
     def fft(self):
-        """tuple: Whether this grid is compatible with FFT in each direction."""
+        """list: Whether this grid is compatible with FFT in each direction."""
         if not hasattr(self, "_fft"):
             self._fft = [False, False, False]
         return self._fft

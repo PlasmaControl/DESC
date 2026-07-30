@@ -1,6 +1,7 @@
 """Classes for spectral bases and functions for evaluation."""
 
 import functools
+import warnings
 from abc import ABC, abstractmethod
 from math import factorial
 
@@ -39,8 +40,7 @@ class _Basis(IOAble, ABC):
     ]
 
     _static_attrs = [
-        "_fft_poloidal",
-        "_fft_toroidal",
+        "_fft",
         "_L",
         "_M",
         "_N",
@@ -254,18 +254,26 @@ class _Basis(IOAble, ABC):
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     @property
-    def fft_poloidal(self):
-        """bool: whether this basis is compatible with fft in the poloidal direction."""
-        if not hasattr(self, "_fft_poloidal"):
-            self._fft_poloidal = False
-        return self._fft_poloidal
+    def fft(self):
+        """list: Whether this basis is compatible with FFT in (x0,x1,x2) directions."""
+        if not hasattr(self, "_fft"):
+            self._fft = [False, False, False]
+        return self._fft
 
     @property
-    def fft_toroidal(self):
-        """bool: whether this basis is compatible with fft in the toroidal direction."""
-        if not hasattr(self, "_fft_toroidal"):
-            self._fft_toroidal = False
-        return self._fft_toroidal
+    def fft_x0(self):
+        """bool: whether this basis is compatible with FFT in the x0 direction."""
+        return self.fft[0]
+
+    @property
+    def fft_x1(self):
+        """bool: whether this basis is compatible with FFT in the x1 direction."""
+        return self.fft[1]
+
+    @property
+    def fft_x2(self):
+        """bool: whether this basis is compatible with FFT in the x2 direction."""
+        return self.fft[2]
 
     @property
     def unique_L_idx(self):
@@ -346,6 +354,28 @@ class _Basis(IOAble, ABC):
             and self.spectral_indexing == other.spectral_indexing
         )
 
+    @property
+    def fft_poloidal(self):
+        """bool: Whether this grid is compatible with FFT in the x1 direction."""
+        warnings.warn(
+            FutureWarning(
+                "Attribute `fft_poloidal` is deprecated and will be removed in a "
+                + "future release. Use `fft_x1` instead."
+            )
+        )
+        return self.fft[1]
+
+    @property
+    def fft_toroidal(self):
+        """bool: Whether this grid is compatible with FFT in the x2 direction."""
+        warnings.warn(
+            FutureWarning(
+                "Attribute `fft_toroidal` is deprecated and will be removed in a "
+                + "future release. Use `fft_x2` instead."
+            )
+        )
+        return self.fft[2]
+
 
 class PowerSeries(_Basis):
     """1D basis set for flux surface quantities.
@@ -362,8 +392,7 @@ class PowerSeries(_Basis):
 
     """
 
-    _fft_poloidal = True  # trivially true
-    _fft_toroidal = True
+    _fft = [False, True, True]  # trivially true in poloidal and toroidal directions
 
     def __init__(self, L, sym="even"):
         self._L = check_nonnegint(L, "L", False)
@@ -475,8 +504,7 @@ class FourierSeries(_Basis):
 
     """
 
-    _fft_poloidal = True
-    _fft_toroidal = True
+    _fft = [False, True, True]  # trivially true in poloidal direction
 
     def __init__(self, N, NFP=1, sym=False):
         self._L = 0
@@ -599,8 +627,7 @@ class DoubleFourierSeries(_Basis):
 
     """
 
-    _fft_poloidal = True
-    _fft_toroidal = True
+    _fft = [False, True, True]
 
     def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
@@ -764,8 +791,7 @@ class ZernikePolynomial(_Basis):
 
     """
 
-    _fft_poloidal = False
-    _fft_toroidal = True
+    _fft = [False, False, True]
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -964,8 +990,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
     """
 
-    _fft_poloidal = True
-    _fft_toroidal = True
+    _fft = [False, True, True]
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1143,8 +1168,7 @@ class DoubleChebyshevFourierBasis(_Basis):
 
     """
 
-    _fft_poloidal = False
-    _fft_toroidal = False
+    _fft = [False, True, False]
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1351,8 +1375,7 @@ class FourierZernikeBasis(_Basis):
 
     """
 
-    _fft_poloidal = False
-    _fft_toroidal = True
+    _fft = [False, False, True]
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)
@@ -1566,8 +1589,7 @@ class ChebyshevPolynomial(_Basis):
 
     """
 
-    _fft_poloidal = True  # trivially true
-    _fft_toroidal = True
+    _fft = [False, True, True]  # trivially true
 
     def __init__(self, L):
         self._L = check_nonnegint(L, "L", False)

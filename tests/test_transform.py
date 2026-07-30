@@ -469,7 +469,7 @@ class TestTransform:
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        b._fft_toroidal = False
+        b._fft[2] = False
         g = LinearGridFlux(2, 3, 4)
         with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="fft")
@@ -484,7 +484,7 @@ class TestTransform:
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
-        b._fft_toroidal = False
+        b._fft[2] = False
         g = LinearGridFlux(2, 3, 4)
         with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="direct2")

@@ -8,12 +8,14 @@ from desc.utils import check_nonnegint, check_posint, errorif, warnif
 from .core import AbstractGrid
 from .utils import midpoint_spacing, periodic_spacing
 
+
 class AbstractGridCylindrical(AbstractGrid):
     """Base class for collocation grids in cylindrical coordinates.
 
     Specifically, these grids represent annular cylinders in real space,
     with the R and Z coordinates linearly rescaled to [0,1] and the
-    phi coordinate periodic with period 2*pi/NFP."""
+    phi coordinate periodic with period 2*pi/NFP.
+    """
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP"]
 
@@ -40,9 +42,9 @@ class AbstractGridCylindrical(AbstractGrid):
         """Get general label that specifies the direction of given coordinate label."""
         if label in {"x0", "x1", "x2"}:
             return label
-        x0 = {"r": "r"}[self.coordinates[0]]
+        x0 = {"R": "r"}[self.coordinates[0]]
         x1 = {"p": "phi"}[self.coordinates[1]]
-        x2 = {"z": "z"}[self.coordinates[2]]
+        x2 = {"Z": "z"}[self.coordinates[2]]
         return {x0: "x0", x1: "x1", x2: "x2"}[label.lower()]
 
     @property
@@ -50,16 +52,16 @@ class AbstractGridCylindrical(AbstractGrid):
         """Coordinates specified by the nodes.
 
         Options for x0 coordinate:
-        - r = R
+        - R = R
 
         Options for x1 coordinate:
         - p = phi
 
         Options for x2 coordinate:
-        - z = Z
+        - Z = Z
         """
-        coordinates = self.__dict__.setdefault("_coordinates", "rpz")
-        errorif(coordinates != "rpz", NotImplementedError)
+        coordinates = self.__dict__.setdefault("_coordinates", "RpZ")
+        errorif(coordinates != "RpZ", NotImplementedError)
         return coordinates
 
     @property
@@ -73,7 +75,7 @@ class AbstractGridCylindrical(AbstractGrid):
         return (np.inf, 2 * np.pi / self.NFP, np.inf)
 
     @property
-    def num_r(self):
+    def num_R(self):
         """int: Number of unique R coordinates."""
         return self.num_x0
 
@@ -83,12 +85,12 @@ class AbstractGridCylindrical(AbstractGrid):
         return self.num_x1
 
     @property
-    def num_z(self):
+    def num_Z(self):
         """int: Number of unique Z coordinates."""
         return self.num_x2
 
     @property
-    def unique_r_idx(self):
+    def unique_R_idx(self):
         """ndarray: Indices of unique R coordinates."""
         return self.unique_x0_idx
 
@@ -98,12 +100,12 @@ class AbstractGridCylindrical(AbstractGrid):
         return self.unique_x1_idx
 
     @property
-    def unique_z_idx(self):
+    def unique_Z_idx(self):
         """ndarray: Indices of unique Z coordinates."""
         return self.unique_x2_idx
 
     @property
-    def inverse_r_idx(self):
+    def inverse_R_idx(self):
         """ndarray: Indices that recover the R coordinates."""
         return self.inverse_x0_idx
 
@@ -113,7 +115,7 @@ class AbstractGridCylindrical(AbstractGrid):
         return self.inverse_x1_idx
 
     @property
-    def inverse_z_idx(self):
+    def inverse_Z_idx(self):
         """ndarray: Indices that recover the Z coordinates."""
         return self.inverse_x2_idx
 
@@ -148,10 +150,10 @@ class CustomGridCylindrical(AbstractGridCylindrical):
         Whether to sort the nodes for use with FFT method.
     is_meshgrid : bool
         Whether this grid is a tensor-product grid.
-        Let the tuple (r, p, z) ∈ R³ denote a radial, angular, and vertical
+        Let the tuple (R, phi, Z) ∈ R³ denote a radial, angular, and vertical
         coordinate value. The is_meshgrid flag denotes whether any coordinate
         can be iterated over along the relevant axis of the reshaped grid:
-        nodes.reshape((num_phi, num_r, num_z, 3), order="F").
+        nodes.reshape((num_phi, num_R, num_Z, 3), order="F").
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights,
@@ -366,15 +368,6 @@ class QuadratureGridCylindrical(AbstractGridCylindrical):
         vertical grid resolution
     NFP : int
         number of field periods (Default = 1)
-    R : np.ndarray
-        radial coordinates (Default None, in which case L
-        must be specified).
-    phi : np.ndarray
-        toroidal coordinates (Default None, in which case
-        M must be specified)
-    Z: np.ndarray
-        vertical coordinates (Default None, in which case
-        N must be specified)
     """
 
     def __init__(
@@ -481,6 +474,18 @@ class QuadratureGridCylindrical(AbstractGridCylindrical):
 
 
 def lobatto(res):
+    """Create Chebyshev-Gauss-Lobatto nodes in [0,1].
+
+    Parameters
+    ----------
+    res : int
+        Resolution of corresponding Chebyshev basis.
+
+    Returns
+    -------
+    nodes : ndarray of float, size(res+1,)
+        Chebyshev-Gauss-Lobatto nodes in [0,1].
+    """
     if res == 0:
         return np.array([1])
     x = (np.cos(np.arange(res, -1, -1) * np.pi / res) + 1) / 2

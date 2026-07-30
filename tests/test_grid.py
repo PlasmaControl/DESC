@@ -517,8 +517,7 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_cylindrical_grid(self):
-        """Test that QuadratureGridCylindrical correctly makes meshgrid of Gauss-Lobatto nodes."""
-
+        """Test QuadratureGridCylindrical correctly makes meshgrid of Lobatto nodes."""
         L = N = 3
         M = 0
         NFP = 1
@@ -577,7 +576,7 @@ class TestGrid:
         assert "L=2" in s
         assert "M=3" in s
         assert "N=4" in s
-    
+
     @pytest.mark.unit
     def test_repr_flux(self):
         """Test string representations of flux grid objects."""
@@ -685,11 +684,11 @@ class TestGrid:
 
         def test(grid, *desired_resolution):
             assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
-            assert grid.num_r == grid.unique_r_idx.size
+            assert grid.num_R == grid.unique_R_idx.size
             assert grid.num_phi == grid.unique_phi_idx.size
-            assert grid.num_z == grid.unique_z_idx.size
+            assert grid.num_Z == grid.unique_Z_idx.size
             np.testing.assert_equal(
-                (grid.unique_r_idx, grid.inverse_r_idx),
+                (grid.unique_R_idx, grid.inverse_R_idx),
                 np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
             )
             np.testing.assert_equal(
@@ -697,7 +696,7 @@ class TestGrid:
                 np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
             )
             np.testing.assert_equal(
-                (grid.unique_z_idx, grid.inverse_z_idx),
+                (grid.unique_Z_idx, grid.inverse_Z_idx),
                 np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
             )
             # test that changing NFP updated the nodes
@@ -899,40 +898,39 @@ class TestGrid:
         # atol=1e-12 bc default grid shifts points away from the axis a tiny bit
         np.testing.assert_allclose(grid1.nodes, grid.nodes, atol=1e-12)
         # want radial/poloidal/toroidal nodes sorted in the same order for both
-        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_r_idx)
+        np.testing.assert_allclose(grid1.unique_rho_idx, grid.unique_R_idx)
         np.testing.assert_allclose(grid1.unique_theta_idx, grid.unique_phi_idx)
-        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_z_idx)
-        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_r_idx)
+        np.testing.assert_allclose(grid1.unique_zeta_idx, grid.unique_Z_idx)
+        np.testing.assert_allclose(grid1.inverse_rho_idx, grid.inverse_R_idx)
         np.testing.assert_allclose(grid1.inverse_theta_idx, grid.inverse_phi_idx)
-        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_z_idx)
-        
+        np.testing.assert_allclose(grid1.inverse_zeta_idx, grid.inverse_Z_idx)
+
     @pytest.mark.unit
     def test_meshgrid_reshape_cylindrical(self):
         """Test that reshaping meshgrids works correctly for cylindrical grids."""
         grid = QuadratureGridCylindrical(2, 3, 4)
 
-        R = grid.nodes[grid.unique_r_idx, 0]
+        R = grid.nodes[grid.unique_R_idx, 0]
         phi = grid.nodes[grid.unique_phi_idx, 1]
-        Z = grid.nodes[grid.unique_z_idx, 2]
+        Z = grid.nodes[grid.unique_Z_idx, 2]
 
         # user regular allclose for broadcasting to work correctly
         # reshaping rpz should have R along first axis
         assert np.allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 0], "rpz"), R[:, None, None]
+            grid.meshgrid_reshape(grid.nodes[:, 0], "RpZ"), R[:, None, None]
         )
         # reshaping rzp should have phi along last axis
         assert np.allclose(
-            grid.meshgrid_reshape(grid.nodes[:, 1], "rzp"), phi[None, None, :]
+            grid.meshgrid_reshape(grid.nodes[:, 1], "RZp"), phi[None, None, :]
         )
         # reshaping pzr should have zeta along 2nd axis
         assert np.allclose(
-            grid.meshgrid_reshape(grid.nodes, "pzr")[:, :, :, 2], Z[None, :, None]
+            grid.meshgrid_reshape(grid.nodes, "pZR")[:, :, :, 2], Z[None, :, None]
         )
 
-        # coordinates are rtz, not raz
+        # coordinates are rpz, not raz
         with pytest.raises(ValueError):
             grid.meshgrid_reshape(grid.nodes[:, 0], "raz")
-
 
         R = np.linspace(0, 1, 3)
         phi = np.linspace(0, 2 * np.pi, 4)
@@ -941,22 +939,22 @@ class TestGrid:
         R, phi, Z = grid.nodes.T
         # functions of Z should separate along first two axes
         # since those are contiguous, this should work
-        f = grid.meshgrid_reshape(Z, "rpz").reshape(-1, Z.size)
+        f = grid.meshgrid_reshape(Z, "RpZ").reshape(-1, Z.size)
         for i in range(1, f.shape[0]):
             np.testing.assert_allclose(f[i - 1], f[i])
         # likewise for R
-        f = grid.meshgrid_reshape(R, "rpz").reshape(R.size, -1)
+        f = grid.meshgrid_reshape(R, "RpZ").reshape(R.size, -1)
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[:, i - 1], f[:, i])
 
         # test reshaping result won't mix data
-        f = grid.meshgrid_reshape(phi**2 + Z, "rpz")
+        f = grid.meshgrid_reshape(phi**2 + Z, "RpZ")
         for i in range(1, f.shape[0]):
             np.testing.assert_allclose(f[i - 1], f[i])
-        f = grid.meshgrid_reshape(R**2 + Z, "rpz")
+        f = grid.meshgrid_reshape(R**2 + Z, "RpZ")
         for i in range(1, f.shape[1]):
             np.testing.assert_allclose(f[:, i - 1], f[:, i])
-        f = grid.meshgrid_reshape(R**2 + phi, "rpz")
+        f = grid.meshgrid_reshape(R**2 + phi, "RpZ")
         for i in range(1, f.shape[-1]):
             np.testing.assert_allclose(f[..., i - 1], f[..., i])
 
@@ -1177,7 +1175,6 @@ def test_find_least_rational_surfaces():
 @pytest.mark.unit
 def test_custom_jitable_grid_indexing_cylindrical():
     """Test that unique/inverse indices are set correctly when jitable=True."""
-
     R = np.concatenate([0.5 * np.ones(10), 0.7 * np.ones(10)])
     phi = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)]) * 2 * np.pi
     Z = np.concatenate([np.linspace(0, 1, 10), np.linspace(0, 1, 10)])
@@ -1191,33 +1188,33 @@ def test_custom_jitable_grid_indexing_cylindrical():
     x = np.random.random(grid1.num_nodes)
 
     # these shouldn't error
-    _ = grid1.unique_r_idx
+    _ = grid1.unique_R_idx
     _ = grid1.unique_phi_idx
-    _ = grid1.unique_z_idx
-    _ = grid1.inverse_r_idx
+    _ = grid1.unique_Z_idx
+    _ = grid1.inverse_R_idx
     _ = grid1.inverse_phi_idx
-    _ = grid1.inverse_z_idx
-    _ = grid3.unique_r_idx
+    _ = grid1.inverse_Z_idx
+    _ = grid3.unique_R_idx
 
     with pytest.raises(AttributeError):
-        _ = grid2.unique_r_idx
+        _ = grid2.unique_R_idx
     with pytest.raises(AttributeError):
         _ = grid2.unique_phi_idx
     with pytest.raises(AttributeError):
-        _ = grid2.unique_z_idx
+        _ = grid2.unique_Z_idx
     with pytest.raises(AttributeError):
-        _ = grid2.inverse_r_idx
+        _ = grid2.inverse_R_idx
     with pytest.raises(AttributeError):
         _ = grid2.inverse_phi_idx
     with pytest.raises(AttributeError):
-        _ = grid2.inverse_z_idx
+        _ = grid2.inverse_Z_idx
 
     assert not hasattr(grid1, "weights")
     assert not hasattr(grid1, "spacing")
     assert not hasattr(grid1, "source_grid")
-    assert not hasattr(grid2, "num_r")
+    assert not hasattr(grid2, "num_R")
     assert not hasattr(grid2, "num_phi")
-    assert not hasattr(grid2, "num_z")
+    assert not hasattr(grid2, "num_Z")
 
     y1 = grid1.copy_data_from_other(x, grid2, "R")
     y2 = grid2.copy_data_from_other(x, grid1, "R")
@@ -1225,6 +1222,7 @@ def test_custom_jitable_grid_indexing_cylindrical():
 
     np.testing.assert_allclose(y1, y2)
     np.testing.assert_allclose(y1, y3)
+
 
 @pytest.mark.unit
 def test_custom_jitable_grid_indexing_flux():
@@ -1287,4 +1285,3 @@ def test_custom_jitable_grid_indexing_flux():
         _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
     b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
     np.testing.assert_allclose(b1, b3)
-

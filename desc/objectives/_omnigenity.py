@@ -59,6 +59,7 @@ class QuasisymmetryBoozer(_Objective):
         name="QS Boozer",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -78,6 +79,7 @@ class QuasisymmetryBoozer(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
@@ -249,6 +251,7 @@ class QuasisymmetryTwoTerm(_Objective):
         name="QS two-term",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -266,6 +269,7 @@ class QuasisymmetryTwoTerm(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
@@ -412,6 +416,7 @@ class QuasisymmetryTripleProduct(_Objective):
         name="QS triple product",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -428,6 +433,7 @@ class QuasisymmetryTripleProduct(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -584,6 +590,7 @@ class Omnigenity(_Objective):
         name="omnigenity",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -617,6 +624,7 @@ class Omnigenity(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -899,6 +907,7 @@ class Isodynamicity(_Objective):
         name="Isodynamicity",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -915,6 +924,7 @@ class Isodynamicity(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

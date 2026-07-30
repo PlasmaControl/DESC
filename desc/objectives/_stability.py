@@ -74,6 +74,7 @@ class MercierStability(_Objective):
         name="Mercier Stability",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
@@ -90,6 +91,7 @@ class MercierStability(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -240,6 +242,7 @@ class MagneticWell(_Objective):
         name="Magnetic Well",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
@@ -256,6 +259,7 @@ class MagneticWell(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -438,6 +442,7 @@ class BallooningStability(_Objective):
         name="ideal ballooning lambda",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -472,6 +477,7 @@ class BallooningStability(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

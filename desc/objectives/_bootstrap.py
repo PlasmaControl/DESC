@@ -73,6 +73,7 @@ class BootstrapRedlConsistency(_Objective):
         name="Bootstrap current self-consistency (Redl)",
         jac_chunk_size=None,
         device_id=0,
+        rank=0,
     ):
         if target is None and bounds is None:
             target = 0
@@ -93,6 +94,7 @@ class BootstrapRedlConsistency(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

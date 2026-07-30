@@ -687,10 +687,7 @@ class BoundaryError(_Objective):
 
             # sheet current stuff
             if self._sheet_current:
-                p = (
-                    "desc.magnetic_fields._current_potential."
-                    "FourierCurrentPotentialField"
-                )
+                p = self._eq.surface
                 sheet_params = {
                     "R_lmn": self._eq.params_dict["Rb_lmn"],
                     "Z_lmn": self._eq.params_dict["Zb_lmn"],
@@ -817,10 +814,7 @@ class BoundaryError(_Objective):
             )
 
             if self._sheet_current:
-                p = (
-                    "desc.magnetic_fields._current_potential."
-                    "FourierCurrentPotentialField"
-                )
+                p = self._eq.surface
                 sheet_params = {
                     "R_lmn": eq_params["Rb_lmn"],
                     "Z_lmn": eq_params["Zb_lmn"],

@@ -855,6 +855,145 @@ class AxisZSelfConsistency(_Objective):
         return f
 
 
+class SurfaceCurveConsistency(_Objective):
+    """Ensures a SurfaceCurve shares params with underlying Surface.
+
+    Objective is only needed when both the curve and surface objects
+    are both being optimized.
+
+    Parameters
+    ----------
+    curve: SurfaceCurve, FourierRZWindingCoil CoilSet
+            Curve or collection of curves carrying a copy of surface params.
+    surface: FourierRZToroidalSurface
+            Surface on which the curve input should lie.
+    equilibrium: Equilibrium, optional
+            Optional argument in place of surface when intended
+            surface is equilibrium.surface, the last closed flux surface.
+    name: str, optional
+            Name of the objective function.
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    _scalar = False
+    _linear = True
+    _fixed = False  # not "diagonal", since it is fixing a sum
+    _units = "(m)"
+    _print_value_fmt = "SurfaceCurve consistency error: "
+
+    def __init__(
+        self,
+        curve,
+        surface,
+        equilibrium=None,
+        name="SurfaceCurve consistency",
+    ):
+        if equilibrium is not None:
+            things = [curve, equilibrium]
+        else:
+            things = [curve, surface]
+        super().__init__(
+            things=things,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        from desc.equilibrium import Equilibrium
+
+        source = self.things[1]
+        curve = self.things[0]
+
+        # matrix A should be nxm
+        mR = len(source.R_basis.modes)
+        mZ = len(source.Z_basis.modes)
+        nR = len(curve.R_basis.modes)
+        nZ = len(curve.Z_basis.modes)
+
+        AR = np.zeros((nR, mR))
+        AZ = np.zeros((nZ, mZ))
+        self._dim_f = nR + nZ
+
+        if isinstance(source, Equilibrium):
+            self._src_params = {"R": "Rb_lmn", "Z": "Zb_lmn"}
+            Js_R = []
+            for i, (l, m, n) in enumerate(source.R_basis.modes):
+                j = np.argwhere(
+                    (curve.R_basis.modes[:, 1:] == [m, n]).all(axis=1)
+                ).flatten()
+                Js_R.append(j)
+            AR[Js_R[:, 0], np.arange(source.R_basis.num_modes)] = zernike_radial(
+                1, source.R_basis.modes[:, 0], source.R_basis.modes[:, 1]
+            )
+            Js_Z = []
+            for i, (l, m, n) in enumerate(source.Z_basis.modes):
+                j = np.argwhere(
+                    (curve.Z_basis.modes[:, 1:] == [m, n]).all(axis=1)
+                ).flatten()
+                Js_Z.append(j)
+            AZ[Js_Z[:, 0], np.arange(source.Z_basis.num_modes)] = zernike_radial(
+                1, source.Z_basis.modes[:, 0], source.Z_basis.modes[:, 1]
+            )
+        else:
+            self._src_params = {"R": "R_lmn", "Z": "Z_lmn"}
+            AR = np.identity(nR)
+            AZ = np.identity(nZ)
+
+        self._A = {"R": AR, "Z": AZ}
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_curve, params_surface, constants=None):
+        """Compute SurfaceCurveConsistency error.
+
+        Measures the mismatch between the surface params attached to the curve,
+        and the params attached to the underlying surface (or equilibrium.surface).
+
+        Parameters
+        ----------
+        params_curve : dict
+            Dictionary of curve degrees of freedom
+        params_surface: dict
+            Dictionary of surface degrees of freedom, or if surface=equilibrium.surface,
+            then the equilibrium degrees of freedom
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
+
+        Returns
+        -------
+        f : ndarray
+            SurfaceCurveConsistency errors.
+        """
+        return jnp.concatenate(
+            [
+                jnp.dot(self._A["R"], params_surface[self._src_params["R"]])
+                - params_curve["R_lmn"],
+                jnp.dot(self._A["Z"], params_surface[self._src_params["Z"]])
+                - params_curve["Z_lmn"],
+            ]
+        )
+
+
 class FixBoundaryR(FixParameters):
     """Boundary condition on the R boundary parameters.
 

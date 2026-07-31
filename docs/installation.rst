@@ -291,7 +291,12 @@ On Most Linux Computing Clusters
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
+            
+            Run a test by replacing path_to_DESC with your path
 
+            .. code-block:: sh
+
+                srun -n 1 -p gpudev --gres=gpu:a100:1 --time=00:10:00 --mem=10G $HOME/conda-envs/desc-env/bin/python -m desc -vv $HOME/path_to_DESC/desc/examples/SOLOVEV -g
 
 Verifying your Installation
 ***************************

@@ -425,7 +425,6 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
-        ranks = [obj._rank for obj in objectives]
         device_ids = [obj._device_id for obj in objectives]
         self._is_mpi = len(set(device_ids)) > 1
         if mpi is not None:

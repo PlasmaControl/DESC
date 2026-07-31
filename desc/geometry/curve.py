@@ -1688,3 +1688,35 @@ class SplineXYZCurve(Curve):
             method=method,
             name=name,
         )
+
+
+class SurfaceCurve(Curve):
+    # What are the components one needs for this abstract class?
+    # docstring
+    # io attrs + static attrs
+    # properties
+    # theta(s), zeta(s) <- optimizable
+    # surface
+    # methods
+    #
+
+    pass
+
+
+class FourierWindingSurfaceCurve(SurfaceCurve):
+    # new io attrs:
+    # new static attrs: secular_theta, secular_zeta, N, sym_theta, sym_zeta
+    # init (takes theta_n, zeta_n, theta_modes, zeta_modes,
+    #       sym_theta, sym_zeta, secular_theta, secular_zeta, surface)
+    # properties
+    # getter and setter for theta_n, zeta_n <- optimizable
+    # getter and setter for secular_theta, secular_zeta <- not optimizable
+    # should associate two fourier bases
+
+    # methods
+    # from values
+    pass
+
+
+class FourierUmbilicCurve(SurfaceCurve):
+    pass

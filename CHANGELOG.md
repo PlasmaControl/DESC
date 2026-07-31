@@ -17,6 +17,7 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary, in-memory buffer, not to disk. Note that invoking DESC from the command like ``python -m desc input.vmec`` retains the current behavior of writing an input file for the converted DESC input.
 - Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
 - Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
   asymmetric ``currvmns`` magnetic-axis extrapolation.

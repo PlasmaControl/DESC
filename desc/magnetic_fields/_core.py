@@ -77,11 +77,10 @@ def dipole_field(re, rs, m, chunk_size=None):
 
     """
     re, rs, m = map(jnp.asarray, (re, rs, m))
-    print(rs.shape)
     re = re.reshape(-1, 3)
     rs = rs.reshape(-1, 3)
     m = m.reshape(-1, 3)
-    print(rs.shape)
+
     def dipole(re):
         dr = re - rs
         r = jnp.linalg.norm(dr, axis=-1, keepdims=True)

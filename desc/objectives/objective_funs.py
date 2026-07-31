@@ -133,11 +133,6 @@ doc_rank = """
         MPI rank to run the objective on. Defaults to 0. Objectives on the same
         rank should have the same `device_id`.
 """
-doc_rank = """
-    rank : int, optional
-        MPI rank to run the objective on. Defaults to 0. Objectives on the same
-        rank should have the same `device_id`.
-"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -149,7 +144,6 @@ docs = {
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
     "device_id": doc_device_id,
-    "rank": doc_rank,
     "rank": doc_rank,
 }
 
@@ -382,7 +376,6 @@ class ObjectiveFunction(IOAble):
         "_objectives",
         "_use_jit",
     ]
-    # these will be updated for MPI later
     # these will be updated for MPI later
     _static_attrs = [
         "_built",

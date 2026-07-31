@@ -7,6 +7,10 @@ on:
     types: [opened, synchronize]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   memory-benchmark:
     runs-on: ubuntu-latest
@@ -90,7 +94,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (PR)
+      - name: Run Benchmarks (PR)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
@@ -140,7 +144,7 @@ jobs:
           lscpu
           pip list
 
-      - name: Benchmark with pytest-benchmark (MASTER)
+      - name: Run Benchmarks (MASTER)
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate

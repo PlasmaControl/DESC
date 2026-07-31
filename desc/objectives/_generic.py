@@ -272,7 +272,7 @@ class GenericObjective(_Objective):
         jac_chunk_size=None,
         compute_kwargs=None,
         device_id=0,
-        rank=0,
+        rank=None,
         **kwargs,
     ):
         errorif(
@@ -571,7 +571,7 @@ class ObjectiveFromUser(_Objective):
         jac_chunk_size=None,
         compute_kwargs=None,
         device_id=0,
-        rank=0,
+        rank=None,
         **kwargs,
     ):
         errorif(
@@ -809,7 +809,7 @@ class DeflationOperator(_Objective):
         multiple_deflation_type="prod",
         single_shift=False,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

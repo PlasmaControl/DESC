@@ -63,7 +63,7 @@ class Pressure(_Objective):
         name="pressure",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -201,7 +201,7 @@ class RotationalTransform(_Objective):
         name="rotational transform",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -352,7 +352,7 @@ class Shear(_Objective):
         name="shear",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -495,7 +495,7 @@ class ToroidalCurrent(_Objective):
         name="toroidal current",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

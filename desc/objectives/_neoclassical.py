@@ -89,7 +89,7 @@ class EffectiveRipple(_Objective):
         spline=True,
         use_bounce1d=False,
         device_id=0,
-        rank=0,
+        rank=None,
         **kwargs,
     ):
         try:

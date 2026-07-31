@@ -62,7 +62,7 @@ class ForceBalance(_Objective):
         name="force",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -220,7 +220,7 @@ class ForceBalanceAnisotropic(_Objective):
         name="force-anisotropic",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -360,7 +360,7 @@ class RadialForceBalance(_Objective):
         name="radial force",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -500,7 +500,7 @@ class HelicalForceBalance(_Objective):
         name="helical force",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -641,7 +641,7 @@ class Energy(_Objective):
         name="energy",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -787,7 +787,7 @@ class CurrentDensity(_Objective):
         name="current density",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

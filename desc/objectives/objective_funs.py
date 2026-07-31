@@ -425,14 +425,23 @@ class ObjectiveFunction(IOAble):
         self._built = False
         self._compiled = False
         self._name = name
-        ranks = [obj._rank for obj in objectives]
         device_ids = [obj._device_id for obj in objectives]
-        self._is_mpi = len(set(ranks)) > 1
+        self._is_mpi = len(set(device_ids)) > 1
         if mpi is not None:
             # for multiple node cases, each process sees 1 CPU
             # for those cases we cannot put objectives on different devices
             # instead we will run each objective on the given rank
             self._is_mpi = True
+            ranks = [obj._rank for obj in objectives]
+            # give a reasonable default if all None
+            if ranks == [None] * len(ranks):
+                ranks = np.arange(len(objectives))
+            errorif(
+                any(rank is None for rank in ranks),
+                ValueError,
+                "If a rank is given to any of the sub-objective, it has to be "
+                f"given to all of them. Given ranks: {ranks}",
+            )
             self._rank_per_objective = ranks
             self._rank_per_objective = np.asarray(self._rank_per_objective)
             # here, we guess the number of devices per node by max(device_ids) + 1
@@ -467,14 +476,6 @@ class ObjectiveFunction(IOAble):
                 f"rank_per_objective uses {n_ranks_needed} rank(s) (highest rank "
                 f"index is {max(self._rank_per_objective)}), but {self.size} MPI "
                 f"rank(s) are running. These must match. "
-            )
-            # TODO: probably want to relx this for constraints.
-            errorif(
-                n_ranks_needed < self.size,
-                ValueError,
-                f"{msg}You are running more MPI ranks than rank_per_objective uses, "
-                "so some ranks would have no objective assigned. Either reduce the "
-                "number of MPI ranks or assign objectives to every rank.",
             )
             errorif(
                 n_ranks_needed > self.size,
@@ -1663,7 +1664,7 @@ class _Objective(IOAble, ABC):
         name=None,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if self._scalar:
             assert self._coordinates == ""

@@ -120,7 +120,7 @@ class GammaC(_Objective):
         use_bounce1d=False,
         Nemov=True,
         device_id=0,
-        rank=0,
+        rank=None,
         **kwargs,
     ):
         try:

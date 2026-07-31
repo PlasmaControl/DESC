@@ -80,7 +80,7 @@ class _CoilObjective(_Objective):
         name=None,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         self._grid = grid
         self._data_keys = data_keys
@@ -402,7 +402,7 @@ class CoilLength(_CoilObjective):
         name="coil length",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -510,7 +510,7 @@ class CoilCurvature(_CoilObjective):
         name="coil curvature",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -614,7 +614,7 @@ class CoilTorsion(_CoilObjective):
         name="coil torsion",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -718,7 +718,7 @@ class CoilCurrentLength(CoilLength):
         name="coil current length",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -830,7 +830,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         name="coil integrated curvature",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 2 * np.pi
@@ -969,7 +969,7 @@ class CoilSetMinDistance(_Objective):
         dist_chunk_size=None,
         num_neighbors=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         from desc.coils import CoilSet
 
@@ -1183,7 +1183,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
         softmin_alpha=1.0,
         dist_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (0, 1)
@@ -1472,7 +1472,7 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
         softmin_alpha=1.0,
         dist_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -1547,7 +1547,7 @@ class CoilArclengthVariance(_CoilObjective):
         grid=None,
         name="coil arclength variance",
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1710,7 +1710,7 @@ class QuadraticFlux(_Objective):
         name="Quadratic flux",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
@@ -1935,7 +1935,7 @@ class SurfaceQuadraticFlux(_Objective):
         field_fixed=False,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -2162,7 +2162,7 @@ class ToroidalFlux(_Objective):
         eq_fixed=False,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -2433,7 +2433,7 @@ class LinkingCurrentConsistency(_Objective):
         jac_chunk_size=None,
         name="linking current",
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -2624,7 +2624,7 @@ class CoilSetLinkingNumber(_Objective):
         jac_chunk_size=None,
         name="coil-coil linking number",
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         from desc.coils import CoilSet
 
@@ -2787,7 +2787,7 @@ class SurfaceCurrentRegularization(_Objective):
         source_grid=None,
         name="surface-current-regularization",
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         from desc.magnetic_fields import (
             CurrentPotentialField,

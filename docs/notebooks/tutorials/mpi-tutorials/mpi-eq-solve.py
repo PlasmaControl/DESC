@@ -82,6 +82,7 @@ if __name__ == "__main__":
         N=eq.N_grid,
         NFP=eq.NFP,
     )
+    # ranks will be automatically assigned as 0 and 1, respectively
     obj = ObjectiveFunction(
         [
             ForceBalance(eq, grid=grid1, device_id=0),

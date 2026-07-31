@@ -65,7 +65,7 @@ class QuasisymmetryBoozer(_Objective):
         jac_chunk_size=None,
         surf_batch_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -260,7 +260,7 @@ class QuasisymmetryTwoTerm(_Objective):
         name="QS two-term",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -425,7 +425,7 @@ class QuasisymmetryTripleProduct(_Objective):
         name="QS triple product",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -605,7 +605,7 @@ class Omnigenity(_Objective):
         jac_chunk_size=None,
         surf_batch_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -932,7 +932,7 @@ class Isodynamicity(_Objective):
         name="Isodynamicity",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

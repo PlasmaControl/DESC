@@ -92,7 +92,7 @@ class VacuumBoundaryError(_Objective):
         name="Vacuum boundary error",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         *,
         bs_chunk_size=None,
         **kwargs,
@@ -485,7 +485,7 @@ class BoundaryError(_Objective):
         name="Boundary error",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
@@ -966,7 +966,7 @@ class BoundaryErrorNESTOR(_Objective):
         name="NESTOR Boundary",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

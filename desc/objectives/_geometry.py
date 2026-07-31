@@ -62,7 +62,7 @@ class AspectRatio(_Objective):
         name="aspect ratio",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 2
@@ -209,7 +209,7 @@ class Elongation(_Objective):
         name="elongation",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -354,7 +354,7 @@ class Volume(_Objective):
         name="volume",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -553,7 +553,7 @@ class PlasmaVesselDistance(_Objective):
         use_signed_distance=False,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -883,7 +883,7 @@ class MeanCurvature(_Objective):
         name="mean curvature",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -1026,7 +1026,7 @@ class PrincipalCurvature(_Objective):
         name="principal-curvature",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -1164,7 +1164,7 @@ class BScaleLength(_Objective):
         name="B-scale-length",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -1299,7 +1299,7 @@ class GoodCoordinates(_Objective):
         name="coordinate goodness",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1441,7 +1441,7 @@ class MirrorRatio(_Objective):
         name="mirror ratio",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0.2

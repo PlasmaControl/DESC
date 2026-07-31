@@ -351,18 +351,27 @@ def test_multidevice_objective_build():
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
     grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.4, 0.8, 0.9], sym=True)
 
-    obj1 = ForceBalance(eq, grid=grid1, device_id=0, rank=0)
-    obj2 = ForceBalance(eq, grid=grid2, device_id=1, rank=1)
-    obj3 = ForceBalance(eq, grid=grid3, device_id=2, rank=2)
-    obj4 = ForceBalance(eq, grid=grid4, device_id=0, rank=0)
+    # default rank will be 0, 1, 2, 3, respectively
+    obj1 = ForceBalance(eq, grid=grid1, device_id=0)
+    obj2 = ForceBalance(eq, grid=grid2, device_id=1)
+    obj3 = ForceBalance(eq, grid=grid3, device_id=2)
+    obj4 = ForceBalance(eq, grid=grid4, device_id=0)
 
     # need to pass MPI communicator to the ObjectiveFunction
     with pytest.raises(ValueError, match="MPI communicator"):
         # this one is multi-device
         obj = ObjectiveFunction([obj1, obj2, obj3])
 
+    # if any rank is given, all should be given
+    obj1._rank = 0
+    with pytest.raises(ValueError, match="If a rank is given to any"):
+        # this one is multi-device
+        obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
+
     # make it inconsistent with device_id
+    obj1._rank = 0
     obj2._rank = 2
+    obj3._rank = 1
     # need to use multiple ranks if using multiple devices
     with pytest.raises(ValueError, match="rank and device id are inconsistent"):
         # this one is multi-device
@@ -371,12 +380,6 @@ def test_multidevice_objective_build():
     obj1._rank = 0
     obj2._rank = 1
     obj3._rank = 2
-    obj4._rank = 2
-    # need to have same device for the same rank objectives
-    with pytest.raises(ValueError, match="rank and device id are inconsistent"):
-        # this one is multi-device
-        obj = ObjectiveFunction([obj1, obj2, obj3, obj4], mpi=MPI)
-
     obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):

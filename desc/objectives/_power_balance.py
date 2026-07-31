@@ -59,7 +59,7 @@ class FusionPower(_Objective):
         name="fusion power",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         errorif(
             fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
@@ -230,7 +230,7 @@ class HeatingPowerISS04(_Objective):
         name="heating power",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

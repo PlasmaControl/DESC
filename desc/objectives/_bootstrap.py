@@ -73,7 +73,7 @@ class BootstrapRedlConsistency(_Objective):
         name="Bootstrap current self-consistency (Redl)",
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0

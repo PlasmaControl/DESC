@@ -4,7 +4,6 @@ import os
 import warnings
 
 import numpy as np
-from map2disc import BCM
 
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import FourierZernikeBasis, zernike_radial
@@ -24,7 +23,9 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
+def set_initial_guess(  # noqa: C901
+    eq, *args, ensure_nested=True, ensure_nested_method="opt"
+):
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -47,8 +48,17 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             of a grid. If lambda is not passed, it will be set to zero.
     ensure_nested : bool
         If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
+        run a small optimization problem or solve a harmonic BVP to attempt
+        to refine initial guess to improve coordinate mapping, with the method used
+        determined by "method".
+    ensure_nested_method : {"opt","map2disc"}
+        The method to use for refining the initial guess if not nested.
+        "opt" will attempt to refine the guess by running
+        a small optimization problem using the GoodCoordinates objective.
+        "map2disc" will use the map2disc package to solve a harmonic BVP to
+        find a nested initial mapping, using the equilibrium surface or the
+        passed-in surface as the boundary. Note that the `map2disc` package must be
+        installed to use this method.
 
     Examples
     --------
@@ -232,54 +242,66 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
 
     if ensure_nested and not eq.is_nested():
-
+        fallback_to_goodcoordinates = False
         warnings.warn(
             "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
         )
-        try:
-            Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
+        if ensure_nested_method == "map2disc":
+            try:
+                import map2disc  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "The map2disc package is not installed. Please install it to use "
+                    + "the 'map2disc' method for refining the initial guess."
+                )
+            try:
+                Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
 
-            eq.R_lmn = Rlmn
-            eq.Z_lmn = Zlmn
-            eq.axis = eq.get_axis()
-            # enforce the R_lmn Z_lmn to match the original surface, as
-            # right now there may be a mismatch, through applying
-            # the linear constraints
-            constraints = get_fixed_axis_constraints(
-                profiles=False, eq=eq
-            ) + get_fixed_boundary_constraints(eq=eq)
-            constraints = maybe_add_self_consistency(eq, constraints)
-            objective = ObjectiveFunction(constraints)
-            objective.build(verbose=0)
-            _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
-                objective, objective
-            )
-            args = objective.unpack_state(recover(project(objective.x(eq))), False)[0]
-            eq.params_dict = args
-        except (
-            Exception
-        ) as e:  # if Babin init fails, just try to refine the existing guess
-            print(
-                "Unable to use map2disc method to obtain nested initial guess, got "
-                "error: ",
-                e,
-            )
-            print(
-                "Falling back to performing optimization using GoodCoordinates"
-                " objective (following work of Tecchiolli et al.)"
-            )
-            obj = ObjectiveFunction(GoodCoordinates(eq))
-            constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
-            eq.solve(
-                objective=obj,
-                constraints=constraints,
-                ftol=0,
-                xtol=0,
-                gtol=1e-8,
-                verbose=0,
-                optimizer="fmintr-bfgs",
-            )
+                eq.R_lmn = Rlmn
+                eq.Z_lmn = Zlmn
+                eq.axis = eq.get_axis()
+                # enforce the R_lmn Z_lmn to match the original surface, as
+                # right now there may be a mismatch, through applying
+                # the linear constraints
+                constraints = get_fixed_axis_constraints(
+                    profiles=False, eq=eq
+                ) + get_fixed_boundary_constraints(eq=eq)
+                constraints = maybe_add_self_consistency(eq, constraints)
+                objective = ObjectiveFunction(constraints)
+                objective.build(verbose=0)
+                _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
+                    objective, objective
+                )
+                args = objective.unpack_state(recover(project(objective.x(eq))), False)[
+                    0
+                ]
+                eq.params_dict = args
+            except (
+                Exception
+            ) as e:  # if Babin init fails, just try to refine the existing guess
+                print(
+                    "Unable to use map2disc method to obtain nested initial guess, got "
+                    "error: ",
+                    e,
+                )
+                print(
+                    "Falling back to performing optimization using GoodCoordinates"
+                    " objective (following work of Tecchiolli et al.)"
+                )
+                fallback_to_goodcoordinates = True
+            if ensure_nested_method == "opt" or fallback_to_goodcoordinates:
+                obj = ObjectiveFunction(GoodCoordinates(eq))
+                constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
+                eq.solve(
+                    objective=obj,
+                    constraints=constraints,
+                    ftol=0,
+                    xtol=0,
+                    gtol=1e-8,
+                    verbose=0,
+                    optimizer="fmintr-bfgs",
+                )
         warnif(
             not eq.is_nested(),
             UserWarning,
@@ -451,6 +473,8 @@ def _babin_init_Zernike_only(eq, nrho):
         Nested Z_lmn coefficients
 
     """
+    from map2disc import BCM
+
     surface = eq.surface
     L = eq.L
     M = eq.M

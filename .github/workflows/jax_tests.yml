@@ -5,6 +5,10 @@ on:
     types: [labeled, synchronize]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   jax_tests:
     if: ${{ contains(github.event.pull_request.labels.*.name, 'test_jax') || github.event_name == 'workflow_dispatch' }}

@@ -3,8 +3,10 @@
 import pickle
 import warnings
 
+import jax_finufft
 import numpy as np
 import pytest
+from packaging.version import Version
 
 from desc.coils import (
     FourierPlanarCoil,
@@ -32,6 +34,8 @@ from desc.magnetic_fields import (
     OmnigenousField,
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
+
+OLD_FINUFFT = Version(jax_finufft.__version__) <= Version("1.2.0")
 
 
 def _compare_against_master(
@@ -76,7 +80,7 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
-        rtol = 1e-4 if "Gamma_" in name else 1e-8  # jax-finufft version differences
+        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
         atol = 1e-8
         errorif(
             not np.all(

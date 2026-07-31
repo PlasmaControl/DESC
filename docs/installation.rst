@@ -266,23 +266,18 @@ On Most Linux Computing Clusters
 
         .. dropdown:: RAVEN (IPP, Germany)
 
-            These instructions were verified to work on the RAVEN cluster at IPP on Aug 18, 2024.
-            They do not install FINUFFT with GPU support.
+            These instructions were verified to work on the RAVEN cluster at IPP on Jul 31, 2026.
+            They use a local JAX installation instead of the module system.
 
             .. code-block:: sh
 
                 module load anaconda/3/2023.03
-                CONDA_OVERRIDE_CUDA="12.2" conda create --name desc-env "jax==0.4.23" "jaxlib==0.4.23=cuda12*" -c conda-forge
+                conda create --name desc-env -c conda-forge
                 conda activate desc-env
+                conda install python=3.12 -c conda-forge -y
 
                 git clone https://github.com/PlasmaControl/DESC
                 cd DESC
-
-            Top pin the allowed ``scipy`` version as follows by editing the ``requirements.txt`` file in the current directory.
-
-            .. code-block:: sh
-
-                scipy >= 1.7.0, <= 1.11.3
 
             Now install DESC.
 

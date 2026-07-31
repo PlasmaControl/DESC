@@ -27,6 +27,9 @@ from desc.utils import (
 
 from .core import Curve
 
+# from . import FourierRZToroidalSurface
+
+
 __all__ = [
     "FourierPlanarCurve",
     "FourierRZCurve",
@@ -1691,19 +1694,88 @@ class SplineXYZCurve(Curve):
 
 
 class SurfaceCurve(Curve):
-    # What are the components one needs for this abstract class?
-    # docstring
-    # io attrs + static attrs
-    # properties
-    # theta(s), zeta(s) <- optimizable
-    # surface
-    # methods
-    #
+    _io_attrs_ = Curve._io_attrs_ + [
+        "secular_theta",
+        "secular_zeta",
+        "surface",
+        "surface_optimizable",
+    ]
+    _static_attrs = Curve._static_attrs + [
+        "secular_theta",
+        "secular_zeta",
+        "surface",
+        "surface_optimizable",
+    ]
 
-    pass
+    from . import FourierRZToroidalSurface
+
+    def __init__(
+        self,
+        secular_theta=0,
+        secular_zeta=1,
+        surface=None,
+        surface_optimizable=True,
+        name="",
+    ):
+        super().__init__(name=name)
+        self._secular_theta = secular_theta
+        self._secular_zeta = secular_zeta
+        self._surface = surface
+        self._surface_optimizable = surface_optimizable
+
+    @property
+    def secular_theta(self):
+        return self.__dict__.setdefault(self._secular_theta, 0)
+
+    @secular_theta.setter
+    def secular_theta(self, new):
+        assert isinstance(new, int) or new is None
+        self._secular_theta = self.__dict__.setdefault(new, 0)
+
+    @property
+    def secular_zeta(self):
+        return self.__dict__.setdefault(self._secular_zeta, 1)
+
+    @secular_zeta.setter
+    def secular_zeta(self, new):
+        assert isinstance(new, int) or new is None
+        self._secular_zeta = self.__dict__.setdefault(new, 1)
+
+    @property
+    def surface(self):
+        return self.__dict__.setdefault(self._surface, None)
+
+    @surface.setter
+    def surface(self, surface):
+        assert issubclass(surface, FourierRZToroidalSurface) or surface is None
+        self._surface = surface
+
+    @property
+    def surface_optimizable(self):
+        return self.__dict__.setdefault(self._surface_optimizable, True)
+
+    @surface_optimizable.setter
+    def surface_optimizable(self, value):
+        self._surface_optimizable = value
+
+    @property
+    def shift(self):
+        return jnp.array([0.0, 0.0, 0.0])
+
+    @shift.setter
+    def shift(self, new):
+        raise NotImplementedError("Shift not implemented for surface curves")
+
+    @property
+    def rotmat(self):
+        return jnp.eye(3, dtype=float).flatten()
+
+    @rotmat.setter
+    def rotmat(self, new):
+        raise NotImplementedError("Rotation not implemented for surface curves")
 
 
-class FourierWindingSurfaceCurve(SurfaceCurve):
+class FourierRZSurfaceCurve(SurfaceCurve):
     # new io attrs:
     # new static attrs: secular_theta, secular_zeta, N, sym_theta, sym_zeta
     # init (takes theta_n, zeta_n, theta_modes, zeta_modes,
@@ -1715,8 +1787,150 @@ class FourierWindingSurfaceCurve(SurfaceCurve):
 
     # methods
     # from values
-    pass
 
+    def __init__(
+        self,
+        secular_theta=0,
+        secular_zeta=1,
+        theta_n=[0.0],
+        zeta_n=[0.0],
+        modes_theta=None,
+        modes_zeta=None,
+        surface=None,
+        equilibrium=None,
+        surface_optimizable=True,
+        sym_theta=False,
+        sym_zeta=False,
+        NFP=None,
+        name="",
+    ):
 
-class FourierUmbilicCurve(SurfaceCurve):
-    pass
+        self._sym_theta = sym_theta
+        self._sym_zeta = sym_zeta
+
+        from . import FourierRZToroidalSurface
+
+        assert surface is None or equilibrium is None
+        if equilibrium is not None:
+            self._surface = equilibrium.surface
+        elif surface is not None:
+            self._surface = surface
+        else:
+            surface = FourierRZToroidalSurface()
+
+        if surface_optimizable:
+            self._R_lmn = surface.R_lmn
+            self._Z_lmn = surface.Z_lmn
+        else:
+            self._R_lmn = None
+            self._Z_lmn = None
+
+        self._theta_n_fixed = (theta_n is None) and (modes_theta is None)
+        self._zeta_n_fixed = (zeta_n is None) and (modes_zeta is None)
+
+        # we're doing funny things with symmetry here, potentially ignoring user inputs
+        if self._theta_n_fixed:
+            self._theta_n = jnp.array(None)
+            self._modes_theta = None
+            self._basis_theta = None
+        else:
+            if theta_n is None:
+                self._theta_n = jnp.zeros_like(self._modes_theta)
+            else:
+                self._theta_n = jnp.array(theta_n)
+            if modes_theta is None:
+                self._modes_theta = np.arange(-len(theta_n) // 2, len(theta_n) // 2 + 1)
+            else:
+                self._modes_theta = jnp.array(modes_theta)
+            N = np.max(np.abs(self._modes_theta))
+            self._basis_theta = FourierSeries(
+                N, sym=sym_theta
+            )  # NFP doesn't make sense in theta
+            self._theta_n = copy_coeffs(
+                self._theta_n, self._modes_theta, self._basis_theta.modes[:, 2]
+            )
+
+        if self._zeta_n_fixed:
+            self._zeta_n = jnp.array(None)
+            self._modes_zeta = None
+            self._basis_zeta = None
+        else:
+            if zeta_n is None:
+                self._zeta_n = jnp.zeros_like(self._modes_zeta)
+            else:
+                self._zeta_n = jnp.array(zeta_n)
+            if modes_zeta is None:
+                self._modes_zeta = np.arange(-len(zeta_n) // 2, len(zeta_n) // 2 + 1)
+            else:
+                self._modes_zeta = jnp.array(modes_zeta)
+            N = np.max(np.abs(self._modes_zeta))
+            self._basis_zeta = FourierSeries(N, NFP=NFP, sym=sym_zeta)
+            self._zeta_n = copy_coeffs(
+                self._zeta_n, self._modes_zeta, self._basis_zeta.modes[:, 2]
+            )
+
+        super().__init__(
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            surface=surface,
+            surface_optimizable=surface_optimizable,
+            name=name,
+        )
+
+    @optimizable_parameter
+    @property
+    def theta_n(self):
+        return self._theta_n
+
+    @theta_n.setter
+    def theta_n(self, new):
+        assert len(new) == len(self._theta_n)
+        self._theta_n = new
+
+    @optimizable_parameter
+    @property
+    def zeta_n(self):
+        return self._zeta_n
+
+    @zeta_n.setter
+    def zeta_n(self, new):
+        assert len(new) == len(self._zeta_n)
+        self._zeta_n = new
+
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        # returns none if surface is not optimizable
+        # in that case, can use surface getter: self.surface.R_lmn
+        return self._R_lmn
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        return self.Z_lmn
+
+    @property
+    def surface(self):
+        return self.surface
+
+    @surface.setter
+    def surface(self, surface):
+        self._surface = surface
+        if self.surface_optimizable:
+            self._R_lmn = surface.R_lmn
+            self._Z_lmn = surface.Z_lmn
+
+    @property
+    def sym_theta(self):
+        return self._sym_theta
+
+    @property
+    def sym_zeta(self):
+        return self._sym_zeta
+
+    @property
+    def NFP(self):
+        return self._NFP
+
+    def change_resolution(self):
+        pass

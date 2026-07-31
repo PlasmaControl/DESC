@@ -275,6 +275,7 @@ On Most Linux Computing Clusters
                 conda create --name desc-env -c conda-forge
                 conda activate desc-env
                 conda install python=3.12 -c conda-forge -y
+                pip install "jax[cuda13]" -y
 
                 git clone https://github.com/PlasmaControl/DESC
                 cd DESC

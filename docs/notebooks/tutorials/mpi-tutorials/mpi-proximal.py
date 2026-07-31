@@ -96,18 +96,20 @@ if __name__ == "__main__":
         sym=True,
     )
 
-    # when using parallel objectives, the user needs to supply the device_id
-    obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
-    obj2 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1)
-    obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
+    # when using parallel objectives, the user needs to supply the device_id and rank
+    obj1 = QuasisymmetryTwoTerm(
+        eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0, rank=0
+    )
+    obj2 = QuasisymmetryTwoTerm(
+        eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1, rank=1
+    )
+    obj3 = AspectRatio(eq=eq, target=8, weight=100, device_id=0, rank=0)
     objs = [obj1, obj2, obj3]
 
     # Parallel objective function needs the MPI communicator
     # If you don't specify `deriv_mode=blocked`, you will get a warning and DESC will
     # automatically switch to `blocked`.
-    objective = ObjectiveFunction(
-        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 0])
-    )
+    objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
     if rank == 0:
         objective.build(verbose=3)
     else:

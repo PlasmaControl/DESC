@@ -73,9 +73,9 @@ def test_multidevice_objective_attributes():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj2 = ObjectiveFunction(
             [
-                ForceBalance(eq, grid=grid1, device_id=0),
-                ForceBalance(eq, grid=grid2, device_id=1),
-                ForceBalance(eq, grid=grid3, device_id=2),
+                ForceBalance(eq, grid=grid1, device_id=0, rank=0),
+                ForceBalance(eq, grid=grid2, device_id=1, rank=1),
+                ForceBalance(eq, grid=grid3, device_id=2, rank=2),
             ],
             mpi=MPI,
         )
@@ -119,9 +119,9 @@ def test_multidevice_compute():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj2 = ObjectiveFunction(
             [
-                ForceBalance(eq, grid=grid1, device_id=0),
-                ForceBalance(eq, grid=grid2, device_id=1),
-                ForceBalance(eq, grid=grid3, device_id=2),
+                ForceBalance(eq, grid=grid1, device_id=0, rank=0),
+                ForceBalance(eq, grid=grid2, device_id=1, rank=1),
+                ForceBalance(eq, grid=grid3, device_id=2, rank=2),
             ],
             mpi=MPI,
         )
@@ -172,9 +172,9 @@ def test_multidevice_derivatives():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj2 = ObjectiveFunction(
             [
-                ForceBalance(eq, grid=grid1, device_id=0),
-                ForceBalance(eq, grid=grid2, device_id=1),
-                ForceBalance(eq, grid=grid3, device_id=2),
+                ForceBalance(eq, grid=grid1, device_id=0, rank=0),
+                ForceBalance(eq, grid=grid2, device_id=1, rank=1),
+                ForceBalance(eq, grid=grid3, device_id=2, rank=2),
             ],
             mpi=MPI,
         )
@@ -224,9 +224,9 @@ def test_multidevice_linear_proj_derivatives():
     with pytest.warns(UserWarning, match="When using multiple devices"):
         objf2 = ObjectiveFunction(
             [
-                ForceBalance(eq, grid=grid1, device_id=0),
-                ForceBalance(eq, grid=grid2, device_id=1),
-                ForceBalance(eq, grid=grid3, device_id=2),
+                ForceBalance(eq, grid=grid1, device_id=0, rank=0),
+                ForceBalance(eq, grid=grid2, device_id=1, rank=1),
+                ForceBalance(eq, grid=grid3, device_id=2, rank=2),
             ],
             mpi=MPI,
         )
@@ -285,14 +285,18 @@ def test_multidevice_proximal_derivatives():
     con1 = ObjectiveFunction(ForceBalance(eq1))
     con1.build(verbose=0)
 
-    obj1 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid1, device_id=0)
-    obj2 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid2, device_id=1)
-    obj3 = QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid3, device_id=2)
+    obj1 = QuasisymmetryTwoTerm(
+        eq=eq2, helicity=(1, eq.NFP), grid=grid1, device_id=0, rank=0
+    )
+    obj2 = QuasisymmetryTwoTerm(
+        eq=eq2, helicity=(1, eq.NFP), grid=grid2, device_id=1, rank=1
+    )
+    obj3 = QuasisymmetryTwoTerm(
+        eq=eq2, helicity=(1, eq.NFP), grid=grid3, device_id=2, rank=2
+    )
     objs = [obj1, obj2, obj3]
 
-    objective2 = ObjectiveFunction(
-        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 2])
-    )
+    objective2 = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
     objective2.build(verbose=0)
     con2 = ObjectiveFunction(ForceBalance(eq2))
     con2.build(verbose=0)
@@ -347,54 +351,56 @@ def test_multidevice_objective_build():
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
     grid4 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.4, 0.8, 0.9], sym=True)
 
-    objective1 = ForceBalance(eq, grid=grid1, device_id=0)
-    objective2 = ForceBalance(eq, grid=grid2, device_id=1)
-    objective3 = ForceBalance(eq, grid=grid3, device_id=2)
-    objective4 = ForceBalance(eq, grid=grid4, device_id=0)
+    obj1 = ForceBalance(eq, grid=grid1, device_id=0, rank=0)
+    obj2 = ForceBalance(eq, grid=grid2, device_id=1, rank=1)
+    obj3 = ForceBalance(eq, grid=grid3, device_id=2, rank=2)
+    obj4 = ForceBalance(eq, grid=grid4, device_id=0, rank=0)
 
     # need to pass MPI communicator to the ObjectiveFunction
     with pytest.raises(ValueError, match="MPI communicator"):
         # this one is multi-device
-        obj1 = ObjectiveFunction([objective1, objective2, objective3])
+        obj = ObjectiveFunction([obj1, obj2, obj3])
 
+    # make it inconsistent with device_id
+    obj2._rank = 2
     # need to use multiple ranks if using multiple devices
     with pytest.raises(ValueError, match="rank and device id are inconsistent"):
         # this one is multi-device
-        obj1 = ObjectiveFunction(
-            [objective1, objective2, objective3], mpi=MPI, rank_per_objective=[0, 0, 0]
-        )
+        obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
 
+    obj1._rank = 0
+    obj2._rank = 1
+    obj3._rank = 2
+    obj4._rank = 2
     # need to have same device for the same rank objectives
     with pytest.raises(ValueError, match="rank and device id are inconsistent"):
         # this one is multi-device
-        obj1 = ObjectiveFunction(
-            [objective1, objective2, objective3, objective4],
-            mpi=MPI,
-            rank_per_objective=[0, 1, 2, 2],
-        )
+        obj = ObjectiveFunction([obj1, obj2, obj3, obj4], mpi=MPI)
 
-    obj1 = ObjectiveFunction([objective1, objective2, objective3], mpi=MPI)
+    obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
-        obj1.build()
+        obj.build()
 
     # reset objectives that are built
-    for o in [objective1, objective2, objective3]:
+    for o in [obj1, obj2, obj3]:
         o._built = False
         o._use_jit = True
 
     # this one is single device, and grids have different sizes
-    obj2 = ObjectiveFunction([objective1, objective4])
-    obj2.build()
+    obj1._rank = 0
+    obj4._rank = 0
+    objj = ObjectiveFunction([obj1, obj4])
+    objj.build()
 
-    assert obj1._is_mpi
-    assert not obj2._is_mpi
+    assert obj._is_mpi
+    assert not objj._is_mpi
 
-    np.testing.assert_allclose(obj1.x(eq), obj2.x(eq))
+    np.testing.assert_allclose(obj.x(eq), objj.x(eq))
 
     # multi-device objective must be blocked
-    assert obj1._deriv_mode == "blocked"
-    assert obj2._deriv_mode == "batched"
+    assert obj._deriv_mode == "blocked"
+    assert objj._deriv_mode == "batched"
 
 
 @pytest.mark.mpi_run
@@ -415,9 +421,9 @@ def test_multidevice_eq_solve():
     grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.6, 0.8], sym=True)
     grid3 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
 
-    obj1 = ForceBalance(eq, grid=grid1, device_id=0)
-    obj2 = ForceBalance(eq, grid=grid2, device_id=1)
-    obj3 = ForceBalance(eq, grid=grid3, device_id=2)
+    obj1 = ForceBalance(eq, grid=grid1, device_id=0, rank=0)
+    obj2 = ForceBalance(eq, grid=grid2, device_id=1, rank=1)
+    obj3 = ForceBalance(eq, grid=grid3, device_id=2, rank=2)
 
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
@@ -470,7 +476,6 @@ def test_multidevice_eq_optimize():
 
     ### Single device optimization
 
-    # when using parallel objectives, the user needs to supply the device_id
     obj1 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid1)
     obj2 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid2)
     obj3 = QuasisymmetryTwoTerm(eq=eq_no_mpi, helicity=(1, eq.NFP), grid=grid3)
@@ -504,16 +509,20 @@ def test_multidevice_eq_optimize():
     # Wait for everyone to finish their work before proceeding
     MPI.COMM_WORLD.Barrier()
 
-    # when using parallel objectives, the user needs to supply the device_id
-    obj1 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0)
-    obj2 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1)
-    obj3 = QuasisymmetryTwoTerm(eq=eq, helicity=(1, eq.NFP), grid=grid3, device_id=2)
-    obj4 = AspectRatio(eq=eq, target=8, weight=100, device_id=0)
+    # when using parallel objectives, the user needs to supply the device_id and rank
+    obj1 = QuasisymmetryTwoTerm(
+        eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0, rank=0
+    )
+    obj2 = QuasisymmetryTwoTerm(
+        eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1, rank=1
+    )
+    obj3 = QuasisymmetryTwoTerm(
+        eq=eq, helicity=(1, eq.NFP), grid=grid3, device_id=2, rank=2
+    )
+    obj4 = AspectRatio(eq=eq, target=8, weight=100, device_id=0, rank=0)
     objs = [obj1, obj2, obj3, obj4]
 
-    objective = ObjectiveFunction(
-        objs, deriv_mode="blocked", mpi=MPI, rank_per_objective=np.array([0, 1, 2, 0])
-    )
+    objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
     objective.build()
 
     constraints = (

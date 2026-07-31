@@ -366,10 +366,6 @@ class ObjectiveFunction(IOAble):
         to manually choose a chunk_size if an OOM error is experienced in this case.
     mpi : MPI object, optional
         MPI communicator. Required when using multiple devices.
-    rank_per_objective : array-like of int, optional
-        Specifies which rank each objective should run on. This will allow for multiple
-        objectives to run on the same rank. By default, each objective will be assigned
-        to different ranks.
 
     """
 

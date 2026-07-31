@@ -1237,3 +1237,46 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
     return data
+
+
+
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+                            # SurfaceCurve compute functions #
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.SurfaceCurve",
+)
+def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+
+    pass
+    # R = transforms["R"].transform(params["R_n"], dz=0)
+    # Z = transforms["Z"].transform(params["Z_n"], dz=0)
+    # phi = transforms["grid"].nodes[:, 2]
+    # coords = jnp.stack([R, phi, Z], axis=1)
+    # # convert to xyz for displacement and rotation
+    # coords = rpz2xyz(coords)
+    # coords = (
+    #     coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
+    # )
+    # # convert back to rpz
+    # coords = xyz2rpz(coords)
+    # data["x"] = coords
+    # return data

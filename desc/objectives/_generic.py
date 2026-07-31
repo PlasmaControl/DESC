@@ -272,6 +272,7 @@ class GenericObjective(_Objective):
         jac_chunk_size=None,
         compute_kwargs=None,
         device_id=0,
+        rank=None,
         **kwargs,
     ):
         errorif(
@@ -297,6 +298,7 @@ class GenericObjective(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
         self._print_value_fmt = f"{name} objective value: "
         self._p = _parse_parameterization(thing)
@@ -569,6 +571,7 @@ class ObjectiveFromUser(_Objective):
         jac_chunk_size=None,
         compute_kwargs=None,
         device_id=0,
+        rank=None,
         **kwargs,
     ):
         errorif(
@@ -596,6 +599,7 @@ class ObjectiveFromUser(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
         self._p = _parse_parameterization(thing)
 
@@ -804,6 +808,8 @@ class DeflationOperator(_Objective):
         deflation_type="power",
         multiple_deflation_type="prod",
         single_shift=False,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -874,6 +880,8 @@ class DeflationOperator(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

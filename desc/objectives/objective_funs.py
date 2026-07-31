@@ -133,6 +133,11 @@ doc_rank = """
         MPI rank to run the objective on. Defaults to 0. Objectives on the same
         rank should have the same `device_id`.
 """
+doc_rank = """
+    rank : int, optional
+        MPI rank to run the objective on. Defaults to 0. Objectives on the same
+        rank should have the same `device_id`.
+"""
 docs = {
     "target": doc_target,
     "bounds": doc_bounds,
@@ -144,6 +149,7 @@ docs = {
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
     "device_id": doc_device_id,
+    "rank": doc_rank,
     "rank": doc_rank,
 }
 
@@ -366,10 +372,6 @@ class ObjectiveFunction(IOAble):
         to manually choose a chunk_size if an OOM error is experienced in this case.
     mpi : MPI object, optional
         MPI communicator. Required when using multiple devices.
-    rank_per_objective : array-like of int, optional
-        Specifies which rank each objective should run on. This will allow for multiple
-        objectives to run on the same rank. By default, each objective will be assigned
-        to different ranks.
 
     """
 
@@ -380,6 +382,7 @@ class ObjectiveFunction(IOAble):
         "_objectives",
         "_use_jit",
     ]
+    # these will be updated for MPI later
     # these will be updated for MPI later
     _static_attrs = [
         "_built",
@@ -437,6 +440,16 @@ class ObjectiveFunction(IOAble):
             # for those cases we cannot put objectives on different devices
             # instead we will run each objective on the given rank
             self._is_mpi = True
+            ranks = [obj._rank for obj in objectives]
+            # give a reasonable default if all None
+            if ranks == [None] * len(ranks):
+                ranks = np.arange(len(objectives))
+            errorif(
+                any(rank is None for rank in ranks),
+                ValueError,
+                "If a rank is given to any of the sub-objective, it has to be "
+                f"given to all of them. Given ranks: {ranks}",
+            )
             self._rank_per_objective = ranks
             self._rank_per_objective = np.asarray(self._rank_per_objective)
             # here, we guess the number of devices per node by max(device_ids) + 1
@@ -471,14 +484,6 @@ class ObjectiveFunction(IOAble):
                 f"rank_per_objective uses {n_ranks_needed} rank(s) (highest rank "
                 f"index is {max(self._rank_per_objective)}), but {self.size} MPI "
                 f"rank(s) are running. These must match. "
-            )
-            # TODO: probably want to relx this for constraints.
-            errorif(
-                n_ranks_needed < self.size,
-                ValueError,
-                f"{msg}You are running more MPI ranks than rank_per_objective uses, "
-                "so some ranks would have no objective assigned. Either reduce the "
-                "number of MPI ranks or assign objectives to every rank.",
             )
             errorif(
                 n_ranks_needed > self.size,
@@ -1680,7 +1685,7 @@ class _Objective(IOAble, ABC):
         name=None,
         jac_chunk_size=None,
         device_id=0,
-        rank=0,
+        rank=None,
     ):
         if self._scalar:
             assert self._coordinates == ""

@@ -59,6 +59,7 @@ class FusionPower(_Objective):
         name="fusion power",
         jac_chunk_size=None,
         device_id=0,
+        rank=None,
     ):
         errorif(
             fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
@@ -79,6 +80,7 @@ class FusionPower(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -94,9 +96,10 @@ class FusionPower(_Objective):
         """
         eq = self.things[0]
         errorif(
-            eq.electron_density is None,
+            (eq.ion_density is None)
+            and (eq.electron_density is None or eq.atomic_number is None),
             ValueError,
-            "Equilibrium must have an electron density profile.",
+            "Equilibrium must have an ion density profile.",
         )
         errorif(
             eq.ion_temperature is None,
@@ -227,6 +230,7 @@ class HeatingPowerISS04(_Objective):
         name="heating power",
         jac_chunk_size=None,
         device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -245,6 +249,7 @@ class HeatingPowerISS04(_Objective):
             name=name,
             jac_chunk_size=jac_chunk_size,
             device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

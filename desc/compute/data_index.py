@@ -296,6 +296,7 @@ _class_inheritance = {
         "desc.geometry.core.Surface",
     ],
 }
+_topological_order = {}
 data_index = {p: {} for p in _class_inheritance.keys()}
 all_kwargs = {p: {} for p in _class_inheritance.keys()}
 allowed_kwargs = {"basis"}

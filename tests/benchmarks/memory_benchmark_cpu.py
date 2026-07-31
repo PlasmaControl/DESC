@@ -72,7 +72,7 @@ def monitor_vram(proc, interval, vram_usage, timestamps):
 
 if __name__ == "__main__":
     mode = "CPU"  # "CPU" or "GPU"
-    interval = 0.1  # seconds between samples
+    interval = 0.01  # seconds between samples
 
     data = {}
 
@@ -87,6 +87,7 @@ if __name__ == "__main__":
         "test_proximal_jac_ripple",
         "test_proximal_jac_ripple_bounce1d",
         "test_eq_solve",
+        "test_objective_quadratic_flux_jac",
     ]
 
     for i in range(len(funs)):

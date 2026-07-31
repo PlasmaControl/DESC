@@ -2,6 +2,8 @@
 
 import pdb
 
+import jax
+
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
@@ -230,8 +232,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @X.setter
     def X(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._X = jnp.float64(float(np.squeeze(new)))
+        self._X = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -241,8 +242,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @Y.setter
     def Y(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._Y = jnp.float64(float(np.squeeze(new)))
+        self._Y = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -252,8 +252,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @Z.setter
     def Z(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._Z = jnp.float64(float(np.squeeze(new)))
+        self._Z = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -263,8 +262,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @phi.setter
     def phi(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._phi = jnp.float64(float(np.squeeze(new)))
+        self._phi = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -274,8 +272,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @theta.setter
     def theta(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._theta = jnp.float64(float(np.squeeze(new)))
+        self._theta = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -285,8 +282,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @m0.setter
     def m0(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        self._m0 = jnp.float64(float(np.squeeze(new)))
+        self._m0 = jnp.asarray(new).reshape(())
 
     @optimizable_parameter
     @property
@@ -298,13 +294,23 @@ class _Dipole(_MagneticField, Optimizable, ABC):
 
     @rho.setter
     def rho(self, new):
-        assert jnp.isscalar(new) or new.size == 1
-        errorif(
-            new < -1 or new > 1,
-            ValueError,
-            f"rho must be in range (-1, 1), got {new}"
-        )
-        self._rho = jnp.float64(float(np.squeeze(new)))
+        if not isinstance(new, jax.core.Tracer):
+            errorif(
+                bool(jnp.any(new < -1) or jnp.any(new > 1)),
+                ValueError,
+                f"rho must be in range (-1, 1), got {new}"
+            )
+        self._rho = jnp.asarray(new).reshape(())
+
+    # @rho.setter
+    # def rho(self, new):
+    #     assert jnp.isscalar(new) or new.size == 1
+    #     errorif(
+    #         new < -1 or new > 1,
+    #         ValueError,
+    #         f"rho must be in range (-1, 1), got {new}"
+    #     )
+    #     self._rho = jnp.float64(float(np.squeeze(new)))
 
     @property
     def name(self):
@@ -1037,13 +1043,14 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         # routing ~10^5 scalar leaves through jit compiles an enormous XLA graph
         # (minutes), while NumPy stacking is effectively instant. Fall back to
         # ``tree_stack`` only if params are traced (e.g. inside an optimizer).
-        try:
-            sources = {
-                k: jnp.asarray(np.array([np.asarray(p[k]) for p in params])).reshape(len(params))
-                for k in params[0]
-            }
-        except Exception:
-            sources = tree_stack(params)
+        # try:
+        needed_keys = [k for k in ("X", "Y", "Z", "phi", "theta", "m0", "rho", "M0") if k in params[0]]
+        sources = {
+            k: jnp.stack([jnp.asarray(p[k]).reshape(-1)[0] for p in params])
+            for k in needed_keys
+        } 
+        # except Exception:
+        #     sources = tree_stack(params)
         rs = jnp.stack([sources["X"], sources["Y"], sources["Z"]], axis=-1)
         if "M0" in sources:
             M0 = sources["M0"]

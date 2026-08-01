@@ -44,7 +44,7 @@ class GammaC(_Objective):
            https://doi.org/10.1088/1741-4326/ac2994.
     .. [3] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
            bounce-averaging algorithm and its applications,"
-           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+           J. Plasma Physics. 2026;92(3):E72. https://arxiv.org/pdf/2412.01724.
 
     """
 
@@ -212,7 +212,7 @@ class GammaLoss(_Objective):
            https://doi.org/10.1088/1741-4326/ac2994.
     .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
            bounce-averaging algorithm and its applications,"
-           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+           J. Plasma Physics. 2026;92(3):E72. https://arxiv.org/pdf/2412.01724.
 
     """
 
@@ -289,9 +289,11 @@ class GammaLoss(_Objective):
             f"Expected kind to be 'delta' or 'alpha', got {kind}.",
         )
         errorif(
-            deriv_mode == "fwd",
+            deriv_mode == "fwd"
+            and (version.parse(jax.__version__) < version.parse("0.11.0")),
             ValueError,
-            "Reverse mode should be used for the objective: GammaLoss.",
+            "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
+            "GammaLoss.",
         )
         nufft_eps = check_nufft(nufft_eps)
 

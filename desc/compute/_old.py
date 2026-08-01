@@ -5,9 +5,9 @@ They are kept for verification and correctness testing.
 
 References
 ----------
-.. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and M. F. Heyn,
-       "Evaluation of 1/ν neoclassical transport in stellarators,"
-       Phys. Plasmas 6, 4622 (1999). https://doi.org/10.1063/1.873749.
+.. [1] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+        bounce-averaging algorithm and its applications,"
+        J. Plasma Physics. 2026;92(3):E72. https://arxiv.org/pdf/2412.01724.
 .. [2] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and G. O. Leitold,
        "Poloidal motion of trapped particle orbits in real-space coordinates,"
        Phys. Plasmas 15, 052501 (2008). https://doi.org/10.1063/1.2912456.

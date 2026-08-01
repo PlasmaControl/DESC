@@ -187,7 +187,7 @@ class Bounce2D(_Bounce):
     ----------
     .. [1] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
            bounce-averaging algorithm and its applications,"
-           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+           J. Plasma Physics. 2026;92(3):E72. https://arxiv.org/pdf/2412.01724.
 
     Examples
     --------
@@ -427,7 +427,7 @@ class Bounce2D(_Bounce):
         sparse : bool
             Whether to use sparsity preserving pullbacks.
             Default is ``True``, which makes the most sense if the output has
-            shape (num_rho, ). Otherwise, if the output shape is larger, and
+            shape (num rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.
@@ -1491,7 +1491,7 @@ class Bounce1D(_Bounce):
         sparse : bool
             Whether to use sparsity preserving pullbacks.
             Default is ``True``, which makes the most sense if the output has
-            shape (num_rho, ). Otherwise, if the output shape is larger, and
+            shape (num rho, ). Otherwise, if the output shape is larger, and
             the final objective of interest is a lower dimensional quantity
             than the output, it may be preferable to delay the vjp
             by setting to ``False``.

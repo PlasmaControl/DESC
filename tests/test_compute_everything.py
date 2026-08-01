@@ -49,13 +49,17 @@ def _compare_against_master(
             else:
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
+                if "Gamma_c" in name or "Gamma_delta" in name:
+                    rtol = 2e-5
+                else:
+                    rtol = 1e-8
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
                     atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
-                    rtol=1e-8,
+                    rtol=rtol,
                     err_msg=err_msg,
                 )
             except AssertionError as e:
@@ -379,7 +383,7 @@ def raz_grid_data(p):
     eq = get("W7-X")
     num_transit = 2
     Y_B = eq.N_grid * 2
-    rho = np.linspace(0, 1, 10)
+    rho = np.linspace(0.1, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")

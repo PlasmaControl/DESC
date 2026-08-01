@@ -123,3 +123,13 @@ jobs:
             ./cov.xml
             ./mpl_results.html
             ./prof.db
+
+      - name: Upload coverage
+        if: env.has_changes == 'true'
+        id : codecov
+        uses: codecov/codecov-action@v7
+        with:
+          name: codecov-umbrella
+          files: ./cov.xml
+          fail_ci_if_error: true
+          verbose: true

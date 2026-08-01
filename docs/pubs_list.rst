@@ -58,7 +58,8 @@ Papers extending DESC functionality
 #. Kaya Unalmis et al. (2025).
    *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
    its applications*.
-   [`JPP <https://doi:10.1017/S0022377826101652>`__]
+   [`pdf <https://arxiv.org/pdf/2412.01724>`__]
+   [`JPP <https://doi.org/10.1017/S0022377826101652>`__]
 
 #. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
    *High Order Free Boundary MHD Equilibria in DESC*.

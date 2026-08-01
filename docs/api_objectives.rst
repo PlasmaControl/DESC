@@ -43,6 +43,7 @@ Fast ion confinement
     :template: class.rst
 
     desc.objectives.GammaC
+    desc.objectives.GammaLoss
 
 
 Geometry

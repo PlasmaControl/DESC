@@ -195,13 +195,8 @@ def _ae_well_data(
         Per-pitch, per-well available-energy data on one flux surface and one
         field line.
     """
-    from desc.compute._fast_ion import _radial_drift
-    from desc.compute._turbulence import (
-        _ae,
-        _binormal_drift_wb_inverse,
-        _energy_quad,
-        _G_hat_half,
-    )
+    from desc.compute._drift import _binormal_drift, _radial_drift, _sqrt_G_hat
+    from desc.compute._turbulence import _ae, _energy_quad
 
     bounce_names = (
         "cvdrift (periodic)",
@@ -275,7 +270,7 @@ def _ae_well_data(
     )
     points = bounce.points(pitch_inv, opts.num_well)
     G, G_ω_α, G_ω_ψ = bounce.integrate(
-        [_G_hat_half, _binormal_drift_wb_inverse, _radial_drift],
+        [_sqrt_G_hat, _binormal_drift, _radial_drift],
         pitch_inv,
         fun_data,
         bounce_names,

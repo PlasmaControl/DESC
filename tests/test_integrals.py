@@ -15,7 +15,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
-from desc.compute._turbulence import _binormal_drift_wb_inverse
+from desc.compute._drift import _binormal_drift
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -1653,7 +1653,7 @@ class TestBounce2D:
 
         data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
         drift_numerical_num, drift_numerical_den = bounce.integrate(
-            [_binormal_drift_wb_inverse, TestBounce.drift_den_integrand],
+            [_binormal_drift, TestBounce.drift_den_integrand],
             pitch_inv,
             data,
             points=points,
@@ -1669,9 +1669,7 @@ class TestBounce2D:
             drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce, _binormal_drift_wb_inverse, data, nufft_eps
-        )
+        TestBounce._test_bounce_autodiff(bounce, _binormal_drift, data, nufft_eps)
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytical)

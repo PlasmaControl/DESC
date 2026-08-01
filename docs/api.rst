@@ -245,6 +245,7 @@ Objective Functions
     desc.objectives.ForceBalanceAnisotropic
     desc.objectives.FusionPower
     desc.objectives.GammaC
+    desc.objectives.GammaLoss
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints

@@ -7,7 +7,8 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.surface_integral import surface_integrals
-from ..utils import apply, parse_argname_change, safediv
+from ..utils import safediv
+from ._drift import _I_1, _I_2
 from .data_index import register_compute_fun
 
 
@@ -33,21 +34,6 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
         transforms["grid"], jnp.abs(jnp.reciprocal(data["psi_r/sqrt(g)"]))
     )
     return data
-
-
-def _dI_1(data, B, pitch):
-    """Integrand of Unalmis et al. eqaution 2.9 with |∂ψ/∂ρ| removed."""
-    return (
-        jnp.sqrt(jnp.abs(1 - pitch * B))
-        * (4 / (pitch * B) - 1)
-        * data["|grad(rho)|*kappa_g"]
-        / B
-    )
-
-
-def _dI_2(data, B, pitch):
-    """Integrand of Unalmis et al. equation 2.10."""
-    return jnp.sqrt(jnp.abs(1 - pitch * B)) / B
 
 
 @register_compute_fun(
@@ -78,35 +64,31 @@ def _dI_2(data, B, pitch):
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
+    References
+    ----------
+    .. [1] V. V. Nemov, S. V. Kasilov, W. Kernbichler, and M. F. Heyn,
+           "Evaluation of 1/ν neoclassical transport in stellarators,"
+           Phys. Plasmas 6, 4622-4632 (1999).
+           https://doi.org/10.1063/1.873749.
+    .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
+           bounce-averaging algorithm and its applications,"
+           J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
-    The reference 2 below refers to that implementation.
-
-    [1] Evaluation of 1/ν neoclassical transport in stellarators.
-        V. V. Nemov, S. V. Kasilov, W. Kernbichler, M. F. Heyn.
-        Phys. Plasmas 1 December 1999; 6 (12): 4622–4632.
-        https://doi.org/10.1063/1.873749.
-
-    [2] Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-        and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
-        Equation 2.12.
 
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
     # TODO: in future don't close over grid so that sharding works
     grid = transforms["grid"]
     opts = Options.guess(1, grid, **kwargs)
 
-    def eps_32(data):
-        bounce = Bounce2D(grid, data, data["angle"], **opts)
+    def foreach_surface(data):
 
-        def fun(pitch_inv):
+        def foreach(pitch_inv):
             I_1, I_2 = bounce.integrate(
-                [_dI_1, _dI_2],
+                [_I_1, _I_2],
                 pitch_inv,
                 data,
                 ["|grad(rho)|*kappa_g"],
@@ -114,13 +96,15 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
             )
             return safediv(I_1**2, I_2).sum(-1).mean(-2)
 
-        # B₀ has units of λ⁻¹.
-        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
+        bounce = Bounce2D(grid, data, data["angle"], **opts)
+        # B₀ has units of λ⁻¹.
+        # (λB₀)³ d(λB₀)⁻¹ = B₀² λ³ d(λ⁻¹) = -B₀² λ dλ.
         return jnp.sum(
-            batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**3,
+            batch_map(foreach, pitch_inv, opts.pitch_batch_size)
+            * (weight / pitch_inv**3),
             axis=-1,
         )
 
@@ -129,12 +113,12 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         opts.num_field_periods / grid.NFP * 4 * 2**0.5
     )
     out = Bounce2D.batch(
-        eps_32,
-        apply(data, subset=("|grad(rho)|*kappa_g",)),
+        foreach_surface,
         data,
-        angle,
         grid,
-        opts.surf_batch_size,
+        angle=kwargs["angle"],
+        names=("|grad(rho)|*kappa_g",),
+        batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["effective ripple 3/2"] = (

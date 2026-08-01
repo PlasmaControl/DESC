@@ -2181,8 +2181,22 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(
                 obj.compute(eq.params_dict), grid.compress(data[name])
             )
-        data = eq.compute("available energy", grid, angle=angle, **opts)
-        obj = AvailableEnergy(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
+        data = eq.compute(
+            "available energy",
+            grid,
+            angle=angle,
+            fieldline_normalization=0.37,
+            **opts,
+        )
+        obj = AvailableEnergy(
+            eq,
+            grid=obj_grid,
+            nufft_eps=1e-7,
+            X=X,
+            Y=Y,
+            fieldline_normalization=0.37,
+            **opts,
+        )
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(

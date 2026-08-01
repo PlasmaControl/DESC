@@ -39,8 +39,12 @@ class _AvailableEnergyWellData:
     valid : ndarray
         Boolean mask for wells with ordered bounce points, with shape
         ``(num_pitch, num_well)``.
-    omega_alpha, omega_psi, ae_per_pitch_well : ndarray
-        Per-pitch, per-well bounce quantities with shape
+    omega_alpha, omega_psi : ndarray
+        Dimensionless, conjugate-width-scaled bounce-averaged drift frequencies
+        used by the available-energy kernel, with shape
+        ``(num_pitch, num_well)``.
+    ae_per_pitch_well : ndarray
+        Per-pitch, per-well available energy with shape
         ``(num_pitch, num_well)``.
     """
 
@@ -180,7 +184,9 @@ def _ae_well_data(
     angle : ndarray, optional
         Bounce2D angle map. If omitted, it is computed from ``eq``.
     radial_scale, binormal_scale : float, optional
-        Correlation-length scale factors.
+        Correlation-length coefficients Cᵣ and Cₛ in
+        Δr_A = Cᵣρₗ and Δs_A = Cₛρₗ, respectively. The plotted quantity has
+        already factored out ρ★², so these are not physical coordinate widths.
     density_gradient, temperature_gradient : float or ndarray, optional
         Values replacing ``ne_r / ne`` and ``Te_r / Te`` before multiplication
         by ``radial_scale``. If omitted, the equilibrium profiles are used.
@@ -195,7 +201,11 @@ def _ae_well_data(
         Per-pitch, per-well available-energy data on one flux surface and one
         field line.
     """
-    from desc.compute._drift import _binormal_drift, _radial_drift, _sqrt_G_hat
+    from desc.compute._drift import (
+        _energy_normalized_binormal_drift,
+        _energy_normalized_radial_drift,
+        _sqrt_G_hat,
+    )
     from desc.compute._turbulence import _ae, _energy_quad
 
     bounce_names = (
@@ -270,7 +280,11 @@ def _ae_well_data(
     )
     points = bounce.points(pitch_inv, opts.num_well)
     G, G_ω_α, G_ω_ψ = bounce.integrate(
-        [_sqrt_G_hat, _binormal_drift, _radial_drift],
+        [
+            _sqrt_G_hat,
+            _energy_normalized_binormal_drift,
+            _energy_normalized_radial_drift,
+        ],
         pitch_inv,
         fun_data,
         bounce_names,

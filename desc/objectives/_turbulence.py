@@ -18,9 +18,36 @@ class AvailableEnergy(_Objective):
 
     The objective is presented in [1]_, and the computation is presented in [2]_.
     This objective computes the particle drifts using a flux tube model;
-    and therefore, has a meaningless ergodic limit. An optimization should be
-    evaluated by measuring improvement over a fixed number of field period
-    transits.
+    and therefore, has a meaningless ergodic limit. In 3-D, an optimization should
+    be evaluated by measuring improvement over a fixed number of field-period
+    transits. In axisymmetry, use one poloidal transit between global maxima of |B|.
+
+    Notes
+    -----
+    Let ρ★ = ρₗ/a and r = aρ. Equations (2.47) and (2.49) of [1]_
+    define Δr_A = Cᵣρₗ and factor ρ★² out of the available energy.
+    Consequently, the widths used internally are
+    Δψ_A/ρ★ = Cᵣ ∂ψ/∂ρ and Δα_A/ρ★ = Cₛ/ρ. The parameters
+    ``radial_scale`` and ``binormal_scale`` are Cᵣ and Cₛ, not the normalized
+    coordinate width Δρ_A = Cᵣρ★.
+
+    DESC uses ψ = Ψρ²/(2π) = ψₑρ², so ∂ψ/∂ρ = 2ψₑρ. Thus,
+    Δψ_A/ρ★ already contains the factor of ρ in Eq. (4.7) of [3]_.
+
+    Before energy normalization, the bounce-integral ratios satisfy
+    G_ω/G = qω/(mv²). They are converted to the qω/ε₀ convention, with
+    ε₀ = mv²/2, by the AE-specific drift integrands before bounce integration,
+    as required by Eqs. (2.35) and (2.38) of [1]_.
+
+    Every complete well in the traced interval is summed. The registered compute
+    function does not infer a special axisymmetric domain. For k complete
+    axisymmetric poloidal transits between global maxima of |B|, choose ``alpha``
+    and ``num_field_periods`` accordingly and pass
+    ``fieldline_normalization=|ι|/k``.
+
+    The result uses the 3nT/2 thermal-energy normalization in Eqs. (2.44) and
+    (2.49) of [1]_. It is therefore ⅔ of an otherwise identical convention
+    normalized by nT, such as Eq. (4.2) of [3]_.
 
     References
     ----------
@@ -28,6 +55,9 @@ class AvailableEnergy(_Objective):
     .. [2] K. Unalmis et al., "Spectrally accurate, reverse-mode differentiable
            bounce-averaging algorithm and its applications,"
            J. Plasma Physics. https://doi:10.1017/S0022377826101652.
+    .. [3] E. Rodríguez and R. J. J. Mackenbach, "Trapped-particle precession and
+           modes in quasisymmetric stellarators and tokamaks: a near-axis
+           perspective," J. Plasma Phys. 89, 905890521 (2023).
 
     """
 
@@ -36,11 +66,18 @@ class AvailableEnergy(_Objective):
         + doc_bounce
         + """
     radial_scale : float
-        Multiplier for the radial correlation length.
+        Radial correlation-length coefficient Cᵣ in Δr_A = Cᵣρₗ.
+        After factoring out ρ★² in the definition of Â, this scales both
+        Δψ_A/ρ★ = Cᵣ ∂ψ/∂ρ and the radial profile gradients.
         Default is 1.0.
     binormal_scale : float
-        Multiplier for the binormal correlation length.
+        Binormal correlation-length coefficient Cₛ in Δs_A = Cₛρₗ.
         Default is 1.0.
+    fieldline_normalization : float or ndarray, optional
+        Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where 𝓛 is the sum of ∫dℓ/B over
+        the retained complete field-line domain. The default
+        ``NFP / num_field_periods`` is the long-field-line estimate. For k
+        complete axisymmetric poloidal transits, pass |ι|/k.
         """.rstrip()
         + collect_docs(
             target_default="``target=0``.",
@@ -85,6 +122,7 @@ class AvailableEnergy(_Objective):
         spline=True,
         radial_scale=1.0,
         binormal_scale=1.0,
+        fieldline_normalization=None,
     ):
         errorif(
             deriv_mode == "fwd",
@@ -114,6 +152,7 @@ class AvailableEnergy(_Objective):
             "spline": spline,
             "radial_scale": radial_scale,
             "binormal_scale": binormal_scale,
+            "fieldline_normalization": fieldline_normalization,
         }
 
         super().__init__(

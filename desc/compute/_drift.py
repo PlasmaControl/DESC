@@ -39,6 +39,18 @@ def _binormal_drift(data, B, pitch):
 
 
 @register_drift(
+    name="energy-normalized binormal drift",
+    units="1 / Wb",
+    units_long="Inverse webers",
+    description="Local binormal drift normalized by particle energy.",
+)
+def _energy_normalized_binormal_drift(data, B, pitch):
+    """Binormal drift integrand whose bounce ratio is qωα/ε₀."""
+    # The raw ratio is Gωα/G = qωα/(mv²), while ε₀ = mv²/2.
+    return 2 * _binormal_drift(data, B, pitch)
+
+
+@register_drift(
     name="sqrt(G hat)",
     units="~",
     units_long="None",
@@ -71,6 +83,18 @@ def _radial_drift(data, B, pitch):
         * data["|grad(psi)|*kappa_g"]
         / B
     )
+
+
+@register_drift(
+    name="energy-normalized radial drift",
+    units="~",
+    units_long="None",
+    description="Local radial drift normalized by particle energy.",
+)
+def _energy_normalized_radial_drift(data, B, pitch):
+    """Radial drift integrand whose bounce ratio is qωψ/ε₀."""
+    # The raw ratio is Gωψ/G = qωψ/(mv²), while ε₀ = mv²/2.
+    return 2 * _radial_drift(data, B, pitch)
 
 
 @register_drift(

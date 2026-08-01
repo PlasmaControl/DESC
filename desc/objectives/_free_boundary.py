@@ -995,7 +995,9 @@ class BoundaryError(_Objective):
 
 
 class FreeSurfaceError(_Objective):
-    """Target for free surface ideal MHD equilirium as described in [1]_.
+    """Target for a free-surface ideal-MHD equilibrium.
+
+    Implements the formulation described in [1]_.
 
     References
     ----------

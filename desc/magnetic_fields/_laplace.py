@@ -247,6 +247,11 @@ class SourceFreeField(FourierRZToroidalSurface):
         ``Y * grad(phi)``, implemented as a toroidal magnetic field with
         magnitude ``Y / R``. Default is zero.
 
+    References
+    ----------
+    .. [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
+
     """
 
     _io_attrs_ = ["_surface", "_Phi_tilde_basis", "_B0", "_I", "_Y"]
@@ -529,6 +534,11 @@ class FreeSurfaceOuterField(SourceFreeField):
         Net toroidal sheet current determining a circulation of Φ.
         Default is zero. The physical representative is built from a linked
         filament inferred from ``surface``.
+
+    References
+    ----------
+    .. [1] Unalmis et al. New high-order accurate free surface stellarator
+           equilibria optimization and boundary integral methods in DESC.
 
     """
 

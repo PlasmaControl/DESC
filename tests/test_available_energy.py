@@ -5,12 +5,13 @@ import math
 import numpy as np
 import pytest
 from qsc import Qsc
-from scipy.integrate import quad, quad_vec
+from quadax import quadgk
+from scipy.integrate import quad
 from scipy.optimize import brentq
 from scipy.special import ellipe, ellipk, erf, gamma, gammainc
 
 from desc.backend import jnp
-from desc.compute._turbulence import _ae
+from desc.compute._turbulence import _ae_kernel, _ae_precompute, _ae_reduce
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.integrals._ae_plot import _ae_well_data
@@ -39,7 +40,8 @@ def _analytic_ae_kernel(energy, omega_alpha, omega_star):
         "ae grad(density)": jnp.array([omega_star]),
         "ae grad(temperature)": jnp.array([0.0]),
     }
-    return np.asarray(_ae(G, G_omega_alpha, G_omega_psi, data, energy)).ravel()
+    ae_data = _ae_precompute(G, G_omega_alpha, G_omega_psi, data)
+    return np.asarray(_ae_kernel(*ae_data, energy)).ravel()
 
 
 def _ae_inputs(c1, omega_alpha):
@@ -57,14 +59,12 @@ def _ae_inputs(c1, omega_alpha):
 
 
 def _adaptive_energy_integral(c1, omega_alpha, abs_err=1e-11, rel_err=1e-11):
-    """Integrate the analytic-limit AE kernel with test-only quadrature."""
-    inputs = _ae_inputs(c1, omega_alpha)
-    value = quad(
-        lambda energy: energy**1.5
-        * np.exp(-energy)
-        * np.asarray(_ae(*inputs, jnp.asarray([energy]))).squeeze(),
-        0.0,
-        np.inf,
+    """Integrate the analytic-limit AE kernel with adaptive quadrature."""
+    ae_data = _ae_precompute(*_ae_inputs(c1, omega_alpha))
+    value = quadgk(
+        lambda energy: (energy**1.5 * jnp.exp(-energy))
+        * _ae_reduce(*ae_data, jnp.ones(1), energy).squeeze(-1),
+        jnp.array([0.0, jnp.inf]),
         epsabs=abs_err,
         epsrel=rel_err,
     )[0]
@@ -115,35 +115,15 @@ def _near_axis_qs_ae(r, eta, omega_star, num_pitch):
         "ae grad(density)": jnp.asarray([omega_star]),
         "ae grad(temperature)": jnp.zeros(1),
     }
+    ae_data = _ae_precompute(G, G_omega_alpha, jnp.zeros_like(G), data)
     pitch_weights = jnp.asarray(weights * 4 * r * eta * k)
-
-    def energy_integrand(energy):
-        return (
-            energy**1.5
-            * np.exp(-energy)
-            * np.asarray(
-                _ae(
-                    G,
-                    G_omega_alpha,
-                    jnp.zeros_like(G),
-                    data,
-                    jnp.asarray([energy]),
-                )
-                .sum(-1)
-                .mean(-3)
-            ).squeeze(-1)
-        )
-
-    energy_integral = np.dot(
-        quad_vec(
-            energy_integrand,
-            0.0,
-            np.inf,
-            epsabs=1e-11,
-            epsrel=1e-10,
-        )[0],
-        pitch_weights,
-    )
+    energy_integral = quadgk(
+        lambda energy: (energy**1.5 * jnp.exp(-energy))
+        * _ae_reduce(*ae_data, pitch_weights, energy).squeeze(-1),
+        jnp.asarray([0.0, jnp.inf]),
+        epsabs=1e-11,
+        epsrel=1e-10,
+    )[0]
 
     # This is DESC's final 3nT/2 normalization for this analytic model.
     desc_ae = float(energy_integral / (12 * np.pi**1.5))
@@ -197,8 +177,8 @@ def test_counter_rotating_particles_do_not_contribute_to_ae():
 
 
 @pytest.mark.unit
-def test_available_energy_integral_matches_paper_weight_function():
-    """The available-energy kernel integrates to Eq. (4.6)."""
+def test_available_energy_quadgk_integral_matches_paper_weight_function():
+    """Adaptive energy quadrature matches Eq. (4.6)."""
     omega_alpha = 0.7
     c1 = np.asarray([0.5, 1.0, 2.0, 5.0, 10.0])
     np.testing.assert_allclose(
@@ -222,15 +202,22 @@ def test_available_energy_sums_distinct_wells():
         "ae grad(density)": jnp.asarray([2.0]),
         "ae grad(temperature)": jnp.asarray([0.3]),
     }
-    combined = _ae(G, G_omega_alpha, G_omega_psi, data, energy).sum(-1)
+    combined = _ae_reduce(
+        *_ae_precompute(G, G_omega_alpha, G_omega_psi, data),
+        jnp.ones(1),
+        energy,
+    )
     separate = sum(
-        _ae(
-            G[..., well : well + 1],
-            G_omega_alpha[..., well : well + 1],
-            G_omega_psi[..., well : well + 1],
-            data,
+        _ae_reduce(
+            *_ae_precompute(
+                G[..., well : well + 1],
+                G_omega_alpha[..., well : well + 1],
+                G_omega_psi[..., well : well + 1],
+                data,
+            ),
+            jnp.ones(1),
             energy,
-        ).sum(-1)
+        )
         for well in range(G.shape[-1])
     )
     np.testing.assert_allclose(combined, separate, rtol=1e-7, atol=1e-9)
@@ -271,7 +258,6 @@ def test_available_energy_matches_near_axis_qs_asymptotes(
     np.testing.assert_allclose(paper_exact, asymptote, rtol=asymptote_rtol, atol=0)
 
 
-@pytest.mark.unit
 @pytest.mark.skip
 def test_available_energy_from_optimized_near_axis_tokamak():
     """Test the full equilibrium-to-AE pipeline against Eqs. (4.8) and (4.9)."""
@@ -358,6 +344,8 @@ def test_available_energy_from_optimized_near_axis_tokamak():
         "num_quad": 32,
         "Y_B": 256,
         "nufft_eps": 0,
+        "quad_atol": 1e-18,
+        "quad_rtol": 1e-8,
     }
 
     actual_by_regime = {}

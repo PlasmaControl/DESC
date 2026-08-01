@@ -119,6 +119,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         angle=kwargs["angle"],
         names=("|grad(rho)|*kappa_g",),
         batch_size=opts.surf_batch_size,
+        shard=opts.shard,
     )
     assert out.ndim == 1
     data["effective ripple 3/2"] = (

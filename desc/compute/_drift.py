@@ -141,7 +141,7 @@ def _alpha_drift_wb_inverse(data, B, pitch):
     units="m^{-2} T^{-1}",
     units_long="Inverse square meters per tesla",
     description="Integrand of equation 2.9 in [2]_  in neoclassical file "
-    "with |∂ψ/∂ρ| removed.",
+    "with the magnitude of ∂ψ/∂ρ removed.",
 )
 def _I_1(data, B, pitch):
     return (

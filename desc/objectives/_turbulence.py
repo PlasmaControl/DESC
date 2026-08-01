@@ -23,7 +23,8 @@ class AvailableEnergy(_Objective):
     This objective computes the particle drifts using a flux tube model;
     and therefore, has a meaningless ergodic limit. In 3-D, an optimization should
     be evaluated by measuring improvement over a fixed number of field-period
-    transits. In axisymmetry, use one poloidal transit between global maxima of |B|.
+    transits. In axisymmetry, use one poloidal transit between global maxima of the
+    magnetic-field strength.
 
     Notes
     -----
@@ -44,9 +45,9 @@ class AvailableEnergy(_Objective):
 
     Every complete well in the traced interval is summed. The registered compute
     function does not infer a special axisymmetric domain. For k complete
-    axisymmetric poloidal transits between global maxima of |B|, choose ``alpha``
-    and ``num_field_periods`` accordingly and pass
-    ``fieldline_normalization=|ι|/k``.
+    axisymmetric poloidal transits between global maxima of the magnetic-field
+    strength, choose ``alpha`` and ``num_field_periods`` accordingly, then pass the
+    magnitude of ι divided by k as ``fieldline_normalization``.
 
     The result uses the 3nT/2 thermal-energy normalization in Eqs. (2.44) and
     (2.49) of [1]_. It is therefore ⅔ of an otherwise identical convention
@@ -89,7 +90,7 @@ class AvailableEnergy(_Objective):
         Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where 𝓛 is the sum of ∫dℓ/B over
         the retained complete field-line domain. The default
         ``NFP / num_field_periods`` is the long-field-line estimate. For k
-        complete axisymmetric poloidal transits, pass |ι|/k.
+        complete axisymmetric poloidal transits, use the magnitude of ι divided by k.
     quad_atol : float
         Absolute tolerance for adaptive energy quadrature.
         If ``quad_atol=0.0``, then this is interpreted as a flag to use a fixed

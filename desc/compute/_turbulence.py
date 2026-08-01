@@ -198,7 +198,8 @@ def _energy_quad(num_energy):
         "float or ndarray : Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where "
         "𝓛 is the sum of ∫dℓ/B over the retained complete field-line domain. "
         "The default NFP/num_field_periods is the long-field-line estimate. "
-        "For k complete axisymmetric poloidal transits, pass |ι|/k."
+        "For k complete axisymmetric poloidal transits, use the magnitude of ι "
+        "divided by k."
     ),
     quad_atol=(
         "float : Absolute tolerance for adaptive energy quadrature. "
@@ -240,7 +241,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where 𝓛 is the sum of ∫dℓ/B over
         the retained complete field-line domain. The default
         ``NFP / num_field_periods`` is the long-field-line estimate. For k
-        complete axisymmetric poloidal transits, pass |ι|/k.
+        complete axisymmetric poloidal transits, use the magnitude of ι divided by k.
     quad_atol, quad_rtol : float
         Tolerances for the adaptive energy quadrature.
         If ``quad_atol=0.0``, then this is interpreted as a flag to use a fixed
@@ -266,9 +267,10 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
 
     All complete wells in the traced interval are summed, as in Eq. (2.45) of [2]_.
     The compute function does not infer a special axisymmetric domain. To use k
-    complete poloidal transits between global maxima of |B|, choose ``alpha`` and
-    ``num_field_periods`` so the traced interval contains those transits and pass
-    ``fieldline_normalization=|ι|/k``.
+    complete poloidal transits between global maxima of the magnetic-field strength,
+    choose ``alpha`` and ``num_field_periods`` so the traced interval contains those
+    transits, then pass the magnitude of ι divided by k as
+    ``fieldline_normalization``.
 
     The result uses the 3nT/2 thermal-energy normalization in Eqs. (2.44) and
     (2.49) of [2]_. It is therefore ⅔ of an otherwise identical convention

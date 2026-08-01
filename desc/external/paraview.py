@@ -7,21 +7,18 @@ import numpy as np
 try:
     import pyvista as pv
 except ImportError:
-    pv = None
+    with warnings.catch_warnings():
+        warnings.filterwarnings("default", "DESC objects are exported to Paraview")
+        warnings.warn(
+            "DESC objects are exported to Paraview using `pyvista` "
+            "package which is an optional dependency. Please pip install "
+            "`pyvista` to your environment."
+        )
 
 from desc.coils import CoilSet, _Coil
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
-
-
-def _require_pyvista():
-    """Raise an informative error if the optional pyvista package is unavailable."""
-    if pv is None:
-        raise ImportError(
-            "DESC objects are exported to Paraview using the optional `pyvista` "
-            "package. Please install it with `pip install pyvista`."
-        )
 
 
 def export_surface_to_paraview(
@@ -56,7 +53,6 @@ def export_surface_to_paraview(
         and add it to the mesh by `mesh['name'] = value`. Once the mesh is changed,
         the user has to save it again `mesh.save(filename)`.
     """
-    _require_pyvista()
     if not isinstance(obj, (Equilibrium, FourierRZToroidalSurface)):
         raise ValueError(
             "This function only support Equilibrium or FourierRZToroidalSurface "
@@ -109,7 +105,6 @@ def export_coils_to_paraview(coils, filename, res=100, keys=[]):
         Additional data to store in the file. By default, only the current
         corresponding to each coil is stored.
     """
-    _require_pyvista()
     if not isinstance(coils, _Coil):
         raise ValueError(
             "This function only support classes inherited from _Coil "
@@ -192,7 +187,6 @@ def export_volume_to_paraview(
         and add it to the mesh by `mesh['name'] = value`. Once the mesh
         is changed, the user has to save it again `mesh.save(filename)`.
     """
-    _require_pyvista()
     if not isinstance(eq, Equilibrium):
         raise ValueError(
             "This function only support classes of type Equilibrium "

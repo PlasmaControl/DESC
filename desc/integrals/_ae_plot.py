@@ -196,7 +196,7 @@ def _ae_well_data(
     quad_atol, quad_rtol : float, optional
         Tolerances for adaptive energy quadrature.
     num_zeta : int, optional
-        Number of points used to plot ``|B|`` along the field line.
+        Number of points used to plot the magnetic-field strength along the field line.
     **kwargs
         Additional options forwarded to ``Options.guess`` and ``Bounce2D``.
 
@@ -561,7 +561,7 @@ def plot_available_energy(
     fig : matplotlib.figure.Figure
         Figure containing the plot.
     ax : matplotlib.axes.Axes
-        Primary axes containing ``|B|`` and the well segments.
+        Primary axes containing the magnetic-field strength and the well segments.
     well_data : _AvailableEnergyWellData, optional
         Returned only when ``return_data`` is True.
 

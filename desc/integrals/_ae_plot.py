@@ -9,6 +9,7 @@ from interpax import PPoly
 from interpax_fft import PiecewiseChebyshevSeries
 from matplotlib.collections import LineCollection
 from matplotlib.ticker import MaxNLocator
+from quadax import quadgk
 
 from desc.backend import jnp
 from desc.grid import LinearGrid
@@ -39,8 +40,12 @@ class _AvailableEnergyWellData:
     valid : ndarray
         Boolean mask for wells with ordered bounce points, with shape
         ``(num_pitch, num_well)``.
-    omega_alpha, omega_psi, ae_per_pitch_well : ndarray
-        Per-pitch, per-well bounce quantities with shape
+    omega_alpha, omega_psi : ndarray
+        Dimensionless, conjugate-width-scaled bounce-averaged drift frequencies
+        used by the available-energy kernel, with shape
+        ``(num_pitch, num_well)``.
+    ae_per_pitch_well : ndarray
+        Per-pitch, per-well available energy with shape
         ``(num_pitch, num_well)``.
     """
 
@@ -158,6 +163,8 @@ def _ae_well_data(
     binormal_scale=1.0,
     density_gradient=None,
     temperature_gradient=None,
+    quad_atol=1e-6,
+    quad_rtol=1e-6,
     num_zeta=2000,
     **kwargs,
 ):
@@ -180,10 +187,14 @@ def _ae_well_data(
     angle : ndarray, optional
         Bounce2D angle map. If omitted, it is computed from ``eq``.
     radial_scale, binormal_scale : float, optional
-        Correlation-length scale factors.
+        Correlation-length coefficients Cᵣ and Cₛ in
+        Δr_A = Cᵣρₗ and Δs_A = Cₛρₗ, respectively. The plotted quantity has
+        already factored out ρ★², so these are not physical coordinate widths.
     density_gradient, temperature_gradient : float or ndarray, optional
         Values replacing ``ne_r / ne`` and ``Te_r / Te`` before multiplication
         by ``radial_scale``. If omitted, the equilibrium profiles are used.
+    quad_atol, quad_rtol : float, optional
+        Tolerances for adaptive energy quadrature.
     num_zeta : int, optional
         Number of points used to plot ``|B|`` along the field line.
     **kwargs
@@ -195,8 +206,12 @@ def _ae_well_data(
         Per-pitch, per-well available-energy data on one flux surface and one
         field line.
     """
-    from desc.compute._drift import _binormal_drift, _radial_drift, _sqrt_G_hat
-    from desc.compute._turbulence import _ae, _energy_quad
+    from desc.compute._drift import (
+        _energy_normalized_binormal_drift,
+        _energy_normalized_radial_drift,
+        _sqrt_G_hat,
+    )
+    from desc.compute._turbulence import _ae_kernel, _ae_precompute
 
     bounce_names = (
         "cvdrift (periodic)",
@@ -269,8 +284,12 @@ def _ae_well_data(
         fun_data["min_tz |B|"], fun_data["max_tz |B|"], opts.pitch_quad
     )
     points = bounce.points(pitch_inv, opts.num_well)
-    G, G_ω_α, G_ω_ψ = bounce.integrate(
-        [_sqrt_G_hat, _binormal_drift, _radial_drift],
+    bounce_data = bounce.integrate(
+        [
+            _sqrt_G_hat,
+            _energy_normalized_binormal_drift,
+            _energy_normalized_radial_drift,
+        ],
         pitch_inv,
         fun_data,
         bounce_names,
@@ -278,12 +297,16 @@ def _ae_well_data(
         loop=opts.loop,
     )
 
-    energy, energy_weight = _energy_quad(32)
-    ae_per_pitch_well = jnp.sum(
-        _ae(G, G_ω_α, G_ω_ψ, fun_data, energy) * energy_weight[..., None],
-        axis=-2,
-    )
+    ae_data = _ae_precompute(*bounce_data, fun_data)
+    ae_per_pitch_well = quadgk(
+        lambda energy: (energy**1.5 * jnp.exp(-energy))
+        * _ae_kernel(*ae_data, energy).squeeze(-4),
+        jnp.array([0.0, jnp.inf]),
+        epsabs=quad_atol,
+        epsrel=quad_rtol,
+    )[0]
 
+    G, G_ω_α, G_ω_ψ = bounce_data
     shape = (-1,) + (1,) * (G.ndim - 1)
     G_ω_α = G_ω_α * fun_data["ae psi width"].reshape(shape)
     G_ω_ψ = G_ω_ψ * fun_data["ae alpha width"].reshape(shape)
@@ -407,7 +430,8 @@ def _add_well_segments(
         cmap=cmap,
         norm=_color_norm(norm, values, vmin, vmax),
         linewidths=initial_linewidth,
-        alpha=0.95,
+        antialiaseds=False,
+        alpha=1.0,
         zorder=1,
     )
     ax.add_collection(collection)

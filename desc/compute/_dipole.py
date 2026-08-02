@@ -165,7 +165,7 @@ def _M0_Dipole(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position of the dipole in Cartesian [X, Y, Z] coordinates",
     dim=3,
-    params=["x", "y", "z"],
+    params=["X", "Y", "Z"],
     transforms={},
     profiles=[],
     coordinates="",
@@ -173,7 +173,7 @@ def _M0_Dipole(params, transforms, profiles, data, **kwargs):
     parameterization=_DIPOLE_PARAMETERIZATION,
 )
 def _position_Dipole(params, transforms, profiles, data, **kwargs):
-    data["position"] = jnp.array([params["x"], params["y"], params["z"]])
+    data["position"] = jnp.array([params["X"], params["Y"], params["Z"]])
     return data
 
 

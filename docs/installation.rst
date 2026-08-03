@@ -267,7 +267,7 @@ On Most Linux Computing Clusters
         .. dropdown:: RAVEN (IPP, Germany)
 
             These instructions were verified to work on the RAVEN cluster at IPP on Jul 31, 2026.
-            They use a local JAX installation instead of the module system.
+            They do not install FINUFFT with GPU support.
 
             .. code-block:: sh
 
@@ -275,16 +275,16 @@ On Most Linux Computing Clusters
                 conda create --name desc-env -c conda-forge
                 conda activate desc-env
                 conda install python=3.12 -c conda-forge -y
-                pip install "jax[cuda13]" -y
 
                 git clone https://github.com/PlasmaControl/DESC
                 cd DESC
 
-            Now install DESC.
+            Now install DESC and JAX (necessary for GPU Support).
 
             .. code-block:: sh
 
                 pip install --editable .
+                pip install "jax[cuda13]" -y
 
             You may optionally install developer requirements if you want to run tests.
 

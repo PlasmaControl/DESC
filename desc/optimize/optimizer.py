@@ -460,13 +460,18 @@ def _project_x_scale(x_scale, objective):
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
         x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
-        # Project equilibrium part: remove excluded parameters
-        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # Project equilibrium part: keep only the parameters that the proximal
+        # projection actually exposes to the optimizer. Which parameters are removed
+        # depends on how the internal equilibrium is solved (fixed LCFS vs fixed
+        # Poincare section), so use the list that ProximalProjection itself built
+        # rather than duplicating that logic here.
+        # See desc.optimize._constraint_wrappers.ProximalProjection.
         included_idx = []
-        for arg in prox_obj._eq.optimizable_params:
-            if arg not in excluded_params:
-                included_idx.extend(prox_obj._eq.x_idx[arg])
-        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
+        for arg in prox_obj._args:
+            included_idx.extend(np.asarray(prox_obj._eq.x_idx[arg]).tolist())
+        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][
+            jnp.asarray(included_idx, dtype=int)
+        ]
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):

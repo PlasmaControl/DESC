@@ -266,36 +266,37 @@ On Most Linux Computing Clusters
 
         .. dropdown:: RAVEN (IPP, Germany)
 
-            These instructions were verified to work on the RAVEN cluster at IPP on Aug 18, 2024.
+            These instructions were verified to work on the RAVEN cluster at IPP on Jul 31, 2026.
             They do not install FINUFFT with GPU support.
 
             .. code-block:: sh
 
                 module load anaconda/3/2023.03
-                CONDA_OVERRIDE_CUDA="12.2" conda create --name desc-env "jax==0.4.23" "jaxlib==0.4.23=cuda12*" -c conda-forge
+                conda create --name desc-env -c conda-forge
                 conda activate desc-env
+                conda install python=3.12 -c conda-forge -y
 
                 git clone https://github.com/PlasmaControl/DESC
                 cd DESC
 
-            Top pin the allowed ``scipy`` version as follows by editing the ``requirements.txt`` file in the current directory.
-
-            .. code-block:: sh
-
-                scipy >= 1.7.0, <= 1.11.3
-
-            Now install DESC.
+            Now install DESC and JAX (necessary for GPU Support).
 
             .. code-block:: sh
 
                 pip install --editable .
+                pip install "jax[cuda13]" -y
 
             You may optionally install developer requirements if you want to run tests.
 
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
+            
+            Run a test by replacing path_to_DESC with your path
 
+            .. code-block:: sh
+
+                srun -n 1 -p gpudev --gres=gpu:a100:1 --time=00:10:00 --mem=10G $HOME/conda-envs/desc-env/bin/python -m desc -vv $HOME/path_to_DESC/desc/examples/SOLOVEV -g
 
 Verifying your Installation
 ***************************

@@ -1,0 +1,43 @@
+# This is the DESC input file for a Solov'ev equilibrium with node_pattern error
+# This file should produce a warning
+
+# global parameters
+sym = 1
+NFP = 19
+Psi = 1.0
+
+# spectral resolution
+L_rad  = 24
+M_pol  = 12
+N_tor  = 3
+M_grid = 18
+N_grid =  6
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-6
+maxiter = 100
+
+# solver methods
+optimizer         = lsq-exact
+objective         = force
+spectral_indexing = fringe
+node_pattern      = jacobi
+
+# pressure and rotational transform/current profiles
+l:   0  p =  1.8E+4  i =  1.0E+0
+l:   2  p = -3.6E+4  i =  1.5E+0
+l:   4  p =  1.8E+4
+
+# magnetic axis initial guess
+n:   0  R0 =  1.0E+1  Z0 =  0.0E+0
+
+# fixed-boundary surface shape
+m:   0  n:   0  R1 =  1.0E+1
+m:   1  n:   0  R1 = -1.0E+0
+m:   1  n:   1  R1 = -3.0E-1
+m:  -1  n:  -1  R1 =  3.0E-1
+m:  -1  n:   0  Z1 =  1.0E+0
+m:  -1  n:   1  Z1 = -3.0E-1
+m:   1  n:  -1  Z1 = -3.0E-1

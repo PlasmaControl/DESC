@@ -34,6 +34,7 @@
    notebooks/tutorials/advanced_equilibrium_continuation.ipynb
    notebooks/tutorials/continuation_step_by_step.ipynb
    notebooks/tutorials/nae_constraint.ipynb
+   notebooks/tutorials/poincare_boundary_condition.ipynb
    notebooks/tutorials/free_boundary_equilibrium.ipynb
 
 

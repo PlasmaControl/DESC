@@ -12,6 +12,9 @@ from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
     FixIota,
+    FixSectionLambda,
+    FixSectionR,
+    FixSectionZ,
     ObjectiveFunction,
     maybe_add_self_consistency,
 )
@@ -457,13 +460,18 @@ def _project_x_scale(x_scale, objective):
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
         x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
-        # Project equilibrium part: remove excluded parameters
-        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # Project equilibrium part: keep only the parameters that the proximal
+        # projection actually exposes to the optimizer. Which parameters are removed
+        # depends on how the internal equilibrium is solved (fixed LCFS vs fixed
+        # Poincare section), so use the list that ProximalProjection itself built
+        # rather than duplicating that logic here.
+        # See desc.optimize._constraint_wrappers.ProximalProjection.
         included_idx = []
-        for arg in prox_obj._eq.optimizable_params:
-            if arg not in excluded_params:
-                included_idx.extend(prox_obj._eq.x_idx[arg])
-        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
+        for arg in prox_obj._args:
+            included_idx.extend(np.asarray(prox_obj._eq.x_idx[arg]).tolist())
+        x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][
+            jnp.asarray(included_idx, dtype=int)
+        ]
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
@@ -577,7 +585,7 @@ def _parse_constraints(constraints):
 
 
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraints, method, options
+    eq, objective, nonlinear_constraints, method, options, eq_solve_method
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
@@ -607,9 +615,26 @@ def _maybe_wrap_nonlinear_constraints(
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
+            solve_method=eq_solve_method,
         )
         nonlinear_constraints = ()
     return objective, nonlinear_constraints
+
+
+def get_eq_solve_method(linear_constraints):
+    """Get the solve method for the internal equilibrium.
+
+    If any of the linear constraints are FixSectionR, FixSectionZ, or FixSectionLambda,
+    the solve method is set to "section". Otherwise, it is set to "lcfs".
+    """
+    if any(
+        isinstance(lc, FixSectionR)
+        or isinstance(lc, FixSectionZ)
+        or isinstance(lc, FixSectionLambda)
+        for lc in linear_constraints
+    ):
+        return "section"
+    return "lcfs"
 
 
 def get_combined_constraint_objectives(  # noqa: C901
@@ -631,8 +656,9 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+    eq_solve_method = get_eq_solve_method(linear_constraints)
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-        eq, objective, nonlinear_constraints, opt_method, options
+        eq, objective, nonlinear_constraints, opt_method, options, eq_solve_method
     )
     is_prox = isinstance(objective, ProximalProjection)
     for t in things:

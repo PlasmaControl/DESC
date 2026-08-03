@@ -20,7 +20,9 @@ from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
+def set_initial_guess(  # noqa: C901 - FIXME: simplify
+    eq, *args, ensure_nested=True, lcfs=True
+):
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -45,6 +47,11 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
         If True, and the default initial guess does not produce nested surfaces,
         run a small optimization problem to attempt to refine initial guess to improve
         coordinate mapping.
+    lcfs : bool
+        If True, the initial guess will be created by scaling down the LCFS
+        surface(rho=1.0), to form nested surfaces. If False, the initial guess
+        will be created by revolving the given Poincare section(zeta=0) resulting in
+        an axisymmetric equilibrium. Default is True.
 
     Examples
     --------
@@ -90,7 +97,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             "set_initial_guess should be called with 4 or fewer arguments."
         )
     if nargs == 0 or nargs == 1 and args[0] is None:
-        if hasattr(eq, "_surface"):
+        if hasattr(eq, "_surface") and lcfs:
             # use whatever surface is already assigned
             if hasattr(eq, "_axis"):
                 axisR = np.array([eq._axis.R_basis.modes[:, -1], eq._axis.R_n]).T
@@ -104,20 +111,36 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
                 eq.Rb_lmn,
                 eq.surface.R_basis,
                 axisR,
-                coord=coord,
+                coord,
             )
             eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,
                 axisZ,
-                coord=coord,
+                coord,
             )
             eq.L_lmn = np.zeros_like(eq.L_lmn)
+        elif hasattr(eq, "_xsection") and not lcfs:
+            eq.R_lmn = _initial_guess_surface(
+                eq.R_basis,
+                eq.Rp_lmn,
+                eq.xsection.R_basis,
+            )
+            eq.Z_lmn = _initial_guess_surface(
+                eq.Z_basis,
+                eq.Zp_lmn,
+                eq.xsection.Z_basis,
+            )
+            eq.L_lmn = _initial_guess_surface(
+                eq.L_basis,
+                eq.Lp_lmn,
+                eq.xsection.L_basis,
+            )
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "
-                + "but no surface is assigned."
+                + "but no surface or cross-section is assigned."
             )
     else:  # nargs > 0
         if isinstance(args[0], Surface):
@@ -169,6 +192,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             eq.Za_n = copy_coeffs(
                 eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
             )
+            eq.xsection = eq1.xsection
 
         elif isinstance(args[0], (str, os.PathLike)):
             # from file
@@ -256,7 +280,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     return eq
 
 
-def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None):
+def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, coord=None):
     """Create an initial guess from boundary coefficients and a magnetic axis guess.
 
     Parameters
@@ -269,11 +293,6 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         basis of the boundary surface (for Rb or Zb)
     axis : ndarray, shape(num_modes,2)
         coefficients of the magnetic axis. axis[i, :] = [n, x0].
-        Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
-    mode : str
-        One of 'lcfs', 'poincare'.
-        Whether the boundary condition is specified by the last closed flux surface
-        (rho=1) or the Poincare section (zeta=0).
     coord : float or None
         Surface label (ie, rho, zeta, etc.) for supplied surface.
 
@@ -288,14 +307,13 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
     b_lmn = jnp.asarray(b_lmn)
     x_lmn = jnp.zeros((x_basis.num_modes,))
 
-    if mode is None:
-        # auto-detect based on mode numbers
-        if np.all(b_basis.modes[:, 0] == 0):
-            mode = "lcfs"
-        elif np.all(b_basis.modes[:, 2] == 0):
-            mode = "poincare"
-        else:
-            raise ValueError("Surface should have either l=0 or n=0")
+    if np.all(b_basis.modes[:, 0] == 0):
+        mode = "lcfs"
+    elif np.all(b_basis.modes[:, 2] == 0):
+        mode = "poincare"
+    else:
+        raise ValueError("Surface should have either l=0 or n=0")
+
     if mode == "lcfs":
         if coord is None:
             coord = 1.0

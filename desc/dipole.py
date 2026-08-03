@@ -786,6 +786,47 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     def sym(self):
         """bool: Whether this dipole set is stellarator symmetric."""
         return self._sym
+
+    @property
+    def X(self):
+        """X coordinates of all dipoles."""
+        return jnp.asarray([dipole.X for dipole in self])
+
+
+    @property
+    def Y(self):
+        """Y coordinates of all dipoles."""
+        return jnp.asarray([dipole.Y for dipole in self])
+
+
+    @property
+    def Z(self):
+        """Z coordinates of all dipoles."""
+        return jnp.asarray([dipole.Z for dipole in self])
+
+
+    @property
+    def phi(self):
+        """Azimuthal angles of all dipoles."""
+        return jnp.asarray([dipole.phi for dipole in self])
+
+
+    @property
+    def theta(self):
+        """Polar angles of all dipoles."""
+        return jnp.asarray([dipole.theta for dipole in self])
+
+
+    @property
+    def shift(self):
+        """Shift vectors of all dipoles."""
+        return jnp.asarray([dipole.shift for dipole in self])
+
+
+    @property
+    def rotmat(self):
+        """Rotation matrices of all dipoles."""
+        return jnp.asarray([dipole.rotmat for dipole in self])
     
     @property
     def rho(self):

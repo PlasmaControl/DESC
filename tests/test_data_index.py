@@ -73,7 +73,7 @@ def test_data_index_deps():
     pattern_params = re.compile(r"params\[(.*?)]")
     pattern_dep_ignore = re.compile("noqa: unused dependency")
     for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
-        if module_name[0] == "_":
+        if module_name[0] == "_" and module_name != "_drift":
             # JITed functions are not functions according to inspect,
             # so just check if callable and in the right module
             filt = lambda x: callable(x) and x.__module__ == module.__name__

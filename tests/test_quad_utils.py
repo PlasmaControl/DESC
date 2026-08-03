@@ -1,13 +1,18 @@
 """Tests for quadrature utilities."""
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 import scipy
 from jax import grad
+from matplotlib import pyplot as plt
 from numpy.polynomial.chebyshev import chebgauss, chebweight
 from scipy.special import roots_chebyu
+from tests.test_plotting import tol_1d
 
 from desc.backend import jnp
+from desc.compute._fast_ion import _reduction_gamma_alpha
 from desc.integrals.quad_utils import (
     automorphism_arcsin,
     automorphism_sin,
@@ -22,6 +27,54 @@ from desc.integrals.quad_utils import (
     tanh_sinh,
     uniform,
 )
+
+
+def _manufactured_gamma_alpha(num_alpha):
+    """Manufactured Gamma_alpha data with analytically known loss interval."""
+    alpha0 = 0.37
+    thresh = 0.23
+    alpha = np.linspace(0, 2 * np.pi, num_alpha, endpoint=False)
+    v_tau = (
+        1.2 + 0.3 * np.cos(alpha) + 0.2 * np.sin(2 * alpha) - 0.1 * np.cos(3 * alpha)
+    )[:, None, None]
+    radial = (-np.sin(alpha - alpha0))[:, None, None]
+    poloidal = np.ones_like(radial)
+    start = alpha0 + np.arcsin(thresh)
+    stop = start + np.pi
+    exact = (
+        1.2 * (stop - start)
+        + 0.3 * (np.sin(stop) - np.sin(start))
+        + 0.1 * (np.cos(2 * start) - np.cos(2 * stop))
+        - (0.1 / 3) * (np.sin(3 * stop) - np.sin(3 * start))
+    ) / (2 * np.pi)
+    opts = SimpleNamespace(alpha=alpha, thresh=thresh)
+    return v_tau, radial, poloidal, opts, exact
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_loss_cone_convergence():
+    """Test Gamma_alpha reduction on a manufactured alpha loss cone."""
+    num_alpha = np.array([16, 32, 64, 128])
+    lowes = []
+    highs = []
+    for num in num_alpha:
+        v_tau, radial, poloidal, opts, exact = _manufactured_gamma_alpha(num)
+        lo = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=0).item()
+        hi = _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1).item()
+        lowes.append(abs(lo - exact))
+        highs.append(abs(hi - exact))
+    lowes, highs = np.asarray(lowes), np.asarray(highs)
+
+    assert highs[-1] < 2e-5
+    assert highs[-1] < highs[-2] < highs[-3]
+
+    fig, ax = plt.subplots()
+    ax.loglog(num_alpha, lowes, "o-")
+    ax.loglog(num_alpha, highs, "o-")
+    ax.loglog(num_alpha, lowes[0] * (num_alpha[0] / num_alpha), "k--")
+    ax.loglog(num_alpha, highs[2] * (num_alpha[2] / num_alpha) ** 2, "k:")
+    return fig
 
 
 @pytest.mark.unit

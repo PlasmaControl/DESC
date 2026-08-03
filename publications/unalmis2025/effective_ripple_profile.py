@@ -17,7 +17,7 @@ Profiling requires python < 3.14.
   - pip install 'setuptools < 82'
   - cd DESC/publications/unalmis2025
   - python effective_ripple_profile.py
-  - tensorboard --logdir=/tmp/profile-data
+  - xprof --port=8791 ./profile-data
 
 """
 
@@ -51,6 +51,6 @@ obj.build()
 x = obj.x(eq)
 eps = obj.jac_scaled_error(x).block_until_ready()
 
-with jax.profiler.trace("/tmp/profile-data"):
+with jax.profiler.trace("./profile-data"):
     with jax.profiler.TraceAnnotation("Benchmarking the Jacobian"):
         eps = obj.jac_scaled_error(x).block_until_ready()

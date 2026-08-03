@@ -172,7 +172,6 @@ doc_bounce = """
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
-        Default is single field line.
         On irrational magnetic surfaces, it is sufficient to integrate along a
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
@@ -209,6 +208,9 @@ doc_bounce = """
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
+    shard : bool
+        Whether to shard batched input data across devices before applying chunked
+        batching. Default is ``False``.
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.

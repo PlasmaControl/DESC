@@ -14,6 +14,7 @@ Dynamic shape support jax-finufft.
 
 Profiling requires python < 3.14.
   - pip install xprof tensorboard tensorboard_plugin_profile
+  - pip install 'setuptools < 82'
   - cd DESC/publications/unalmis2025
   - python effective_ripple_profile.py
   - tensorboard --logdir=/tmp/profile-data
@@ -31,7 +32,7 @@ eq = get("W7-X")
 rho = np.linspace(0.1, 1, 10)
 grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
 
-num_transit = 15
+num_field_periods = 75
 obj = ObjectiveFunction(
     [
         EffectiveRipple(
@@ -39,9 +40,8 @@ obj = ObjectiveFunction(
             grid=grid,
             X=32,
             Y=32,
-            Y_B=100,
-            num_transit=num_transit,
-            num_well=16 * num_transit,
+            num_field_periods=num_field_periods,
+            num_well=3 * num_field_periods,
             num_quad=32,
             num_pitch=101,
         )

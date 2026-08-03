@@ -26,7 +26,7 @@ from matplotlib import pyplot as plt
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
     _JF_BUG,
-    _eps,
+    _root_eps,
     chebder,
     nufft1d2r,
     nufft2d2r,
@@ -105,7 +105,7 @@ def _bounce_points(
     )
     assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
-    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=True)))
+    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=1)))
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
@@ -370,10 +370,11 @@ def bounce_points_jvp(num_well, primals, tangents):
     dB_dz += dB_dt * dt_dz
     dB_do += dB_dt * dt_do
 
+    regularization = _root_eps()
     dB_dz = jnp.where(
-        jnp.abs(dB_dz) > _eps,
+        jnp.abs(dB_dz) > regularization,
         dB_dz,
-        dB_dz + jnp.copysign(_eps, dB_dz.real),
+        dB_dz + jnp.copysign(regularization, dB_dz.real),
     )
     dz = jnp.where(mask, (dp[..., None] - dB_do) / dB_dz, 0.0)
 
@@ -703,7 +704,7 @@ def get_mins(knots, B, num_mins=-1, fill_value=0.0):
         a_max=jnp.diff(knots),
         sentinel=0.0,
     )
-    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=True) > 0) & (mins > 0))
+    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=1) > 0) & (mins > 0))
     mins = flatten_mat(
         jnp.stack(
             [

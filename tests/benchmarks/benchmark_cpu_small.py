@@ -11,7 +11,7 @@ from desc.backend import jax
 from desc.basis import FourierZernikeBasis
 from desc.coils import MixedCoilSet, initialize_modular_coils, initialize_saddle_coils
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGridFlux, LinearGridCurve, LinearGridFlux
+from desc.grid import ConcentricGrid, LinearGrid
 from desc.magnetic_fields import ToroidalMagneticField
 from desc.objectives import (
     BoundaryError,
@@ -43,7 +43,7 @@ def test_build_transform_fft_lowres(benchmark):
         L = 5
         M = 5
         N = 5
-        grid = ConcentricGridFlux(L=L, M=M, N=N)
+        grid = ConcentricGrid(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -62,7 +62,7 @@ def test_build_transform_fft_midres(benchmark):
         L = 15
         M = 15
         N = 15
-        grid = ConcentricGridFlux(L=L, M=M, N=N)
+        grid = ConcentricGrid(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -81,7 +81,7 @@ def test_build_transform_fft_highres(benchmark):
         L = 25
         M = 25
         N = 25
-        grid = ConcentricGridFlux(L=L, M=M, N=N)
+        grid = ConcentricGrid(L=L, M=M, N=N)
         basis = FourierZernikeBasis(L=L, M=M, N=N)
         transf = Transform(grid, basis, method="fft", build=False)
         transf.build()
@@ -331,9 +331,7 @@ def test_perturb_2(benchmark):
 def test_proximal_jac_atf(benchmark):
     """Benchmark computing jacobian of constrained proximal projection."""
     eq = desc.examples.get("ATF")
-    grid = LinearGridFlux(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10)
-    )
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(
@@ -358,9 +356,7 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
     eq = desc.examples.get("ATF")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(12, 12, 4, 24, 24, 8)
-    grid = LinearGridFlux(
-        M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10)
-    )
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
     objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
     constraint = ObjectiveFunction(ForceBalance(eq))
     prox = ProximalProjection(
@@ -565,7 +561,7 @@ def _test_quadratic_flux(N, method):
     # for loops and hence the performance of the field computation
     # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
     eq = desc.examples.get("precise_QH")
-    field_grid = LinearGridCurve(N=N)
+    field_grid = LinearGrid(N=N)
     modular = initialize_modular_coils(
         eq, num_coils=6, r_over_a=2.5, check_intersection=False
     ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)

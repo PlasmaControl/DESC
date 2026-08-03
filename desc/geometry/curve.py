@@ -1801,7 +1801,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         surface_optimizable=True,
         sym_theta=False,
         sym_zeta=False,
-        NFP=None,
+        NFP=1,
         name="",
     ):
 
@@ -1817,6 +1817,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             self._surface = surface
         else:
             surface = FourierRZToroidalSurface()
+
+        NFP_effective = secular_zeta*NFP
 
         if surface_optimizable:
             self._R_lmn = surface.R_lmn
@@ -1844,8 +1846,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
                 self._modes_theta = jnp.array(modes_theta)
             N = np.max(np.abs(self._modes_theta))
             self._basis_theta = FourierSeries(
-                N, sym=sym_theta
-            )  # NFP doesn't make sense in theta
+                N, sym=sym_theta, NFP=NFP_effective
+            )
             self._theta_n = copy_coeffs(
                 self._theta_n, self._modes_theta, self._basis_theta.modes[:, 2]
             )
@@ -1864,7 +1866,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             else:
                 self._modes_zeta = jnp.array(modes_zeta)
             N = np.max(np.abs(self._modes_zeta))
-            self._basis_zeta = FourierSeries(N, NFP=NFP, sym=sym_zeta)
+            self._basis_zeta = FourierSeries(N, NFP=NFP_effective, sym=sym_zeta)
             self._zeta_n = copy_coeffs(
                 self._zeta_n, self._modes_zeta, self._basis_zeta.modes[:, 2]
             )
@@ -1876,6 +1878,14 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             surface_optimizable=surface_optimizable,
             name=name,
         )
+
+    @property
+    def theta_basis(self):
+        return self._basis_theta
+
+    @property
+    def zeta_basis(self):
+        return self._basis_zeta
 
     @optimizable_parameter
     @property
@@ -1933,4 +1943,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         return self._NFP
 
     def change_resolution(self):
+        pass
+
+    @classmethod
+    def from_values(cls):
         pass

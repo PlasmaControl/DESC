@@ -2,6 +2,7 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign
 
+from ..grid import Grid
 from ..utils import (
     cross,
     dot,
@@ -1257,26 +1258,186 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     "This is not a position vector unless basis is cartesian. "
     "When basis is cartesian, the units are meters.",
     dim=3,
-    params=[],
-    transforms={},
+    params=["R_lmn","Z_lmn"],
+    transforms={"surface":[]},
     profiles=[],
     coordinates="s",
-    data=[],
+    data=["theta","zeta"],
     parameterization="desc.geometry.curve.SurfaceCurve",
 )
 def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
 
+    data_surf = transforms["surface"].compute(
+        ["R", "phi", "Z"],
+        grid=grid,
+        method="jitable",
+        params=params_temp,
+    )
+    coords = jnp.stack([data_surf["R"], data_surf["phi"], data_surf["Z"]], axis=1)
+    data["x"] = coords
+    return data
+
+
+
+
+
+
+
+
+
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+                            # FourierRZSurfaceCurve compute functions #
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------
+@register_compute_fun(
+    name="theta",
+    label="\\mathbf{\\theta}",
+    units="~",
+    units_long="not applicable",
+    description="Poloidal angle along curve",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    theta_0 = transforms["secular_theta"]*transforms["NFP"]*data["s"]
+    theta_1 = transforms["theta"].transform(params["theta_n"],dz=0)
+    data["theta"] = theta_0 + theta_1
+    return data
+
+@register_compute_fun(
+    name="zeta",
+    label="\\mathbf{\\zeta}",
+    units="~",
+    units_long="not applicable",
+    description="Toroidal angle along curve",
+    dim=1,
+    params=["zeta_n"],
+    transforms={"zeta":[[0,0,0]], "secular_zeta": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    zeta_0 = transforms["secular_zeta"]*data["s"]
+    zeta_1 = transforms["zeta"].transform(params["zeta_n"],dz=0)
+    data["zeta"] = zeta_0 + zeta_1
+    return data
+
+
+@register_compute_fun(
+    name="theta_s",
+    label="\\partial_{s} \\mathbf{\\theta}",
+    units="~",
+    units_long="not applicable",
+    description="Poloidal angle along curve, first derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     pass
-    # R = transforms["R"].transform(params["R_n"], dz=0)
-    # Z = transforms["Z"].transform(params["Z_n"], dz=0)
-    # phi = transforms["grid"].nodes[:, 2]
-    # coords = jnp.stack([R, phi, Z], axis=1)
-    # # convert to xyz for displacement and rotation
-    # coords = rpz2xyz(coords)
-    # coords = (
-    #     coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
-    # )
-    # # convert back to rpz
-    # coords = xyz2rpz(coords)
-    # data["x"] = coords
-    # return data
+
+@register_compute_fun(
+    name="theta_ss",
+    label="\\partial_{ss} \\mathbf{\\theta}",
+    units="~",
+    units_long="not applicable",
+    description="Poloidal angle along curve, second derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_ss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    pass
+
+
+@register_compute_fun(
+    name="theta_sss",
+    label="\\partial_{sss} \\mathbf{\\theta}",
+    units="~",
+    units_long="not applicable",
+    description="Poloidal angle along curve, third derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    pass
+
+
+@register_compute_fun(
+    name="zeta_s",
+    label="\\partial_{s} \\mathbf{\\zeta}",
+    units="~",
+    units_long="not applicable",
+    description="Toroidal angle along curve, first derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    pass
+
+@register_compute_fun(
+    name="zeta_ss",
+    label="\\partial_{ss} \\mathbf{\\zeta}",
+    units="~",
+    units_long="not applicable",
+    description="Toroidal angle along curve, second derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_ss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    pass
+
+@register_compute_fun(
+    name="zeta_sss",
+    label="\\partial_{sss} \\mathbf{\\zeta}",
+    units="~",
+    units_long="not applicable",
+    description="Toroidal angle along curve, third derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta":[[0,0,0]], "secular_theta": [], "NFP": []},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    pass

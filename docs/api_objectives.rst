@@ -133,6 +133,7 @@ Coil Optimization
     desc.objectives.ToroidalFlux
     desc.objectives.SurfaceCurrentRegularization
     desc.objectives.LinkingCurrentConsistency
+    desc.objectives.QuadcoilProxy
 
 
 Profiles

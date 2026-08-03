@@ -61,6 +61,7 @@ Geometry
     desc.objectives.BScaleLength
     desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+    desc.objectives.NeutronWallLoading
 
 
 Neoclassical

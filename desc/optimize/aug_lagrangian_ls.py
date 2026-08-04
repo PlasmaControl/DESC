@@ -25,7 +25,6 @@ from .utils import (
     inequality_to_bounds,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    scale_columns,
     solve_triangular_regularized,
 )
 
@@ -285,10 +284,12 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
-    # carrying so many J-sized matrices in memory, which can be large. The buffer is
-    # donated so the scaling doesn't allocate a second copy of J.
-    J_h = scale_columns(J, d)
+    # TODO: place this function under JIT to use in-place operation (#1669)
+    # we don't need unscaled J anymore, so we overwrite
+    # it with J_h = J * d to avoid carrying so many J-sized matrices
+    # in memory, which can be large
+    J *= d
+    J_h = J
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -522,18 +523,9 @@ def lsq_auglag(  # noqa: C901
             L = L_new
             cost = cost_new
             Lcost = Lcost_new
-            # Delete old arrays before computing new one
-            # otherwise the peak is bigger by J-sized arrays
-            del J_h, J_a
-            if tr_method == "svd":
-                del U, s, Vt
-            elif tr_method == "cho":
-                del B_h
-            elif tr_method == "qr":
-                del R
             J = lagjac(z, y, mu, *args)
             njev += 1
-            g = jnp.dot(L, J)
+            g = jnp.dot(J.T, L)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -556,10 +548,9 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                del J
                 J = lagjac(z, y, mu, *args)
                 njev += 1
-                g = jnp.dot(L, J)
+                g = jnp.dot(J.T, L)
 
                 if jac_scale:
                     scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -576,7 +567,11 @@ def lsq_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            J_h = scale_columns(J, d)
+            # we don't need unscaled J anymore, so we overwrite
+            # it with J_h = J * d to avoid carrying so many J-sized matrices
+            # in memory, which can be large
+            J *= d
+            J_h = J
             del J
 
             if g_norm < gtol and constr_violation < ctol:
@@ -608,9 +603,6 @@ def lsq_auglag(  # noqa: C901
         success, message = False, STATUS_MESSAGES["maxiter"]
     x, s = z2xs(z)
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
-    # after overwriting J_h with J*d, we have to revert back and store the
-    # unscaled version
-    J_h = scale_columns(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         s=s,
@@ -621,7 +613,7 @@ def lsq_auglag(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J_h,
+        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

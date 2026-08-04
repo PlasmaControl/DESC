@@ -221,12 +221,12 @@ def _test_proximal_ripple(use_bounce1d, method):
 @pytest.mark.memory
 def test_eq_solve():
     """Benchmark equilibrium solve with 2 steps."""
-    res = 12
+    N = 12
     eq = desc.examples.get("precise_QA")
-    eq.change_resolution(L=res, M=res, L_grid=2 * res, M_grid=2 * res)
+    eq.change_resolution(L=N, M=N, N=N, L_grid=2 * N, M_grid=2 * N, N_grid=2 * N)
     # this test is mostly for intermediate operations, so having a chunk size
-    # of 100 will be fine to see their effect
-    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100, deriv_mode="batched")
+    # of 10 will be fine to see their effect
+    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=10, deriv_mode="batched")
     obj.build(verbose=0)
     eq.solve(
         objective=obj,

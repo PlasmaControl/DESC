@@ -12,12 +12,7 @@ import numpy as np
 
 
 def monitor_ram(proc, interval, ram_usage, timestamps):
-    """Sample the child's resident set size until *proc* finishes.
-
-    Reading /proc keeps the trace free of whatever else runs on the CI machine, and
-    is cheap enough that the sampler barely registers. The child's RSS stops existing
-    when it exits, so there is nothing to watch for afterwards.
-    """
+    """Sample the child's resident set size until *proc* finishes."""
     page_mb = os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
     with open(f"/proc/{proc.pid}/statm", "rb") as statm:
         while proc.poll() is None:  # check if child still running

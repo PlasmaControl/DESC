@@ -523,8 +523,14 @@ def lsq_auglag(  # noqa: C901
             cost = cost_new
             Lcost = Lcost_new
             # Delete old arrays before computing new one
-            # otherwise the peak is bigger by 1 J-sized array
+            # otherwise the peak is bigger by J-sized arrays
             del J_h, J_a
+            if tr_method == "svd":
+                del U, s, Vt
+            elif tr_method == "cho":
+                del B_h
+            elif tr_method == "qr":
+                del R
             J = lagjac(z, y, mu, *args)
             njev += 1
             g = jnp.dot(L, J)

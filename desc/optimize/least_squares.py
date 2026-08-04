@@ -406,8 +406,14 @@ def lsqtr(  # noqa: C901
             f = f_new
             cost = cost_new
             # Delete old arrays before computing new one
-            # otherwise the peak is bigger by 1 J-sized array
+            # otherwise the peak is bigger by J-sized arrays
             del J_h, J_a
+            if tr_method == "svd":
+                del U, s, Vt
+            elif tr_method == "cho":
+                del B_h
+            elif tr_method == "qr":
+                del R
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(f, J)

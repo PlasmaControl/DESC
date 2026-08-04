@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
+- Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+
+
+v0.17.3
+-------
+
 New Features
 
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.

@@ -26,6 +26,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZSurfaceCurve,
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
@@ -1431,6 +1432,114 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
             Z=curve.Z,
             knots=curve.knots,
             method=curve.method,
+            name=name,
+        )
+
+
+class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
+    """Coil that is contained in a FourierRZToroidalSurface.
+
+    Parameterized by a pair of integers (secular terms for toroidal
+    and poloidal winding) and Fourier series for theta(s), zeta(s).
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    center : array-like, shape(3,)
+        Coordinates of center of curve, in system determined by basis.
+    normal : array-like, shape(3,)
+        Components of normal vector to planar surface, in system determined by basis.
+    r_n : array-like
+        Fourier coefficients for radius from center as function of polar angle
+    modes : array-like
+        mode numbers associated with r_n
+
+    name : str
+        Name for this coil
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.coils import FourierPlanarCoil
+        from desc.grid import LinearGrid
+        import numpy as np
+
+        I = 10
+        mu0 = 4 * np.pi * 1e-7
+        R_coil = 10
+        # circular coil given by center at (0,0,0)
+        # and normal vector in Z direction (0,0,1) and radius 10
+        coil = FourierPlanarCoil(
+            current=I,
+            center=[0, 0, 0],
+            normal=[0, 0, 1],
+            r_n=R_coil,
+            modes=[0],
+        )
+        z0 = 10
+        field_evaluated = coil.compute_magnetic_field(
+            np.array([[0, 0, 0], [0, 0, z0]]), basis="rpz"
+        )
+        np.testing.assert_allclose(
+            field_evaluated[0, :], np.array([0, 0, mu0 * I / 2 / R_coil]), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            field_evaluated[1, :],
+            np.array([0, 0, mu0 * I / 2 * R_coil**2 / (R_coil**2 + z0**2) ** (3 / 2)]),
+            atol=1e-8,
+        )
+
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierPlanarCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierPlanarCurve._static_attrs
+
+    def __init__(
+        self,
+        current=1,
+        center=[10, 0, 0],
+        normal=[0, 1, 0],
+        r_n=2,
+        modes=None,
+        basis="xyz",
+        name="",
+    ):
+        super().__init__(current, center, normal, r_n, modes, basis, name)
+
+    @classmethod
+    def from_values(cls, current, coords, N=10, basis="xyz", name=""):
+        """Fit coordinates to FourierPlanarCoil representation.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: ndarray, shape (num_coords,3)
+            Coordinates to fit a FourierPlanarCurve object with each column
+            corresponding to xyz or rpz depending on the basis argument.
+        N : int
+            Fourier resolution of the new r representation.
+        basis : {"rpz", "xyz"}
+            Basis for input coordinates. Defaults to "xyz".
+        name : str
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierPlanarCoil
+            New representation of the coil parameterized by a Fourier series for r.
+
+        """
+        curve = super().from_values(coords=coords, N=N, basis=basis, name=name)
+        return FourierPlanarCoil(
+            current=current,
+            center=curve.center,
+            normal=curve.normal,
+            r_n=curve.r_n,
+            modes=curve.r_basis.modes[:, 2],
+            basis="xyz",
             name=name,
         )
 

@@ -1693,34 +1693,69 @@ class SplineXYZCurve(Curve):
         )
 
 
-class SurfaceCurve(Curve):
+class _SurfaceCurve(Curve):
+    r"""Curve which lies in a toroidal surface.
+
+    Parameterized in terms of poloidal/toroidal
+    angles:
+    (theta,zeta)= (theta(s), zeta(s)), s in [0,2pi].
+    Translated to lab coordinates via the surface:
+    (R,Z)=(R(theta(s),zeta(s)), Z(theta(s),zeta(s))).
+
+    Note: objects carry a read-only copy of
+    the surface and its underlying parameters.
+    Users must declare whether this surface is
+    optimizable (default True). If this surface
+    appears across multiple objectives, should use
+    the objective SurfaceCurveConsistency.
+
+    Parameters
+    ----------
+    surface: FourierRZToroidalSurface
+        Underlying surface which the curve lies on.
+    secular_theta: non-negative int, optional
+        Net winding of theta(s), equivalent to
+        1/2pi \int_{0}^{2pi} theta'(s) ds. Default
+        value is 0. Nonzero values result in curves
+        linking the torus poloidally.
+    secular_zeta: non-negative int, optional
+        Net winding of zeta(s), equivalent to
+        1/2pi \int_{0}^{2pi} zeta'(s) ds. Default
+        value is 1. Nonzero values result in curves
+        linking the torus toroidally.
+    surface_optimizable: bool, optional
+        Whether the underlying surface's params
+        are optimizable or not. Default is True.
+    name: str, optional
+        Name for this curve.
+    """
+
     _io_attrs_ = Curve._io_attrs_ + [
+        "surface",
         "secular_theta",
         "secular_zeta",
-        "surface",
         "surface_optimizable",
     ]
     _static_attrs = Curve._static_attrs + [
+        "surface",
         "secular_theta",
         "secular_zeta",
-        "surface",
         "surface_optimizable",
     ]
 
-    from . import FourierRZToroidalSurface
-
     def __init__(
         self,
+        surface,
         secular_theta=0,
         secular_zeta=1,
-        surface=None,
         surface_optimizable=True,
         name="",
     ):
+        assert surface is not None, "Surface cannot be None"
         super().__init__(name=name)
+        self._surface = surface
         self._secular_theta = secular_theta
         self._secular_zeta = secular_zeta
-        self._surface = surface
         self._surface_optimizable = surface_optimizable
 
     @property
@@ -1747,7 +1782,7 @@ class SurfaceCurve(Curve):
 
     @surface.setter
     def surface(self, surface):
-        assert issubclass(surface, FourierRZToroidalSurface) or surface is None
+        assert surface is not None, "Surface cannot be None"
         self._surface = surface
 
     @property
@@ -1775,29 +1810,95 @@ class SurfaceCurve(Curve):
         raise NotImplementedError("Rotation not implemented for surface curves")
 
 
-class FourierRZSurfaceCurve(SurfaceCurve):
-    # new io attrs:
-    # new static attrs: secular_theta, secular_zeta, N, sym_theta, sym_zeta
-    # init (takes theta_n, zeta_n, theta_modes, zeta_modes,
-    #       sym_theta, sym_zeta, secular_theta, secular_zeta, surface)
-    # properties
-    # getter and setter for theta_n, zeta_n <- optimizable
-    # getter and setter for secular_theta, secular_zeta <- not optimizable
-    # should associate two fourier bases
+class FourierRZSurfaceCurve(_SurfaceCurve):
+    r"""Fourier parameterized SurfaceCurve.
 
-    # methods
-    # from values
+    Poloidal and toroidal angles parameterized as follows:
+    theta(s) = theta_secular*s
+        + sum_{0}^N theta_{-n} sin(NFP*zeta_secular*n*s) + theta_n cos(NFP*zeta_secular*n*s)
+    zeta(s) = NFP*zeta_secular*s
+        + sum_{0}^N zeta_{-n} sin(NFP*zeta_secular*n*s) + zeta_n cos(NFP*zeta_secular*n*s)
+
+    Parameters
+    ----------
+    surface: FourierRZToroidalSurface, optional
+        Underlying surface which the curve lies on.
+        If None, must pass a value for "equilibrium."
+    equilibrium: Equilibrium, optional
+        Used in place of "surface" when the curve is intended
+        to live on the rho=1 surface of an equilibrium which
+        may be optimized alongside the curve.
+        Must pass exactly one of "surface" or "equilibrium."
+    secular_theta: non-negative int, optional
+        Net winding of theta(s), equivalent to
+        1/2pi \int_{0}^{2pi} theta'(s) ds. Default
+        value is 0. Nonzero values result in curves
+        linking the torus poloidally.
+    secular_zeta: non-negative int, optional
+        Net winding of zeta(s), equivalent to
+        1/2pi \int_{0}^{2pi} zeta'(s) ds. Default
+        value is 1. Nonzero values result in curves
+        linking the torus toroidally.
+    theta_n: array-like, shape (M,), optional
+        Coefficients of Fourier modes defining
+        theta(s).
+    zeta_n: array-like, shape (N,), optional
+        Coefficients of Fourier modes defining
+        zeta(s).
+    modes_theta: array-like, shape (M,), optional
+        Mode numbers associated with theta. If
+        not given, defaults to [-M:M].
+    modes_zeta: array-like, shape (N,), optional
+        Mode numbers associated with zeta. If
+        not given, defaults to [-N:N].
+    surface_optimizable: bool, optional
+        Whether the underlying surface's params
+        are optimizable or not. Default is True.
+    sym_theta: str, optional
+        If "sin"/"cos", retains only the corresponding
+        modes in the series for theta(s). Defaults
+        to None, i.e. all modes are kept.
+    sym_zeta: bool, optional
+        If "sin"/"cos", retains only the corresponding
+        modes in the series for zeta(s). Defaults
+        to None, i.e. all modes are kept.
+    NFP: positive int, optional
+        Field period symmetry of the curve. Should
+        only be changed if curve is known to share the
+        NFP symmetry of the surface. Defaults to 1.
+    name: str, optional
+        Name for this curve.
+    """
+
+    _io_attrs_ = _SurfaceCurve._io_attrs_ + [
+        "theta_n",
+        "zeta_n",
+        "modes_theta",
+        "modes_zeta",
+        "sym_theta",
+        "sym_zeta",
+        "NFP",
+    ]
+    _static_attrs = _SurfaceCurve._static_attrs + [
+        "theta_n",
+        "zeta_n",
+        "modes_theta",
+        "modes_zeta",
+        "sym_theta",
+        "sym_zeta",
+        "NFP",
+    ]
 
     def __init__(
         self,
+        surface=None,
+        equilibrium=None,
         secular_theta=0,
         secular_zeta=1,
         theta_n=[0.0],
         zeta_n=[0.0],
         modes_theta=None,
         modes_zeta=None,
-        surface=None,
-        equilibrium=None,
         surface_optimizable=True,
         sym_theta=False,
         sym_zeta=False,
@@ -1818,7 +1919,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         else:
             surface = FourierRZToroidalSurface()
 
-        NFP_effective = secular_zeta*NFP
+        NFP_effective = secular_zeta * NFP
 
         if surface_optimizable:
             self._R_lmn = surface.R_lmn
@@ -1845,9 +1946,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             else:
                 self._modes_theta = jnp.array(modes_theta)
             N = np.max(np.abs(self._modes_theta))
-            self._basis_theta = FourierSeries(
-                N, sym=sym_theta, NFP=NFP_effective
-            )
+            self._basis_theta = FourierSeries(N, sym=sym_theta, NFP=NFP_effective)
             self._theta_n = copy_coeffs(
                 self._theta_n, self._modes_theta, self._basis_theta.modes[:, 2]
             )
@@ -1910,8 +2009,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
     @optimizable_parameter
     @property
     def R_lmn(self):
-        # returns none if surface is not optimizable
-        # in that case, can use surface getter: self.surface.R_lmn
         return self._R_lmn
 
     @optimizable_parameter
@@ -1922,13 +2019,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
     @property
     def surface(self):
         return self.surface
-
-    @surface.setter
-    def surface(self, surface):
-        self._surface = surface
-        if self.surface_optimizable:
-            self._R_lmn = surface.R_lmn
-            self._Z_lmn = surface.Z_lmn
 
     @property
     def sym_theta(self):

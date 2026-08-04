@@ -1164,8 +1164,10 @@ def _trace_particles(
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
 
-    # the coil geometry is independent of the evaluation points, so we can
-    # precompute the constant source information once, and use it inside the loop
+    # For supported fields, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing, i.e. the coil geometry (which is independent of the evaluation
+    # points) at every step of every particle.
     if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
         grid = options.pop("source_grid", None)
         field = field._as_precomputed_source(grid, params)

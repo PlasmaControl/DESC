@@ -59,16 +59,16 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -78,17 +78,27 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Returns
     -------
     B : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic field in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic field in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
-    # For AD purposes, computing rs x J part of the following
-    # relation : dr x J = (rs - re) x J = rs x J - re x J
-    # is much faster.
+    # We want sum_M (rs-re) x JdV / |rs-re|^3, where rs, JdV are (M x 3) and re
+    # is (N x 3). Forming (rs-re) x JdV gives an (N x M x 3) array, which is
+    # very large. Instead we split it as rs x JdV - re x JdV, so that
+    # K = rs x JdV is only (M x 3). Then, with w = 1/|rs-re|^3 of shape
+    # (N x M), the contractions w @ K and w @ JdV sum over the sources directly
+    # and give (N x 3); only the latter is crossed with re. This way dr is the
+    # only (N x M x 3) array, and it is immediately reduced to (N x M) by the
+    # norm, which XLA can handle easily.
+    # Note that for AD, this approach removes multiple intermediate arrays.
     K = jnp.cross(rs, JdV, axis=-1)
+    # The split adds a bit of rounding error for points very close to a source,
+    # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,
+    # so for a 1e-3m distance, error is ~1e-11 in a 20m device. This kernel is never
+    # used for singular or near-singular integrals, so we should be fine.
 
     def biot(re):
         dr = rs - re[..., jnp.newaxis, :]
@@ -114,16 +124,16 @@ def biot_savart_general_vector_potential(
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -133,8 +143,8 @@ def biot_savart_general_vector_potential(
     Returns
     -------
     A : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic vector potential in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic vector potential in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -2766,11 +2776,10 @@ def _field_line_integrate(
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
     """
-    # For filamentary coils, precompute the Biot-Savart source data once, so that
+    # For supported fields, precompute the Biot-Savart source data once, so that
     # the ODE right hand side only evaluates the Biot-Savart kernel instead of
-    # recomputing the coil geometry (which is independent of the evaluation
-    # points) at every step of every field line. Duck-typed to avoid a circular
-    # import of desc.coils.
+    # recomputing, i.e. the coil geometry (which is independent of the evaluation
+    # points) at every step of every field line.
     if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
         field = field._as_precomputed_source(source_grid, params)
         params = None

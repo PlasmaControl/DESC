@@ -94,6 +94,7 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     # only (N x M x 3) array, and it is immediately reduced to (N x M) by the
     # norm, which XLA can handle easily.
     # Note that for AD, this approach removes multiple intermediate arrays.
+    # This trick was first suggested by Claude Fable 5, then implemented by Yigit
     K = jnp.cross(rs, JdV, axis=-1)
     # The split adds a bit of rounding error for points very close to a source,
     # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,

@@ -27,7 +27,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, warnif
+from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import (
     fourier_to_zernike,
     ptolemy_identity_fwd,
@@ -260,6 +260,14 @@ class VMECIO:
         """
         timer = Timer()
         timer.start("Total time")
+
+        errorif(
+            np.any(eq.W_lmn),
+            NotImplementedError,
+            "VMEC output requires the computational toroidal angle to be the "
+            "cylindrical angle (omega = 0), but this equilibrium has nonzero "
+            "omega (generalized toroidal angle).",
+        )
 
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f
             see lines 300+ for full list of included variables

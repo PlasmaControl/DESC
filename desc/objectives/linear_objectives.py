@@ -661,6 +661,119 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
+class BoundaryWSelfConsistency(_Objective):
+    """Ensure that the boundary and interior omega are self consistent.
+
+    Enforces W_lmn (Fourier-Zernike) evaluated at the boundary surface to match
+    Wb_lmn (double Fourier series), where omega is the toroidal stream function
+    defining the generalized toroidal angle, phi = zeta + omega.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    surface_label : float, optional
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    _scalar = False
+    _linear = True
+    _fixed = False  # not "diagonal", since it is fixing a sum
+    _units = "(rad)"
+    _print_value_fmt = "omega boundary self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        surface_label=None,
+        name="self_consistency omega",
+    ):
+        self._surface_label = surface_label
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        modes = eq.surface.W_basis.modes
+        idx = np.arange(eq.surface.W_basis.num_modes)
+
+        self._dim_f = idx.size
+        self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+        Js = []
+        surf = eq.surface.rho if self._surface_label is None else self._surface_label
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            if eq.bdry_mode == "lcfs":
+                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                Js.append(j.flatten())
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
+        if eq.W_basis.num_modes:
+            Js = np.array(Js)
+            # Broadcasting at once is faster. We need to use np.arange to avoid
+            # setting the value to the whole row.
+            self._A[Js[:, 0], np.arange(eq.W_basis.num_modes)] = zernike_radial(
+                surf, eq.W_basis.modes[:, 0], eq.W_basis.modes[:, 1]
+            )
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute boundary omega self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at the
+        boundary and the double Fourier series defining the LCFS omega.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            boundary omega self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["W_lmn"]) - params["Wb_lmn"]
+
+
 class AxisRSelfConsistency(_Objective):
     """Ensure consistency between Zernike and Fourier coefficients on axis.
 
@@ -855,6 +968,103 @@ class AxisZSelfConsistency(_Objective):
         return f
 
 
+class AxisWSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients of omega on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    _scalar = False
+    _linear = True
+    _fixed = False  # not "diagonal", since it is fixing a sum
+    _units = "(rad)"
+    _print_value_fmt = "omega axis self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        name="axis omega self consistency",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        ns = eq.axis.W_basis.modes[:, 2]
+        self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute axis omega self-consistency errors.
+
+        IE, the mismatch between the Fourier-Zernike basis evaluated at rho=0
+        and the Fourier series defining the axis omega.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            axis omega self-consistency errors.
+
+        """
+        f = jnp.dot(self._A, params["W_lmn"]) - params["Wa_n"]
+        return f
+
+
 class FixBoundaryR(FixParameters):
     """Boundary condition on the R boundary parameters.
 
@@ -1017,6 +1227,73 @@ class FixBoundaryZ(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
+class FixBoundaryW(FixParameters):
+    """Boundary condition on the omega boundary parameters.
+
+    Fixes the boundary coefficients of the toroidal stream function omega,
+    where the generalized toroidal angle satisfies phi = zeta + omega. The
+    default target (the current boundary coefficients) keeps the boundary
+    toroidal angle fixed during solves.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Wb_lmn``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
+        Defaults to ``target=eq.Wb_lmn``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Has no effect for this objective (omega is an angle, already O(1)).
+    normalize_target : bool, optional
+        Has no effect for this objective.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the surface modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "omega boundary error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="lcfs omega",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.surface.W_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Wb_lmn": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+
 class FixLambdaGauge(FixParameters):
     """Fixes gauge freedom for lambda, which sets the flux surface avg of lambda to 0.
 
@@ -1062,6 +1339,116 @@ class FixLambdaGauge(FixParameters):
         )
 
 
+class FixOmegaGauge(FixParameters):
+    """Fixes gauge freedom of the generalized toroidal angle.
+
+    For a fixed physical field, the computational toroidal angle may be shifted
+    per flux surface, zeta -> zeta + c(rho), with omega -> omega - c(rho),
+    leaving phi = zeta + omega (and all physics) unchanged. Equivalently, the
+    (m=0, n=0) Fourier-Zernike content of omega is pure gauge. This constraint
+    removes that freedom by fixing all (m=0, n=0) modes of W_lmn to zero.
+    For stellarator-symmetric equilibria the sin-parity basis contains no
+    (0,0) modes and the gauge is fixed automatically by symmetry.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "omega gauge error: "
+
+    def __init__(
+        self,
+        eq,
+        normalize=True,
+        normalize_target=True,
+        name="omega gauge",
+    ):
+        if eq.sym:
+            indices = False
+        else:
+            indices = np.where(
+                np.logical_and(eq.W_basis.modes[:, 1] == 0, eq.W_basis.modes[:, 2] == 0)
+            )[0]
+        super().__init__(
+            thing=eq,
+            params={"W_lmn": indices},
+            target=0,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+
+class FixOmegaInterior(FixParameters):
+    """Fixes the interior (higher radial mode) omega degrees of freedom.
+
+    For each poloidal/toroidal mode pair (m, n) of the omega basis, all radial
+    modes except the one with the lowest radial degree are fixed at their
+    current values. Combined with ``BoundaryWSelfConsistency`` (which supplies
+    one condition per (m, n)), this leaves the interior omega fully determined
+    in a fixed-boundary solve: the boundary supplies the toroidal angle
+    parameterization, and no redundant interior gauge freedom is exposed to
+    the optimizer. Remove this constraint to let the solver vary interior
+    omega (an intrinsically degenerate direction of force balance, since
+    interior omega is a coordinate gauge choice).
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "omega interior error: "
+
+    def __init__(
+        self,
+        eq,
+        normalize=True,
+        normalize_target=True,
+        name="omega interior",
+    ):
+        modes = eq.W_basis.modes
+        indices = []
+        if len(modes):
+            mn = modes[:, 1:]
+            for pair in np.unique(mn, axis=0):
+                idx = np.where((mn == pair).all(axis=1))[0]
+                # all but the lowest radial degree for this (m, n) pair
+                indices.extend(idx[np.argsort(modes[idx, 0])][1:])
+        indices = np.sort(np.asarray(indices, dtype=int))
+        super().__init__(
+            thing=eq,
+            params={"W_lmn": indices},
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+
 class FixThetaSFL(FixParameters):
     """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
 
@@ -1095,6 +1482,51 @@ class FixThetaSFL(FixParameters):
         super().__init__(
             thing=eq,
             params={"L_lmn": True},
+            target=0,
+            bounds=None,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+
+class FixZetaSFL(FixParameters):
+    """Fixes omega=0 so the toroidal angle is the cylindrical toroidal angle.
+
+    This constrains all interior omega degrees of freedom to zero, recovering
+    the traditional DESC representation where zeta = phi.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Has no effect for this objective.
+    normalize_target : bool, optional
+        Has no effect for this objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "phi - zeta error: "
+
+    def __init__(
+        self,
+        eq,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="zeta SFL",
+    ):
+        super().__init__(
+            thing=eq,
+            params={"W_lmn": True},
             target=0,
             bounds=None,
             weight=weight,
@@ -1264,6 +1696,68 @@ class FixAxisZ(FixParameters):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         super().build(use_jit=use_jit, verbose=verbose)
+
+
+class FixAxisW(FixParameters):
+    """Fixes magnetic axis omega coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.Wa_n``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
+        Defaults to ``target=eq.Wa_n``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Has no effect for this objective (omega is an angle, already O(1)).
+    normalize_target : bool, optional
+        Has no effect for this objective.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(rad)"
+    _print_value_fmt = "omega axis error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="axis omega",
+    ):
+        if isinstance(modes, bool):
+            indices = modes
+        else:
+            indices = np.array([], dtype=int)
+            for mode in np.atleast_2d(modes):
+                indices = np.append(indices, eq.axis.W_basis.get_idx(*mode))
+        super().__init__(
+            thing=eq,
+            params={"Wa_n": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
 
 class FixModeR(FixParameters):

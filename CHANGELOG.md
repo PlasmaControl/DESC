@@ -3,6 +3,13 @@ Changelog
 
 New Features
 
+- Generalizes the toroidal coordinate so that the computational angle ``zeta`` need not equal the cylindrical laboratory angle ``phi``, via a periodic toroidal stream function ``omega`` with ``phi = zeta + omega``. ``omega = 0`` remains the default everywhere and reproduces the previous behavior exactly, adding no degrees of freedom. (Resolves #465)
+  - ``FourierRZToroidalSurface`` gains ``W_lmn``/``W_basis`` with independent ``Mz``/``Nz`` resolution, and ``from_values`` can now fit ``omega = phi - zeta`` from sampled points when a ``zeta`` is supplied, accepting either ``(R, phi, Z)`` or ``(X, Y, Z)`` coordinates. Use this to represent a surface given in Boozer or other generalized toroidal angles.
+  - ``Equilibrium`` gains ``W_lmn`` with ``Lz``/``Mz``/``Nz`` resolution, plus ``Wb_lmn`` and ``Wa_n`` for the boundary and axis; ``FourierRZCurve`` gains ``W_n``.
+  - New constraints ``FixBoundaryW``, ``FixAxisW``, ``FixOmegaGauge``, ``FixOmegaInterior``, ``FixZetaSFL``, and the automatically applied ``BoundaryWSelfConsistency`` and ``AxisWSelfConsistency``. These are only added when the equilibrium actually has ``omega`` degrees of freedom.
+  - ``FourierRZToroidalSurface.check_toroidal_map`` validates that the map is a usable chart, ie that ``d(phi)/d(zeta) = 1 + d(omega)/d(zeta) > 0`` everywhere.
+  - New theory documentation page, "Generalized Toroidal Angle".
+- Adds ``_io_attrs_optional_``, a per-class allowlist of attributes that may be absent from a previously saved file without raising a warning, for attributes whose ``_set_up`` assigns a default reproducing the old behavior.
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
 - Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
 - Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.

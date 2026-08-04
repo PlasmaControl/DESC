@@ -95,9 +95,11 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             if hasattr(eq, "_axis"):
                 axisR = np.array([eq._axis.R_basis.modes[:, -1], eq._axis.R_n]).T
                 axisZ = np.array([eq._axis.Z_basis.modes[:, -1], eq._axis.Z_n]).T
+                axisW = np.array([eq._axis.W_basis.modes[:, -1], eq._axis.W_n]).T
             else:
                 axisR = None
                 axisZ = None
+                axisW = None
             coord = eq.surface.rho if hasattr(eq.surface, "rho") else None
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
@@ -114,6 +116,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
                 coord=coord,
             )
             eq.L_lmn = np.zeros_like(eq.L_lmn)
+            _initial_guess_omega(eq, eq.surface, axisW, coord)
         else:
             raise ValueError(
                 "set_initial_guess called with no arguments, "
@@ -127,6 +130,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
                     axis = args[1]
                     axisR = np.array([axis.R_basis.modes[:, -1], axis.R_n]).T
                     axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
+                    axisW = np.array([axis.W_basis.modes[:, -1], axis.W_n]).T
                 else:
                     raise TypeError(
                         "Don't know how to initialize from object type {}".format(
@@ -136,6 +140,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             else:
                 axisR = None
                 axisZ = None
+                axisW = None
             coord = surface.rho if hasattr(surface, "rho") else None
             eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
@@ -152,6 +157,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
                 coord=coord,
             )
             eq.L_lmn = np.zeros_like(eq.L_lmn)
+            _initial_guess_omega(eq, surface, axisW, coord)
         elif type(args[0]) is type(eq):
             eq1 = args[0]
             if nargs > 1:
@@ -163,6 +169,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.W_lmn = copy_coeffs(eq1.W_lmn, eq1.W_basis.modes, eq.W_basis.modes)
             eq.Ra_n = copy_coeffs(
                 eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
             )
@@ -205,6 +212,7 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.W_lmn = copy_coeffs(eq1.W_lmn, eq1.W_basis.modes, eq.W_basis.modes)
             eq.Ra_n = copy_coeffs(
                 eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
             )
@@ -254,6 +262,33 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
         )
 
     return eq
+
+
+def _initial_guess_omega(eq, surface, axis=None, coord=None):
+    """Set the initial guess for omega from a boundary surface, if applicable.
+
+    A guess is only built when both the equilibrium and the given surface
+    actually carry omega degrees of freedom. When the surface has none its
+    toroidal angle is the cylindrical angle, so omega stays zero; when the
+    equilibrium has none it cannot represent a generalized angle at all, which
+    is worth telling the user about since their boundary omega is discarded.
+    """
+    eq_modes = eq.W_basis.num_modes
+    surf_modes = getattr(surface, "W_basis", None)
+    surf_modes = 0 if surf_modes is None else surf_modes.num_modes
+
+    warnif(
+        (not eq_modes) and surf_modes and np.any(surface.W_lmn),
+        UserWarning,
+        "The given surface has a nonzero generalized toroidal angle (omega), "
+        "but this equilibrium has no omega resolution, so it will be ignored. "
+        "Pass Mz/Nz (and Lz) to the Equilibrium to keep it.",
+    )
+    if not (eq_modes and surf_modes):
+        return
+    eq.W_lmn = _initial_guess_surface(
+        eq.W_basis, surface.W_lmn, surface.W_basis, axis, coord=coord
+    )
 
 
 def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None):

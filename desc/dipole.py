@@ -1397,6 +1397,137 @@ def export_dipoles(dipole_set, f):
         print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho_tilde}", file=outfile)
 
     outfile.close()
+import os
+def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
+        """Save CoilSet as a MAKEGRID-formatted coil txtfile.
+
+        By default, each coil is assigned to the same Coilgroup in MAKEGRID
+        with the name "Modular". For more details see the MAKEGRID documentation
+        https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+
+        Note: if a nested CoilSet, will flatten it first before saving
+
+        Parameters
+        ----------
+        filename : str or path-like
+            path save CoilSet as a file in MAKEGRID txt format
+        NFP : int, default None
+            If > 1, assumes that the CoilSet is the coils for a coilset
+            with a nominal discrete toroidal symmetry of NFP, and will
+            put that NFP in the periods line of the coils file generated.
+            defaults to 1
+        grid: Grid, ndarray, int,
+            Grid of sample points along each coil to save.
+            if None, will default to the coil compute functions's
+            default grid
+        """
+        # TODO(#1376): name each group based off of CoilSet name?
+        # TODO(#1376): have CoilGroup be automatically assigned based off of
+        # CoilSet if current coilset is a collection of coilsets?
+
+        coilsFilename = os.path.expanduser(coilsFilename)
+
+        NFP = 1 if NFP is None else NFP
+
+        def flatten_coils(coilset):
+            if hasattr(coilset, "__len__"):
+                if isinstance(coilset, DipoleSet):
+                    if coilset.NFP > 1 or coilset.sym:
+                        # hit a CoilSet with symmetries, this coilset only contains
+                        # its unique coils. However, for this function we
+                        # need to get the entire coilset, not just the unique coils,
+                        # so make a MixedCoilSet using this CoilSet's coils and NFP/sym
+                        coilset_full = DipoleSet.from_symmetry(
+                            coilset,
+                            NFP=coilset.NFP,
+                            sym=coilset.sym,
+                        )
+                        return [c for c in coilset_full]
+                return [a for i in coilset for a in flatten_coils(i)]
+            else:
+                return [coilset]
+
+        coils = flatten_coils(self)
+        # after flatten, should have as many elements in list as self.num_coils, if
+        # flatten worked correctly.
+        assert len(coils) == self.num_coils
+
+        assert (
+            int(len(coils) / NFP) == len(coils) / NFP
+        ), "Number of coils in coilset must be evenly divisible by NFP!"
+
+        header = (
+            # number of field period
+            "periods "
+            + str(NFP)
+            + "\n"
+            + "begin filament\n"
+            # not 100% sure of what this line is, neither is MAKEGRID,
+            # but it is needed and expected by other codes
+            # "The third line is read by MAKEGRID but ignored"
+            # https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+            + "mirror NIL"
+        )
+        footer = "end\n"
+
+        x_arr = []
+        y_arr = []
+        z_arr = []
+        currents_arr = []
+        coil_end_inds = []  # indices where the coils end, need to track these
+        # to place the coilgroup number and name later, which MAKEGRID expects
+        # at the end of each individual coil
+        if hasattr(grid, "endpoint"):
+            endpoint = grid.endpoint
+        elif isinstance(grid, numbers.Integral) or grid is None:
+            # if int or None, will create a grid w/ endpoint=False in compute
+            endpoint = False
+        for i in range(int(len(coils))):
+            coil = coils[i]
+            coordsx = coil.compute("X", basis="xyz", grid=grid)["X"]
+            coordsy = coil.compute("Y", basis="xyz", grid=grid)["X"]
+            coordsz = coil.compute("Z", basis="xyz", grid=grid)["X"]
+
+            contour_X = np.asarray(coordsx[0:])
+            contour_Y = np.asarray(coordsy[0:])
+            contour_Z = np.asarray(coordsz[0:])
+
+            currents = np.ones_like(contour_X) * float(coil.rho)
+
+            coil_end_inds.append(contour_X.size)
+
+            x_arr.append(contour_X)
+            y_arr.append(contour_Y)
+            z_arr.append(contour_Z)
+            currents_arr.append(currents)
+        # form full array to save
+        x_arr = np.concatenate(x_arr)
+        y_arr = np.concatenate(y_arr)
+        z_arr = np.concatenate(z_arr)
+        currents_arr = np.concatenate(currents_arr)
+
+        save_arr = np.vstack((x_arr, y_arr, z_arr, currents_arr)).T
+        # save initial file
+        np.savetxt(
+            coilsFilename,
+            save_arr,
+            delimiter=" ",
+            header=header,
+            footer=footer,
+            fmt="%14.12e",
+            comments="",  # to avoid the # appended to the start of the header/footer
+        )
+        # now need to re-load the file and place coilgroup markers at end of each coil
+        with open(coilsFilename) as f:
+            lines = f.readlines()
+        for i in range(len(coil_end_inds)):
+            name = coils[i].name if coils[i].name != "" else "1 Modular"
+            real_end_ind = int(
+                np.sum(coil_end_inds[0 : i + 1]) + 2
+            )  # to account for the 3 header lines
+            lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
+        with open(coilsFilename, "w") as f:
+            f.writelines(lines)
 
 import csv
 

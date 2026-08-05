@@ -291,20 +291,34 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @optimizable_parameter
     @property
     def rho(self):
-        """float: Dimensionless optimization parameter in range (-1, 1) that defines radial
-        direction and magntiude of the dipole; positive is radially outward, negative is 
-        radially inward."""
+        """float: Dimensionless ofree unconstrained parameter seen by the optimizer"""
         return self._rho
 
     @rho.setter
     def rho(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        errorif(
-            new < -1 or new > 1,
-            ValueError,
-            f"rho must be in range (-1, 1), got {new}"
-        )
+        # errorif(
+        #     new < -1 or new > 1,
+        #     ValueError,
+        #     f"rho must be in range (-1, 1), got {new}"
+        # )
         self._rho = jnp.float64(float(np.squeeze(new)))
+
+    #rho_tilde is unconstrained
+    @property
+    def rho_tilde(self):
+        """float: Dimensionless parameter in range (-1, 1) that defines radial
+        direction and magntiude of the dipole; positive is radially outward, negative is 
+        radially inward.
+        """
+        return jnp.tanh(self._rho)
+
+    @rho_tilde.setter
+    def rho_tilde(self, new):
+        """Set the dipole via its physical (bounded) strength; converts to the
+        underlying unconstrained `rho` under the hood."""
+        new = jnp.clip(jnp.asarray(float(np.squeeze(new))), -1 + 1e-7, 1 - 1e-7)
+        self._rho = jnp.arctanh(new)
 
     @property
     def name(self):
@@ -323,13 +337,13 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @property
     def M0(self):
         """float: Effective dipole moment strength, with radial direction."""
-        return self._m0 * self._rho
+        return self._m0 * self._rho_tilde
     
     @property
     def m_xyz(self):
         """float: Effective dipole moment strength, with radial direction expressed
         in an array of its x, y, and z components."""
-        M0 = self.m0 * self.rho
+        M0 = self.m0 * self.rho_tilde
         theta = self._theta
         phi = self._phi
         m_hat = jnp.array(
@@ -408,9 +422,11 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         #     }
 
         if params is None:
-            rho = self.rho
+            #rho = self.rho
+            rho = jnp.tanh(self.rho)
         else:
-            rho = params.get("rho", self.rho)
+            #rho = params.get("rho", self.rho)
+            rho = jnp.tanh(params.get("rho", self.rho))
 
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
@@ -445,7 +461,8 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             )
             # data["x_s"] = rpz2xyz_vec(data["x_s"], phi=data["x"][:, 1])
             # data["x"] = rpz2xyz(data["x"])
-            rho = data["rho"]
+            #rho = data["rho"]
+            rho = jnp.tanh(data["rho"])
 
         # x = params.get("x", self.x)
         # y = params.get("y", self.y)
@@ -833,6 +850,11 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         """list: Optimization parameters for each dipole from (-1, 1)."""
         return [dipole.rho for dipole in self.dipoles]
 
+    @property
+    def rho_tilde(self):
+        """list: """
+        return [dipole.rho_tilde for dipole in self.dipoles]
+
     @rho.setter
     def rho(self, new):
         # new must be a 1D iterable regardless of the tree structure of the dipoleSet
@@ -1032,7 +1054,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = [
-                get_params(["X", "Y", "Z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self]
+                get_params(["X", "Y", "Z", "phi", "theta", "m0", "rho"], dipole) for dipole in self]
             #     "x": dipole.x,
             #     "y": dipole.y,  
             #     "z": dipole.z,
@@ -1093,7 +1115,8 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         if "M0" in sources:
             M0 = sources["M0"]
         else:
-            M0 = sources["m0"] * sources["rho"]
+            #M0 = sources["m0"] * sources["rho"]
+            M0 = sources["m0"] * jnp.tanh(sources["rho"])
         #pdb.set_trace()
         sin_theta = jnp.sin(sources["theta"])
         m_hat = jnp.stack(
@@ -1371,17 +1394,21 @@ def export_dipoles(dipole_set, f):
     print("x (m), y (m), z (m), phi (rad), theta (rad), m0, rho (unitless)", file=outfile)
     
     for i in range(len(d)):
-        print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho}", file=outfile)
+        print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho_tilde}", file=outfile)
 
     outfile.close()
 
 import csv
 
-def create_dipole(X, Y, Z, phi, theta, m0, rho):
+def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde):
     '''
     Creates a Dipole object using given data
     '''
-    return _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, rho=rho)
+    dip = _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, 
+                   #rho=rho_tilde
+                   )
+    dip.rho_tilde = rho_tilde
+    return dip
 
 def import_dipoles(NFP, sym, filename):
     '''

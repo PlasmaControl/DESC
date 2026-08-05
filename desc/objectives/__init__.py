@@ -18,6 +18,11 @@ from ._coils import (
     SurfaceQuadraticFlux,
     ToroidalFlux,
 )
+from ._dipole import (
+    QuadraticFluxPM,
+    DipoleDiscreteness,
+    DipoleVolume
+)
 from ._equilibrium import (
     CurrentDensity,
     Energy,

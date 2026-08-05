@@ -4,10 +4,10 @@ from .core import Curve, Surface
 from .curve import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZSurfaceCurve,
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
-    SurfaceCurve,
-    FourierRZSurfaceCurve
+    _SurfaceCurve,
 )
 from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection

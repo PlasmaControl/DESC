@@ -1457,7 +1457,6 @@ class QuadraticFlux(_Objective):
         "_B_plasma_chunk_size",
         "_bs_chunk_size",
         "_vacuum",
-        "_field_fixed",
     ]
 
     _scalar = False
@@ -1480,7 +1479,6 @@ class QuadraticFlux(_Objective):
         field_grid=None,
         vacuum=False,
         name="Quadratic flux",
-        field_fixed=None,
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
@@ -1497,7 +1495,6 @@ class QuadraticFlux(_Objective):
         self._field = [field] if not isinstance(field, list) else field
         self._field_grid = field_grid
         self._vacuum = vacuum
-        self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
         self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
         errorif(
@@ -1580,13 +1577,6 @@ class QuadraticFlux(_Objective):
             )
         )
 
-        Bcoils = np.linalg.norm(self._field_fixed.compute_magnetic_field(
-                            jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
-                            source_grid=self._field_grid,
-                            basis="rpz",
-                            chunk_size=self._bs_chunk_size), axis=1)
-
-
         self._constants = {
             "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
@@ -1595,7 +1585,6 @@ class QuadraticFlux(_Objective):
             "eval_transforms": eval_transforms,
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
-            "B_coils": Bcoils,
         }
 
         timer.stop("Precomputing transforms")
@@ -1631,7 +1620,6 @@ class QuadraticFlux(_Objective):
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
-        B_coils = constants["B_coils"]
 
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
 
@@ -1644,7 +1632,7 @@ class QuadraticFlux(_Objective):
             chunk_size=self._bs_chunk_size,
         )
         B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
-        f = (B_ext + B_plasma + B_coils) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+        f = (B_ext + B_plasma) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 
 

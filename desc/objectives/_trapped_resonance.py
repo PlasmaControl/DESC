@@ -5,7 +5,7 @@ from orthax.legendre import leggauss
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
-from desc.compute._trapped_resonance import _NUM_WELL, _build_eta_grid
+from desc.compute._trapped_resonance import _build_eta_grid
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization
@@ -126,15 +126,6 @@ class TrappedResonance(_Objective):
         If ``True``, zero out wells whose poloidal bounce width exceeds 2π
         (barely-trapped filter) before the resonance physics calculation.
         Defaults to ``False``.
-    pointwise : bool, optional
-        If ``True``, return one residual per phase space point rather than
-        performing the phase space average here. Writing that average as
-        ∑ⱼ Wⱼ fⱼ, this returns √Wⱼ fⱼ, so the least squares objective forms
-        ∑ⱼ Wⱼ fⱼ² rather than (∑ⱼ Wⱼ fⱼ)², which carries cross terms between
-        distinct phase space points. Note this makes ``dim_f`` the number of
-        phase space points instead of the number of flux surfaces, which
-        enlarges the Jacobian by the same factor.
-        Defaults to ``True``.
     """
 
     _scalar = False
@@ -149,7 +140,6 @@ class TrappedResonance(_Objective):
         # Selects which branch ``compute`` takes, so it must stay concrete
         # under jit rather than becoming a traced leaf.
         "_use_bounce1d",
-        "_pointwise",
         "_X",
         "_Y",
     ]
@@ -189,7 +179,6 @@ class TrappedResonance(_Objective):
         stab_sacrifice=False,
         cropping_DOmega=False,
         bt_filter_flag=False,
-        pointwise=True,
         use_bounce1d=False,
         X=32,
         Y=32,
@@ -200,10 +189,6 @@ class TrappedResonance(_Objective):
         if target is None and bounds is None:
             target = 1e-8
         self._use_bounce1d = bool(use_bounce1d)
-        self._pointwise = bool(pointwise)
-        if self._pointwise:
-            # Residuals are per phase space point, not per flux surface.
-            self._coordinates = ""
         self._num_rho = int(num_rho)
         self._num_eta = int(num_eta)
         if self._num_eta < 2:
@@ -240,7 +225,6 @@ class TrappedResonance(_Objective):
             "stab_sacrifice": stab_sacrifice,
             "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
-            "pointwise": pointwise,
             "use_bounce1d": self._use_bounce1d,
         }
         if not self._use_bounce1d:
@@ -278,20 +262,7 @@ class TrappedResonance(_Objective):
 
         rho = np.linspace(0, 1, self._num_rho + 1)[1:]
         self._constants["rho"] = rho
-        if self._pointwise:
-            # One residual per phase space point rather than per flux surface,
-            # so that the least squares objective forms the sum of squares.
-            # The pitch count comes from the quadrature rather than num_pitch
-            # directly, since the Simpson rule adds a node.
-            num_pitch = Bounce1D.get_pitch_inv_quad(
-                jnp.array([1.0]),
-                jnp.array([2.0]),
-                self._hyperparameters["num_pitch"],
-                simp=True,
-            )[0].shape[-1]
-            self._dim_f = rho.size * self._num_eta * num_pitch * _NUM_WELL
-        else:
-            self._dim_f = rho.size
+        self._dim_f = rho.size
 
         self._grid_1dr = LinearGrid(
             rho=rho,
@@ -488,11 +459,7 @@ class TrappedResonance(_Objective):
             )
             if self._hyperparameters.get("pitch_invs", None) is not None:
                 return data[self._key]
-            return (
-                data[self._key]
-                if self._pointwise
-                else base_grid.compress(data[self._key])
-            )
+            return base_grid.compress(data[self._key])
 
         eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
         eta_grid = eta_desc_grid.source_grid
@@ -591,8 +558,4 @@ class TrappedResonance(_Objective):
         )
         if self._hyperparameters.get("pitch_invs", None) is not None:
             return data[self._key]
-        return (
-            data[self._key]
-            if self._pointwise
-            else self._grid_1dr.compress(data[self._key])
-        )
+        return self._grid_1dr.compress(data[self._key])

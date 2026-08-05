@@ -1563,14 +1563,21 @@ def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     description="Poloidal angle along curve",
     dim=1,
     params=["theta_n"],
-    transforms={"theta": [[0, 0, 0]], "secular_theta": [], "NFP": []},
+    transforms={
+        "theta": [[0, 0, 0]],
+        "secular_theta": [],
+        "secular_zeta": [],
+        "NFP": [],
+    },
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
 )
 def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    theta_0 = transforms["secular_theta"] * transforms["NFP"] * data["s"]
+    secular_zeta = transforms["secular_zeta"]
+    NFP = transforms["NFP"]
+    theta_0 = transforms["secular_theta"] * NFP / jnp.gcd(NFP, secular_zeta) * data["s"]
     theta_1 = transforms["theta"].transform(params["theta_n"], dz=0)
     data["theta"] = theta_0 + theta_1
     return data
@@ -1584,14 +1591,16 @@ def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     description="Toroidal angle along curve",
     dim=1,
     params=["zeta_n"],
-    transforms={"zeta": [[0, 0, 0]], "secular_zeta": []},
+    transforms={"zeta": [[0, 0, 0]], "secular_zeta": [], "NFP": []},
     profiles=[],
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
 )
 def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    zeta_0 = transforms["secular_zeta"] * data["s"]
+    secular_zeta = transforms["secular_zeta"]
+    NFP = transforms["NFP"]
+    zeta_0 = secular_zeta / jnp.gcd(NFP, secular_zeta) * data["s"]
     zeta_1 = transforms["zeta"].transform(params["zeta_n"], dz=0)
     data["zeta"] = zeta_0 + zeta_1
     return data
@@ -1605,14 +1614,21 @@ def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     description="Poloidal angle along curve, first derivative",
     dim=1,
     params=["theta_n"],
-    transforms={"theta": [[0, 0, 1]], "secular_theta": [], "NFP": []},
+    transforms={
+        "theta": [[0, 0, 1]],
+        "secular_theta": [],
+        "secular_zeta": [],
+        "NFP": [],
+    },
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
 )
 def _theta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    theta_0 = transforms["secular_theta"] * transforms["NFP"]
+    secular_zeta = transforms["secular_zeta"]
+    NFP = transforms["NFP"]
+    theta_0 = transforms["secular_theta"] * NFP / jnp.gcd(NFP, secular_zeta)
     theta_1 = transforms["theta"].transform(params["theta_n"], dz=1)
     data["theta_s"] = theta_0 + theta_1
     return data
@@ -1666,14 +1682,16 @@ def _theta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwarg
     description="Toroidal angle along curve, first derivative",
     dim=1,
     params=["zeta_n"],
-    transforms={"zeta": [[0, 0, 1]], "secular_zeta": []},
+    transforms={"zeta": [[0, 0, 1]], "secular_zeta": [], "NFP": []},
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
 )
 def _zeta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
-    zeta_0 = transforms["secular_zeta"]
+    secular_zeta = transforms["secular_zeta"]
+    NFP = transforms["NFP"]
+    zeta_0 = secular_zeta / jnp.gcd(NFP, secular_zeta)
     zeta_1 = transforms["zeta"].transform(params["zeta_n"], dz=1)
     data["zeta_s"] = zeta_0 + zeta_1
     return data

@@ -763,12 +763,7 @@ def _resonance_physics(
     ft_prefactor = eta_res / jnp.pi
     f_q_c = ft_prefactor * jnp.sum(ft_cos, axis=1)
     f_q_s = ft_prefactor * jnp.sum(ft_sin, axis=1)
-    # Guard the sqrt like safediv guards division: f_q_c == f_q_s == 0 exactly
-    # at every invalid (rho, pitch, well) (s_drift is zeroed there before the
-    # FT), and a bare sqrt has a NaN gradient (0/0) at that point even though
-    # its value is fine, since d(sqrt(u))/du = 1/(2 sqrt(u)). This matters now
-    # that f_q_abs itself (not just its square) feeds into f_res below, so its
-    # gradient is no longer multiplied away by an outer square.
+
     f_q_r2 = f_q_c**2 + f_q_s**2
     is_zero = f_q_r2 == 0
     f_q_abs = 0.5 * jnp.sqrt(jnp.where(is_zero, 1.0, f_q_r2))
@@ -781,13 +776,6 @@ def _resonance_physics(
     q_iw = q_arr[None, None, None, :]
     denom = jnp.pi * q_iw * jnp.abs(Omega_prime_s[..., None])
     Delta_s_profile = 4 * jnp.sqrt(safediv(f_q_abs, denom, fill=0.0))
-    # Delta_s_profile ** 2, computed directly from f_q_abs (rather than by
-    # squaring Delta_s_profile) so no sqrt is taken of a quantity
-    # (f_q_abs / denom) that can be exactly zero, which would otherwise give
-    # a NaN gradient. The least-squares objective built on top of this
-    # compute function squares its residual again, so returning the island
-    # width squared here (rather than to the 4th power) avoids penalizing
-    # island width to the 8th power overall.
     Delta_s_sq_profile = 16 * safediv(f_q_abs, denom, fill=0.0)
     Delta_s_sq_sum = (Delta_s_sq_profile * res_weight).sum(axis=-1)
 
@@ -887,16 +875,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     Y_B = kwargs.get("Y_B", None)
     spline = kwargs.get("spline", True)
     vander = kwargs.get("_vander", None)
-    # Tighter than Bounce2D's usual default. The radial drift bounce integral
-    # is a near-total cancellation -- the omnigenity optimization it measures
-    # drives it toward zero, so ∫|f| / |∫f| reaches 1e2--1e7 -- and any
-    # interpolation error is amplified by that factor. On the raw integral,
-    # 1e-6 leaves no correct digits and does not converge under refinement.
-    # The objective is less exposed, since the ratio and the phase-space
-    # average cancel much of the error, but 1e-6 still roughly doubles the
-    # disagreement with Bounce1D (3.1e-2 vs 2.0e-2 on precise_QA, relative to
-    # the summed objective). 1e-8 was converged there; the extra order is
-    # margin for equilibria whose cancellation is worse.
+
     nufft_eps = kwargs.get("nufft_eps", 1e-10)
 
     base_grid = transforms["grid"]

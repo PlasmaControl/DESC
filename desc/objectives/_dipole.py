@@ -2,10 +2,15 @@ import numpy as np
 
 from desc.backend import jnp, tree_leaves
 from desc.compute import get_params
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, setdefault
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
+from desc.grid import LinearGrid, _Grid
+from desc.integrals import compute_B_plasma
 
 class QuadraticFluxPM(_Objective):
     """Target B*n = 0 on LCFS.
@@ -380,7 +385,7 @@ class _DipoleObjective(_Objective):
 
 
 class DipoleDiscreteness(_DipoleObjective):
-    """Target dipole strengths to be maximally "on" or "off"
+    """Target dipole strengths to have rho=-1,0,1
 
     Parameters
     ----------
@@ -458,7 +463,80 @@ class DipoleDiscreteness(_DipoleObjective):
 
 
 
-# class DipoleVolume(_DipoleObjective):
-#     return jnp.abs(rho_tilde)
+class DipoleVolume(_DipoleObjective):
+    """Target dipole volume, minimizing rho so some magnets can have rho=0 and not exist
 
+    Parameters
+    ----------
+    dipole : DipoleSet
+
+    """
+
+    _scalar = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Dipole volume: "
+
+    def __init__(
+        self,
+        dipole,
+        target=0,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        deriv_mode="auto",
+        name="dipole-volume",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        super().__init__(
+            dipole,
+            data_keys=["rho"],
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        super().build(use_jit=use_jit, verbose=verbose)
+        self._normalization = 1.0
+
+    def compute(self, params, constants=None):
+        """Compute dipole discreteness.
+
+        Parameters
+        ----------
+        params : dict or list of dict
+            Dictionary (or list, one per dipole) of the dipole's degrees of
+            freedom.
+        constants : dict
+            Dictionary of constant data. Defaults to ``self._constants``.
+
+        Returns
+        -------
+        d : ndarray, shape(num_dipoles,)
+
+        """
+        data = super().compute(params, constants=constants)
+        rho_raw = jnp.asarray([jnp.atleast_1d(d["rho"])[0] for d in data])
+        rho_tilde = jnp.tanh(rho_raw)
+        return jnp.abs(rho_tilde)
     

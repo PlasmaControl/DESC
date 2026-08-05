@@ -1,6 +1,8 @@
 """Classes for dipoles."""
 
 import pdb
+import os
+import csv
 
 from abc import ABC
 from collections.abc import MutableSequence
@@ -1329,76 +1331,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         return g_ij, xyz
 
-    # add is_self_intersecting and save_in_makegrid_format later on
-
-
-    def __add__(self, other):
-        if isinstance(other, (DipoleSet)):
-            return DipoleSet(*self.dipoles, *other.dipoles)
-        if isinstance(other, (list, tuple)):
-            return DipoleSet(*self.dipoles, *other)
-        else:
-            return NotImplemented
-
-    # dunder methods required by MutableSequence
-    def __getitem__(self, i):
-        return self.dipoles[i]
-
-    def __setitem__(self, i, new_item):
-        if not isinstance(new_item, _Dipole):
-            raise TypeError("Members of DipoleSet must be of type Dipole.")
-        self._dipoles[i] = new_item
-
-    def __delitem__(self, i):
-        del self._dipoles[i]
-
-    def __len__(self):
-        return len(self._dipoles)
-
-    def insert(self, i, new_item):
-        """Insert a new dipole into the dipoleset at position i."""
-        if not isinstance(new_item, _Dipole):
-            raise TypeError("Members of DipoleSet must be of type Dipole.")
-        self._dipoles.insert(i, new_item)
-    
-    def __repr__(self):
-        """Get the string form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + " (name={}, with {} submembers)".format(self.name, len(self))
-        )
-    
-def export_dipoles(dipole_set, f):
-    '''
-    Exports dipoles to a CSV file.
-
-    Writes the data of each dipole to a comma-separated file with a header row.
-
-    Parameters
-    ----------
-    dipole_set : DipoleSet
-        Object containing a list of dipoles.
-    f : str or path-like
-        Path to the output file.
-
-    Format
-    -------------
-    x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)
-    '''
-    d = dipole_set.dipoles
-
-    outfile = open(f, 'w')
-
-    print("x (m), y (m), z (m), phi (rad), theta (rad), m0, rho (unitless)", file=outfile)
-    
-    for i in range(len(d)):
-        print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho_tilde}", file=outfile)
-
-    outfile.close()
-import os
-def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
+    def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
 
         By default, each coil is assigned to the same Coilgroup in MAKEGRID
@@ -1529,7 +1462,74 @@ def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         with open(coilsFilename, "w") as f:
             f.writelines(lines)
 
-import csv
+
+    def __add__(self, other):
+        if isinstance(other, (DipoleSet)):
+            return DipoleSet(*self.dipoles, *other.dipoles)
+        if isinstance(other, (list, tuple)):
+            return DipoleSet(*self.dipoles, *other)
+        else:
+            return NotImplemented
+
+    # dunder methods required by MutableSequence
+    def __getitem__(self, i):
+        return self.dipoles[i]
+
+    def __setitem__(self, i, new_item):
+        if not isinstance(new_item, _Dipole):
+            raise TypeError("Members of DipoleSet must be of type Dipole.")
+        self._dipoles[i] = new_item
+
+    def __delitem__(self, i):
+        del self._dipoles[i]
+
+    def __len__(self):
+        return len(self._dipoles)
+
+    def insert(self, i, new_item):
+        """Insert a new dipole into the dipoleset at position i."""
+        if not isinstance(new_item, _Dipole):
+            raise TypeError("Members of DipoleSet must be of type Dipole.")
+        self._dipoles.insert(i, new_item)
+    
+    def __repr__(self):
+        """Get the string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + " (name={}, with {} submembers)".format(self.name, len(self))
+        )
+    
+def export_dipoles(dipole_set, f):
+    '''
+    Exports dipoles to a CSV file.
+
+    Writes the data of each dipole to a comma-separated file with a header row.
+
+    Parameters
+    ----------
+    dipole_set : DipoleSet
+        Object containing a list of dipoles.
+    f : str or path-like
+        Path to the output file.
+
+    Format
+    -------------
+    x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)
+    '''
+    d = dipole_set.dipoles
+
+    outfile = open(f, 'w')
+
+    print("x (m), y (m), z (m), phi (rad), theta (rad), m0, rho (unitless)", file=outfile)
+    
+    for i in range(len(d)):
+        print(f"{d[i].X}, {d[i].Y}, {d[i].Z}, {d[i].phi}, {d[i].theta}, {d[i].m0}, {d[i].rho_tilde}", file=outfile)
+
+    outfile.close()
+
+
 
 def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde):
     '''

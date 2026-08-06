@@ -1792,6 +1792,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         NFP=1,
         name="",
     ):
+        theta_n = np.atleast_1d(theta_n)
+        zeta_n = np.atleast_1d(zeta_n)
         self._sym_theta = sym_theta
         self._sym_zeta = sym_zeta
         self._secular_theta = secular_theta
@@ -1887,10 +1889,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
     @secular_theta.setter
     def secular_theta(self, new):
-        assert isinstance(new, int)
-        assert (
-            np.gcd(new, self._secular_zeta) == 1
-        ), "secular_theta and secular_zeta should have a gcd of 1"
+        errorif(int(new) != new, ValueError, "secular_theta should be an integer")
         self._secular_theta = new
 
     @property
@@ -1899,23 +1898,22 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
     @secular_zeta.setter
     def secular_zeta(self, new):
-        assert isinstance(new, int)
-        assert (
-            np.gcd(self._secular_theta, new) == 1
-        ), "secular_theta and secular_zeta should have a gcd of 1"
-        self.change_resolution(secular_zeta=new)
+        errorif(int(new) != new, ValueError, "secular_zeta should be an integer")
+        # assert (
+        #     np.gcd(self._secular_theta, new) == 1
+        # ), "secular_theta and secular_zeta should have a gcd of 1"
         self._secular_zeta = new
 
-    def set_secular_terms(self, secular_theta=None, secular_zeta=None):
-        """Setter for both secular terms at once, with fresh gcd check."""
-        secular_theta = setdefault(secular_theta, self._secular_theta)
-        secular_zeta = setdefault(secular_zeta, self._secular_zeta)
-        assert (
-            np.gcd(secular_theta, secular_zeta) == 1
-        ), "secular_theta and secular_zeta should have a gcd of 1"
-        self.change_resolution(secular_zeta=secular_zeta)
-        self._secular_theta = secular_theta
-        self._secular_zeta = secular_zeta
+    # def set_secular_terms(self, secular_theta=None, secular_zeta=None):
+    #     """Setter for both secular terms at once, with fresh gcd check."""
+    #     secular_theta = setdefault(secular_theta, self._secular_theta)
+    #     secular_zeta = setdefault(secular_zeta, self._secular_zeta)
+    #     assert (
+    #         np.gcd(secular_theta, secular_zeta) == 1
+    #     ), "secular_theta and secular_zeta should have a gcd of 1"
+    #     self.change_resolution(secular_zeta=secular_zeta)
+    #     self._secular_theta = secular_theta
+    #     self._secular_zeta = secular_zeta
 
     @property
     def theta_basis(self):
@@ -1932,7 +1930,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
     @theta_n.setter
     def theta_n(self, new):
-        assert len(new) == len(self._theta_n)
+        assert len(new) == len(self.theta_basis.num_modes)
         self._theta_n = new
 
     @optimizable_parameter
@@ -1942,7 +1940,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
     @zeta_n.setter
     def zeta_n(self, new):
-        assert len(new) == len(self._zeta_n)
+        assert len(new) == len(self.zeta_basis.num_modes)
         self._zeta_n = new
 
     @property
@@ -1983,7 +1981,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         N_zeta=None,
         sym_theta=None,
         sym_zeta=None,
-        secular_zeta=None,
     ):
         # Limitation: this cannot be used to completely eliminate one of the bases, since
         # N_theta=None just gets defaulted to self.N_theta.
@@ -1993,37 +1990,39 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         sym_theta = setdefault(sym_theta, self.sym_theta)
         sym_zeta = setdefault(sym_zeta, self.sym_zeta)
         NFP = self._NFP
-        secular_zeta = setdefault(secular_zeta, self._secular_zeta)
 
         if N_theta is not None and (
-            (N_theta != self.N_theta)
-            or (sym_theta != self.sym_theta)
-            or (secular_zeta != self.secular_zeta)
+            (N_theta != self.N_theta) or (sym_theta != self.sym_theta)
         ):
             assert (
                 self.N_theta is not None
             ), "theta basis is trivial; cannot change resolution"
             modes_theta_old = self.theta_basis.modes[:, 2]
-            self._theta_basis = self.theta_basis.change_resolution(
-                N_theta, NFP, sym_theta
-            )
+            self.theta_basis.change_resolution(N_theta, NFP, sym_theta)
             self.theta_n = copy_coeffs(
                 self.theta_n, modes_theta_old, self.theta_basis.modes[:, 2]
             )
 
         if N_zeta is not None and (
-            (N_zeta != self.N_zeta)
-            or (sym_zeta != self.sym_zeta)
-            or (secular_zeta != self.secular_zeta)
+            (N_zeta != self.N_zeta) or (sym_zeta != self.sym_zeta)
         ):
             assert (
                 self.N_zeta is not None
             ), "zeta basis is trivial; cannot change resolution"
             modes_zeta_old = self.zeta_basis.modes[:, 2]
-            self._zeta_basis = self.zeta_basis.change_resolution(N_zeta, NFP, sym_zeta)
+            self.zeta_basis.change_resolution(N_zeta, NFP, sym_zeta)
             self.zeta_n = copy_coeffs(
                 self.zeta_n, modes_zeta_old, self.zeta_basis.modes[:, 2]
             )
+
+        self.sym_theta = sym_theta
+        self.sym_zeta = sym_zeta
+
+    def get_coeffs(self):
+        pass
+
+    def set_coeffs(self):
+        pass
 
     def compute(
         self, names, grid=None, params=None, transforms=None, data=None, **kwargs
@@ -2043,7 +2042,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         N_zeta=10,
         secular_theta=None,
         secular_zeta=None,
-        surface_optimizable=True,
         sym_theta=None,
         sym_zeta=None,
         name="",
@@ -2074,9 +2072,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             Coefficient of secular term in theta. If None, estimated automatically.
         secular_zeta: int or None, optional
             Coefficient of secular term in zeta. If None, estimated automatically.
-        surface_optimizable: bool, optional
-            Whether the underlying surface's params
-            are optimizable or not. Default is True.
         sym_theta: str or None, optional
             Whether to use "cos", "sin", or no (None) symmetry in the series for theta(s).
             Default is None.
@@ -2085,35 +2080,40 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             Default is None.
         name: str, optional
             Name for this curve.
+
+
+        Returns
+        ----------
+        FourierRZSurfaceCurve
+            FourierRZSurfaceCurve object fit to the given coords.
         """
         s = coords[:, 0]
         theta = coords[:, 1]
         zeta = coords[:, 2]
 
         if secular_theta is None:
-            slope_theta = (theta[-1] - theta[0]) / (s[-1] - s[0])
-            secular_theta = np.round(slope_theta / NFP).astype(int)
+            secular_theta = (theta[-1] - theta[0]) / (s[-1] - s[0])
+            secular_theta = np.round(secular_theta).astype(int)
         if secular_zeta is None:
-            slope_zeta = (zeta[-1] - zeta[0]) / (s[-1] - s[0])
-            secular_zeta = np.round(slope_zeta).astype(int)
+            secular_zeta = (zeta[-1] - zeta[0]) / (s[-1] - s[0])
+            secular_zeta = np.round(secular_zeta).astype(int)
 
-        theta_single_val = theta - secular_theta * NFP / np.gcd(NFP, secular_zeta) * s
-        zeta_single_val = zeta - secular_zeta / np.gcd(NFP, secular_zeta) * s
+        theta_single_val = theta - secular_theta * s
+        zeta_single_val = zeta - secular_zeta * s
 
-        period = 2 * np.pi / NFP_rescaled
-        s = s % period
+        s = s % (2 * np.pi)
 
         # Sort and remove duplicate values of phi
         s, idx = np.unique(s, return_index=True)
-        theta = theta[idx]
-        zeta = zeta[idx]
+        theta_single_val = theta_single_val[idx]
+        zeta_single_val = zeta_single_val[idx]
 
         if N_theta is None:
             theta_n = None
             modes_theta = None
         else:
-            grid_theta = LinearGrid(zeta=s, NFP=NFP_rescaled, sym=sym_theta)
-            theta_basis = FourierSeries(N=N_theta, NFP=NFP_rescaled, sym=sym_theta)
+            grid_theta = LinearGrid(zeta=s, NFP=NFP)
+            theta_basis = FourierSeries(N=N_theta, NFP=NFP)
             transform_theta = Transform(grid_theta, theta_basis, build_pinv=True)
             theta_n = transform_theta.fit(theta_single_val)
             modes_theta = theta_basis.modes[:, 2]
@@ -2122,8 +2122,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             zeta_n = None
             modes_zeta = None
         else:
-            grid_zeta = LinearGrid(zeta=s, NFP=NFP_rescaled, sym=sym_zeta)
-            zeta_basis = FourierSeries(N=N_zeta, NFP=NFP_rescaled, sym=sym_zeta)
+            grid_zeta = LinearGrid(zeta=s, NFP=NFP)
+            zeta_basis = FourierSeries(N=N_zeta, NFP=NFP, sym=sym_zeta)
             transform_zeta = Transform(grid_zeta, zeta_basis, build_pinv=True)
             zeta_n = transform_zeta.fit(zeta_single_val)
             modes_zeta = zeta_basis.modes[:, 2]

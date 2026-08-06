@@ -736,6 +736,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis=basis, name=name
         )
 
+    # I don't think this makes sense to have
+    def to_FourierRZSurface(
+        self, N=10, grid=None, s=None, basis="xyz", name="", **kwargs
+    ):
+        pass
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -1591,7 +1597,6 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         -------
         curve : FourierRZSurfaceCoil
             New representation of the coil parameterized by a Fourier series for theta(s),zeta(s).
-
         """
         curve = super().from_values(
             coords,
@@ -1646,6 +1651,15 @@ def _check_type(coil0, coil):
         FourierXYCoil: ["X_basis", "Y_basis"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
+        FourierRZSurfaceCoil: [
+            "theta_basis",
+            "zeta_basis",
+            "R_basis",
+            "Z_basis",
+            "NFP",
+            "secular_theta",
+            "secular_zeta",
+        ],
     }
 
     for attr in attrs[coil0.__class__]:

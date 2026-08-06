@@ -667,7 +667,7 @@ class SurfaceCurve(Curve):
     @optimizable_parameter
     @property
     def R_lmn(self):
-        return self.surface.R_lmn
+        return self._surface.R_lmn
 
     @R_lmn.setter
     def R_lmn(self, new):
@@ -676,7 +676,7 @@ class SurfaceCurve(Curve):
     @optimizable_parameter
     @property
     def Z_lmn(self):
-        return self.surface.Z_lmn
+        return self._surface.Z_lmn
 
     @Z_lmn.setter
     def Z_lmn(self, new):
@@ -686,14 +686,6 @@ class SurfaceCurve(Curve):
     def shift(self):
         return jnp.array([0.0, 0.0, 0.0])
 
-    @shift.setter
-    def shift(self, new):
-        self._shift = new
-
     @property
     def rotmat(self):
         return jnp.eye(3, dtype=float).flatten()
-
-    @rotmat.setter
-    def rotmat(self, new):
-        self._rotmat = new

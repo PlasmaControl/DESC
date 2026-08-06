@@ -511,6 +511,17 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        warnif(
+            any((obj._deriv_mode == "rev") for obj in self.objectives)
+            and self._deriv_mode == "batched",
+            UserWarning,
+            "Using batched derivative mode, which performs fwd mode "
+            "differentiation of the entire objective, but one or more of the"
+            ' sub-objectives have deriv_mode="rev". It is recommended to use '
+            'deriv_mode="blocked", as these objective performances may suffer '
+            "in fwd mode.",
+        )
+
         errorif(
             isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
             ValueError,

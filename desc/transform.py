@@ -192,7 +192,7 @@ class Transform(IOAble):
             )
             self.method = "direct2"
             return
-        if not basis.fft_toroidal:
+        if not basis.fft_x2:
             warnings.warn(
                 colored(
                     f"fft method requires compatible basis, got {basis}."
@@ -272,7 +272,7 @@ class Transform(IOAble):
             )
             self.method = "direct1"
             return
-        if not basis.fft_toroidal:  # direct2 and fft have same basis requirements
+        if not basis.fft_x2:  # direct2 and fft have same basis requirements
             warnings.warn(
                 colored(
                     "direct2 method requires compatible basis, got {}".format(basis)

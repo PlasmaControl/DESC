@@ -125,8 +125,7 @@ class LinearGridCurve(AbstractGridCurve):
         self._endpoint = bool(endpoint)
         self._is_meshgrid = True
         # these are default values that may get overwritten in _create_nodes
-        self._fft_x1 = False
-        self._fft_x2 = False
+        self._fft = [False, False, False]
         self._can_fft2 = not endpoint
 
         self._nodes, self._spacing = self._create_nodes(
@@ -178,7 +177,7 @@ class LinearGridCurve(AbstractGridCurve):
         s_period = self.period[2]
 
         # curve coordinate s
-        ss, ds, self._fft_x2 = _create_linear_nodes(N, s, s_period, endpoint, NFP=NFP)
+        ss, ds, self._fft[2] = _create_linear_nodes(N, s, s_period, endpoint, NFP=NFP)
 
         _ = np.zeros(1)
         d_ = np.zeros_like(_)

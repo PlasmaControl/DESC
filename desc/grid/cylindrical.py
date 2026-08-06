@@ -45,7 +45,14 @@ class AbstractGridCylindrical(AbstractGrid):
         x0 = {"R": "r"}[self.coordinates[0]]
         x1 = {"p": "phi"}[self.coordinates[1]]
         x2 = {"Z": "z"}[self.coordinates[2]]
-        return {x0: "x0", x1: "x1", x2: "x2"}[label.lower()]
+        return {
+            "radial": "x0",
+            "toroidal": "x1",
+            "vertical": "x2",
+            x0: "x0",
+            x1: "x1",
+            x2: "x2",
+        }[label.lower()]
 
     @property
     def coordinates(self):

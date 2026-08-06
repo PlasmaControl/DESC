@@ -344,6 +344,18 @@ class _Basis(IOAble, ABC):
             self._tensor_product = False
         return self._tensor_product
 
+    @property
+    def toroidal_coordinate(self):
+        """int: Index of the toroidal coordinate in the grid."""
+        if hasattr(self, "_toroidal_coordinate"):
+            return self._toroidal_coordinate
+        elif self.NFP == 1:
+            return 2
+        else:
+            raise AttributeError(
+                "Attribute `toroidal_coordinate` is not set and NFP != 1."
+            )
+
     def __repr__(self):
         """Get the string form of the object."""
         return (
@@ -538,6 +550,7 @@ class FourierSeries(_Basis):
     _fft = [False, True, True]  # trivially true in poloidal direction
     _dct = [False, False, False]
     _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
+    _toroidal_coordinate = 2  # (_,_,x2) = (_,_,zeta)
 
     def __init__(self, N, NFP=1, sym=False):
         self._L = 0
@@ -663,6 +676,7 @@ class DoubleFourierSeries(_Basis):
     _fft = [False, True, True]
     _dct = [False, False, False]
     _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
+    _toroidal_coordinate = 2  # (_,x1,x2) = (_,theta,zeta)
 
     def __init__(self, M, N, NFP=1, sym=False):
         self._L = 0
@@ -1030,6 +1044,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
     _fft = [False, True, True]
     _dct = [True, False, False]
     _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
+    _toroidal_coordinate = 2  # (x0,x1,x2) = (rho,theta,zeta)
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1210,6 +1225,7 @@ class DoubleChebyshevFourierBasis(_Basis):
     _fft = [False, True, False]
     _dct = [True, False, True]
     _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
+    _toroidal_coordinate = 1  # (x0,x1,x2) = (R,phi,Z)
 
     def __init__(self, L, M, N, NFP=1, sym=False):
         self._L = check_nonnegint(L, "L", False)
@@ -1419,6 +1435,7 @@ class FourierZernikeBasis(_Basis):
     _fft = [False, False, True]
     _dct = [False, False, False]
     _tensor_product = False
+    _toroidal_coordinate = 2  # (x0,x1,x2) = (rho,theta,zeta)
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
         self._L = check_nonnegint(L, "L", False)

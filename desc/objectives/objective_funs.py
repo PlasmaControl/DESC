@@ -519,7 +519,7 @@ class ObjectiveFunction(IOAble):
             "differentiation of the entire objective, but one or more of the"
             ' sub-objectives have deriv_mode="rev". It is recommended to use '
             'deriv_mode="blocked", as these objective performances may suffer '
-            "in fwd mode.",
+            "in fwd mode, or may not even support reverse mode at all.",
         )
 
         errorif(

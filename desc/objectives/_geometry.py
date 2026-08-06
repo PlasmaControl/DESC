@@ -1531,7 +1531,7 @@ class UmbilicHighCurvature(_Objective):
         are included in the optimization as well.
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=1``.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=-1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to Objective.dim_f.
@@ -1566,6 +1566,16 @@ class UmbilicHighCurvature(_Objective):
     _units = "(m^-1)"
     _print_value_fmt = "Umbilic high curvature: "
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=-1``.",
+        bounds_default="``target=-1``.",
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_curve_data_keys",
+        "_surface_data_keys",
+    ]
+
     def __init__(
         self,
         curve,
@@ -1578,13 +1588,12 @@ class UmbilicHighCurvature(_Objective):
         loss_function=None,
         deriv_mode="auto",
         name="Umbilic high curvature",
+        jac_chunk_size=None,
     ):
 
         if target is None and bounds is None:
-            target = -10
+            target = -1
 
-        self._curve = curve
-        self._surface = curve.surface
         self._curve_grid = curve_grid
 
         things = [curve]
@@ -1598,6 +1607,7 @@ class UmbilicHighCurvature(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1611,13 +1621,24 @@ class UmbilicHighCurvature(_Objective):
             Level of output.
 
         """
-        curve = self._curve
+        curve = self.things[0]
         surface = curve.surface
-        N = max(curve.N_theta, curve.N_zeta)
+        N = curve.N
 
         if self._curve_grid is None:
-            s_arr = jnp.linspace(0, 2 * jnp.pi, 3 * N)
-            curve_grid = LinearGrid(zeta=s_arr)
+            n_grid = (
+                2
+                * (N + surface.R_basis.N + surface.Z_basis.N * curve.secular_theta)
+                * curve.NFP
+                + 5
+            )
+            n_grid = n_grid * curve.secular_zeta
+            s_arr = jnp.linspace(0, 2 * jnp.pi, n_grid, endpoint=False)
+            nodes = jnp.concatenate(
+                [jnp.zeros_like(s_arr), jnp.zeros_like(s_arr), s_arr], axis=1
+            )
+            spacing = jnp.array([0.0, 0.0, s_arr[1] - s_arr[0]])
+            curve_grid = Grid(nodes=nodes, spacing=spacing, weights=None)
         else:
             curve_grid = self._curve_grid
 
@@ -1650,7 +1671,7 @@ class UmbilicHighCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(surface)
-            self._normalization = scales["a"]
+            self._normalization = 1 / scales["a"]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1671,11 +1692,13 @@ class UmbilicHighCurvature(_Objective):
             Minimum principal curvature at each point (m^-1).
 
         """
+        curve = self.things[0]
+        surface = curve.surface
         constants = setdefault(constants, self.constants)
-        params = setdefault(params, get_params(self._curve_data_keys, obj=self._curve))
+        params = setdefault(params, self.things[0].params_dict)
 
         curve_data = compute_fun(
-            self._curve,
+            curve,
             self._curve_data_keys,
             params=params,
             transforms=constants["curve_transforms"],
@@ -1689,29 +1712,19 @@ class UmbilicHighCurvature(_Objective):
             jitable=True,
         )
 
-        # what is this for?
-        # equil_profiles = get_profiles(
-        #     self._equil_data_keys,
-        #     obj=self._eq,
-        #     grid=umbilic_edge_grid,
-        #     has_axis=umbilic_edge_grid.axis.size,
-        # )
-
         surface_transforms = get_transforms(
             self._surface_data_keys,
-            obj=self._surface,
+            obj=surface,
             grid=umbilic_edge_grid,
             has_axis=umbilic_edge_grid.axis.size,
             jitable=True,
         )
 
-        # now compute the curvature
-        # does this work? params includes everything, both
-        # for curve and surface
         data = compute_fun(
-            self._surface,
+            surface,
             self._surface_data_keys,
             params=params,
             transforms=surface_transforms,
+            profiles={},
         )
         return data["curvature_k2_rho"]

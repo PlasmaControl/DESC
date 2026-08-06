@@ -20,7 +20,8 @@ from desc.backend import (
     tree_structure,
 )
 from desc.basis import zernike_radial
-from desc.geometry import FourierRZCurve
+from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZCurve, Surface
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -865,11 +866,9 @@ class SurfaceCurveConsistency(_Objective):
     ----------
     curve: SurfaceCurve, FourierRZWindingCoil CoilSet
             Curve or collection of curves carrying a copy of surface params.
-    surface: FourierRZToroidalSurface
-            Surface on which the curve input should lie.
-    equilibrium: Equilibrium, optional
-            Optional argument in place of surface when intended
-            surface is equilibrium.surface, the last closed flux surface.
+    source: FourierRZToroidalSurface or Equilibrium
+            Surface on which the curve input should lie. If Equilibrium is passed,
+            surface is set to the equilibrium's rho=1 surface.
     name: str, optional
             Name of the objective function.
     """
@@ -889,17 +888,27 @@ class SurfaceCurveConsistency(_Objective):
     _units = "(m)"
     _print_value_fmt = "SurfaceCurve consistency error: "
 
+    _static_attrs = _Objective._static_attrs + ["_src_params"]
+
     def __init__(
         self,
         curve,
-        surface,
-        equilibrium=None,
+        source,
         name="SurfaceCurve consistency",
     ):
-        if equilibrium is not None:
-            things = [curve, equilibrium]
+        errorif(
+            not isinstance(source, (Surface, Equilibrium)),
+            "Source must be a surface or equilibrium.",
+        )
+        if isinstance(source, Equilibrium):
+            equilibrium = source
         else:
-            things = [curve, surface]
+            equilibrium = None
+
+        if equilibrium is not None:
+            things = [curve, source]
+        else:
+            things = [curve, source]
         super().__init__(
             things=things,
             target=0,
@@ -909,6 +918,7 @@ class SurfaceCurveConsistency(_Objective):
             normalize_target=False,
         )
 
+    @execute_on_cpu
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
 
@@ -919,46 +929,71 @@ class SurfaceCurveConsistency(_Objective):
         verbose : int, optional
             Level of output.
         """
-        from desc.equilibrium import Equilibrium
+        from desc.coils import CoilSet
 
+        def _expand(curve):
+            leaves = []
+            if isinstance(curve, CoilSet):
+                leaves.append([_expand(coil) for coil in curve.coils])
+            else:
+                leaves.append(curve)
+            return leaves
+
+        curve_expanded = _expand(self.things[0])
         source = self.things[1]
-        curve = self.things[0]
 
         # matrix A should be nxm
-        mR = len(source.R_basis.modes)
-        mZ = len(source.Z_basis.modes)
-        nR = len(curve.R_basis.modes)
-        nZ = len(curve.Z_basis.modes)
-
-        AR = np.zeros((nR, mR))
-        AZ = np.zeros((nZ, mZ))
-        self._dim_f = nR + nZ
-
         if isinstance(source, Equilibrium):
+            source_R_basis = source.surface.R_basis
+            source_Z_basis = source.surface.Z_basis
             self._src_params = {"R": "Rb_lmn", "Z": "Zb_lmn"}
-            Js_R = []
-            for i, (l, m, n) in enumerate(source.R_basis.modes):
-                j = np.argwhere(
-                    (curve.R_basis.modes[:, 1:] == [m, n]).all(axis=1)
-                ).flatten()
-                Js_R.append(j)
-            AR[Js_R[:, 0], np.arange(source.R_basis.num_modes)] = zernike_radial(
-                1, source.R_basis.modes[:, 0], source.R_basis.modes[:, 1]
-            )
-            Js_Z = []
-            for i, (l, m, n) in enumerate(source.Z_basis.modes):
-                j = np.argwhere(
-                    (curve.Z_basis.modes[:, 1:] == [m, n]).all(axis=1)
-                ).flatten()
-                Js_Z.append(j)
-            AZ[Js_Z[:, 0], np.arange(source.Z_basis.num_modes)] = zernike_radial(
-                1, source.Z_basis.modes[:, 0], source.Z_basis.modes[:, 1]
-            )
         else:
+            source_R_basis = source.R_basis
+            source_Z_basis = source.Z_basis
             self._src_params = {"R": "R_lmn", "Z": "Z_lmn"}
-            AR = np.identity(nR)
-            AZ = np.identity(nZ)
 
+        AR = []
+        AZ = []
+        mR = len(source_R_basis.modes)
+        mZ = len(source_Z_basis.modes)
+        for curve in curve_expanded:
+            nR = len(curve.surface.R_basis.modes)
+            nZ = len(curve.surface.Z_basis.modes)
+
+            ar = np.zeros((nR, mR))
+            az = np.zeros((nZ, mZ))
+
+            if isinstance(source, Equilibrium):
+
+                for i, (l, m, n) in enumerate(source.R_basis.modes):
+                    j = np.argwhere(
+                        (curve.R_basis.modes[:, 1:] == [m, n]).all(axis=1)
+                    ).flatten()
+
+                    # with rho=1, this call returns 1. But present in case
+                    # it makes sense to allow rho<1 surfaces
+                    ar[j, i] = zernike_radial(
+                        1, source.R_basis.modes[:, 0], source.R_basis.modes[:, 1]
+                    )
+
+                for i, (l, m, n) in enumerate(source.Z_basis.modes):
+                    j = np.argwhere(
+                        (curve.Z_basis.modes[:, 1:] == [m, n]).all(axis=1)
+                    ).flatten()
+                    az[j, i] = zernike_radial(
+                        1, source.Z_basis.modes[:, 0], source.Z_basis.modes[:, 1]
+                    )
+
+            else:
+                ar = np.identity(nR)
+                az = np.identity(nZ)
+
+            AR.append(ar)
+            AZ.append(az)
+
+        self._dim_f = np.sum(
+            np.concatenate(([a.shape for a in AR], [a.shape for a in AZ]))
+        )
         self._A = {"R": AR, "Z": AZ}
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -971,7 +1006,7 @@ class SurfaceCurveConsistency(_Objective):
         Parameters
         ----------
         params_curve : dict
-            Dictionary of curve degrees of freedom
+            Dictionary of curve (or coilset) degrees of freedom
         params_surface: dict
             Dictionary of surface degrees of freedom, or if surface=equilibrium.surface,
             then the equilibrium degrees of freedom
@@ -984,12 +1019,16 @@ class SurfaceCurveConsistency(_Objective):
         f : ndarray
             SurfaceCurveConsistency errors.
         """
+        params_curve = tree_leaves(params_curve, is_leaf=lambda x: isinstance(x, dict))
         return jnp.concatenate(
             [
-                jnp.dot(self._A["R"], params_surface[self._src_params["R"]])
-                - params_curve["R_lmn"],
-                jnp.dot(self._A["Z"], params_surface[self._src_params["Z"]])
-                - params_curve["Z_lmn"],
+                [
+                    jnp.dot(self._A["R"][i], params_surface[self._src_params["R"]])
+                    - params_curve[i]["R_lmn"],
+                    jnp.dot(self._A["Z"][i], params_surface[self._src_params["Z"]])
+                    - params_curve[i]["Z_lmn"],
+                ]
+                for i in range(len(params_curve))
             ]
         )
 

@@ -1453,33 +1453,33 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         Used in place of "surface" when the coil is intended
         to live on the rho=1 surface of an equilibrium which
         may be optimized alongside the coil.
+        Must pass exactly one of "surface" or "equilibrium."
     secular_theta: non-negative int, optional
         Net winding of theta(s), equivalent to
         1/2pi \int_{0}^{2pi} theta'(s) ds. Default
-        value is 0. Nonzero values result in curves
+        value is 0. Nonzero values result in coils
         linking the torus poloidally.
         Note: gcd(secular_theta, secular_zeta) should equal 1.
     secular_zeta: non-negative int, optional
         Net winding of zeta(s), equivalent to
         1/2pi \int_{0}^{2pi} zeta'(s) ds. Default
-        value is 1. Nonzero values result in curves
+        value is 1. Nonzero values result in coils
         linking the torus toroidally.
         Note: gcd(secular_theta, secular_zeta) should equal 1.
-    theta_n: array-like, shape (M,), optional
+    theta_n: array-like, optional
         Coefficients of Fourier modes defining
         theta(s).
-    zeta_n: array-like, shape (N,), optional
+    zeta_n: array-like, optional
         Coefficients of Fourier modes defining
         zeta(s).
-    modes_theta: array-like, shape (M,), optional
+    modes_theta: array-like, optional
         Mode numbers associated with theta. If
-        not given, defaults to [-M:M].
-    modes_zeta: array-like, shape (N,), optional
+        not given, defaults to [-N_theta:N_theta],
+        where N_theta = len(theta_n)//2.
+    modes_zeta: array-like, optional
         Mode numbers associated with zeta. If
-        not given, defaults to [-N:N].
-    surface_optimizable: bool, optional
-        Whether the underlying surface's params
-        are optimizable or not. Default is True.
+        not given, defaults to [-N_theta:N_theta],
+        where N_theta = len(theta_n)//2.
     sym_theta: str, optional
         If "sin"/"cos", retains only the corresponding
         modes in the series for theta(s). Defaults
@@ -1489,9 +1489,12 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         modes in the series for zeta(s). Defaults
         to None, i.e. all modes are kept.
     NFP: positive int, optional
-        Field period symmetry of the coil.. Should
-        only be changed if curve is known to share the
-        NFP symmetry of the surface. Defaults to 1.
+        Field period symmetry of the coil. Defaults to 1.
+        The curve's image is invariant
+        under zeta -> zeta + 2pi/NFP, and Fourier modes
+        are multiples of NFP in s.
+        Note: If changed, must satisfy (a) NFP | surface.NFP,
+        (b) NFP | secular_theta, (c) secular_zeta \neq 0.
     name: str, optional
         Name for this coil.
     """
@@ -1510,14 +1513,13 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         zeta_n=[0.0],
         modes_theta=None,
         modes_zeta=None,
-        surface_optimizable=True,
         sym_theta=False,
         sym_zeta=False,
         NFP=1,
         name="",
     ):
-        self.current = current
         super().__init__(
+            current=current,
             surface=surface,
             equilibrium=equilibrium,
             secular_theta=secular_theta,
@@ -1526,7 +1528,6 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
             zeta_n=zeta_n,
             modes_theta=modes_theta,
             modes_zeta=modes_zeta,
-            surface_optimizable=surface_optimizable,
             sym_theta=sym_theta,
             sym_zeta=sym_zeta,
             NFP=NFP,
@@ -1545,7 +1546,6 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         N_zeta=10,
         secular_theta=None,
         secular_zeta=None,
-        surface_optimizable=True,
         sym_theta=None,
         sym_zeta=None,
         name="",
@@ -1578,9 +1578,6 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
             Coefficient of secular term in theta. If None, estimated automatically.
         secular_zeta: int or None, optional
             Coefficient of secular term in zeta. If None, estimated automatically.
-        surface_optimizable: bool, optional
-            Whether the underlying surface's params
-            are optimizable or not. Default is True.
         sym_theta: str or None, optional
             Whether to use "cos", "sin", or no (None) symmetry in the series for theta(s).
             Default is None.
@@ -1598,19 +1595,19 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         """
         curve = super().from_values(
             coords,
-            surface=None,
-            equilibrium=None,
-            NFP=1,
-            N_theta=10,
-            N_zeta=10,
-            secular_theta=None,
-            secular_zeta=None,
-            surface_optimizable=True,
-            sym_theta=None,
-            sym_zeta=None,
+            surface=surface,
+            equilibrium=equilibrium,
+            NFP=NFP,
+            N_theta=N_theta,
+            N_zeta=N_zeta,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            sym_theta=sym_theta,
+            sym_zeta=sym_zeta,
             name="",
         )
-        return FourierRZSurfaceCoil(
+        return cls(
+            current=current,
             surface=surface,
             equilibrium=equilibrium,
             secular_theta=secular_theta,
@@ -1619,7 +1616,6 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
             zeta_n=curve.zeta_n,
             modes_theta=curve.basis_theta.modes[:, 2],
             modes_zeta=curve.basis_zeta.modes[:, 2],
-            surface_optimizable=surface_optimizable,
             sym_theta=sym_theta,
             sym_zeta=sym_zeta,
             NFP=NFP,

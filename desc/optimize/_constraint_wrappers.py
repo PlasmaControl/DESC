@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jax, jit, jnp, put, vmap
 from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -1226,9 +1226,36 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
 
-        # we don't need to divide this part into blocked and batched because
-        # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+        if self._constraint._deriv_mode == "batched":
+            # (dF/dx)^-1 (restricted to feasible directions) only depends on xf,
+            # not on the perturbation direction v being differentiated. The naive
+            # approach -- calling constraint.jvp_<op> fresh inside every chunk of
+            # the vmap below -- re-evaluates the nonlinear force-balance residual
+            # from scratch every chunk (jax.jvp does not cache the primal across
+            # separate calls) and re-factorizes Fxh via a brand new SVD every
+            # chunk too, even though both are identical across chunks. That cost
+            # scales with the number of chunks (dim_x_reduced / jac_chunk_size),
+            # which is exactly backwards: chunking exists to bound memory, not to
+            # multiply redundant work.
+            #
+            # jax.linearize pays for the nonlinear residual evaluation exactly
+            # once at xf, handing back a cheap linear map. We use it once to
+            # build Fxh and factor its pseudoinverse once, then reuse both the
+            # linear map and the factors for every column/chunk below.
+            fun = lambda x_: getattr(self._constraint, "compute_" + op)(
+                x_, constants[1]
+            )
+            _, f_lin = jax.linearize(fun, xf)
+            Fxh = vmap(f_lin)(self._eq_solve_objective._feasible_tangents.T).T
+            uf, sfi, vtf = _factor_pinv_pure(Fxh)
+            jvpfun = lambda u: self._get_tangent_linearized(u, f_lin, uf, sfi, vtf)
+        else:
+            # blocked mode does not go through the chunked-vmap-of-jvp path above
+            # (jac_chunk_size chunking is only used in "batched" mode), so it
+            # does not have the redundant-recompute problem the fast path above
+            # fixes -- leave its (already-correct) behavior untouched.
+            jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+
         tangents = batched_vectorize(
             jvpfun,
             signature="(n)->(k)",
@@ -1283,6 +1310,37 @@ class ProximalProjection(ObjectiveFunction):
         # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
         # Note: We will never form full Jacobian J, we will just compute the above
         # expression by JVPs.
+        dxdcv = jnp.concatenate(
+            [
+                *vs[: self._eq_idx],
+                self._dxdc @ vs[self._eq_idx],  # Rb_lmn, Zb_lmn to full eq state vector
+                *vs[self._eq_idx + 1 :],
+            ]
+        )
+        tangent = dxdcv - self._feasible_tangents @ dfdc
+        return tangent
+
+    def _get_tangent_linearized(self, v, f_lin, uf, sfi, vtf):
+        """Same as _get_tangent, but reusing a linearization of the constraint.
+
+        f_lin, uf, sfi, vtf are computed once per xf in ``_jvp`` (see the comment
+        there) instead of being recomputed from scratch for every column/chunk
+        of v -- this function is vectorized over v the same way _get_tangent is.
+        """
+        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+        # This is (dF/dx)^-1 * dF/dc  # noqa : E800
+        dfdc = _proximal_jvp_f_linearized_pure(
+            f_lin,
+            vs[self._eq_idx],
+            self._dxdc,
+            uf,
+            sfi,
+            vtf,
+        )
+        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+        dfdcs[self._eq_idx] = dfdc
+        dfdc = jnp.concatenate(dfdcs)
+
         dxdcv = jnp.concatenate(
             [
                 *vs[: self._eq_idx],
@@ -1354,6 +1412,43 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    return vtf.T @ (sfi * (uf.T @ Fc))
+
+
+@jit
+def _factor_pinv_pure(Fxh):
+    """Regularized SVD pseudoinverse factors of dF/dx (feasible directions only).
+
+    Split out of the tangent computation because Fxh depends only on the
+    converged equilibrium state xf, not on the perturbation direction being
+    differentiated. ``Fxh`` is a plain array here (not a closure), so unlike
+    ``_proximal_jvp_f_linearized_pure`` this can safely be a normal jitted
+    function -- its arguments are hashable/traceable and repeated calls with
+    the same shape hit the same compiled program.
+    """
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf = sf + sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    return uf, sfi, vtf
+
+
+def _proximal_jvp_f_linearized_pure(f_lin, dc, dxdc, uf, sfi, vtf):
+    """Same as _proximal_jvp_f_pure, but reusing a linearization of the constraint.
+
+    ``f_lin`` is the cheap linear map returned by ``jax.linearize`` at xf (built
+    once in ``ProximalProjection._jvp``); calling it here does not re-evaluate
+    the nonlinear force-balance residual the way a fresh ``jax.jvp`` call would.
+    ``uf, sfi, vtf`` are the corresponding cached pseudoinverse factors of Fxh
+    from ``_factor_pinv_pure``.
+
+    Deliberately not jitted directly: ``f_lin`` is a Python closure, not a plain
+    array, so it cannot be traced as an ordinary jit argument. It is instead
+    consumed here as-is; the vmap/scan machinery in ``batched_vectorize`` (which
+    calls this once per element/chunk of ``dc``) still traces and compiles this
+    body normally.
+    """
+    Fc = f_lin(dxdc @ dc)
     return vtf.T @ (sfi * (uf.T @ Fc))
 
 

@@ -411,7 +411,7 @@ class DipoleDiscreteness(_DipoleObjective):
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
-            target = 0
+            bounds = (-np.inf, np.inf)
         super().__init__(
             dipole,
             data_keys=["rho"],

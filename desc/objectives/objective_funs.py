@@ -1586,12 +1586,23 @@ class _Objective(IOAble, ABC):
 
         if self._deriv_mode == "fwd":
             fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
+            sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+            chunk_size = self._jac_chunk_size
+            if (
+                chunk_size is not None
+                and v[0].ndim > 1
+                and v[0].shape[0] > chunk_size
+            ):
+                # see Derivative.linearize
+                _, jvp_fn = Derivative.linearize(fun, tuple(range(len(x))), *x)
+                return batched_vectorize(
+                    jvp_fn, signature=sig, chunk_size=chunk_size
+                )(*v)
             jvpfun = lambda *dx: Derivative.compute_jvp(
                 fun, tuple(range(len(x))), dx, *x
             )
-            sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
             return batched_vectorize(
-                jvpfun, signature=sig, chunk_size=self._jac_chunk_size
+                jvpfun, signature=sig, chunk_size=chunk_size
             )(*v)
         else:  # rev mode. We compute full jacobian and manually do mv. In this case
             # the jacobian should be wide so this isn't very expensive.

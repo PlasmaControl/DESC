@@ -220,7 +220,7 @@ class AutoDiffDerivative(_Derivative):
 
     @classmethod
     def linearize(cls, fun, argnum, *args, **kwargs):
-        """Thin wrapper around ``jax.linearize`` for a single argnum.
+        """Thin wrapper around ``jax.linearize``.
 
         See the JAX docs for what this actually does:
         https://docs.jax.dev/en/latest/_autosummary/jax.linearize.html -- in
@@ -236,9 +236,8 @@ class AutoDiffDerivative(_Derivative):
         ----------
         fun : callable
             function to differentiate
-        argnum : int
-            argument to differentiate with respect to. Unlike ``compute_jvp``,
-            only a single argument is supported (not a tuple of argnums).
+        argnum : int or tuple
+            arguments to differentiate with respect to
         args : tuple
             arguments passed to fun, evaluated at the point to linearize around
         kwargs : dict
@@ -249,18 +248,19 @@ class AutoDiffDerivative(_Derivative):
         y : array-like
             fun(*args, **kwargs)
         jvp_fn : callable
-            function of a single tangent vector v that computes df/dx * v.
+            function of tangent vectors (one per argnum) that computes df/dx * v.
 
         """
         _ = kwargs.pop("rel_step", None)  # unused by autodiff
-        assert jnp.isscalar(argnum), "linearize only supports a single argnum"
+        argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
 
-        def _fun(x):
+        def _fun(*x):
             _args = list(args)
-            _args[argnum] = x
+            for i, xi in zip(argnum, x):
+                _args[i] = xi
             return fun(*_args, **kwargs)
 
-        return jax.linearize(_fun, args[argnum])
+        return jax.linearize(_fun, *(args[i] for i in argnum))
 
     @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):

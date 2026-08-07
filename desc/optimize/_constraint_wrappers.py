@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put, vmap
+from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.derivatives import Derivative
 from desc.objectives import (
@@ -1068,7 +1068,7 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
+        jvpfun = self._get_tangent_fun(xf, constants, "scaled_error")
         tangents = batched_vectorize(
             jvpfun,
             signature="(n)->(k)",
@@ -1207,6 +1207,40 @@ class ProximalProjection(ObjectiveFunction):
         op = "unscaled"
         return self._jvp(v, x, constants, op)
 
+    def _get_tangent_fun(self, xf, constants, op):
+        """Return a fn of a single direction u giving the tangent at xf (see _jvp).
+
+        Shared by ``_jvp`` and ``grad`` so the hoisting below (and the fix to it)
+        only needs to happen in one place.
+        """
+        if self._constraint._deriv_mode == "batched":
+            # Fxh = dF/dx (restricted to feasible directions) depends only on
+            # xf, not on the direction being differentiated, so it and its
+            # pseudoinverse only need to be built once here -- see
+            # Derivative.linearize for the mechanism. Note this is a different
+            # redundancy than the one _jvp_batched's own chunk_size fast path
+            # fixes: that one helps the jvp_<op> call inside _get_tangent if it
+            # chunks internally, but Fxh/its SVD are constructed here, once per
+            # OUTER chunk of v below, and _jvp_batched has no way to reach in
+            # and hoist that out -- so this is still needed on top of it.
+            fun = lambda x_, c: getattr(self._constraint, "compute_" + op)(x_, c)
+            _, f_lin = Derivative.linearize(fun, 0, xf, constants[1])
+            # Fxh can be as large as the (reduced) equilibrium state itself, so
+            # this still needs to respect jac_chunk_size for memory -- f_lin
+            # being cheap means chunking it here is just bounding memory, not
+            # repeating expensive work the way chunking the old jvp_<op> call
+            # would have.
+            Fxh = batched_vectorize(
+                f_lin,
+                signature="(n)->(k)",
+                chunk_size=self._constraint._jac_chunk_size,
+            )(self._eq_solve_objective._feasible_tangents.T).T
+            uf, sfi, vtf = _factor_pinv_pure(Fxh)
+            return lambda u: self._get_tangent_linearized(u, f_lin, uf, sfi, vtf)
+        # blocked mode doesn't chunk via jac_chunk_size the way batched mode
+        # does, so it doesn't have the redundancy above -- untouched.
+        return lambda u: self._get_tangent(u, xf, constants, op=op)
+
     def _jvp(self, v, x, constants=None, op="scaled_error"):
         # The goal is to compute the Jacobian of the objective function with respect to
         # the optimization variables (c). Before taking the Jacobian, we update the
@@ -1227,26 +1261,7 @@ class ProximalProjection(ObjectiveFunction):
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
 
-        if self._constraint._deriv_mode == "batched":
-            # Fxh = dF/dx (restricted to feasible directions) depends only on
-            # xf, not on the direction being differentiated, so it and its
-            # pseudoinverse only need to be built once here -- see
-            # Derivative.linearize for the mechanism. Note this is a different
-            # redundancy than the one _jvp_batched's own chunk_size fast path
-            # fixes: that one helps the jvp_<op> call inside _get_tangent if it
-            # chunks internally, but Fxh/its SVD are constructed here, once per
-            # OUTER chunk of v below, and _jvp_batched has no way to reach in
-            # and hoist that out -- so this is still needed on top of it.
-            fun = lambda x_, c: getattr(self._constraint, "compute_" + op)(x_, c)
-            _, f_lin = Derivative.linearize(fun, 0, xf, constants[1])
-            Fxh = vmap(f_lin)(self._eq_solve_objective._feasible_tangents.T).T
-            uf, sfi, vtf = _factor_pinv_pure(Fxh)
-            jvpfun = lambda u: self._get_tangent_linearized(u, f_lin, uf, sfi, vtf)
-        else:
-            # blocked mode doesn't chunk via jac_chunk_size the way batched
-            # mode does, so it doesn't have the redundancy above -- untouched.
-            jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
-
+        jvpfun = self._get_tangent_fun(xf, constants, op)
         tangents = batched_vectorize(
             jvpfun,
             signature="(n)->(k)",

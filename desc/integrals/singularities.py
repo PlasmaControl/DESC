@@ -8,7 +8,7 @@ from interpax import fft_interp2d
 from interpax_fft import rfft2_modes, rfft2_vander
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp, rfft2
+from desc.backend import desc_config, fori_loop, jnp, rfft2
 from desc.batching import batch_map, vmap_chunked
 from desc.grid import LinearGrid
 from desc.io import IOAble
@@ -613,6 +613,7 @@ def _nonsingular_part(
     ht = 2 * jnp.pi / source_grid.num_theta
     hz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
     w = source_data["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
+    contract = getattr(kernel, "contract", None)
 
     def nfp_loop(j, f_data):
         """Calculate effects from source points on a single field period.
@@ -640,9 +641,6 @@ def _nonsingular_part(
         # nest this def to avoid having to pass the modified source_data around the loop
         # easier to just close over it and let JAX figure it out
         def eval_pt(eval_data_i):
-            k = kernel(eval_data_i, source_data).reshape(
-                -1, source_grid.num_nodes, kernel.ndim
-            )
             eta = _eta(
                 source_theta,
                 source_data["zeta"],
@@ -653,7 +651,13 @@ def _nonsingular_part(
                 st,
                 sz,
             )
-            return jnp.sum(k * (w * (1 - eta))[..., jnp.newaxis], axis=1)
+            dS = w * (1 - eta)
+            if contract is not None:
+                return contract(eval_data_i, source_data, dS).reshape(-1, kernel.ndim)
+            k = kernel(eval_data_i, source_data).reshape(
+                -1, source_grid.num_nodes, kernel.ndim
+            )
+            return jnp.sum(k * dS[..., jnp.newaxis], axis=1)
 
         f += batch_map(eval_pt, eval_data, chunk_size).reshape(
             eval_grid.num_nodes, kernel.ndim
@@ -814,6 +818,10 @@ def singular_integral(
         evaluation points.
         If vector valued, the input to the kernel function will be in rpz and output
         should be in xyz.
+        A kernel may optionally define an attribute
+        ``contract(eval_data, source_data, w)`` returning
+        ``sum_j w[:, j] kernel(eval_data, source_data)[:, j]`` of shape
+        ``(num eval nodes, ndim)``. This avoids forming the full kernel matrix.
     interpolator : _BIESTInterpolator
         Function to interpolate from rectangular source grid to polar
         source grid around each singular point. See ``FFTInterpolator`` or
@@ -921,8 +929,35 @@ def _kernel_biot_savart(eval_data, source_data, diag=False):
     return mu_0 / 4 / jnp.pi * safediv(num, r**3)
 
 
+def _contract_biot_savart(eval_data, source_data, weight):
+    # sum_j u K' x (r - r'), u = weight / |r - r'|^3.
+    # Bilinearity splits this into (sum_j u K') x r - sum_j u (K' x r'), so the
+    # only (eval x source x 3) array is dx, which the norm reduces immediately.
+    # Both sums are one contraction. The split adds error ~ eps |r| / |r - r'|,
+    # but the near field here is suppressed by the (1 - eta) factor in ``weight``,
+    # so |r - r'| stays a finite fraction of the minor radius at any resolution.
+    source_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([source_data["R"], source_data["phi"], source_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T)
+    )
+    K = rpz2xyz_vec(source_data["K_vc"], phi=source_data["phi"])
+    r = safenorm(eval_x[:, jnp.newaxis] - source_x[jnp.newaxis], axis=-1)
+    u = safediv(weight, r**3)
+    X = jnp.concatenate([K, jnp.cross(K, source_x, axis=-1)], axis=-1)
+    # this operation compiles very differently on CPU and GPU
+    # we aim to use the best by conditionals
+    if desc_config.get("kind") == "gpu":
+        u = (u[..., jnp.newaxis] * X).sum(axis=-2)
+    else:
+        u = u @ X
+    return mu_0 / 4 / jnp.pi * (jnp.cross(u[:, :3], eval_x, axis=-1) - u[:, 3:])
+
+
 _kernel_biot_savart.ndim = 3
 _kernel_biot_savart.keys = ["R", "phi", "Z", "K_vc"]
+_kernel_biot_savart.contract = _contract_biot_savart
 
 
 def _kernel_biot_savart_A(eval_data, source_data, diag=False):

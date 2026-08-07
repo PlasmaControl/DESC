@@ -190,6 +190,16 @@ def vmap_chunked(
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
 
+    This is the low-level chunking primitive: single ``in_axes`` (0 or None),
+    no signature-based broadcasting, but supports ``reduction``/``chunk_reduction``
+    for accumulating across chunks without materializing the unchunked result
+    (e.g. a memory-bounded sum). ``batched_vectorize`` is built on top of this
+    (calling it once per broadcast dimension) to add ``jax.numpy.vectorize``-style
+    generalized broadcasting for mismatched argument shapes, at the cost of not
+    exposing ``reduction``. Use this directly for a simple, uniform ``in_axes``
+    call (optionally with a reduction); use ``batched_vectorize`` when arguments
+    have different shapes that need broadcasting.
+
     Warnings
     --------
     - https://github.com/PlasmaControl/DESC/issues/1599
@@ -274,6 +284,11 @@ def batch_map(
 
 def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_size=None):
     """Define a vectorized function with broadcasting and batching.
+
+    Implemented on top of ``vmap_chunked`` (called once per broadcast
+    dimension implied by ``signature``); see that function's docstring for
+    how the two relate and when to reach for the lower-level primitive
+    directly instead.
 
     Refrences
     ---------

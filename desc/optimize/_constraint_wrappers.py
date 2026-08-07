@@ -1064,11 +1064,11 @@ class ProximalProjection(ObjectiveFunction):
         # where ∇G is the Jacobian of G with respect to full state vector
         # and ∇F is the Jacobian of F with respect to full state vector. Then,
         # ∇L = G.T @ ∇G @ [dc_tangents - (∇F @ dx_tangents) ^ -1 @ (∇F @ dc_tangents)]
-        # We get the part in [] using the _get_tangent method.
+        # We get the part in [] using the _get_tangent_fun method.
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        jvpfun = self._get_tangent_fun(xf, constants, "scaled_error")
+        jvpfun = self._get_tangent_fun(xf, constants, op="scaled_error")
         tangents = batched_vectorize(
             jvpfun,
             signature="(n)->(k)",
@@ -1213,8 +1213,46 @@ class ProximalProjection(ObjectiveFunction):
         op = "unscaled"
         return self._jvp(v, x, constants, op)
 
+    def _jvp(self, v, x, constants=None, op="scaled_error"):
+        # The goal is to compute the Jacobian of the objective function with respect to
+        # the optimization variables (c). Before taking the Jacobian, we update the
+        # equilibrium such that
+        # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
+        # so that we can set F(x, c) = 0, from here we can solve for dx and get
+        # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
+        # We can then compute the Jacobian of the objective function with respect to c
+        # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
+        # substituting in dx we get
+        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
+        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+
+        # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
+        # First we compute the tangent direction (see _get_tangent_fun for details),
+        # then we compute the Jacobian.
+        v = v[0] if isinstance(v, (tuple, list)) else v
+        constants = setdefault(constants, [None, None])
+        xg, xf = self._update_equilibrium(x, store=True)
+
+        jvpfun = self._get_tangent_fun(xf, constants, op=op)
+        tangents = batched_vectorize(
+            jvpfun,
+            signature="(n)->(k)",
+            chunk_size=self._constraint._jac_chunk_size,
+        )(v)
+
+        if self._objective._deriv_mode == "batched":
+            # objective's method already know about its jac_chunk_size
+            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
+        else:
+            return _proximal_jvp_blocked_pure(
+                self._objective,
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
+                op,
+            )
+
     def _get_tangent_fun(self, xf, constants, op):
-        """Return a fn of a single direction u giving the tangent at xf (see _jvp).
+        """Return a fn of a single direction u giving the tangent at xf.
 
         Shared by ``_jvp`` and ``grad`` so the hoisting below only needs to
         happen in one place.
@@ -1249,91 +1287,50 @@ class ProximalProjection(ObjectiveFunction):
             chunk_size=self._constraint._jac_chunk_size,
         )(self._eq_solve_objective._feasible_tangents.T).T
         uf, sfi, vtf = _factor_pinv_pure(Fxh)
-        return lambda u: self._get_tangent(u, f_lin, uf, sfi, vtf)
 
-    def _jvp(self, v, x, constants=None, op="scaled_error"):
-        # The goal is to compute the Jacobian of the objective function with respect to
-        # the optimization variables (c). Before taking the Jacobian, we update the
-        # equilibrium such that
-        # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
-        # so that we can set F(x, c) = 0, from here we can solve for dx and get
-        # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
-        # We can then compute the Jacobian of the objective function with respect to c
-        # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
-        # substituting in dx we get
-        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
-        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+        def tangent_fun(v):
+            # Note: This function is vectorized over v. So, v is expected to be
+            # 1D array of size self.dim_x.
 
-        # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
-        # First we will compute the tangent direction (see _get_tangent for details),
-        # then we will compute the Jacobian.
-        v = v[0] if isinstance(v, (tuple, list)) else v
-        constants = setdefault(constants, [None, None])
-        xg, xf = self._update_equilibrium(x, store=True)
-
-        jvpfun = self._get_tangent_fun(xf, constants, op)
-        tangents = batched_vectorize(
-            jvpfun,
-            signature="(n)->(k)",
-            chunk_size=self._constraint._jac_chunk_size,
-        )(v)
-
-        if self._objective._deriv_mode == "batched":
-            # objective's method already know about its jac_chunk_size
-            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
-        else:
-            return _proximal_jvp_blocked_pure(
-                self._objective,
-                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
-                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
-                op,
+            # v contains self._args DoFs from eq and other objects (like coils,
+            # surfaces etc), we want jvp_f to only get parts from equilibrium,
+            # not other things
+            vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
+            # This is (dF/dx)^-1 * dF/dc  # noqa : E800
+            dfdc = _proximal_jvp_f_pure(
+                f_lin, vs[self._eq_idx], self._dxdc, uf, sfi, vtf
             )
+            # broadcasting against multiple things
+            dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
+            dfdcs[self._eq_idx] = dfdc
+            # note that dfdc.size != vs[self._eq_idx].size
+            # dfdc has the size of reduced state vector of the equilibrium
+            # but vs[self._eq_idx] has the size of self._args DoFs
+            dfdc = jnp.concatenate(dfdcs)
 
-    def _get_tangent(self, v, f_lin, uf, sfi, vtf):
-        # Note: This function is vectorized over v. So, v is expected to be 1D array
-        # of size self.dim_x.
+            # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+            # where G is the objective function. Since DESC stores x and c in the
+            # same vector, instead of multiple JVP calls, we will just find a
+            # tangent direction that will give us the same result.
+            # For making the explanation clear, assume J is the Jacobian of the
+            # objective function with respect to the full state vector (both x
+            # and c). Then,
+            # dG/dc = J @ (tangent vectors in c direction)
+            # dG/dx = J @ (tangent vectors in x direction)
+            # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
+            # J @ [(tangent in c direction) - (tangent in x direction) @ dfdc]
+            # Note: We will never form full Jacobian J, we will just compute the
+            # above expression by JVPs.
+            dxdcv = jnp.concatenate(
+                [
+                    *vs[: self._eq_idx],
+                    self._dxdc @ vs[self._eq_idx],  # Rb_lmn, Zb_lmn to full eq state
+                    *vs[self._eq_idx + 1 :],
+                ]
+            )
+            return dxdcv - self._feasible_tangents @ dfdc
 
-        # v contains self._args DoFs from eq and other objects (like coils, surfaces
-        # etc), we want jvp_f to only get parts from equilibrium, not other things
-        vs = jnp.split(v, np.cumsum(self._dimc_per_thing))
-        # This is (dF/dx)^-1 * dF/dc  # noqa : E800
-        dfdc = _proximal_jvp_f_pure(
-            f_lin,
-            vs[self._eq_idx],
-            self._dxdc,
-            uf,
-            sfi,
-            vtf,
-        )
-        # broadcasting against multiple things
-        dfdcs = [jnp.zeros(dim) for dim in self._dimc_per_thing]
-        dfdcs[self._eq_idx] = dfdc
-        # note that dfdc.size != vs[self._eq_idx].size
-        # dfdc has the size of reduced state vector of the equilibrium
-        # but vs[self._eq_idx] has the size of self._args DoFs
-        dfdc = jnp.concatenate(dfdcs)
-
-        # We try to find dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
-        # where G is the objective function. Since DESC stores x and c in the same
-        # vector, instead of multiple JVP calls, we will just find a tangent direction
-        # that will give us the same result.
-        # For making the explanation clear, assume J is the Jacobian of the objective
-        # function with respect to the full state vector (both x and c). Then,
-        # dG/dc = J @ (tangent vectors in c direction)
-        # dG/dx = J @ (tangent vectors in x direction)
-        # So, dG/dc - dG/dx * (dF/dx)^-1 * dF/dc can be written as
-        # J @ [(tangent vectors in c direction) - (tangent vectors in x direction)@dfdc]
-        # Note: We will never form full Jacobian J, we will just compute the above
-        # expression by JVPs.
-        dxdcv = jnp.concatenate(
-            [
-                *vs[: self._eq_idx],
-                self._dxdc @ vs[self._eq_idx],  # Rb_lmn, Zb_lmn to full eq state vector
-                *vs[self._eq_idx + 1 :],
-            ]
-        )
-        tangent = dxdcv - self._feasible_tangents @ dfdc
-        return tangent
+        return tangent_fun
 
     @property
     def constants(self):

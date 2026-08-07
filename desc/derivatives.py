@@ -219,6 +219,50 @@ class AutoDiffDerivative(_Derivative):
         return u
 
     @classmethod
+    def linearize(cls, fun, argnum, *args, **kwargs):
+        """Linearize fun at a point, for cheap repeated JVPs at that point.
+
+        Unlike ``compute_jvp``, which re-evaluates ``fun``'s primal on every
+        call, this pays for the (potentially expensive, nonlinear) primal
+        evaluation once and returns a cheap linear function for the tangent
+        propagation. Useful when many JVPs are needed at the same point, e.g.
+        when a Jacobian is built in chunks: computing each chunk with a fresh
+        ``compute_jvp``/``jax.jvp`` call re-evaluates the primal once per chunk
+        even though it is identical across chunks, while linearizing once up
+        front and reusing the result does not.
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int
+            argument to differentiate with respect to. Unlike ``compute_jvp``,
+            only a single argument is supported (not a tuple of argnums).
+        args : tuple
+            arguments passed to fun, evaluated at the point to linearize around
+        kwargs : dict
+            keyword arguments passed to fun
+
+        Returns
+        -------
+        y : array-like
+            fun(*args, **kwargs)
+        jvp_fn : callable
+            function of a single tangent vector v that computes df/dx * v,
+            without re-evaluating fun's primal.
+
+        """
+        _ = kwargs.pop("rel_step", None)  # unused by autodiff
+        assert jnp.isscalar(argnum), "linearize only supports a single argnum"
+
+        def _fun(x):
+            _args = list(args)
+            _args[argnum] = x
+            return fun(*_args, **kwargs)
+
+        return jax.linearize(_fun, args[argnum])
+
+    @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
         """Compute d^2f/dx^2*v1*v2.
 

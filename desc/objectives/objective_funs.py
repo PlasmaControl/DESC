@@ -899,9 +899,32 @@ class ObjectiveFunction(IOAble):
 
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
+            chunk_size = self._jac_chunk_size
+            if (
+                chunk_size is not None
+                and v[0].ndim > 1
+                and v[0].shape[0] > chunk_size
+            ):
+                # More directions than fit in one chunk, so batched_vectorize
+                # will split v[0] across multiple scan iterations. fun's primal
+                # does not depend on the tangent direction, only on x, so a
+                # fresh Derivative.compute_jvp/jax.jvp call inside every chunk
+                # would re-evaluate fun's (potentially expensive, nonlinear)
+                # primal from scratch once per chunk, even though it is
+                # identical across chunks -- chunking exists to bound memory,
+                # not to multiply redundant work. Linearize fun at x once here
+                # instead, and reuse the resulting cheap linear map for every
+                # chunk. When there is only one chunk anyway (or none of the
+                # tangents are actually batched), vmap already shares fun's
+                # primal for free across a single vmap call, so there is
+                # nothing to gain and we fall back to the previous behavior.
+                _, jvp_fn = Derivative.linearize(fun, 0, x)
+                return batched_vectorize(
+                    jvp_fn, signature="(n)->(k)", chunk_size=chunk_size
+                )(v[0])
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
-                jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
+                jvpfun, signature="(n)->(k)", chunk_size=chunk_size
             )(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)

@@ -53,6 +53,7 @@ Geometry
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.AxisTorsion
     desc.objectives.Elongation
     desc.objectives.Volume
     desc.objectives.MeanCurvature

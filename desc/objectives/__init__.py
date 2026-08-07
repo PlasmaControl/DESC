@@ -3,6 +3,7 @@
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,
+    CoilBounds,
     CoilCurrentLength,
     CoilCurvature,
     CoilIntegratedCurvature,
@@ -15,6 +16,7 @@ from ._coils import (
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
+    SurfaceMatch,
     SurfaceQuadraticFlux,
     ToroidalFlux,
 )
@@ -37,6 +39,7 @@ from ._generic import (
 )
 from ._geometry import (
     AspectRatio,
+    AxisTorsion,
     BScaleLength,
     Elongation,
     GoodCoordinates,
@@ -44,6 +47,9 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    SLAMElongation,
+    SLAMCenter,
+    SurfaceArea,
     Volume,
 )
 from ._neoclassical import EffectiveRipple

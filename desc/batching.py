@@ -468,16 +468,26 @@ def jacfwd_chunked(
             f, argnums, args, require_static_args_hashable=False
         )
         tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
-        if not has_aux:
+        basis = _std_basis(dyn_args)
+        n = tree_leaves(basis)[0].shape[0]
+        if not has_aux and chunk_size is not None and n > chunk_size:
+            # More directions than fit in one chunk, so this will be split
+            # across multiple scan iterations. Linearize once here instead of
+            # chunking fresh _jvp calls -- see Derivative.linearize (in
+            # desc/derivatives.py) for the mechanism; same idea, just built on
+            # jax.linearize/WrappedFun directly since desc.derivatives can't be
+            # imported here without a circular import.
+            y, jvp_fn = jax.linearize(lambda t: f_partial.call_wrapped(*t), dyn_args)
+            jac = vmap_chunked(jvp_fn, chunk_size=chunk_size)(basis)
+            jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
+        elif not has_aux:
             pushfwd = partial(_jvp, f_partial, dyn_args)
-            y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(_std_basis(dyn_args))
+            y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(basis)
             y = tree_map(lambda x: x[0], y)
             jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
         else:
             pushfwd = partial(_jvp, f_partial, dyn_args, has_aux=True)
-            y, jac, aux = vmap_chunked(pushfwd, chunk_size=chunk_size)(
-                _std_basis(dyn_args)
-            )
+            y, jac, aux = vmap_chunked(pushfwd, chunk_size=chunk_size)(basis)
             y = tree_map(lambda x: x[0], y)
             jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
             aux = tree_map(lambda x: x[0], aux)

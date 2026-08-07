@@ -1261,7 +1261,7 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["x"],
-    parameterization="desc.geometry.curve.SurfaceCurve",
+    parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _center_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     xyz = rpz2xyz(data["x"])
@@ -1284,7 +1284,7 @@ def _center_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["theta", "zeta"],
-    parameterization="desc.geometry.curve.SurfaceCurve",
+    parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
@@ -1318,7 +1318,7 @@ def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["theta", "zeta", "theta_s", "zeta_s"],
-    parameterization="desc.geometry.curve.SurfaceCurve",
+    parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
@@ -1354,7 +1354,7 @@ def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="s",
     data=["theta", "zeta", "theta_s", "zeta_s", "theta_ss", "zeta_ss"],
-    parameterization="desc.geometry.curve.SurfaceCurve",
+    parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
@@ -1413,8 +1413,9 @@ def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     dz_xs_Z = Z_tz * t_s + Z_zz * z_s
     ds_xs_Z = Z_t * t_ss + Z_z * z_ss
 
-    # As vectors, x_s = xs_R(theta(s),zeta(s))R_hat(zeta(s)) + xs_p(theta(s),zeta(s))p_hat(zeta(s))
-    #                   + xs_Z(theta(s),zeta(s))Z_hat
+    # As vectors, x_s = xs_R(theta(s),zeta(s)) R_hat(zeta(s))
+    #                   + xs_p(theta(s),zeta(s)) p_hat(zeta(s))
+    #                   + xs_Z(theta(s),zeta(s)) Z_hat
     # We now apply the chain rule with the derivatives computed above
     xss_R = dt_xs_R * t_s + dz_xs_R * z_s + ds_xs_R - xs_p * z_s
     xss_p = dt_xs_p * t_s + dz_xs_p * z_s + ds_xs_p + xs_R * z_s
@@ -1446,7 +1447,7 @@ def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
         "zeta_sss",
         "x_ss",
     ],
-    parameterization="desc.geometry.curve.SurfaceCurve",
+    parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
@@ -1593,6 +1594,7 @@ def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_theta="Net poloidal winding number of the curve.",
 )
 def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     secular_theta = kwargs["secular_theta"]
@@ -1615,6 +1617,7 @@ def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=["s"],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_zeta="Net toroidal winding number of the curve.",
 )
 def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     secular_zeta = kwargs["secular_zeta"]
@@ -1639,6 +1642,7 @@ def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_theta="Net poloidal winding number of the curve.",
 )
 def _theta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     secular_theta = kwargs["secular_theta"]
@@ -1701,6 +1705,7 @@ def _theta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwarg
     coordinates="s",
     data=[],
     parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_zeta="Net toroidal winding number of the curve.",
 )
 def _zeta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
     secular_zeta = kwargs["secular_zeta"]

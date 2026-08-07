@@ -1540,6 +1540,28 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
             name=name,
         )
 
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute magnetic field or vector potential at a set of points."""
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for a FourierRZSurfaceCoil must have NFP=1.",
+        )
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self.N_effective + 5)
+        return super()._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, compute_A_or_B, chunk_size
+        )
+
     @classmethod
     def from_values(
         cls,
@@ -1585,18 +1607,19 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
         secular_zeta: int or None, optional
             Coefficient of secular term in zeta. If None, estimated automatically.
         sym_theta: str or None, optional
-            Whether to use "cos", "sin", or no (None) symmetry in the series for theta(s).
-            Default is None.
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for theta(s). Default is None.
         sym_zeta: str or None, optional
-            Whether to use "cos", "sin", or no (None) symmetry in the series for zeta(s).
-            Default is None.
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for zeta(s). Default is None.
         name: str, optional
             Name for this curve.
 
         Returns
         -------
         curve : FourierRZSurfaceCoil
-            New representation of the coil parameterized by a Fourier series for theta(s),zeta(s).
+            New representation of the coil parameterized by a Fourier series
+            for theta(s), zeta(s).
         """
         curve = super().from_values(
             coords,
@@ -1615,12 +1638,12 @@ class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
             current=current,
             surface=surface,
             equilibrium=equilibrium,
-            secular_theta=secular_theta,
-            secular_zeta=secular_zeta,
+            secular_theta=curve.secular_theta,
+            secular_zeta=curve.secular_zeta,
             theta_n=curve.theta_n,
             zeta_n=curve.zeta_n,
-            modes_theta=curve.basis_theta.modes[:, 2],
-            modes_zeta=curve.basis_zeta.modes[:, 2],
+            modes_theta=curve.theta_basis.modes[:, 2],
+            modes_zeta=curve.zeta_basis.modes[:, 2],
             sym_theta=sym_theta,
             sym_zeta=sym_zeta,
             NFP=NFP,

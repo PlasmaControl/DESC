@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_params
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
@@ -1514,7 +1513,12 @@ class UmbilicHighCurvature(_Objective):
     Objective returns the minimum principal curvature k2 along that curve,
     which is used to ensure a large negative curvature and umbilic-ness.
 
-     References
+    Note: The parameterization (theta(s), zeta(s)) of FourierRZSurfaceCurves
+    has a gauge freedom (reparameterizing s). This objective evaluates k2 pointwise,
+    so the optimizer can exploit this. Recommended to build the curve with
+    one of theta_n or zeta_n fixed to None to reduce the DOF.
+
+    References
     ----------
     [1] https://arxiv.org/abs/2505.04211.
     Omnigenous Umbilic Stellarators.
@@ -1524,24 +1528,32 @@ class UmbilicHighCurvature(_Objective):
 
     Parameters
     ----------
-    curve: FourierRZSurfaceCurve
+    curve: FourierRZSurfaceCurve or FourierRZSurfaceCoil
         Curve which corresponds to the desired sharp boundary.
-        Note: curve carries a copy of the underlying surface. Ensure
-        curve.surface_optimizable is True if the surface params
-        are included in the optimization as well.
+        The curve carries a copy of the underlying surface, and this
+        objective is evaluated on that copy. By default, the surface params
+        are optimizable. Two ways of modifying/properly enforcing this:
+            - If the surface is meant to stay fixed, add an objective
+              FixParameters(curve, {"R_lmn": True, "Z_lmn": True})
+            - If the surface is optimizable, but is shared among objects
+              or objectives (e.g. curve lies on a equilibrium flux surface
+              and equilibrium is being optimized, or optimizing both winding
+              surface and coil lying on it),tie the parameters together
+              using the objective SurfaceCurveConsistency(curve, *other surface*).
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.
         Must be broadcastable to Objective.dim_f. Defaults to ``target=-1``.
     bounds : tuple of {float, ndarray}, optional
         Lower and upper bounds on the objective. Overrides target.
         Both bounds must be broadcastable to Objective.dim_f.
-        Defaults to ``target=1``.
+        Defaults to ``target=-1``.
     weight : {float, ndarray}, optional
         Weighting to apply to the Objective, relative to other Objectives.
         Must be broadcastable to Objective.dim_f
     curve_grid : Grid, optional
         Collocation grid containing parameter values along the curve at
-        which to calculate the objective.
+        which to calculate the objective. Defaults to a uniform grid in s with
+        ``2*curve.N_effective + 5`` nodes.
     normalize : bool, optional
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1623,21 +1635,15 @@ class UmbilicHighCurvature(_Objective):
         """
         curve = self.things[0]
         surface = curve.surface
-        N = curve.N
 
         if self._curve_grid is None:
-            n_grid = (
-                2
-                * (N + surface.R_basis.N + surface.Z_basis.N * curve.secular_theta)
-                * curve.NFP
-                + 5
-            )
-            n_grid = n_grid * curve.secular_zeta
+            n_grid = 2 * curve.N_effective + 5
             s_arr = jnp.linspace(0, 2 * jnp.pi, n_grid, endpoint=False)
-            nodes = jnp.concatenate(
+            nodes = jnp.stack(
                 [jnp.zeros_like(s_arr), jnp.zeros_like(s_arr), s_arr], axis=1
             )
-            spacing = jnp.array([0.0, 0.0, s_arr[1] - s_arr[0]])
+            # uniform spacing
+            spacing = jnp.tile(jnp.array([0.0, 0.0, 2 * jnp.pi / n_grid]), (n_grid, 1))
             curve_grid = Grid(nodes=nodes, spacing=spacing, weights=None)
         else:
             curve_grid = self._curve_grid
@@ -1703,6 +1709,8 @@ class UmbilicHighCurvature(_Objective):
             params=params,
             transforms=constants["curve_transforms"],
             profiles={},
+            secular_theta=curve.secular_theta,
+            secular_zeta=curve.secular_zeta,
         )
         curve_theta = curve_data["theta"]
         curve_zeta = curve_data["zeta"]

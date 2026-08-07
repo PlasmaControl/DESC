@@ -662,11 +662,13 @@ class SurfaceCurve(Curve):
 
     @property
     def surface(self):
+        """The curve's own copy of the surface it lies on."""
         return self._surface
 
     @optimizable_parameter
     @property
     def R_lmn(self):
+        """Spectral coefficients for R of the underlying surface."""
         return self._surface.R_lmn
 
     @R_lmn.setter
@@ -676,6 +678,7 @@ class SurfaceCurve(Curve):
     @optimizable_parameter
     @property
     def Z_lmn(self):
+        """Spectral coefficients for Z of the underlying surface."""
         return self._surface.Z_lmn
 
     @Z_lmn.setter
@@ -683,9 +686,34 @@ class SurfaceCurve(Curve):
         self._surface.Z_lmn = new
 
     @property
+    def R_basis(self):
+        """Spectral basis for R of the underlying surface."""
+        return self._surface.R_basis
+
+    @property
+    def Z_basis(self):
+        """Spectral basis for Z of the underlying surface."""
+        return self._surface.Z_basis
+
+    @property
+    def NFP_surface(self):
+        """Number of field periods of the underlying surface."""
+        return self._surface.NFP
+
+    @property
     def shift(self):
+        """Shift is fixed to the 0 vector."""
         return jnp.array([0.0, 0.0, 0.0])
+
+    @shift.setter
+    def shift(self, new):
+        raise NotImplementedError("Shift does not apply to SurfaceCurves.")
 
     @property
     def rotmat(self):
+        """Rotation matrix is fixed to the identity matrix.."""
         return jnp.eye(3, dtype=float).flatten()
+
+    @rotmat.setter
+    def rotmat(self, new):
+        raise NotImplementedError("Rotmat does not apply to SurfaceCurves.")

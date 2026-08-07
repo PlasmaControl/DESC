@@ -20,7 +20,6 @@ from desc.backend import (
     tree_structure,
 )
 from desc.basis import zernike_radial
-from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, Surface
 from desc.utils import broadcast_tree, errorif, setdefault
 
@@ -896,8 +895,12 @@ class SurfaceCurveConsistency(_Objective):
         source,
         name="SurfaceCurve consistency",
     ):
+        # local import to avoid circular dependency
+        from desc.equilibrium import Equilibrium
+
         errorif(
             not isinstance(source, (Surface, Equilibrium)),
+            ValueError,
             "Source must be a surface or equilibrium.",
         )
         if isinstance(source, Equilibrium):
@@ -930,19 +933,17 @@ class SurfaceCurveConsistency(_Objective):
             Level of output.
         """
         from desc.coils import CoilSet
+        from desc.equilibrium import Equilibrium
 
         def _expand(curve):
-            leaves = []
             if isinstance(curve, CoilSet):
-                leaves.append([_expand(coil) for coil in curve.coils])
-            else:
-                leaves.append(curve)
-            return leaves
+                return [c for coil in curve.coils for c in _expand(coil)]
+            return [curve]
 
+        # in case the curve is a coilset, expand to a list of all individual curves
         curve_expanded = _expand(self.things[0])
         source = self.things[1]
 
-        # matrix A should be nxm
         if isinstance(source, Equilibrium):
             source_R_basis = source.surface.R_basis
             source_Z_basis = source.surface.Z_basis
@@ -954,46 +955,23 @@ class SurfaceCurveConsistency(_Objective):
 
         AR = []
         AZ = []
-        mR = len(source_R_basis.modes)
-        mZ = len(source_Z_basis.modes)
         for curve in curve_expanded:
             nR = len(curve.surface.R_basis.modes)
             nZ = len(curve.surface.Z_basis.modes)
 
-            ar = np.zeros((nR, mR))
-            az = np.zeros((nZ, mZ))
+            # The curve carries a copy of the source surface, so the bases must agree.
+            errorif(
+                not np.array_equal(curve.R_basis.modes, source_R_basis.modes)
+                or not np.array_equal(curve.Z_basis.modes, source_Z_basis.modes),
+                ValueError,
+                "The curve's surface and the source must share the same R and Z bases.",
+            )
+            # The weights are just the identity matrices. If rho<1 surfaces
+            # are supported at any point, this will change.
+            AR.append(np.eye(nR))
+            AZ.append(np.eye(nZ))
 
-            if isinstance(source, Equilibrium):
-
-                for i, (l, m, n) in enumerate(source.R_basis.modes):
-                    j = np.argwhere(
-                        (curve.R_basis.modes[:, 1:] == [m, n]).all(axis=1)
-                    ).flatten()
-
-                    # with rho=1, this call returns 1. But present in case
-                    # it makes sense to allow rho<1 surfaces
-                    ar[j, i] = zernike_radial(
-                        1, source.R_basis.modes[:, 0], source.R_basis.modes[:, 1]
-                    )
-
-                for i, (l, m, n) in enumerate(source.Z_basis.modes):
-                    j = np.argwhere(
-                        (curve.Z_basis.modes[:, 1:] == [m, n]).all(axis=1)
-                    ).flatten()
-                    az[j, i] = zernike_radial(
-                        1, source.Z_basis.modes[:, 0], source.Z_basis.modes[:, 1]
-                    )
-
-            else:
-                ar = np.identity(nR)
-                az = np.identity(nZ)
-
-            AR.append(ar)
-            AZ.append(az)
-
-        self._dim_f = np.sum(
-            np.concatenate(([a.shape for a in AR], [a.shape for a in AZ]))
-        )
+        self._dim_f = sum(a.shape[0] for a in AR) + sum(a.shape[0] for a in AZ)
         self._A = {"R": AR, "Z": AZ}
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1022,13 +1000,14 @@ class SurfaceCurveConsistency(_Objective):
         params_curve = tree_leaves(params_curve, is_leaf=lambda x: isinstance(x, dict))
         return jnp.concatenate(
             [
-                [
+                block
+                for i in range(len(params_curve))
+                for block in (
                     jnp.dot(self._A["R"][i], params_surface[self._src_params["R"]])
                     - params_curve[i]["R_lmn"],
                     jnp.dot(self._A["Z"][i], params_surface[self._src_params["Z"]])
                     - params_curve[i]["Z_lmn"],
-                ]
-                for i in range(len(params_curve))
+                )
             ]
         )
 

@@ -250,7 +250,7 @@ _class_inheritance = {
         "desc.geometry.core.Curve",
     ],
     "desc.geometry.curve.FourierRZSurfaceCurve": [
-        "desc.geometry.curve.SurfaceCurve",
+        "desc.geometry.core.SurfaceCurve",
         "desc.geometry.core.Curve",
     ],
     "desc.geometry.surface.FourierRZToroidalSurface": [

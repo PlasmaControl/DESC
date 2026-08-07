@@ -1,6 +1,6 @@
 """Classes for representing geometric objects like curves and surfaces."""
 
-from .core import Curve, Surface
+from .core import Curve, Surface, SurfaceCurve
 from .curve import (
     FourierPlanarCurve,
     FourierRZCurve,
@@ -8,6 +8,5 @@ from .curve import (
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
-    _SurfaceCurve,
 )
 from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection

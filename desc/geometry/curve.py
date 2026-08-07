@@ -1813,6 +1813,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             from . import FourierRZToroidalSurface
 
             surface = FourierRZToroidalSurface()
+
         check_nonnegint(secular_theta, "secular_theta", False)
         check_nonnegint(secular_zeta, "secular_zeta", False)
         errorif(

@@ -1564,6 +1564,51 @@ def plot_fsa(  # noqa: C901
     return fig, ax
 
 
+def _phi_to_zeta_bisect(eq, nodes, niter=48):
+    """Invert phi = zeta + omega(rho, theta, zeta) for zeta, without Newton.
+
+    ``map_coordinates`` inverts this with a Newton solve started from
+    ``zeta = phi``.  On a strongly shaped device that guess is far from the
+    root and roughly 1-5 % of points converge to a DIFFERENT branch, which are
+    returned without complaint and plot as long streamers outside the plasma
+    (see ``_find_failed_phi_inversion``).
+
+    This is the fix.  Only zeta changes -- rho and theta are the same labels in
+    both bases -- so the inversion is one dimensional per node, and the chart
+    guarantees ``dphi/dzeta = 1 + domega/dzeta > 0``, so ``phi(zeta)`` is
+    strictly increasing and the root is unique.  A valid chart also has
+    ``|omega| < pi``, so
+
+        f(phi - pi) = omega - pi <= 0     and     f(phi + pi) = omega + pi >= 0
+
+    brackets it.  Bisection on that bracket cannot land on the wrong branch,
+    whatever the shaping.
+
+    Returns ``nodes`` unchanged when the equilibrium has no omega, where
+    zeta == phi exactly.
+    """
+    W_basis = getattr(eq, "W_basis", None)
+    if W_basis is None or W_basis.num_modes == 0:
+        return nodes
+    nodes = np.atleast_2d(np.asarray(nodes, dtype=float)).copy()
+    phi_target = nodes[:, 2].copy()
+    lo = phi_target - np.pi
+    hi = phi_target + np.pi
+
+    def phi_at(zeta):
+        n = nodes.copy()
+        n[:, 2] = zeta
+        return np.asarray(eq.compute("phi", grid=Grid(n, sort=False))["phi"])
+
+    for _ in range(niter):
+        mid = 0.5 * (lo + hi)
+        too_big = phi_at(mid) > phi_target
+        hi = np.where(too_big, mid, hi)
+        lo = np.where(too_big, lo, mid)
+    nodes[:, 2] = 0.5 * (lo + hi)
+    return nodes
+
+
 def _find_failed_phi_inversion(eq, grid, phi_target, atol=1e-6):
     """Flag points whose (rho, theta, zeta) do not reproduce the requested phi.
 
@@ -1747,29 +1792,17 @@ def plot_section(
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         phi_target = grid.nodes[:, 2].copy()  # requested phi, before remap
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+        # Bracketed inversion of phi = zeta + omega; see _phi_to_zeta_bisect.
+        # A no-op (and free) when omega = 0.
+        grid = Grid(_phi_to_zeta_bisect(eq, grid.nodes), sort=False)
     else:
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         phi_target = grid.nodes[:, 2].copy()  # requested phi, before remap
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+        # Bracketed inversion of phi = zeta + omega; see _phi_to_zeta_bisect.
+        # A no-op (and free) when omega = 0.
+        grid = Grid(_phi_to_zeta_bisect(eq, grid.nodes), sort=False)
 
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)

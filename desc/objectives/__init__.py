@@ -44,6 +44,7 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
+    UmbilicHighCurvature,
     Volume,
 )
 from ._neoclassical import EffectiveRipple
@@ -104,5 +105,6 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
     ShareParameters,
+    SurfaceCurveConsistency,
 )
 from .objective_funs import ObjectiveFunction

@@ -680,3 +680,185 @@ class TestCurveOmega:
         R = 10 + np.cos(s)
         x_true = np.array([R * np.cos(s), R * np.sin(s), -np.cos(s)]).T
         np.testing.assert_allclose(d["x"], x_true, atol=1e-12)
+
+
+def _make_elongated_surface(NFP=1, omega=True, elong=2.5):
+    """Elongated cross-section, optionally with nonzero omega.
+
+    The cross-section must NOT be near-circular for the elongation comparison:
+    Ramanujan's inversion has a square-root singularity as a/b -> 1, so on a
+    circle a 0.05 % change in perimeter swings the reported elongation by tens
+    of percent and the comparison measures nothing.
+    """
+    kw = {}
+    if omega:
+        kw = dict(W_lmn=np.array([0.10, 0.05]), modes_W=np.array([[0, -1], [-1, 1]]))
+    return FourierRZToroidalSurface(
+        R_lmn=np.array([10.0, 1.0, 0.05]),
+        Z_lmn=np.array([-elong, -0.05]),
+        modes_R=np.array([[0, 0], [1, 0], [1, 1]]),
+        modes_Z=np.array([[-1, 0], [-1, 1]]),
+        NFP=NFP,
+        sym=True,
+        **kw,
+    )
+
+
+def _make_synthetic_surface_omega0(NFP=1):
+    """Same R, Z as _make_synthetic_surface but with omega identically zero.
+
+    The control: with omega = 0 a constant-zeta cross-section IS planar, so
+    DESC's area/perimeter and a direct measurement must agree to within
+    discretization.
+    """
+    return FourierRZToroidalSurface(
+        R_lmn=np.array([10.0, 1.0, 0.05]),
+        Z_lmn=np.array([-1.0, -0.05]),
+        modes_R=np.array([[0, 0], [1, 0], [1, 1]]),
+        modes_Z=np.array([[-1, 0], [-1, 1]]),
+        NFP=NFP,
+        sym=True,
+    )
+
+
+def _ramanujan_elongation(A, P):
+    """Elongation from area and perimeter, matching desc.compute._geometry."""
+    a = (
+        np.sqrt(3)
+        * (
+            np.sqrt(8 * np.pi * A + P**2)
+            + np.sqrt(
+                np.abs(
+                    2 * np.sqrt(3) * P * np.sqrt(8 * np.pi * A + P**2)
+                    - 40 * np.pi * A
+                    + 4 * P**2
+                )
+            )
+        )
+        + 3 * P
+    ) / (12 * np.pi)
+    return a / (A / (np.pi * a))
+
+
+def _measure_cross_section(surf, zeta0, ntheta=2048):
+    """Area, perimeter and elongation of one cross-section, measured directly.
+
+    Independent of DESC's compute functions: sample points around the
+    cross-section in Cartesian space, fit the flattest plane through them
+    (the smallest singular direction of the centred points is its normal),
+    project into that plane, then use the shoelace formula for the area and
+    summed segment lengths for the perimeter.
+
+    Doing it in the cross-section's OWN plane matters.  Projecting onto the
+    R-Z plane instead foreshortens a tilted cross-section by cos(tilt) and
+    makes DESC look wrong by a factor that is purely the projection.
+    """
+    theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
+    grid = Grid(
+        np.vstack([np.ones(ntheta), theta, np.full(ntheta, zeta0)]).T, sort=False
+    )
+    d = surf.compute(["R", "Z", "phi"], grid=grid)
+    R, phi, Z = np.asarray(d["R"]), np.asarray(d["phi"]), np.asarray(d["Z"])
+    P = np.stack([R * np.cos(phi), R * np.sin(phi), Z], axis=1)
+    Q = P - P.mean(axis=0)
+    _, _, Vt = np.linalg.svd(Q, full_matrices=False)
+    u, v = Q @ Vt[0], Q @ Vt[1]  # coordinates in the best-fit plane
+    area = 0.5 * np.abs(np.sum(u * np.roll(v, -1) - np.roll(u, -1) * v))
+    perim = np.sum(np.hypot(np.roll(u, -1) - u, np.roll(v, -1) - v))
+    return area, perim, _ramanujan_elongation(area, perim)
+
+
+class TestCrossSectionGeometry:
+    """A(z), perimeter(z) and elongation against a direct measurement.
+
+    With omega != 0 a constant-zeta cross-section is no longer planar, and
+    DESC's line integrals use the full 3-D step length ``safenorm(e_theta)``
+    rather than the in-plane one.  These tests pin how far that moves the
+    answer, and assert the omega = 0 case is unaffected.
+
+    Tolerances: the direct measurement approximates a smooth closed curve by an
+    ``ntheta``-point polygon, which underestimates both area and perimeter by
+    O(1/ntheta^2).  At ntheta = 2048 that floor is ~1e-6 relative, so 1e-4 is a
+    real assertion for the omega = 0 control rather than a rubber stamp.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("omega", [False, True])
+    def test_area_matches_direct_measurement(self, omega):
+        """Check A(z) against the area measured in the cross-section's plane."""
+        surf = _make_elongated_surface(NFP=1, omega=omega)
+        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
+        A_desc = grid.compress(
+            np.asarray(surf.compute("A(z)", grid=grid)["A(z)"]), surface_label="zeta"
+        )
+        A_mine = np.array([_measure_cross_section(surf, z)[0] for z in zetas])
+        rel = np.abs(A_desc / A_mine - 1)
+        # measured: 1.6e-06 at omega=0, 9.3e-03 at omega!=0 -- four orders
+        # apart, so this asserts the effect rather than passing on slack.
+        tol = 2e-2 if omega else 1e-5
+        assert np.all(rel < tol), (
+            f"omega={omega}: A(z) vs direct measurement differs by "
+            f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
+            f"  DESC   {A_desc}\n  direct {A_mine}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("omega", [False, True])
+    def test_perimeter_matches_direct_measurement(self, omega):
+        """perimeter(z) uses safenorm(e_theta), the full 3-D step length.
+
+        On a warped cross-section that is longer than the in-plane step, so this
+        is where the sideways R*omega_theta component shows up directly.
+        """
+        surf = _make_elongated_surface(NFP=1, omega=omega)
+        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
+        P_desc = grid.compress(
+            np.asarray(surf.compute("perimeter(z)", grid=grid)["perimeter(z)"]),
+            surface_label="zeta",
+        )
+        P_mine = np.array([_measure_cross_section(surf, z)[1] for z in zetas])
+        rel = np.abs(P_desc / P_mine - 1)
+        # measured: 3.9e-07 at omega=0, 2.1e-04 at omega!=0
+        tol = 1e-3 if omega else 1e-5
+        assert np.all(rel < tol), (
+            f"omega={omega}: perimeter(z) vs direct differs by "
+            f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
+            f"  DESC   {P_desc}\n  direct {P_mine}"
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("omega", [False, True])
+    def test_elongation_matches_direct_measurement(self, omega):
+        """Check a_major/a_minor against the same formula on measured inputs.
+
+        DESC derives elongation from A(z) and perimeter(z) through Ramanujan's
+        ellipse approximation, so the comparison applies that identical formula
+        to an independently measured area and perimeter.  Any difference is then
+        attributable to A(z)/perimeter(z), not to the definition.
+
+        The cross-section is deliberately elongated: as a/b -> 1 the Ramanujan
+        inversion has a square-root singularity and the comparison becomes
+        meaningless (a 0.05 % perimeter change moved it 47 % on a circle).
+        """
+        surf = _make_elongated_surface(NFP=1, omega=omega)
+        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
+        e_desc = grid.compress(
+            np.asarray(surf.compute("a_major/a_minor", grid=grid)["a_major/a_minor"]),
+            surface_label="zeta",
+        )
+        e_mine = np.array([_measure_cross_section(surf, z)[2] for z in zetas])
+        assert np.all(e_mine > 1.5), (
+            f"cross-section not elongated enough for a conditioned comparison: "
+            f"{e_mine}"
+        )
+        rel = np.abs(e_desc / e_mine - 1)
+        # measured: 1.3e-06 at omega=0, 1.6e-02 at omega!=0
+        tol = 3e-2 if omega else 1e-5
+        assert np.all(rel < tol), (
+            f"omega={omega}: elongation differs by {100 * rel.max():.3f} % "
+            f"(max over zeta), tol {100 * tol:.3f} %\n"
+            f"  DESC   {e_desc}\n  direct {e_mine}"
+        )

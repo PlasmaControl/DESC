@@ -450,8 +450,15 @@ class FourierRZCurve(Curve):
         """
         # this is the base class scale:
         scales = super()._get_ess_scale(alpha, order, min_value)
-        # we use ESS for the following:
-        modes = {"R_n": self.R_basis.modes, "Z_n": self.Z_basis.modes}
+        # we use ESS for the following.  W_n is the generalized toroidal angle
+        # (phi = s + W(s)); it is a Fourier series in the same variable as
+        # R_n, Z_n and so gets the same spectral scaling.  Empty basis when
+        # omega == 0, in which case this contributes nothing.
+        modes = {
+            "R_n": self.R_basis.modes,
+            "Z_n": self.Z_basis.modes,
+            "W_n": self.W_basis.modes,
+        }
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales

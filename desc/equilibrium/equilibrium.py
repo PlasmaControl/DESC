@@ -2903,6 +2903,12 @@ class Equilibrium(IOAble, Optimizable):
             "R_lmn": self.R_basis.modes,
             "Z_lmn": self.Z_basis.modes,
             "L_lmn": self.L_basis.modes,
+            # omega is a Fourier-Zernike series like R, Z and lambda, so it
+            # takes the same spectral scaling.  Without this entry it would
+            # silently fall through to the all-ones scale from the base class
+            # while R, Z, lambda were scaled, which is not what "ess" means.
+            # Empty basis when omega == 0, contributing nothing.
+            "W_lmn": self.W_basis.modes,
         }
         # note there is no ESS for profiles, since they may not be polynomials, and
         # even if they are, they're usually low order and not in an orthogonal basis
@@ -2911,8 +2917,10 @@ class Equilibrium(IOAble, Optimizable):
 
         scales["Ra_n"] = axis_scale["R_n"]
         scales["Za_n"] = axis_scale["Z_n"]
+        scales["Wa_n"] = axis_scale["W_n"]
         scales["Rb_lmn"] = bdry_scale["R_lmn"]
         scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        scales["Wb_lmn"] = bdry_scale["W_lmn"]
         if hasattr(self.surface, "Phi_mn"):
             scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales

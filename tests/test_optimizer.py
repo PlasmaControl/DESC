@@ -51,11 +51,13 @@ from desc.objectives import (
     GenericObjective,
     LinkingCurrentConsistency,
     MagneticWell,
+    HelicalForceBalance,
     MeanCurvature,
     ObjectiveFunction,
     PlasmaVesselDistance,
     QuadraticFlux,
     QuasisymmetryTripleProduct,
+    RadialForceBalance,
     Volume,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
@@ -1376,6 +1378,131 @@ def test_proximal_jacobian():
     np.testing.assert_allclose(jac_unscaled, jac1, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac2, rtol=1e-12, atol=1e-12)
     np.testing.assert_allclose(jac_unscaled, jac3, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_proximal_chunk_invariant_and_linearizes_once(monkeypatch):
+    """jac_scaled/grad must not depend on jac_chunk_size, and chunking should
+    not rebuild Fxh (and its SVD) once per chunk.
+
+    Regression test for ProximalProjection: Fxh = dF/dx (restricted to
+    feasible directions) depends only on the converged equilibrium state, not
+    on the outer perturbation direction being differentiated, so it and its
+    pseudoinverse should only be built once per xf. Before this fix they were
+    rebuilt from scratch once per OUTER chunk of the design-space directions,
+    so cost scaled with the number of chunks instead of staying roughly
+    constant -- measured as a 2.7-3x slowdown on a real equilibrium at chunk
+    counts that evenly divide the design space.
+    """
+
+    def make_prox(chunk_size):
+        eq = Equilibrium()
+        # jac_chunk_size must be passed to the outer ObjectiveFunction, not the
+        # sub-objective -- passing it to the sub-objective forces "blocked"
+        # deriv_mode (see the auto-deriv_mode selection in
+        # ObjectiveFunction.build), which is a different code path than the
+        # "batched" one this test targets.
+        con = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=chunk_size)
+        obj = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq, deriv_mode="fwd"),
+                AspectRatio(eq, deriv_mode="fwd"),
+                Volume(eq, deriv_mode="fwd"),
+            ),
+            deriv_mode="batched",
+        )
+        prox = ProximalProjection(
+            obj, con, eq, {"order": 1}, {"maxiter": 1, "verbose": 0}
+        )
+        prox.build(verbose=0)
+        return prox
+
+    prox_ref = make_prox(None)
+    x = prox_ref.x(prox_ref._eq)
+    jac_ref = prox_ref.jac_scaled(x)
+    grad_ref = prox_ref.grad(x)
+
+    prox_chunked = make_prox(3)
+    np.testing.assert_allclose(prox_chunked.jac_scaled(x), jac_ref, atol=1e-10)
+    np.testing.assert_allclose(prox_chunked.grad(x), grad_ref, atol=1e-10)
+
+    calls = {"n": 0}
+    real_linearize = Derivative.linearize.__func__
+
+    def counting_linearize(cls, *args, **kwargs):
+        calls["n"] += 1
+        return real_linearize(cls, *args, **kwargs)
+
+    monkeypatch.setattr(Derivative, "linearize", classmethod(counting_linearize))
+
+    calls["n"] = 0
+    prox_chunked.jac_scaled(x)  # multiple outer chunks of v
+    assert calls["n"] == 1, f"expected linearize called once, got {calls['n']}"
+
+    calls["n"] = 0
+    prox_chunked.grad(x)
+    assert calls["n"] == 1, f"expected linearize called once, got {calls['n']}"
+
+
+@pytest.mark.unit
+def test_proximal_always_linearizes_multi_objective_blocked_constraint():
+    """ProximalProjection should always linearize the constraint, even when
+    it is a "blocked"-mode combination of multiple sub-objectives with mixed
+    fwd/rev deriv_mode.
+
+    ProximalProjection used to fall back to differentiating the constraint via
+    its own jvp_<op> (dispatching per sub-objective) whenever the constraint's
+    deriv_mode was "blocked", rather than linearizing it as one function. That
+    distinction turned out not to matter: the constraint types
+    ProximalProjection accepts (ForceBalance, CurrentDensity,
+    RadialForceBalance, HelicalForceBalance) are all dense many-output
+    residuals, so reverse mode is never actually cheaper for them, and the SVD
+    downstream is already computed on one combined matrix either way.
+
+    Checks this by comparing against a mathematically equivalent
+    single-sub-objective, "batched"-mode constraint: RadialForceBalance and
+    HelicalForceBalance together are the radial/helical decomposition of
+    ForceBalance, so a ProximalProjection built with either constraint should
+    give the same jac_scaled/grad at the same point.
+    """
+
+    def make_prox(eq, con):
+        obj = ObjectiveFunction(
+            (
+                QuasisymmetryTripleProduct(eq, deriv_mode="fwd"),
+                AspectRatio(eq, deriv_mode="fwd"),
+                Volume(eq, deriv_mode="fwd"),
+            ),
+            deriv_mode="batched",
+        )
+        prox = ProximalProjection(
+            obj, con, eq, {"order": 1}, {"maxiter": 1, "verbose": 0}
+        )
+        prox.build(verbose=0)
+        return prox
+
+    eq_batched = Equilibrium()
+    prox_batched = make_prox(eq_batched, ObjectiveFunction(ForceBalance(eq_batched)))
+    assert prox_batched._constraint._deriv_mode == "batched"
+    x = prox_batched.x(eq_batched)
+
+    eq_blocked = Equilibrium()
+    con_blocked = ObjectiveFunction(
+        (
+            RadialForceBalance(eq_blocked, deriv_mode="fwd"),
+            HelicalForceBalance(eq_blocked, deriv_mode="rev"),
+        ),
+        deriv_mode="blocked",
+    )
+    prox_blocked = make_prox(eq_blocked, con_blocked)
+    assert prox_blocked._constraint._deriv_mode == "blocked"
+
+    np.testing.assert_allclose(
+        prox_blocked.jac_scaled(x), prox_batched.jac_scaled(x), atol=1e-9
+    )
+    np.testing.assert_allclose(
+        prox_blocked.grad(x), prox_batched.grad(x), atol=1e-9
+    )
 
 
 @pytest.mark.slow

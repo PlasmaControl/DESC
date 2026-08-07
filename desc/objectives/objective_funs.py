@@ -899,24 +899,21 @@ class ObjectiveFunction(IOAble):
 
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
-            chunk_size = self._jac_chunk_size
             if (
-                chunk_size is not None
+                self._jac_chunk_size is not None
                 and v[0].ndim > 1
-                and v[0].shape[0] > chunk_size
+                and v[0].shape[0] > self._jac_chunk_size
             ):
                 # More directions than fit in one chunk, so this will be split
                 # across multiple scan iterations. Linearize once here instead
                 # of chunking fresh compute_jvp calls -- see Derivative.linearize
                 # for what that buys us. Single-chunk calls are left as-is:
                 # there vmap already traces fun's primal once regardless.
-                _, jvp_fn = Derivative.linearize(fun, 0, x)
-                return batched_vectorize(
-                    jvp_fn, signature="(n)->(k)", chunk_size=chunk_size
-                )(v[0])
-            jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
+                _, jvpfun = Derivative.linearize(fun, 0, x)
+            else:
+                jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
-                jvpfun, signature="(n)->(k)", chunk_size=chunk_size
+                jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
             )(v[0])
         elif len(v) == 2:
             jvpfun = lambda dx1, dx2: Derivative.compute_jvp2(fun, 0, 0, dx1, dx2, x)
@@ -1587,22 +1584,19 @@ class _Objective(IOAble, ABC):
         if self._deriv_mode == "fwd":
             fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
             sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
-            chunk_size = self._jac_chunk_size
             if (
-                chunk_size is not None
+                self._jac_chunk_size is not None
                 and v[0].ndim > 1
-                and v[0].shape[0] > chunk_size
+                and v[0].shape[0] > self._jac_chunk_size
             ):
                 # see Derivative.linearize
-                _, jvp_fn = Derivative.linearize(fun, tuple(range(len(x))), *x)
-                return batched_vectorize(
-                    jvp_fn, signature=sig, chunk_size=chunk_size
-                )(*v)
-            jvpfun = lambda *dx: Derivative.compute_jvp(
-                fun, tuple(range(len(x))), dx, *x
-            )
+                _, jvpfun = Derivative.linearize(fun, tuple(range(len(x))), *x)
+            else:
+                jvpfun = lambda *dx: Derivative.compute_jvp(
+                    fun, tuple(range(len(x))), dx, *x
+                )
             return batched_vectorize(
-                jvpfun, signature=sig, chunk_size=chunk_size
+                jvpfun, signature=sig, chunk_size=self._jac_chunk_size
             )(*v)
         else:  # rev mode. We compute full jacobian and manually do mv. In this case
             # the jacobian should be wide so this isn't very expensive.

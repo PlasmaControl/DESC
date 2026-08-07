@@ -1564,6 +1564,119 @@ def plot_fsa(  # noqa: C901
     return fig, ax
 
 
+def _phi_to_zeta_bisect(eq, nodes, niter=48):
+    """Invert phi = zeta + omega(rho, theta, zeta) for zeta, without Newton.
+
+    ``map_coordinates`` inverts this with a Newton solve started from
+    ``zeta = phi``.  On a strongly shaped device that guess is far from the
+    root and roughly 1-5 % of points converge to a DIFFERENT branch, which are
+    returned without complaint and plot as long streamers outside the plasma
+    (see ``_find_failed_phi_inversion``).
+
+    This is the fix.  Only zeta changes -- rho and theta are the same labels in
+    both bases -- so the inversion is one dimensional per node, and the chart
+    guarantees ``dphi/dzeta = 1 + domega/dzeta > 0``, so ``phi(zeta)`` is
+    strictly increasing and the root is unique.  A valid chart also has
+    ``|omega| < pi``, so
+
+        f(phi - pi) = omega - pi <= 0     and     f(phi + pi) = omega + pi >= 0
+
+    brackets it.  Bisection on that bracket cannot land on the wrong branch,
+    whatever the shaping.
+
+    Returns ``nodes`` unchanged when the equilibrium has no omega, where
+    zeta == phi exactly.
+    """
+    W_basis = getattr(eq, "W_basis", None)
+    if W_basis is None or W_basis.num_modes == 0:
+        return nodes
+    nodes = np.atleast_2d(np.asarray(nodes, dtype=float)).copy()
+    phi_target = nodes[:, 2].copy()
+    lo = phi_target - np.pi
+    hi = phi_target + np.pi
+
+    def phi_at(zeta):
+        n = nodes.copy()
+        n[:, 2] = zeta
+        return np.asarray(eq.compute("phi", grid=Grid(n, sort=False))["phi"])
+
+    for _ in range(niter):
+        mid = 0.5 * (lo + hi)
+        too_big = phi_at(mid) > phi_target
+        hi = np.where(too_big, mid, hi)
+        lo = np.where(too_big, lo, mid)
+    nodes[:, 2] = 0.5 * (lo + hi)
+    return nodes
+
+
+def _find_failed_phi_inversion(eq, grid, phi_target, atol=1e-6):
+    """Flag points whose (rho, theta, zeta) do not reproduce the requested phi.
+
+    A constant-phi section of an equilibrium with a generalized toroidal angle
+    requires inverting
+
+        phi = zeta + omega(rho, theta, zeta)
+
+    for zeta.  ``map_coordinates`` does this by Newton iteration starting from
+    ``guess = grid.nodes``, i.e. from ``zeta = phi``.  That guess is good when
+    omega is small, but on a strongly shaped device it is not: for a racetrack
+    with ``dphi/dzeta`` spanning 0.32 to 3.54 and ``|omega|`` up to 0.65 rad,
+    roughly 5 % of points converge to a DIFFERENT branch of the map.
+
+    Those points are returned without complaint and are not equilibrium points
+    at all.  Plotted, they appear as long streamers reaching well outside the
+    plasma (R ~ 2.5 m for a cross-section ending at 1.55 m), and they corrupt
+    any maximum taken over the plotted field -- which is easy to misread as a
+    localized force-balance defect.
+
+    This routine verifies the inversion and returns a boolean mask of the
+    failures so the caller can drop them, rather than drawing them.
+
+    NOTE: masking is a SAFETY NET, not a fix -- it leaves holes in the section.
+    The real fix belongs in the inversion itself.  ``phi(zeta)`` is monotonic
+    wherever the chart is valid (``dphi/dzeta = 1 + omega_zeta > 0``), so the
+    root is unique and bracketable; a guarded bisection, or simply a better
+    initial guess ``zeta ~ phi - omega(rho, theta, phi)``, cannot land on the
+    wrong branch.  Keep this check even after that lands: a silent wrong root
+    is far worse than a slow one.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium being plotted.  A no-op unless it has omega degrees of
+        freedom.
+    grid : Grid
+        Grid of ``(rho, theta, zeta)`` returned by ``map_coordinates``.
+    phi_target : ndarray
+        The phi originally requested, captured BEFORE the remap.
+    atol : float
+        Tolerance on ``|phi(found) - phi(requested)|`` in radians.
+
+    Returns
+    -------
+    phi_bad : ndarray of bool, or None
+        True where the inversion failed.  None if omega == 0 (nothing to check).
+
+    """
+    if getattr(eq, "W_basis", None) is None or not eq.W_basis.num_modes:
+        return None  # omega == 0: zeta IS phi, nothing to invert
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        phi_got = np.asarray(eq.compute("phi", grid=grid)["phi"])
+    # compare mod 2pi, mapped into (-pi, pi]
+    dphi = np.abs(((phi_got - phi_target + np.pi) % (2 * np.pi)) - np.pi)
+    phi_bad = dphi > atol
+    if phi_bad.any():
+        warnings.warn(
+            f"plot_section: {phi_bad.sum()} of {phi_bad.size} points failed the "
+            "phi -> zeta inversion (Newton converged to the wrong branch) and "
+            "are masked, leaving holes in the section. This is expected for "
+            "strongly shaped omega != 0 equilibria; see "
+            "_find_failed_phi_inversion for the proper fix."
+        )
+    return phi_bad
+
+
 def plot_section(
     eq,
     name,
@@ -1678,31 +1791,26 @@ def plot_section(
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+        phi_target = grid.nodes[:, 2].copy()  # requested phi, before remap
+        # Bracketed inversion of phi = zeta + omega; see _phi_to_zeta_bisect.
+        # A no-op (and free) when omega = 0.
+        grid = Grid(_phi_to_zeta_bisect(eq, grid.nodes), sort=False)
     else:
         phi = np.unique(grid.nodes[:, 2])
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        coords = map_coordinates(
-            eq,
-            grid.nodes,
-            ["rho", "theta", "phi"],
-            ["rho", "theta", "zeta"],
-            period=(np.inf, 2 * np.pi, 2 * np.pi),
-            guess=grid.nodes,
-        )
-        grid = Grid(coords, sort=False)
+        phi_target = grid.nodes[:, 2].copy()  # requested phi, before remap
+        # Bracketed inversion of phi = zeta + omega; see _phi_to_zeta_bisect.
+        # A no-op (and free) when omega = 0.
+        grid = Grid(_phi_to_zeta_bisect(eq, grid.nodes), sort=False)
 
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
+
+    # With a generalized toroidal angle (omega != 0) the constant-phi section
+    # requires inverting phi = zeta + omega(rho, theta, zeta).  See
+    # _find_failed_phi_inversion for why that can silently return junk.
+    phi_bad = _find_failed_phi_inversion(eq, grid, phi_target)
 
     data, _ = _compute(
         eq,
@@ -1712,6 +1820,8 @@ def plot_section(
         reshape=False,
         compute_kwargs=compute_kwargs,
     )
+    if phi_bad is not None and phi_bad.any():
+        data = np.where(phi_bad, np.nan, data)
     if normalize:
         norm_data, _ = _compute(
             eq,

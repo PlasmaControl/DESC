@@ -122,7 +122,17 @@ def map_coordinates(  # noqa: C901
     )
 
     # TODO (#1382): make this work for permutations of in/out basis
-    if outbasis == ("rho", "theta", "zeta"):
+    # The closed form inversions below assume the toroidal angle appearing in
+    # the field line label and the PEST mapping is the computational
+    # coordinate zeta, ie that omega = 0 so phi = zeta. With a generalized
+    # toroidal angle, omega depends on theta, which is the very unknown being
+    # solved for, so those inversions no longer decouple; in that case we fall
+    # through to the general Newton solve, which handles theta_PEST and alpha
+    # (both defined via phi) correctly.
+    omega_is_0 = OMEGA_IS_0 and (
+        getattr(eq, "W_basis", None) is None or eq.W_basis.num_modes == 0
+    )
+    if outbasis == ("rho", "theta", "zeta") and omega_is_0:
         if inbasis == ("rho", "alpha", "zeta"):
             errorif(
                 np.isfinite(period[1]),
@@ -135,8 +145,8 @@ def map_coordinates(  # noqa: C901
             else:
                 iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
             rho, alpha, zeta = coords.T
-            omega = 0  # TODO(#568)
-            coords = jnp.column_stack([rho, alpha + iota * (zeta + omega), zeta])
+            # alpha = theta_PEST - iota * phi and phi = zeta since omega = 0
+            coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
             inbasis = ("rho", "theta_PEST", "zeta")
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(
@@ -572,7 +582,7 @@ def _map_poloidal_coordinates(
         return t - alpha
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None, W_lmn=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordinate Jacobian (sqrt(g)) sign.
@@ -590,8 +600,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     grid  :  Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn, L_lmn : ndarray, optional
-        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+        spectral coefficients for R, Z, lambda, omega. Defaults to eq.R_lmn,
+        eq.Z_lmn, etc.
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -607,6 +618,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         Z_lmn = eq.Z_lmn
     if L_lmn is None:
         L_lmn = eq.L_lmn
+    if W_lmn is None:
+        W_lmn = eq.W_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
@@ -614,7 +627,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
-        params={"R_lmn": R_lmn, "Z_lmn": Z_lmn, "L_lmn": L_lmn},
+        params={"R_lmn": R_lmn, "Z_lmn": Z_lmn, "L_lmn": L_lmn, "W_lmn": W_lmn},
         transforms=transforms,
         profiles={},  # no profiles needed
     )

@@ -347,8 +347,13 @@ def _add_shaping(
     bdry_ratio = 0 if eq.N else 1
 
     surf_axisym = eq.surface.copy()
-    surf_axisym.change_resolution(eq.L, eq.M, 0)
-    surf_axisym.change_resolution(eq.L, eq.M, eq.N)
+    # Mz/Nz must be passed explicitly: change_resolution defaults them to the
+    # surface's CURRENT values, so a positional (L, M, 0) call leaves omega at
+    # full strength.  get_deltas would then see identical W_lmn, emit no
+    # Wb_lmn, and every intermediate would pair an axisymmetric R, Z with a
+    # fully rotated toroidal angle -- non-nested at any bdry_step.
+    surf_axisym.change_resolution(eq.L, eq.M, 0, Mz=0, Nz=0)
+    surf_axisym.change_resolution(eq.L, eq.M, eq.N, Mz=eq.surface.Mz, Nz=eq.surface.Nz)
 
     ii = len(eqfam_temp)
     stop = False
@@ -360,6 +365,13 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
+        # The generalized toroidal angle must be ramped in step with the shape.
+        # deltas is recomputed from the same two fixed surfaces every iteration,
+        # so an unscaled Wb_lmn would be applied IN FULL at every step, both
+        # overshooting omega by the number of steps and pairing a fully rotated
+        # angle with a partially shaped boundary.
+        if "Wb_lmn" in deltas:
+            deltas["Wb_lmn"] *= bdry_step
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)

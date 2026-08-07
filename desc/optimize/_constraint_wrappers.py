@@ -4,8 +4,9 @@ import functools
 
 import numpy as np
 
-from desc.backend import jax, jit, jnp, put, vmap
+from desc.backend import jit, jnp, put, vmap
 from desc.batching import batched_vectorize
+from desc.derivatives import Derivative
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -1227,33 +1228,23 @@ class ProximalProjection(ObjectiveFunction):
         xg, xf = self._update_equilibrium(x, store=True)
 
         if self._constraint._deriv_mode == "batched":
-            # (dF/dx)^-1 (restricted to feasible directions) only depends on xf,
-            # not on the perturbation direction v being differentiated. The naive
-            # approach -- calling constraint.jvp_<op> fresh inside every chunk of
-            # the vmap below -- re-evaluates the nonlinear force-balance residual
-            # from scratch every chunk (jax.jvp does not cache the primal across
-            # separate calls) and re-factorizes Fxh via a brand new SVD every
-            # chunk too, even though both are identical across chunks. That cost
-            # scales with the number of chunks (dim_x_reduced / jac_chunk_size),
-            # which is exactly backwards: chunking exists to bound memory, not to
-            # multiply redundant work.
-            #
-            # jax.linearize pays for the nonlinear residual evaluation exactly
-            # once at xf, handing back a cheap linear map. We use it once to
-            # build Fxh and factor its pseudoinverse once, then reuse both the
-            # linear map and the factors for every column/chunk below.
-            fun = lambda x_: getattr(self._constraint, "compute_" + op)(
-                x_, constants[1]
-            )
-            _, f_lin = jax.linearize(fun, xf)
+            # Fxh = dF/dx (restricted to feasible directions) depends only on
+            # xf, not on the direction being differentiated, so it and its
+            # pseudoinverse only need to be built once here -- see
+            # Derivative.linearize for the mechanism. Note this is a different
+            # redundancy than the one _jvp_batched's own chunk_size fast path
+            # fixes: that one helps the jvp_<op> call inside _get_tangent if it
+            # chunks internally, but Fxh/its SVD are constructed here, once per
+            # OUTER chunk of v below, and _jvp_batched has no way to reach in
+            # and hoist that out -- so this is still needed on top of it.
+            fun = lambda x_, c: getattr(self._constraint, "compute_" + op)(x_, c)
+            _, f_lin = Derivative.linearize(fun, 0, xf, constants[1])
             Fxh = vmap(f_lin)(self._eq_solve_objective._feasible_tangents.T).T
             uf, sfi, vtf = _factor_pinv_pure(Fxh)
             jvpfun = lambda u: self._get_tangent_linearized(u, f_lin, uf, sfi, vtf)
         else:
-            # blocked mode does not go through the chunked-vmap-of-jvp path above
-            # (jac_chunk_size chunking is only used in "batched" mode), so it
-            # does not have the redundant-recompute problem the fast path above
-            # fixes -- leave its (already-correct) behavior untouched.
+            # blocked mode doesn't chunk via jac_chunk_size the way batched
+            # mode does, so it doesn't have the redundancy above -- untouched.
             jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
 
         tangents = batched_vectorize(
@@ -1419,12 +1410,9 @@ def _proximal_jvp_f_pure(constraint, xf, constants, dc, eq_feasible_tangents, dx
 def _factor_pinv_pure(Fxh):
     """Regularized SVD pseudoinverse factors of dF/dx (feasible directions only).
 
-    Split out of the tangent computation because Fxh depends only on the
-    converged equilibrium state xf, not on the perturbation direction being
-    differentiated. ``Fxh`` is a plain array here (not a closure), so unlike
-    ``_proximal_jvp_f_linearized_pure`` this can safely be a normal jitted
-    function -- its arguments are hashable/traceable and repeated calls with
-    the same shape hit the same compiled program.
+    Split out so it's computed once per xf rather than once per call to
+    ``_proximal_jvp_f_linearized_pure``. Plain array in, so unlike that
+    function this can just be jitted normally.
     """
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
@@ -1436,17 +1424,11 @@ def _factor_pinv_pure(Fxh):
 def _proximal_jvp_f_linearized_pure(f_lin, dc, dxdc, uf, sfi, vtf):
     """Same as _proximal_jvp_f_pure, but reusing a linearization of the constraint.
 
-    ``f_lin`` is the cheap linear map returned by ``jax.linearize`` at xf (built
-    once in ``ProximalProjection._jvp``); calling it here does not re-evaluate
-    the nonlinear force-balance residual the way a fresh ``jax.jvp`` call would.
-    ``uf, sfi, vtf`` are the corresponding cached pseudoinverse factors of Fxh
-    from ``_factor_pinv_pure``.
-
-    Deliberately not jitted directly: ``f_lin`` is a Python closure, not a plain
-    array, so it cannot be traced as an ordinary jit argument. It is instead
-    consumed here as-is; the vmap/scan machinery in ``batched_vectorize`` (which
-    calls this once per element/chunk of ``dc``) still traces and compiles this
-    body normally.
+    f_lin, uf, sfi, vtf come from ``Derivative.linearize``/``_factor_pinv_pure``
+    in ``ProximalProjection._jvp``, built once per xf. Not jitted directly:
+    f_lin is a closure, not an array, so it can't be an ordinary jit argument --
+    it's fine as-is since the enclosing vmap/scan in ``batched_vectorize``
+    already traces and compiles this body.
     """
     Fc = f_lin(dxdc @ dc)
     return vtf.T @ (sfi * (uf.T @ Fc))

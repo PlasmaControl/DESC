@@ -220,16 +220,17 @@ class AutoDiffDerivative(_Derivative):
 
     @classmethod
     def linearize(cls, fun, argnum, *args, **kwargs):
-        """Linearize fun at a point, for cheap repeated JVPs at that point.
+        """Thin wrapper around ``jax.linearize`` for a single argnum.
 
-        Unlike ``compute_jvp``, which re-evaluates ``fun``'s primal on every
-        call, this pays for the (potentially expensive, nonlinear) primal
-        evaluation once and returns a cheap linear function for the tangent
-        propagation. Useful when many JVPs are needed at the same point, e.g.
-        when a Jacobian is built in chunks: computing each chunk with a fresh
-        ``compute_jvp``/``jax.jvp`` call re-evaluates the primal once per chunk
-        even though it is identical across chunks, while linearizing once up
-        front and reusing the result does not.
+        See the JAX docs for what this actually does:
+        https://docs.jax.dev/en/latest/_autosummary/jax.linearize.html -- in
+        short, it partially evaluates ``fun`` once at a point and returns a
+        cheap linear map for repeated tangents at that same point, the same
+        way factorizing a matrix once and reusing the factors for multiple
+        right-hand sides beats refactorizing for each one. Prefer this over
+        repeated ``compute_jvp`` calls at a fixed point, e.g. when chunking a
+        Jacobian: chunking with fresh ``compute_jvp``/``jax.jvp`` calls repeats
+        that partial evaluation once per chunk instead of once overall.
 
         Parameters
         ----------
@@ -248,8 +249,7 @@ class AutoDiffDerivative(_Derivative):
         y : array-like
             fun(*args, **kwargs)
         jvp_fn : callable
-            function of a single tangent vector v that computes df/dx * v,
-            without re-evaluating fun's primal.
+            function of a single tangent vector v that computes df/dx * v.
 
         """
         _ = kwargs.pop("rel_step", None)  # unused by autodiff

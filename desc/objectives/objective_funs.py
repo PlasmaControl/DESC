@@ -905,19 +905,11 @@ class ObjectiveFunction(IOAble):
                 and v[0].ndim > 1
                 and v[0].shape[0] > chunk_size
             ):
-                # More directions than fit in one chunk, so batched_vectorize
-                # will split v[0] across multiple scan iterations. fun's primal
-                # does not depend on the tangent direction, only on x, so a
-                # fresh Derivative.compute_jvp/jax.jvp call inside every chunk
-                # would re-evaluate fun's (potentially expensive, nonlinear)
-                # primal from scratch once per chunk, even though it is
-                # identical across chunks -- chunking exists to bound memory,
-                # not to multiply redundant work. Linearize fun at x once here
-                # instead, and reuse the resulting cheap linear map for every
-                # chunk. When there is only one chunk anyway (or none of the
-                # tangents are actually batched), vmap already shares fun's
-                # primal for free across a single vmap call, so there is
-                # nothing to gain and we fall back to the previous behavior.
+                # More directions than fit in one chunk, so this will be split
+                # across multiple scan iterations. Linearize once here instead
+                # of chunking fresh compute_jvp calls -- see Derivative.linearize
+                # for what that buys us. Single-chunk calls are left as-is:
+                # there vmap already traces fun's primal once regardless.
                 _, jvp_fn = Derivative.linearize(fun, 0, x)
                 return batched_vectorize(
                     jvp_fn, signature="(n)->(k)", chunk_size=chunk_size

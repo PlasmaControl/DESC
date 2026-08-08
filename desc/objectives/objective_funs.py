@@ -457,13 +457,6 @@ class ObjectiveFunction(IOAble):
                 f"node ({max(device_ids) + 1}). Got rank_per_objective="
                 f"{self._rank_per_objective} and device_ids={device_ids}.",
             )
-            warnif(
-                max(device_ids) != desc_config["num_device"] - 1,
-                UserWarning,
-                f"Not all available devices are being used. {desc_config['num_device']}"
-                f" device(s) are available, but the highest device id assigned to an "
-                f"objective is {max(device_ids)}.",
-            )
             self.mpi = mpi
             self.comm = self.mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()
@@ -487,24 +480,17 @@ class ObjectiveFunction(IOAble):
             self._obj_per_rank = [
                 np.where(self._rank_per_objective == i)[0] for i in range(self.size)
             ]
-            errorif(
-                any(foo.size == 0 for foo in self._obj_per_rank),
-                ValueError,
-                "Every rank must have at least one objective assigned, but the "
-                "following ranks have none: "
-                f"{[i for i, foo in enumerate(self._obj_per_rank) if foo.size == 0]}. "
-                f"Objective indices per rank are {self._obj_per_rank}.",
-            )
             # if the constaints should also use MPI, we will store the constraints here
             # such that we don't need to pass the constraint objects between workers.
             # This can be thought of making them globally accessible to the single
-            # worker loop. We will set this manually in desc.optimize
-            # get_combined_constraint_objectives function.
+            # worker loop. This is set externally (on every rank, before the worker
+            # loop is started) to the constraints that will be passed to the optimizer,
+            # and turned into a parallel ObjectiveFunction by _build_constraints.
             self._constraints = None
             # we will use this string to check if the computations should be done on the
             # objective or the constraint when we receive the message in the worker loop
-            # The possible values are "obj" and "con". The default will be updated again
-            # in get_combined_constraint_objectives function.
+            # The possible values are "obj" and "con". It is set to "con" in
+            # _build_constraints for the constraint ObjectiveFunction.
             self._obj_type = "obj"
             self._static_attrs += [
                 "mpi",
@@ -554,6 +540,44 @@ class ObjectiveFunction(IOAble):
             self.comm.bcast(message, root=0)
         self.running = False
 
+    def _build_constraints(self, verbose=0):
+        """Combine and build the nonlinear constraints of a parallel optimization.
+
+        ``self._constraints`` is set to the nonlinear constraints of the problem by
+        ``desc.optimize.prepare_problem_for_mpi``, which is called by every rank before
+        the context manager is entered. Here they are combined into their own parallel
+        ObjectiveFunction, which uses the worker loop of this ObjectiveFunction instead
+        of having one of its own. Since every rank does this, the constraint objects
+        never have to be communicated between the ranks.
+
+        The constraints only use MPI if the user distributed them over ranks or
+        devices. Otherwise this is reset to None and they are computed on the root
+        rank, like they would be without MPI.
+
+        Parameters
+        ----------
+        verbose : int, optional
+            Level of output.
+
+        """
+        if isinstance(self._constraints, ObjectiveFunction):
+            return  # already combined and built
+        cons = self._constraints
+        cons = [cons] if isinstance(cons, _Objective) else list(cons)
+        if not (
+            any(con._rank is not None for con in cons)
+            or len({con._device_id for con in cons}) > 1
+        ):
+            # the ranks would default to np.arange(len(cons)) which has nothing to do
+            # with what the user wants, so don't parallelize the constraints at all
+            self._constraints = None
+            return
+        self._constraints = ObjectiveFunction(cons, deriv_mode="blocked", mpi=self.mpi)
+        self._constraints._obj_type = "con"
+        self._constraints.build(verbose=verbose)
+        # the constraints must take the same state vector as the objective
+        self._constraints._set_things(self.things)
+
     def _worker_loop(self):
         """Worker loop for MPI parallelization.
 
@@ -568,6 +592,9 @@ class ObjectiveFunction(IOAble):
         to compute the objective function and its derivatives, and to stop. The workers
         will then broadcast the results back to the root rank. Once the context manager
         exits, the loop will be terminated by the root rank.
+
+        The same loop serves both the objective and the nonlinear constraints, the
+        first part of the message tells which one an operation belongs to.
 
         Therefore we can use MPI parallelization with the ObjectiveFunction while
         preventing execution of redundant calculations on different ranks.
@@ -585,7 +612,8 @@ class ObjectiveFunction(IOAble):
 
         while self.running:
             # The message contains 3 parts:
-            # message[0] is the operation to be performed
+            # message[0] is "<obj or con>:<operation to be performed>", the first part
+            # tells if the operation belongs to the objective or to the constraints
             # message[1] is the size of state vector (for compute and jvp's)
             # message[2] is the shape of tangents (for only jvp's)
             message = (None, None, None)
@@ -595,50 +623,60 @@ class ObjectiveFunction(IOAble):
                 print(f"Rank {self.rank} STOPPING")
                 break
 
-            obj_idx_rank = self._obj_per_rank[self.rank]
-            objs = [self.objectives[i] for i in obj_idx_rank]
+            kind, op = message[0].split(":")
+            objfun = self if kind == "obj" else self._constraints
+            obj_idx_rank = objfun._obj_per_rank[self.rank]
+            objs = [objfun.objectives[i] for i in obj_idx_rank]
+            # a rank may have no constraint assigned to it, it still has to take part
+            # in the collective calls, but with empty buffers
+            device = objs[0]._device if len(objs) else None
 
             # get arrays by Bcast which uses buffers and faster than bcast
-            x = alloc_array(message[1], device=self.objectives[obj_idx_rank[0]]._device)
+            x = alloc_array(message[1], device=device)
             x = safe_mpi_Bcast(x, self.comm, root=0)
 
-            if "compute" in message[0]:
-                params = self.unpack_state(x)
-                params = jax.device_put(
-                    params, self.objectives[obj_idx_rank[0]]._device
-                )
-                params = [params[i] for i in obj_idx_rank]
-                out = compute_per_process(params, objs, op=message[0])
+            if "compute" in op:
+                if len(objs):
+                    params = objfun.unpack_state(x)
+                    params = jax.device_put(params, device)
+                    params = [params[i] for i in obj_idx_rank]
+                    out = compute_per_process(params, objs, op=op)
+                else:
+                    out = jnp.empty(0)
                 if not desc_config["mpi-cuda"]:
                     out = np.array(out)
                 self.comm.Gatherv(
-                    out, (None, self._f_sizes, self._f_displs, self.mpi.DOUBLE), root=0
+                    out,
+                    (None, objfun._f_sizes, objfun._f_displs, self.mpi.DOUBLE),
+                    root=0,
                 )
-            elif "jvp" in message[0]:
-                x = jnp.split(x, np.cumsum([t.dim_x for t in self.things]))
-                vs = alloc_array(
-                    message[2], device=self.objectives[obj_idx_rank[0]]._device
-                )
+            elif "jvp" in op:
+                splits = np.cumsum([t.dim_x for t in objfun.things])
+                x = jnp.split(x, splits)
+                vs = alloc_array(message[2], device=device)
                 vs = safe_mpi_Bcast(vs, self.comm, root=0)
-                vs = jnp.split(vs, np.cumsum([t.dim_x for t in self.things]), axis=-1)
+                vs = jnp.split(vs, splits, axis=-1)
 
                 # put xi and vi on the same device as the objective
-                xs = jax.device_put(x, self.objectives[obj_idx_rank[0]]._device)
-                vs = jax.device_put(vs, self.objectives[obj_idx_rank[0]]._device)
+                xs = jax.device_put(x, device)
+                vs = jax.device_put(vs, device)
                 # only pass the relevant parts of x and v to each objective
                 xs = [
-                    [xs[i] for i in self._things_per_objective_idx[idx]]
+                    [xs[i] for i in objfun._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
                 vs = [
-                    [vs[i] for i in self._things_per_objective_idx[idx]]
+                    [vs[i] for i in objfun._things_per_objective_idx[idx]]
                     for idx in obj_idx_rank
                 ]
-                if "proximal" not in message[0]:
-                    out = jvp_per_process(xs, vs, objs, op=message[0]).T
-                elif "proximal_jvp" in message[0]:
-                    op = message[0].replace("proximal_jvp_", "")
-                    out = jvp_proximal_per_process(xs, vs, objs, op=op)
+                if not len(objs):
+                    out = jnp.empty((0, message[2][0]))
+                elif "proximal" not in op:
+                    out = jvp_per_process(xs, vs, objs, op=op).T
+                elif "proximal_jvp" in op:
+                    out = jvp_proximal_per_process(
+                        xs, vs, objs, op=op.replace("proximal_jvp_", "")
+                    )
 
                 if not desc_config["mpi-cuda"]:
                     out = np.array(out)
@@ -646,8 +684,8 @@ class ObjectiveFunction(IOAble):
                     out,
                     (
                         None,
-                        self._f_sizes * message[2][0],
-                        self._f_displs * message[2][0],
+                        objfun._f_sizes * message[2][0],
+                        objfun._f_displs * message[2][0],
                         self.mpi.DOUBLE,
                     ),
                     root=0,
@@ -709,10 +747,10 @@ class ObjectiveFunction(IOAble):
             )
             self._use_jit = False
 
-        # cannot use different devices under jit, unjit to allow for that
-        device_ids = [obj._device_id for obj in self._objectives]
-        is_multi_device = len(set(device_ids)) > 1
-        if self._is_mpi and is_multi_device:
+        # cannot use different devices under jit, and MPI calls cannot be traced,
+        # unjit to allow for both. The actual computations are still jitted by the
+        # module level *_per_process functions.
+        if self._is_mpi:
             self._use_jit = False
 
         timer = Timer()
@@ -834,13 +872,19 @@ class ObjectiveFunction(IOAble):
                     [self._objectives[i].__class__.__name__ for i in objective_ids]
                     for objective_ids in self._obj_per_rank
                 ]
+                kind = "objective" if self._obj_type == "obj" else "constraint"
                 print("-" * 60)
                 for rank in range(self.size):
                     print(
-                        f"Rank {rank} will run objective(s): "
+                        f"Rank {rank} will run {kind}(s): "
                         f"{objective_names_per_rank[rank]}"
                     )
                 print("-" * 60)
+
+        # nonlinear constraints can run in parallel as well, they use the worker loop
+        # of this objective, see _build_constraints
+        if self._is_mpi and self._constraints is not None:
+            self._build_constraints(verbose=verbose)
 
         if not self._use_jit:
             self._unjit()
@@ -911,18 +955,20 @@ class ObjectiveFunction(IOAble):
     def _parallel_compute(self, x, op):
         """Compute the objective function in parallel using MPI."""
         if self.rank == 0:
-            message = (op, x.shape, None)
+            message = (self._obj_type + ":" + op, x.shape, None)
             self.comm.bcast(message, root=0)
             safe_mpi_Bcast(x, self.comm, root=0)
 
-            params = self.unpack_state(x)
             obj_idx_rank = self._obj_per_rank[self.rank]
-
-            f_rank = compute_per_process(
-                [params[i] for i in obj_idx_rank],
-                [self.objectives[i] for i in obj_idx_rank],
-                op=message[0],
-            )
+            if len(obj_idx_rank):
+                params = self.unpack_state(x)
+                f_rank = compute_per_process(
+                    [params[i] for i in obj_idx_rank],
+                    [self.objectives[i] for i in obj_idx_rank],
+                    op=op,
+                )
+            else:
+                f_rank = jnp.empty(0)
             if not desc_config["mpi-cuda"]:
                 f_rank = np.array(f_rank)
                 recvbuf = np.empty(self.dim_f, dtype=np.float64)
@@ -1244,7 +1290,7 @@ class ObjectiveFunction(IOAble):
             if self.rank == 0:
                 # broadcasting x and v as single array is faster than
                 # boradcasting the list
-                message = ("jvp_" + op, x.shape, v[0].shape)
+                message = (self._obj_type + ":jvp_" + op, x.shape, v[0].shape)
                 self.comm.bcast(message, root=0)
                 safe_mpi_Bcast(x, self.comm, root=0)
                 safe_mpi_Bcast(v[0], self.comm, root=0)
@@ -1258,18 +1304,21 @@ class ObjectiveFunction(IOAble):
                 # we will do multiple transpose operations. The first one is to be able
                 # to stack the Jacobian parts vertically, the second one is to return
                 # the Jacobian in the expected way by other functions.
-                J_rank = jvp_per_process(
-                    [
-                        [xs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [
-                        [vs[i] for i in self._things_per_objective_idx[idx]]
-                        for idx in obj_idx_rank
-                    ],
-                    [self.objectives[i] for i in obj_idx_rank],
-                    op=message[0],
-                ).T
+                if len(obj_idx_rank):
+                    J_rank = jvp_per_process(
+                        [
+                            [xs[i] for i in self._things_per_objective_idx[idx]]
+                            for idx in obj_idx_rank
+                        ],
+                        [
+                            [vs[i] for i in self._things_per_objective_idx[idx]]
+                            for idx in obj_idx_rank
+                        ],
+                        [self.objectives[i] for i in obj_idx_rank],
+                        op="jvp_" + op,
+                    ).T
+                else:
+                    J_rank = jnp.empty((0, message[2][0]))
                 if not desc_config["mpi-cuda"]:
                     J_rank = np.array(J_rank)
                     recvbuf = np.empty((self.dim_f, message[2][0]), dtype=np.float64)
@@ -1378,6 +1427,11 @@ class ObjectiveFunction(IOAble):
         return J
 
     def _vjp(self, v, x, constants=None, op="scaled"):
+        errorif(
+            self._is_mpi,
+            NotImplementedError,
+            "Vector-Jacobian product is not implemented for MPI ObjectiveFunction.",
+        )
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         return Derivative.compute_vjp(fun, 0, v, x)
 

@@ -576,8 +576,73 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
+def prepare_problem_for_mpi(objective, constraints=(), verbose=1):
+    """Set up a parallel objective and its nonlinear constraints on every rank.
+
+    When using MPI, only the root rank runs the optimization, the other ranks wait in
+    the worker loop of the ObjectiveFunction. Everything the workers need must therefore
+    be known to them before the context manager is entered, which is what this function
+    does: it parses the constraints the same way the optimizer does and hands the
+    nonlinear ones to the ObjectiveFunction, so that they can use the same worker loop,
+    then builds everything. In a parallel script it replaces ``objective.build()``,
+
+        objective = prepare_problem_for_mpi(objective, constraints)
+        with objective:
+            if rank == 0:
+                eq.optimize(objective=objective, constraints=constraints, ...)
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize, created with an ``mpi`` communicator.
+    constraints : tuple of Objective
+        The same constraints that will be passed to the optimizer. The nonlinear ones
+        are computed in parallel only if they are given a ``rank`` or a ``device_id``,
+        otherwise they are computed on the root rank as usual.
+    verbose : int, optional
+        Level of output. Only the root rank prints.
+
+    Returns
+    -------
+    objective : ObjectiveFunction
+        Built objective function, that also knows about the nonlinear constraints.
+
+    """
+    errorif(
+        not isinstance(objective, ObjectiveFunction),
+        TypeError,
+        "objective should be of type ObjectiveFunction.",
+    )
+    if not isinstance(constraints, (tuple, list)):
+        constraints = (constraints,)
+    _, nonlinear_constraints = _parse_constraints(constraints)
+    # wrappers like LinearConstraintProjection don't have this attribute
+    is_mpi = getattr(objective, "_is_mpi", False)
+    verbose = verbose if (not is_mpi or objective.rank == 0) else 0
+
+    if is_mpi:
+        # ObjectiveFunction.build combines and builds these, see _build_constraints
+        objective._constraints = (
+            nonlinear_constraints if nonlinear_constraints else None
+        )
+    if not objective.built:
+        objective.build(verbose=verbose)
+    elif is_mpi and objective._constraints is not None:
+        objective._build_constraints(verbose=verbose)
+
+    # make the objective and the constraints take the same state vector, this is what
+    # combine_args does on the root rank once the optimization starts
+    things = unique_list(
+        flatten_list([objective.things] + [con.things for con in constraints])
+    )[0]
+    objective._set_things(things)
+    if is_mpi and objective._constraints is not None:
+        objective._constraints._set_things(things)
+    return objective
+
+
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraints, method, options
+    eq, objective, nonlinear_constraints, method, options, nonlinear_constraint=None
 ):
     """Use ProximalProjection to handle nonlinear constraints."""
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
@@ -603,7 +668,11 @@ def _maybe_wrap_nonlinear_constraints(
         solve_options = options.pop("solve_options", {})
         objective = ProximalProjection(
             objective,
-            constraint=_combine_constraints(nonlinear_constraints),
+            constraint=(
+                nonlinear_constraint
+                if nonlinear_constraint is not None
+                else _combine_constraints(nonlinear_constraints)
+            ),
             perturb_options=perturb_options,
             solve_options=solve_options,
             eq=eq,
@@ -631,8 +700,23 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
+    # for a parallel objective, the nonlinear constraints are already combined and
+    # built by every rank in prepare_problem_for_mpi, reuse that ObjectiveFunction so
+    # that the root rank and the workers use the same one
+    mpi_constraint = getattr(objective, "_constraints", None)
+    mpi_constraint = (
+        mpi_constraint if isinstance(mpi_constraint, ObjectiveFunction) else None
+    )
+    errorif(
+        mpi_constraint is not None
+        and {id(con) for con in mpi_constraint.objectives}
+        != {id(con) for con in nonlinear_constraints},
+        ValueError,
+        "The nonlinear constraints given to the optimizer are not the same as the "
+        "ones given to prepare_problem_for_mpi.",
+    )
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-        eq, objective, nonlinear_constraints, opt_method, options
+        eq, objective, nonlinear_constraints, opt_method, options, mpi_constraint
     )
     is_prox = isinstance(objective, ProximalProjection)
     for t in things:
@@ -642,7 +726,11 @@ def get_combined_constraint_objectives(  # noqa: C901
             continue
         linear_constraints = maybe_add_self_consistency(t, linear_constraints)
     linear_constraint = _combine_constraints(linear_constraints)
-    nonlinear_constraint = _combine_constraints(nonlinear_constraints)
+    nonlinear_constraint = (
+        mpi_constraint
+        if (mpi_constraint is not None and len(nonlinear_constraints))
+        else _combine_constraints(nonlinear_constraints)
+    )
 
     # make sure everything is built
     if objective is not None and not objective.built:

@@ -1257,11 +1257,10 @@ class ProximalProjection(ObjectiveFunction):
             )(v)
         else:
             # TODO: implement parallel constraint for ProximalProjection
-            # Note: This would require putting workers into a second infinite loop.
-            # One way to do this could be to give pre-build objective
-            # and constraint to the optimizer and use 2 context managers. Also,
-            # divide workers for force balance constraint loop and objective loop.
-            # This is probably a rare use case, so not a priority for now.
+            # Note: the workers no longer need a second loop for this, the constraints
+            # share the loop of the objective. What is left is that _get_tangent is
+            # vectorized over v by batched_vectorize, and MPI calls cannot be traced,
+            # so the tangents have to be computed for all directions at once instead.
             raise NotImplementedError(
                 "Parallel constraint for ProximalProjection not implemented yet. "
                 "Please use only one Equilibrium constraint."
@@ -1428,7 +1427,7 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
 
 def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
     if objective.rank == 0:
-        message = ("proximal_jvp_" + op, xgs.shape, vgs.shape)
+        message = (objective._obj_type + ":proximal_jvp_" + op, xgs.shape, vgs.shape)
         objective.comm.bcast(message, root=0)
         safe_mpi_Bcast(xgs, comm=objective.comm, root=0)
         safe_mpi_Bcast(vgs, comm=objective.comm, root=0)

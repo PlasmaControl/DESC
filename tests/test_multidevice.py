@@ -35,7 +35,12 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_fixed_boundary_constraints,
 )
-from desc.optimize import LinearConstraintProjection, Optimizer, ProximalProjection
+from desc.optimize import (
+    LinearConstraintProjection,
+    Optimizer,
+    ProximalProjection,
+    build_for_mpi,
+)
 
 
 @pytest.mark.mpi_setup
@@ -258,6 +263,70 @@ def test_multidevice_linear_proj_derivatives():
 
 
 @pytest.mark.mpi_run
+def test_multidevice_nonlinear_constraint_derivatives():
+    """Test that parallel nonlinear constraints give same results."""
+    rank = MPI.COMM_WORLD.Get_rank()
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.9], sym=True)
+
+    objective = ObjectiveFunction(
+        [
+            QuasisymmetryTwoTerm(
+                eq=eq, helicity=(1, eq.NFP), grid=grid1, device_id=0, rank=0
+            ),
+            QuasisymmetryTwoTerm(
+                eq=eq, helicity=(1, eq.NFP), grid=grid2, device_id=1, rank=1
+            ),
+            AspectRatio(eq=eq, target=8, device_id=2, rank=2),
+        ],
+        deriv_mode="blocked",
+        mpi=MPI,
+    )
+    # the nonlinear constraints only use rank 0 and 1, rank 2 gets none of them
+    constraints = (
+        ForceBalance(eq=eq, grid=grid1, device_id=0, rank=0),
+        ForceBalance(eq=eq, grid=grid2, device_id=1, rank=1),
+    ) + get_fixed_boundary_constraints(eq)
+    objective = build_for_mpi(objective, constraints, verbose=0)
+
+    # same constraints on a single device, to compare against
+    con1 = ObjectiveFunction(
+        [ForceBalance(eq=eq, grid=grid1), ForceBalance(eq=eq, grid=grid2)],
+        deriv_mode="blocked",
+    )
+    con1.build(verbose=0)
+
+    with objective:
+        if rank == 0:
+            con2 = objective._constraints
+            assert con2._is_mpi
+            assert [len(ids) for ids in con2._obj_per_rank] == [1, 1, 0]
+
+            x = objective.x(eq)
+            f1 = con1.compute_scaled_error(x)
+            f2 = con2.compute_scaled_error(x)
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = con1.jac_scaled_error(x)
+            f2 = con2.jac_scaled_error(x)
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+    # constraints that are not given a rank are computed on the root rank as usual
+    objective = build_for_mpi(
+        objective,
+        (ForceBalance(eq=eq, grid=grid1),) + get_fixed_boundary_constraints(eq),
+        verbose=0,
+    )
+    assert objective._constraints is None
+
+
+@pytest.mark.mpi_run
 def test_multidevice_proximal_derivatives():
     """Test that proximal derivatives gives same results."""
     rank = MPI.COMM_WORLD.Get_rank()
@@ -431,7 +500,8 @@ def test_multidevice_eq_solve():
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
-        obj.build()
+        # there is no constraint here, this only builds the objective on every rank
+        obj = build_for_mpi(obj)
 
     # creating grids like grid3 = [grid1, grid2] doesn't give the same
     # node, spacing and weight ordering, so we can't compare the Jacobians
@@ -526,7 +596,6 @@ def test_multidevice_eq_optimize():
     objs = [obj1, obj2, obj3, obj4]
 
     objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
-    objective.build()
 
     constraints = (
         ForceBalance(eq=eq),
@@ -537,6 +606,9 @@ def test_multidevice_eq_optimize():
         FixCurrent(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+    # every rank builds the objective, the constraints are not given a rank so they
+    # are computed on the root rank as usual
+    objective = build_for_mpi(objective, constraints, verbose=verbose)
 
     with objective:
         if rank == 0:

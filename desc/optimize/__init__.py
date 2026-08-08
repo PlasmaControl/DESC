@@ -6,10 +6,5 @@ from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
-from .optimizer import (
-    Optimizer,
-    optimizers,
-    prepare_problem_for_mpi,
-    register_optimizer,
-)
+from .optimizer import Optimizer, build_for_mpi, optimizers, register_optimizer
 from .stochastic import sgd

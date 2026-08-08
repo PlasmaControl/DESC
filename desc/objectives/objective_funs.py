@@ -544,7 +544,7 @@ class ObjectiveFunction(IOAble):
         """Combine and build the nonlinear constraints of a parallel optimization.
 
         ``self._constraints`` is set to the nonlinear constraints of the problem by
-        ``desc.optimize.prepare_problem_for_mpi``, which is called by every rank before
+        ``desc.optimize.build_for_mpi``, which is called by every rank before
         the context manager is entered. Here they are combined into their own parallel
         ObjectiveFunction, which uses the worker loop of this ObjectiveFunction instead
         of having one of its own. Since every rank does this, the constraint objects

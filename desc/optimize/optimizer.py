@@ -576,8 +576,8 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def prepare_problem_for_mpi(objective, constraints=(), verbose=1):
-    """Set up a parallel objective and its nonlinear constraints on every rank.
+def build_for_mpi(objective, constraints=(), verbose=1):
+    """Build a parallel objective and its nonlinear constraints on every rank.
 
     When using MPI, only the root rank runs the optimization, the other ranks wait in
     the worker loop of the ObjectiveFunction. Everything the workers need must therefore
@@ -586,7 +586,7 @@ def prepare_problem_for_mpi(objective, constraints=(), verbose=1):
     nonlinear ones to the ObjectiveFunction, so that they can use the same worker loop,
     then builds everything. In a parallel script it replaces ``objective.build()``,
 
-        objective = prepare_problem_for_mpi(objective, constraints)
+        objective = build_for_mpi(objective, constraints)
         with objective:
             if rank == 0:
                 eq.optimize(objective=objective, constraints=constraints, ...)
@@ -618,6 +618,14 @@ def prepare_problem_for_mpi(objective, constraints=(), verbose=1):
     _, nonlinear_constraints = _parse_constraints(constraints)
     # wrappers like LinearConstraintProjection don't have this attribute
     is_mpi = getattr(objective, "_is_mpi", False)
+    errorif(
+        not is_mpi and any(con._rank is not None for con in nonlinear_constraints),
+        ValueError,
+        "Some nonlinear constraints are assigned to a rank, but the ObjectiveFunction "
+        "is not parallel. The constraints use the worker loop of the ObjectiveFunction,"
+        " so the MPI communicator must be given to it, even if the objectives "
+        "themselves all run on a single device, ie ObjectiveFunction(..., mpi=MPI).",
+    )
     verbose = verbose if (not is_mpi or objective.rank == 0) else 0
 
     if is_mpi:
@@ -701,7 +709,7 @@ def get_combined_constraint_objectives(  # noqa: C901
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
     # for a parallel objective, the nonlinear constraints are already combined and
-    # built by every rank in prepare_problem_for_mpi, reuse that ObjectiveFunction so
+    # built by every rank in build_for_mpi, reuse that ObjectiveFunction so
     # that the root rank and the workers use the same one
     mpi_constraint = getattr(objective, "_constraints", None)
     mpi_constraint = (
@@ -713,7 +721,7 @@ def get_combined_constraint_objectives(  # noqa: C901
         != {id(con) for con in nonlinear_constraints},
         ValueError,
         "The nonlinear constraints given to the optimizer are not the same as the "
-        "ones given to prepare_problem_for_mpi.",
+        "ones given to build_for_mpi.",
     )
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
         eq, objective, nonlinear_constraints, opt_method, options, mpi_constraint

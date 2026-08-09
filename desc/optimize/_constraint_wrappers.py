@@ -757,13 +757,9 @@ class ProximalProjection(ObjectiveFunction):
         # we will need to set this static attribute, only possible if tuple
         self._dimc_per_thing = tuple(self._dimc_per_thing)
 
-        # Note: we used to build here the full state vector version of the feasible
-        # tangents, i.e. eye(objective.dim_x) with the equilibrium block replaced by
-        # Deq@Zeq (aka. dx_eq_unscaled/dxeq_reduced, see LinearConstraintProjection)
-        # and 0 rows for the eq fixed parameters. Its equilibrium block is exactly
-        # self._eq_solve_objective._feasible_tangents and all its other blocks are
-        # identity, so _proximal_get_tangents works with the (much smaller)
-        # equilibrium block directly instead of forming a dim_x by dim_x matrix here.
+        # Note: the full state vector version of the feasible tangents used to be
+        # built here, but its eq block is just _eq_solve_objective._feasible_tangents
+        # and the other blocks are identity, so _proximal_get_tangents uses that.
 
         ## history and caching
         # first, ensure equilibrium is solved to the
@@ -1315,36 +1311,36 @@ def _proximal_get_tangents(
     # Note: We will never form full Jacobian J, we will just compute the above
     # expression by JVPs.
 
-    # The tangent directions are a linear function of v, so instead of vectorizing
-    # the (expensive) constraint JVPs and the linear solve over the directions in v,
-    # we form the matrix dxeq/dc once and get the tangents for every direction in v
-    # with a single matmul. This makes the cost of this function independent of the
-    # number of directions in v.
-    dxeqdc = _proximal_dxeqdc(constraint, xf, constants, eq_feasible_tangents, dxdc, op)
     # v contains prox._args DoFs from eq and other objects (like coils, surfaces
-    # etc). Only the equilibrium block of the state vector changes when the
-    # equilibrium is re-solved, so the tangents of the other things are just v
-    # itself and we only have to correct the equilibrium block.
+    # etc). Only the eq block changes when the equilibrium is re-solved.
     vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
-    return jnp.concatenate(
-        [*vs[:eq_idx], vs[eq_idx] @ dxeqdc.T, *vs[eq_idx + 1 :]], axis=-1
-    )
+    # JVPs are taken for the dxdc @ v tangents, but at most dimc of them are useful,
+    # so take whichever combination needs fewer of them. Applying v after the JVPs
+    # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
+    if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
+        eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
+            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
+        )
+    else:
+        dxdcv = vs[eq_idx] @ dxdc.T
+        # atleast_2d and reshape are to also handle a single (1D) direction
+        eq_tangents = _proximal_eq_tangents(
+            constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
+        )
+        eq_tangents = eq_tangents.reshape(dxdcv.shape)
+    return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
 
 
 @jit_if_possible
-def _proximal_dxeqdc(
-    constraint, xf, constants, eq_feasible_tangents, dxdc, op="scaled_error"
+def _proximal_eq_tangents(
+    constraint, xf, constants, eq_feasible_tangents, dxdcv, op="scaled_error"
 ):
-    # Returns dxeq/dc = dxdc - feasible_tangents @ (dF/dx)⁻¹ @ dF/dc, of shape
-    # (dim_x_eq, dim_c). This is the change of the full equilibrium state vector per
-    # unit change of the proximal DoFs c, once the equilibrium is re-solved.
+    # Note: dxdcv holds the directions in c, mapped to the full eq state vector, as
+    # rows. It is either dxdc.T or v @ dxdc.T, the return has the same shape.
 
-    # here Fxh is dF/dx in the reduced (feasible) coordinates of the equilibrium and
-    # Fc is dF/dc. Both are Jacobians of the same function at the same point, so we
-    # get them from a single batched JVP call and let the constraint's own
-    # jac_chunk_size take care of the batching. Doing it this way also means the
-    # SVD below is computed once by construction, instead of relying on the compiler
-    # to hoist it out of a vectorized loop.
+    # here Fxh is dF/dx in the reduced (feasible) eq coordinates and Fc is dF/dc. A
+    # single batched JVP gives both, so the SVD below is computed once by
+    # construction, instead of relying on the compiler to hoist it out of a loop.
     # Our compute functions never include variables like Rb_lmn, Zb_lmn etc. So,
     # taking the JVP in just dc direction will give 0. To prevent this, we use dxdc
     # which is the dx/dc matrix and convert the Rb_lmn to R_lmn entries etc.
@@ -1352,19 +1348,17 @@ def _proximal_dxeqdc(
     # wrt all R_lmn coefficients that contribute to Rb_023. See BoundaryRSelfConsistency
     # for the relation between Rb_lmn and R_lmn.
     dim_x_reduced = eq_feasible_tangents.shape[-1]
-    tangents = jnp.concatenate([eq_feasible_tangents.T, dxdc.T], axis=0)
+    tangents = jnp.concatenate([eq_feasible_tangents.T, dxdcv], axis=0)
     J = getattr(constraint, "jvp_" + op)(tangents, xf, constants)
     Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
     sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    # this is (dF/dx)⁻¹ @ dF/dc for all the directions in c at once  # noqa : E800
+    # this is (dF/dx)⁻¹ @ dF/dc for all the directions at once  # noqa : E800
     dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
-    # feasible_tangents maps the reduced equilibrium state vector back to the full
-    # one, the eq block of ProximalProjection._feasible_tangents used to do this
-    # padded with zeros for the other things, which is not needed here.
-    return dxdc - eq_feasible_tangents @ dfdc
+    # feasible_tangents maps the reduced eq state vector back to the full one
+    return dxdcv - (eq_feasible_tangents @ dfdc).T
 
 
 @jit_if_possible

@@ -53,10 +53,11 @@ class VMECIO:
         boundary is loaded and the DESC Equilibrium R,Z are constrained to
         match the given VMEC boundary.
 
-        NOTE: This is only a fit, so the DESC Equilibrium returned is not
-        expected to be in force balance. It is recommended to solve the
-        Equilibrium once loaded before using the Equilibrium for any
-        analysis.
+        NOTE: This is only a fit of the VMEC R, Z and lambda, so the DESC
+        Equilibrium returned is not expected to be in force balance. It is
+        recommended to solve the Equilibrium once loaded before using the
+        Equilibrium for any analysis or computing any derived quantities in
+        DESC (e.g. anything that is not just R, Z or lambda).
 
         Parameters
         ----------
@@ -94,6 +95,13 @@ class VMECIO:
                 "VMEC output appears to be from version {}".format(str(version))
                 + " while DESC is only designed for compatibility with VMEC version"
                 + " 9. Some data may not be loaded correctly."
+            )
+        if "lrfp__logical__" in file.variables:
+            # guard against the wout not having it, as VMEC++ does not save
+            # all the flags that VMEC does
+            assert float(file.variables["lrfp__logical__"][0]) == 0, (
+                "DESC currently does not support poloidal flux label, "
+                "and so cannot load this VMEC wout, which has LRFP=T"
             )
 
         # parameters
@@ -727,7 +735,7 @@ class VMECIO:
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
+        jcurv.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
         jcurv[:] = surface_averages(
             grid_full,
@@ -783,7 +791,7 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
         raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
@@ -800,7 +808,7 @@ class VMECIO:
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
@@ -1324,7 +1332,7 @@ class VMECIO:
         # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
-            currumns[0, :] = -(
+            currvmns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta*sqrt(g)")
@@ -1508,10 +1516,13 @@ class VMECIO:
         f.write("!---- Pressure Parameters ----\n")
         f.write("  GAMMA = 0\n")  # pressure profile specified
         f.write("  PRES_SCALE = {}\n".format(kwargs.get("PRES_SCALE", 1)))  # AM scale
-        if eq.pressure is not None:
+        if eq.pressure is not None and isinstance(
+            eq.pressure, (PowerSeriesProfile, SplineProfile)
+        ):
             pressure = eq.pressure
         else:
-            # if kinetic profiles, fit pressure to power series
+            # if kinetic profiles or non-power series or spline,
+            #  fit pressure to power series
             grid = LinearGrid(L=eq.L_grid, axis=True)
             data = eq.compute(["rho", "p"], grid=grid)
             rho = grid.compress(data["rho"])
@@ -1580,7 +1591,7 @@ class VMECIO:
                         " {:+14.8E}".format(
                             0
                             if np.abs(r) < np.finfo(r.dtype).eps
-                            else float(current(r, dr=1) / (2 * r))
+                            else float(current(r, dr=1)[0] / (2 * r))
                         )
                     )
                 f.write("\n  PCURR_TYPE = 'cubic_spline_Ip'\n")
@@ -1590,13 +1601,13 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         # Z axis
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         # R axis cosine coefficients
         f.write("  RAXIS_CC = ")

@@ -11,6 +11,7 @@ from ._coils import (
     CoilSetMinDistance,
     CoilTorsion,
     LinkingCurrentConsistency,
+    PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
     SurfaceCurrentRegularization,
@@ -28,6 +29,7 @@ from ._equilibrium import (
 from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
 from ._generic import (
+    DeflationOperator,
     ExternalObjective,
     GenericObjective,
     LinearObjectiveFromUser,
@@ -79,6 +81,7 @@ from .linear_objectives import (
     FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
+    FixIonDensity,
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
@@ -100,5 +103,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

@@ -36,6 +36,7 @@ the magnetic axis, cross section, and various space curves.
     desc.geometry.FourierRZCurve
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
+    desc.geometry.FourierXYCurve
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
@@ -62,6 +63,7 @@ profiles together by addition, multiplication, or scaling.
     desc.profiles.ProductProfile
     desc.profiles.SumProfile
     desc.profiles.PowerProfile
+    desc.profiles.FourierZernikeProfile
 
 
 Utilities
@@ -78,3 +80,4 @@ equilibria to a given size and/or field strength.
     desc.compat.flip_theta
     desc.compat.rescale
     desc.compat.rotate_zeta
+    desc.compat.contract_equilibrium

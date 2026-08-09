@@ -10,12 +10,15 @@ Basis
     :recursive:
     :template: class.rst
 
-    desc.basis.PowerSeries
-    desc.basis.FourierSeries
-    desc.basis.DoubleFourierSeries
-    desc.basis.ZernikePolynomial
+    desc.basis.ChebyshevPolynomial
     desc.basis.ChebyshevDoubleFourierBasis
+    desc.basis.DoubleFourierSeries
+    desc.basis.FourierSeries
     desc.basis.FourierZernikeBasis
+    desc.basis.PowerSeries
+    desc.basis.ZernikePolynomial
+
+
 
 Coils
 *****
@@ -26,11 +29,13 @@ Coils
     :template: class.rst
 
     desc.coils.CoilSet
-    desc.coils.FourierRZCoil
-    desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYCoil
+    desc.coils.FourierXYZCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
+    desc.coils.initialize_helical_coils
     desc.coils.initialize_modular_coils
     desc.coils.initialize_saddle_coils
 
@@ -41,11 +46,13 @@ Compatibility
     :toctree: _api/compat
     :recursive:
 
+    desc.compat.contract_equilibrium
     desc.compat.ensure_positive_jacobian
     desc.compat.flip_helicity
     desc.compat.flip_theta
     desc.compat.rescale
     desc.compat.rotate_zeta
+
 
 Continuation
 ************
@@ -58,7 +65,7 @@ Continuation
 
 Derivatives
 ***********
-Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
+Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative``.
 
 .. autosummary::
     :toctree: _api/derivatives
@@ -66,7 +73,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     :template: class.rst
 
     desc.derivatives.AutoDiffDerivative
-    desc.derivatives.FiniteDiffDerivative
 
 Equilibrium
 ***********
@@ -89,6 +95,21 @@ Examples
     desc.examples.get
     desc.examples.listall
 
+External
+********
+Note that these objectives and utility functions are not regularly tested and maybe incompatible with newer version
+of the external code. Please see the README of the `desc.external` for more details.
+
+.. autosummary::
+    :toctree: _api/external
+    :recursive:
+
+    desc.external.paraview.export_coils_to_paraview
+    desc.external.paraview.export_surface_to_paraview
+    desc.external.paraview.export_volume_to_paraview
+    desc.external.terpsichore.TERPSICHORE
+
+
 Geometry
 ********
 
@@ -97,10 +118,11 @@ Geometry
    :recursive:
    :template: class.rst
 
-    desc.geometry.FourierRZCurve
-    desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
+    desc.geometry.FourierRZCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.FourierXYCurve
+    desc.geometry.FourierXYZCurve
     desc.geometry.SplineXYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
@@ -112,10 +134,10 @@ Grid
     :recursive:
     :template: class.rst
 
+    desc.grid.ConcentricGrid
     desc.grid.Grid
     desc.grid.LinearGrid
     desc.grid.QuadratureGrid
-    desc.grid.ConcentricGrid
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces
 
@@ -151,6 +173,7 @@ Magnetic Fields
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
     desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.OmnigenousField
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScalarPotentialField
@@ -158,6 +181,7 @@ Magnetic Fields
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
+    desc.magnetic_fields.VectorPotentialField
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.field_line_integrate
     desc.magnetic_fields.read_BNORM_file
@@ -172,6 +196,7 @@ Objective Functions
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.BallooningStability
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
     desc.objectives.BScaleLength
@@ -187,6 +212,7 @@ Objective Functions
     desc.objectives.EffectiveRipple
     desc.objectives.Elongation
     desc.objectives.Energy
+    desc.objectives.ExternalObjective
     desc.objectives.FixAnisotropy
     desc.objectives.FixAtomicNumber
     desc.objectives.FixAxisR
@@ -201,6 +227,9 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixNearAxisR
+    desc.objectives.FixNearAxisZ
+    desc.objectives.FixNearAxisLambda
     desc.objectives.FixOmniBmax
     desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
@@ -214,6 +243,7 @@ Objective Functions
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
+    desc.objectives.FusionPower
     desc.objectives.GammaC
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
@@ -221,6 +251,7 @@ Objective Functions
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_NAE_constraints
     desc.objectives.GoodCoordinates
+    desc.objectives.HeatingPowerISS04
     desc.objectives.HelicalForceBalance
     desc.objectives.Isodynamicity
     desc.objectives.LinearObjectiveFromUser
@@ -232,17 +263,20 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity
+    desc.objectives.PlasmaCoilSetDistanceBound
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.PlasmaVesselDistance
     desc.objectives.Pressure
     desc.objectives.PrincipalCurvature
     desc.objectives.QuadraticFlux
     desc.objectives.QuasisymmetryBoozer
-    desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
+    desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.RadialForceBalance
     desc.objectives.RotationalTransform
+    desc.objectives.ShareParameters
     desc.objectives.Shear
+    desc.objectives.SurfaceCurrentRegularization
     desc.objectives.SurfaceQuadraticFlux
     desc.objectives.ToroidalCurrent
     desc.objectives.ToroidalFlux
@@ -265,6 +299,21 @@ Optimize
    desc.optimize.lsqtr
    desc.optimize.register_optimizer
    desc.optimize.sgd
+
+Particles
+*********
+
+.. autosummary::
+    :toctree: _api/particles
+    :recursive:
+    :template: class.rst
+
+    desc.particles.CurveParticleInitializer
+    desc.particles.ManualParticleInitializerFlux
+    desc.particles.ManualParticleInitializerLab
+    desc.particles.SurfaceParticleInitializer
+    desc.particles.VacuumGuidingCenterTrajectory
+    desc.particles.trace_particles
 
 Perturbations
 *************
@@ -295,12 +344,16 @@ Plotting
     desc.plotting.plot_coefficients
     desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines
     desc.plotting.plot_fsa
+    desc.plotting.plot_gammac
     desc.plotting.plot_grid
     desc.plotting.plot_logo
+    desc.plotting.plot_particle_trajectories
     desc.plotting.plot_qs_error
     desc.plotting.plot_section
     desc.plotting.plot_surfaces
+    desc.plotting.poincare_plot
 
 Profiles
 ********

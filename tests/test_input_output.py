@@ -3,6 +3,7 @@
 import os
 import pathlib
 import shutil
+from io import BytesIO
 
 import h5py
 import numpy as np
@@ -42,9 +43,11 @@ def test_vmec_input(tmpdir_factory):
     tmp_path = tmpdir.join("input.DSHAPE")
     shutil.copyfile(input_path, tmp_path)
     with pytest.warns(UserWarning):
-        ir = InputReader(cl_args=[str(tmp_path)])
+        ir = InputReader(cl_args=[str(tmp_path)], save_converted_vmec_input=True)
+        # this mimics the CLI behavior, which has this
+        # True by default
     vmec_inputs = ir.inputs
-    # ir makes a VMEC file automatically
+    # ir makes a VMEC file automatically if called with cl_args
     path_converted_file = tmpdir.join("input.DSHAPE_desc")
     # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
@@ -237,20 +240,30 @@ def test_near_axis_input_files():
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
-def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
-    """Test that from_input_file works for DESC input files."""
-    vmec_path = ".//tests//inputs//input.DSHAPE"
+def test_from_input_file_equilibrium_desc_vmec_DSHAPE(tmp_path):
+    """Test that from_input_file works for DESC and VMEC input files."""
     desc_path = ".//tests//inputs//input.DSHAPE_desc"
     kwargs = {"spectral_indexing": "fringe"}
     with pytest.warns(UserWarning, match="Left handed"):
         eq = Equilibrium.from_input_file(desc_path, **kwargs)
-    with pytest.warns(UserWarning):
-        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    # load VMEC input from a read-only directory to ensure temp buffer works
+    # Related to issue #2139
+    vmec_src = ".//tests//inputs//input.DSHAPE"
+    locked_dir = tmp_path / "locked"
+    locked_dir.mkdir()
+    shutil.copy(vmec_src, locked_dir / "input.DSHAPE")
+    os.chmod(locked_dir, 0o555)
+    try:
+        with pytest.warns(UserWarning):
+            eq_VMEC = Equilibrium.from_input_file(
+                str(locked_dir / "input.DSHAPE"), **kwargs
+            )
+    finally:
+        os.chmod(locked_dir, 0o755)
 
     # make sure the loaded eqs are equivalent
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
@@ -302,9 +315,6 @@ def test_from_input_file_equilibrium_desc_vmec():
     assert eq.iota is None
     assert eq_VMEC.iota is None
     assert eq.sym == eq_VMEC.sym
-
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
@@ -571,22 +581,93 @@ def test_pickle_io(tmpdir_factory):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
 def test_ascii_io(tmpdir_factory):
     """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("solovev_test.txt")
+    tmp_path = tmpdir.join("ascii_test.txt")
     eq1 = desc.examples.get("DSHAPE_CURRENT")
-    with pytest.warns(UserWarning, match="existing toroidal current"):
-        eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-            sym=True
-        )
-    write_ascii(tmp_path, eq1)
-    with pytest.warns(UserWarning, match="not an even power series"):
+    with pytest.warns(UserWarning, match="Setting"):
+        eq1.iota = eq1.get_profile("iota").to_powerseries(sym=True)
+    with pytest.warns(DeprecationWarning):
+        write_ascii(tmp_path, eq1)
+    with pytest.warns(DeprecationWarning):
         eq2 = read_ascii(tmp_path)
-    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
-    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
-    assert np.allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(
+        eq1.iota.params[np.nonzero(eq1.iota.params)],
+        eq2.iota.params[np.nonzero(eq2.iota.params)],
+    )
+    np.testing.assert_allclose(
+        eq1.pressure.params[np.nonzero(abs(eq1.pressure.params) > 1e-3)],
+        eq2.pressure.params[np.nonzero(abs(eq2.pressure.params) > 1e-3)],
+    )
+    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
+    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+
+    # test with different profile type
+    eq1.pressure = eq1.get_profile("p", kind="spline")
+    with pytest.warns(DeprecationWarning):
+        write_ascii(tmp_path, eq1)
+    with pytest.warns(DeprecationWarning):
+        eq2 = read_ascii(tmp_path)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    rho = np.linspace(0, 1, 20)
+    np.testing.assert_allclose(
+        eq1.iota.params[np.nonzero(eq1.iota.params)],
+        eq2.iota.params[np.nonzero(eq2.iota.params)],
+    )
+    np.testing.assert_allclose(
+        eq1.pressure(rho), eq2.pressure(rho), rtol=1e-3, atol=1e-3
+    )
+    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
+    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+
+    # test kinetic and current profiles
+    eq1 = desc.examples.get("reactor_QA")
+    with pytest.warns(DeprecationWarning):
+        write_ascii(tmp_path, eq1)
+    with pytest.warns(DeprecationWarning):
+        eq2 = read_ascii(tmp_path)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    rho = np.linspace(0, 1, 20)
+    # this eq's iota is not well represented by an even PowerSeries
+    np.testing.assert_allclose(
+        eq1.compute("iota", grid=LinearGrid(rho=rho))["iota"],
+        eq2.iota(rho),
+        rtol=8e-2,
+        atol=1e-3,
+    )
+    # this eq's pressure is not well represented by power series at the edges
+    rho = np.linspace(0.1, 0.9, 20)
+    np.testing.assert_allclose(
+        eq1.compute("p", grid=LinearGrid(rho=rho))["p"],
+        eq2.pressure(rho),
+        rtol=2e-2,
+        atol=1e-5,
+    )
+    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
+    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+
+
+@pytest.mark.unit
+def test_ascii_io_errors(tmpdir_factory):
+    """Test saving and loading equilibrium in ASCII format."""
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("ascii_test.txt")
+    eq1 = desc.examples.get("DSHAPE_CURRENT")
+    eq1.pressure = eq1.pressure.to_fourierzernike()
+    with pytest.raises(ValueError, match="FourierZernikeProfile as ascii"):
+        with pytest.warns(DeprecationWarning):
+            write_ascii(tmp_path, eq1)
 
 
 @pytest.mark.unit
@@ -738,3 +819,14 @@ def test_io_OmnigenousField(tmpdir_factory):
     data2 = field2.compute(["|B|", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
+
+
+@pytest.mark.unit
+def test_io_file_like_object(tmpdir_factory):
+    """Test loading an equilibrium from a file-like object (BytesIO)."""
+    file_path = "./tests/inputs/iotest_HELIOTRON.h5"
+    with open(file_path, "rb") as f:
+        file_like_obj = BytesIO(f.read())
+    eq_from_file = load(file_path)
+    eq_from_bytesio = load(file_like_obj, "hdf5")
+    assert eq_from_file.equiv(eq_from_bytesio)

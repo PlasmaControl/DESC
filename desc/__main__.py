@@ -12,7 +12,7 @@ def main(cl_args=sys.argv[1:]):
     and prints and plots the resulting equilibrium.
 
     """
-    ir = InputReader(cl_args=cl_args)
+    ir = InputReader(cl_args=cl_args, save_converted_vmec_input=True)
 
     if ir.args.version:
         return
@@ -78,13 +78,13 @@ def main(cl_args=sys.argv[1:]):
             print("Plotting solution at step {}".format(i + 1))
             _ = plot_surfaces(eq)
             plt.show()
-            _ = plot_section(eq, "|F|", log=True, norm_F=True)
+            _ = plot_section(eq, "|F|_normalized", log=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
         _ = plot_surfaces(equil_fam[-1])
         plt.show()
-        _ = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)
+        _ = plot_section(equil_fam[-1], "|F|_normalized", log=True)
         plt.show()
 
 

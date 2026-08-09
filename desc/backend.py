@@ -12,6 +12,8 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+OMEGA_IS_0 = True
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
@@ -34,12 +36,12 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
-            x = jnp.linspace(0, 5)
+            x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
     except ModuleNotFoundError:
         jnp = np
-        x = jnp.linspace(0, 5)
+        x = jnp.linspace(0, 5, 2)
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
@@ -63,6 +65,19 @@ def print_backend_info():
     )
 
 
+def _diag_to_full(d, e):
+    j = np.arange(d.shape[-1])
+    return (
+        jnp.zeros(d.shape + (d.shape[-1],))
+        .at[..., j, j]
+        .set(d, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[:-1], j[1:]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+        .at[..., j[1:], j[:-1]]
+        .set(e, indices_are_sorted=True, unique_indices=True)
+    )
+
+
 if use_jax:  # noqa: C901
     from jax import custom_jvp, jit, vmap
     from jax.experimental.ode import odeint
@@ -70,14 +85,130 @@ if use_jax:  # noqa: C901
     from jax.nn import softmax as softargmax
     from jax.numpy import bincount, flatnonzero, repeat, take
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
-    from jax.scipy.fft import dct, idct
+    from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+
+    # TODO: remove fallback once JAX min version >= 0.10.0
+    if Version(jax.__version__) >= Version("0.10.0"):
+        from jax.scipy.linalg import qr_multiply
+    else:
+        # Implements `jax.scipy.linalg.qr_multiply` without the ``ormqr`` primitive
+        # (which requires a jaxlib rebuild), so it runs on any installed jaxlib. The
+        # Householder reflectors ``Q`` are applied to ``c`` via the blocked CWY/UT
+        # transform of Puglisi (1992) and Joffrain & Low (2006) without ever forming
+        # ``Q``, on large tall systems this beats forming ``Q`` (``orgqr``) and, on GPU,
+        # cuSOLVER's ``ormqr``.
+
+        # Ported from https://github.com/jax-ml/jax/pull/36575. The `DotAlgorithmPreset`
+        # used there only mattered for float32 throughput, which DESC does not use, so
+        # plain matmuls are used here. Block sizes are the upstream A100-tuned values.
+
+        def _householder_multiply(a, taus, c, *, transpose=False):
+            """Apply the reflectors in ``a``/``taus`` to ``c`` from the left, one block.
+
+            Forms ``Q = I - V T^{-1} V^H`` via the identity ``T^{-1} + T^{-H} = V^H V``,
+            recovering the triangular ``T^{-1}`` by correcting the diagonal.
+            """
+            m, k = a.shape
+            # V: unit lower-trapezoidal (reflectors below the diagonal, unit diagonal).
+            V = jnp.where(
+                jnp.tril(jnp.ones((m, k), bool), -1), a, jnp.eye(m, k, dtype=a.dtype)
+            )
+            diag_correction = (1 / taus) if transpose else (1 / taus).conj()
+            diag_correction = jnp.expand_dims(diag_correction, -1) * jnp.eye(
+                k, dtype=a.dtype
+            )
+            Vh = V.conj().swapaxes(-1, -2)
+            # solve_triangular reads only the relevant triangle, so passing the full
+            # Gram matrix V^H V (minus the diagonal correction) recovers T^{-1}.
+            T_inv = Vh @ V - diag_correction
+            z = solve_triangular(T_inv, Vh @ c, lower=transpose)
+            with jax.default_matmul_precision("highest"):
+                return c - V @ z
+
+        def _blocked_householder_multiply(a, taus, c, *, left, transpose):
+            """Apply Q (or Q^H) to c in blocks (block sizes tuned on A100)."""
+            if not left:  # c @ Q == (Q^H @ c^H)^H
+                ct = c.conj().swapaxes(-1, -2)
+                out = _blocked_householder_multiply(
+                    a, taus, ct, left=True, transpose=not transpose
+                )
+                return out.conj().swapaxes(-1, -2)
+
+            if a.ndim > 2:  # batch dims via vmap, keep the core logic 2-D
+                fn = functools.partial(
+                    _blocked_householder_multiply, left=True, transpose=transpose
+                )
+                return vmap(fn)(a, taus, c)
+
+            m = a.shape[0]
+            k = taus.shape[0]
+            if k == 0:  # no reflectors -> Q is the identity
+                return c
+            # Balances the per-block V^H V cost against the number of sequential blocks.
+            esize = a.dtype.itemsize
+            hi_limit = 4096 * max(1, 8 // esize)
+            mid_limit = 4096 * esize
+            nb = min(k, 256 if m <= hi_limit else 128 if m <= mid_limit else 64)
+
+            blocks = range(0, k, nb)
+            for j0 in blocks if transpose else reversed(blocks):
+                c = c.at[j0:, :].set(
+                    _householder_multiply(
+                        a[j0:, j0 : j0 + nb],
+                        taus[j0 : j0 + nb],
+                        c[j0:, :],
+                        transpose=transpose,
+                    )
+                )
+            return c
+
+        @functools.partial(jit, static_argnames="mode")
+        def qr_multiply(a, c, mode="right"):
+            """Pure-JAX drop-in for ``jax.scipy.linalg.qr_multiply``; returns `(CQ, R)`.
+
+            ``a = Q @ R`` is the (economic) QR factorization. For ``mode="right"``
+            returns ``c @ Q`` (with 1-D ``c`` treated as a length-``M`` row vector); for
+            ``mode="left"`` returns ``Q @ c``. ``R`` has shape ``(min(M, N), N)``.
+            """
+            m, n = a.shape
+            k = min(m, n)
+            # mode="raw" returns the packed reflectors (transposed) plus tau factors,
+            # via the existing geqrf primitive -- no new primitive / jaxlib rebuild.
+            h, taus = jnp.linalg.qr(a, mode="raw")
+            packed = h.swapaxes(
+                -1, -2
+            )  # (M, N): lower triangle = reflectors, upper = R
+            R = jnp.triu(packed)[:k, :]
+            # When m <= n geqrf's last reflector (row m-1) is the identity (tau == 0).
+            # Drop it statically -- the economic Q is unchanged and we avoid 1/0.
+            n_refl = k - 1 if m <= n else k
+            V = packed[:, :n_refl]
+            taus = taus[:n_refl]
+            c1d = c.ndim == 1
+
+            if mode == "right":
+                cq = _blocked_householder_multiply(
+                    V, taus, c[None, :] if c1d else c, left=False, transpose=False
+                )
+                cq = cq[:, :k]  # economic Q has min(M, N) columns
+                return (cq[0] if c1d else cq), R
+
+            C = c[:, None] if c1d else c
+            pad = jnp.zeros((m - k, C.shape[1]), C.dtype)
+            cq = _blocked_householder_multiply(
+                V, taus, jnp.vstack([C, pad]), left=True, transpose=False
+            )
+            return (cq[:, 0] if c1d else cq), R
+
     from jax.scipy.special import gammaln
     from jax.tree_util import (
         register_pytree_node,
+        tree_broadcast,
         tree_flatten,
         tree_leaves,
         tree_map,
+        tree_map_with_path,
         tree_structure,
         tree_unflatten,
         treedef_is_leaf,
@@ -134,8 +265,64 @@ if use_jax:  # noqa: C901
 
         return wrapper
 
-    # JAX implementation is not differentiable on gpu.
-    eigh_tridiagonal = execute_on_cpu(jax.scipy.linalg.eigh_tridiagonal)
+    _eigh_tridiagonal = jnp.vectorize(
+        jax.scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
+    if desc_config["kind"] == "gpu":
+        # JAX eigh_tridiagonal is not differentiable on gpu.
+        # https://github.com/jax-ml/jax/issues/23650
+        # # TODO (#1750): Eventually use this once it supports kwargs.
+        # https://docs.jax.dev/en/latest/_autosummary/jax.lax.platform_dependent.html
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            return jax.scipy.linalg.eigh(
+                _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+            )
+
+    else:
+
+        def eigh_tridiagonal(
+            d,
+            e,
+            *,
+            eigvals_only=False,
+            select="a",
+            select_range=None,
+            tol=None,
+        ):
+            """Wrapper for eigh_tridiagonal which is partially implemented in JAX.
+
+            Calls linalg.eigh when on GPU or when eigenvectors are requested.
+            """
+            # Reverse mode also not differentiable on CPU.
+            # TODO (#1750): Update logic when resolving the linked issue?
+            if True or not eigvals_only:
+                # https://github.com/jax-ml/jax/issues/14019
+                return jax.scipy.linalg.eigh(
+                    _diag_to_full(d, e), eigvals_only=eigvals_only, eigvals=select_range
+                )
+            return _eigh_tridiagonal(
+                d,
+                e,
+                eigvals_only=eigvals_only,
+                select=select,
+                select_range=select_range,
+                tol=tol,
+            )
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -304,8 +491,7 @@ if use_jax:  # noqa: C901
                 return state[0]
 
         def tangent_solve(g, y):
-            A = jax.jacfwd(g)(y)
-            return y / A
+            return y / g(1.0)
 
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
@@ -460,20 +646,26 @@ else:  # pragma: no cover
     execute_on_cpu = lambda func: func
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
-    from scipy.fft import dct, idct  # noqa: F401
+    from scipy.fft import dct, dctn, idct, idctn  # noqa: F401
     from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
         block_diag,
         cho_factor,
         cho_solve,
-        eigh_tridiagonal,
         qr,
+        qr_multiply,
         solve_triangular,
     )
     from scipy.special import gammaln  # noqa: F401
     from scipy.special import softmax as softargmax  # noqa: F401
 
     trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+
+    eigh_tridiagonal = np.vectorize(
+        scipy.linalg.eigh_tridiagonal,
+        signature="(m),(n)->(m)",
+        excluded={"eigvals_only", "select", "select_range", "tol"},
+    )
 
     def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
         """Generalizes jax.lax.map; uses numpy."""
@@ -532,6 +724,10 @@ else:  # pragma: no cover
         """Map pytree for numpy backend."""
         raise NotImplementedError
 
+    def tree_map_with_path(*args, **kwargs):
+        """Map pytree with path for numpy backend."""
+        raise NotImplementedError
+
     def tree_structure(*args, **kwargs):
         """Get structure of pytree for numpy backend."""
         raise NotImplementedError
@@ -542,6 +738,10 @@ else:  # pragma: no cover
 
     def treedef_is_leaf(*args, **kwargs):
         """Check is leaf of pytree for numpy backend."""
+        raise NotImplementedError
+
+    def tree_broadcast(*args, **kwargs):
+        """Broadcast pytree for numpy backend."""
         raise NotImplementedError
 
     def register_pytree_node(foo, *args):

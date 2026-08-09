@@ -3,11 +3,18 @@
 import numpy as np
 
 from desc.backend import jnp, vmap
-from desc.compute import get_profiles, get_transforms, rpz2xyz
-from desc.compute.geom_utils import copy_rpz_periods
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.utils import Timer, errorif, parse_argname_change, safenorm, warnif
+from desc.utils import (
+    Timer,
+    copy_rpz_periods,
+    errorif,
+    parse_argname_change,
+    rpz2xyz,
+    safenorm,
+    warnif,
+)
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -100,6 +107,7 @@ class AspectRatio(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -135,7 +143,7 @@ class AspectRatio(_Objective):
             Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -143,8 +151,7 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -243,6 +250,7 @@ class Elongation(_Objective):
                     M=eq.M * 2,
                     N=eq.N * 2,
                     NFP=eq.NFP,
+                    sym=False,
                 )
         else:
             grid = self._grid
@@ -278,7 +286,7 @@ class Elongation(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -286,8 +294,7 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -423,7 +430,7 @@ class Volume(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -431,8 +438,7 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -500,6 +506,15 @@ class PlasmaVesselDistance(_Objective):
         target_default="``bounds=(1,np.inf)``.",
         bounds_default="``bounds=(1,np.inf)``.",
     )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_fixed",
+        "_equil_data_keys",
+        "_surface_fixed",
+        "_surface_data_keys",
+        "_use_signed_distance",
+        "_use_softmin",
+    ]
 
     _coordinates = "rtz"
     _units = "(m)"
@@ -715,7 +730,7 @@ class PlasmaVesselDistance(_Objective):
             Only needed if self._surface_fixed = False
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -723,8 +738,7 @@ class PlasmaVesselDistance(_Objective):
             For each point in the surface grid, approximate distance to plasma.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             surface_params = params_1
         elif self._surface_fixed:
@@ -926,7 +940,7 @@ class MeanCurvature(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -934,8 +948,7 @@ class MeanCurvature(_Objective):
             Mean curvature at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1066,7 +1079,7 @@ class PrincipalCurvature(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1074,8 +1087,7 @@ class PrincipalCurvature(_Objective):
             Max absolute principal curvature at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1195,7 +1207,7 @@ class BScaleLength(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1203,8 +1215,7 @@ class BScaleLength(_Objective):
             Magnetic field scale length at each point (m).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1330,7 +1341,7 @@ class GoodCoordinates(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1338,8 +1349,7 @@ class GoodCoordinates(_Objective):
             coordinate goodness error, (m^6)
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -1477,7 +1487,7 @@ class MirrorRatio(_Objective):
             eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1485,8 +1495,7 @@ class MirrorRatio(_Objective):
             Mirror ratio on each surface.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,

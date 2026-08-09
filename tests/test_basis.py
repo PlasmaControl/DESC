@@ -400,6 +400,49 @@ class TestBasis:
         with pytest.raises(ValueError):
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
+    @pytest.mark.unit
+    def test_basis_hash(self):
+        """Test that all basis classes can be hashable."""
+        all_bases = []
+        all_types = []
+        all_bases.append([PowerSeries(L=3), PowerSeries(L=3)])
+        all_bases.append([FourierSeries(N=3), FourierSeries(N=3)])
+        all_bases.append([DoubleFourierSeries(M=3, N=3), DoubleFourierSeries(M=3, N=3)])
+        all_bases.append([ZernikePolynomial(L=3, M=3), ZernikePolynomial(L=3, M=3)])
+        all_bases.append(
+            [FourierZernikeBasis(L=3, M=3, N=3), FourierZernikeBasis(L=3, M=3, N=3)]
+        )
+        all_bases.append(
+            [
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+                ChebyshevDoubleFourierBasis(L=3, M=3, N=3),
+            ]
+        )
+        all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
+        for basis1, basis2 in all_bases:
+            # check that hash is consistent
+            assert hash(basis1) == hash(basis2)
+            # check that equality is consistent
+            assert basis1 == basis2
+            # check that they are not the same object (i.e., not the same instance)
+            assert basis1 is not basis2
+
+            all_types.append(str(basis1.__class__.__name__))
+
+        bases1 = [hash(basis[0]) for basis in all_bases]
+        bases2 = [hash(basis[1]) for basis in all_bases]
+
+        # check that all bases have unique hashes
+        assert len(bases1) == len(set(bases1))
+        assert len(bases2) == len(set(bases2))
+
+        import desc
+
+        # chech that this test tests all basis types
+        assert set(all_types) == set(
+            desc.basis.__all__
+        ), "Not all basis types were tested."
+
 
 @pytest.mark.unit
 def test_jacobi_jvp():

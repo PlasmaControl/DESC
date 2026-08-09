@@ -1,6 +1,13 @@
 Changelog
 =========
 
+Performance Improvements
+
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+
+v0.17.3
+-------
+
 New Features
 
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
@@ -13,7 +20,6 @@ Performance Improvements
 - Adds a pure-JAX ``qr_multiply`` fallback (a blocked Householder / compact-WY implementation) for ``jax < 0.10.0``, so the above ``Q``-avoidance speedup is available on the currently pinned JAX with no jaxlib rebuild (~1.5-2x faster than forming ``Q`` on CPU for tall Jacobians, larger on GPU).
 - Adds ``surf_batch_size`` kwarg to Boozer and omnigenous field compute variables, to allow for tuning of the memory usage when computing these quantities by choosing how many surfaces to simultaneously compute.
   - Also adds ``surf_batch_size`` as an additional kwarg to ``make_boozmn_output``, as well as the objectives ``Omnigenity`` and ``QuasisymmetryBoozer``
-- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size`.
 
 Bug Fixes
 

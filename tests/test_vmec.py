@@ -1027,6 +1027,25 @@ def test_vmec_save_asym(VMEC_save_asym):
     np.testing.assert_allclose(
         vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=2
     )
+    assert desc.variables["jcuru"].long_name == (
+        "flux surface average of sqrt(g)*J^theta, on full mesh"
+    )
+    assert desc.variables["jcurv"].long_name == (
+        "flux surface average of sqrt(g)*J^zeta, on full mesh"
+    )
+    s_full = np.linspace(0, 1, desc.dimensions["radius"].size)
+    expected_currumns_axis = desc.variables["currumns"][1, :] - (
+        (desc.variables["currumns"][2, :] - desc.variables["currumns"][1, :])
+        / (s_full[2] - s_full[1])
+        * s_full[1]
+    )
+    expected_currvmns_axis = desc.variables["currvmns"][1, :] - (
+        (desc.variables["currvmns"][2, :] - desc.variables["currvmns"][1, :])
+        / (s_full[2] - s_full[1])
+        * s_full[1]
+    )
+    np.testing.assert_allclose(desc.variables["currumns"][0, :], expected_currumns_axis)
+    np.testing.assert_allclose(desc.variables["currvmns"][0, :], expected_currvmns_axis)
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=6e-2
     )

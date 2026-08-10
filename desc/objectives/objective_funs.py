@@ -424,6 +424,7 @@ class ObjectiveFunction(IOAble):
             "vjp_scaled_error",
             "vjp_unscaled",
         ]
+        methods.append("hessp")
         for method in methods:
             try:
                 setattr(
@@ -848,26 +849,14 @@ class ObjectiveFunction(IOAble):
             Derivative(self.compute_scalar, mode="hess")(x, constants).squeeze()
         )
 
-    # @jit
-    # def hvp_gauss_newton(self, x, v, constants=None):
-    #     """Compute approximate Hessian-vector product of compute_scalar.
-
-    #     Computes the Gauss-Newton approximation of the Hessian, valid for
-    #     least-squares problems.
-    #     """
-    #     if constants is None:
-    #         constants = self.constants
-
-    #     def hvp(f, x, v):
-    #         _, Jv = jax.jvp(f, (x,), (v,))
-    #         print(Jv)
-    #         _,vjpfun = jax.vjp(f, x)
-    #         JtJv = vjpfun(Jv)[0]
-    #         return JtJv
-
-    #     Jv = self.jvp_scaled_error()
-
-    #     return
+    # TODO: cannot use @jit here for some reason, so we jit it later
+    # in the scipy_wrappers, should jit here though
+    def hessp(self, x, v, constants=None):
+        """Compute Hessian-vector product of self.compute_scalar wrt x."""
+        constants = self._get_deprecated_constants(constants)
+        return jnp.atleast_1d(
+            Derivative.compute_hvp(self.compute_scalar, 0, v, x, constants).squeeze()
+        )
 
     @jit
     def jac_scaled(self, x, constants=None):

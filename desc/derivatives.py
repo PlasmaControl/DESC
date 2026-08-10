@@ -116,7 +116,7 @@ class AutoDiffDerivative(_Derivative):
         One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
         ``'hess'`` (Hessian of a scalar function),
-        or ``'jvp'`` (Jacobian vector product)
+        ``'jvp'`` (Jacobian vector product), or ``'hvp'`` (Hessian-vector product)
         Default = ``'fwd'``
 
     Raises
@@ -219,6 +219,48 @@ class AutoDiffDerivative(_Derivative):
         return u
 
     @classmethod
+    def compute_hvp(cls, fun, argnum, v, *args, **kwargs):
+        """Compute d^2f/dx^2*v.
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        v : array-like or tuple of array-like
+            tangent vectors. Should be one for each argnum
+        args : tuple
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
+
+        Returns
+        -------
+        hvp : array-like
+            Hessian times vectors v, summed over different argnums
+
+        """
+        _ = kwargs.pop("rel_step", None)  # unused by autodiff
+
+        def _fun(*x):
+            _args = list(args)
+            argnums = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
+            for i, xi in zip(argnums, x):
+                _args[i] = xi
+            return fun(*_args, **kwargs)
+
+        if jnp.isscalar(argnum):
+            grad_fun = jax.grad(_fun, argnum)
+            _, u = jax.jvp(grad_fun, (args[argnum],), (v,))
+        else:
+            argnum = tuple(argnum)
+            v = ensure_tuple(v)
+            grad_fun = jax.grad(_fun, argnum)
+            _, u = jax.jvp(grad_fun, tuple(args[i] for i in argnum), v)
+        return u
+
+    @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
         """Compute d^2f/dx^2*v1*v2.
 
@@ -317,8 +359,11 @@ class AutoDiffDerivative(_Derivative):
     def _compute_jvp(self, v, *args, **kwargs):
         return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
+    def _compute_hvp(self, v, *args, **kwargs):
+        return self.compute_hvp(self._fun, self.argnum, v, *args, **kwargs)
+
     def _set_mode(self, mode) -> None:
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp", "hvp"]:
             raise ValueError("invalid mode option for automatic differentiation")
 
         self._mode = mode
@@ -340,6 +385,8 @@ class AutoDiffDerivative(_Derivative):
             )
         elif self._mode == "jvp":
             self._compute = self._compute_jvp
+        elif self._mode == "hvp":
+            self._compute = self._compute_hvp
 
 
 Derivative = AutoDiffDerivative

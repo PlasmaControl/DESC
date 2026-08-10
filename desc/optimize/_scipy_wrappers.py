@@ -4,7 +4,7 @@ import numpy as np
 import scipy.optimize
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 
 from .optimizer import register_optimizer
 from .utils import (
@@ -107,6 +107,7 @@ def _optimize_scipy_minimize(  # noqa: C901
         # has no effect anyways, so safe to remove
         options.pop("disp")
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+    hessp_fun = getattr(objective, "hessp", None)
     # don't call hess if the method is approximating the hessian, since we probably
     # are avoiding it due to it being expensive
     use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
@@ -120,6 +121,8 @@ def _optimize_scipy_minimize(  # noqa: C901
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
         options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
         options.setdefault("max_trust_radius", np.inf)
+
+    use_hessp = method in ["scipy-Newton-CG", "scipy-trust-ncg", "scipy-trust-krylov"]
     # need to use some "global" variables here
     allx = [x0]
     func_allx = []
@@ -170,7 +173,18 @@ def _optimize_scipy_minimize(  # noqa: C901
             hess_allf.append(H)
         return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
-    hess_wrapped = None if not use_hessian else hess_wrapped
+    hess_wrapped = None if not use_hessian or use_hessp else hess_wrapped
+    if use_hessp:
+        if hessp_fun is not None:
+
+            @jit
+            def hessp_wrapped(xs, p):
+                return scale * hessp_fun(xs * scale, p * scale)
+
+        else:
+            hessp_wrapped = None
+    else:
+        hessp_wrapped = None
 
     def callback(xs):
         x1 = xs * scale
@@ -255,6 +269,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
+            hessp=hessp_wrapped,
             tol=stoptol["gtol"],
             options=options,
             callback=callback,

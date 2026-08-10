@@ -361,3 +361,21 @@ class TestJVP:
             self.fun, 0, self.y, self.x, self.c1, self.c2
         )
         np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]), rtol=1e-4)
+
+    @pytest.mark.unit
+    def test_hvp(self):
+        """Tests using AD for Hessian-vector product calculation."""
+
+        def scalar_fun(x, y, a):
+            return jnp.sum(jnp.sin(x) + x * y + a)
+
+        v = np.array([1.0, 2.0, 3.0])
+        expected = -np.sin(self.x) * v
+
+        df = AutoDiffDerivative.compute_hvp(scalar_fun, 0, v, self.x, self.c1, self.c2)
+        np.testing.assert_allclose(df, expected)
+
+        df = AutoDiffDerivative(scalar_fun, argnum=0, mode="hvp")(
+            v, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, expected)

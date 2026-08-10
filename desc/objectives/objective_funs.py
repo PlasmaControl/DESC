@@ -520,9 +520,10 @@ class ObjectiveFunction(IOAble):
             "'batched' deriv_mode differentiates the whole ObjectiveFunction in "
             "forward mode, but these sub-objectives are set to use reverse mode "
             "(either automatically, from their input/output sizes, or by user): "
-            f"{rev_objs}. In forward mode these may under-perform, or may not "
-            "work at all. Consider 'blocked' deriv_mode. See the sub-objective "
-            "docstrings for details.",
+            f"{rev_objs}. \n"
+            "In forward mode these may under-perform, or they may not "
+            "support forward mode. Consider 'blocked' deriv_mode. See the "
+            "sub-objective docstrings for details.",
         )
 
         errorif(

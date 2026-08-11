@@ -37,6 +37,7 @@ from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import ForceBalance, ObjectiveFunction
 from desc.objectives.getters import get_fixed_boundary_constraints
+from desc.optimize import run_with_mpi
 
 if __name__ == "__main__":
     rank = MPI.COMM_WORLD.Get_rank()
@@ -91,19 +92,19 @@ if __name__ == "__main__":
         mpi=MPI,
         deriv_mode="blocked",
     )
-    obj.build()
     cons = get_fixed_boundary_constraints(eq)
 
     # Until this line, the code is performed on all ranks, so it might print some
     # information multiple times. The following part will only be performed on the
     # master rank
 
-    # this context manager will put the workers in a loop to listen to the master
-    # to compute the objective function and its derivatives
-    with obj:
+    # this context manager builds the problem on every rank, then puts the workers in
+    # a loop to listen to the master to compute the objective function and its
+    # derivatives. Only the master rank gets is_root=True.
+    with run_with_mpi(obj, cons) as is_root:
         # apart from cost evaluation and derivatives, everything else will be only
         # performed on the master rank
-        if rank == 0:
+        if is_root:
             eq.solve(
                 objective=obj,
                 constraints=cons,

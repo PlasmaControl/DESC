@@ -649,6 +649,48 @@ def build_for_mpi(objective, constraints=(), verbose=1):
     return objective
 
 
+@contextlib.contextmanager
+def run_with_mpi(objective, constraints=(), verbose=1):
+    """Build a problem for MPI and keep the worker ranks listening to the root rank.
+
+    Combines ``build_for_mpi`` with the context manager of the ObjectiveFunction, so
+    that a parallel script is
+
+        with run_with_mpi(objective, constraints) as is_root:
+            if is_root:
+                eq.optimize(objective=objective, constraints=constraints, ...)
+
+    Every rank builds the objective and the nonlinear constraints, then the worker
+    ranks wait for the root rank to send them work, until the context is exited. Only
+    the root rank gets ``is_root=True``, since the optimization itself is done by it
+    alone. If the objective is not parallel, this only builds it and every rank is the
+    root rank, so that the same script can be run with and without MPI.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize, created with an ``mpi`` communicator.
+    constraints : tuple of Objective
+        The same constraints that will be passed to the optimizer. The nonlinear ones
+        are computed in parallel only if they are given a ``rank`` or a ``device_id``,
+        otherwise they are computed on the root rank as usual.
+    verbose : int, optional
+        Level of output. Only the root rank prints.
+
+    Yields
+    ------
+    is_root : bool
+        Whether this rank is the one that should run the optimization.
+
+    """
+    objective = build_for_mpi(objective, constraints, verbose)
+    if not objective._is_mpi:
+        yield True
+    else:
+        with objective:
+            yield objective.rank == 0
+
+
 def _maybe_wrap_nonlinear_constraints(
     eq, objective, nonlinear_constraints, method, options, nonlinear_constraint=None
 ):

@@ -40,6 +40,7 @@ from desc.optimize import (
     Optimizer,
     ProximalProjection,
     build_for_mpi,
+    run_with_mpi,
 )
 
 
@@ -101,7 +102,6 @@ def test_multidevice_objective_attributes():
 @pytest.mark.mpi_run
 def test_multidevice_compute():
     """Test that objective compute gives same results."""
-    rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
 
     gM = eq.M_grid
@@ -132,8 +132,8 @@ def test_multidevice_compute():
         )
         obj2.build()
 
-    with obj2:
-        if rank == 0:
+    with run_with_mpi(obj2) as is_root:
+        if is_root:
             f1 = obj1.compute_scalar(obj1.x(eq))
             f2 = obj2.compute_scalar(obj2.x(eq))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
@@ -154,7 +154,6 @@ def test_multidevice_compute():
 @pytest.mark.mpi_run
 def test_multidevice_derivatives():
     """Test that objective derivatives gives same results."""
-    rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
 
     gM = eq.M_grid
@@ -185,8 +184,8 @@ def test_multidevice_derivatives():
         )
         obj2.build()
 
-    with obj2:
-        if rank == 0:
+    with run_with_mpi(obj2) as is_root:
+        if is_root:
             with pytest.raises(NotImplementedError):
                 _ = obj2.grad(obj2.x(eq))
 
@@ -206,7 +205,6 @@ def test_multidevice_derivatives():
 @pytest.mark.mpi_run
 def test_multidevice_linear_proj_derivatives():
     """Test that linear projection derivatives gives same results."""
-    rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
 
     gM = eq.M_grid
@@ -244,8 +242,8 @@ def test_multidevice_linear_proj_derivatives():
     obj1.build()
     obj2.build()
 
-    with objf2:
-        if rank == 0:
+    with run_with_mpi(objf2) as is_root:
+        if is_root:
             with pytest.raises(NotImplementedError):
                 _ = obj2.grad(obj2.x(eq))
 
@@ -265,7 +263,6 @@ def test_multidevice_linear_proj_derivatives():
 @pytest.mark.mpi_run
 def test_multidevice_nonlinear_constraint_derivatives():
     """Test that parallel nonlinear constraints give same results."""
-    rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(1, 1, 1, 2, 2, 2)
@@ -293,7 +290,6 @@ def test_multidevice_nonlinear_constraint_derivatives():
         ForceBalance(eq=eq, grid=grid1, device_id=0, rank=0),
         ForceBalance(eq=eq, grid=grid2, device_id=1, rank=1),
     ) + get_fixed_boundary_constraints(eq)
-    objective = build_for_mpi(objective, constraints, verbose=0)
 
     # same constraints on a single device, to compare against
     con1 = ObjectiveFunction(
@@ -302,8 +298,8 @@ def test_multidevice_nonlinear_constraint_derivatives():
     )
     con1.build(verbose=0)
 
-    with objective:
-        if rank == 0:
+    with run_with_mpi(objective, constraints, verbose=0) as is_root:
+        if is_root:
             con2 = objective._constraints
             assert con2._is_mpi
             assert [len(ids) for ids in con2._obj_per_rank] == [1, 1, 0]
@@ -329,7 +325,6 @@ def test_multidevice_nonlinear_constraint_derivatives():
 @pytest.mark.mpi_run
 def test_multidevice_proximal_derivatives():
     """Test that proximal derivatives gives same results."""
-    rank = MPI.COMM_WORLD.Get_rank()
     eq = get("precise_QH")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(1, 1, 1, 2, 2, 2)
@@ -389,8 +384,8 @@ def test_multidevice_proximal_derivatives():
     prox1.build()
     prox2.build()
 
-    with objective2:
-        if rank == 0:
+    with run_with_mpi(objective2) as is_root:
+        if is_root:
             f1 = prox1.grad(prox1.x(eq1))
             f2 = prox2.grad(prox2.x(eq2))
             np.testing.assert_allclose(f2, f1, atol=1e-8)
@@ -500,7 +495,8 @@ def test_multidevice_eq_solve():
     # deriv_mode will be set to "blocked" automatically
     with pytest.warns(UserWarning, match="When using multiple devices"):
         obj = ObjectiveFunction([obj1, obj2, obj3], mpi=MPI)
-        # there is no constraint here, this only builds the objective on every rank
+        # there is no constraint here, this only builds the objective on every rank,
+        # run_with_mpi below then only has to start the worker loop
         obj = build_for_mpi(obj)
 
     # creating grids like grid3 = [grid1, grid2] doesn't give the same
@@ -508,8 +504,8 @@ def test_multidevice_eq_solve():
     # or the objective values directly. Instead, we compare the objective
     # values before and after a single iteration of the solver. This should
     # always decrease the objective value.
-    with obj:
-        if rank == 0:
+    with run_with_mpi(obj) as is_root:
+        if is_root:
             f0 = obj.compute_scalar(obj.x(eq)).block_until_ready()
             eq.solve(objective=obj, maxiter=2, verbose=3)
             f1 = obj.compute_scalar(obj.x(eq))
@@ -606,12 +602,11 @@ def test_multidevice_eq_optimize():
         FixCurrent(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+
     # every rank builds the objective, the constraints are not given a rank so they
     # are computed on the root rank as usual
-    objective = build_for_mpi(objective, constraints, verbose=verbose)
-
-    with objective:
-        if rank == 0:
+    with run_with_mpi(objective, constraints, verbose=verbose) as is_root:
+        if is_root:
             f0 = objective.compute_scalar(objective.x(eq))
             eq.optimize(
                 objective=objective,

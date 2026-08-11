@@ -48,7 +48,7 @@ from desc.objectives import (
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
 )
-from desc.optimize import Optimizer
+from desc.optimize import Optimizer, run_with_mpi
 
 if __name__ == "__main__":
     rank = MPI.COMM_WORLD.Get_rank()
@@ -109,11 +109,8 @@ if __name__ == "__main__":
     # Parallel objective function needs the MPI communicator
     # If you don't specify `deriv_mode=blocked`, you will get a warning and DESC will
     # automatically switch to `blocked`.
+    # this is not built here, `run_with_mpi` below builds it on every rank
     objective = ObjectiveFunction(objs, deriv_mode="blocked", mpi=MPI)
-    if rank == 0:
-        objective.build(verbose=3)
-    else:
-        objective.build(verbose=0)
 
     # we will fix some modes as usual
     R_modes = np.vstack(
@@ -127,6 +124,9 @@ if __name__ == "__main__":
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
     ]
+    # nonlinear constraints can be given a device_id and rank to run them on different
+    # devices as well, but that is not supported by the proximal wrapper yet, so here
+    # ForceBalance is computed on the master rank
     constraints = (
         ForceBalance(eq=eq),
         FixBoundaryR(eq=eq, modes=R_modes),
@@ -141,12 +141,13 @@ if __name__ == "__main__":
     # information multiple times. The following part will only be performed on the
     # master rank
 
-    # this context manager will put the workers in a loop to listen to the master
-    # to compute the objective function and its derivatives
-    with objective:
+    # this context manager builds the problem on every rank, then puts the workers in
+    # a loop to listen to the master to compute the objective function and its
+    # derivatives. Only the master rank gets is_root=True, and prints.
+    with run_with_mpi(objective, constraints, verbose=3) as is_root:
         # apart from cost evaluation and derivatives, everything else will be only
         # performed on the master rank
-        if rank == 0:
+        if is_root:
             eq.optimize(
                 objective=objective,
                 constraints=constraints,

@@ -7,6 +7,7 @@ import desc.examples
 from desc.backend import jit
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
+    DoubleChebyshevFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -14,7 +15,7 @@ from desc.basis import (
     ZernikePolynomial,
 )
 from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGrid, CylindricalGrid, Grid, LinearGrid
 from desc.transform import Transform
 
 
@@ -491,6 +492,72 @@ class TestTransform:
         assert t.method == "direct1"
 
     @pytest.mark.unit
+    def test_rpz_warnings(self):
+        """Test warnings when trying to use RPZ methods if they won't work."""
+        # Grid has correct spacing for RPZ and partial RPZ methods
+        g = LinearGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=2)
+        for method in ["rpz", "partialrpz"]:
+            with pytest.warns(UserWarning, match="compatible basis and grid"):
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+
+        # Basis is correct
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = FourierZernikeBasis(2, 2, 2, NFP=2)
+        for method in ["rpz", "partialrpz", "directrpz"]:
+            with pytest.warns(
+                UserWarning, match="compatible basis and grid|basis of type"
+            ):
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+
+        # Grid and basis have same L and N
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(3, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="same L and N"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # Grid and basis have same NFP
+        g = CylindricalGrid(2, 2, 2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=3)
+        for method in ["rpz", "partialrpz"]:
+            with pytest.warns(UserWarning) as record:
+                t = Transform(g, b, method=method)
+            assert t.method == "direct1"
+            NFP_grid_basis_warning_exists = False
+            nodes_warning_exists = False
+            for r in record:
+                if "Unequal number of field periods" in str(r.message):
+                    NFP_grid_basis_warning_exists = True
+                if "same NFP" in str(r.message):
+                    nodes_warning_exists = True
+
+            assert NFP_grid_basis_warning_exists and nodes_warning_exists
+
+        # Cylindrical grid has correct node pattern
+        g = CylindricalGrid(R=[0.1, 0.2, 0.3], M=2, N=2, NFP=2)
+        b = DoubleChebyshevFourierBasis(2, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="custom node patterns"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # 0-resolution grids not allowed
+        g = CylindricalGrid(M=2, N=2, NFP=2)
+        b = DoubleChebyshevFourierBasis(0, 2, 2, NFP=2)
+        with pytest.warns(UserWarning, match="0-resolution"):
+            t = Transform(g, b, method="rpz")
+        assert t.method == "direct1"
+
+        # Direct RPZ method requires a meshgrid
+        g = Grid([[1, 0, 1], [0, 1, 0], [3, 1, 0]])
+        b = DoubleChebyshevFourierBasis(g.L, g.M, g.N)
+        with pytest.warns(UserWarning, match="tensor product grid"):
+            t = Transform(g, b, method="directrpz")
+        assert t.method == "direct1"
+
+    @pytest.mark.unit
     def test_fit_direct1_and_jitable(self):
         """Test fitting with direct1 and jitable method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
@@ -530,6 +597,104 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_diff_rpz(self):
+        """Test fitting and differentiation with RPZ method."""
+        # Build grid, basis, and transform
+        grid = CylindricalGrid(L=10, N=5, M=5, NFP=2)
+        r, phi, z = grid.nodes.T
+
+        # Create a basis that corresponds to the grid, and a transform between them
+        basis = DoubleChebyshevFourierBasis(grid.L, 6, grid.N, NFP=grid.NFP)
+        transform = Transform(
+            grid, basis, build=True, build_pinv=True, derivs=2, method="rpz"
+        )
+
+        # Define a test function with a known analytic derivative
+        def f(r, phi, z):
+            return np.stack(
+                [
+                    (np.cos(r)) * np.cos(6 * phi) * (1 - z) ** 3,
+                    r**2 * np.sin(2 * phi) * np.exp(z),
+                ]
+            ).T
+
+        def df(r, phi, z):
+            return 216 * np.sin(r) * np.cos(6 * phi) * (1 - z)
+
+        # Evaluate the derivative numerically and analyically
+        y = f(r, phi, z)
+        y_c = transform.fit(y)
+        numerical = transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(y[:, 0], transform.transform(y_c[:, 0]), atol=1e-7)
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, df(r, phi, z), atol=1e-7)
+
+        # Create an arbitrary grid and use the direct RPZ (partial sum) method
+        R = np.arange(0, 1, 0.1)
+        Z = np.arange(0, 1, 0.1)
+        out_grid = CylindricalGrid(R=R, M=5, Z=Z, NFP=basis.NFP)
+        out_transform = Transform(
+            out_grid, basis, derivs=2, build=True, method="directrpz"
+        )
+
+        r, phi, z = out_grid.nodes.T
+
+        # Calculate the derivatives both numerically and analytically
+        numerical = out_transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(
+            f(r, phi, z)[:, 0], out_transform.transform(y_c[:, 0]), atol=1e-7
+        )
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, df(r, phi, z), atol=1e-7)
+
+        # Try directRPZ method
+
+        # Create an arbitrary grid and use the partial RPZ (partial sum) method
+        R = np.arange(0, 1, 0.1)
+        Z = np.arange(0, 1, 0.1)
+        out_grid = CylindricalGrid(R=R, M=10, Z=Z, NFP=basis.NFP)
+        out_transform = Transform(
+            out_grid, basis, derivs=2, build=True, method="partialrpz"
+        )
+
+        r, phi, z = out_grid.nodes.T
+
+        # Calculate the derivatives both numerically and analytically
+        numerical = out_transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(
+            f(r, phi, z)[:, 0], out_transform.transform(y_c[:, 0]), atol=1e-7
+        )
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, df(r, phi, z), atol=1e-7)
+
+        # Try fitting to a lower resolution basis
+        basis = DoubleChebyshevFourierBasis(grid.L, 3, grid.N, NFP=grid.NFP)
+        transform = Transform(
+            grid, basis, build=True, build_pinv=True, derivs=2, method="rpz"
+        )
+
+        # Evaluate the derivative numerically and analyically
+        r, phi, z = grid.nodes.T
+        y = f(r, phi, z)
+        y_c = transform.fit(y)
+        numerical = transform.transform(y_c[:, 0], dr=1, dt=2, dz=2)
+
+        # Assert that transforming back to real space gives back y
+        np.testing.assert_allclose(y[:, 0], transform.transform(y_c[:, 0]), atol=1e-7)
+
+        # Assert that the numerical and analytical derivatives are the same
+        np.testing.assert_allclose(numerical, df(r, phi, z), atol=1e-7)
 
     @pytest.mark.unit
     def test_empty_grid(self):

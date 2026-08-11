@@ -1518,7 +1518,7 @@ def test_precomputed_biot_savart_source():
         coilset._as_precomputed_source(source_grid=[LinearGrid(N=40)])
 
     # field_line_integrate takes the precomputed path automatically for coil
-    # fields; wrapping in SumMagneticField forces the generic path
+    # fields
     r0 = np.array([10.1, 10.3])
     z0 = np.zeros_like(r0)
     phis = np.linspace(0, 2 * np.pi / 5, 3)

@@ -1854,7 +1854,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
                     -(len(theta_n) // 2), len(theta_n) // 2 + 1
                 )
             else:
-                self._modes_theta = jnp.array(modes_theta)
+                self._modes_theta = np.array(modes_theta)
             if theta_n is None:
                 self._theta_n = jnp.zeros_like(self._modes_theta, dtype=float)
             else:
@@ -1873,7 +1873,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             if modes_zeta is None:
                 self._modes_zeta = np.arange(-(len(zeta_n) // 2), len(zeta_n) // 2 + 1)
             else:
-                self._modes_zeta = jnp.array(modes_zeta)
+                self._modes_zeta = np.array(modes_zeta)
             if zeta_n is None:
                 self._zeta_n = jnp.zeros_like(self._modes_zeta, dtype=float)
             else:

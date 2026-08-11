@@ -107,7 +107,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^theta_PEST_v)|PEST",
-    label="\\partial_{\\vartheta} J^{\\theta_{PEST}}",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} J^{\\vartheta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant PEST poloidal component of plasma current density"
@@ -144,7 +144,7 @@ def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(J^theta_PEST_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\vartheta} J^{\\theta_{PEST}}",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} J^{\\vartheta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant PEST poloidal component of plasma current density"

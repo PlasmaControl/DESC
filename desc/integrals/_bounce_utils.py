@@ -1,34 +1,46 @@
-"""Utilities for bounce integrals."""
+"""Utilities for bounce integrals.
+
+Note that since the filename is preceded by an underscore,
+these utilities are private, and although it is unlikely,
+their API may change without warning.
+"""
+
+from functools import partial
 
 import numpy as np
 from interpax import CubicSpline, PPoly
-from matplotlib import pyplot as plt
-
-from desc.backend import dct, ifft, jnp
-from desc.integrals._interp_utils import (
-    cheb_from_dct,
-    cheb_pts,
-    idct_mmt,
-    ifft_mmt,
-    irfft_mmt,
-    nufft1d2r,
-    polyroot_vec,
-    polyval_vec,
-)
-from desc.integrals.basis import (
+from interpax_fft import (
     FourierChebyshevSeries,
     PiecewiseChebyshevSeries,
-    _add2legend,
-    _in_epigraph_and,
-    _plot_intersect,
+    cheb_from_dct,
+    cheb_pts,
+    epigraph_and,
+    idct_mmt,
+    ifft_mmt,
+    irfft_mmt_pos,
+    take_mask,
+)
+from interpax_fft._series import _add2legend, _plot_intersect
+from matplotlib import pyplot as plt
+from orthax.chebyshev import chebvander
+
+from desc.backend import dct, ifft, jax, jnp
+from desc.integrals._interp_utils import (
+    _JF_BUG,
+    _eps,
+    chebder,
+    nufft1d2r,
+    nufft2d2r,
+    poly_val,
+    polyroot_vec,
 )
 from desc.integrals.quad_utils import bijection_from_disc
-from desc.utils import atleast_nd, flatten_mat, setdefault, take_mask
+from desc.utils import atleast_nd, flatten_mat, setdefault
 
 _sentinel = -1e5
 
 
-def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
+def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -40,28 +52,25 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
         Shape (N, ).
         ζ coordinates of spline knots. Must be strictly increasing.
     B : jnp.ndarray
-        Shape (..., N - 1, B.shape[-1]).
+        Shape (..., N - 1, 4).
         Polynomial coefficients of the spline of B in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    dB_dz : jnp.ndarray
-        Shape (..., N - 1, B.shape[-1] - 1).
-        Polynomial coefficients of the spline of (∂B/∂ζ)|(ρ,α) in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
     num_well : int or None
         Specify to return the first ``num_well`` pairs of bounce points for each
-        pitch and field line. Default is ``None``, which will detect all wells,
-        but due to current limitations in JAX this will have worse performance.
+        pitch and field line. Choosing ``-1`` will detect all wells, but due
+        to current limitations in JAX this will have worse performance.
         Specifying a number that tightly upper bounds the number of wells will
         increase performance. In general, an upper bound on the number of wells
-        per toroidal transit is ``Aι+B`` where ``A``, ``B`` are the poloidal and
+        per toroidal transit is ``Aι+C`` where ``A``, ``C`` are the poloidal and
         toroidal Fourier resolution of B, respectively, in straight-field line
         PEST coordinates, and ι is the rotational transform normalized by 2π.
-        A tighter upper bound than ``num_well=(Aι+B)*num_transit`` is preferable.
+        A tighter upper bound than ``num_well=(Aι+C)*num_transit`` is preferable.
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
+    return_mask : bool
+        Whether to return the mask ``z1<z2``. Default is ``False``.
 
     Returns
     -------
@@ -76,8 +85,9 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
         line and pitch, is padded with zero.
 
     """
+    B = B[..., None, :, :]
     intersect = polyroot_vec(
-        c=B[..., None, :, :],
+        c=B,
         k=jnp.atleast_1d(pitch_inv)[..., None],
         a_min=jnp.array([0.0]),
         a_max=jnp.diff(knots),
@@ -87,37 +97,221 @@ def bounce_points(pitch_inv, knots, B, dB_dz, num_well=None):
     )
     assert intersect.shape[-2:] == (knots.size - 1, B.shape[-1] - 1)
 
-    dB_dz = flatten_mat(
-        jnp.sign(polyval_vec(x=intersect, c=dB_dz[..., None, :, None, :]))
-    )
+    dB_dz = flatten_mat(jnp.sign(poly_val(x=intersect, c=B[..., None, :], der=True)))
     # Only consider intersect if it is within knots that bound that polynomial.
     mask = flatten_mat(intersect >= 0)
-    # We ignore the bounce points of particles only assigned to a class that are
-    # trapped outside this snapshot of the field line.
     z1 = (dB_dz <= 0) & mask
-    z2 = (dB_dz >= 0) & _in_epigraph_and(mask, dB_dz)
+    z2 = (dB_dz >= 0) & epigraph_and(mask, dB_dz)
+    del dB_dz
 
     # Transform out of local power basis expansion.
     intersect = flatten_mat(intersect + knots[:-1, None])
     z1 = take_mask(intersect, z1, size=num_well, fill_value=_sentinel)
     z2 = take_mask(intersect, z2, size=num_well, fill_value=_sentinel)
+    del intersect
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
     # Set to zero so integration is over set of measure zero
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-    return z1, z2
+    return (z1, z2, mask) if return_mask else (z1, z2)
 
 
-def _set_default_plot_kwargs(kwargs, l=None, m=None):
+def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
+    """Newton step using maps used in the quadrature.
+
+    An error of ε in a bounce point manifests
+      * 𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹.
+      * 𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+    mask : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well).
+        Subset of points to refine.
+    nufft_eps : float
+        Desired error ε of the returned bounce points.
+        Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
+
+    Returns
+    -------
+    z1, z2 : tuple[jnp.ndarray]
+        Shape (num ρ, num α, num pitch, num well).
+
+    """
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+            ]
+        ),
+    )
+    dt_dz = dt_dz.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    B = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [
+                o._c["|B|"],
+                o._c["|B|"] * (1j * o._modes_z)[:, None],
+                o._c["|B|"] * (1j * o._modes_t),
+            ],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=(
+            None
+            if _JF_BUG
+            else flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4)
+        ),
+    )
+    B, dB_dz, dB_dt = (
+        B.reshape(3, *shape)
+        if B.ndim == 2
+        # reshape before swap to avoid memory copy
+        else B.reshape(shape[0], 3, *shape[1:]).swapaxes(0, 1)
+    )
+    z = z.reshape(shape)
+
+    dz = (B - pitch_inv[..., None, :, None]) / (dB_dz + dB_dt * dt_dz)
+    Z = z - dz
+    mask = mask & (Z[..., 0, :, :] < Z[..., 1, :, :])  # Deny interval inversion.
+    mask = mask[..., None, :, :] & (jnp.abs(dz) < 1e-1)  # Deny large updates.
+    z = jnp.where(mask, Z, z)
+
+    return z[..., 0, :, :], z[..., 1, :, :]
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(2,))
+def regular_points(o, pitch_inv, num_well):
+    """Bounce points then Newton, with regularized jvp.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    num_well : int
+        The usual suspect.
+
+    """
+    return _newton(
+        o,
+        pitch_inv,
+        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well, True),
+        min(o._nufft_eps, 1e-10),
+    )
+
+
+@regular_points.defjvp
+def regular_points_jvp(num_well, primals, tangents):
+    """Implicit function theorem with regularization.
+
+    Regularization used to smooth the discretized system so that it recognizes
+    any non-differentiable sample it has observed actually has zero measure in
+    the continuous system.
+
+    References
+    ----------
+    See supplementary information in DESC/publications/unalmis2025.
+
+    """
+    # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
+
+    o, p = primals
+    do, dp = tangents
+
+    z1, z2 = regular_points(o, p, num_well)
+
+    shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
+
+    z = flatten_mat(jnp.stack((z1, z2), axis=-3), 3)
+    t, dt_dz = o._theta.eval1d(
+        z[None],
+        jnp.stack(
+            [
+                o._theta.cheb,
+                chebder(o._theta.cheb, scl=o._NFP / jnp.pi, axis=-1, keepdims=True),
+            ]
+        ),
+    )
+    dt_do = o._theta.eval1d(z, do._theta.cheb).reshape(shape)
+    dt_dz = dt_dz.reshape(shape)
+    t = flatten_mat(t)
+    z = flatten_mat(z)
+
+    mask = (z1 < z2)[..., None, :, :]
+
+    nufft_eps = min(o._nufft_eps, 1e-10)
+    dB_dz = nufft2d2r(
+        z,
+        t,
+        jnp.concatenate(
+            [o._c["|B|"] * (1j * o._modes_z)[:, None], o._c["|B|"] * (1j * o._modes_t)],
+            -3,
+        ),
+        (0, 2 * jnp.pi / o._NFP),
+        vec=True,
+        eps=nufft_eps,
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    )
+    dB_do = nufft2d2r(
+        z,
+        t,
+        do._c["|B|"].squeeze(-3),
+        (0, 2 * jnp.pi / o._NFP),
+        eps=nufft_eps,
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
+    ).reshape(shape)
+
+    dB_dz, dB_dt = (
+        dB_dz.reshape(2, *shape)
+        if dB_dz.ndim == 2
+        # reshape before swap to avoid memory copy
+        else dB_dz.reshape(shape[0], 2, *shape[1:]).swapaxes(0, 1)
+    )
+
+    # chain rule to move from (∂/∂ζ)|ρ,θ to (∂/∂ζ)|ρ,a
+    dB_dz += dB_dt * dt_dz
+    dB_do += dB_dt * dt_do
+
+    dB_dz = jnp.where(
+        jnp.abs(dB_dz) > _eps,
+        dB_dz,
+        dB_dz + jnp.copysign(_eps, dB_dz.real),
+    )
+    dz12 = jnp.where(mask, (dp[..., None, :, None] - dB_do) / dB_dz, 0.0)
+
+    return (z1, z2), (dz12[..., 0, :, :], dz12[..., 1, :, :])
+
+
+def set_default_plot_kwargs(kwargs, l=None, m=None):
+    """Sets some plot kwargs to defaults."""
     vlabel = r"$\vert B \vert$"
     default_title = (
         rf"Intersects $\zeta$ in epigraph$(${vlabel}$)$ "
-        + rf"s.t. {vlabel}$(\zeta) = 1/\lambda$"
+        + rf"s.t. $\lambda${vlabel}$(\zeta) = 1$"
     )
     if l is not None and m is not None:
-        default_title += rf" on field line $\rho(l={l})$, $\alpha(m={m})$"
+        default_title += rf" on field line $(\rho_{{l={l}}}, \alpha_{{m={m}}})$"
     kwargs.setdefault("title", default_title)
     kwargs.setdefault("klabel", r"$1/\lambda$")
     kwargs.setdefault("hlabel", r"$\zeta$")
@@ -125,13 +319,13 @@ def _set_default_plot_kwargs(kwargs, l=None, m=None):
     return kwargs
 
 
-def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
+def check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     """Check that bounce points are computed correctly.
 
     For the plotting labels of ρ(l), α(m), it is assumed that the axis that
-    enumerates the index l preceds the axis that enumerates the index m.
+    enumerates the index l precedes the axis that enumerates the index m.
     """
-    kwargs = _set_default_plot_kwargs(kwargs)
+    kwargs = set_default_plot_kwargs(kwargs)
     title = kwargs.pop("title")
     plots = []
 
@@ -149,7 +343,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
     # do not need to broadcast to full size because
     # https://jax.readthedocs.io/en/latest/notebooks/
     # Common_Gotchas_in_JAX.html#out-of-bounds-indexing
-    pitch_inv = atleast_nd(3, _broadcast_for_bounce(pitch_inv))
+    pitch_inv = atleast_nd(3, broadcast_for_bounce(pitch_inv))
     B = atleast_nd(4, B)
 
     mask = (z1 - z2) != 0.0
@@ -177,7 +371,7 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z2=_z2,
                     k=pitch_inv[idx],
                     title=title
-                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
+                    + rf" on field line $(\rho_{{l={lm[0]}}}, \alpha_{{m={lm[1]}}})$",
                     **kwargs,
                 )
 
@@ -197,15 +391,14 @@ def _check_bounce_points(z1, z2, pitch_inv, knots, B, plot=True, **kwargs):
                     z1=z1[lm],
                     z2=z2[lm],
                     k=pitch_inv[lm],
-                    title=title
-                    + rf" on field line $\rho(l={lm[0]})$, $\alpha(m={lm[1]})$",
+                    title=title,
                     **kwargs,
                 )
             )
     return plots
 
 
-def _check_interp(zeta, b_sup_z, B, f, result, plot=True):
+def check_interp(zeta, b_sup_z, B, f, result, plot=True):
     """Check for interpolation failures and floating point issues.
 
     Parameters
@@ -219,7 +412,7 @@ def _check_interp(zeta, b_sup_z, B, f, result, plot=True):
     f : list[jnp.ndarray]
         Arguments to the integrand, interpolated to ``zeta``.
     result : list[jnp.ndarray]
-        Output of ``_integrate``.
+        Computed integrals.
     plot : bool
         Whether to plot stuff.
 
@@ -275,12 +468,11 @@ def _plot_check_interp(zeta, V, name=""):
         ax.set_ylabel(name)
         ax.set_title(
             f"Interpolation of {name} to quadrature points"
-            + rf" on field line $\rho(l={idx[0]})$, $\alpha(m={idx[1]})$"
+            + rf" on field line $(\rho_{{l={idx[0]}}}, \alpha_{{m={idx[1]}}})$"
         )
         for i in marked:
             ax.plot(zeta[(*idx, i)], V[(*idx, i)], marker="o")
         fig.text(0.01, 0.01, "Each color specifies a bounce integral.")
-        plt.tight_layout()
         plt.show()
 
 
@@ -290,6 +482,7 @@ def plot_ppoly(
     z1=None,
     z2=None,
     k=None,
+    *,
     k_transparency=0.5,
     klabel=r"$k$",
     title=r"Intersects $z$ in epigraph$(f)$ s.t. $f(z) = k$",
@@ -301,6 +494,9 @@ def plot_ppoly(
     include_knots=False,
     knot_transparency=0.4,
     include_legend=True,
+    return_legend=False,
+    legend_kwargs=None,
+    **kwargs,
 ):
     """Plot the piecewise polynomial ``ppoly``.
 
@@ -340,7 +536,7 @@ def plot_ppoly(
     knot_transparency : float
         Transparency of knot lines.
     include_legend : bool
-        Whether to include the legend in the plot. Default is true.
+        Whether to plot the legend. Default is true.
 
     Returns
     -------
@@ -348,7 +544,8 @@ def plot_ppoly(
         Matplotlib (fig, ax) tuple.
 
     """
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=kwargs.pop("figsize", None))
+
     legend = {}
     if include_knots:
         for knot in ppoly.x:
@@ -364,7 +561,7 @@ def plot_ppoly(
         stop=setdefault(stop, ppoly.x[-1]),
         num=num,
     )
-    _add2legend(legend, ax.plot(z, ppoly(z), label=vlabel))
+    _add2legend(legend, ax.plot(z, ppoly(z), label=vlabel, **kwargs))
     _plot_intersect(
         ax=ax,
         legend=legend,
@@ -373,61 +570,80 @@ def plot_ppoly(
         k=k,
         k_transparency=k_transparency,
         klabel=klabel,
+        hlabel=hlabel,
+        **kwargs,
     )
     ax.set_xlabel(hlabel)
     ax.set_ylabel(vlabel)
-    if include_legend:
-        ax.legend(legend.values(), legend.keys(), loc="lower right")
     ax.set_title(title)
-    plt.tight_layout()
+
+    if include_legend:
+        if legend_kwargs is None:
+            legend_kwargs = dict(loc="lower right")
+        ax.legend(legend.values(), legend.keys(), **legend_kwargs)
+
     if show:
         plt.show()
         plt.close()
-    return fig, ax
+    return (fig, ax, legend) if return_legend else (fig, ax)
 
 
-def get_extrema(knots, g, dg_dz, sentinel=jnp.nan):
-    """Return extrema (z*, g(z*)).
+def get_mins(knots, B, num_mins=-1, fill_value=0.0):
+    """Return minima of (z*, B(z*)) within open interval defined by knots.
 
     Parameters
     ----------
     knots : jnp.ndarray
         Shape (N, ).
         ζ coordinates of spline knots. Must be strictly increasing.
-    g : jnp.ndarray
-        Shape (..., N - 1, g.shape[-1]).
-        Polynomial coefficients of the spline of g in local power basis.
+    B : jnp.ndarray
+        Shape (..., N - 1, 4).
+        Polynomial coefficients of the spline of B in local power basis.
         Last axis enumerates the coefficients of power series. Second to
         last axis enumerates the polynomials that compose a particular spline.
-    dg_dz : jnp.ndarray
-        Shape (..., N - 1, g.shape[-1] - 1).
-        Polynomial coefficients of the spline of ∂g/∂z in local power basis.
-        Last axis enumerates the coefficients of power series. Second to
-        last axis enumerates the polynomials that compose a particular spline.
-    sentinel : float
-        Value with which to pad array to return fixed shape.
+    num_mins : jnp.ndarray
+        Number of minima to return. Otherwise returns maximum possible.
+    fill_value : float
+        If there were less than ``num_mins`` minima detected, then the result
+        is padded with ``fill_value``.
 
     Returns
     -------
-    ext, g_ext : jnp.ndarray
-        Shape (..., (N - 1) * (g.shape[-1] - 2)).
-        First array enumerates z*. Second array enumerates g(z*)
+    mins, B_mins : jnp.ndarray
+        Shape (..., num mins).
+        First array enumerates z*. Second array enumerates B(z*).
         Sorting order of extrema is arbitrary.
 
     """
-    ext = polyroot_vec(
-        c=dg_dz, a_min=jnp.array([0.0]), a_max=jnp.diff(knots), sentinel=sentinel
+    if num_mins < 0 or num_mins > B.shape[-2]:
+        # The number of interior minima for C¹ continuous cubic spline must be < N,
+        # and every minima must be a simple root.
+        num_mins = B.shape[-2]
+
+    b = B[..., :-1] * jnp.arange(B.shape[-1] - 1, 0, -1)
+    mins = polyroot_vec(
+        c=b,
+        a_min=jnp.array([0.0]),
+        a_max=jnp.diff(knots),
+        sentinel=0.0,
     )
-    g_ext = flatten_mat(polyval_vec(x=ext, c=g[..., None, :]))
-    # Transform out of local power basis expansion.
-    ext = flatten_mat(ext + knots[:-1, None])
-    assert ext.shape == g_ext.shape
-    assert ext.shape[-1] == g.shape[-2] * (g.shape[-1] - 2)
-    return ext, g_ext
+    b = flatten_mat((poly_val(x=mins, c=b[..., None, :], der=True) > 0) & (mins > 0))
+    mins = flatten_mat(
+        jnp.stack(
+            [
+                # Transform out of local power basis expansion.
+                mins + knots[:-1, None],
+                poly_val(x=mins, c=B[..., None, :]),
+            ]
+        )
+    )
+    mins, b = take_mask(mins, b, size=num_mins, fill_value=fill_value)
+    assert mins.shape[-1] == num_mins
+    return mins, b
 
 
-def argmin(z1, z2, f, ext, g_ext):
-    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E g(ζ). Returns f(A).
+def argmin(z1, z2, f, mins, B_mins):
+    """Let E = {ζ ∣ ζ₁ < ζ < ζ₂} and A ∈ argmin_E B(ζ). Returns f(A).
 
     Parameters
     ----------
@@ -436,29 +652,27 @@ def argmin(z1, z2, f, ext, g_ext):
         Boundaries to detect argmin between.
         ``z1`` (``z2``) stores left (right) boundaries.
     f : jnp.ndarray
-        Function interpolated to ``ext``.
+        Function interpolated to ``mins``.
+        Shape (..., num mins).
 
     Returns
     -------
     f : jnp.ndarray
         Shape (..., num pitch, num well).
-        ``f`` at the minimum extrema of ``g`` between ``z1`` and ``z2``.
+        ``f`` at the minimum of ``B`` between ``z1`` and ``z2``.
 
     """
     assert z1.ndim > 1 and z2.ndim > 1
-    assert f.shape == ext.shape == g_ext.shape
+    assert f.shape == mins.shape == B_mins.shape
     # We can use the non-differentiable argmin because we actually want the gradients
     # to accumulate through only the minimum since we are differentiating how our
     # physics objective changes wrt equilibrium perturbations not wrt which of the
     # extrema get interpolated to.
     where = jnp.argmin(
-        # With the new axes, the shapes are:
-        #     z1, z2 (..., num pitch, num well, 1)
-        # ext, g_ext (...,         1,        1, num extrema)
         jnp.where(
-            (z1[..., None] < ext[..., None, None, :])
-            & (ext[..., None, None, :] < z2[..., None]),
-            g_ext[..., None, None, :],
+            (z1[..., None] < mins[..., None, None, :])
+            & (mins[..., None, None, :] < z2[..., None]),
+            B_mins[..., None, None, :],
             jnp.inf,
         ),
         axis=-1,
@@ -467,148 +681,154 @@ def argmin(z1, z2, f, ext, g_ext):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_fieldline(alpha, iota, num_transit):
+def get_alphas(alpha, iota, num_transit, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
     ----------
     alpha : jnp.ndarray
-        Shape (num alpha, ).
+        Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
     iota : jnp.ndarray
-        Shape (num rho, ).
+        Shape (num ρ, ).
         Rotational transform normalized by 2π.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP: int
+        Number of field periods.
 
     Returns
     -------
-    fieldline : jnp.ndarray
-        Shape (num alpha, num rho, num transit).
+    alphas : jnp.ndarray
+        Shape (num α, num ρ, num transit * NFP).
         Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
-    iota = jnp.atleast_1d(iota)[:, None]
-    alpha = jnp.atleast_1d(alpha)[:, None, None]
-    # Select the next branch such that ϑ is continuous.
-    #      αᵢ = ϑ − ιϕᵢ
-    #    αᵢ₊₁ = ϑ − ιϕᵢ₊₁
-    # αᵢ₊₁−αᵢ = ι(ϕᵢ-ϕᵢ₊₁) = ι(ζᵢ-ζᵢ₊₁) = ι 2π
-    return alpha + iota * (2 * jnp.pi) * jnp.arange(num_transit)
+    alpha = alpha[:, None, None]
+    iota = iota[:, None]
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
 
 
-def fourier_chebyshev(theta, iota, alpha, num_transit):
-    """Parameterize θ on field lines ``alpha``.
+def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
+    """Parameterize θ on field lines α.
 
     Parameters
     ----------
-    theta : jnp.ndarray
-        Shape (num rho, X, Y).
-        DESC coordinates θ from ``Bounce2D.compute_theta``.
-        ``X`` and ``Y`` are preferably rounded down to powers of two.
+    angle : jnp.ndarray
+        Shape (num ρ, X, Y).
+        Angle returned by ``Bounce2D.angle``.
     iota : jnp.ndarray
-        Shape (num rho, ).
+        Shape (num ρ, ).
         Rotational transform normalized by 2π.
     alpha : jnp.ndarray
-        Shape (num alpha, ).
+        Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
     num_transit : int
         Number of toroidal transits to follow field line.
+    NFP : int
+        Number of field periods.
+    X_min : int
+        See notes section. This parameter should never be changed.
+        It is included in the function signature for code optics only.
+        It is the number below which we short-circuit convergence to enforce
+        continuity by removing a discontinuity which is near machine precision
+        due to exponential convergence. This is not a hack; it has rigorous
+        mathematical justification regardless of the size of the removed
+        discontinuity, and does not bias the output beyond that of more
+        floating point operations in finite-precision.
 
     Returns
     -------
-    T : PiecewiseChebyshevSeries
+    theta : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
-        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit. ``T.cheb`` broadcasts with
-        shape (num rho, num alpha, num transit, Y).
+        enumerates field line ``α[i]``. Each Chebyshev series approximates
+        θ over one toroidal transit. ``theta.cheb`` broadcasts with
+        shape (num ρ, num α, num transit * NFP, max(1,7Y//8)).
 
     Notes
     -----
-    The field line label α changes discontinuously, so the approximation
-    g defined with basis function in (α, ζ) coordinates to some continuous
-    function f does not guarantee continuity between cuts of the field line
-    until sufficient convergence of g to f.
+    To accelerate convergence, we introduced the stream variable δ such that
+    θ = α + δ. This stream map δ : α, ζ ↦ δ(α, ζ) is linear in θ.
+    Hence, it may be interpolated directly from discrete solutions θ* to
 
-    Note if g were defined with basis functions in straight field line
-    coordinates, then continuity between cuts of the field line, as
-    determined by the straight field line coordinates (ϑ, ζ), is
-    guaranteed even with incomplete convergence (because the
-    parameters (ϑ, ζ) change continuously along the field line).
+    θ* - (δ−ιζ)(θ*, ζ) = α + ιζ.
 
-    Do not interpret this as superior function approximation.
-    Indeed, if g is defined with basis functions in (α, ζ) coordinates, then
-    g(α=α₀, ζ) will sample the approximation to f(α=α₀, ζ) for the full domain in ζ.
-    This holds even with incomplete convergence of g to f.
-    However, if g is defined with basis functions in (ϑ, ζ) coordinates, then
-    g(ϑ(α=α₀,ζ), ζ) will sample the approximation to f(α=α₀ ± ε, ζ) with ε → 0 as
-    g converges to f.
+    This feature avoids expensive off-grid re-interpolation in optimization.
 
-    (Visually, the small discontinuity apparent in g(α, ζ) at cuts of the field
-    line will not be visible in g(ϑ, ζ) because when moving along the field line
-    with g(ϑ, ζ) one is continuously flowing away from the starting field line,
-    whereas g(α, ζ) has to "decide" at the cut what the next field line is).
+    Note the field line label α changes discontinuously along a magnetic field line.
+    So an approximation f defined with basis functions in (α, NFP ζ) coordinates to
+    some map F which is continuous along the magnetic field line does not guarantee
+    continuity between branch cuts of (α, NFP ζ) ∈ [0, 2π)² until sufficient convergence
+    of f to F. If f is instead defined with basis functions in flux coordinates such as
+    (ϑ, NFP ζ), then continuity between branch cuts of (α, NFP ζ) ∈ [0, 2π)² is
+    guaranteed even with incomplete convergence because the parameters (ϑ, ζ) change
+    continuously along the magnetic field line.
 
-    Note that if g is an unbounded function, as all coordinates are, then
-    it is impossible to approximate it with a finite number of periodic
-    basis functions, so we are forced to use a Fourier Chebyshev series to
-    interpolate θ anyway.
-
-    We explicitly enforce continuity of our approximation of θ between
-    cuts to short-circuit the convergence of the Fourier series for θ.
-    This works to remove the small discontinuity between cuts of the field line
-    because the first cut is on α=0, which is a knot of the Fourier series, and
-    the Chebyshev points include a knot near endpoints, so θ at the next cut of
-    the field line is known with precision. This map is infinitely differentiable
-    on ζ ∈ ℝ.
+    This does not imply a parameterization without branch cuts is superior for
+    approximation; convergence is determined by the properties of the basis and the
+    domain size moreso than whether the parameters have branch cuts on the domain.
+    For example, if f is defined with basis functions in (α, NFP ζ) coordinates, then
+    f(α=α₀, ζ) will sample the approximation to F(α=α₀, ζ) for ζ ∈ [0, NFP 2π) even
+    with incomplete convergence. However, if f is defined with basis functions in
+    (ϑ, NFP ζ) coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to
+    F(α=α₀ ± ε, ζ) with ε → 0 as f converges to F.
 
     """
+    X = angle.shape[-2]
+    Y = truncate_rule(angle.shape[-1])
+    num_alpha = alpha.size
+    domain = (0, 2 * jnp.pi / NFP)
+
     # peeling off field lines
-    fieldline = get_fieldline(alpha, iota, num_transit)
-    if theta.ndim == 2:
-        fieldline = fieldline.squeeze(1)
+    alpha = get_alphas(alpha, iota, num_transit, NFP)
+    if angle.ndim == 2:
+        alpha = alpha.squeeze(1)
 
-    # Reduce θ to a set of Chebyshev series. This is a partial summation technique.
-    domain = (0, 2 * jnp.pi)
-    T = FourierChebyshevSeries(theta, domain).compute_cheb(fieldline).swapaxes(0, -3)
-    T = PiecewiseChebyshevSeries(T, domain)
-    T.stitch()
-    assert T.cheb.shape == (
-        *theta.shape[:-2],
-        jnp.size(alpha),
-        num_transit,
-        theta.shape[-1],
+    # Mod early for speed and conditioning
+    # (since this avoids modding on more points later and keeps θ bounded).
+    alpha %= 2 * jnp.pi
+
+    delta = (
+        FourierChebyshevSeries(angle, domain, truncate=Y)
+        .compute_cheb(alpha)
+        .swapaxes(0, -3)
     )
-    return T
+    alpha = alpha.swapaxes(0, -2)
+    delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
+    assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+
+    if X < X_min:
+        # This is needed as our algorithm assumes continuity of |B| along field
+        # lines when gathering bounce points. This is always true physically.
+        delta = PiecewiseChebyshevSeries.stitch(delta)
+
+    return PiecewiseChebyshevSeries(delta, domain)
 
 
-def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
+def fast_chebyshev(theta, f, Y, num_t, modes_t, modes_z, *, vander=None):
     """Compute Chebyshev approximation of ``f`` on field lines using fast transforms.
 
     Parameters
     ----------
-    T : PiecewiseChebyshevSeries
+    theta : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
-        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit. ``T.cheb`` should broadcast with
-        shape (num rho, num alpha, num transit, T.Y).
+        enumerates field line αᵢ. Each Chebyshev series approximates
+        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
-        Chebyshev spectral resolution for ``f``. Preferably power of 2.
-        Usually the spectrum of ``f`` is wider than θ, so one can upsample
-        to about double the resolution of θ. (This is function dependent).
-    num_theta : int
+        Chebyshev spectral resolution for ``f`` over a field period.
+        Preferably power of 2.
+    num_t : int
         Fourier resolution in poloidal direction.
-    m_modes : jnp.ndarray
+    modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
-    n_modes : jnp.ndarray
+    modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
-    NFP : int
-        Number of field periods.
     vander : jnp.ndarray
         Precomputed transform matrix.
 
@@ -617,76 +837,76 @@ def fast_chebyshev(T, f, Y, num_theta, m_modes, n_modes, NFP=1, *, vander=None):
     f : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of ``f`` on field lines.
         {f_αᵢⱼ : ζ ↦ f(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
-        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
+        enumerates field line αᵢ. Each Chebyshev series approximates
         ``f`` over one toroidal transit. ``f.cheb`` broadcasts with
-        shape (num rho, num alpha, num transit, Y).
+        shape (num ρ, num α, num transit * NFP, Y).
 
     """
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on non-uniform tensor product grids
-    # of size |𝛉|×|𝛇| where |𝛉| = num alpha × num transit and |𝛇| = Y.
+    # of size |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y.
     # Partial summation is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > mn|𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > n + |𝛉|.
 
     f = ifft_mmt(
-        cheb_pts(Y, T.domain)[:, None] if vander is None else None,
+        cheb_pts(Y, theta.domain)[:, None] if vander is None else None,
         f,
-        (0, 2 * jnp.pi / NFP),
+        theta.domain,
         axis=-2,
-        modes=n_modes,
+        modes=modes_z,
         vander=vander,
     )[..., None, None, :, :]
-    f = irfft_mmt(T.evaluate(Y), f, num_theta, _modes=m_modes)
+    f = irfft_mmt_pos(theta.evaluate(Y), f, num_t, modes=modes_t)
     f = cheb_from_dct(dct(f, type=2, axis=-1) / Y)
-    f = PiecewiseChebyshevSeries(f, T.domain)
-    assert f.cheb.shape == (*T.cheb.shape[:-1], Y)
+    f = PiecewiseChebyshevSeries(f, theta.domain)
+    assert f.cheb.shape == (*theta.cheb.shape[:-1], Y)
     return f
 
 
 def fast_cubic_spline(
-    T,
+    theta,
     f,
     Y,
-    num_theta,
-    m_modes,
-    n_modes,
+    num_t,
+    modes_t,
+    modes_z,
     NFP=1,
     nufft_eps=1e-6,
     *,
-    vander_zeta=None,
-    vander_theta=None,
+    vander_t=None,
+    vander_z=None,
     check=False,
 ):
     """Compute cubic spline of ``f`` on field lines using fast transforms.
 
     Parameters
     ----------
-    T : PiecewiseChebyshevSeries
+    theta : PiecewiseChebyshevSeries
         Set of 1D Chebyshev spectral coefficients of θ on field lines.
         {θ_αᵢⱼ : ζ ↦ θ(αᵢⱼ, ζ) | αᵢⱼ ∈ Aᵢ} where Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)
-        enumerates field line ``alpha[i]``. Each Chebyshev series approximates
-        θ over one toroidal transit. ``T.cheb`` should broadcast with
-        shape (num rho, num alpha, num transit, T.Y).
+        enumerates field line αᵢ. Each Chebyshev series approximates
+        θ over one toroidal transit. ``theta.cheb`` should broadcast with
+        shape (num ρ, num α, num transit * NFP, theta.Y).
     f : jnp.ndarray
-        Shape broadcasts with (num rho, 1, n_modes.size, m_modes.size).
+        Shape broadcasts with (num ρ, 1, modes_z.size, modes_t.size).
         Fourier transform of f(θ, ζ) as returned by ``Bounce2D.fourier``.
     Y : int
         Number of knots per toroidal transit to interpolate ``f``.
         This number will be rounded up to an integer multiple of ``NFP``.
-    num_theta : int
+    num_t : int
         Fourier resolution in poloidal direction.
-    m_modes : jnp.ndarray
+    modes_t : jnp.ndarray
         Real FFT Fourier modes in poloidal direction.
-    n_modes : jnp.ndarray
+    modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     NFP : int
         Number of field periods.
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-    vander_zeta : jnp.ndarray
+    vander_t : jnp.ndarray
         Precomputed transform matrix.
-    vander_theta : jnp.ndarray
+    vander_z : jnp.ndarray
         Precomputed transform matrix.
     check : bool
         Flag for debugging. Must be false for JAX transformations.
@@ -694,7 +914,7 @@ def fast_cubic_spline(
     Returns
     -------
     f : jnp.ndarray
-        Shape broadcasts with (num rho, num alpha, num transit * Y - 1, 4).
+        Shape broadcasts with (num ρ, num α, num transit * Y - 1, 4).
         Polynomial coefficients of the spline of f in local power basis.
         Last axis enumerates the coefficients of power series. For a polynomial
         given by ∑ᵢⁿ cᵢ xⁱ, coefficient cᵢ is stored at ``f[...,n-i]``.
@@ -705,24 +925,26 @@ def fast_cubic_spline(
         Knots of spline ``f``.
 
     """
-    assert T.cheb.ndim >= 3
-    lines = T.cheb.shape[:-2]
+    assert theta.domain == (0, 2 * jnp.pi / NFP)
 
-    num_zeta = (Y + NFP - 1) // NFP
-    Y = num_zeta * NFP
-    x = jnp.linspace(-1, 1, Y, endpoint=False)
-    zeta = bijection_from_disc(x, T.domain[0], T.domain[1])
+    lines = theta.cheb.shape[:-2]
+    num_transit = theta.X // NFP
+
+    axisymmetric = f.shape[-2] == 1
+    Y, num_z = round_up_rule(Y, NFP, axisymmetric)
+    x = jnp.linspace(-1, 1, (Y // NFP) if axisymmetric else num_z, endpoint=False)
+    z = bijection_from_disc(x, *theta.domain)
 
     # Let m, n denote the poloidal and toroidal Fourier resolution. We need to
     # compute a set of 2D Fourier series each on uniform (non-uniform) in ζ (θ)
     # tensor product grids of size
-    #   |𝛉|×|𝛇| where |𝛉| = num alpha × num transit × NFP and |𝛇| = Y/NFP.
+    #   |𝛉|×|𝛇| where |𝛉| = num α × num transit × NFP and |𝛇| = Y/NFP.
     # Partial summation via FFT is more efficient than direct evaluation when
     # mn|𝛉||𝛇| > m log(|𝛇|) |𝛇| + m|𝛉||𝛇| or equivalently n|𝛉| > log|𝛇| + |𝛉|.
 
-    if num_zeta >= f.shape[-2]:
+    if num_z >= f.shape[-2]:
         f = f.squeeze(-3)
-        p = num_zeta - f.shape[-2]
+        p = num_z - f.shape[-2]
         p = (p // 2, p - p // 2)
         pad = [(0, 0)] * f.ndim
         pad[-2] = p if (f.shape[-2] % 2 == 0) else p[::-1]
@@ -730,37 +952,45 @@ def fast_cubic_spline(
         f = ifft(f, axis=-2, norm="forward")
     else:
         f = ifft_mmt(
-            zeta[:num_zeta, None],
+            z[:, None],
             f,
-            (0, 2 * jnp.pi / NFP),
+            theta.domain,
             axis=-2,
-            modes=n_modes,
-            vander=vander_zeta,
+            modes=modes_z,
+            vander=vander_z,
         )
 
     # θ at uniform ζ on field lines
-    theta = idct_mmt(x, T.cheb[..., None, :], vander=vander_theta).reshape(
-        *lines, T.X, NFP, num_zeta
+    t = idct_mmt(
+        x,
+        theta.cheb.reshape(*lines, num_transit, NFP, 1, theta.Y),
+        vander=vander_t,
     )
+    if axisymmetric:
+        t = t.reshape(*lines, num_transit, -1, 1)
 
-    if nufft_eps < 1e-14:
-        f = irfft_mmt(theta, f[..., None, None, None, :, :], num_theta, _modes=m_modes)
+    if nufft_eps < 1e-14 or f.shape[-1] < 14:
+        # second condition for GPU
+        f = f[..., None, None, None, :, :]
+        f = irfft_mmt_pos(t, f, num_t, modes=modes_t)
     else:
         if len(lines) > 1:
-            theta = theta.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_zeta, -1)
+            t = t.transpose(0, 4, 1, 2, 3).reshape(lines[0], num_z, -1)
         else:
-            theta = theta.transpose(3, 0, 1, 2).reshape(num_zeta, -1)
-        f = nufft1d2r(theta, f, eps=nufft_eps).mT
+            t = t.transpose(3, 0, 1, 2).reshape(num_z, -1)
+        f = nufft1d2r(t, f, eps=nufft_eps).mT
     f = f.reshape(*lines, -1)
 
-    zeta = jnp.ravel(zeta + (T.domain[1] - T.domain[0]) * jnp.arange(T.X)[:, None])
-    f = CubicSpline(x=zeta, y=f, axis=-1, check=check).c
+    z = jnp.ravel(
+        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(theta.X)[:, None]
+    )
+    f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, T.X * Y - 1, 4)
-    return f, zeta
+    assert f.shape == (*lines, num_transit * Y - 1, 4)
+    return f, z
 
 
-def _move(f, out=True):
+def move(f, out=True):
     """Use to move between the following shapes.
 
     The LHS shape enables the simplest broadcasting so it is used internally,
@@ -769,46 +999,137 @@ def _move(f, out=True):
 
     When out is True, goes from left to right. Goes other way when False.
 
-    (num pitch, num rho, num alpha, -1) ->  (num rho, num alpha, num pitch, -1)
-    (num pitch,          num alpha, -1) ->  (         num alpha, num pitch, -1)
-    (num pitch,                     -1) ->  (                    num pitch, -1)
+    (num pitch, num ρ, num α, -1) -> (num ρ, num α, num pitch, -1)
+    (num pitch,        num α, -1) -> (       num α, num pitch, -1)
+    (num pitch,               -1) -> (              num pitch, -1)
     """
     assert f.ndim <= 4
     s, d = (0, -2) if out else (-2, 0)
     return jnp.moveaxis(f, s, d)
 
 
-def _mmt_for_bounce(v, c):
+def mmt_for_bounce(z, t, c):
     """Matrix multiplication transform.
 
     Parameters
     ----------
-    v : jnp.ndarray
-        Shape (num rho, num alpha, num pitch, num well, num quad,
-                num zeta modes, num theta modes).
+    z : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well, num quad, num ζ modes).
+        Vandermonde array.
+    t : jnp.ndarray
+        Shape (num ρ, num α, num pitch, num well, num quad, num θ modes).
         Vandermonde array.
     c : jnp.ndarray
-        Shape (num rho, 1, num zeta modes, num theta modes).
+        Shape (num ρ, 1, num ζ modes, num θ modes).
         Fourier coefficients.
 
     """
-    return (v * c[..., None, None, None, :, :]).real.sum((-2, -1))
+    # Reduce over ζ first since the derivative graph is deeper in θ, and
+    # because num ζ modes ~= 2 num θ modes since real fft done over θ.
+    return (t * jnp.einsum("...pwqz, ...zt -> ...pwqt", z, c)).real.sum(-1)
 
 
-def _broadcast_for_bounce(pitch_inv):
+def broadcast_for_bounce(pitch_inv):
     """Add axis if necessary.
 
     Parameters
     ----------
     pitch_inv : jnp.ndarray
-        Shape broadcasts with (num rho, num pitch).
+        Shape broadcasts with (num ρ, num pitch).
 
     Returns
     -------
     pitch_inv : jnp.ndarray
-        Shape broadcasts with (num rho, num alpha, num pitch).
+        Shape broadcasts with (num ρ, num α, num pitch).
 
     """
-    if jnp.ndim(pitch_inv) == 2:
+    pitch_inv = jnp.atleast_1d(pitch_inv)
+    if pitch_inv.ndim == 2:
         pitch_inv = pitch_inv[:, None]
     return pitch_inv
+
+
+def truncate_rule(Y):
+    """Truncation of Chebyshev series to reduce spectral aliasing.
+
+    The truncation will remove aliasing error at the shortest wavelengths
+    where the signal to noise ratio is lowest.
+    We truncate with a 7/8 rule in the toroidal direction so that the Lebesgue
+    constant is ~ (4/π²) log(Y) when the data is corrupted by ≤ 10⁻⁸ noise from
+    the inexact Newton solve. The Lebesgue constant discussed here is the one in
+    L Mason, J.C. & Handscomb, David C. 2002 Chebyshev Polynomials, chapter 5.
+    This is useful since we evaluate the series on a much denser grid than the
+    Newton solve grid; and therefore, prefer all discretization error is from
+    the error of the projection rather than the interpolation.
+
+    """
+    return max(1, 7 * Y // 8)
+
+
+def round_up_rule(Y, NFP, axisymmetric):
+    """Round Y up to NFP multiple.
+
+    Returns
+    -------
+    Y : int
+        Number of points per toroidal transit.
+    num_z : int
+        Number of points per field period.
+    axisymmetric : bool
+        Whether there toroidal smmetry.
+
+    """
+    if axisymmetric:
+        assert Y % NFP == 0, "Should set NFP = 1."
+        NFP = Y
+    num_z = (Y + NFP - 1) // NFP
+    return num_z * NFP, num_z
+
+
+def Y_B_rule(grid, spline):
+    """Guess Y_B from grid resolution.
+
+    Parameters
+    ----------
+    grid : Grid
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
+    spline : bool
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series.
+
+    Returns
+    -------
+    Y_B : int
+        Desired resolution for algorithm to compute bounce points.
+
+    """
+    Y_B = (grid.num_theta + grid.num_zeta) // 2
+    # Due to backwards compatibility reasons Y_B is expected to indicate
+    # resolution over full transit (a single field period) when spline is
+    # true (false).
+    return (Y_B * grid.NFP) if spline else Y_B
+
+
+def num_well_rule(num_transit, NFP, mins_per_transit=None):
+    """Guess upper bound for number of wells based on spectrum.
+
+    This should be loose enough that it is equivalent to ``num_well=None``,
+    but more performant.
+    """
+    num_well = num_transit * (20 + NFP)
+    return (
+        num_well
+        if mins_per_transit is None
+        else min(num_well, num_transit * mins_per_transit)
+    )
+
+
+def get_vander_spline(grid, Y, Y_B, NFP):
+    """Builds Vandermonde matrices for objectives."""
+    Y_trunc = truncate_rule(Y)
+    Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)
+    x = jnp.linspace(
+        -1, 1, (Y_B // NFP) if (grid.num_zeta == 1) else num_z, endpoint=False
+    )
+    return {"dct spline": chebvander(x, Y_trunc - 1)}

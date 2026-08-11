@@ -7,6 +7,7 @@ Using tensor product approach in 3D:
 - Fourier methods in y dimension
 - Fourier methods in z dimension
 """
+
 import os
 
 import matplotlib.pyplot as plt
@@ -298,9 +299,7 @@ def test_tensor_mixed_derivative(
     # record it (pytest will still assert below)
     collected_errors.append((dx_order, dy_order, dz_order, n, error))
 
-    assert (
-        error < tol
-    ), f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
+    assert error < tol, f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
         error {error:.2e} exceeds tol {tol}"
 
 

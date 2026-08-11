@@ -262,6 +262,14 @@ class _PrecomputedBiotSavartField(_MagneticField):
     repeated evaluations of the magnetic field, such as in field line integration.
     This also improves the speed of Biot-Savart evaluation on GPU, since it can use
     the GPU more efficiently by eliminating for-loops and using vectorized operations.
+    Sources are stored in one of two forms: ``src_pts``/``src_J`` for coils whose field
+    is integrated with quadrature, evaluated by ``biot_savart_general``, and
+    ``seg_start``/``seg_end``/``seg_current`` for coils whose field is summed over
+    straight segments, evaluated by ``biot_savart_hh`` (currently only
+    ``SplineXYZCoil``). Either or both can be given, so a ``MixedCoilSet`` containing
+    ``SplineXYZCoil`` along with other coil types is still reduced to a single instance.
+    The intended usage is through the ``_as_precomputed_source`` method of the source
+    field, which should fill in whichever of the two forms it needs.
 
     Parameters
     ----------

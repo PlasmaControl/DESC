@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+
+
+v0.17.2
+-------
+
 New Features
 
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.

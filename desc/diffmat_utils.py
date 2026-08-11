@@ -4,30 +4,126 @@ Differentiation‑matrix utilities for spectral methods in **DESC**.
 
 =================================================================
 
-This module provides vectorized, JAX‑friendly helpers for constructing first‑ and
-second‑order differentiation matrices using either Chebyshev–Lobatto or Fourier
-collocation points.  All routines are **pure** and **stateless** – they rely only
-on `jax.numpy` and therefore can be freely composed, JIT‑compiled, or parallelised
-with `jax.vmap` / `jax.pmap` inside larger optimisation loops.
+This module provides vectorized, JAX-friendly helpers for constructing first-order
+differentiation matrices using Fourier, Legendre-Lobatto, Gauss-Radau-Jacobi,
+B-spline, finite-difference, and coupled Zernike-Fourier discretizations.
 
 The implementations follow the formulas in
   **Trefethen, L. N. (2000). *Spectral Methods in MATLAB*. SIAM** and
   **Canuto et al. (2006). *Spectral Methods – Fundamentals in Single Domains*.**
 
 """
+
 from functools import partial
 
-from jax import tree_util
+import numpy as np
 
 from desc.backend import jit, jnp
-from desc.integrals.quad_utils import leggauss_lob
+from desc.integrals.quad_utils import (
+    _bspline_clamped_uniform_knots,
+    bspline_nodes_weights,
+    gauss_radau_jacobi,
+    leggauss_lob,
+)
+from desc.io import IOAble
+from desc.utils import check_posint, errorif
 
 
-@tree_util.register_pytree_node_class
-class DiffMat:
-    """Single-resolution constant matrices."""
+def zernike_penalty_projector_from_diffmat(D_rho, D_theta, svd_tol=1e-10):
+    """Build the coupled Zernike-Fourier de-aliasing penalty projector.
 
-    __slots__ = ("D_rho", "D_theta", "D_zeta", "W_rho", "W_theta", "W_zeta", "_token")
+    The stacked derivative row space gives the represented basis range modulo
+    constants. Adding the constant mode back leaves only the unresolved nodal
+    complement to be penalized.
+
+    Parameters
+    ----------
+    D_rho, D_theta : array-like
+        Coupled radial and poloidal derivative matrices with matching square
+        shape ``(n_rho * n_theta, n_rho * n_theta)``.
+    svd_tol : float, optional
+        Relative SVD cutoff.
+
+    Returns
+    -------
+    projector : jax.Array
+        Hermitian projector onto unresolved nodal content.
+    rank : int
+        Dimension of the represented range after adding the constant mode.
+    """
+    if D_rho is None or D_theta is None:
+        raise ValueError(
+            "D_rho and D_theta are required to build a Zernike penalty projector."
+        )
+    D_rho = np.asarray(D_rho)
+    D_theta = np.asarray(D_theta)
+    if D_rho.ndim != 2 or D_rho.shape[0] != D_rho.shape[1]:
+        raise ValueError("D_rho must be a square matrix.")
+    if D_theta.shape != D_rho.shape:
+        raise ValueError("D_theta must have the same shape as D_rho.")
+
+    rt_size = D_rho.shape[0]
+    D_stack = np.vstack((D_rho, D_theta))
+    _, svals, vh = np.linalg.svd(D_stack, full_matrices=False)
+    cutoff = float(svd_tol) * max(float(svals[0]), 1.0)
+    rank = int(np.count_nonzero(svals > cutoff))
+
+    range_basis = vh[:rank].conj().T
+    dtype = range_basis.dtype if range_basis.size else D_stack.dtype
+    const = np.ones((rt_size, 1), dtype=dtype)
+    if rank:
+        const = const - range_basis @ (range_basis.conj().T @ const)
+    const_norm = np.linalg.norm(const)
+    if const_norm > 10.0 * np.finfo(float).eps:
+        range_basis = np.concatenate((range_basis, const / const_norm), axis=1)
+
+    P_rt = range_basis @ range_basis.conj().T
+    Q_rt = np.eye(rt_size, dtype=P_rt.dtype) - P_rt
+    Q_rt = 0.5 * (Q_rt + Q_rt.conj().T)
+    return jnp.asarray(Q_rt), int(range_basis.shape[1])
+
+
+class DiffMat(IOAble):
+    """Differentiation and quadrature matrices for a tensor-product grid.
+
+    At least one differentiation/quadrature matrix pair must be supplied. The
+    matrices must be built for the nodes on which they will be used; in particular,
+    ``D_zeta`` and ``W_zeta`` must match the zeta nodes in the grid passed to
+    :meth:`Equilibrium.compute <desc.equilibrium.Equilibrium.compute>`.
+    Use :meth:`from_zeta_grid` to construct a compatible fourth-order
+    finite-difference pair for a uniform zeta grid.
+
+    Parameters
+    ----------
+    D_rho, D_theta, D_zeta : array-like, optional
+        Differentiation matrices for each coordinate.
+    W_rho, W_theta, W_zeta : array-like, optional
+        Quadrature matrices corresponding to each differentiation matrix.
+    zernike_penalty_alpha : float, optional
+        Coupled Zernike-Fourier de-aliasing penalty strength. If positive and
+        ``zernike_penalty_projector`` is not supplied, the projector is built
+        once from ``D_rho`` and ``D_theta``.
+    zernike_penalty_svd_tol : float, optional
+        Relative SVD cutoff used to build the coupled Zernike-Fourier penalty
+        projector.
+    zernike_penalty_projector : array-like, optional
+        Precomputed projector onto nodal content outside the represented
+        Zernike-Fourier range.
+    """
+
+    _io_attrs_ = [
+        "D_rho",
+        "D_theta",
+        "D_zeta",
+        "W_rho",
+        "W_theta",
+        "W_zeta",
+        "zernike_penalty_alpha",
+        "zernike_penalty_svd_tol",
+        "zernike_penalty_projector",
+        "zernike_penalty_rank",
+    ]
+    _static_attrs = ["_token"]
 
     def __init__(
         self,
@@ -37,59 +133,144 @@ class DiffMat:
         D_zeta=None,
         W_rho=None,
         W_theta=None,
-        W_zeta=None
+        W_zeta=None,
+        zernike_penalty_alpha=0.0,
+        zernike_penalty_svd_tol=1e-10,
+        zernike_penalty_projector=None,
+        zernike_penalty_rank=None,
     ):
-        self.D_rho = D_rho  # (Nr×Nr) jax.Array or None
-        self.D_theta = D_theta  # (Nt×Nt) jax.Array or None
-        self.D_zeta = D_zeta  # (Nz×Nz) jax.Array or None
-        self.W_rho = W_rho
-        self.W_theta = W_theta
-        self.W_zeta = W_zeta
+        self.D_rho = None if D_rho is None else jnp.asarray(D_rho)
+        self.D_theta = None if D_theta is None else jnp.asarray(D_theta)
+        self.D_zeta = None if D_zeta is None else jnp.asarray(D_zeta)
+        self.W_rho = None if W_rho is None else jnp.asarray(W_rho)
+        self.W_theta = None if W_theta is None else jnp.asarray(W_theta)
+        self.W_zeta = None if W_zeta is None else jnp.asarray(W_zeta)
+        self.zernike_penalty_alpha = float(zernike_penalty_alpha)
+        self.zernike_penalty_svd_tol = float(zernike_penalty_svd_tol)
+        self.zernike_penalty_projector = (
+            None
+            if zernike_penalty_projector is None
+            else jnp.asarray(zernike_penalty_projector)
+        )
+        self.zernike_penalty_rank = (
+            None if zernike_penalty_rank is None else int(zernike_penalty_rank)
+        )
+        if self.zernike_penalty_alpha > 0.0 and self.zernike_penalty_projector is None:
+            projector, rank = zernike_penalty_projector_from_diffmat(
+                self.D_rho, self.D_theta, self.zernike_penalty_svd_tol
+            )
+            self.zernike_penalty_projector = projector
+            self.zernike_penalty_rank = rank
+        self._set_up()
 
-        # Stable identity for hashing(JIT-safe)
+    def _set_up(self):
+        """Validate the matrices and create JAX's static structure token."""
+        if not hasattr(self, "zernike_penalty_alpha"):
+            self.zernike_penalty_alpha = 0.0
+        if not hasattr(self, "zernike_penalty_svd_tol"):
+            self.zernike_penalty_svd_tol = 1e-10
+        if not hasattr(self, "zernike_penalty_projector"):
+            self.zernike_penalty_projector = None
+        if not hasattr(self, "zernike_penalty_rank"):
+            self.zernike_penalty_rank = None
+
+        matrix_pairs = (
+            ("rho", self.D_rho, self.W_rho),
+            ("theta", self.D_theta, self.W_theta),
+            ("zeta", self.D_zeta, self.W_zeta),
+        )
+        if all(D is None and W is None for _, D, W in matrix_pairs):
+            raise ValueError(
+                "DiffMat requires at least one differentiation/quadrature matrix "
+                "pair. Omit diffmat to use the default finite-difference solver."
+            )
+        for coordinate, D, W in matrix_pairs:
+            if (D is None) != (W is None):
+                raise ValueError(
+                    f"D_{coordinate} and W_{coordinate} must be provided together."
+                )
+            if D is not None:
+                # D must be a square operator. In `coupled_rt` mode D_rho/D_theta
+                # are the full 2D (rho, theta) operators of shape (Nr*Nt,)^2 while
+                # the quadrature weight stays a 1D per-direction factor (the
+                # finite-n lambda3 path krons W_rho, W_theta, W_zeta together), so
+                # W is allowed to be a 1D vector whose length need not match D.
+                # A 2D W (used by the separable/ballooning path) must be square
+                # and match D.
+                if D.ndim != 2 or D.shape[0] != D.shape[1]:
+                    raise ValueError(f"D_{coordinate} must be a square matrix.")
+                if W.ndim == 2 and W.shape != D.shape:
+                    raise ValueError(
+                        f"2D W_{coordinate} must be square and match D_{coordinate}."
+                    )
+                if W.ndim not in (1, 2):
+                    raise ValueError(
+                        f"W_{coordinate} must be a 1D weight vector or a 2D matrix."
+                    )
+        if self.zernike_penalty_projector is not None:
+            Q = self.zernike_penalty_projector
+            if Q.ndim != 2 or Q.shape[0] != Q.shape[1]:
+                raise ValueError("zernike_penalty_projector must be a square matrix.")
+            if self.D_rho is not None and Q.shape != self.D_rho.shape:
+                raise ValueError("zernike_penalty_projector must match D_rho shape.")
+
+        # Matrix values are dynamic PyTree leaves. The token describes only their
+        # static structure, so equal-shaped matrices share compiled code safely.
         self._token = (
             "DiffMat",
-            (None if self.D_zeta is None else getattr(self.D_zeta, "shape", None)),
             (None if self.D_rho is None else getattr(self.D_rho, "shape", None)),
             (None if self.D_theta is None else getattr(self.D_theta, "shape", None)),
+            (None if self.D_zeta is None else getattr(self.D_zeta, "shape", None)),
             (None if self.W_rho is None else getattr(self.W_rho, "shape", None)),
             (None if self.W_theta is None else getattr(self.W_theta, "shape", None)),
             (None if self.W_zeta is None else getattr(self.W_zeta, "shape", None)),
+            (
+                None
+                if self.zernike_penalty_projector is None
+                else getattr(self.zernike_penalty_projector, "shape", None)
+            ),
         )
-
-    # JAX PyTree protocol
-    def tree_flatten(self):
-        """Flatten PyTree."""
-        children = (
-            self.D_rho,
-            self.D_theta,
-            self.D_zeta,
-            self.W_rho,
-            self.W_theta,
-            self.W_zeta,
-        )
-        aux = self._token
-        return children, aux
 
     @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        """Unflatten PyTree."""
-        D_rho, D_theta, D_zeta, W_rho, W_theta, W_zeta = children
-        dm = cls(
-            D_rho=D_rho,
-            D_theta=D_theta,
-            D_zeta=D_zeta,
-            W_rho=W_rho,
-            W_theta=W_theta,
-            W_zeta=W_zeta,
+    def from_zeta_grid(cls, zeta):
+        """Create a ``DiffMat`` for a uniform zeta grid.
+
+        This convenience constructor uses the fourth-order summation-by-parts
+        finite-difference stencil returned by :func:`finite_difference_diffmat`.
+        Pass the resulting object with the same ``zeta`` nodes:
+
+        .. code-block:: python
+
+            zeta = jnp.linspace(-3 * jnp.pi, 3 * jnp.pi, 600)
+            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+            diffmat = DiffMat.from_zeta_grid(zeta)
+            data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
+
+        Parameters
+        ----------
+        zeta : array-like
+            One-dimensional, uniformly spaced zeta nodes. At least 8 nodes are
+            required by the boundary stencil.
+        """
+        zeta = jnp.asarray(zeta)
+        if zeta.ndim != 1:
+            raise ValueError("zeta must be one-dimensional.")
+        if zeta.size < 8:
+            raise ValueError("At least 8 zeta nodes are required.")
+        spacing = np.diff(np.asarray(zeta))
+        if not np.allclose(spacing, spacing[0]):
+            raise ValueError("zeta nodes must be uniformly spaced.")
+        D_zeta, W_zeta = finite_difference_diffmat(
+            zeta.size, spacing[0], dtype=zeta.dtype
         )
-        dm._token = aux_data
-        return dm
+        return cls(D_zeta=D_zeta, W_zeta=W_zeta)
 
     def __hash__(self):
+        """Hash the static matrix structure."""
         return hash(self._token)
 
     def __eq__(self, other):
+        """Compare the static matrix structure."""
         return isinstance(other, DiffMat) and self._token == other._token
 
 
@@ -145,9 +326,7 @@ def fourier_pts(n: int, domain=None):
     """
     if domain is None:
         domain = [0, 2 * jnp.pi]
-    a, b = domain
-    h = (b - a) / n
-    return jnp.arange(n) * h + a
+    return jnp.linspace(domain[0], domain[1], n, endpoint=False)
 
 
 def fourier_diffmat(n: int):
@@ -177,6 +356,46 @@ def fourier_diffmat(n: int):
     W = jnp.zeros((n, n))
     W = W.at[jnp.diag_indices(n)].set(2 * jnp.pi / n)
 
+    return D, W
+
+
+def fourier_diffmat_truncated(n: int, M=None):
+    """Return a Fourier differentiation matrix truncated at wavenumber ``M``.
+
+    The collocation grid and quadrature weights are identical to
+    :func:`fourier_diffmat`, but modes above ``M`` are mapped to zero. Omitting
+    ``M`` retains every resolvable non-Nyquist mode and reproduces
+    :func:`fourier_diffmat`.
+
+    Parameters
+    ----------
+    n : int
+        Number of equally spaced collocation points on ``[0, 2*pi)``.
+    M : int, optional
+        Highest retained wavenumber. Must satisfy
+        ``1 <= M <= (n - 1) // 2``.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        Differentiation and diagonal quadrature matrices, each with shape
+        ``(n, n)``.
+    """
+    n = check_posint(n, "n", False)
+    max_mode = (n - 1) // 2
+    errorif(max_mode < 1, ValueError, "n must be at least 3.")
+    M = max_mode if M is None else check_posint(M, "M", False)
+    errorif(
+        M > max_mode,
+        ValueError,
+        f"M must not exceed (n - 1) // 2 = {max_mode}.",
+    )
+
+    i, j = jnp.mgrid[0:n, 0:n]
+    modes = jnp.arange(1, M + 1)
+    phase = (2.0 * jnp.pi / n) * (i - j)[:, :, None] * modes[None, None, :]
+    D = -(2.0 / n) * jnp.sum(modes[None, None, :] * jnp.sin(phase), axis=-1)
+    W = jnp.diag(jnp.full(n, 2.0 * jnp.pi / n))
     return D, W
 
 
@@ -262,3 +481,198 @@ def finite_difference_diffmat(N, h, dtype=jnp.float64):
     W = W.at[jnp.diag_indices(N)].set(H * h)
 
     return D / h, W
+
+
+########################################################################
+# ------------------------ JACOBI MATRICES --------------------------- #
+########################################################################
+
+
+def jacobi_diffmat(N, alpha=0.0, beta=1.0):
+    """Return a differentiation matrix on left-Gauss-Radau-Jacobi nodes.
+
+    Parameters
+    ----------
+    N : int
+        Number of nodes, at least 2.
+    alpha, beta : float
+        Jacobi weight exponents, both greater than -1.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        First-derivative and diagonal quadrature matrices with shape ``(N, N)``.
+    """
+    nodes, weights = gauss_radau_jacobi(N, alpha, beta)
+    barycentric_weights = _barycentric_weights(nodes)
+    difference = nodes[:, None] - nodes[None, :]
+    safe_difference = difference + jnp.eye(N)
+    D = barycentric_weights[None, :] / barycentric_weights[:, None] / safe_difference
+    D = D.at[jnp.diag_indices(N)].set(0.0)
+    D = D.at[jnp.diag_indices(N)].set(-jnp.sum(D, axis=1))
+    W = jnp.diag(weights)
+    return D, W
+
+
+########################################################################
+# ----------------------- B-SPLINE MATRICES -------------------------- #
+########################################################################
+
+
+def _bspline_basis_and_deriv(x, knots, degree):
+    """Evaluate a B-spline basis and its first derivative at ``x``."""
+    x = jnp.atleast_1d(x)
+    number_of_basis_functions = knots.size - degree - 1
+    left = knots[:-1]
+    right = knots[1:]
+
+    basis = (x[:, None] >= left[None, :]) & (x[:, None] < right[None, :])
+    final_nonempty_interval = (right == knots[-1]) & (left < right)
+    basis = basis | ((x[:, None] == knots[-1]) & final_nonempty_interval[None, :])
+    basis = basis.astype(x.dtype)
+
+    def safe_divide(numerator, denominator):
+        safe_denominator = jnp.where(denominator == 0, 1, denominator)
+        return jnp.where(
+            denominator == 0,
+            0.0,
+            numerator / safe_denominator,
+        )
+
+    def elevate(current_basis, current_degree):
+        i = jnp.arange(current_basis.shape[1] - 1)
+        left_denominator = knots[i + current_degree] - knots[i]
+        right_denominator = knots[i + current_degree + 1] - knots[i + 1]
+        left_coefficient = safe_divide(
+            x[:, None] - knots[i][None, :],
+            left_denominator[None, :],
+        )
+        right_coefficient = safe_divide(
+            knots[i + current_degree + 1][None, :] - x[:, None],
+            right_denominator[None, :],
+        )
+        return (
+            left_coefficient * current_basis[:, :-1]
+            + right_coefficient * current_basis[:, 1:]
+        )
+
+    degree_minus_one_basis = basis
+    for current_degree in range(1, degree):
+        degree_minus_one_basis = elevate(degree_minus_one_basis, current_degree)
+    basis = elevate(degree_minus_one_basis, degree)
+
+    i = jnp.arange(number_of_basis_functions)
+    left_denominator = knots[i + degree] - knots[i]
+    right_denominator = knots[i + degree + 1] - knots[i + 1]
+    derivative = degree * (
+        safe_divide(
+            degree_minus_one_basis[:, :-1],
+            left_denominator[None, :],
+        )
+        - safe_divide(
+            degree_minus_one_basis[:, 1:],
+            right_denominator[None, :],
+        )
+    )
+    return basis, derivative
+
+
+def bspline_diffmat(N, degree=4):
+    """Return a B-spline collocation differentiation matrix and weights.
+
+    Greville abscissae of a clamped-uniform knot vector provide one node per
+    basis function. The derivative matrix collocates the analytic B-spline
+    derivative, and the diagonal weights are the exact basis integrals.
+
+    Parameters
+    ----------
+    N : int
+        Number of basis functions and collocation nodes.
+    degree : int
+        Polynomial degree. ``N`` must be at least ``degree + 1``.
+
+    Returns
+    -------
+    D, W : tuple[jax.Array]
+        Differentiation and diagonal quadrature matrices with shape ``(N, N)``.
+    """
+    nodes, weights = bspline_nodes_weights(N, degree)
+    knots = _bspline_clamped_uniform_knots(N, degree)
+    basis, derivative = _bspline_basis_and_deriv(nodes, knots, degree)
+    D = jnp.linalg.solve(basis.T, derivative.T).T
+    W = jnp.diag(weights)
+    return D, W
+
+
+########################################################################
+# ----------------- ZERNIKE-FOURIER MATRICES ------------------------ #
+########################################################################
+
+
+def zernike_fourier_diffmat(
+    rho,
+    theta,
+    L=-1,
+    M=-1,
+    spectral_indexing="ansi",
+):
+    """Return coupled radial and poloidal Zernike-Fourier derivatives.
+
+    A single pseudo-inverse fits nodal values to a Zernike basis, after which
+    radial and poloidal derivative evaluations produce two coupled real-space
+    operators. The returned matrices follow the node ordering of the
+    :class:`~desc.grid.LinearGrid` constructed from ``rho`` and ``theta``.
+
+    Parameters
+    ----------
+    rho, theta : array-like
+        One-dimensional radial and poloidal collocation nodes.
+    L, M : int
+        Zernike radial and poloidal resolutions. A value of ``-1`` chooses a
+        resolution from the supplied node counts.
+    spectral_indexing : {"ansi", "fringe"}
+        Zernike spectral indexing convention.
+
+    Returns
+    -------
+    D_rho, D_theta : tuple[jax.Array]
+        Coupled first-derivative matrices, each with shape
+        ``(rho.size * theta.size, rho.size * theta.size)``.
+    """
+    from desc.basis import ZernikePolynomial
+    from desc.grid import LinearGrid
+    from desc.transform import Transform
+
+    rho = jnp.atleast_1d(rho)
+    theta = jnp.atleast_1d(theta)
+    errorif(
+        rho.ndim != 1 or theta.ndim != 1,
+        ValueError,
+        "rho and theta must be one-dimensional.",
+    )
+    errorif(
+        rho.size < 1 or theta.size < 1,
+        ValueError,
+        "rho and theta cannot be empty.",
+    )
+    M = max((theta.size - 1) // 2, 0) if M == -1 else M
+    L = 2 * (rho.size - 1) if L == -1 else L
+
+    grid = LinearGrid(rho=rho, theta=theta, NFP=1, sym=False)
+    basis = ZernikePolynomial(
+        L=L,
+        M=M,
+        spectral_indexing=spectral_indexing,
+    )
+    transform = Transform(
+        grid,
+        basis,
+        derivs=1,
+        build=True,
+        build_pinv=True,
+        method="direct1",
+    )
+    inverse = jnp.asarray(transform.matrices["pinv"])
+    D_rho = jnp.asarray(transform.matrices["direct1"][1][0][0]) @ inverse
+    D_theta = jnp.asarray(transform.matrices["direct1"][0][1][0]) @ inverse
+    return D_rho, D_theta

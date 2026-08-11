@@ -5,10 +5,8 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.diffmat_utils import DiffMat
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
-
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -31,6 +29,63 @@ overwrite_stability = {
         Defaults to ``bounds=(0, np.inf)``
     """,
 }
+
+
+def _agni_sigma_shift(obj, constants):
+    """Shift-invert sigma for the finite-n eigensolve. Fixed unless tracking is on.
+
+    DEFAULT (AGNI_SIGMA_MODE=fixed): `sigma_factor * self._lambda_guess`, both
+    static -- the historical behaviour, byte-for-byte. Nothing below runs.
+
+    TRACKING (AGNI_SIGMA_MODE=track): sigma is re-based on `constants["lambda_guess"]`,
+    which `update_state` refreshes every outer step from the TRUSTED dense eigsh
+    (see the note at the end of update_state). That entry is a traced array, so
+    writing a new value of the same shape/dtype changes a VALUE, not a signature --
+    no recompile. This is the mechanism the file already documents and already
+    maintains; the only thing that was missing is that sigma read the STATIC
+    attribute instead of this traced one.
+
+    WHY tracking is wanted: the near-zero eigenvalue cluster sits at a FIXED
+    mu = 1/|sigma|, while the wanted mode's mu = 1/(lambda - sigma) moves as the
+    optimizer drives lambda -> 0. With sigma pinned, the wanted mode slides INTO
+    the cluster: separation 1.150 at the start, 1.023 at the observed drift point,
+    1.0046 at job 56105697. At separation 1.0134 the objective read +2.14e-02 on a
+    genuinely UNSTABLE equilibrium. See BENCHMARKING.md section 10.
+
+    SCOPE (BENCHMARKING.md 10.8): this re-bases sigma from the value refreshed once
+    per OUTER step. It does NOT track sigma per trial point inside a line search --
+    that remains blocked, and would also break objective purity.
+
+    !! FACTOR WARNING !! `_sigma_factor` defaults to 10, which is correct for the
+    CONSTRUCTION-time convention (callers pass lambda_guess = lambda/10, so
+    10 * lambda/10 = lambda). Once `lambda_guess` holds the TRUE lambda, a factor of
+    10 puts sigma at 10x lambda and separation gets WORSE than the fixed default
+    (1.111 vs 1.150). BENCHMARKING.md 10.4(b) measured the sweet spot at
+    sigma ~ 2-3 x lambda: closer than that and the LU conditioning
+    (|lam - sigma| = 1.95e-5 against ||A|| = 2.8e7) costs accuracy instead.
+    Set AGNI_SIGMA_FACTOR=2.5 when enabling tracking.
+    """
+    import os as _os
+
+    import jax as _jax  # not imported at module scope in this file
+
+    # AGNI_SIGMA_MODE=track only. 'fixed' and 'adapt' both leave sigma alone here --
+    # 'adapt' re-shifts INSIDE the eigensolve instead, which needs no state.
+    # "track" or "track+adapt" both track here; "adapt" alone leaves sigma fixed at
+    # this level and does its re-shift inside the eigensolve instead.
+    if "track" not in _os.environ.get("AGNI_SIGMA_MODE", "fixed").lower():
+        return obj._sigma_factor * obj._lambda_guess
+
+    factor = float(_os.environ.get("AGNI_SIGMA_FACTOR", "2.5"))
+    lam_g = None if constants is None else constants.get("lambda_guess", None)
+    if lam_g is None:  # pre-first-refresh: nothing to track yet
+        return obj._sigma_factor * obj._lambda_guess
+    # stop_gradient: sigma is a SOLVER SETTING, not a physical parameter. It comes
+    # from the PREVIOUS outer step, so it is constant w.r.t. the current params --
+    # but JAX must be told, or a spurious dsigma/dp path appears. Hellmann-Feynman
+    # contains no sigma at all, so this cannot bias the gradient's form; a poor
+    # sigma degrades the ACCURACY of v, never the formula.
+    return factor * _jax.lax.stop_gradient(jnp.asarray(lam_g))
 
 
 class MercierStability(_Objective):
@@ -434,7 +489,7 @@ class BallooningStability(_Objective):
         nzetaperturn=200,
         zeta0=None,
         Neigvals=1,
-        diffmat=DiffMat(),
+        diffmat=None,
         lambda0=0.0,
         w0=1.0,
         w1=10.0,
@@ -604,26 +659,39 @@ class FinitenStability(_Objective):
     Finite-n ideal MHD ballooning modes are of significant interest.
     With this class, we optimize MHD equilibria against the finite-n unstable modes.
 
-    Targets the following metric:
+    ``compute`` evaluates ``finite-n lambda3 rayleigh``: the Rayleigh quotient
+    ``lambda_R = v^T A(p) v / v^T v`` where ``v`` is eigensolved from ``A(p)`` at that
+    same ``p`` (ARPACK on the host, via ``jax.pure_callback``). Because a callback
+    output carries no tangent, AD reduces the derivative to the Hellmann-Feynman
+    contraction ``v^T (dA/dp) v / v^T v`` automatically.
 
-    f = w₀ sum(ReLU(λ-λ₀))
-
-    where λ is the negative squared growth rate for each field line (such that λ>0 is
-    unstable), λ₀ is a cutoff, and w₀ and w₁ are weights.
+    The eigenvector is deliberately NOT cached. ProximalProjection re-solves the
+    equilibrium before every objective evaluation; ``L_lmn`` then moves, ``theta``
+    moves with it, and a 7e-5 mesh shift already sends the Rayleigh residual to ~4800
+    and flips lambda_R's sign. See WHY_V_CANNOT_BE_CACHED.md. The matrix-free solver
+    is not used anywhere in this objective. Historical note: ``update_state``
+    between accepted optimization steps to refresh the cached eigenvalue/eigenfunction
+    by running the warm-started matrix-free eigensolver.
 
     Parameters
     ----------
     eq : Equilibrium
         ``Equilibrium`` to be optimized.
-    grid : float
-        Flux surface to optimize on. Instabilities often peak near the middle.
+    grid : Grid
+        PEST grid used for the finite-n operator.
     diffmat: DiffMat
-        DiffMat object.
-        Default is an object containing None.
+        Differentiation matrices for the PEST grid.
+    v_guess : ndarray, optional
+        Cached full eigenfunction. Updated by ``update_state``.
+    lambda_guess : float, optional
+        Cached eigenvalue. Updated by ``update_state`` and used to set the
+        shift-invert sigma.
     lambda0 : float
-        Threshold for penalizing growth rates in metric above.
+        Threshold for ``metric="shifted_relu"``.
     w0 : float
-        Weight for sum and max terms in metric above.
+        Weight for ``metric="shifted_relu"``.
+    metric : {"raw", "shifted_relu"}
+        Objective metric. ``"raw"`` returns lambda directly.
     name : str, optional
         Name of the objective function.
 
@@ -637,10 +705,45 @@ class FinitenStability(_Objective):
     )
 
     _static_attrs = _Objective._static_attrs + [
+        # Lists of compute-key strings. They must be declared static or the jitted
+        # ObjectiveFunction tries to interpret each str as an abstract array.
+        "_flux_keys",
+        "_zero_d_keys",
+        # The DiffMat carries `zernike_penalty_alpha`, which `_get_zernike_penalty`
+        # reads as a concrete Python float to decide whether to build the penalty
+        # projector at all. If the DiffMat is a traced pytree that read raises
+        # TracerBoolConversionError. BallooningStability marks `_diffmat` static
+        # for the same reason.
+        "_diffmat",
         "_axisym",
         "_n_mode_axisym",
         "_gamma",
+        # `_v_guess` and `_lambda_guess` are static, and are therefore INVARIANTS:
+        # nothing may ever rebind them after construction. A static attr lives in
+        # the jit signature, so rebinding one mints a new treedef and discards the
+        # compiled objective. `update_state` used to rebind both on every refresh,
+        # i.e. recompile the whole graph once per outer step. Measured at 12x16x8:
+        # a repeat objective call costs 0.002 s with `_v_guess=None` and 1.3 s once
+        # a real eigenvector is installed -- 650x, on calls that should be free.
+        # `_v_guess` now stays None forever and `_lambda_guess` keeps its
+        # construction value (it only ever sets the fixed eigsh shift). The live
+        # eigenpair lives in `_constants`, which is traced. `_density` is likewise
+        # a static ndarray and is safe only because it is never rebound.
         "_v_guess",
+        "_lambda_guess",
+        "_state_solver",
+        "_matfree_solver",
+        "_sigma_factor",
+        "_num_matvecs",
+        "_cg_tol",
+        "_cg_maxiter",
+        "_eigsh_tol",
+        "_coupled_rt",
+        "_n_rho_coupled",
+        "_n_theta_coupled",
+        "_incompressible",
+        "_density",
+        "_metric",
     ]
 
     _coordinates = "r"
@@ -658,14 +761,28 @@ class FinitenStability(_Objective):
         loss_function=None,
         deriv_mode="auto",
         v_guess=None,
+        lambda_guess=None,
         grid=None,
         axisym=None,
         gamma=0.0,
         n_mode_axisym=1,
-        diffmat=DiffMat(),
+        incompressible=False,
+        density=None,
+        diffmat=None,
+        state_solver="dense_eigsh",
+        matfree_solver=None,
+        sigma_factor=1.3,
+        num_matvecs=64,
+        cg_tol=1e-6,
+        cg_maxiter=30000,
+        eigsh_tol=1e-8,
+        coupled_rt=False,
+        n_rho_coupled=None,
+        n_theta_coupled=None,
+        metric="raw",
         lambda0=0.0,
         w0=1.0,
-        name="finite-n lambda matfree",
+        name="finite-n lambda3 rayleigh",
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
@@ -673,9 +790,24 @@ class FinitenStability(_Objective):
 
         self._axisym = axisym
         self._v_guess = v_guess
+        self._lambda_guess = lambda_guess
         self._gamma = gamma
+        self._n_mode_axisym = n_mode_axisym
+        self._incompressible = incompressible
+        self._density = density
         self._diffmat = diffmat
         self._grid = grid
+        self._state_solver = state_solver
+        self._matfree_solver = matfree_solver
+        self._sigma_factor = sigma_factor
+        self._num_matvecs = num_matvecs
+        self._cg_tol = cg_tol
+        self._cg_maxiter = cg_maxiter
+        self._eigsh_tol = eigsh_tol
+        self._coupled_rt = coupled_rt
+        self._n_rho_coupled = n_rho_coupled
+        self._n_theta_coupled = n_theta_coupled
+        self._metric = metric
         self._lambda0 = lambda0
         self._w0 = w0
 
@@ -704,21 +836,75 @@ class FinitenStability(_Objective):
 
         """
         eq = self.things[0]
+        errorif(
+            self._grid is None,
+            ValueError,
+            "FinitenStability requires a PEST grid. Pass the same source grid used "
+            "to build the finite-n lambda3 DiffMat.",
+        )
+        errorif(
+            self._diffmat is None,
+            ValueError,
+            "FinitenStability requires diffmat for finite-n lambda3 matfree.",
+        )
 
-        a_grid = LinearGrid(
-            rho=jnp.array([1.0]),
+        self._dim_f = 1
+        grid_PEST = self._grid
+        # Flux functions (coordinates="r"). These are constant on a rho surface, so
+        # computing them on a LinearGrid over the PEST rho values and copying them
+        # onto the AGNI nodes reproduces what eq.compute(override_grid=True) does
+        # for its internal `grid1dr` (equilibrium.py). This is the same pattern
+        # BallooningStability uses, and it is required here: the AGNI grid's nodes
+        # are traced (they come from map_coordinates(params=params)), so DESC's own
+        # override_grid machinery cannot build its internal grids under AD.
+        # These live on `self`, not in `_constants`: `_constants` is traversed as a
+        # JAX pytree by the jitted ObjectiveFunction, and a list of str in there
+        # raises "Error interpreting argument to ... as an abstract array".
+        # BallooningStability keeps `_iota_keys` on self for the same reason.
+        self._flux_keys = flux_keys = [
+            "iota",
+            "iota_r",
+            "iota_den",
+            "iota_den_r",
+            "iota_num",
+            "iota_num_r",
+            "iota_num current",
+            "iota_num_r current",
+            "iota_num vacuum",
+            "iota_num_r vacuum",
+            "psi_r",
+            "psi_rr",
+            "p",
+            "p_r",
+        ]
+        # `a` is 0-D (coordinates=""), NOT a flux function, and it must not ride
+        # along on flux_grid. eq.compute(override_grid=True) -- i.e. the dense
+        # finite-n lambda3 reference that produces the eigenpair -- computes 0-D
+        # quantities on a QuadratureGrid, where `A` is a direct area integral of
+        # |e_rho x e_theta|. On any other grid, `_compute_A_of_z` instead takes a
+        # boundary line-integral branch that differs by ~3.8% for this QH case.
+        # `a` is the whole non-dimensionalization (B_N = |Psi|/(pi a^2), and the
+        # operator's terms carry a^2, a^3 and a^4), so a mismatched `a` gives the
+        # Rayleigh quotient a different operator than the one eigsh diagonalized.
+        # QuadratureGrid is built from static resolutions only, so it holds no
+        # traced nodes and is safe to use inside AD.
+        self._zero_d_keys = zero_d_keys = ["a"]
+        quad_grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        quad_transforms = get_transforms(zero_d_keys, obj=eq, grid=quad_grid)
+        quad_profiles = get_profiles(zero_d_keys, eq, quad_grid)
+
+        rho_nodes = np.asarray(grid_PEST.nodes[:, 0])
+        rho_unique = np.unique(rho_nodes)
+        flux_grid = LinearGrid(
+            rho=rho_unique,
             M=eq.M_grid,
             N=eq.N_grid,
             NFP=eq.NFP,
             sym=eq.sym,
         )
-        assert not a_grid.axis.size
-
-        self._dim_f = 1
-        transforms = get_transforms(["a"], obj=eq, grid=a_grid)
-        profiles = get_profiles(["a"] + ["finite-n lambda matfree"], eq, a_grid)
-
-        grid_PEST = self._grid
+        assert not flux_grid.axis.size
+        flux_transforms = get_transforms(flux_keys, obj=eq, grid=flux_grid)
+        flux_profiles = get_profiles(flux_keys, eq, flux_grid)
         n_rho = grid_PEST.num_rho
         n_theta = grid_PEST.num_theta
         n_zeta = grid_PEST.num_zeta
@@ -726,17 +912,266 @@ class FinitenStability(_Objective):
             grid_PEST.meshgrid_reshape(grid_PEST.nodes, order="rtz"),
             (n_rho * n_theta * n_zeta, 3),
         )
+        # rho is invariant under the PEST->DESC map, so the rho compress/expand
+        # indices of the mapped grid are exactly those of PEST_nodes. Precomputing
+        # them here (concretely, on the reshaped rho-major ordering that the operator
+        # actually uses) is what lets the mapped grid be rebuilt from *traced* nodes
+        # inside AD -- Grid(jitable=True) accepts them instead of rediscovering them
+        # with NumPy. This is the same trick get_rtz_grid uses for BallooningStability.
+        rho_PEST = np.asarray(PEST_nodes[:, 0])
+        _, unique_rho_idx, inverse_rho_idx = np.unique(
+            rho_PEST, return_index=True, return_inverse=True
+        )
+        v_guess = self._v_guess
+        if v_guess is None:
+            v_guess = np.ones(3 * n_rho * n_theta * n_zeta)
+        lambda_guess = setdefault(self._lambda_guess, -1e-1)
 
         self._constants = {
-            "a_transforms": transforms,
-            "diffmat": self._diffmat,
             "PEST_nodes": PEST_nodes,
-            "profiles": profiles,
+            "flux_transforms": flux_transforms,
+            "flux_profiles": flux_profiles,
+            "quad_transforms": quad_transforms,
+            "quad_profiles": quad_profiles,
+            "unique_rho_idx": jnp.asarray(unique_rho_idx),
+            "inverse_rho_idx": jnp.asarray(inverse_rho_idx),
             "quad_weights": 1.0,
             "lambda0": self._lambda0,
             "w0": self._w0,
+            "v_guess": jnp.asarray(v_guess).reshape(-1),
+            "lambda_guess": jnp.asarray(lambda_guess),
         }
         super().build(use_jit=use_jit, verbose=verbose)
+
+    def _mapped_grid(self, params, constants):
+        """Map the PEST nodes to DESC coordinates at THESE parameters.
+
+        The PEST grid is fixed in PEST coordinates, but the DESC coordinates of
+        those nodes move as the equilibrium changes, so this must be rebuilt on
+        every call -- including inside AD. Caching it would freeze the nodes and
+        silently drop the node-motion contribution to dlambda/dp.
+
+        Two things make that possible under a trace, both taken from
+        ``get_rtz_grid`` (the ``BallooningStability`` path):
+
+        - ``jitable=True``: skips ``_find_axis``/``_find_unique_inverse_nodes``,
+          which call into NumPy and cannot see traced nodes. This is what raised
+          ``ConcretizationTypeError``/``TracerArrayConversionError`` when this was
+          a bare ``Grid(DESC_nodes)``.
+        - supplying the rho indices: rho is invariant under the PEST->DESC map, so
+          the mapped grid's rho compress/expand indices are just the PEST grid's,
+          precomputed concretely in ``build``. The grid never has to rediscover
+          them from traced values.
+        """
+        eq = self.things[0]
+        DESC_nodes = eq.map_coordinates(
+            constants["PEST_nodes"],  # (ρ,θ_PEST,ζ)
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            tol=1e-12,
+            maxiter=50,
+            params=params,
+        )
+        return Grid(
+            nodes=DESC_nodes,
+            coordinates="rtz",
+            sort=False,
+            jitable=True,
+            _unique_rho_idx=constants["unique_rho_idx"],
+            _inverse_rho_idx=constants["inverse_rho_idx"],
+        )
+
+    def _flux_data(self, params, constants, grid):
+        """Prefill the quantities that must not be computed on the AGNI grid.
+
+        Two distinct kinds, on two distinct grids, matching what
+        ``eq.compute(override_grid=True)`` does for the dense reference:
+
+        - 0-D (``a``) on a ``QuadratureGrid``.
+        - 1-D flux functions on a ``LinearGrid`` over the PEST rho values, copied
+          onto the AGNI nodes.
+
+        Everything else is a pointwise profile evaluation (``ne``, ``Ti``, ``rho``,
+        ...) which is grid-insensitive and correct on the AGNI grid directly.
+        """
+        eq = self.things[0]
+        # 0-D first, then seed it into the flux compute, mirroring the
+        # `data=data1dr_seed | data0d_seed` ordering in Equilibrium.compute.
+        zero_d_data = compute_fun(
+            eq,
+            self._zero_d_keys,
+            params=params,
+            transforms=constants["quad_transforms"],
+            profiles=constants["quad_profiles"],
+        )
+        data = {key: jnp.asarray(zero_d_data[key]) for key in self._zero_d_keys}
+
+        flux_data = compute_fun(
+            eq,
+            self._flux_keys,
+            params=params,
+            transforms=constants["flux_transforms"],
+            profiles=constants["flux_profiles"],
+            data=dict(data),
+        )
+        flux_grid = constants["flux_transforms"]["grid"]
+        for key in self._flux_keys:
+            data[key] = grid.copy_data_from_other(
+                jnp.asarray(flux_data[key]), flux_grid, surface_label="rho"
+            )
+        return data
+
+    def compute_data(self, params, constants=None, solve=False):
+        """Evaluate the fixed-vector Rayleigh quotient of the finite-n operator.
+
+        ``solve`` is accepted only for backwards compatibility and must be False.
+        This objective never solves an eigenproblem here: the eigenpair comes from
+        dense ``finite-n lambda3`` + eigsh in ``update_state``, and ``compute``
+        differentiates the Rayleigh quotient with that eigenvector held fixed.
+        """
+        errorif(
+            solve,
+            ValueError,
+            "FinitenStability.compute_data(solve=True) is not supported: it would "
+            "run the matrix-free eigensolver. Refresh the eigenpair with "
+            "update_state(state_solver='dense_eigsh') instead.",
+        )
+        constants = self.constants if constants is None else constants
+        eq = self.things[0]
+
+        grid = self._mapped_grid(params, constants)
+
+        options = {
+            "axisym": self._axisym,
+            "n_mode_axisym": self._n_mode_axisym,
+            "gamma": self._gamma,
+            "incompressible": self._incompressible,
+            "coupled_rt": self._coupled_rt,
+            "n_rho_coupled": self._n_rho_coupled,
+            "n_theta_coupled": self._n_theta_coupled,
+            # No v_guess. `finite-n lambda3 rayleigh` eigensolves A(p) itself, at
+            # this p, so the eigenvector is always the primal point's. Caching one
+            # here is what made the optimizer minimize a stale-vector quotient:
+            # ProximalProjection re-solves the equilibrium before every evaluation,
+            # L_lmn moves, theta moves with it, and a 7e-5 mesh shift already sends
+            # the Rayleigh residual to ~4800. See WHY_V_CANNOT_BE_CACHED.md.
+            # Fixed by default; AGNI_SIGMA_MODE=track re-bases it on the traced
+            # constants["lambda_guess"]. See _agni_sigma_shift -- including the
+            # FACTOR WARNING (set AGNI_SIGMA_FACTOR=2.5 when tracking).
+            "sigma": _agni_sigma_shift(self, constants),
+            "eigsh_tol": self._eigsh_tol,
+        }
+        if self._density is not None:
+            options["density"] = self._density
+
+        return eq.compute(
+            "finite-n lambda3 rayleigh",
+            grid=grid,
+            diffmat=self._diffmat,
+            params=params,
+            data=self._flux_data(params, constants, grid),
+            override_grid=False,
+            **options,
+        )
+
+    def metric(self, lam, constants=None):
+        """Apply the requested scalar metric to the finite-n eigenvalue."""
+        constants = self.constants if constants is None else constants
+        if self._metric == "raw":
+            return lam
+        errorif(
+            self._metric != "shifted_relu",
+            ValueError,
+            "Unknown finite-n stability metric: expected 'raw' or 'shifted_relu'.",
+        )
+        return (
+            constants["w0"]
+            * (lam - constants["lambda0"])
+            * (lam >= constants["lambda0"])
+        )
+
+    def update_state(self, params, constants=None):
+        """Refresh and cache the finite-n eigenpair.
+
+        Call this before each one-step DESC optimization solve. ``compute`` then
+        returns the fixed-mode Rayleigh quotient, so DESC computes the gradient in
+        its usual way while the expensive eigensolve stays outside AD. By default
+        this preserves the original warm-started matrix-free refresh. If
+        ``state_solver="dense_eigsh"``, the cached eigenpair is instead refreshed
+        with dense ``finite-n lambda3`` and SciPy ARPACK ``eigsh``.
+        """
+        constants = self.constants if constants is None else constants
+        state_solver = str(self._state_solver).lower()
+        if state_solver in {"matfree", "shiftinvert_cg"}:
+            raise ValueError(
+                "state_solver='matfree' is not supported: it runs the matrix-free "
+                "eigensolver. Use state_solver='dense_eigsh'."
+            )
+        elif state_solver in {"dense", "dense_eigsh", "eigsh"}:
+            eq = self.things[0]
+            grid = self._mapped_grid(params, constants)
+            if bool(__import__("os").environ.get("AGNI_OBJECTIVE_DEBUG", "")):
+                _sig = self._sigma_factor * constants.get(
+                    "lambda_guess", self._lambda_guess
+                )
+                print(
+                    "[FinitenStability dense_eigsh] "
+                    f"sigma={_sig} "
+                    f"eigsh_tol={self._eigsh_tol} coupled_rt={self._coupled_rt} "
+                    f"n_rho_coupled={self._n_rho_coupled} "
+                    f"n_theta_coupled={self._n_theta_coupled} grid=bare",
+                    flush=True,
+                )
+            options = {
+                "axisym": self._axisym,
+                "n_mode_axisym": self._n_mode_axisym,
+                "gamma": self._gamma,
+                "incompressible": self._incompressible,
+                "coupled_rt": self._coupled_rt,
+                "n_rho_coupled": self._n_rho_coupled,
+                "n_theta_coupled": self._n_theta_coupled,
+                # sigma is a FIXED shift built from the immutable `_lambda_guess`
+                # supplied at construction -- never from the last refresh. See the
+                # note below on why nothing here may be rebound.
+                "sigma": self._sigma_factor * self._lambda_guess,
+                # No v_guess: the dense eigsh cold-starts every time. A warm start
+                # from the previous step's eigenvector is only as good as that
+                # vector is fresh; if a boundary step moved the equilibrium, ARPACK
+                # is handed a stale v0 and can grind or converge to a different
+                # mode. Cold-starting is slower per solve but cannot mislead.
+                "eigsh_tol": self._eigsh_tol,
+            }
+            if self._density is not None:
+                options["density"] = self._density
+            data = eq.compute(
+                "finite-n lambda3",
+                grid=grid,
+                diffmat=self._diffmat,
+                params=params,
+                **options,
+            )
+            lam = jnp.asarray(data["finite-n lambda3"]).reshape(-1)[0]
+            v = jnp.asarray(data["finite-n eigenfunction3"]).reshape(-1)
+        else:
+            raise ValueError(
+                "Unknown finite-n state_solver: expected 'matfree' or "
+                f"'dense_eigsh', got {self._state_solver!r}."
+            )
+        # `self._v_guess` and `self._lambda_guess` are declared in `_static_attrs`,
+        # so they live in the jit signature. Rebinding a static attr mints a new
+        # treedef and throws away the compiled objective -- and update_state runs
+        # once per outer step, so rebinding here means recompiling the whole graph
+        # every refresh. Measured at 12x16x8: a repeat objective call costs 0.002 s
+        # with `_v_guess=None` and 1.3 s once a real eigenvector is installed.
+        # They are therefore left at their construction values FOREVER. The refreshed
+        # eigenpair goes only into `_constants`, which is traced: writing a new array
+        # of the same shape/dtype there changes a value, not a signature, so nothing
+        # recompiles. `compute_data` reads `constants["v_guess"]`, never self.
+        if hasattr(self, "_constants"):
+            self._constants["v_guess"] = v
+            self._constants["lambda_guess"] = lam
+        return data
 
     def compute(self, params, constants=None):
         """Compute the finite-n stability eigenvalue.
@@ -756,64 +1191,7 @@ class FinitenStability(_Objective):
             Finite-n instability eigenvalue.
 
         """
-        if constants is None:
-            constants = self.constants
-
-        eq = self.things[0]
-
-        a_data = compute_fun(
-            eq,
-            ["a"],
-            params=params,
-            transforms=constants["a_transforms"],
-            profiles=constants["profiles"],
-        )
-
-        data = {"a": a_data["a"]}
-        PEST_nodes = constants["PEST_nodes"]
-
-        DESC_nodes = eq.map_coordinates(
-            PEST_nodes,  # (ρ,θ_PEST,ζ)
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-            tol=1e-12,
-            maxiter=50,
-            params=params,
-        )
-        DESC_nodes_spacing = jnp.vstack(
-            (jnp.array([0.0, 0.0, 0.0]), jnp.diff(DESC_nodes, axis=0))
-        )
-        grid = Grid(
-            DESC_nodes,
-            spacing=DESC_nodes_spacing,
-            coordinates="rtz",
-            source_grid=self._grid,
-            sort=False,
-            jitable=True,
-        )
-
-        ## trying to not use constants
-        data = compute_fun(
-            eq,
-            ["finite-n lambda matfree"],
-            params=params,
-            transforms=get_transforms(
-                keys=["finite-n lambda matfree"],
-                obj=eq,
-                grid=grid,
-                diffmat=constants["diffmat"],
-                jitable=True,
-            ),
-            data=data,
-            profiles=constants["profiles"],
-            axisym=self._axisym,
-            v_guess=self._v_guess,
-            gamma=self._gamma,
-        )
-
-        lam = data["finite-n lambda matfree"]
-        lambda0, w0 = constants["lambda0"], constants["w0"]
-        # shifted ReLU
-        lam = w0 * (lam - lambda0) * (lam >= lambda0)
-        return lam
+        constants = self.constants if constants is None else constants
+        data = self.compute_data(params, constants=constants, solve=False)
+        lam = data["finite-n lambda3 rayleigh"]
+        return self.metric(lam, constants=constants)

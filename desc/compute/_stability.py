@@ -8,12 +8,14 @@ of these quantities. These lambda functions are evaluated only when the
 computational grid has a node on the magnetic axis to avoid potentially
 expensive computations.
 """
-from functools import partial
+
 import os
 import time
+from functools import partial
 
 import numpy as np
 from jax.scipy.sparse.linalg import bicgstab, cg, gmres
+
 try:
     from matfree import decomp, eig
 except ModuleNotFoundError:
@@ -31,7 +33,13 @@ from .data_index import register_compute_fun
 
 def _agni_mem_trace_enabled(kwargs):
     flag = os.environ.get("AGNI_MEM_TRACE", "0").strip().lower()
-    return bool(kwargs.get("debug_matfree", False)) or flag not in {"", "0", "false", "no", "off"}
+    return bool(kwargs.get("debug_matfree", False)) or flag not in {
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
+    }
 
 
 def _agni_mem_trace(kwargs, *parts):
@@ -42,8 +50,8 @@ def _agni_mem_trace(kwargs, *parts):
 def _require_matfree_backend():
     if decomp is None or eig is None:
         raise ModuleNotFoundError(
-            "matfree is required only for matfree_solver='shiftinvert_cg' or "
-            "'shiftinvert_pcg'. "
+            "matfree is required only for matfree_solver='shiftinvert_cg', "
+            "'shiftinvert_bicgstab', or 'shiftinvert_gmres'. "
             "Install matfree or use matfree_solver='eigsh_no_shiftinvert'."
         )
 
@@ -69,41 +77,6 @@ def _get_zernike_penalty(transforms, rt_size):
             f"coupled_rt grid: got {Q_rt.shape}, expected {(rt_size, rt_size)}."
         )
     return alpha, Q_rt, getattr(diffmat, "zernike_penalty_rank", None)
-
-
-def _assemble_diagblocks_comp_major(blocks, rho_idx, theta_idx, zeta_idx, sym=False):
-    """Assemble a (3N, 3N) component-major matrix from (N, 3, 3) diagonal blocks.
-
-    blocks: (N,3,3). Works for L (lower-tri) or B_blocks (symmetric).
-
-    *_idx:  python slices for component-major ranges.
-
-    NOTE that it currently only works for assembling lower diagonal
-    matrices such as the ones formed by cholesky. Generalize logic later.
-
-    This is used only by the Linv_full vs compact-Linv equivalence checks
-    (the active compute paths reconstruct xi directly from the compact Linv);
-    it is kept at module scope so the equivalence test in tests/ can import it.
-    """
-    N = blocks.shape[0]
-    big = jnp.zeros((3 * N, 3 * N))
-
-    # Diagonal sub-blocks
-    big = big.at[rho_idx, rho_idx].set(jnp.diag(blocks[:, 0, 0]))
-    big = big.at[theta_idx, theta_idx].set(jnp.diag(blocks[:, 1, 1]))
-    big = big.at[zeta_idx, zeta_idx].set(jnp.diag(blocks[:, 2, 2]))
-
-    # Off-diagonal (lower) subblocks — upper are zero for a Cholesky L anyway
-    big = big.at[theta_idx, rho_idx].set(jnp.diag(blocks[:, 1, 0]))
-    big = big.at[zeta_idx, rho_idx].set(jnp.diag(blocks[:, 2, 0]))
-    big = big.at[zeta_idx, theta_idx].set(jnp.diag(blocks[:, 2, 1]))
-
-    if sym:
-        big = big.at[rho_idx, theta_idx].set(jnp.diag(blocks[:, 0, 1]))
-        big = big.at[rho_idx, zeta_idx].set(jnp.diag(blocks[:, 0, 2]))
-        big = big.at[theta_idx, zeta_idx].set(jnp.diag(blocks[:, 1, 2]))
-
-    return big
 
 
 @register_compute_fun(
@@ -696,8 +669,6 @@ def _Newcomb_ball_metric(params, transforms, profiles, data, **kwargs):
     return data
 
 
-
-
 def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     """Assemble the reduced, whitened dense finite-n lambda3 matrix ``A``.
 
@@ -725,11 +696,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     fewer terms and even order derivatives. For this version
     the PSD version of A is actually very close to PSD ~ 1e-12.
     B is perfectly PSD
-    
+
     The difference between this version and finite-n lambda is
     a variable transformation that matrix assembly significantly
     efficient. Moreover, we minimize the number of full matrices
-    that are materialized. 
+    that are materialized.
 
     A test compares the eigenvalue and eigenfunction of this version
     with finite-n lambda.
@@ -741,10 +712,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     iotainv = (1 / data["iota"])[:, None]
 
     psi_r = data["psi_r"][:, None] / (a_N**2 * B_N)
-    psi_r0 = 1.0
-    #psi_r0 = a_N**2 * B_N
-    psi_r02 = psi_r0 ** 2
-
     psi_r2 = psi_r**2
     psi_r3 = psi_r**3
 
@@ -752,8 +719,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     # Add a tiny shift because sometimes the pressure can be
     # slightly negative in the edge
-    p0 = 1.0 * mu_0 * data["p"][:, None] /B_N**2 + 1e-12
-    p_r = 1.0 * mu_0 * data["p_r"][:, None] /B_N**2
+    p0 = 1.0 * mu_0 * data["p"][:, None] / B_N**2 + 1e-12
+    p_r = 1.0 * mu_0 * data["p_r"][:, None] / B_N**2
 
     axisym = kwargs.get("axisym", False)
 
@@ -846,7 +813,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.float64)
         B = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.float64)
 
-
     sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 
     sqrtg_r = data["(sqrt(g)_PEST_r)|PEST"][:, None] * 1 / a_N**3
@@ -878,11 +844,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # Can be obtained from ideal-MHD force balance
     j_sup_theta = iota * j_sup_zeta + p_r / psi_r
 
-    # instability drive term. f_scale (default 1) temporarily amplifies the drive
-    # so callers can isolate the physical unstable mode at f_scale>1, then continue
-    # back to f_scale=1 using that eigenvalue/eigenfunction as sigma/v_guess.
-    f_scale = kwargs.get("f_scale", 1.0)
-    F = -1.0 * f_scale * mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
+    F = -mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
 
     C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
     C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
@@ -892,10 +854,10 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     ####----Q²_ρρ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
-        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * psi_r02 * W * g_rr) * D_theta)
-        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * psi_r02 * g_rr) * D_zeta)
-        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * psi_r02 * W * g_rr) * D_zeta)
-        + _cT((psi_r_over_sqrtg * iota * psi_r3 * psi_r02 * W * g_rr) * D_zeta) @ D_theta
+        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+        + _cT((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta) @ D_theta
     )
 
     ####################
@@ -912,11 +874,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     A = A.at[rho_idx, rho_idx].add(
         +_cT(D_rho * iota_psi_r2.T)
-        @ ((psi_r_over_sqrtg * psi_r02 * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
+        @ ((psi_r_over_sqrtg * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1 * _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * psi_r0 * W * g_vv) * D_zeta)
+        -1 * _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
     )
 
     ####################
@@ -931,11 +893,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     )
     A = A.at[rho_idx, rho_idx].add(
         +_cT(D_rho * psi_r2.T)
-        @ ((psi_r_over_sqrtg * psi_r02 * W * g_pp / psi_r) * (D_rho * psi_r2.T))
+        @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * psi_r2.T))
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        1 * _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * psi_r0 * W * g_pp) * D_theta)
+        1 * _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
     )
 
     ####################
@@ -945,9 +907,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         -1
         * (
             _cT(D_theta)
-            @ ((iota * psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
             + _cT(D_zeta)
-            @ ((psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+            @ ((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
         )
     )
 
@@ -955,16 +917,16 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     A = A.at[rho_idx, rho_idx].add(
         -1
         * (
-            _cT((iota * psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+            _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
             @ D_theta
-            + _cT((psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+            + _cT((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
             @ D_zeta
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        _cT(D_theta) @ ((iota * psi_r2 * psi_r0 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
-        + _cT(D_zeta) @ ((psi_r2 * psi_r0 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
     )
 
     ######################
@@ -974,25 +936,25 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         -1
         * (
             _cT(D_theta)
-            @ ((iota * psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
-            + _cT(D_zeta) @ ((psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+            + _cT(D_zeta) @ ((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
         )
     )
 
     A = A.at[rho_idx, rho_idx].add(
         -1
         * (
-            _cT((iota * psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+            _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
             @ D_theta
-            + _cT((psi_r * psi_r02 * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T)) @ D_zeta
+            + _cT((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T)) @ D_zeta
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
         -1
         * (
-            _cT(D_theta) @ ((iota * psi_r2 * psi_r0 * psi_r_over_sqrtg * W * g_rp) * D_theta)
-            + _cT(D_zeta) @ ((psi_r2 * psi_r0 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
         )
     )
 
@@ -1003,15 +965,15 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         -1
         * (
             _cT(D_zeta) @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
-            + _cT((psi_r_over_sqrtg* W * psi_r * g_vp) * D_theta) @ D_zeta
+            + _cT((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta) @ D_zeta
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
         -1
         * (
-            _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * psi_r0 * W * g_vp) * D_zeta)
-            - _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * psi_r0 * W * g_vp) * D_theta)
+            _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
+            - _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
         )
     )
 
@@ -1019,14 +981,14 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         1
         * (
             _cT(D_rho * iota_psi_r2.T)
-            @ ((psi_r_over_sqrtg * psi_r02 * W * g_vp / psi_r) * (D_rho * psi_r2.T))
+            @ ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
         )
     )
     # ρ-ρ symmetrizing term
     A = A.at[rho_idx, rho_idx].add(
         1
         * (
-            _cT((psi_r_over_sqrtg * psi_r02 * W * g_vp / psi_r) * (D_rho * psi_r2.T))
+            _cT((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
             @ (D_rho * iota_psi_r2.T)
         )
     )
@@ -1035,54 +997,53 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # \xi^{\rho} (\mathbf{J} \times \nabla\rho)/|\nabla \rho|^2 \cdot \mathbf{Q}
     # Some algebra is performed to replace g_sup_rv and g_sup_rp
     A = A.at[rho_idx, rho_idx].add(
-        -1.
+        1.0
         * (
             (
                 W
-                * psi_r2 * psi_r02
-                * (j_sup_theta * g_sup_rp_term + j_sup_zeta * g_sup_rv_term)
+                * psi_r2
+                * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
                 / g_sup_rr
             )
             * (iota * D_theta + D_zeta)
-            + (W * sqrtg * psi_r * psi_r02 * j_sup_zeta) * (D_rho * iota_psi_r2.T)
-            + (W * sqrtg * psi_r * psi_r02 * j_sup_theta) * (D_rho * psi_r2.T)
+            - (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T)
+            + (W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T)
         )
     )
 
     # ρ-ρ block transposed for symmetry
     A = A.at[rho_idx, rho_idx].add(
-        -1.
+        1.0
         * (
             _cT(
                 (
                     W
                     * psi_r2
-                    * psi_r02
-                    * (j_sup_theta * g_sup_rp_term + j_sup_zeta * g_sup_rv_term)
+                    * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
                     / g_sup_rr
                 )
                 * (iota * D_theta + D_zeta)
             )
-            + _cT((W * sqrtg * psi_r * psi_r02 * j_sup_zeta) * (D_rho * iota_psi_r2.T))
-            + _cT((W * sqrtg * psi_r * psi_r02 * j_sup_theta) * (D_rho * psi_r2.T))
+            - _cT((W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T))
+            + _cT((W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T))
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -(1.* W * psi_r2 * psi_r0 * sqrtg * j_sup_theta) * D_theta
-        + (1. * W * psi_r2 * psi_r0 * sqrtg * j_sup_zeta) * D_zeta
+        (W * psi_r2 * sqrtg * j_sup_theta) * D_theta
+        + (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
     )
 
     ## diagonal |J|² term
-    A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * psi_r02 * W * sqrtg * J2).flatten()))
+    A = A.at[rho_idx, rho_idx].add(
+        jnp.diag((psi_r2 * W * sqrtg * J2 / g_sup_rr).flatten())
+    )
 
     # Mass matrix (must be symmetric positive definite)
-    B = B.at[rho_idx, rho_idx].add(jnp.diag((n0 * W * psi_r2 * psi_r02 * sqrtg * g_rr).flatten()))
+    B = B.at[rho_idx, rho_idx].add(jnp.diag((n0 * W * psi_r2 * sqrtg * g_rr).flatten()))
     B = B.at[ups_idx, ups_idx].add(jnp.diag((n0 * W * sqrtg * g_vv).flatten()))
 
-    B = B.at[rho_idx, ups_idx].add(
-        jnp.diag((n0 * W * psi_r * psi_r0 * sqrtg * g_rv).flatten())
-    )
+    B = B.at[rho_idx, ups_idx].add(jnp.diag((n0 * W * psi_r * sqrtg * g_rv).flatten()))
 
     # typical in magnetic mirrors. `ismirror` is a TRACED bool (depends on iota), so a
     # Python `if ismirror` raises TracerBoolConversionError under jit (the assembly
@@ -1099,8 +1060,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     )
     rz = jnp.where(
         ismirror,
-        n0 * W * psi_r * psi_r0 * sqrtg * g_rp,
-        n0 * W * psi_r * psi_r0 * sqrtg * (g_rv + iotainv * g_rp),
+        n0 * W * psi_r * sqrtg * g_rp,
+        n0 * W * psi_r * sqrtg * (g_rv + iotainv * g_rp),
     )
     uz = jnp.where(
         ismirror,
@@ -1112,19 +1073,17 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[ups_idx, zeta_idx].add(jnp.diag(uz.flatten()))
 
     ##A = np.where(np.abs(A) >= 1e-11, 1.0, 0.0)
-    #from matplotlib import pyplot as plt
-    #plt.spy(A, precision=1e-11)
-    #plt.savefig("test.png", dpi=400)
+    # from matplotlib import pyplot as plt
+    # plt.spy(A, precision=1e-11)
+    # plt.savefig("test.png", dpi=400)
 
     # purely stabilizing and doesn't change the marginal stability
     A = A.at[rho_idx, rho_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * psi_r02 * p0) * (C_rho * psi_r.T))
+        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
     )
-    A = A.at[ups_idx, ups_idx].add(
-        _cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta)
-    )
+    A = A.at[ups_idx, ups_idx].add(_cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta))
     A = A.at[rho_idx, ups_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * psi_r0 * p0) * C_theta)
+        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
     )
 
     A = A.at[zeta_idx, zeta_idx].add(
@@ -1132,17 +1091,17 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
     )
     A = A.at[rho_idx, zeta_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * psi_r0 * p0) * (C_theta + C_zeta * iotainv.T))
+        _cT(C_rho * psi_r.T)
+        @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
     )
     A = A.at[ups_idx, zeta_idx].add(
         _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
     )
 
-
     #### Instability drive term
-    #Au = jnp.zeros((3 * n_total, 3 * n_total))
-    #Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
-    au_diag = (W * psi_r2 * psi_r02 * sqrtg * F).flatten()
+    # Au = jnp.zeros((3 * n_total, 3 * n_total))
+    # Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
+    au_diag = (W * psi_r2 * sqrtg * F).flatten()
 
     rt_size = n_rho_max * n_theta_max
     zernike_penalty_alpha, Q_rt, penalty_rank = _get_zernike_penalty(
@@ -1155,16 +1114,16 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         A = A.at[ups_idx, ups_idx].add(penalty)
         A = A.at[zeta_idx, zeta_idx].add(penalty)
         rank_msg = "unknown" if penalty_rank is None else str(penalty_rank)
-        #penalized_msg = (
+        # penalized_msg = (
         #    "unknown" if penalty_rank is None else str(rt_size - penalty_rank)
-        #)
-        #print(
+        # )
+        # print(
         #    "[finite-n lambda3:coupled penalty]",
         #    f"alpha={zernike_penalty_alpha:.3e}",
         #    f"rank={rank_msg}/{rt_size}",
         #    f"penalized_rt={penalized_msg}",
         #    flush=True,
-        #)
+        # )
 
     A = A.at[ups_idx, rho_idx].set(_cT(A[rho_idx, ups_idx]))
     A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
@@ -1173,7 +1132,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[ups_idx, rho_idx].set(_cT(B[rho_idx, ups_idx]))
     B = B.at[zeta_idx, rho_idx].set(_cT(B[rho_idx, zeta_idx]))
     B = B.at[zeta_idx, ups_idx].set(_cT(B[ups_idx, zeta_idx]))
-
 
     d = 1 / jnp.sqrt(jnp.diag(B))  # 1D array
 
@@ -1226,7 +1184,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     node_ids = np.arange(n_total)
     rho_shell = node_ids // n_per_shell
     boundary = np.asarray((rho_shell == 0) | (rho_shell == (n_rho_max - 1)))
-    #boundary = (rho_shell == (n_rho_max - 1))
+    # boundary = (rho_shell == (n_rho_max - 1))
 
     # In lambda3 the local basis is (rho, upsilon, zeta)
     # so remove rho-upsilon and rho-zeta couplings on the boundary
@@ -1429,8 +1387,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     n_rho_coupled="int: number of rho nodes when coupled_rt is set",
     n_theta_coupled="int: number of theta nodes when coupled_rt is set",
     sigma="float: shift for the shift-invert eigensolver (default -0.1)",
-    f_scale="float: multiplier on the instability drive F (default 1.0); use "
-    ">1 to isolate the physical unstable mode, then continue back to 1",
     full_spectrum="bool: if True, dense-eigendecompose the full reduced matrix "
     "with jnp.linalg.eigh and store every eigenvalue under "
     "'finite-n lambda3 spectrum'; the returned dominant eigenmode is unchanged. "
@@ -1465,7 +1421,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     ups_idx = _as["ups_idx"]
     zeta_idx = _as["zeta_idx"]
 
-
     v0 = kwargs.get("v_guess", None)
     if v0 is not None:
         v0 = np.asarray(v0).reshape(-1)
@@ -1487,7 +1442,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         "converting A2 to NumPy",
     )
 
-    
     sigma = kwargs.get("sigma", -1e-1)
     full_spectrum = kwargs.get("full_spectrum", False)
     if full_spectrum:
@@ -1532,9 +1486,10 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     idxs = jnp.where(jnp.abs(v) > 5e-5)[0]
     y = A @ v
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"eigval res={jnp.linalg.norm(y[idxs]/v[idxs]-w)}")
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"eigenvalue: {w}")
-
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(f"eigval res={jnp.linalg.norm(y[idxs]/v[idxs]-w)}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(f"eigenvalue: {w}")
 
     # Reduced eigenvector -> full component-major vector [rho,theta,zeta].
     v_mode = v[:, 0] if jnp.ndim(v) == 2 else v
@@ -1555,7 +1510,9 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
         def d_dz(D, u):
             return jnp.einsum("ij,klj->kli", D, u)
+
     else:
+
         def d_dr(D, u):
             """Calculate the radial derivative of u."""
             return jnp.einsum("ij,jkl->ikl", D, u)  # (Nr, Nθ, Nζ)
@@ -1579,11 +1536,13 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     # Reconstruct the physical displacement directly from the compact Linv blocks
     # (equivalent to d * (LinvT_full @ v_full); the equivalence is checked in tests/).
     vr, vv, vz = v_full[rho_idx], v_full[ups_idx], v_full[zeta_idx]
-    xi_full = jnp.concatenate([
-        d[rho_idx]  * (Linv[:, 0, 0] * vr + Linv[:, 1, 0] * vv + Linv[:, 2, 0] * vz),
-        d[ups_idx]  * (                     Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
-        d[zeta_idx] * (                                          Linv[:, 2, 2] * vz),
-    ])
+    xi_full = jnp.concatenate(
+        [
+            d[rho_idx] * (Linv[:, 0, 0] * vr + Linv[:, 1, 0] * vv + Linv[:, 2, 0] * vz),
+            d[ups_idx] * (Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
+            d[zeta_idx] * (Linv[:, 2, 2] * vz),
+        ]
+    )
 
     # Phase rotation doesn't change the physics. Here, we use it to make the eigenmode up-down symmetric.
     # phase_offset (default 0) is an optional tunable rotation applied on top of the mean-based alignment.
@@ -1596,44 +1555,90 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     threshold = 0.01 * jnp.max(mags)
     mask = mags > threshold
     angle_diff_valid = jnp.where(mask, jnp.abs(angle_diff), jnp.nan)
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"phase_angle (mean-based): {phase_angle:.4f} rad  |  per-elem deviation (all): max={jnp.max(jnp.abs(angle_diff)):.4f}, mean={jnp.mean(jnp.abs(angle_diff)):.4f}, std={jnp.std(angle_diff):.4f} rad")
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"  deviation (|xi|>1% max, n={int(jnp.sum(mask))}/{xi_ref.size}): max={float(jnp.nanmax(angle_diff_valid)):.4f}, mean={float(jnp.nanmean(angle_diff_valid)):.4f} rad")
-    xr = (xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xv = (xi_full[ups_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xz = (xi_full[zeta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"phase_angle (mean-based): {phase_angle:.4f} rad  |  per-elem deviation (all): max={jnp.max(jnp.abs(angle_diff)):.4f}, mean={jnp.mean(jnp.abs(angle_diff)):.4f}, std={jnp.std(angle_diff):.4f} rad"
+        )
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"  deviation (|xi|>1% max, n={int(jnp.sum(mask))}/{xi_ref.size}): max={float(jnp.nanmax(angle_diff_valid)):.4f}, mean={float(jnp.nanmean(angle_diff_valid)):.4f} rad"
+        )
+    xr = (
+        xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
+    xv = (
+        xi_full[ups_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
+    xz = (
+        xi_full[zeta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
 
     # precomputed forward derivatives (re-used below)
     xr_v = d_dv(D_theta0, xr)
     xr_z = d_dz(D_zeta0, xr)
 
-    xv_v = d_dv(D_theta0, xv+xz)
-    xv_z = d_dz(D_zeta0, xv+xz)
+    xv_v = d_dv(D_theta0, xv + xz)
+    xv_z = d_dz(D_zeta0, xv + xz)
 
-    xz_v = d_dv(D_theta0, xz/iota)
-    xz_z = d_dz(D_zeta0, xz/iota)
+    xz_v = d_dv(D_theta0, xz / iota)
+    xz_z = d_dz(D_zeta0, xz / iota)
 
     test_v = d_dv(D_theta0, xv)
     test_z = d_dz(D_zeta0, xv)
 
     # combos used many times
-    xr_r = d_dr(D_rho0,  xr)  # dρ(ι ψ′² xr)
-    psi_rr = d_dr(D_rho0,  psi_r)  # dρ(ι ψ′² xr)
-    iota_r = d_dr(D_rho0,  iota)  # dρ(ι ψ′² xr)
+    xr_r = d_dr(D_rho0, xr)  # dρ(ι ψ′² xr)
+    psi_rr = d_dr(D_rho0, psi_r)  # dρ(ι ψ′² xr)
+    iota_r = d_dr(D_rho0, iota)  # dρ(ι ψ′² xr)
 
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"xr_v shape: {xr_v.shape}, xv_z shape: {xv_z.shape}, xz_z shape: {xz_z.shape}, xr_r shape: {xr_r.shape}, psi_r shape: {psi_r.shape}, psi_rr shape: {psi_rr.shape}, iota_r shape: {iota_r.shape}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"xr_v shape: {xr_v.shape}, xv_z shape: {xv_z.shape}, xz_z shape: {xz_z.shape}, xr_r shape: {xr_r.shape}, psi_r shape: {psi_r.shape}, psi_rr shape: {psi_rr.shape}, iota_r shape: {iota_r.shape}"
+        )
 
     deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
-    deltaB_v = psi_r_over_sqrtg * (1.* (test_z) - 1.*(xr_r * iota *psi_r + (2 * iota * psi_rr + iota_r * psi_r)* xr))
-    deltaB_z = -psi_r_over_sqrtg * (1.* (test_v) + 1.*(xr_r * psi_r + 2 * psi_rr * xr))
+    deltaB_v = psi_r_over_sqrtg * (
+        1.0 * (test_z)
+        - 1.0 * (xr_r * iota * psi_r + (2 * iota * psi_rr + iota_r * psi_r) * xr)
+    )
+    deltaB_z = -psi_r_over_sqrtg * (
+        1.0 * (test_v) + 1.0 * (xr_r * psi_r + 2 * psi_rr * xr)
+    )
 
     deltaV_r = psi_r * xr
-    deltaV_v = xv + xz 
-    deltaV_z = xz * 1/iota
+    deltaV_v = xv + xz
+    deltaV_z = xz * 1 / iota
 
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"deltaB_r shape: {deltaB_r.shape}, deltaB_v shape: {deltaB_v.shape}, deltaB_z shape: {deltaB_z.shape}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"deltaB_r shape: {deltaB_r.shape}, deltaB_v shape: {deltaB_v.shape}, deltaB_z shape: {deltaB_z.shape}"
+        )
 
-    deltaB2 = g_rr * deltaB_r ** 2 + 1.*g_vv * deltaB_v ** 2  + g_pp * deltaB_z ** 2 + 2. * (g_rv * deltaB_r * deltaB_v + g_rp * deltaB_r * deltaB_z +  g_vp * deltaB_v * deltaB_z)
-    deltaV2 = g_rr * deltaV_r ** 2 + 1.*g_vv * deltaV_v ** 2  + g_pp * deltaV_z ** 2 + 2. * (g_rv * deltaV_r * deltaV_v + g_rp * deltaV_r * deltaV_z +  g_vp * deltaV_v * deltaV_z)
+    deltaB2 = (
+        g_rr * deltaB_r**2
+        + 1.0 * g_vv * deltaB_v**2
+        + g_pp * deltaB_z**2
+        + 2.0
+        * (
+            g_rv * deltaB_r * deltaB_v
+            + g_rp * deltaB_r * deltaB_z
+            + g_vp * deltaB_v * deltaB_z
+        )
+    )
+    deltaV2 = (
+        g_rr * deltaV_r**2
+        + 1.0 * g_vv * deltaV_v**2
+        + g_pp * deltaV_z**2
+        + 2.0
+        * (
+            g_rv * deltaV_r * deltaV_v
+            + g_rp * deltaV_r * deltaV_z
+            + g_vp * deltaV_v * deltaV_z
+        )
+    )
 
     data["finite-n lambda3"] = w
     data["finite-n eigenfunction3"] = v_full
@@ -1684,7 +1689,6 @@ def _AGNI_eigenfunction3(params, transforms, profiles, data, **kwargs):
     return data  # noqa: unused dependency
 
 
-
 def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     """Build the reduced, whitened finite-n lambda3 operator ``Ax``.
 
@@ -1732,7 +1736,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         n_theta = D_theta0.shape[0]
     n_zeta = D_zeta0.shape[0]
     n_total = n_rho * n_theta * n_zeta
-
 
     def _reshape(u):
         return u.reshape(n_rho, n_theta, n_zeta)
@@ -1800,7 +1803,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
         def d_dz(D, u):
             return jnp.einsum("ij,klj->kli", D, u)
+
     else:
+
         def d_dr(D, u):
             return jnp.einsum("ij,jkl->ikl", D, u)
 
@@ -1829,7 +1834,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         B_blocks = B_blocks.at[:, 2, 1].set((n0 * W * sqrtg * g_vp).flatten())
     else:
         B_blocks = B_blocks.at[:, 2, 2].set(
-            (n0 * W * sqrtg * (g_vv + 2.0 * iotainv * g_vp + iotainv**2 * g_pp)).flatten()
+            (
+                n0 * W * sqrtg * (g_vv + 2.0 * iotainv * g_vp + iotainv**2 * g_pp)
+            ).flatten()
         )
         B_blocks = B_blocks.at[:, 0, 2].set(
             (n0 * W * psi_r * sqrtg * (g_rv + iotainv * g_rp)).flatten()
@@ -1939,19 +1946,13 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Ar += iota_psi_r2 * d_dr(
             _cT(D_rho0), (psi_r_over_sqrtg * W * g_vv / psi_r) * xr1_r
         )
-        Ar += -iota_psi_r2 * d_dr(
-            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vv) * xu_z
-        )
+        Ar += -iota_psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vv) * xu_z)
         Au += -d_dz(_cT(D_zeta0), (psi_r_over_sqrtg * W * g_vv) * xr1_r)
 
         # Q^2_zz -> upsilon block after variable change
         Au += d_dv(_cT(D_theta0), (psi_r_over_sqrtg * psi_r * W * g_pp) * xu_v)
-        Ar += psi_r2 * d_dr(
-            _cT(D_rho0), (psi_r_over_sqrtg * W * g_pp / psi_r) * xr2_r
-        )
-        Ar += psi_r2 * d_dr(
-            _cT(D_rho0), (psi_r_over_sqrtg * W * g_pp) * xu_v
-        )
+        Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_pp / psi_r) * xr2_r)
+        Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_pp) * xu_v)
         Au += d_dv(_cT(D_theta0), (psi_r_over_sqrtg * W * g_pp) * xr2_r)
 
         # Q^2_rv and transpose
@@ -1960,17 +1961,17 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
             + d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_rv) * xr1_r)
         )
         Ar += -(
-            iota_psi_r2 * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr_v)
-            + iota_psi_r2 * d_dr(_cT(D_rho0), (psi_r * psi_r_over_sqrtg * W * g_rv) * xr_z)
+            iota_psi_r2
+            * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rv) * xr_v)
+            + iota_psi_r2
+            * d_dr(_cT(D_rho0), (psi_r * psi_r_over_sqrtg * W * g_rv) * xr_z)
         )
-        Ar += (
-            d_dv(_cT(D_theta0), (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * xu_z)
-            + d_dz(_cT(D_zeta0), (psi_r2 * psi_r_over_sqrtg * W * g_rv) * xu_z)
-        )
-        Au += (
-            d_dz(_cT(D_zeta0), (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * xr_v)
-            + d_dz(_cT(D_zeta0), (psi_r2 * psi_r_over_sqrtg * W * g_rv) * xr_z)
-        )
+        Ar += d_dv(
+            _cT(D_theta0), (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * xu_z
+        ) + d_dz(_cT(D_zeta0), (psi_r2 * psi_r_over_sqrtg * W * g_rv) * xu_z)
+        Au += d_dz(
+            _cT(D_zeta0), (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * xr_v
+        ) + d_dz(_cT(D_zeta0), (psi_r2 * psi_r_over_sqrtg * W * g_rv) * xr_z)
 
         # Q^2_rz and transpose
         Ar += -(
@@ -1978,7 +1979,8 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
             + d_dz(_cT(D_zeta0), (psi_r * psi_r_over_sqrtg * W * g_rp) * xr2_r)
         )
         Ar += -(
-            psi_r2 * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr_v)
+            psi_r2
+            * d_dr(_cT(D_rho0), (iota * psi_r * psi_r_over_sqrtg * W * g_rp) * xr_v)
             + psi_r2 * d_dr(_cT(D_rho0), (psi_r * psi_r_over_sqrtg * W * g_rp) * xr_z)
         )
         Ar += -(
@@ -2002,9 +2004,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Ar += iota_psi_r2 * d_dr(
             _cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr2_r
         )
-        Ar += psi_r2 * d_dr(
-            _cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r
-        )
+        Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
         # J cross Q terms. The two branches are algebraically identical; they differ
         # only in how g^rv/g^rz are obtained. jq_lower_metric=True is the dense
@@ -2012,35 +2012,49 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # psi_r2 here where the other branch has psi_r3*sqrtg).
         if jq_lower_metric:
             jq = (
-                psi_r2 * W
-                * (j_sup_theta * g_sup_rp_term + j_sup_zeta * g_sup_rv_term)
+                psi_r2
+                * W
+                * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
                 / g_sup_rr
             )
         else:
-            jq = psi_r3 * sqrtg * W * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv) / g_sup_rr
-        Ar += -(jq * (iota * xr_v + xr_z))
+            jq = (
+                psi_r3
+                * sqrtg
+                * W
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            )
+        Ar += +(jq * (iota * xr_v + xr_z))
         Ar += -(psi_r * sqrtg * W * j_sup_zeta) * xr1_r
-        Ar += -(psi_r * sqrtg * W * j_sup_theta) * xr2_r
-        Ar += -(iota * d_dv(_cT(D_theta0), jq * xr) + d_dz(_cT(D_zeta0), jq * xr))
+        Ar += +(psi_r * sqrtg * W * j_sup_theta) * xr2_r
+        Ar += +(iota * d_dv(_cT(D_theta0), jq * xr) + d_dz(_cT(D_zeta0), jq * xr))
         Ar += -iota_psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_zeta * xr)
-        Ar += -psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_theta * xr)
-        Ar += -(W * psi_r2 * sqrtg * j_sup_theta) * xu_v + (W * psi_r2 * sqrtg * j_sup_zeta) * xu_z
-        Au += -d_dv(_cT(D_theta0), W * psi_r2 * sqrtg * j_sup_theta * xr)
+        Ar += psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_theta * xr)
+
+        # Off-diagonal term and it's transpose
+        Ar += (
+            +(W * psi_r2 * sqrtg * j_sup_theta) * xu_v
+            + (W * psi_r2 * sqrtg * j_sup_zeta) * xu_z
+        )
+        Au += +d_dv(_cT(D_theta0), W * psi_r2 * sqrtg * j_sup_theta * xr)
         Au += d_dz(_cT(D_zeta0), W * psi_r2 * sqrtg * j_sup_zeta * xr)
 
         # |J|^2 and instability drive
-        Ar += (psi_r2 * W * sqrtg * J2) * xr
+        Ar += (psi_r2 * W * sqrtg * J2) / g_sup_rr * xr
         Aur = (W * psi_r2 * sqrtg * F) * xr
 
         # Compressibility terms
         gp = gamma * sqrtg * W * p0
         cr = psi_r * partial_r_log_sqrtg * xr + xr3_r
         cu = partial_v_log_sqrtg * xu + xu_v
-        cz = partial_v_log_sqrtg * xz + xz_v + iotainv * (partial_p_log_sqrtg * xz + xz_z)
-
-        Ar += psi_r * (
-            partial_r_log_sqrtg * gp * cr + d_dr(_cT(D_rho0), gp * cr)
+        cz = (
+            partial_v_log_sqrtg * xz
+            + xz_v
+            + iotainv * (partial_p_log_sqrtg * xz + xz_z)
         )
+
+        Ar += psi_r * (partial_r_log_sqrtg * gp * cr + d_dr(_cT(D_rho0), gp * cr))
         Au += partial_v_log_sqrtg * gp * cu + d_dv(_cT(D_theta0), gp * cu)
         Az += (
             partial_v_log_sqrtg * gp * cz
@@ -2048,14 +2062,10 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
             + iotainv * (partial_p_log_sqrtg * gp * cz + d_dz(_cT(D_zeta0), gp * cz))
         )
 
-        Ar += psi_r * (
-            partial_r_log_sqrtg * gp * cu + d_dr(_cT(D_rho0), gp * cu)
-        )
+        Ar += psi_r * (partial_r_log_sqrtg * gp * cu + d_dr(_cT(D_rho0), gp * cu))
         Au += partial_v_log_sqrtg * gp * cr + d_dv(_cT(D_theta0), gp * cr)
 
-        Ar += psi_r * (
-            partial_r_log_sqrtg * gp * cz + d_dr(_cT(D_rho0), gp * cz)
-        )
+        Ar += psi_r * (partial_r_log_sqrtg * gp * cz + d_dr(_cT(D_rho0), gp * cz))
         Az += (
             partial_v_log_sqrtg * gp * cr
             + d_dv(_cT(D_theta0), gp * cr)
@@ -2080,10 +2090,13 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Aus = jnp.stack(
             [Aur, jnp.zeros_like(Aur), jnp.zeros_like(Aur)], axis=-1
         ).reshape((n_total, 3))
-        ys = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As) #stable
-        yus = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * Aus) #unstable
+        ys = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * As)  # stable
+        yus = jnp.einsum("lij,lj->li", Linv_D, diagBsqinv * Aus)  # unstable
         y = ys + yus
-        return y.T.reshape(-1) + 1e-16 * x_flat
+        # Constant diagonal shift in the whitened L^-1 A L^-T basis, matching the
+        # 1e-14 that dense ``_agni3_assemble`` adds before the instability drive.
+        # Must stay in sync with it or the two paths differ by a uniform shift.
+        return y.T.reshape(-1) + 1e-14 * x_flat
 
     def Ax(x_reduced):
         x_full = jnp.zeros(3 * n_total, dtype=x_reduced.dtype)
@@ -2165,7 +2178,8 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     gamma="float: adiabatic constant",
     stable_only="bool: for testing only, materialize and eigendecompose the stable part of the matrix",
     v_guess="ndarray: eigenfunction guess to initialize the iterative eigenvalue solver",
-    matfree_solver="str: matrix-free eigensolver backend ('eigsh_shiftinvert' (default), 'eigsh_shiftinvert_pcg', 'shiftinvert_cg', or experimental 'shiftinvert_pcg')",
+    matfree_solver="str: matrix-free eigensolver backend ('eigsh_shiftinvert' "
+    "(default), 'shiftinvert_cg', 'shiftinvert_bicgstab', or 'shiftinvert_gmres')",
     eigsh_tol="float: tolerance for ARPACK eigsh in matrix-free mode",
     eigsh_maxiter="int: max iterations for ARPACK eigsh in matrix-free mode",
     eigsh_ncv="int: number of Lanczos vectors used by ARPACK eigsh",
@@ -2174,10 +2188,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     num_matvecs="int: Lanczos matvec count for shiftinvert_cg solver",
     cg_tol="float: CG tolerance inside shiftinvert_cg solver",
     cg_maxiter="int: CG max iterations inside shiftinvert_cg solver",
-    pcg_preconditioner="str: preconditioner for matfree_solver='eigsh_shiftinvert_pcg' ('fourier_mode_blocks' or experimental dense 'fourier_band_spd') or matfree_solver='shiftinvert_pcg' ('fourier_mode_blocks')",
-    pcg_bandwidth="int: theta-mode cyclic bandwidth for pcg_preconditioner='fourier_band_spd'",
-    pcg_floor_rel="float: relative eigenvalue floor for pcg_preconditioner='fourier_band_spd'",
-    pcg_build_batch_size="int: number of Fourier-basis columns to batch while building the preconditioner",
     check_v_guess_only="bool: apply matrix-free Ax to v_guess without eigensolve",
     lambda_guess="float: eigenvalue used by check_v_guess_only",
     build_matrix="bool: materialize and return the reduced operator A (column j = Ax(e_j))",
@@ -2225,301 +2235,6 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     d_dv = _op["d_dv"]
     d_dz = _op["d_dz"]
 
-
-    n_rho_reduced = (n_rho - 2) * n_theta * n_zeta
-
-    def _theta_mode_groups():
-        """Coefficient-space indices grouped by theta Fourier mode."""
-        groups = []
-
-        def _component_indices(offset, nr_comp, k):
-            rr = np.arange(nr_comp, dtype=np.int64)[:, None]
-            zz = np.arange(n_zeta, dtype=np.int64)[None, :]
-            return (offset + rr * n_theta * n_zeta + k * n_zeta + zz).reshape(-1)
-
-        for k in range(n_theta):
-            parts = [
-                _component_indices(0, n_rho - 2, k),
-                _component_indices(n_rho_reduced, n_rho, k),
-                _component_indices(n_rho_reduced + n_total, n_rho, k),
-            ]
-            groups.append(np.concatenate(parts))
-        return groups
-
-    def _theta_mode_labels():
-        labels = np.empty(n_keep, dtype=np.int64)
-        for k, idxs in enumerate(_theta_mode_groups()):
-            labels[idxs] = k
-        return labels
-
-    def _red_to_theta_coeff_batch(x):
-        """Reduced nodal row-vectors -> normalized theta-Fourier coefficients."""
-        x = np.asarray(x)
-        one_dim = x.ndim == 1
-        if one_dim:
-            x = x[None, :]
-        scale = np.sqrt(n_theta)
-        rho_part = x[:, :n_rho_reduced].reshape(-1, n_rho - 2, n_theta, n_zeta)
-        ups_part = x[:, n_rho_reduced : n_rho_reduced + n_total].reshape(
-            -1, n_rho, n_theta, n_zeta
-        )
-        zet_part = x[:, n_rho_reduced + n_total :].reshape(
-            -1, n_rho, n_theta, n_zeta
-        )
-        out = np.concatenate(
-            [
-                (np.fft.fft(rho_part, axis=2) / scale).reshape(x.shape[0], -1),
-                (np.fft.fft(ups_part, axis=2) / scale).reshape(x.shape[0], -1),
-                (np.fft.fft(zet_part, axis=2) / scale).reshape(x.shape[0], -1),
-            ],
-            axis=1,
-        )
-        return out[0] if one_dim else out
-
-    def _theta_coeff_to_red_batch(xh):
-        """Normalized theta-Fourier coefficient row-vectors -> reduced nodal vectors."""
-        xh = np.asarray(xh)
-        one_dim = xh.ndim == 1
-        if one_dim:
-            xh = xh[None, :]
-        scale = np.sqrt(n_theta)
-        rho_part = xh[:, :n_rho_reduced].reshape(-1, n_rho - 2, n_theta, n_zeta)
-        ups_part = xh[:, n_rho_reduced : n_rho_reduced + n_total].reshape(
-            -1, n_rho, n_theta, n_zeta
-        )
-        zet_part = xh[:, n_rho_reduced + n_total :].reshape(
-            -1, n_rho, n_theta, n_zeta
-        )
-        out = np.concatenate(
-            [
-                (np.fft.ifft(rho_part, axis=2) * scale).reshape(xh.shape[0], -1),
-                (np.fft.ifft(ups_part, axis=2) * scale).reshape(xh.shape[0], -1),
-                (np.fft.ifft(zet_part, axis=2) * scale).reshape(xh.shape[0], -1),
-            ],
-            axis=1,
-        )
-        return out[0] if one_dim else out
-
-    def _red_to_theta_coeff_jax(x):
-        """Reduced nodal vector -> normalized theta-Fourier coefficients."""
-        scale = jnp.sqrt(jnp.asarray(n_theta, dtype=jnp.real(x).dtype))
-        rho_part = x[:n_rho_reduced].reshape(n_rho - 2, n_theta, n_zeta)
-        ups_part = x[n_rho_reduced : n_rho_reduced + n_total].reshape(
-            n_rho, n_theta, n_zeta
-        )
-        zet_part = x[n_rho_reduced + n_total :].reshape(
-            n_rho, n_theta, n_zeta
-        )
-        return jnp.concatenate(
-            [
-                (jnp.fft.fft(rho_part, axis=1) / scale).reshape(-1),
-                (jnp.fft.fft(ups_part, axis=1) / scale).reshape(-1),
-                (jnp.fft.fft(zet_part, axis=1) / scale).reshape(-1),
-            ]
-        )
-
-    def _theta_coeff_to_red_jax(xh):
-        """Normalized theta-Fourier coefficients -> reduced nodal vector."""
-        scale = jnp.sqrt(jnp.asarray(n_theta, dtype=jnp.real(xh).dtype))
-        rho_part = xh[:n_rho_reduced].reshape(n_rho - 2, n_theta, n_zeta)
-        ups_part = xh[n_rho_reduced : n_rho_reduced + n_total].reshape(
-            n_rho, n_theta, n_zeta
-        )
-        zet_part = xh[n_rho_reduced + n_total :].reshape(
-            n_rho, n_theta, n_zeta
-        )
-        return jnp.concatenate(
-            [
-                (jnp.fft.ifft(rho_part, axis=1) * scale).reshape(-1),
-                (jnp.fft.ifft(ups_part, axis=1) * scale).reshape(-1),
-                (jnp.fft.ifft(zet_part, axis=1) * scale).reshape(-1),
-            ]
-        )
-
-    def _apply_A_batch(x_batch):
-        return np.asarray(jax.vmap(Ax)(jnp.asarray(x_batch)))
-
-    def _coefficient_columns(idxs, dtype):
-        cols = np.zeros((idxs.size, n_keep), dtype=dtype)
-        cols[np.arange(idxs.size), idxs] = 1.0
-        return cols
-
-    def _build_theta_mode_block_preconditioner(op_dtype):
-        """Build an SPD block inverse in theta-Fourier coefficient space.
-
-        This costs one application of ``Ax`` per reduced unknown, but stores only
-        same-mode blocks. It is experimental: useful when many inner CG solves
-        are expected for one fixed equilibrium, expensive if rebuilt repeatedly.
-        """
-        from scipy.linalg import cho_factor, cho_solve
-
-        build_t0 = time.time()
-        groups = _theta_mode_groups()
-        factors = []
-        min_eigs = []
-        batch_size = int(kwargs.get("pcg_build_batch_size", 128))
-        for idxs in groups:
-            block_cols = []
-            for i0 in range(0, idxs.size, batch_size):
-                ib = idxs[i0 : i0 + batch_size]
-                coeff_basis = _coefficient_columns(ib, op_dtype)
-                red_basis = _theta_coeff_to_red_batch(coeff_basis)
-                y = _apply_A_batch(red_basis) - sigma * red_basis
-                yhat = _red_to_theta_coeff_batch(y)
-                block_cols.append(yhat[:, idxs].T)
-            block = np.concatenate(block_cols, axis=1)
-            block = 0.5 * (block + block.conj().T)
-            min_eigs.append(float(np.linalg.eigvalsh(block)[0]))
-            factors.append(cho_factor(block, lower=True, check_finite=False))
-
-        if debug_matfree:
-            print(
-                "[finite-n lambda3 matfree pcg]",
-                "preconditioner=fourier_mode_blocks",
-                f"build_time={time.time() - build_t0:.2f}s",
-                f"min_block_eig={min(min_eigs):.3e}",
-                flush=True,
-            )
-
-        def _mv(x):
-            xh = _red_to_theta_coeff_batch(x)
-            yh = np.zeros_like(xh)
-            for idxs, fac in zip(groups, factors):
-                yh[idxs] = cho_solve(fac, xh[idxs], check_finite=False)
-            return _theta_coeff_to_red_batch(yh)
-
-        return LinearOperator(shape=(n_keep, n_keep), matvec=_mv, dtype=op_dtype)
-
-    def _build_theta_mode_block_preconditioner_jax(op_dtype):
-        """Build a JAX-callable HPD mode-block preconditioner for CG.
-
-        The operator passed to CG remains ``A - sigma I``. This function is
-        supplied as the CG ``M`` callback, so CG uses the standard HPD
-        preconditioned recurrence instead of applying a nonsymmetric ``M A``.
-        """
-
-        build_t0 = time.time()
-        groups_np = _theta_mode_groups()
-        blocks = []
-        min_eigs = []
-        batch_size = int(kwargs.get("pcg_build_batch_size", 128))
-        np_dtype = np.dtype(op_dtype)
-        for idxs in groups_np:
-            block_cols = []
-            for i0 in range(0, idxs.size, batch_size):
-                ib = idxs[i0 : i0 + batch_size]
-                coeff_basis = _coefficient_columns(ib, np_dtype)
-                red_basis = _theta_coeff_to_red_batch(coeff_basis)
-                y = _apply_A_batch(red_basis) - sigma * red_basis
-                yhat = _red_to_theta_coeff_batch(y)
-                block_cols.append(yhat[:, idxs].T)
-            block = np.concatenate(block_cols, axis=1)
-            block = 0.5 * (block + block.conj().T)
-            evals = np.linalg.eigvalsh(block)
-            min_eigs.append(float(evals[0]))
-            if evals[0] <= 0.0:
-                raise np.linalg.LinAlgError(
-                    "theta Fourier mode block preconditioner is not HPD: "
-                    f"min_eig={evals[0]:.3e}"
-                )
-            blocks.append(jnp.asarray(block, dtype=op_dtype))
-
-        if debug_matfree:
-            print(
-                "[finite-n lambda3 matfree pcg]",
-                "preconditioner=fourier_mode_blocks_jax",
-                f"build_time={time.time() - build_t0:.2f}s",
-                f"min_block_eig={min(min_eigs):.3e}",
-                flush=True,
-            )
-
-        def _mv(x):
-            xh = _red_to_theta_coeff_jax(x)
-            yh = jnp.zeros_like(xh)
-            for idxs, block in zip(groups_np, blocks):
-                yh = yh.at[idxs].set(jnp.linalg.solve(block, xh[idxs]))
-            return _theta_coeff_to_red_jax(yh)
-
-        return _mv
-
-    def _build_theta_band_spd_preconditioner(op_dtype):
-        """Build a dense SPD-projected theta-Fourier band preconditioner.
-
-        This is a diagnostic-quality preconditioner: it materializes the
-        Fourier-space operator, drops mode couplings outside a cyclic bandwidth,
-        and floors the eigenvalues before applying the dense inverse. It is not
-        intended as the final large-scale implementation.
-        """
-        from scipy.linalg import eigh
-
-        build_t0 = time.time()
-        bandwidth = int(kwargs.get("pcg_bandwidth", 2))
-        floor_rel = float(kwargs.get("pcg_floor_rel", 1e-6))
-        batch_size = int(kwargs.get("pcg_build_batch_size", 128))
-        groups = _theta_mode_groups()
-        labels = _theta_mode_labels()
-        Ahat = np.zeros((n_keep, n_keep), dtype=op_dtype)
-        all_idxs = np.arange(n_keep)
-        for i0 in range(0, n_keep, batch_size):
-            ib = all_idxs[i0 : i0 + batch_size]
-            coeff_basis = _coefficient_columns(ib, op_dtype)
-            red_basis = _theta_coeff_to_red_batch(coeff_basis)
-            y = _apply_A_batch(red_basis) - sigma * red_basis
-            yhat = _red_to_theta_coeff_batch(y)
-            Ahat[:, ib] = yhat.T
-
-        dm = np.abs(labels[:, None] - labels[None, :])
-        cyclic_dm = np.minimum(dm, n_theta - dm)
-        Ahat = np.where(cyclic_dm <= bandwidth, Ahat, 0.0)
-        Ahat = 0.5 * (Ahat + Ahat.conj().T)
-        vals, vecs = eigh(Ahat, check_finite=False)
-        floor = floor_rel * max(float(vals[-1]), 1.0)
-        floored = np.maximum(vals, floor)
-        inv_vals = 1.0 / floored
-
-        if debug_matfree:
-            print(
-                "[finite-n lambda3 matfree pcg]",
-                "preconditioner=fourier_band_spd",
-                f"bandwidth={bandwidth}",
-                f"floor_rel={floor_rel:.3e}",
-                f"build_time={time.time() - build_t0:.2f}s",
-                f"raw_min={vals[0]:.3e}",
-                f"floor={floor:.3e}",
-                f"n_floored={int(np.count_nonzero(floored > vals))}",
-                flush=True,
-            )
-
-        def _mv(x):
-            xh = _red_to_theta_coeff_batch(x)
-            yh = vecs @ (inv_vals * (vecs.conj().T @ xh))
-            return _theta_coeff_to_red_batch(yh)
-
-        return LinearOperator(shape=(n_keep, n_keep), matvec=_mv, dtype=op_dtype)
-
-    def _build_pcg_preconditioner(op_dtype):
-        preconditioner = str(
-            kwargs.get("pcg_preconditioner", "fourier_mode_blocks")
-        ).lower()
-        if preconditioner in {"none", "false", "0", "off"}:
-            return None
-        if n_theta <= 1:
-            if debug_matfree:
-                print(
-                    "[finite-n lambda3 matfree pcg]",
-                    "theta preconditioner disabled for n_theta <= 1",
-                    flush=True,
-                )
-            return None
-        if preconditioner in {"fourier_mode_blocks", "mode_blocks", "blocks"}:
-            return _build_theta_mode_block_preconditioner(op_dtype)
-        if preconditioner in {"fourier_band_spd", "band_spd", "band"}:
-            return _build_theta_band_spd_preconditioner(op_dtype)
-        raise ValueError(
-            f"Unknown pcg_preconditioner={preconditioner!r}; expected "
-            "'fourier_mode_blocks', 'fourier_band_spd', or 'none'."
-        )
-
     # Optionally materialize the reduced operator A (column j = Ax(e_j)).
     # BATCHED + host-accumulated: never forms the full n x n identity (only small
     # (b, n_keep) sub-identity blocks), vmaps Ax over one batch at a time, and moves
@@ -2528,16 +2243,22 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     # A_mat lives on host (numpy) for the CPU eigh. Batch size via AGNI_BUILD_BATCH.
     if bool(kwargs.get("build_matrix", False)):
         import os as _os
+
         _dt = Ax(jnp.ones(n_keep)).dtype
-        bs = int(kwargs.get("build_matrix_batch", _os.environ.get("AGNI_BUILD_BATCH", 512)))
+        bs = int(
+            kwargs.get("build_matrix_batch", _os.environ.get("AGNI_BUILD_BATCH", 512))
+        )
         bs = max(1, min(bs, n_keep))
         rows = []
         for j0 in range(0, n_keep, bs):
             j1 = min(j0 + bs, n_keep)
-            blk = jnp.zeros((j1 - j0, n_keep), dtype=_dt).at[
-                jnp.arange(j1 - j0), jnp.arange(j0, j1)].set(1.0)  # e_{j0..j1-1}
-            rows.append(np.asarray(jax.vmap(Ax)(blk)))            # row i = A e_{j0+i}
-        A_mat = np.concatenate(rows, axis=0).T                    # columns = A e_j
+            blk = (
+                jnp.zeros((j1 - j0, n_keep), dtype=_dt)
+                .at[jnp.arange(j1 - j0), jnp.arange(j0, j1)]
+                .set(1.0)
+            )  # e_{j0..j1-1}
+            rows.append(np.asarray(jax.vmap(Ax)(blk)))  # row i = A e_{j0+i}
+        A_mat = np.concatenate(rows, axis=0).T  # columns = A e_j
         data["finite-n lambda3 matfree operator"] = A_mat
         data["finite-n lambda3 matfree keep"] = keep
         return data
@@ -2556,7 +2277,6 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     matfree_solver = str(kwargs.get("matfree_solver", "eigsh_shiftinvert")).lower()
     debug_matfree = bool(kwargs.get("debug_matfree", False))
     check_v_guess_only = bool(kwargs.get("check_v_guess_only", False))
-    pcg_stats = None
     shiftinvert_stats = None
 
     if check_v_guess_only:
@@ -2598,14 +2318,13 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
         )
         data["finite-n lambda3 matfree check lambda_rayleigh"] = lam_rayleigh
         data["finite-n lambda3 matfree check rayleigh_residual"] = rayleigh_residual
-    elif matfree_solver in {"eigsh_shiftinvert", "eigsh_shiftinvert_pcg"}:
+    elif matfree_solver == "eigsh_shiftinvert":
         # Matrix-free analogue of the dense path: build the shift-inverted
         # operator (A - sigma I)^{-1} and ask ARPACK for its largest-magnitude
         # eigenvalues (which="LM"), which map back to the eigenvalues of A
         # nearest sigma -- i.e. the most-unstable mode. (A - sigma I) is SPD
-        # when sigma sits below the most-negative eigenvalue, so CG converges
-        # and supplies OPinv without ever materializing A. The ``*_pcg`` variant
-        # builds one experimental preconditioner for that shifted inner solve.
+        # when sigma sits below the most-negative eigenvalue, so CG supplies
+        # OPinv without ever materializing A.
         from scipy.sparse.linalg import cg as _scipy_cg
 
         sigma = float(kwargs.get("sigma", -1e-1))
@@ -2631,11 +2350,7 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
             dtype=op_dtype,
         )
 
-        Mop = None
         shiftinvert_stats = {"solves": 0, "total_iters": 0, "infos": []}
-        if matfree_solver == "eigsh_shiftinvert_pcg":
-            pcg_stats = shiftinvert_stats
-            Mop = _build_pcg_preconditioner(op_dtype)
 
         def _opinv(b):
             iters = {"n": 0}
@@ -2645,7 +2360,6 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
                 rtol=cg_tol,
                 atol=0.0,
                 maxiter=cg_maxiter,
-                M=Mop,
                 callback=lambda _x: iters.__setitem__("n", iters["n"] + 1),
             )
             shiftinvert_stats["solves"] += 1
@@ -2668,14 +2382,15 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
         )
         w = jnp.asarray(w_np)
         v = jnp.asarray(v_np[:, 0])
-    elif matfree_solver in {"shiftinvert_cg", "shiftinvert_pcg",
-                            "shiftinvert_bicgstab", "shiftinvert_gmres"}:
+    elif matfree_solver in {
+        "shiftinvert_cg",
+        "shiftinvert_bicgstab",
+        "shiftinvert_gmres",
+    }:
         _require_matfree_backend()
         # Default sigma must sit BELOW the most-unstable (most-negative)
         # eigenvalue so (A - sigma I) is SPD and CG is valid; matches the
-        # scipy 'eigsh_shiftinvert' default. The ``*_pcg`` variant keeps this
-        # Hermitian shifted operator as the CG matrix and supplies an HPD
-        # approximate inverse through CG's M callback.
+        # scipy 'eigsh_shiftinvert' default.
         sigma = kwargs.get("sigma", -1e-1)
         num_matvecs = int(kwargs.get("num_matvecs", 20))
         cg_tol = float(kwargs.get("cg_tol", 1e-5))
@@ -2686,33 +2401,15 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
         # carry input (real) and output (complex) dtypes disagree and crashes.
         op_dtype = jnp.result_type(Ax(v0).dtype, v0.dtype)
         v0 = v0.astype(op_dtype)
-        M_apply = None
-        if matfree_solver == "shiftinvert_pcg":
-            preconditioner = str(
-                kwargs.get("pcg_preconditioner", "fourier_mode_blocks")
-            ).lower()
-            if preconditioner in {"none", "false", "0", "off"} or n_theta <= 1:
-                if debug_matfree:
-                    print(
-                        "[finite-n lambda3 matfree pcg]",
-                        "preconditioner disabled in shiftinvert_pcg",
-                        flush=True,
-                    )
-            elif preconditioner in {"fourier_mode_blocks", "mode_blocks", "blocks"}:
-                M_apply = _build_theta_mode_block_preconditioner_jax(op_dtype)
-            else:
-                raise ValueError(
-                    "matfree_solver='shiftinvert_pcg' currently supports only "
-                    "pcg_preconditioner='fourier_mode_blocks' or 'none'."
-                )
 
         # Inner Krylov solver for (A - sigma I) x = b. cg assumes the shifted
         # operator is Hermitian SPD; bicgstab/gmres are robust to a non-Hermitian
         # Ax (e.g. if the raw operator is not exactly Hermitian), which can clean
         # up the shift-invert Lanczos vectors.
         _inner = {
-            "shiftinvert_cg": cg, "shiftinvert_pcg": cg,
-            "shiftinvert_bicgstab": bicgstab, "shiftinvert_gmres": gmres,
+            "shiftinvert_cg": cg,
+            "shiftinvert_bicgstab": bicgstab,
+            "shiftinvert_gmres": gmres,
         }[matfree_solver]
 
         def OPinv(b):
@@ -2724,13 +2421,10 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
                 b.astype(op_dtype),
                 tol=cg_tol,
                 maxiter=cg_maxiter,
-                M=M_apply,
             )
             return y
 
-        tridiag = decomp.tridiag_sym(
-            num_matvecs, reortho="full", materialize=True
-        )
+        tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
         alg = eig.eigh_partial(tridiag)
         mu, vecs = alg(lambda x: OPinv(x), v0)
         sort_idxs = jnp.argsort(mu, descending=True)
@@ -2739,8 +2433,8 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     else:
         raise ValueError(
             f"Unknown matfree_solver={matfree_solver!r}; expected "
-            "'eigsh_shiftinvert', 'eigsh_shiftinvert_pcg', 'shiftinvert_cg', "
-            "'shiftinvert_pcg', 'shiftinvert_bicgstab', or 'shiftinvert_gmres'."
+            "'eigsh_shiftinvert', 'shiftinvert_cg', 'shiftinvert_bicgstab', "
+            "or 'shiftinvert_gmres'."
         )
 
     v_full = jnp.zeros(3 * n_total, dtype=v.dtype)
@@ -2773,15 +2467,40 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     iota_r = d_dr(D_rho0, iota)
 
     deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
-    deltaB_v = psi_r_over_sqrtg * (1.* (test_z) - 1.*(xr_r * iota *psi_r + (2 * iota * psi_rr + iota_r * psi_r)* xr))
-    deltaB_z = -psi_r_over_sqrtg * (1.* (test_v) + 1.*(xr_r * psi_r + 2 * psi_rr * xr))
+    deltaB_v = psi_r_over_sqrtg * (
+        1.0 * (test_z)
+        - 1.0 * (xr_r * iota * psi_r + (2 * iota * psi_rr + iota_r * psi_r) * xr)
+    )
+    deltaB_z = -psi_r_over_sqrtg * (
+        1.0 * (test_v) + 1.0 * (xr_r * psi_r + 2 * psi_rr * xr)
+    )
 
     deltaV_r = psi_r * xr
     deltaV_v = xv + xz
-    deltaV_z = xz * 1/iota
+    deltaV_z = xz * 1 / iota
 
-    deltaB2 = g_rr * deltaB_r ** 2 + 1.*g_vv * deltaB_v ** 2  + g_pp * deltaB_z ** 2 + 2. * (g_rv * deltaB_r * deltaB_v + g_rp * deltaB_r * deltaB_z +  g_vp * deltaB_v * deltaB_z)
-    deltaV2 = g_rr * deltaV_r ** 2 + 1.*g_vv * deltaV_v ** 2  + g_pp * deltaV_z ** 2 + 2. * (g_rv * deltaV_r * deltaV_v + g_rp * deltaV_r * deltaV_z +  g_vp * deltaV_v * deltaV_z)
+    deltaB2 = (
+        g_rr * deltaB_r**2
+        + 1.0 * g_vv * deltaB_v**2
+        + g_pp * deltaB_z**2
+        + 2.0
+        * (
+            g_rv * deltaB_r * deltaB_v
+            + g_rp * deltaB_r * deltaB_z
+            + g_vp * deltaB_v * deltaB_z
+        )
+    )
+    deltaV2 = (
+        g_rr * deltaV_r**2
+        + 1.0 * g_vv * deltaV_v**2
+        + g_pp * deltaV_z**2
+        + 2.0
+        * (
+            g_rv * deltaV_r * deltaV_v
+            + g_rp * deltaV_r * deltaV_z
+            + g_vp * deltaV_v * deltaV_z
+        )
+    )
 
     data["finite-n lambda3 matfree"] = w
     data["finite-n eigenfunction3 matfree"] = v_full
@@ -2812,21 +2531,6 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
                 f"infos={shiftinvert_stats['infos']}",
                 flush=True,
             )
-    if pcg_stats is not None:
-        data["finite-n lambda3 matfree pcg solves"] = jnp.asarray(pcg_stats["solves"])
-        data["finite-n lambda3 matfree pcg total_iters"] = jnp.asarray(
-            pcg_stats["total_iters"]
-        )
-        data["finite-n lambda3 matfree pcg infos"] = jnp.asarray(pcg_stats["infos"])
-        if debug_matfree:
-            print(
-                "[finite-n lambda3 matfree pcg]",
-                f"solves={pcg_stats['solves']}",
-                f"total_cg_iters={pcg_stats['total_iters']}",
-                f"infos={pcg_stats['infos']}",
-                flush=True,
-            )
-
     if debug_matfree:
         idxs = jnp.where(jnp.abs(v) > 1e-4)[0]
         res = Ax(v)
@@ -2844,11 +2548,9 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     label="\\lambda_R = v^T A v / v^T v",
     units="~",
     units_long="None",
-    description="Fixed-vector Rayleigh quotient of the finite-n lambda3 operator. "
-    "The eigenvector v is supplied and held fixed, so this is a plain "
-    "differentiable scalar function of the equilibrium parameters: AD through it "
-    "supplies the Hellmann-Feynman contraction v^T (dA/dp) v / v^T v. No "
-    "eigensolver runs here.",
+    description="Rayleigh quotient of the finite-n lambda3 operator. A fresh "
+    "eigenvector is computed at the primal point, then held fixed for AD so the "
+    "gradient is the Hellmann-Feynman contraction v^T (dA/dp) v / v^T v.",
     dim=1,
     params=["Psi"],
     transforms={"grid": [], "diffmat": []},
@@ -2884,7 +2586,6 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     incompressible="bool: imposes incompressibility",
     gamma="float: adiabatic constant",
     density="ndarray: the radial density profile",
-    f_scale="float: multiplier on the instability drive F (default 1.0)",
     sigma="float: shift for the ARPACK eigsh that supplies the fresh eigenvector",
     eigsh_tol="float: tolerance for the ARPACK eigsh",
     coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier (rho, theta) "
@@ -2893,73 +2594,57 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     n_theta_coupled="int: number of theta nodes when coupled_rt is set",
 )
 def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
-    """Rayleigh quotient of finite-n lambda3 with a FRESH eigenvector.
+    """Fresh-eigenvector Rayleigh objective for finite-n lambda3.
 
-        lambda_R(p) = v^T A(p) v / (v^T v),   v = eigsh(A(p))  computed AT THIS p
+    Called by
+    ---------
+    ``FinitenStability.compute_data`` through DESC's normal ``eq.compute`` path,
+    with the compute key ``"finite-n lambda3 rayleigh"``. The optimization driver
+    in ``AGNI_var/dense-eigsh-optimization/run_dense_eigsh_opt.py`` builds a
+    ``FinitenStability`` objective, then DESC calls this function during objective
+    and Jacobian evaluations.
 
-    Why v is recomputed rather than cached
-    --------------------------------------
-    The (rho, theta_PEST, zeta) grid is fixed but the MESH is not: theta_PEST is
-    defined through lambda (`L_lmn`), so `map_coordinates` solves
-    `theta + lambda = theta_PEST` and any change in L_lmn puts the same PEST label at
-    a different physical point. ProximalProjection re-solves the equilibrium before
-    every objective evaluation, and L_lmn moves even when R_lmn/Z_lmn barely do.
-    Measured at 24x32x12 (job 55995328): L_lmn moved 3.6e-3, theta moved 7.0e-5, and
-    a CACHED v then gave lambda_R = +6.85e-03 with residual r = 4815 where the truth
-    is -1.03e-04 with r = 0.39. A 7e-5 mesh shift destroys the eigenvector, so no
-    trust radius and no pre-solve can rescue a cache.
-    See AGNI_var/dense-eigsh-optimization/WHY_V_CANNOT_BE_CACHED.md.
+    Inputs
+    ------
+    ``params``, ``transforms``, ``profiles``, and ``data`` are the standard DESC
+    compute-function arguments. This key expects the metric/current/pressure
+    entries listed in the decorator. ``kwargs`` carries the finite-n settings:
+    ``sigma``, ``eigsh_tol``, ``axisym``, ``n_mode_axisym``, ``coupled_rt``, and
+    grid-size metadata.
 
-    This mirrors BallooningStability, which calls `jnp.linalg.eigh` inside its own
-    compute and so always holds the primal point's eigenvector. Our operator is
-    26880^2 and cannot go through `eigh` under AD, so ARPACK supplies the primal via
-    a host callback instead.
+    Runtime knobs
+    -------------
+    ``AGNI_EIGENSOLVER=eigsh_callback`` uses a host scipy ARPACK callback.
+    ``AGNI_EIGENSOLVER=jax_lanczos`` assembles/factorizes in JAX and uses matfree
+    Lanczos. ``AGNI_SIGMA_MODE=adapt`` does the two-pass shift update used by the
+    optimizer. ``AGNI_DIAG=1`` prints xcheck; ``AGNI_DIAG=2`` also prints r_mu and
+    separation diagnostics.
 
-    Why no custom_jvp is needed
-    ---------------------------
-    A `jax.pure_callback` output carries ZERO tangent, so AD differentiates only
-    `A(p)` and the quotient's derivative collapses to
+    Outputs
+    -------
+    Adds ``"finite-n lambda3 rayleigh"`` and
+    ``"finite-n lambda3 rayleigh residual"`` to ``data``. The objective is always
+    ``lam_R = real(vdot(v, Ax(v)) / vdot(v, v))``. The eigensolve returns a fresh
+    ``v`` at the current primal point, but the custom VJP gives ``v`` zero
+    cotangent, so gradients flow only through ``Ax(v)``.
 
-        dlambda/dp = v^T (dA/dp) v / (v^T v)
+    Examples
+    --------
+    The normal optimizer route is not a direct call to this function:
 
-    which is exactly Hellmann-Feynman -- the same rule `jnp.linalg.eigh` applies
-    internally. `stop_gradient` is applied to v as well so the assumption is stated
-    in the code rather than resting on a JAX implementation detail.
+    ``sbatch --export=ALL,AGNI_SIGMA_MODE=adapt,N_STEPS=1,LAMBDA_FLOOR=-1.0e-6,UNFIX_K=4 job_sigma_repeat.sl``
+
+    A value/gradient gate uses:
+
+    ``sbatch --export=ALL,AGNI_KEEP_CHECKS=1 job_regression.sl``
     """
-    # The matfree OPERATOR (not the matfree EIGENSOLVER -- `shiftinvert_cg` sign-flips
-    # at 40/48 and is never called). Verified against the dense A to 2e-11 on random
-    # vectors (job 56012614); they are the same operator. This is the ONLY thing that
-    # is traced: Ax's intermediates are (nr,nt,nz) arrays -- D_rho0/D_theta0/D_zeta0
-    # are small per-dimension operators applied by einsum -- so reverse mode tapes
-    # only VECTORS and one backward pass yields dlambda/dp for ALL parameters.
     _op = _agni3_matfree_operator(params, transforms, profiles, data, **kwargs)
     n_keep = _op["n_keep"]
-    # A's dtype mirrors `A = einsum(Linv, A, Linv)` in the assembly: complex128 when
-    # axisym (B_blocks is built complex there), float64 otherwise.
     _dtype = _op["Linv_DT"].dtype
 
     sigma = kwargs.get("sigma", -1e-1)
     eigsh_tol = kwargs.get("eigsh_tol", 1e-8)
 
-    # ---------------------------------------------------------------------------
-    # THE PRIMAL, ENTIRELY OUTSIDE THE TRACED GRAPH.
-    #
-    # `stop_gradient(A)` is NOT enough and was measured to fail (job 56013034, OOM
-    # at 6115295232 bytes == 27648^2 * 8, an assembly temporary -- NOT outer(v,v)).
-    # It stops the cotangent, but the assembly still runs inside the graph that
-    # `jax.grad` traces, and its long `A.at[...].add(...)` chain stops being updated
-    # in place once buffer donation is constrained under vjp. Each update then wants
-    # a fresh 6.1 GB.
-    #
-    # So the whole primal -- assemble AND ARPACK -- goes inside the callback, where
-    # params/data arrive CONCRETE. The assembly runs eagerly (on GPU), ARPACK runs on
-    # the host, the 6.1 GB is freed before the traced part resumes, and no 27648^2
-    # array ever enters the graph in either direction.
-    #
-    # `data` must be passed THROUGH the callback rather than closed over: it is traced
-    # (it depends on params via _flux_data and the mapped grid). `transforms` and
-    # `profiles` are concrete and are closed over.
-    # ---------------------------------------------------------------------------
     _array_data, _other_data = {}, {}
     for _k, _val in data.items():
         if isinstance(_val, (jnp.ndarray, np.ndarray, float, int)):
@@ -2967,68 +2652,99 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         else:
             _other_data[_k] = _val
 
-    # GPU shift-invert: factorize (A - sigma I) with cuSolver getrf on the GPU
-    # instead of letting scipy's ARPACK do a dense LU on the CPU.
-    #
-    # DEFAULT OFF. In ISOLATION it is a big win -- n=26880 (job 56043107): GPU getrf
-    # 1.37 s + eigsh 1 s vs 41 s CPU (~17x), lambda identical to 3.4e-08 (SAME mode,
-    # not a null-cluster mode; getrf's O(n) workspace dodges the int32 overflow that
-    # kills syevd/eigh above ~17k, [[project_agni_eigenspectrum]]). But INTEGRATED
-    # into the full objective it is a NET LOSS: ~170 s/call vs ~118 s CPU (job
-    # 56044503, steady across 3 calls, so per-call not compile). The LU's transient
-    # 5.7 GB allocations (identity, A-sigma I, factors) contend with the resident Ax
-    # operator + assembled A under MEM_FRACTION=.93, and that ~50 s of allocator
-    # pressure is paid every call. Re-enable with AGNI_GPU_LU=1 only after the
-    # transient allocations are cut (drop the full jnp.eye, free A, tune the fraction).
     import jax.scipy.linalg as _jsla
 
     _use_gpu_lu = os.environ.get("AGNI_GPU_LU", "0").lower() not in {
-        "0", "false", "no", "off"
+        "0",
+        "false",
+        "no",
+        "off",
     }
 
     def _assemble_and_solve_host(params_host, data_host):
-        """Assemble + ARPACK on concrete values. Never sees a tracer."""
+        """Assemble ``A`` and run scipy ``eigsh`` for the rayleigh primal pass.
+
+        Called by
+        ---------
+        ``_eigensolve`` through ``jax.pure_callback`` when
+        ``AGNI_EIGENSOLVER=eigsh_callback`` or when the variable is unset. This
+        is the default path used by ``finite-n lambda3 rayleigh`` during DESC
+        objective and Jacobian evaluations.
+
+        Inputs
+        ------
+        ``params_host`` and ``data_host`` are the array-valued leaves that JAX
+        is allowed to pass through a callback. Non-array entries from DESC's
+        compute ``data`` are restored from the enclosing ``_other_data`` dict.
+        ``transforms``, ``profiles``, ``kwargs``, ``sigma``, and ``eigsh_tol``
+        are closed over from ``_AGNI3_rayleigh``.
+
+        Outputs
+        -------
+        Returns ``(v, lam_mu)`` as numpy arrays. ``v`` has shape ``(n_keep,)`` and
+        is the fresh shifted-eigsh eigenvector at the current equilibrium.
+        ``lam_mu`` is the eigenvalue reported by scipy. The objective does not
+        differentiate through either output; they only choose the vector used in
+        the differentiable Rayleigh quotient below.
+
+        Test examples
+        -------------
+        The regression job exercises this path by default:
+
+        ``sbatch --export=ALL,AGNI_KEEP_CHECKS=1 job_regression.sl``
+
+        The GPU optimizer also uses this unless ``AGNI_EIGENSOLVER`` is changed:
+
+        ``sbatch --export=ALL,AGNI_SIGMA_MODE=adapt,LAMBDA_FLOOR=-1e-6,UNFIX_K=4,N_STEPS=1 job_sigma_repeat.sl``
+        """
         p_h = {k: jnp.asarray(val) for k, val in params_host.items()}
         d_h = dict(_other_data)
         d_h.update({k: jnp.asarray(val) for k, val in data_host.items()})
-        A_h = _agni3_assemble(p_h, transforms, profiles, d_h, **kwargs)["A"]  # GPU
+        A_h = _agni3_assemble(p_h, transforms, profiles, d_h, **kwargs)["A"]
         nA = A_h.shape[0]
 
         if _use_gpu_lu:
-            # Factor (A - sigma I) once on the GPU; ARPACK's shift-invert then only
-            # needs OPinv @ b = (A - sigma I)^-1 @ b, done as GPU triangular solves.
-            #
-            # Memory-lean to fight the allocator pressure that made the naive version
-            # a net loss (job 56044503). Three cuts:
-            #   - no full jnp.eye: subtract sigma off the diagonal in place-ish.
-            #   - FREE A's 5.7 GB device buffer the instant the shifted matrix M is
-            #     formed -- A is not needed again (shift-invert never applies A, only
-            #     OPinv), so peak during getrf is M + LU, not A + M + LU.
-            #   - pass A to eigsh as a LinearOperator whose matvec is never called
-            #     (ARPACK mode 3 uses OPinv only), so no 5.7 GB device->host copy.
-            diag_idx = jnp.diag_indices(nA)
-            M = A_h.at[diag_idx].add(-sigma)
+            M = A_h.at[jnp.diag_indices(nA)].add(-sigma)
             jax.block_until_ready(M)
-            A_h.delete()  # free A (5.7 GB) before the factorization allocates the LU
+            A_h.delete()
             lu_piv = _jsla.lu_factor(M)
             jax.block_until_ready(lu_piv)
-            M.delete()  # LU factors hold everything now; drop the shifted matrix
+            M.delete()
 
             def _opinv(b):
+                """Apply the GPU LU inverse used as scipy ``OPinv``.
+
+                Called by scipy ARPACK inside ``eigsh`` only when
+                ``AGNI_GPU_LU=1``. Input ``b`` is one Krylov vector from scipy.
+                Output is ``(A - sigma I)^{-1} b`` copied back to numpy so scipy
+                can continue the shift-invert iteration. This helper is covered
+                by the same regression/optimizer jobs when ``AGNI_GPU_LU=1`` is
+                exported.
+                """
                 x = _jsla.lu_solve(lu_piv, jnp.asarray(b, dtype=lu_piv[0].dtype))
                 return np.asarray(x)
 
-            def _never(_x):  # ARPACK mode 3 (shift-invert) never applies A
+            def _never(_x):
+                """Fail if scipy tries the wrong operator in shift-invert mode.
+
+                ``eigsh`` should use ``OPinv`` for the shifted solve. This dummy
+                matvec is installed only to satisfy scipy's ``LinearOperator``
+                constructor. If it is called, the GPU-LU path is not doing the
+                intended inverse iteration, so raising is better than silently
+                computing the wrong thing.
+                """
                 raise RuntimeError("A.matvec should not be called in shift-invert")
 
             A_op = LinearOperator((nA, nA), matvec=_never, dtype=np.float64)
             OPinv = LinearOperator((nA, nA), matvec=_opinv, dtype=np.float64)
-            # ARPACK already computes the eigenvalue; it used to be discarded.
-            # Return it so both eigensolver paths have the SAME (v, lam) signature
-            # and the cross-check monitor works on either.
             w_h, v_h = eigsh(
-                A_op, k=1, sigma=sigma, OPinv=OPinv, which="LM",
-                tol=eigsh_tol, return_eigenvectors=True,
+                A_op,
+                k=1,
+                sigma=sigma,
+                OPinv=OPinv,
+                which="LM",
+                tol=eigsh_tol,
+                return_eigenvectors=True,
             )
             return (
                 np.asarray(v_h[:, 0], dtype=np.float64),
@@ -3037,7 +2753,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         A_np = np.asarray(A_h)
         w_h, v_h = eigsh(
-            A_np, k=1, sigma=sigma, which="LM", tol=eigsh_tol,
+            A_np,
+            k=1,
+            sigma=sigma,
+            which="LM",
+            tol=eigsh_tol,
             return_eigenvectors=True,
         )
         return (
@@ -3045,52 +2765,17 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             np.asarray(w_h[0], dtype=A_np.dtype),
         )
 
-    # -----------------------------------------------------------------------
-    # PURE-JAX eigensolve (no callback): assemble + GPU getrf + matfree Lanczos.
-    #
-    # The callback exists ONLY to keep the dense assembly out of the reverse-mode
-    # (vjp) trace, where XLA buffer donation is disabled and the assembly's scatter-
-    # adds + getrf each allocate a fresh 5.7 GB (OOM). custom_vjp is an alternative
-    # isolation: its fwd is not differentiated through (the bwd is the zero-cotangent
-    # HF rule), so a jitted fwd MAY keep donation on and run in-place -- no callback,
-    # all on GPU. AGNI_EIGENSOLVER=jax_lanczos selects this; default keeps the
-    # validated callback path. If it OOMs, the assembly donation is not preserved and
-    # the callback stays.
-    #
-    # The eigensolver is matfree's Lanczos (decomp.tridiag_sym reortho="full" +
-    # eig.eigh_partial) -- the SAME machinery `finite-n lambda3 matfree` already uses,
-    # but with an EXACT LU OPinv (lu_solve of getrf(A-sigma I)) in place of the CG
-    # OPinv that failed (kappa~2e11, no preconditioner). LU is exact, so no CG
-    # convergence problem; matfree is pure JAX, so no scipy and no re-entrant callback.
     _eigensolver = os.environ.get("AGNI_EIGENSOLVER", "eigsh_callback").lower()
-    _num_matvecs = int(os.environ.get("AGNI_NUM_MATVECS", str(kwargs.get("num_matvecs", 50))))
-    # --- TWO knobs, not seven. Consolidated 2026-07-19. -----------------------
-    #
-    # AGNI_SIGMA_MODE : fixed (default) | track | adapt      -- how sigma is chosen
-    #   fixed  sigma = sigma_factor * lambda_guess, constant. Historical behaviour.
-    #   track  re-based once per OUTER step on the trusted lambda. Superseded --
-    #          too coarse, lambda moves ~18x WITHIN a step (BENCHMARKING.md 10.9).
-    #   adapt  re-shifted INSIDE every solve onto that solve's own lam_mu. Makes
-    #          the starting sigma nearly irrelevant (10.10).
-    # AGNI_SIGMA_FACTOR : the multiplier for track/adapt (default 2.5, the measured
-    #   sweet spot -- closer blows up LU conditioning, further loses separation).
-    #   ONE factor for both modes; there used to be two that meant the same thing.
-    # AGNI_DIAG : 0 = silent | 1 = cross-check (DEFAULT) | 2 = + r_mu/separation
-    #   Level 1 is on by default because it is a safety monitor, not a diagnostic:
-    #   it is the only thing standing between a contaminated eigenvector and a
-    #   silently wrong descent direction. Level 2 adds one lu_solve per eigensolve.
-    #
-    # Replaced: AGNI_RMU, AGNI_XCHECK, AGNI_XCHECK_TOL, AGNI_SIGMA_ADAPT,
-    # AGNI_SIGMA_ADAPT_FACTOR, AGNI_SIGMA_TRACK, AGNI_SIGMA_FACTOR.
-    # fixed | track | adapt | track+adapt   (the last two are ORTHOGONAL:
-    #   track  sets the INCOMING sigma once per OUTER step (objectives/_stability.py)
-    #   adapt  re-shifts sigma INSIDE each solve from that solve's own lam_mu
-    # so "track+adapt" = a good starting shift each step, corrected within the step.
+    _num_matvecs = int(
+        os.environ.get("AGNI_NUM_MATVECS", str(kwargs.get("num_matvecs", 50)))
+    )
     _sigma_mode = os.environ.get("AGNI_SIGMA_MODE", "fixed").lower()
     _valid = {"fixed", "track", "adapt", "track+adapt", "adapt+track"}
     if _sigma_mode not in _valid:
         raise ValueError(
-            "AGNI_SIGMA_MODE must be one of %s, got %r" % (sorted(_valid), _sigma_mode)
+            "AGNI_SIGMA_MODE must be one of {}, got {!r}".format(
+                sorted(_valid), _sigma_mode
+            )
         )
     _adapt = "adapt" in _sigma_mode
     _adapt_factor = float(os.environ.get("AGNI_SIGMA_FACTOR", "2.5"))
@@ -3099,100 +2784,106 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     _rmu_diag = _diag >= 2
     _xcheck_tol = 1e-2  # a constant, not a knob: nothing ever needed to tune it
 
-    def _free(x):
-        # Return the ~5.7 GB device buffer to the pool NOW rather than at GC. Each
-        # eigensolve allocates A + M + LU (~17 GB); without prompt frees the leftover
-        # chunks fragment the preallocated pool and a later call's 5.78 GB assembly
-        # gather (jnp.ix_(keep,keep)) OOMs (job 56049551, ~4th call). Eager only;
-        # a tracer has no buffer to delete, so guard.
-        try:
-            x.delete()
-        except Exception:
-            pass
-
-    def _emit_rmu_diagnostic(sig, mu, idx, v_out, opinv):
-        """AGNI_DIAG=2: print convergence + cluster separation. Costs one lu_solve.
-
-        Q1 -- did Lanczos converge? The usual residual
-        r = ||Ax(v) - lam v|| / (|lam| ||v||) CANNOT answer this: it is RETRACTED.
-        |lam| ~ 1e-4 sits ~11 orders below ||A|| ~ 2.8e7, so it reports round-off
-        multiplied by 2.7e11 (r = 0.39 is its FLOOR, not an error). In shift-invert
-        space that inversion is gone -- shift-invert maps the wanted eigenvalue to
-        the DOMINANT one, so |mu| ~ ||OP|| and r_mu is honestly scaled.
-            r_mu small -> converged; the drift is NOT the eigensolver.
-            r_mu large -> not converged. Treat r_mu > 1e-5 as danger.
-
-        Q2 -- is the spectrum near sigma clustered? The Ritz values ARE approximate
-        eigenvalues (lam = sigma + 1/mu), so their spread is free. If the top few
-        |mu| are within a few percent the modes are unresolvable and MORE MATVECS
-        CANNOT HELP (measured: identical to 7 digits at m=50/100/200) -- only
-        moving sigma changes separation.
-        """
-        if not _rmu_diag:
-            return
-        mu_i = mu[idx]
-        res = opinv(v_out) - mu_i * v_out  # the one extra triangular solve
-        r_mu = jnp.linalg.norm(res) / (jnp.abs(mu_i) * jnp.linalg.norm(v_out))
-        mu_s = mu[jnp.argsort(-jnp.abs(mu))][:6]
-        jax.debug.print(
-            "[rmu] sigma={s:.6e}  num_matvecs={k}\n"
-            "[rmu] r_mu={r:.6e}   (>1e-5 => DANGER, not converged)\n"
-            "[rmu] mu_sel={m:.8e}  lam_from_mu={l:.8e}\n"
-            "[rmu] separation |mu_1|/|mu_2| = {sep:.4f}"
-            "   (~1 => clustered, more matvecs cannot help)\n"
-            "[rmu] top |mu|: {mus}\n"
-            "[rmu] implied lam: {lams}",
-            s=sig, k=_num_matvecs, r=r_mu, m=mu_i, l=sig + 1.0 / mu_i,
-            sep=jnp.abs(mu_s[0]) / jnp.abs(mu_s[1]),
-            mus=mu_s, lams=sig + 1.0 / mu_s,
-        )
-
     def _eigensolve_jax(params_d, data_d):
+        """All-JAX shifted eigensolve for the rayleigh primal vector.
+
+        Called by
+        ---------
+        ``_eigensolve`` when ``AGNI_EIGENSOLVER=jax_lanczos``. This is the
+        accelerator-resident alternative to the host scipy callback. It is still
+        a primal eigensolve only; the derivative rule is supplied by
+        ``_v_primal_bwd``.
+
+        Inputs
+        ------
+        ``params_d`` and ``data_d`` are the JAX versions of DESC's ``params`` and
+        array-valued compute ``data``. Non-array data are restored from
+        ``_other_data``. The routine closes over ``sigma``, ``_sigma_mode``,
+        ``_adapt_factor``, ``_num_matvecs``, and diagnostics configured through
+        ``AGNI_SIGMA_MODE``, ``AGNI_SIGMA_FACTOR``, ``AGNI_NUM_MATVECS``, and
+        ``AGNI_DIAG``.
+
+        Outputs
+        -------
+        Returns ``(v, lam_mu)``. ``v`` is the selected Lanczos vector in the
+        reduced ``n_keep`` space. ``lam_mu`` is reconstructed from the
+        shift-invert eigenvalue ``mu`` as ``sigma + 1 / mu``. The value passed to
+        DESC is not ``lam_mu``; it is recomputed below as the fixed-vector
+        Rayleigh quotient ``real(vdot(v, Ax(v)) / vdot(v, v))``.
+
+        Test examples
+        -------------
+        Use the same regression or optimizer scripts with the JAX eigensolver
+        explicitly enabled:
+
+        ``sbatch --export=ALL,AGNI_EIGENSOLVER=jax_lanczos,AGNI_KEEP_CHECKS=1 job_regression.sl``
+
+        ``sbatch --export=ALL,AGNI_EIGENSOLVER=jax_lanczos,AGNI_SIGMA_MODE=adapt,LAMBDA_FLOOR=-1e-6,UNFIX_K=4,N_STEPS=1 job_sigma_repeat.sl``
+        """
         d_h = dict(_other_data)
         d_h.update(data_d)
         A = _agni3_assemble(params_d, transforms, profiles, d_h, **kwargs)["A"]
         nA = A.shape[0]
-        # (A - sigma I): subtract on the diagonal (no full identity materialized).
-        # The manual frees below are EAGER-ONLY: block_until_ready + .delete() force
-        # concrete evaluation and cannot run under a jit trace (the optimizer jits
-        # _proximal_jvp_blocked_pure). Under trace, skip them -- jit's own buffer
-        # management (donation) handles memory, which is the end goal anyway.
         _eager = not isinstance(A, jax.core.Tracer)
 
         def _solve_at(sig, keep_A):
-            """One shift-invert Lanczos solve at shift `sig`.
+            """Run one exact-LU shift-invert Lanczos solve at a chosen shift.
 
-            Returns (v, lam_mu, sep):
-              v      eigenvector (the primal output)
-              lam_mu sigma + 1/mu -- the ROBUST eigenvalue estimate
-              sep    |mu_1|/|mu_2| -- separation from the near-zero cluster.
-                     ~1 means the modes are unresolvable and v is a MIXTURE.
+            Called by
+            ---------
+            ``_eigensolve_jax`` once for fixed/track modes and twice for adapt
+            modes. The first call uses the configured ``sigma``. The second call
+            uses ``AGNI_SIGMA_FACTOR * lam_mu`` when that value is finite and
+            negative.
 
-            `keep_A` must be True if another pass will need A (adaptive re-shift);
-            otherwise A's buffer is reclaimed as soon as M exists.
+            Inputs
+            ------
+            ``sig`` is the scalar shift used to form ``A - sig I``. ``keep_A``
+            controls eager memory cleanup: adapt mode keeps ``A`` after the
+            first factorization so the second shifted matrix can be formed.
+
+            Outputs
+            -------
+            Returns ``(v_out, lam_out, sep_out)``. ``v_out`` is the selected
+            Lanczos vector, ``lam_out`` is ``sig + 1 / mu`` for the selected
+            inverse eigenvalue, and ``sep_out`` is the leading separation ratio
+            used only for diagnostics.
             """
             M = A.at[jnp.diag_indices(nA)].add(-sig)
+            mat_dtype = M.dtype
             if _eager:
-                jax.block_until_ready(M)  # M built before A's buffer is reclaimed
+                jax.block_until_ready(M)
                 if not keep_A:
-                    _free(A)
+                    try:
+                        A.delete()
+                    except Exception:
+                        pass
             lu = _jsla.lu_factor(M)
             if _eager:
-                jax.block_until_ready(lu)  # LU built before M is reclaimed
-                _free(M)
+                jax.block_until_ready(lu)
+                try:
+                    M.delete()
+                except Exception:
+                    pass
 
-            def _OPinv(b):  # exact shift-invert, GPU triangular solves
+            def _OPinv(b):
+                """Apply ``(A - sig I)^{-1}`` to one Lanczos vector.
+
+                ``decomp.tridiag_sym`` calls this repeatedly while building the
+                Krylov basis. Input and output have shape ``(n_keep,)`` and stay
+                in JAX arrays. This is deliberately exact-LU shift-invert, not
+                the old PCG approximation.
+                """
                 return _jsla.lu_solve(lu, b)
 
             _tri = decomp.tridiag_sym(_num_matvecs, reortho="full", materialize=True)
             _alg = eig.eigh_partial(_tri)
             _v0 = jnp.asarray(
-                np.random.default_rng(0).standard_normal(nA), dtype=M.dtype
+                np.random.default_rng(0).standard_normal(nA), dtype=mat_dtype
             )
             _v0 = _v0 / jnp.linalg.norm(_v0)
             mu, vecs = _alg(_OPinv, _v0)
-            # mu are OP eigenvalues 1/(lambda - sigma); largest |mu| == the
-            # eigenvalue NEAREST sigma.
+
             idx = jnp.argmax(jnp.abs(mu))
             v_out = vecs[idx]
 
@@ -3201,61 +2892,68 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             ordered = jnp.abs(mu[jnp.argsort(-jnp.abs(mu))])
             sep_out = ordered[0] / jnp.where(ordered[1] == 0, jnp.inf, ordered[1])
 
-            _emit_rmu_diagnostic(sig, mu, idx, v_out, _OPinv)
+            if _rmu_diag:
+                res = _OPinv(v_out) - mu_i * v_out
+                r_mu = jnp.linalg.norm(res) / (jnp.abs(mu_i) * jnp.linalg.norm(v_out))
+                mu_s = mu[jnp.argsort(-jnp.abs(mu))][:6]
+                jax.debug.print(
+                    "[rmu] sigma={s:.6e}  num_matvecs={k}\n"
+                    "[rmu] r_mu={r:.6e}   (>1e-5 => DANGER, not converged)\n"
+                    "[rmu] mu_sel={m:.8e}  lam_from_mu={l:.8e}\n"
+                    "[rmu] separation |mu_1|/|mu_2| = {sep:.4f}"
+                    "   (~1 => clustered, more matvecs cannot help)\n"
+                    "[rmu] top |mu|: {mus}\n"
+                    "[rmu] implied lam: {lams}",
+                    s=sig,
+                    k=_num_matvecs,
+                    r=r_mu,
+                    m=mu_i,
+                    l=sig + 1.0 / mu_i,
+                    sep=jnp.abs(mu_s[0]) / jnp.abs(mu_s[1]),
+                    mus=mu_s,
+                    lams=sig + 1.0 / mu_s,
+                )
 
             if _eager:
-                jax.block_until_ready(v_out)  # v built before the LU is reclaimed
-                _free(lu[0])
+                jax.block_until_ready(v_out)
+                try:
+                    lu[0].delete()
+                except Exception:
+                    pass
             return v_out, lam_out, sep_out
 
-        # ---- PASS 1, at the incoming shift ----
         v, lam_mu, sep_pass1 = _solve_at(sigma, keep_A=_adapt)
         sep = sep_pass1
 
-        # ---- PASS 2 (AGNI_SIGMA_ADAPT=1): re-shift onto THIS solve's own answer --
-        #
-        # AGNI_SIGMA_MODE=adapt. Rationale/costs: BENCHMARKING.md 10.10. In brief:
-        #   * legitimate where carrying sigma between evaluations is not, because NO
-        #     STATE CROSSES AN EVALUATION BOUNDARY -- lam_mu was measured at THIS p,
-        #     on THIS mesh, so the staleness objection does not apply and the
-        #     objective stays a pure function of params.
-        #   * unconditional, NOT a `lax.cond` on separation: a data-dependent branch
-        #     would make the objective piecewise and confuse the line search.
-        #   * costs +11% wall (the assembly is not repeated) and keeps A resident
-        #     across pass 1 (+10.1 GB at 32x32x12).
         if _adapt:
             sigma2 = _adapt_factor * jax.lax.stop_gradient(lam_mu)
-            # Guard: if lam_mu is not finite or is non-negative, the mode we want
-            # does not exist below zero at this p -- keep pass 1 rather than shift
-            # onto a meaningless target.
-            sigma2 = jnp.where(
-                jnp.isfinite(sigma2) & (sigma2 < 0), sigma2, sigma
-            )
+            sigma2 = jnp.where(jnp.isfinite(sigma2) & (sigma2 < 0), sigma2, sigma)
             v, lam_mu, sep = _solve_at(sigma2, keep_A=False)
-            if _rmu_diag:  # AGNI_DIAG=2 only; the re-shift itself always runs
+            if _rmu_diag:
                 jax.debug.print(
                     "[adapt] sigma1={s1:.6e} sep1={p1:.4f} -> sigma2={s2:.6e} "
                     "sep2={p2:.4f}  lam_mu={l:.8e}",
-                    s1=sigma, p1=sep_pass1, s2=sigma2, p2=sep, l=lam_mu,
+                    s1=sigma,
+                    p1=sep_pass1,
+                    s2=sigma2,
+                    p2=sep,
+                    l=lam_mu,
                 )
 
-        # lam_mu (= sigma + 1/mu) is returned to the CALLER rather than compared
-        # here, so the cross-check can run outside this function.
-        #
-        # TRACER-LEAK RULE (learned the hard way, job 56110541): inside this
-        # function -- the custom_vjp fwd -- use ONLY `params_d`/`data_d` and values
-        # derived from them. `_op` is built in the OUTER trace (~line 2922); calling
-        # `_op["Ax"](v)` here closes over outer tracers from a separate
-        # transformation and raises UnexpectedTracerError under `jac`
-        # (float64[12288,3,3] = B_blocks escaping a LinearizeTracer). It passes the
-        # value tests, which never linearize, and only explodes in the optimizer.
         return v, lam_mu
 
     def _eigensolve(params_d, data_d):
+        """Dispatch the primal eigensolve used by ``_v_primal``.
+
+        Inputs are array-only DESC ``params`` and ``data``. Output is always
+        ``(v, lam_mu)`` with ``v.shape == (n_keep,)`` and scalar ``lam_mu``.
+        ``AGNI_EIGENSOLVER=jax_lanczos`` selects ``_eigensolve_jax``; otherwise
+        this calls ``_assemble_and_solve_host`` through ``jax.pure_callback``.
+        The regression and optimizer scripts exercise this dispatch whenever
+        they compute ``"finite-n lambda3 rayleigh"``.
+        """
         if _eigensolver == "jax_lanczos":
             return _eigensolve_jax(params_d, data_d)
-        # Both paths return (eigenvector, eigenvalue). The scalar is the Ritz/ARPACK
-        # eigenvalue, used only by the cross-check monitor at the call site.
         return jax.pure_callback(
             _assemble_and_solve_host,
             (
@@ -3266,37 +2964,41 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             data_d,
         )
 
-    # A custom differentiation rule is REQUIRED, not stylistic: the callback's inputs
-    # are traced, so JAX demands one and `pure_callback` has none ("Pure callbacks do
-    # not support JVP", job 56013473). stop_gradient on the OUTPUT cannot help -- the
-    # rule is invoked on the way IN.
-    #
-    # custom_VJP, not custom_jvp: under a custom_jvp the JVP rule recomputes the
-    # primal (`_v_primal(*primals)`) DURING linearization, so every reverse-mode
-    # jacobian ran the assemble+ARPACK callback TWICE -- once for the value, once
-    # inside the rule (measured: 10 dense assembles/outer step where the optimizer
-    # asked for 2 fn + 2 jac evals). custom_vjp's fwd runs the callback ONCE and
-    # hands the result to bwd, halving the eigsh count on every jacobian.
     @jax.custom_vjp
     def _v_primal(params_d, data_d):
+        """Return the fresh primal eigenpair with a custom derivative rule.
+
+        Called directly below before building ``Av``. Inputs are the array-only
+        ``params`` and ``data`` dictionaries. Output is ``(v, lam_mu)`` from
+        ``_eigensolve``. The important contract is that ``v`` is recomputed at
+        the current primal point, but the backward pass returns zero cotangents
+        for all inputs so the optimizer sees the fixed-vector Rayleigh gradient.
+        """
         return _eigensolve(params_d, data_d)
 
     def _v_primal_fwd(params_d, data_d):
+        """Forward rule for ``_v_primal``.
+
+        Inputs are the same array-only ``params`` and ``data`` dictionaries. It
+        calls ``_eigensolve`` once and returns ``(v, lam_mu)`` to the primal
+        calculation. The residual saves only the inputs because the backward rule
+        must manufacture matching zero cotangents for the same pytrees.
+        """
         v_out = _eigensolve(params_d, data_d)
-        # residuals: the input pytrees, only so bwd can shape its zero cotangents.
         return v_out, (params_d, data_d)
 
     def _v_primal_bwd(res, g):
-        # dv/dp carries ZERO cotangent to (params, data). This is not a convenience
-        # -- it is Hellmann-Feynman. Differentiating the quotient exactly:
-        #
-        #   dlam/dp = v^T(dA/dp)v/(v^Tv) + 2 (dv/dp)^T (A - lam) v / (v^Tv)
-        #                                   \____ identically 0, since Av = lam v
-        #
-        # so the eigenvector's own derivative cannot contribute; the whole gradient
-        # flows through the Ax(v) contraction below, never through v. Same rule
-        # `jnp.linalg.eigh` applies internally (why BallooningStability's gradient
-        # works). v is FRESH at this p -- never cached, never stale.
+        """Backward rule for ``_v_primal``.
+
+        ``res`` contains the ``params`` and ``data`` pytrees saved by
+        ``_v_primal_fwd``. ``g`` is the incoming cotangent for ``(v, lam_mu)`` and
+        is intentionally ignored. Outputs are zero pytrees matching ``params``
+        and ``data``. This is what enforces the desired math path:
+
+        1. fresh ``v`` from the eigensolve at the primal point,
+        2. no gradient through the eigensolve or eigenvector selection,
+        3. gradient only through ``Av = Ax(v)`` in the Rayleigh quotient.
+        """
         params_d, data_d = res
         return (
             jax.tree_util.tree_map(jnp.zeros_like, params_d),
@@ -3311,40 +3013,21 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     vv = jnp.vdot(v, v)
     lam_R = jnp.real(jnp.vdot(v, Av) / vv)
 
-    # ---- CROSS-CHECK MONITOR (AGNI_DIAG>=1, ON by default) --------------------
-    #
-    # lam_R (the objective) is FRAGILE -- second order in eigenvector contamination
-    # against ||A|| ~ 2.8e7. lam_mu (the Ritz value) is ROBUST. They agree when the
-    # eigenvector is clean and diverge when it is not, so the gap flags an
-    # untrustworthy evaluation. Full argument + measurements: BENCHMARKING.md 10.4a.
-    #
-    # TWO INVARIANTS, both learned by breaking them:
-    #   * lam_mu is a MONITOR, NEVER the objective. It comes from the custom_vjp
-    #     whose bwd returns zero cotangents, so it carries NO GRADIENT -- swapping
-    #     it in gives a zero descent direction that looks like clean convergence.
-    #   * This must live HERE, not inside _eigensolve_jax: `_op` belongs to THIS
-    #     trace, and touching it inside the custom_vjp fwd leaks a tracer under
-    #     `jac` (job 56110541).
     if _xcheck:
         _den = jnp.maximum(jnp.abs(lam_mu), 1e-300)
         _gap = jnp.abs(lam_R - lam_mu) / _den
-        # SUSPECT on sign disagreement too -- that IS the drift signature
-        # (objective says stable, Ritz value says unstable).
         _sign_ok = jnp.sign(lam_R) == jnp.sign(lam_mu)
         _ok = (_gap < _xcheck_tol) & _sign_ok
-        # No jnp.where on strings (it takes arrays). Grep for "trusted=False".
         jax.debug.print(
             "[xcheck] lam_R={a:+.8e}  lam_mu={b:+.8e}  rel_gap={g:.3e}"
             "  sign_ok={s}  trusted={t}",
-            a=lam_R, b=lam_mu, g=_gap, s=_sign_ok, t=_ok,
+            a=lam_R,
+            b=lam_mu,
+            g=_gap,
+            s=_sign_ok,
+            t=_ok,
         )
-    # Norm-wise residual r = ||Ax(v) - lam_R v|| / (|lam_R| ||v||).
-    #
-    # WARNING: r IS NOT A CORRECTNESS METRIC HERE and must not be thresholded.
-    # |lam| ~ 1e-4 sits ~11 orders below ||A|| ~ 2.8e7, so r reports round-off
-    # amplified by ~2.7e11. r = 0.3945 is the FLOOR -- a perfectly fresh eigenvector
-    # gives exactly that. It is retained only for continuity with the logs.
-    # See AGNI_var/dense-eigsh-optimization/WHY_V_CANNOT_BE_CACHED.md (CORRECTION).
+
     resid = jnp.linalg.norm(Av - lam_R * v) / (
         jnp.abs(lam_R) * jnp.sqrt(jnp.real(vv)) + 1e-300
     )
@@ -3352,87 +3035,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     data["finite-n lambda3 rayleigh"] = jnp.atleast_1d(lam_R)
     data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
     return data
-
-
-
-@register_compute_fun(
-    name="finite-n lambda3 matfree pcg",
-    label="low-\\n \\lambda = \\gamma^2",
-    units="~",
-    units_long="None",
-    description="Experimental preconditioned matrix-free finite-n lambda3 solver",
-    dim=1,
-    params=["Psi"],
-    transforms={"grid": [], "diffmat": []},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "g_rr|PEST",
-        "g_rv|PEST",
-        "g_rp|PEST",
-        "g_vv|PEST",
-        "g_vp|PEST",
-        "g_pp|PEST",
-        "g^rr",
-        "g^rv",
-        "g^rz",
-        "J^theta_PEST",
-        "J^zeta",
-        "|J|",
-        "sqrt(g)_PEST",
-        "(sqrt(g)_PEST_r)|PEST",
-        "(sqrt(g)_PEST_v)|PEST",
-        "(sqrt(g)_PEST_p)|PEST",
-        "finite-n instability drive",
-        "iota",
-        "psi_r",
-        "psi_rr",
-        "p",
-        "p_r",
-        "a",
-    ],
-    axisym="bool: if the equilibrium is axisymmetric",
-    n_mode_axisym="int: toroidal mode number to study",
-    incompressible="bool: imposes incompressibility",
-    gamma="float: adiabatic constant",
-    stable_only="bool: for testing only, materialize and eigendecompose the stable part of the matrix",
-    v_guess="ndarray: eigenfunction guess to initialize the iterative eigenvalue solver",
-    eigsh_tol="float: tolerance for ARPACK eigsh in matrix-free mode",
-    eigsh_maxiter="int: max iterations for ARPACK eigsh in matrix-free mode",
-    eigsh_ncv="int: number of Lanczos vectors used by ARPACK eigsh",
-    debug_matfree="bool: print matrix-free solver diagnostics",
-    sigma="float: shift used by shift-invert solver",
-    cg_tol="float: CG tolerance inside the preconditioned shift-invert solve",
-    cg_maxiter="int: CG max iterations inside the preconditioned shift-invert solve",
-    pcg_preconditioner="str: 'fourier_mode_blocks' (default) or experimental dense 'fourier_band_spd'",
-    pcg_bandwidth="int: theta-mode cyclic bandwidth for pcg_preconditioner='fourier_band_spd'",
-    pcg_floor_rel="float: relative eigenvalue floor for pcg_preconditioner='fourier_band_spd'",
-    pcg_build_batch_size="int: number of Fourier-basis columns to batch while building the preconditioner",
-    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier (rho, theta) "
-    "operators instead of separable 1D matrices",
-    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
-    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
-)
-def _AGNI3_matfree_pcg(params, transforms, profiles, data, **kwargs):
-    """Experimental PCG wrapper for :func:`_AGNI3_matfree`.
-
-    The preconditioner is built once per ``eq.compute`` call from the current
-    equilibrium data. During optimization, the equilibrium-dependent operator
-    changes, so this is not automatically amortized across objective calls.
-    """
-    kwargs = dict(kwargs)
-    kwargs.setdefault("matfree_solver", "eigsh_shiftinvert_pcg")
-    kwargs.setdefault("pcg_preconditioner", "fourier_mode_blocks")
-    out = _AGNI3_matfree(params, transforms, profiles, data, **kwargs)
-    if "finite-n lambda3 matfree" in out:
-        out["finite-n lambda3 matfree pcg"] = out["finite-n lambda3 matfree"]
-    if "finite-n eigenfunction3 matfree" in out:
-        out["finite-n eigenfunction3 matfree pcg"] = out[
-            "finite-n eigenfunction3 matfree"
-        ]
-    return out
-
-
 
 
 @register_compute_fun(
@@ -3500,7 +3102,7 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
 
     This version uses GPU accelerator to calculate terms of the stability matrix
     and assembles them into multiple usints that can be be saved on a CPU.
-    The units are later assembles into a giant matrix A_full and solved as an 
+    The units are later assembles into a giant matrix A_full and solved as an
     eigenvalue problem. This is done because of current A100 GPU VRAM limitations
     and the size of the stiffness matrix.
     """
@@ -3513,17 +3115,33 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
     bc_rho_inner = kwargs.get("bc_rho_inner", True)
     bc_rho_outer = kwargs.get("bc_rho_outer", True)
     gpu_assembly = kwargs.get("gpu_assembly", True)
-    gpu_chunk = int(kwargs.get("gpu_chunk_size", _env5("AGNI_GPU_CHUNK_SIZE", 2048)))
+    gpu_chunk = int(
+        kwargs.get(
+            "gpu_chunk_size",
+            os.environ.get(
+                "AGNI_LAMBDA32_GPU_CHUNK_SIZE",
+                os.environ.get("AGNI_GPU_CHUNK_SIZE", 2048),
+            ),
+        )
+    )
     dump_only = kwargs.get("matrix_dump_only", True)
     memmap_blocks = kwargs.get("memmap_blocks", False)
     keep_source_blocks = kwargs.get("keep_source_blocks", True)
 
-    dump_dir = _env5("AGNI_LAMBDA32_DUMP_DIR", os.getcwd(), "AGNI_LAMBDA32_DUMP_DIR")
-    dump_basename = _env5("AGNI_LAMBDA32_DUMP_BASENAME", "finite_n_lambda32", "AGNI_LAMBDA32_DUMP_BASENAME")
-    progress_enabled = _env5("AGNI_LAMBDA32_PROGRESS", "0", "AGNI_LAMBDA32_PROGRESS").strip().lower() not in {
-        "", "0", "false", "no", "off",
+    dump_dir = os.environ.get("AGNI_LAMBDA32_DUMP_DIR", os.getcwd())
+    dump_basename = os.environ.get("AGNI_LAMBDA32_DUMP_BASENAME", "finite_n_lambda32")
+    progress_enabled = os.environ.get(
+        "AGNI_LAMBDA32_PROGRESS", "0"
+    ).strip().lower() not in {
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
     }
-    progress_chunk_every = max(1, int(_env5("AGNI_LAMBDA32_PROGRESS_CHUNK_EVERY", "1", "AGNI_LAMBDA32_PROGRESS_CHUNK_EVERY")))
+    progress_chunk_every = max(
+        1, int(os.environ.get("AGNI_LAMBDA32_PROGRESS_CHUNK_EVERY", "1"))
+    )
     progress_t0 = time.time()
     run_id = int(time.time())
     shape_tag = f"{int(np.asarray(transforms['diffmat'].D_rho).shape[0])}x{int(np.asarray(transforms['diffmat'].D_theta).shape[0])}x{int(np.asarray(np.asarray(transforms['diffmat'].D_zeta)).shape[0])}"
@@ -3542,7 +3160,12 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
             algebra with environment checks.
         """
         if progress_enabled:
-            print("[finite-n lambda32 progress]", f"t={time.time() - progress_t0:.1f}s", msg, flush=True)
+            print(
+                "[finite-n lambda32 progress]",
+                f"t={time.time() - progress_t0:.1f}s",
+                msg,
+                flush=True,
+            )
 
     iota = np.asarray(data["iota"], dtype=np_dtype).reshape(-1, 1)
     iotainv = 1.0 / iota
@@ -3572,12 +3195,25 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
     n_shell = n_theta_max * n_zeta_max
     n_kchunks = (n_total + gpu_chunk - 1) // gpu_chunk
 
-    W = np.kron(W_rho, np.kron(W_theta, W_zeta)).astype(np_dtype, copy=False).reshape(-1, 1)
+    W = (
+        np.kron(W_rho, np.kron(W_theta, W_zeta))
+        .astype(np_dtype, copy=False)
+        .reshape(-1, 1)
+    )
 
     sqrtg = np.asarray(data["sqrt(g)_PEST"], dtype=np_dtype).reshape(-1, 1) / a_N**3
-    sqrtg_r = np.asarray(data["(sqrt(g)_PEST_r)|PEST"], dtype=np_dtype).reshape(-1, 1) / a_N**3
-    sqrtg_v = np.asarray(data["(sqrt(g)_PEST_v)|PEST"], dtype=np_dtype).reshape(-1, 1) / a_N**3
-    sqrtg_p = np.asarray(data["(sqrt(g)_PEST_p)|PEST"], dtype=np_dtype).reshape(-1, 1) / a_N**3
+    sqrtg_r = (
+        np.asarray(data["(sqrt(g)_PEST_r)|PEST"], dtype=np_dtype).reshape(-1, 1)
+        / a_N**3
+    )
+    sqrtg_v = (
+        np.asarray(data["(sqrt(g)_PEST_v)|PEST"], dtype=np_dtype).reshape(-1, 1)
+        / a_N**3
+    )
+    sqrtg_p = (
+        np.asarray(data["(sqrt(g)_PEST_p)|PEST"], dtype=np_dtype).reshape(-1, 1)
+        / a_N**3
+    )
 
     R = np.asarray(data["R"], dtype=np_dtype).reshape(-1, 1)
     Z = np.asarray(data["Z"], dtype=np_dtype).reshape(-1, 1)
@@ -3599,19 +3235,45 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
     g_sup_rp = np.asarray(data["g^rz"], dtype=np_dtype).reshape(-1, 1) * a_N**2
 
     print(f"{file_root}")
-    #np.savez(f"{dump_dir}/{file_root}_eq_data.npz", psi_r_over_sqrtg=psi_r_over_sqrtg, psi_r=psi_r, iota=iota, allow_pickle=True)
-    #np.savez(f"{dump_dir}/{file_root}_eq_data.npz", psi_r_over_sqrtg=psi_r_over_sqrtg, psi_r=psi_r, iota=iota, g_rr=g_rr, g_vv=g_vv, g_pp=g_pp, g_rv=g_rv, g_rp=g_rp, g_vp=g_vp, R=R, Z=Z, D_rho0=D_rho0, D_theta0=D_theta0, D_zeta0=D_zeta0, sqrtg=sqrtg)
-    np.savez(f"{file_root}_eq_data.npz", psi_r_over_sqrtg=psi_r_over_sqrtg, psi_r=psi_r, iota=iota, g_rr=g_rr, g_vv=g_vv, g_pp=g_pp, g_rv=g_rv, g_rp=g_rp, g_vp=g_vp, R=R, Z=Z, D_rho0=D_rho0, D_theta0=D_theta0, D_zeta0=D_zeta0, sqrtg=sqrtg)
+    # np.savez(f"{dump_dir}/{file_root}_eq_data.npz", psi_r_over_sqrtg=psi_r_over_sqrtg, psi_r=psi_r, iota=iota, allow_pickle=True)
+    # np.savez(f"{dump_dir}/{file_root}_eq_data.npz", psi_r_over_sqrtg=psi_r_over_sqrtg, psi_r=psi_r, iota=iota, g_rr=g_rr, g_vv=g_vv, g_pp=g_pp, g_rv=g_rv, g_rp=g_rp, g_vp=g_vp, R=R, Z=Z, D_rho0=D_rho0, D_theta0=D_theta0, D_zeta0=D_zeta0, sqrtg=sqrtg)
+    np.savez(
+        f"{file_root}_eq_data.npz",
+        psi_r_over_sqrtg=psi_r_over_sqrtg,
+        psi_r=psi_r,
+        iota=iota,
+        g_rr=g_rr,
+        g_vv=g_vv,
+        g_pp=g_pp,
+        g_rv=g_rv,
+        g_rp=g_rp,
+        g_vp=g_vp,
+        R=R,
+        Z=Z,
+        D_rho0=D_rho0,
+        D_theta0=D_theta0,
+        D_zeta0=D_zeta0,
+        sqrtg=sqrtg,
+    )
 
-
-    J2 = ((mu_0 * np.asarray(data["|J|"], dtype=np_dtype).reshape(-1, 1)) ** 2) * (a_N / B_N) ** 2
-    j_sup_zeta = mu_0 * np.asarray(data["J^zeta"], dtype=np_dtype).reshape(-1, 1) * a_N**2 / B_N
+    J2 = ((mu_0 * np.asarray(data["|J|"], dtype=np_dtype).reshape(-1, 1)) ** 2) * (
+        a_N / B_N
+    ) ** 2
+    j_sup_zeta = (
+        mu_0 * np.asarray(data["J^zeta"], dtype=np_dtype).reshape(-1, 1) * a_N**2 / B_N
+    )
     j_sup_theta = iota * j_sup_zeta + p_r / psi_r
-    F = -mu_0 * np.asarray(data["finite-n instability drive"], dtype=np_dtype).reshape(-1, 1) * (1 / B_N) ** 2
+    F = (
+        -mu_0
+        * np.asarray(data["finite-n instability drive"], dtype=np_dtype).reshape(-1, 1)
+        * (1 / B_N) ** 2
+    )
 
     assembly_device = None
     if gpu_assembly:
-        assembly_device = next(filter(lambda dev: dev.platform == "gpu", jax.devices()), None)
+        assembly_device = next(
+            filter(lambda dev: dev.platform == "gpu", jax.devices()), None
+        )
 
     def _dev(x):
         """Move host data into the active JAX assembly backend.
@@ -3707,19 +3369,36 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
             tile = (rr == rc) * (tr == tc) * D_zeta0_d[zr, zc]
         elif op_name == "C_rho":
             diagmask = row_idx[:, None] == col_idx[None, :]
-            tile = D_rho0_d[rr, rc] * (tr == tc) * (zr == zc) + partial_r_d[row_idx][:, None] * diagmask
+            tile = (
+                D_rho0_d[rr, rc] * (tr == tc) * (zr == zc)
+                + partial_r_d[row_idx][:, None] * diagmask
+            )
         elif op_name == "C_theta":
             diagmask = row_idx[:, None] == col_idx[None, :]
-            tile = (rr == rc) * D_theta0_d[tr, tc] * (zr == zc) + partial_v_d[row_idx][:, None] * diagmask
+            tile = (rr == rc) * D_theta0_d[tr, tc] * (zr == zc) + partial_v_d[row_idx][
+                :, None
+            ] * diagmask
         elif op_name == "C_zeta":
             diagmask = row_idx[:, None] == col_idx[None, :]
-            tile = (rr == rc) * (tr == tc) * D_zeta0_d[zr, zc] + partial_z_d[row_idx][:, None] * diagmask
+            tile = (rr == rc) * (tr == tc) * D_zeta0_d[zr, zc] + partial_z_d[row_idx][
+                :, None
+            ] * diagmask
         else:
             raise ValueError(op_name)
         return base * tile
 
     @partial(jit, static_argnames=("left_name", "right_name"))
-    def _panel_db_scan(left_name, right_name, row_idx, row_mask, left_row, left_col, right_row, right_col, alpha):
+    def _panel_db_scan(
+        left_name,
+        right_name,
+        row_idx,
+        row_mask,
+        left_row,
+        left_col,
+        right_row,
+        right_col,
+        alpha,
+    ):
         """Assemble one destination row panel for a bilinear term using one scan.
 
         This kernel computes the row panel of
@@ -3732,11 +3411,21 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
         batched dimension is the shared contraction index ``k``, which is split
         into fixed-size chunks and reduced with ``jax.lax.scan``.
         """
-        left_row = jnp.ones(n_total, dtype=jnp.asarray(alpha).dtype) if left_row is None else left_row
-        right_row = jnp.ones(n_total, dtype=jnp.asarray(alpha).dtype) if right_row is None else right_row
+        left_row = (
+            jnp.ones(n_total, dtype=jnp.asarray(alpha).dtype)
+            if left_row is None
+            else left_row
+        )
+        right_row = (
+            jnp.ones(n_total, dtype=jnp.asarray(alpha).dtype)
+            if right_row is None
+            else right_row
+        )
         left_col_panel = None if left_col is None else jnp.conjugate(left_col[row_idx])
         right_col_all = None if right_col is None else right_col
-        out0 = jnp.zeros((gpu_chunk, n_total), dtype=jnp.result_type(left_row, right_row, alpha))
+        out0 = jnp.zeros(
+            (gpu_chunk, n_total), dtype=jnp.result_type(left_row, right_row, alpha)
+        )
 
         def body(carry, xs):
             k_idx, k_mask = xs
@@ -3755,7 +3444,9 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
         return out
 
     @partial(jit, static_argnames=("op_name", "transpose"))
-    def _panel_scaled(op_name, transpose, row_idx, row_mask, left_row, right_row, alpha):
+    def _panel_scaled(
+        op_name, transpose, row_idx, row_mask, left_row, right_row, alpha
+    ):
         """Build one destination row panel for a non-contracted scaled derivative.
 
         Parameters
@@ -3826,18 +3517,62 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
             row_idx_d = _dev(row_idx)
             row_mask_d = _dev(row_mask)
             if mode == "db":
-                panel = _host(_panel_db_scan(left, right, row_idx_d, row_mask_d, left_row_d, left_col_d, right_row_d, right_col_d, alpha))
+                panel = _host(
+                    _panel_db_scan(
+                        left,
+                        right,
+                        row_idx_d,
+                        row_mask_d,
+                        left_row_d,
+                        left_col_d,
+                        right_row_d,
+                        right_col_d,
+                        alpha,
+                    )
+                )
                 dst[i0:i1, :] += panel[: i1 - i0, :]
             elif mode == "sym":
-                panel = _host(_panel_db_scan(left, right, row_idx_d, row_mask_d, left_row_d, left_col_d, right_row_d, right_col_d, alpha))
+                panel = _host(
+                    _panel_db_scan(
+                        left,
+                        right,
+                        row_idx_d,
+                        row_mask_d,
+                        left_row_d,
+                        left_col_d,
+                        right_row_d,
+                        right_col_d,
+                        alpha,
+                    )
+                )
                 panel = panel[: i1 - i0, :]
                 dst[i0:i1, :] += panel
                 dst[:, i0:i1] += np.conjugate(panel.T)
             elif mode == "scaled":
-                panel = _host(_panel_scaled(left, False, row_idx_d, row_mask_d, left_row_d, right_col_d, alpha))
+                panel = _host(
+                    _panel_scaled(
+                        left,
+                        False,
+                        row_idx_d,
+                        row_mask_d,
+                        left_row_d,
+                        right_col_d,
+                        alpha,
+                    )
+                )
                 dst[i0:i1, :] += panel[: i1 - i0, :]
             elif mode == "scaled_h":
-                panel = _host(_panel_scaled(left, True, row_idx_d, row_mask_d, left_row_d, right_col_d, alpha))
+                panel = _host(
+                    _panel_scaled(
+                        left,
+                        True,
+                        row_idx_d,
+                        row_mask_d,
+                        left_row_d,
+                        right_col_d,
+                        alpha,
+                    )
+                )
                 dst[i0:i1, :] += panel[: i1 - i0, :]
             else:
                 raise ValueError(mode)
@@ -3862,7 +3597,9 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
         _progress(f"building {label}")
         path = f"{file_root}_{label}.npy"
         if memmap_blocks:
-            dst = np.lib.format.open_memmap(path, mode="w+", dtype=np_dtype, shape=(n_total, n_total))
+            dst = np.lib.format.open_memmap(
+                path, mode="w+", dtype=np_dtype, shape=(n_total, n_total)
+            )
             dst[:] = 0
         else:
             dst = np.zeros((n_total, n_total), dtype=np_dtype)
@@ -3891,7 +3628,9 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
         b_rz = (n0 * (W * psi_r * sqrtg * g_rp)).reshape(-1)
         b_uz = (n0 * (W * sqrtg * g_vp)).reshape(-1)
     else:
-        b_zz = (n0 * (W * sqrtg * (g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp))).reshape(-1)
+        b_zz = (
+            n0 * (W * sqrtg * (g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp))
+        ).reshape(-1)
         b_rz = (n0 * (W * psi_r * sqrtg * (g_rv + iotainv * g_rp))).reshape(-1)
         b_uz = (n0 * (W * sqrtg * (g_vv + iotainv * g_vp))).reshape(-1)
 
@@ -3938,7 +3677,9 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
 
     rho_start = n_shell if bc_rho_inner else 0
     rho_end = n_total - n_shell if bc_rho_outer else n_total
-    keep = np.concatenate([np.arange(rho_start, rho_end), np.arange(n_total, 3 * n_total)])
+    keep = np.concatenate(
+        [np.arange(rho_start, rho_end), np.arange(n_total, 3 * n_total)]
+    )
 
     np.save(f"{file_root}_d.npy", d)
     np.save(f"{file_root}_dr.npy", dr)
@@ -3956,48 +3697,366 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
 
     facp = (gamma * sqrtg * W * p0).reshape(-1)
     terms_rr = [
-        ("db", "D_theta", "D_theta", None, None, (psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr).reshape(-1), None, 1.0),
-        ("db", "D_zeta", "D_zeta", None, None, (psi_r_over_sqrtg * psi_r3 * W * g_rr).reshape(-1), None, 1.0),
-        ("sym", "D_theta", "D_zeta", None, None, (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr).reshape(-1), None, 1.0),
-        ("db", "D_rho", "D_rho", None, iota_psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_vv / psi_r).reshape(-1), iota_psi_r2.reshape(-1), 1.0),
-        ("db", "D_rho", "D_rho", None, psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_pp / psi_r).reshape(-1), psi_r2.reshape(-1), 1.0),
-        ("sym", "D_theta", "D_rho", None, None, (iota * psi_r * psi_r_over_sqrtg * W * g_rv).reshape(-1), iota_psi_r2.reshape(-1), -1.0),
-        ("sym", "D_zeta", "D_rho", None, None, (psi_r * psi_r_over_sqrtg * W * g_rv).reshape(-1), iota_psi_r2.reshape(-1), -1.0),
-        ("sym", "D_theta", "D_rho", None, None, (iota * psi_r * psi_r_over_sqrtg * W * g_rp).reshape(-1), psi_r2.reshape(-1), -1.0),
-        ("sym", "D_zeta", "D_rho", None, None, (psi_r * psi_r_over_sqrtg * W * g_rp).reshape(-1), psi_r2.reshape(-1), -1.0),
-        ("sym", "D_rho", "D_rho", None, iota_psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_vp / psi_r).reshape(-1), psi_r2.reshape(-1), 1.0),
-        ("scaled", "D_theta", None, (W * psi_r3 * sqrtg * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv) / g_sup_rr).reshape(-1) * iota.reshape(-1), None, None, None, -1.0),
-        ("scaled", "D_zeta", None, (W * psi_r3 * sqrtg * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv) / g_sup_rr).reshape(-1), None, None, None, -1.0),
-        ("scaled", "D_rho", None, (W * sqrtg * psi_r * j_sup_zeta).reshape(-1), None, None, iota_psi_r2.reshape(-1), -1.0),
-        ("scaled", "D_rho", None, (W * sqrtg * psi_r * j_sup_theta).reshape(-1), None, None, psi_r2.reshape(-1), -1.0),
-        ("scaled_h", "D_theta", None, (W * psi_r3 * sqrtg * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv) / g_sup_rr).reshape(-1) * iota.reshape(-1), None, None, None, -1.0),
-        ("scaled_h", "D_zeta", None, (W * psi_r3 * sqrtg * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv) / g_sup_rr).reshape(-1), None, None, None, -1.0),
-        ("scaled_h", "D_rho", None, (W * sqrtg * psi_r * j_sup_zeta).reshape(-1), None, None, iota_psi_r2.reshape(-1), -1.0),
-        ("scaled_h", "D_rho", None, (W * sqrtg * psi_r * j_sup_theta).reshape(-1), None, None, psi_r2.reshape(-1), -1.0),
+        (
+            "db",
+            "D_theta",
+            "D_theta",
+            None,
+            None,
+            (psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "db",
+            "D_zeta",
+            "D_zeta",
+            None,
+            None,
+            (psi_r_over_sqrtg * psi_r3 * W * g_rr).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "sym",
+            "D_theta",
+            "D_zeta",
+            None,
+            None,
+            (psi_r_over_sqrtg * iota * psi_r3 * W * g_rr).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "db",
+            "D_rho",
+            "D_rho",
+            None,
+            iota_psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_vv / psi_r).reshape(-1),
+            iota_psi_r2.reshape(-1),
+            1.0,
+        ),
+        (
+            "db",
+            "D_rho",
+            "D_rho",
+            None,
+            psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_pp / psi_r).reshape(-1),
+            psi_r2.reshape(-1),
+            1.0,
+        ),
+        (
+            "sym",
+            "D_theta",
+            "D_rho",
+            None,
+            None,
+            (iota * psi_r * psi_r_over_sqrtg * W * g_rv).reshape(-1),
+            iota_psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "sym",
+            "D_zeta",
+            "D_rho",
+            None,
+            None,
+            (psi_r * psi_r_over_sqrtg * W * g_rv).reshape(-1),
+            iota_psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "sym",
+            "D_theta",
+            "D_rho",
+            None,
+            None,
+            (iota * psi_r * psi_r_over_sqrtg * W * g_rp).reshape(-1),
+            psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "sym",
+            "D_zeta",
+            "D_rho",
+            None,
+            None,
+            (psi_r * psi_r_over_sqrtg * W * g_rp).reshape(-1),
+            psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "sym",
+            "D_rho",
+            "D_rho",
+            None,
+            iota_psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_vp / psi_r).reshape(-1),
+            psi_r2.reshape(-1),
+            1.0,
+        ),
+        (
+            "scaled",
+            "D_theta",
+            None,
+            (
+                W
+                * psi_r3
+                * sqrtg
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            ).reshape(-1)
+            * iota.reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
+        (
+            "scaled",
+            "D_zeta",
+            None,
+            (
+                W
+                * psi_r3
+                * sqrtg
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            ).reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
+        (
+            "scaled",
+            "D_rho",
+            None,
+            (W * sqrtg * psi_r * j_sup_zeta).reshape(-1),
+            None,
+            None,
+            iota_psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "scaled",
+            "D_rho",
+            None,
+            (W * sqrtg * psi_r * j_sup_theta).reshape(-1),
+            None,
+            None,
+            psi_r2.reshape(-1),
+            1.0,
+        ),
+        (
+            "scaled_h",
+            "D_theta",
+            None,
+            (
+                W
+                * psi_r3
+                * sqrtg
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            ).reshape(-1)
+            * iota.reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
+        (
+            "scaled_h",
+            "D_zeta",
+            None,
+            (
+                W
+                * psi_r3
+                * sqrtg
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
+                / g_sup_rr
+            ).reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
+        (
+            "scaled_h",
+            "D_rho",
+            None,
+            (W * sqrtg * psi_r * j_sup_zeta).reshape(-1),
+            None,
+            None,
+            iota_psi_r2.reshape(-1),
+            -1.0,
+        ),
+        (
+            "scaled_h",
+            "D_rho",
+            None,
+            (W * sqrtg * psi_r * j_sup_theta).reshape(-1),
+            None,
+            None,
+            psi_r2.reshape(-1),
+            1.0,
+        ),
         ("db", "C_rho", "C_rho", None, psi_r.reshape(-1), facp, psi_r.reshape(-1), 1.0),
-        ("diag", (psi_r2 * W * sqrtg * J2).reshape(-1) + (W * psi_r2 * sqrtg * F).reshape(-1)),
+        (
+            "diag",
+            (psi_r2 * W * sqrtg * J2 / g_sup_rr).reshape(-1)
+            + (W * psi_r2 * sqrtg * F).reshape(-1),
+        ),
     ]
     terms_ru = [
-        ("db", "D_rho", "D_zeta", None, iota_psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_vv).reshape(-1), None, -1.0),
-        ("db", "D_rho", "D_theta", None, psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_pp).reshape(-1), None, 1.0),
-        ("db", "D_theta", "D_zeta", None, None, (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv).reshape(-1), None, 1.0),
-        ("db", "D_zeta", "D_zeta", None, None, (psi_r2 * psi_r_over_sqrtg * W * g_rv).reshape(-1), None, 1.0),
-        ("db", "D_theta", "D_theta", None, None, (iota * psi_r2 * psi_r_over_sqrtg * W * g_rp).reshape(-1), None, -1.0),
-        ("db", "D_zeta", "D_theta", None, None, (psi_r2 * psi_r_over_sqrtg * W * g_rp).reshape(-1), None, -1.0),
-        ("db", "D_rho", "D_zeta", None, psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_vp).reshape(-1), None, -1.0),
-        ("db", "D_rho", "D_theta", None, iota_psi_r2.reshape(-1), (psi_r_over_sqrtg * W * g_vp).reshape(-1), None, 1.0),
-        ("scaled", "D_theta", None, (-(W * psi_r2 * sqrtg * j_sup_theta)).reshape(-1), None, None, None, 1.0),
-        ("scaled", "D_zeta", None, (W * psi_r2 * sqrtg * j_sup_zeta).reshape(-1), None, None, None, 1.0),
+        (
+            "db",
+            "D_rho",
+            "D_zeta",
+            None,
+            iota_psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_vv).reshape(-1),
+            None,
+            -1.0,
+        ),
+        (
+            "db",
+            "D_rho",
+            "D_theta",
+            None,
+            psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_pp).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "db",
+            "D_theta",
+            "D_zeta",
+            None,
+            None,
+            (iota * psi_r2 * psi_r_over_sqrtg * W * g_rv).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "db",
+            "D_zeta",
+            "D_zeta",
+            None,
+            None,
+            (psi_r2 * psi_r_over_sqrtg * W * g_rv).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "db",
+            "D_theta",
+            "D_theta",
+            None,
+            None,
+            (iota * psi_r2 * psi_r_over_sqrtg * W * g_rp).reshape(-1),
+            None,
+            -1.0,
+        ),
+        (
+            "db",
+            "D_zeta",
+            "D_theta",
+            None,
+            None,
+            (psi_r2 * psi_r_over_sqrtg * W * g_rp).reshape(-1),
+            None,
+            -1.0,
+        ),
+        (
+            "db",
+            "D_rho",
+            "D_zeta",
+            None,
+            psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_vp).reshape(-1),
+            None,
+            -1.0,
+        ),
+        (
+            "db",
+            "D_rho",
+            "D_theta",
+            None,
+            iota_psi_r2.reshape(-1),
+            (psi_r_over_sqrtg * W * g_vp).reshape(-1),
+            None,
+            1.0,
+        ),
+        (
+            "scaled",
+            "D_theta",
+            None,
+            (W * psi_r2 * sqrtg * j_sup_theta).reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
+        (
+            "scaled",
+            "D_zeta",
+            None,
+            (W * psi_r2 * sqrtg * j_sup_zeta).reshape(-1),
+            None,
+            None,
+            None,
+            1.0,
+        ),
         ("db", "C_rho", "C_theta", None, psi_r.reshape(-1), facp, None, 1.0),
     ]
     terms_rz = [
         ("db", "C_rho", "C_theta", None, psi_r.reshape(-1), facp, None, 1.0),
-        ("db", "C_rho", "C_zeta", None, psi_r.reshape(-1), facp, iotainv.reshape(-1), 1.0),
+        (
+            "db",
+            "C_rho",
+            "C_zeta",
+            None,
+            psi_r.reshape(-1),
+            facp,
+            iotainv.reshape(-1),
+            1.0,
+        ),
     ]
     terms_uu = [
-        ("sym", "D_zeta", "D_zeta", None, None, (psi_r_over_sqrtg * psi_r * W * g_vv).reshape(-1), None, 0.5),
-        ("sym", "D_theta", "D_theta", None, None, (psi_r_over_sqrtg * psi_r * W * g_pp).reshape(-1), None, 0.5),
-        ("sym", "D_zeta", "D_theta", None, None, (psi_r_over_sqrtg * W * psi_r * g_vp).reshape(-1), None, -1.0),
+        (
+            "sym",
+            "D_zeta",
+            "D_zeta",
+            None,
+            None,
+            (psi_r_over_sqrtg * psi_r * W * g_vv).reshape(-1),
+            None,
+            0.5,
+        ),
+        (
+            "sym",
+            "D_theta",
+            "D_theta",
+            None,
+            None,
+            (psi_r_over_sqrtg * psi_r * W * g_pp).reshape(-1),
+            None,
+            0.5,
+        ),
+        (
+            "sym",
+            "D_zeta",
+            "D_theta",
+            None,
+            None,
+            (psi_r_over_sqrtg * W * psi_r * g_vp).reshape(-1),
+            None,
+            -1.0,
+        ),
         ("db", "C_theta", "C_theta", None, None, facp, None, 1.0),
     ]
     terms_uz = [
@@ -4007,10 +4066,21 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
     terms_zz = [
         ("db", "C_theta", "C_theta", None, None, facp, None, 1.0),
         ("sym", "C_theta", "C_zeta", None, None, facp, iotainv.reshape(-1), 1.0),
-        ("db", "C_zeta", "C_zeta", None, iotainv.reshape(-1), facp, iotainv.reshape(-1), 1.0),
+        (
+            "db",
+            "C_zeta",
+            "C_zeta",
+            None,
+            iotainv.reshape(-1),
+            facp,
+            iotainv.reshape(-1),
+            1.0,
+        ),
     ]
 
-    _progress(f"assembly config n_total={n_total} n_rho={n_rho_max} n_theta={n_theta_max} n_zeta={n_zeta_max} chunk={gpu_chunk} gpu_assembly={gpu_assembly}")
+    _progress(
+        f"assembly config n_total={n_total} n_rho={n_rho_max} n_theta={n_theta_max} n_zeta={n_zeta_max} chunk={gpu_chunk} gpu_assembly={gpu_assembly}"
+    )
     _scale_save("A_rr", terms_rr, dr, dr)
     _scale_save("A_ru", terms_ru, dr, du)
     _scale_save("A_rz", terms_rz, dr, dz)
@@ -4022,7 +4092,9 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
         pass
 
     if not dump_only:
-        raise NotImplementedError("finite-n lambda32 block-dump mode only; assemble/eigensolve in separate CPU script")
+        raise NotImplementedError(
+            "finite-n lambda32 block-dump mode only; assemble/eigensolve in separate CPU script"
+        )
 
     data["finite-n lambda32"] = jnp.asarray(np.array([np.nan]))
     data["finite-n eigenfunction32"] = jnp.asarray(np.full((1,), np.nan))
@@ -4032,8 +4104,6 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
     data["finite-n deltaB_v"] = jnp.asarray(np.full((1,), np.nan))
     data["finite-n deltaB_z"] = jnp.asarray(np.full((1,), np.nan))
     return data
-
-
 
 
 @register_compute_fun(
@@ -4056,7 +4126,6 @@ def _AGNI32(params, transforms, profiles, data, **kwargs):
 )
 def _AGNI_eigenfunction32(params, transforms, profiles, data, **kwargs):
     return data
-
 
 
 @register_compute_fun(
@@ -4108,8 +4177,6 @@ def _AGNI_eigenfunction32(params, transforms, profiles, data, **kwargs):
     n_rho_coupled="int: number of rho nodes when coupled_rt is set",
     n_theta_coupled="int: number of theta nodes when coupled_rt is set",
     sigma="float: shift for the shift-invert eigensolver (default -1.0)",
-    f_scale="float: multiplier on the instability drive F (default 1.0); use "
-    ">1 to isolate the physical unstable mode, then continue back to 1",
     full_spectrum="bool: if True, dense-eigendecompose the full reduced matrix "
     "with scipy.linalg.eigh and store every eigenvalue under "
     "'finite-n lambda spectrum'; the returned dominant eigenmode is unchanged. "
@@ -4150,8 +4217,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     # Add a tiny shift because sometimes the pressure can be
     # slightly negative in the edge
-    p0 = mu_0 * data["p"][:, None] /B_N**2 + 1e-12
-    p_r = mu_0 * data["p_r"][:, None] /B_N**2 
+    p0 = mu_0 * data["p"][:, None] / B_N**2 + 1e-12
+    p_r = mu_0 * data["p_r"][:, None] / B_N**2
 
     # Arbitrary choice. Mostly used to decide the range of eigenvalues of
     # the mass matrix. Pre-conditioning should remove this factor
@@ -4283,13 +4350,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     J2 = ((mu_0 * data["|J|"]) ** 2)[:, None] * (a_N / B_N) ** 2
     j_sup_zeta = mu_0 * data["J^zeta"][:, None] * a_N**2 / B_N
     j_sup_theta = iota * j_sup_zeta + p_r / psi_r
-    #j_sup_theta = mu_0 * data["J^theta_PEST"][:, None] * a_N**2 / B_N
+    # j_sup_theta = mu_0 * data["J^theta_PEST"][:, None] * a_N**2 / B_N
 
-    # instability drive term. f_scale (default 1) temporarily amplifies the drive
-    # so callers can isolate the physical unstable mode at f_scale>1, then continue
-    # back to f_scale=1 using that eigenvalue/eigenfunction as sigma/v_guess.
-    f_scale = kwargs.get("f_scale", 1.0)
-    F = -1 * f_scale * mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
+    F = -mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
 
     C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
     C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
@@ -4506,57 +4569,59 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Mixed Q-J term ξ^ρ (𝐉 × ∇ρ)/|∇ ρ|² ⋅ 𝐐
     # \xi^{\rho} (\mathbf{J} \times \nabla\rho)/|\nabla \rho|^2 \cdot \mathbf{Q}
     A = A.at[rho_idx, rho_idx].add(
-        -1.
+        1.0
         * (
             (
                 W
                 * psi_r3
                 * sqrtg
-                * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
+                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
                 / g_sup_rr
             )
             * (iota * D_theta + D_zeta)
-            + (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T)
+            - (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T)
             + (W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T)
         )
     )
 
     # ρ-ρ block transposed for symmetry
     A = A.at[rho_idx, rho_idx].add(
-        -1.
+        1.0
         * (
             _cT(
                 (
                     W
                     * psi_r3
                     * sqrtg
-                    * (j_sup_theta * g_sup_rp + j_sup_zeta * g_sup_rv)
+                    * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
                     / g_sup_rr
                 )
                 * (iota * D_theta + D_zeta)
             )
-            + _cT((W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T))
+            - _cT((W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T))
             + _cT((W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T))
         )
     )
 
     A = A.at[rho_idx, theta_idx].add(
-        -(1. * W * psi_r2 * sqrtg * j_sup_theta) * D_theta
-        + (1. * W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        +(1.0 * W * psi_r2 * sqrtg * j_sup_theta) * D_theta
+        + (1.0 * W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
     )
     A = A.at[rho_idx, zeta_idx].add(
-        +(1. * W * psi_r2 * sqrtg * j_sup_theta) * D_theta
-        - (1. * W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        -(1.0 * W * psi_r2 * sqrtg * j_sup_theta) * D_theta
+        - (1.0 * W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
     )
 
     ## diagonal |J|² term
-    A = A.at[rho_idx, rho_idx].add(jnp.diag((psi_r2 * W * sqrtg * J2).flatten()))
+    A = A.at[rho_idx, rho_idx].add(
+        jnp.diag((psi_r2 * W * sqrtg * J2 / g_sup_rr).flatten())
+    )
 
-    #A = A.at[theta_idx, rho_idx].set(_cT(A[rho_idx, theta_idx]))
-    #A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
-    #A = A.at[zeta_idx, theta_idx].set(_cT(A[theta_idx, zeta_idx]))
+    # A = A.at[theta_idx, rho_idx].set(_cT(A[rho_idx, theta_idx]))
+    # A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
+    # A = A.at[zeta_idx, theta_idx].set(_cT(A[theta_idx, zeta_idx]))
 
-    #w, _ = jnp.linalg.eig(A) 
+    # w, _ = jnp.linalg.eig(A)
 
     # Mass matrix (must be symmetric positive definite)
     B = B.at[rho_idx, rho_idx].add(jnp.diag(n0 * (W * psi_r2 * sqrtg * g_rr).flatten()))
@@ -4655,12 +4720,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, rho_idx].set(_cT(B[rho_idx, zeta_idx]))
     B = B.at[zeta_idx, theta_idx].set(_cT(B[theta_idx, zeta_idx]))
 
-    #D = jnp.diag(1 / jnp.sqrt(jnp.diag(B)))
+    # D = jnp.diag(1 / jnp.sqrt(jnp.diag(B)))
 
     ## Preconditioning improves B, does not affect A
-    #A = D @ (A @ D.T)
-    #Au = D @ (Au @ D.T)
-    #B = D @ (B @ D.T)
+    # A = D @ (A @ D.T)
+    # Au = D @ (Au @ D.T)
+    # B = D @ (B @ D.T)
 
     d = 1 / jnp.sqrt(jnp.diag(B))  # 1D array
 
@@ -4669,8 +4734,8 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     Au = d[:, None] * Au * d[None, :]
     B = d[:, None] * B * d[None, :]
 
-    #w, _ = jnp.linalg.eigh(B)
-    #print(w[:50])
+    # w, _ = jnp.linalg.eigh(B)
+    # print(w[:50])
 
     au_diag = jnp.diagonal(Au)[:n_total]
 
@@ -4732,15 +4797,15 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Enforce physical ξ^ρ BC in the per-node blocks
     # rho index == 0 and n_rho_max - 1
     n_per_shell = n_theta_max * n_zeta_max
-    node_ids    = jnp.arange(n_total)
-    rho_shell   = node_ids // n_per_shell
+    node_ids = jnp.arange(n_total)
+    rho_shell = node_ids // n_per_shell
     boundary = jnp.zeros(n_total, dtype=bool)
-    #if bc_rho_inner:
+    # if bc_rho_inner:
     #    boundary = boundary | (rho_shell == 0)
-    #if bc_rho_outer:
+    # if bc_rho_outer:
     boundary = (rho_shell == 0) | (rho_shell == (n_rho_max - 1))
 
-    # Eliminate ρ–θ and ρ–ζ couplings corresponding to the physical BC 
+    # Eliminate ρ–θ and ρ–ζ couplings corresponding to the physical BC
     # on ξ^ρ = 0 at the inner and outer radial boundaries.
     B_blocks = B_blocks.at[boundary, 0, 1].set(0)
     B_blocks = B_blocks.at[boundary, 1, 0].set(0)
@@ -4790,17 +4855,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     keep = jnp.concatenate([keep_1, keep_2])
 
     ## store indices needed to apply dirichlet BC to ξ^ρ
-    #keep_1 = jnp.arange(0., n_total - n_theta_max * n_zeta_max)
-    #keep_2 = jnp.arange(n_total, 3 * n_total)
-    #keep = jnp.concatenate([keep_1, keep_2])
+    # keep_1 = jnp.arange(0., n_total - n_theta_max * n_zeta_max)
+    # keep_2 = jnp.arange(n_total, 3 * n_total)
+    # keep = jnp.concatenate([keep_1, keep_2])
 
     if incompressible:  # Only enforce incompressibility here
         # ∇⋅𝛏 = C_ρ ξ^ρ + C_θ ξ^θ + C_ζ ξ^ζ
-
-        ## Assemble L_full from blocks of L (only for comparison)
-        # --no-verify Linv_full = _assemble_diagblocks_comp_major(Linv, rho_idx)
-        # --no-verify L_test = jnp.linalg.cholesky(B)
-        ##max|Linv_full - L_test⁻¹| ≈ 3.55e-15
 
         # C.shape (N, 3N)
         d_r = d[rho_idx]
@@ -4831,7 +4891,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         G = Chat @ _cT(Chat)
         G = (G + _cT(G)) / 2 + 1e-14 * jnp.eye(keep_1.size)  # Gram matrix w ridge
 
-        #print(jnp.linalg.cond(G))
+        # print(jnp.linalg.cond(G))
         # The will become one of the most expensive parts
         L_G = jnp.linalg.cholesky(G)
 
@@ -4849,20 +4909,20 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         ##A_proj = A_proj.at[jnp.diag_indices_from(A2_proj)].add(1e-12)
 
-        #Au_proj = Au_bc - Au_bc @ CTS - CTS @ Au_bc + CTS @ Au_bc @ CTS
-        #Au_proj = (Au_proj + _cT(Au_proj)) / 2
+        # Au_proj = Au_bc - Au_bc @ CTS - CTS @ Au_bc + CTS @ Au_bc @ CTS
+        # Au_proj = (Au_proj + _cT(Au_proj)) / 2
 
-        #A_proj = Au_proj + A_proj
+        # A_proj = Au_proj + A_proj
 
         # A_proj is already reduced to (keep, keep); do NOT re-index with `keep`
         # again (those indices run up to 3*n_total and JAX silently clamps the
         # out-of-range ones, corrupting the operator).
         A = A_proj
-        #w, v = jnp.linalg.eigh(A)
+        # w, v = jnp.linalg.eigh(A)
 
-        #print(w)
+        # print(w)
         ## Small for modes far from marginality
-        #print(jnp.max(jnp.abs(Chat1 @ v[:, 0])))
+        # print(jnp.max(jnp.abs(Chat1 @ v[:, 0])))
 
         # --no-verify P = jnp.eye(CTS.shape[0], CTS.dtype) - CTS
         # --no-verify print("sym=", float(jnp.linalg.norm(P - P.T)),
@@ -4875,10 +4935,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
         ## use Gerhsgorin theorem to estimate the lowest eigenvalue
         A = A.at[jnp.diag_indices_from(A)].add(1e-13)
 
-        A = A[jnp.ix_(keep, keep)] 
-        #A = A[jnp.ix_(keep, keep)] + Au[jnp.ix_(keep, keep)]
+        A = A[jnp.ix_(keep, keep)]
+        # A = A[jnp.ix_(keep, keep)] + Au[jnp.ix_(keep, keep)]
         A = (A + _cT(A)) / 2
-
 
     v0 = kwargs.get("v_guess", None)
     if v0 is not None:
@@ -4939,11 +4998,12 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
     idxs = jnp.where(jnp.abs(v) > 5e-5)[0]
     y = A @ v
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"eigval res={jnp.linalg.norm(y[idxs]/v[idxs]-w)}")
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"eigenvalue: {w}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(f"eigval res={jnp.linalg.norm(y[idxs]/v[idxs]-w)}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(f"eigenvalue: {w}")
     if incompressible:
         print(jnp.max(jnp.abs(Chat @ v[:, 0])))
-
 
     # Reduced eigenvector -> full component-major vector [rho,theta,zeta].
     v_mode = v[:, 0] if jnp.ndim(v) == 2 else v
@@ -4967,7 +5027,9 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
 
         def d_dz(D, u):
             return jnp.einsum("ij,klj->kli", D, u)
+
     else:
+
         def d_dr(D, u):
             """Calculate the radial derivative of u."""
             return jnp.einsum("ij,jkl->ikl", D, u)  # (Nr, Nθ, Nζ)
@@ -4991,11 +5053,13 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     # Reconstruct the physical displacement directly from the compact Linv blocks
     # (equivalent to d * (LinvT_full @ v_full); the equivalence is checked in tests/).
     vr, vv, vz = v_full[rho_idx], v_full[theta_idx], v_full[zeta_idx]
-    xi_full = jnp.concatenate([
-        d[rho_idx]   * (Linv[:, 0, 0] * vr + Linv[:, 1, 0] * vv + Linv[:, 2, 0] * vz),
-        d[theta_idx] * (                     Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
-        d[zeta_idx]  * (                                          Linv[:, 2, 2] * vz),
-    ])
+    xi_full = jnp.concatenate(
+        [
+            d[rho_idx] * (Linv[:, 0, 0] * vr + Linv[:, 1, 0] * vv + Linv[:, 2, 0] * vz),
+            d[theta_idx] * (Linv[:, 1, 1] * vv + Linv[:, 2, 1] * vz),
+            d[zeta_idx] * (Linv[:, 2, 2] * vz),
+        ]
+    )
 
     # Phase rotation doesn't change the physics. Here, we use it to make the eigenmode up-down symmetric.
     # phase_offset (default 0) is an optional tunable rotation applied on top of the mean-based alignment.
@@ -5008,45 +5072,90 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     threshold = 0.01 * jnp.max(mags)
     mask = mags > threshold
     angle_diff_valid = jnp.where(mask, jnp.abs(angle_diff), jnp.nan)
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"phase_angle (mean-based): {phase_angle:.4f} rad  |  per-elem deviation (all): max={jnp.max(jnp.abs(angle_diff)):.4f}, mean={jnp.mean(jnp.abs(angle_diff)):.4f}, std={jnp.std(angle_diff):.4f} rad")
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"  deviation (|xi|>1% max, n={int(jnp.sum(mask))}/{xi_ref.size}): max={float(jnp.nanmax(angle_diff_valid)):.4f}, mean={float(jnp.nanmean(angle_diff_valid)):.4f} rad")
-    xr = (xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xv = (xi_full[theta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xz = (xi_full[zeta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)*jnp.exp(1j * (phase_angle + phase_offset))).imag
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"phase_angle (mean-based): {phase_angle:.4f} rad  |  per-elem deviation (all): max={jnp.max(jnp.abs(angle_diff)):.4f}, mean={jnp.mean(jnp.abs(angle_diff)):.4f}, std={jnp.std(angle_diff):.4f} rad"
+        )
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"  deviation (|xi|>1% max, n={int(jnp.sum(mask))}/{xi_ref.size}): max={float(jnp.nanmax(angle_diff_valid)):.4f}, mean={float(jnp.nanmean(angle_diff_valid)):.4f} rad"
+        )
+    xr = (
+        xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
+    xv = (
+        xi_full[theta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
+    xz = (
+        xi_full[zeta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
+        * jnp.exp(1j * (phase_angle + phase_offset))
+    ).imag
 
     # precomputed forward derivatives (re-used below)
     xr_v = d_dv(D_theta0, xr)
     xr_z = d_dz(D_zeta0, xr)
 
-    xv_v = d_dv(D_theta0, xv+xz)
-    xv_z = d_dz(D_zeta0, xv+xz)
+    xv_v = d_dv(D_theta0, xv + xz)
+    xv_z = d_dz(D_zeta0, xv + xz)
 
-    xz_v = d_dv(D_theta0, xz/iota)
-    xz_z = d_dz(D_zeta0, xz/iota)
+    xz_v = d_dv(D_theta0, xz / iota)
+    xz_z = d_dz(D_zeta0, xz / iota)
 
     test_v = d_dv(D_theta0, xv)
     test_z = d_dz(D_zeta0, xv)
 
     # combos used many times
-    xr_r = d_dr(D_rho0,  xr)  # dρ(ι ψ′² xr)
-    psi_rr = d_dr(D_rho0,  psi_r)  # dρ(ι ψ′² xr)
-    iota_r = d_dr(D_rho0,  iota)  # dρ(ι ψ′² xr)
+    xr_r = d_dr(D_rho0, xr)  # dρ(ι ψ′² xr)
+    psi_rr = d_dr(D_rho0, psi_r)  # dρ(ι ψ′² xr)
+    iota_r = d_dr(D_rho0, iota)  # dρ(ι ψ′² xr)
 
-
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"xr_v shape: {xr_v.shape}, xv_z shape: {xv_z.shape}, xz_z shape: {xz_z.shape}, xr_r shape: {xr_r.shape}, psi_r shape: {psi_r.shape}, psi_rr shape: {psi_rr.shape}, iota_r shape: {iota_r.shape}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"xr_v shape: {xr_v.shape}, xv_z shape: {xv_z.shape}, xz_z shape: {xz_z.shape}, xr_r shape: {xr_r.shape}, psi_r shape: {psi_r.shape}, psi_rr shape: {psi_rr.shape}, iota_r shape: {iota_r.shape}"
+        )
 
     deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
-    deltaB_v = psi_r_over_sqrtg * (1.* (test_z) - 1.*(xr_r * iota *psi_r + (2 * iota * psi_rr + iota_r * psi_r)* xr))
-    deltaB_z = -psi_r_over_sqrtg * (1.* (test_v) + 1.*(xr_r * psi_r + 2 * psi_rr * xr))
+    deltaB_v = psi_r_over_sqrtg * (
+        1.0 * (test_z)
+        - 1.0 * (xr_r * iota * psi_r + (2 * iota * psi_rr + iota_r * psi_r) * xr)
+    )
+    deltaB_z = -psi_r_over_sqrtg * (
+        1.0 * (test_v) + 1.0 * (xr_r * psi_r + 2 * psi_rr * xr)
+    )
 
     deltaV_r = psi_r * xr
     deltaV_v = xv + xz
-    deltaV_z = xz * 1/iota
+    deltaV_z = xz * 1 / iota
 
-    if os.environ.get("AGNI_DIAG","1")!="0": print(f"deltaB_r shape: {deltaB_r.shape}, deltaB_v shape: {deltaB_v.shape}, deltaB_z shape: {deltaB_z.shape}")
+    if os.environ.get("AGNI_DIAG", "1") != "0":
+        print(
+            f"deltaB_r shape: {deltaB_r.shape}, deltaB_v shape: {deltaB_v.shape}, deltaB_z shape: {deltaB_z.shape}"
+        )
 
-    deltaB2 = g_rr * deltaB_r ** 2 + 1.*g_vv * deltaB_v ** 2  + g_pp * deltaB_z ** 2 + 2. * (g_rv * deltaB_r * deltaB_v + g_rp * deltaB_r * deltaB_z +  g_vp * deltaB_v * deltaB_z)
-    deltaV2 = g_rr * deltaV_r ** 2 + 1.*g_vv * deltaV_v ** 2  + g_pp * deltaV_z ** 2 + 2. * (g_rv * deltaV_r * deltaV_v + g_rp * deltaV_r * deltaV_z +  g_vp * deltaV_v * deltaV_z)
+    deltaB2 = (
+        g_rr * deltaB_r**2
+        + 1.0 * g_vv * deltaB_v**2
+        + g_pp * deltaB_z**2
+        + 2.0
+        * (
+            g_rv * deltaB_r * deltaB_v
+            + g_rp * deltaB_r * deltaB_z
+            + g_vp * deltaB_v * deltaB_z
+        )
+    )
+    deltaV2 = (
+        g_rr * deltaV_r**2
+        + 1.0 * g_vv * deltaV_v**2
+        + g_pp * deltaV_z**2
+        + 2.0
+        * (
+            g_rv * deltaV_r * deltaV_v
+            + g_rp * deltaV_r * deltaV_z
+            + g_vp * deltaV_v * deltaV_z
+        )
+    )
 
     data["finite-n lambda"] = w
     data["finite-n eigenfunction"] = v_full
@@ -5061,6 +5170,7 @@ def _AGNI(params, transforms, profiles, data, **kwargs):
     data["finite-n deltaV_z"] = deltaV_z
 
     return data
+
 
 @register_compute_fun(
     name="finite-n eigenfunction",

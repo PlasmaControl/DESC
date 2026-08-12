@@ -2318,7 +2318,7 @@ class TestObjectiveFunction:
 
         obj = TrappedResonance(
             eq,
-            num_rho=num_rho,
+            rho=num_rho,
             num_eta=num_eta,
             num_transit=num_transit,
             knots_per_transit=knots_per_transit,
@@ -2334,7 +2334,7 @@ class TestObjectiveFunction:
         """Test TrappedResonance agrees between its two bounce backends."""
         eq = get("precise_QA")
         opts = dict(
-            num_rho=20,
+            rho=20,
             num_eta=10,
             num_transit=4,
             knots_per_transit=60,
@@ -2356,6 +2356,38 @@ class TestObjectiveFunction:
         # Both backends should mark the same surfaces as resonant.
         np.testing.assert_array_equal(b1d != 0, b2d != 0)
         np.testing.assert_allclose(b2d.sum(), b1d.sum(), rtol=0.1)
+
+    @pytest.mark.unit
+    def test_trapped_resonance_rho_array(self):
+        """Custom rho arrays must be increasing, linearly spaced, off-axis."""
+        eq = Equilibrium()
+
+        # an int and the equivalent explicit array build identical grids
+        obj_int = TrappedResonance(eq, rho=4)
+        obj_arr = TrappedResonance(eq, rho=np.linspace(0, 1, 5)[1:])
+        obj_int.build(verbose=0)
+        obj_arr.build(verbose=0)
+        np.testing.assert_allclose(obj_int._constants["rho"], obj_arr._constants["rho"])
+        assert obj_int._params2["rho_res"] == obj_arr._params2["rho_res"]
+
+        # a custom array avoiding the edge, e.g. for equilibria whose
+        # pressure profile is not well-defined at rho=1
+        rho = np.linspace(0.1, 0.9, 5)
+        obj = TrappedResonance(eq, rho=rho)
+        obj.build(verbose=0)
+        np.testing.assert_allclose(obj._constants["rho"], rho)
+        np.testing.assert_allclose(obj._params2["rho_res"], 0.2)
+
+        with pytest.raises(ValueError, match="linearly spaced"):
+            TrappedResonance(eq, rho=np.array([0.1, 0.3, 0.9])).build(verbose=0)
+        with pytest.raises(ValueError, match="linearly spaced"):
+            TrappedResonance(eq, rho=np.array([0.9, 0.6, 0.3])).build(verbose=0)
+        with pytest.raises(ValueError, match="axis"):
+            TrappedResonance(eq, rho=np.array([0.0, 0.5, 1.0])).build(verbose=0)
+        with pytest.raises(ValueError, match=">= 2"):
+            TrappedResonance(eq, rho=np.array([0.5])).build(verbose=0)
+        with pytest.raises(ValueError, match=">= 2"):
+            TrappedResonance(eq, rho=1).build(verbose=0)
 
     @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
@@ -3501,7 +3533,7 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is TrappedResonance:
-        kwargs["num_rho"] = 10
+        kwargs["rho"] = 10
         kwargs["num_eta"] = 10
         kwargs["num_transit"] = 4
         kwargs["knots_per_transit"] = 60
@@ -3969,7 +4001,7 @@ class TestComputeScalarResolution:
         if objective is TrappedResonance:
             eq = get("precise_QA")
             kwargs = dict(
-                num_rho=20,
+                rho=20,
                 num_eta=20,
                 num_transit=4,
                 knots_per_transit=60,

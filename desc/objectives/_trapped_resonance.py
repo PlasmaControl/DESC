@@ -12,7 +12,7 @@ from desc.compute.utils import _parse_parameterization
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, get_vander_spline
 from desc.integrals.bounce_integral import Bounce1D, Bounce2D
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 from interpax_fft import cheb_pts, fourier_pts
 
 from ..integrals.quad_utils import (
@@ -36,11 +36,14 @@ class TrappedResonance(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    num_rho : int, optional
-        Number of flux surfaces.  Constructed as
-        ``np.linspace(0, 1, num_rho + 1)[1:]``, giving ``num_rho``
-        uniformly spaced surfaces from ``1/num_rho`` to ``1`` with
-        spacing ``1/num_rho``.  Default is 10.
+    rho : int or ndarray, optional
+        Flux surfaces on which to evaluate the objective. If an int, the
+        surfaces are constructed as ``np.linspace(0, 1, rho + 1)[1:]``, giving
+        ``rho`` uniformly spaced surfaces from ``1/rho`` to ``1`` with spacing
+        ``1/rho``. If an array, it must be increasing, linearly spaced, and
+        must not include the magnetic axis (rho=0); e.g. pass an array ending
+        before rho=1 for equilibria whose pressure profile is not well-defined
+        at the edge. Default is 10.
     num_eta : int, optional
         Number of uniformly spaced eta points in [0, 2*pi).
         Alpha values are derived per rho surface via
@@ -157,7 +160,7 @@ class TrappedResonance(_Objective):
         verbose=False,
         pitch_batch_size=1,
         surf_batch_size=1,
-        num_rho=10,
+        rho=10,
         num_eta=10,
         weight_method="linear",
         Delta_Omega=None,
@@ -189,12 +192,10 @@ class TrappedResonance(_Objective):
         if target is None and bounds is None:
             target = 1e-8
         self._use_bounce1d = bool(use_bounce1d)
-        self._num_rho = int(num_rho)
+        self._rho = int(rho) if np.isscalar(rho) else np.atleast_1d(np.asarray(rho))
         self._num_eta = int(num_eta)
         if self._num_eta < 2:
             raise ValueError(f"num_eta must be >= 2, got {self._num_eta}.")
-        if self._num_rho < 2:
-            raise ValueError(f"num_rho must be >= 2, got {self._num_rho}.")
 
         self._constants = {"quad_weights": 1}
         self._constants["zeta"] = np.linspace(
@@ -260,7 +261,26 @@ class TrappedResonance(_Objective):
         """
         eq = self.things[0]
 
-        rho = np.linspace(0, 1, self._num_rho + 1)[1:]
+        rho = (
+            np.linspace(0, 1, self._rho + 1)[1:]
+            if isinstance(self._rho, int)
+            else self._rho
+        )
+        errorif(
+            rho.size < 2,
+            ValueError,
+            msg=f"rho must have >= 2 surfaces, got {rho.size}.",
+        )
+        errorif(
+            rho[1] <= rho[0] or not np.allclose(np.diff(rho), rho[1] - rho[0]),
+            ValueError,
+            msg="rho array must be increasing and linearly spaced!",
+        )
+        errorif(
+            np.any(np.isclose(rho, 0.0)),
+            ValueError,
+            msg="rho array must not include the axis!",
+        )
         self._constants["rho"] = rho
         self._dim_f = rho.size
 
@@ -301,7 +321,7 @@ class TrappedResonance(_Objective):
                 if spline
                 else {}
             )
-        rho_res = 1.0 / self._num_rho
+        rho_res = rho[1] - rho[0]
         eta_res = 2 * np.pi / self._num_eta
         self._params2 = {
             "rho_res": rho_res,

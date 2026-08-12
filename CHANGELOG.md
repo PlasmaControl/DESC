@@ -33,7 +33,7 @@ Bug Fixes
 - Fixes bug in ``reactor_QA.py`` script where the current profile was allowed to have a nonzero rho^1 component, which resulted in an unphysical profile near-axis.
     - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
 - Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
-- Fixes bug in ``auglag`` optimizers which prevented it from accepting solver hyperparameters.
+- Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 
 
 Breaking Changes

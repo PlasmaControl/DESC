@@ -1,6 +1,6 @@
 import warnings
 
-from jax import jit
+from desc.backend import jit
 
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms

@@ -614,6 +614,16 @@ class QuadcoilProxy(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        # ----- Fixing a key error -----
+        # The QUADCOIL has np coordinates. To prevent a key error when DESC
+        # tries to execute `grid = self._constants["transforms"]["grid"]`
+        # during build() and cause a key error, we assign some dummy weights.
+        # This prevents the whole
+        # `if hasattr(self, "_constants") and ("quad_weights" not in self._constants):`
+        # from triggering.
+        self._constants["quad_weights"] = jnp.ones(self._dim_f)
+
         # finally, call ``super.build()``
         super().build(use_jit=use_jit, verbose=verbose)
 

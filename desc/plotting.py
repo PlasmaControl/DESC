@@ -974,7 +974,6 @@ def plot_2d(  # noqa : C901
     else:
         im = ax.contourf(xx, yy, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
-    _set_tight_layout(fig)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
     xlabel = _AXIS_LABELS_RTZ[plot_axes[1]]

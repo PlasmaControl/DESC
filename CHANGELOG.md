@@ -10,7 +10,7 @@ Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 
-v0.17.2
+v0.17.3
 -------
 
 New Features

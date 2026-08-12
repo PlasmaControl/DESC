@@ -1,6 +1,14 @@
 Changelog
 =========
 
+Performance Improvements
+
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+
+
+v0.17.2
+-------
+
 New Features
 
 - Generalizes the toroidal coordinate so that the computational angle ``zeta`` need not equal the cylindrical laboratory angle ``phi``, via a periodic toroidal stream function ``omega`` with ``phi = zeta + omega``. ``omega = 0`` remains the default everywhere and reproduces the previous behavior exactly, adding no degrees of freedom. (Resolves #465)

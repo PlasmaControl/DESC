@@ -503,6 +503,18 @@ def get_transforms(  # noqa: C901
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
+    p = _parse_parameterization(obj)
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    optional_diffmat_keys = {
+        "ideal ballooning lambda",
+        "ideal ballooning eigenfunction",
+    }
+    diffmat_users = [
+        key for key in keys if "diffmat" in data_index[p][key][deps_type]["transforms"]
+    ]
+    optional_diffmat = diffmat_users and all(
+        key in optional_diffmat_keys for key in diffmat_users
+    )
 
     # We do not build a Transform, just ensure the dict is present.
     # If not in transforms, Look in kwargs here.
@@ -600,6 +612,8 @@ def get_transforms(  # noqa: C901
                 method=method,
             )
         elif c == "diffmat":
+            if "diffmat" not in transforms and optional_diffmat:
+                transforms["diffmat"] = None
             errorif(
                 "diffmat" not in transforms,
                 ValueError,

@@ -772,7 +772,7 @@ def test_ballooning_stability_eval():
         lam1 = jnp.max(jnp.real(jnp.max(w, axis=(2,))))
 
         # now compute our regular metrics and compare them
-        data00 = eq.compute(["ideal ballooning lambda"], grid=grid, diffmat=DiffMat())
+        data00 = eq.compute(["ideal ballooning lambda"], grid=grid)
         data01 = eq.compute(["Newcomb ballooning metric"], grid=grid)
 
         lam2_full = data00["ideal ballooning lambda"]
@@ -879,10 +879,9 @@ def test_ballooning_compare_with_COBRAVMEC():
     N0 = 4 * ntor * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * ntor, jnp.pi * ntor, N0)
     lam2_array = []
-    diffmat = DiffMat()
     for i in range(surfaces.size):
         grid = Grid.create_meshgrid([surfaces[i], alpha, zeta], coordinates="raz")
-        data = eq.compute("ideal ballooning lambda", grid=grid, diffmat=diffmat)
+        data = eq.compute("ideal ballooning lambda", grid=grid)
         lam2_array.append(data["ideal ballooning lambda"].max())
     lam2_array = np.array(lam2_array)
     root_DESC = find_root_simple(surfaces, lam2_array)

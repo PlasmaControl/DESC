@@ -443,7 +443,7 @@ class BallooningStability(_Objective):
         Default is 1.
     diffmat: DiffMat
         DiffMat object.
-        Default is an object containing None.
+        Default uses the finite-difference solver in ``ideal ballooning lambda``.
     lambda0 : float
         Threshold for penalizing growth rates in metric above.
     w0, w1 : float
@@ -790,7 +790,7 @@ class FinitenStability(_Objective):
 
         self._axisym = axisym
         self._v_guess = v_guess
-        self._lambda_guess = lambda_guess
+        self._lambda_guess = setdefault(lambda_guess, -1e-1)
         self._gamma = gamma
         self._n_mode_axisym = n_mode_axisym
         self._incompressible = incompressible
@@ -1037,7 +1037,7 @@ class FinitenStability(_Objective):
             "run the matrix-free eigensolver. Refresh the eigenpair with "
             "update_state(state_solver='dense_eigsh') instead.",
         )
-        constants = self.constants if constants is None else constants
+        constants = self._constants if constants is None else constants
         eq = self.things[0]
 
         grid = self._mapped_grid(params, constants)
@@ -1077,7 +1077,7 @@ class FinitenStability(_Objective):
 
     def metric(self, lam, constants=None):
         """Apply the requested scalar metric to the finite-n eigenvalue."""
-        constants = self.constants if constants is None else constants
+        constants = self._constants if constants is None else constants
         if self._metric == "raw":
             return lam
         errorif(
@@ -1101,7 +1101,7 @@ class FinitenStability(_Objective):
         ``state_solver="dense_eigsh"``, the cached eigenpair is instead refreshed
         with dense ``finite-n lambda3`` and SciPy ARPACK ``eigsh``.
         """
-        constants = self.constants if constants is None else constants
+        constants = self._constants if constants is None else constants
         state_solver = str(self._state_solver).lower()
         if state_solver in {"matfree", "shiftinvert_cg"}:
             raise ValueError(
@@ -1191,7 +1191,7 @@ class FinitenStability(_Objective):
             Finite-n instability eigenvalue.
 
         """
-        constants = self.constants if constants is None else constants
+        constants = self._constants if constants is None else constants
         data = self.compute_data(params, constants=constants, solve=False)
         lam = data["finite-n lambda3 rayleigh"]
         return self.metric(lam, constants=constants)

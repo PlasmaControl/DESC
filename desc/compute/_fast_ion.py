@@ -88,6 +88,11 @@ def _drift2(data, B, pitch):
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
+
     [1] Poloidal motion of trapped particle orbits in real-space coordinates.
         V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
         Phys. Plasmas 1 May 2008; 15 (5): 052501.
@@ -119,9 +124,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
@@ -270,9 +275,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         num_pitch,
         _,
         _,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-2, grid, **kwargs)
 
@@ -362,6 +367,11 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
+
     [1] A model for the fast evaluation of prompt losses of energetic ions in
         stellarators. Equation 16.
         J.L. Velasco et al. 2021 Nucl. Fusion 61 116059.
@@ -382,9 +392,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         num_pitch,
         pitch_batch_size,
         surf_batch_size,
-        quad,
         nufft_eps,
         spline,
+        quad,
         vander,
     ) = Bounce2D._defaults(-1, grid, **kwargs)
 

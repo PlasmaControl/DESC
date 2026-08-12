@@ -26,6 +26,7 @@ from orthax.chebyshev import chebvander
 
 from desc.backend import dct, ifft, jax, jnp
 from desc.integrals._interp_utils import (
+    _JF_BUG,
     _eps,
     chebder,
     nufft1d2r,
@@ -39,7 +40,7 @@ from desc.utils import atleast_nd, flatten_mat, setdefault
 _sentinel = -1e5
 
 
-def bounce_points(pitch_inv, knots, B, num_well=-1):
+def bounce_points(pitch_inv, knots, B, num_well=-1, return_mask=False):
     """Compute the bounce points given 1D spline of B and pitch λ.
 
     Parameters
@@ -68,10 +69,12 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
 
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
+    return_mask : bool
+        Whether to return the mask ``z1<z2``. Default is ``False``.
 
     Returns
     -------
-    z1, z2, mask : tuple[jnp.ndarray]
+    z1, z2 : tuple[jnp.ndarray]
         Shape (..., num pitch, num well).
         ζ coordinates of bounce points. The points are ordered and grouped such
         that the straight line path between ``z1`` and ``z2`` resides in the
@@ -99,21 +102,23 @@ def bounce_points(pitch_inv, knots, B, num_well=-1):
     mask = flatten_mat(intersect >= 0)
     z1 = (dB_dz <= 0) & mask
     z2 = (dB_dz >= 0) & epigraph_and(mask, dB_dz)
+    del dB_dz
 
     # Transform out of local power basis expansion.
     intersect = flatten_mat(intersect + knots[:-1, None])
     z1 = take_mask(intersect, z1, size=num_well, fill_value=_sentinel)
     z2 = take_mask(intersect, z2, size=num_well, fill_value=_sentinel)
+    del intersect
 
     mask = (z1 > _sentinel) & (z2 > _sentinel)
     # Set to zero so integration is over set of measure zero
     # and basis functions are faster to evaluate in downstream routines.
     z1 = jnp.where(mask, z1, 0.0)
     z2 = jnp.where(mask, z2, 0.0)
-    return z1, z2, mask
+    return (z1, z2, mask) if return_mask else (z1, z2)
 
 
-def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
+def _newton(o, pitch_inv, z1, z2, mask, nufft_eps):
     """Newton step using maps used in the quadrature.
 
     An error of ε in a bounce point manifests
@@ -132,7 +137,8 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         Shape (num ρ, num α, num pitch, num well).
         Subset of points to refine.
     nufft_eps : float
-        Desired error ε of the bounce points.
+        Desired error ε of the returned bounce points.
+        Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
 
     Returns
     -------
@@ -170,7 +176,11 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
         (0, 2 * jnp.pi / o._NFP),
         vec=True,
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4),
+        mask=(
+            None
+            if _JF_BUG
+            else flatten_mat(jnp.broadcast_to(mask[..., None, :, :], shape), 4)
+        ),
     )
     B, dB_dz, dB_dt = (
         B.reshape(3, *shape)
@@ -189,19 +199,30 @@ def _newton(o, pitch_inv, z1, z2, mask, nufft_eps=1e-10):
     return z[..., 0, :, :], z[..., 1, :, :]
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("num_well", "nufft_eps"))
-def regular_points(o, pitch_inv, num_well, nufft_eps):
-    """Bounce points then newton, with regularized jvp."""
+@partial(jax.custom_jvp, nondiff_argnums=(2,))
+def regular_points(o, pitch_inv, num_well):
+    """Bounce points then Newton, with regularized jvp.
+
+    Parameters
+    ----------
+    o : Bounce2D
+        Object instance.
+    pitch_inv : jnp.ndarray
+        Shape broadcasts with (num ρ, num α, num pitch).
+    num_well : int
+        The usual suspect.
+
+    """
     return _newton(
         o,
         pitch_inv,
-        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well),
-        nufft_eps,
+        *bounce_points(pitch_inv, o._c["knots"], o._c["B(z)"], num_well, True),
+        min(o._nufft_eps, 1e-10),
     )
 
 
 @regular_points.defjvp
-def regular_points_jvp(num_well, nufft_eps, primals, tangents):
+def regular_points_jvp(num_well, primals, tangents):
     """Implicit function theorem with regularization.
 
     Regularization used to smooth the discretized system so that it recognizes
@@ -210,8 +231,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    See supplementary information in DESC/publications/unalmis2025.
 
     """
     # Cannot mix primals and tangents; see https://github.com/jax-ml/jax/issues/36319.
@@ -219,7 +239,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
     o, p = primals
     do, dp = tangents
 
-    z1, z2 = regular_points(o, p, num_well, nufft_eps)
+    z1, z2 = regular_points(o, p, num_well)
 
     shape = (*z1.shape[:-2], 2, *z1.shape[-2:])
 
@@ -240,6 +260,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
 
     mask = (z1 < z2)[..., None, :, :]
 
+    nufft_eps = min(o._nufft_eps, 1e-10)
     dB_dz = nufft2d2r(
         z,
         t,
@@ -250,7 +271,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
         (0, 2 * jnp.pi / o._NFP),
         vec=True,
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
     )
     dB_do = nufft2d2r(
         z,
@@ -258,7 +279,7 @@ def regular_points_jvp(num_well, nufft_eps, primals, tangents):
         do._c["|B|"].squeeze(-3),
         (0, 2 * jnp.pi / o._NFP),
         eps=nufft_eps,
-        mask=flatten_mat(jnp.broadcast_to(mask, shape), 4),
+        mask=None if _JF_BUG else flatten_mat(jnp.broadcast_to(mask, shape), 4),
     ).reshape(shape)
 
     dB_dz, dB_dt = (
@@ -688,7 +709,7 @@ def get_alphas(alpha, iota, num_transit, NFP):
     return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
 
 
-def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
+def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -706,6 +727,15 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
         Number of toroidal transits to follow field line.
     NFP : int
         Number of field periods.
+    X_min : int
+        See notes section. This parameter should never be changed.
+        It is included in the function signature for code optics only.
+        It is the number below which we short-circuit convergence to enforce
+        continuity by removing a discontinuity which is near machine precision
+        due to exponential convergence. This is not a hack; it has rigorous
+        mathematical justification regardless of the size of the removed
+        discontinuity, and does not bias the output beyond that of more
+        floating point operations in finite-precision.
 
     Returns
     -------
@@ -744,15 +774,12 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     (ϑ, NFP ζ) coordinates, then f(ϑ(α=α₀, ζ), ζ) will sample the approximation to
     F(α=α₀ ± ε, ζ) with ε → 0 as f converges to F.
 
-    This property was mentioned because parameterizing the stream map in (α, ζ) enables
-    partial summation. However, the small discontinuity due to discretization error
-    between branch cuts is undesirable as it can give significant error to the singular
-    integrals whose integration boundary is near a branch cut. If we were using splines
-    instead of pseudo-spectral methods to interpolate then we would have to account
-    for this.
-
     """
+    X = angle.shape[-2]
+    Y = truncate_rule(angle.shape[-1])
     num_alpha = alpha.size
+    domain = (0, 2 * jnp.pi / NFP)
+
     # peeling off field lines
     alpha = get_alphas(alpha, iota, num_transit, NFP)
     if angle.ndim == 2:
@@ -762,16 +789,20 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP):
     # (since this avoids modding on more points later and keeps θ bounded).
     alpha %= 2 * jnp.pi
 
-    domain = (0, 2 * jnp.pi / NFP)
-    Y = truncate_rule(angle.shape[-1])
     delta = (
         FourierChebyshevSeries(angle, domain, truncate=Y)
         .compute_cheb(alpha)
         .swapaxes(0, -3)
     )
     alpha = alpha.swapaxes(0, -2)
-    delta = delta.at[..., 0].add(alpha)
+    delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
     assert delta.shape == (*angle.shape[:-2], num_alpha, num_transit * NFP, Y)
+
+    if X < X_min:
+        # This is needed as our algorithm assumes continuity of |B| along field
+        # lines when gathering bounce points. This is always true physically.
+        delta = PiecewiseChebyshevSeries.stitch(delta)
+
     return PiecewiseChebyshevSeries(delta, domain)
 
 
@@ -1019,7 +1050,19 @@ def broadcast_for_bounce(pitch_inv):
 
 
 def truncate_rule(Y):
-    """Truncation of Chebyshev series to reduce spectral aliasing."""
+    """Truncation of Chebyshev series to reduce spectral aliasing.
+
+    The truncation will remove aliasing error at the shortest wavelengths
+    where the signal to noise ratio is lowest.
+    We truncate with a 7/8 rule in the toroidal direction so that the Lebesgue
+    constant is ~ (4/π²) log(Y) when the data is corrupted by ≤ 10⁻⁸ noise from
+    the inexact Newton solve. The Lebesgue constant discussed here is the one in
+    L Mason, J.C. & Handscomb, David C. 2002 Chebyshev Polynomials, chapter 5.
+    This is useful since we evaluate the series on a much denser grid than the
+    Newton solve grid; and therefore, prefer all discretization error is from
+    the error of the projection rather than the interpolation.
+
+    """
     return max(1, 7 * Y // 8)
 
 
@@ -1049,9 +1092,11 @@ def Y_B_rule(grid, spline):
     Parameters
     ----------
     grid : Grid
-        Grid.
+        Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
+        (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
     spline : bool
-        Whether |B| will be approximated with cubic spline or Chebyshev.
+        Whether to use cubic splines to compute initial guess for bounce points
+        instead of Chebyshev series.
 
     Returns
     -------
@@ -1066,17 +1111,21 @@ def Y_B_rule(grid, spline):
     return (Y_B * grid.NFP) if spline else Y_B
 
 
-def num_well_rule(num_transit, NFP, Y_B=None):
+def num_well_rule(num_transit, NFP, mins_per_transit=None):
     """Guess upper bound for number of wells based on spectrum.
 
     This should be loose enough that it is equivalent to ``num_well=None``,
     but more performant.
     """
     num_well = num_transit * (20 + NFP)
-    return num_well if Y_B is None else min(num_well, num_transit * Y_B)
+    return (
+        num_well
+        if mins_per_transit is None
+        else min(num_well, num_transit * mins_per_transit)
+    )
 
 
-def get_vander(grid, Y, Y_B, NFP):
+def get_vander_spline(grid, Y, Y_B, NFP):
     """Builds Vandermonde matrices for objectives."""
     Y_trunc = truncate_rule(Y)
     Y_B, num_z = round_up_rule(Y_B, NFP, grid.num_zeta == 1)

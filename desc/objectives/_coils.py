@@ -56,10 +56,10 @@ class _CoilObjective(_Objective):
         floats. Set weight to zero to exclude given coils from optimization.
 
     Subclasses must define a static attribute "_broadcast_input." Equals
-    "Coil" if the objective returns a single scalar per coil, and "Node"
-    if it returns a scalar at every grid point. To be compatible with
-    masking, compute function should apply the mask
-    self._coilset_tree["coilset_mask"] before returning data.
+    "coil" if the objective returns a single scalar per coil, and "node"
+    if it returns a scalar at every grid point. It is case-insensitive.
+    To be compatible with masking, compute function should apply the mask
+    self._coilset_tree["objective_mask"] before returning data.
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
@@ -127,18 +127,20 @@ class _CoilObjective(_Objective):
         def _build_coilset_tree():
             """Unpacks the input coilset, builds coilset tree and mask.
 
-            Returns
-            -------
-            params_tree : dict
-                params_tree["coils"] contains a nested list of 0s representing
-                individual coils and the coilsets to which they belong. Similarly,
-                params_tree["nodes"] lists the grid nodes associated with each coil.
-                params_tree["coilset_mask"] contains the indices in [0,self._dim_f-1]
-                for which the corresponding weight is positive. If all weights are
-                positive (i.e. no masking needed), contains default slice(None).
+            Sets self._coilset_tree, a dict. self._coilset_tree["coils"] contains
+            a nested list of 0s representing individual coils and the coilsets
+            to which they belong. Similarly, self._coilset_tree["nodes"] lists
+            the grid nodes associated with each coil. self._coilset_tree["coilset_mask"]
+            contains the indices in [0,self._num_coils-1] for which the corresponding
+            weight is positive. self._coilset_tree["objective_mask"] contains the
+            indices in [0,self._dim_f-1] for which the corresponding weight is
+            positive. If all weights are positive (i.e. no masking needed), contains
+            default slice(None).
             """
             # Local import to avoid circular import
             from desc.coils import CoilSet, MixedCoilSet, _Coil
+
+            tol = 1e-12
 
             def expand(t, idx=0):
                 if isinstance(t, MixedCoilSet):
@@ -166,12 +168,20 @@ class _CoilObjective(_Objective):
             self._coilset_tree = {
                 "coils": tree[0],
                 "nodes": tree[1],
-                "coilset_mask": slice(None),
+                "coilset_mask": np.arange(self._num_coils),
+                "objective_mask": slice(None),
             }
-            if np.any([w == 0 for w in tree_leaves(self._weight)]):
-                mask = self._coilset_broadcast(self._weight)
-                mask = np.nonzero(mask)[0]
-                self._coilset_tree["coilset_mask"] = mask
+            if np.any(
+                np.isclose([w for w in tree_leaves(self._weight)], 0.0, atol=tol)
+            ):
+                coilset_mask = self._coilset_broadcast(self._weight, target="coil")
+                objective_mask = self._coilset_broadcast(
+                    self._weight, self._broadcast_input
+                )
+                self._coilset_tree["coilset_mask"] = np.nonzero(coilset_mask > tol)[0]
+                self._coilset_tree["objective_mask"] = np.nonzero(objective_mask > tol)[
+                    0
+                ]
 
         coil = self.things[0]
         grid = self._grid
@@ -211,12 +221,12 @@ class _CoilObjective(_Objective):
 
         _build_coilset_tree()
         quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])[
-            self._coilset_tree["coilset_mask"]
+            self._coilset_tree["objective_mask"]
         ]
 
-        if self._broadcast_input == "Node":
+        if self._broadcast_input.lower() == "node":
             grid_nodes_unmasked = [
-                g.num_nodes for g in grid[self._coilset_tree["coilset_mask"]]
+                grid[i].num_nodes for i in self._coilset_tree["coilset_mask"]
             ]
             self._dim_f = np.sum(grid_nodes_unmasked)
         else:
@@ -230,14 +240,14 @@ class _CoilObjective(_Objective):
         grid = _prune_coilset_tree(grid)
         coil = _prune_coilset_tree(coil)
 
-        self._weight = self._coilset_broadcast(self._weight)
-        if self._bounds:
+        self._weight = self._coilset_broadcast(self._weight, self._broadcast_input)
+        if self._bounds is not None:
             self._bounds = (
-                self._coilset_broadcast(self._bounds[0]),
-                self._coilset_broadcast(self._bounds[1]),
+                self._coilset_broadcast(self._bounds[0], self._broadcast_input),
+                self._coilset_broadcast(self._bounds[1], self._broadcast_input),
             )
-        elif self._target:
-            self._target = self._coilset_broadcast(self._target)
+        elif self._target is not None:
+            self._target = self._coilset_broadcast(self._target, self._broadcast_input)
 
         timer = Timer()
         if verbose > 0:
@@ -270,7 +280,7 @@ class _CoilObjective(_Objective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -278,8 +288,7 @@ class _CoilObjective(_Objective):
             Coil objective value(s).
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._get_deprecated_constants(constants)
 
         coil = self.things[0]
         data = coil.compute(
@@ -293,16 +302,21 @@ class _CoilObjective(_Objective):
     @_Objective.bounds.setter
     def bounds(self, bounds):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
-        if bounds:
+        if bounds is not None:
             self._bounds = (
-                self._coilset_broadcast(bounds[0]),
-                self._coilset_broadcast(bounds[1]),
+                self._coilset_broadcast(bounds[0], self._broadcast_input),
+                self._coilset_broadcast(bounds[1], self._broadcast_input),
             )
+        else:
+            self._bounds = None
         self._check_dimensions()
 
     @_Objective.target.setter
     def target(self, target):
-        self._target = self._coilset_broadcast(target) if target is not None else target
+        if target is not None:
+            self._target = self._coilset_broadcast(target, self._broadcast_input)
+        else:
+            self._target = None
         self._check_dimensions()
 
     @_Objective.weight.setter
@@ -312,13 +326,15 @@ class _CoilObjective(_Objective):
         # objective should be rebuilt to account for masking
         self._built = False
 
-    def _coilset_broadcast(self, x):
-        """Expand an array in accordance with the attribute _broadcast_input.
+    def _coilset_broadcast(self, x, target="coil"):
+        """Broadcast an array to dimensions consistent with "target".
 
         Parameters
         ----------
         x : float or list[float]
             Must be broadcastable to the structure of self._things[0].
+        target: str, optional
+            Optional string taking values "coil" or "node". Defaults to "coil".
 
         Returns
         -------
@@ -326,16 +342,22 @@ class _CoilObjective(_Objective):
             Float inputs are returned unchanged, and list inputs are
             expanded to size self._dim_f.
         """
+        target = target.lower()
+        assert target in ["node", "coil"]
+
+        if isinstance(x, (np.ndarray, jnp.ndarray)):
+            x = x.tolist()
+
         # No need to broadcast if input is a scalar
         arr_flat = tree_leaves(x)
         if len(arr_flat) == 1:
             return np.atleast_1d(arr_flat[0])
 
         arr = jax_tree_broadcast(x, self._coilset_tree["coils"])
-        if self._broadcast_input == "Node":
+        if target == "node":
             arr = tree_map(lambda a, b: [a] * b, arr, self._coilset_tree["nodes"])
         arr, _ = tree_flatten(arr)
-        return np.asarray(arr)[self._coilset_tree["coilset_mask"]]
+        return np.asarray(arr)[self._coilset_tree["objective_mask"]]
 
 
 class CoilLength(_CoilObjective):
@@ -360,7 +382,7 @@ class CoilLength(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m)"
     _print_value_fmt = "Coil length: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -423,7 +445,7 @@ class CoilLength(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -434,7 +456,7 @@ class CoilLength(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([dat["length"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilCurvature(_CoilObjective):
@@ -464,7 +486,7 @@ class CoilCurvature(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil curvature: "
-    _broadcast_input = "Node"
+    _broadcast_input = "node"
 
     def __init__(
         self,
@@ -525,7 +547,7 @@ class CoilCurvature(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -536,7 +558,7 @@ class CoilCurvature(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["curvature"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilTorsion(_CoilObjective):
@@ -564,7 +586,7 @@ class CoilTorsion(_CoilObjective):
     _scalar = False
     _units = "(m^-1)"
     _print_value_fmt = "Coil torsion: "
-    _broadcast_input = "Node"
+    _broadcast_input = "node"
 
     def __init__(
         self,
@@ -625,7 +647,7 @@ class CoilTorsion(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -636,7 +658,7 @@ class CoilTorsion(_CoilObjective):
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.concatenate([dat["torsion"] for dat in data])
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilCurrentLength(CoilLength):
@@ -664,7 +686,7 @@ class CoilCurrentLength(CoilLength):
     _scalar = False
     _units = "(A*m)"
     _print_value_fmt = "Coil current length: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -732,7 +754,7 @@ class CoilCurrentLength(CoilLength):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -742,7 +764,7 @@ class CoilCurrentLength(CoilLength):
         lengths = super().compute(params, constants=constants)
         params = tree_leaves(params, is_leaf=lambda x: isinstance(x, dict))
         currents = jnp.concatenate([param["current"] for param in params])
-        out = jnp.atleast_1d(lengths * currents[self._coilset_tree["coilset_mask"]])
+        out = jnp.atleast_1d(lengths * currents[self._coilset_tree["objective_mask"]])
         return out
 
 
@@ -772,7 +794,7 @@ class CoilIntegratedCurvature(_CoilObjective):
     _scalar = False  # not always a scalar, if a coilset is passed in
     _units = "(dimensionless)"
     _print_value_fmt = "Integrated curvature: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -831,7 +853,7 @@ class CoilIntegratedCurvature(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
@@ -849,7 +871,7 @@ class CoilIntegratedCurvature(_CoilObjective):
                 for dat in data
             ]
         )
-        return out[self._coilset_tree["coilset_mask"]]
+        return out[self._coilset_tree["objective_mask"]]
 
 
 class CoilSetMinDistance(_Objective):
@@ -983,7 +1005,7 @@ class CoilSetMinDistance(_Objective):
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -991,8 +1013,7 @@ class CoilSetMinDistance(_Objective):
             Minimum distance to another coil for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         pts = constants["coilset"]._compute_position(
             params=params, grid=constants["grid"], basis="xyz"
         )  # pts.shape = (num_coils, num_nodes, 3)
@@ -1258,7 +1279,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Only required if ``self._eq_fixed = False``.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -1266,8 +1287,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             Minimum/maximum distance from coil to surface for each coil in the coilset.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             coils_params = params_1
         elif self._coils_fixed:
@@ -1476,7 +1496,7 @@ class CoilArclengthVariance(_CoilObjective):
     _scalar = False  # Not always a scalar, if a coilset is passed in
     _units = "(m^2)"
     _print_value_fmt = "Coil Arclength Variance: "
-    _broadcast_input = "Coil"
+    _broadcast_input = "coil"
 
     def __init__(
         self,
@@ -1558,19 +1578,18 @@ class CoilArclengthVariance(_CoilObjective):
             Dictionary of the coil's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self._constants.
+            self._constants. (Deprecated)
 
         Returns
         -------
         f : float or array of floats
             Coil arclength variance.
         """
-        if constants is None:
-            constants = self.constants
         data = super().compute(params, constants=constants)
+        constants = self._get_deprecated_constants(constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
         out = jnp.array([jnp.var(jnp.linalg.norm(dat["x_s"], axis=1)) for dat in data])
-        return (out * constants["mask"])[self._coilset_tree["coilset_mask"]]
+        return (out * constants["mask"])[self._coilset_tree["objective_mask"]]
 
 
 class QuadraticFlux(_Objective):
@@ -1776,7 +1795,7 @@ class QuadraticFlux(_Objective):
             Dictionary of the external field's degrees of freedom.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1784,8 +1803,7 @@ class QuadraticFlux(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
@@ -1978,7 +1996,7 @@ class SurfaceQuadraticFlux(_Objective):
             if field_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1986,8 +2004,7 @@ class SurfaceQuadraticFlux(_Objective):
             Bnorm on the QFM surface from the external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._field_fixed else None
         surf_params = params_1
 
@@ -2248,7 +2265,7 @@ class ToroidalFlux(_Objective):
             Dictionary of the external field's degrees of freedom, if qfm_surface=True.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2256,8 +2273,7 @@ class ToroidalFlux(_Objective):
             Toroidal flux from coils and external field
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         field_params = params_2 if not self._eq_fixed else params_1
         field_params = (
             constants["field"].params_dict if self._field_fixed else field_params
@@ -2475,7 +2491,7 @@ class LinkingCurrentConsistency(_Objective):
             Only required if eq_fixed=False.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -2483,8 +2499,7 @@ class LinkingCurrentConsistency(_Objective):
             Linking current error.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         if self._eq_fixed:
             eq_linking_current = constants["eq_linking_current"]
         else:
@@ -2604,7 +2619,7 @@ class CoilSetLinkingNumber(_Objective):
             Dictionary of coilset degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc.
-            Defaults to self._constants.
+            Defaults to self._constants. (Deprecated)
 
         Returns
         -------
@@ -2614,8 +2629,7 @@ class CoilSetLinkingNumber(_Objective):
             number of coils linked with that coil.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         link = constants["coilset"]._compute_linking_number(
             params=params, grid=constants["grid"]
         )
@@ -2832,7 +2846,7 @@ class SurfaceCurrentRegularization(_Objective):
             eg FourierCurrentPotential.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2840,8 +2854,7 @@ class SurfaceCurrentRegularization(_Objective):
             The surface current density magnitude on the source surface.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         surface_data = compute_fun(
             self._surface_current_field,

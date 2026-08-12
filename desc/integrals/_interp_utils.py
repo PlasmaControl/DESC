@@ -8,13 +8,11 @@ from interpax import interp1d
 try:
     from jax_finufft import nufft2, options
 
-    can_use_nufft = True
 except (ImportError, ModuleNotFoundError):
     warnings.warn(
         "jax_finufft is not installed. NUFFT functions will not be available.",
         UserWarning,
     )
-    can_use_nufft = False
 except Exception as e:
     error_str = str(e)
     # This error will probably happen pretty often, we skip it to prevent breaking
@@ -35,9 +33,16 @@ except Exception as e:
             f"will not be available: {e}",
             UserWarning,
         )
-    can_use_nufft = False
 
 from desc.backend import jax, jnp
+
+_JF_BUG = True
+"""https://github.com/flatironinstitute/jax-finufft/issues/158.
+
+   Wait for jax-finufft to merge
+   https://github.com/flatironinstitute/jax-finufft/pull/216
+   then bump min version and set this to False.
+"""
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
@@ -98,6 +103,7 @@ def nufft2d2r(
     vec=False,
     eps=1e-6,
     mask=None,
+    fill_value=None,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -137,6 +143,13 @@ def nufft2d2r(
         of ``(x),(x),(b,f0,f1)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
+    mask : jnp.ndarray, optional
+        Boolean mask of points to interpolate to. Should have same shape as ``x0``
+        and ``x1``. This does nothing until the merge of
+        https://github.com/flatironinstitute/jax-finufft/pull/216.
+    fill_value : float
+        Value to pad array where the mask is false.
+        Default is 0.0.
 
     Returns
     -------
@@ -160,19 +173,16 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    opts = options.Opts(modeord=1)
-
-    # TODO: Delete this if block after
-    # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
-    # and then bump min version requirement.
-    JF_BUG = True
-    if JF_BUG:
-        # https://github.com/flatironinstitute/jax-finufft/pull/159
+    if _JF_BUG:
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
         return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
-    return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    opts = options.Opts(modeord=1)
+    f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    if mask is not None and fill_value is not None:
+        f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, fill_value)
+    return f
 
 
 # Warning: method must be specified as keyword argument.
@@ -261,7 +271,7 @@ _root_companion = jnp.vectorize(
 _eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
+@partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
     k=0.0,
@@ -360,8 +370,7 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    See supplementary information in DESC/publications/unalmis2025.
 
     """
     c, k, a_min, a_max = primals

@@ -2,7 +2,7 @@
 
 from scipy.optimize import OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jnp, qr, qr_multiply
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -24,6 +24,7 @@ from .utils import (
     compute_jac_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    scale_columns,
     solve_triangular_regularized,
 )
 
@@ -176,13 +177,15 @@ def lsqtr(  # noqa: C901
     x = make_strictly_feasible(x, lb, ub)
 
     f = fun(x, *args)
+    f0 = f
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     # block is needed for jaxify util which uses jax functions inside
     # jax.pure_callback and gets stuck due to async dispatch
     J = jac(x, *args).block_until_ready()
     njev += 1
-    g = jnp.dot(J.T, f)
+    # g is J.T@f and this is equal to f@J for 1D f
+    g = jnp.dot(f, J)
 
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
@@ -202,13 +205,11 @@ def lsqtr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # TODO: place this function under JIT to use in-place operation (#1669)
-    J *= d
 
-    # we don't need unscaled J anymore, so we overwrite
-    # it with J_h = J * d to avoid carrying so many J-sized matrices
-    # in memory, which can be large
-    J_h = J
+    # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
+    # carrying so many J-sized matrices in memory, which can be large. The buffer is
+    # donated so the scaling doesn't allocate a second copy of J.
+    J_h = scale_columns(J, d)
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -301,15 +302,15 @@ def lsqtr(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ f_a)
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -Qt_fa)
             else:
-                Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, -f_a, lower=True)
-            # We don't need the Q and R matrices anymore
-            # Trust region solver will solve the augmented system
-            # with a new Q and R
-            del Q, R
+                # min-norm Newton step uses the QR of J_a.T
+                Q, Rt = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(Rt.T, -f_a, lower=True)
+                del Q, Rt
+                # the tr subproblem still needs the QR of J_a itself
+                Qt_fa, R = qr_multiply(J_a, f_a, mode="right")
 
         actual_reduction = -1
 
@@ -331,7 +332,7 @@ def lsqtr(  # noqa: C901
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    p_newton, f_a, J_a, trust_radius, alpha
+                    p_newton, Qt_fa, R, trust_radius, alpha
                 )
             step = d * step_h  # Trust-region solution in the original space.
 
@@ -404,9 +405,18 @@ def lsqtr(  # noqa: C901
             allx.append(x)
             f = f_new
             cost = cost_new
+            # Delete old arrays before computing new one
+            # otherwise the peak is bigger by J-sized arrays
+            del J_h, J_a
+            if tr_method == "svd":
+                del U, s, Vt
+            elif tr_method == "cho":
+                del B_h
+            elif tr_method == "qr":
+                del R
             J = jac(x, *args)
             njev += 1
-            g = jnp.dot(J.T, f)
+            g = jnp.dot(f, J)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -417,11 +427,7 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J *= d
-            # we don't need unscaled J anymore this iteration, so we overwrite
-            # it with J_h = J * d to avoid carrying so many J-sized matrices
-            # in memory, which can be large
-            J_h = J
+            J_h = scale_columns(J, d)
             del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -450,6 +456,9 @@ def lsqtr(  # noqa: C901
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
+    # after overwriting J_h with J*d, we have to revert back and store the
+    # unscaled version
+    J_h = scale_columns(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         success=success,
@@ -457,7 +466,7 @@ def lsqtr(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back
+        jac=J_h,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,
@@ -467,6 +476,8 @@ def lsqtr(  # noqa: C901
         allx=allx,
         alltr=alltr,
     )
+    result["fse"] = f
+    result["f0se"] = f0
     if verbose > 0:
         if result["success"]:
             print(result["message"])

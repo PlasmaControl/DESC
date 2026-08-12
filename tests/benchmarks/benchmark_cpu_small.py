@@ -9,6 +9,7 @@ desc.set_device("cpu")
 import desc.examples
 from desc.backend import jax
 from desc.basis import FourierZernikeBasis
+from desc.coils import MixedCoilSet, initialize_modular_coils, initialize_saddle_coils
 from desc.equilibrium import Equilibrium
 from desc.grid import ConcentricGrid, LinearGrid
 from desc.magnetic_fields import ToroidalMagneticField
@@ -20,6 +21,7 @@ from desc.objectives import (
     FixPsi,
     ForceBalance,
     ObjectiveFunction,
+    QuadraticFlux,
     QuasisymmetryTwoTerm,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -100,7 +102,7 @@ def test_equilibrium_init_lowres(benchmark):
         N = 5
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
 
 
 @pytest.mark.benchmark()
@@ -111,28 +113,12 @@ def test_equilibrium_init_medres(benchmark):
         jax.clear_caches()
 
     def build():
-        L = 15
-        M = 15
-        N = 15
+        L = 16
+        M = 16
+        N = 16
         _ = Equilibrium(L=L, M=M, N=N)
 
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
-
-
-@pytest.mark.benchmark()
-def test_equilibrium_init_highres(benchmark):
-    """Test time to create an equilibrium for high resolution."""
-
-    def setup():
-        jax.clear_caches()
-
-    def build():
-        L = 25
-        M = 25
-        N = 25
-        _ = Equilibrium(L=L, M=M, N=N)
-
-    benchmark.pedantic(build, setup=setup, iterations=1, rounds=20)
+    benchmark.pedantic(build, setup=setup, iterations=1, rounds=15)
 
 
 @pytest.mark.slow
@@ -191,7 +177,7 @@ def test_objective_compute_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
@@ -212,7 +198,7 @@ def test_objective_compute_atf(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.compute_scaled_error(x, objective.constants).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=100, iterations=1)
 
@@ -233,7 +219,7 @@ def test_objective_jac_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        objective.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=80, iterations=1)
 
@@ -254,7 +240,7 @@ def test_objective_jac_atf(benchmark):
     x = objective.x(eq)
 
     def run(x, objective):
-        objective.jac_scaled_error(x, objective.constants).block_until_ready()
+        objective.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, objective), rounds=20, iterations=1)
 
@@ -263,30 +249,37 @@ def test_objective_jac_atf(benchmark):
 @pytest.mark.benchmark
 def test_perturb_1(benchmark):
     """Benchmark 1st order perturbations."""
+    eq = desc.examples.get("SOLOVEV")
+    obj = ObjectiveFunction(ForceBalance(eq))
+    con = get_fixed_boundary_constraints(eq)
+    con = maybe_add_self_consistency(eq, con)
+    con = ObjectiveFunction(con)
+    obj.build()
+    con.build()
+    # pass in built LinearConstraintProjection to skip
+    # heavy build phase which we already benchmark in
+    # a different test
+    lc = LinearConstraintProjection(obj, con)
+    lc.build()
+    tr_ratio = [0.01, 0.25, 0.25]
+    dp = np.zeros_like(eq.p_l)
+    dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+    deltas = {"p_l": dp}
+    args = (
+        eq,
+        lc,
+        None,
+    )
+    kwargs = {
+        "deltas": deltas,
+        "tr_ratio": tr_ratio,
+        "order": 1,
+        "verbose": 2,
+        "copy": True,
+    }
 
     def setup():
         jax.clear_caches()
-        eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective(eq)
-        objective.build()
-        constraints = get_fixed_boundary_constraints(eq)
-        tr_ratio = [0.01, 0.25, 0.25]
-        dp = np.zeros_like(eq.p_l)
-        dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-        deltas = {"p_l": dp}
-
-        args = (
-            eq,
-            objective,
-            constraints,
-        )
-        kwargs = {
-            "deltas": deltas,
-            "tr_ratio": tr_ratio,
-            "order": 1,
-            "verbose": 2,
-            "copy": True,
-        }
         return args, kwargs
 
     benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
@@ -296,30 +289,38 @@ def test_perturb_1(benchmark):
 @pytest.mark.benchmark
 def test_perturb_2(benchmark):
     """Benchmark 2nd order perturbations."""
+    eq = desc.examples.get("SOLOVEV")
+    obj = ObjectiveFunction(ForceBalance(eq))
+    con = get_fixed_boundary_constraints(eq)
+    con = maybe_add_self_consistency(eq, con)
+    con = ObjectiveFunction(con)
+    obj.build()
+    con.build()
+    # pass in built LinearConstraintProjection to skip
+    # heavy build phase which we already benchmark in
+    # a different test
+    lc = LinearConstraintProjection(obj, con)
+    lc.build()
+    tr_ratio = [0.01, 0.25, 0.25]
+    dp = np.zeros_like(eq.p_l)
+    dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+    deltas = {"p_l": dp}
+
+    args = (
+        eq,
+        lc,
+        None,
+    )
+    kwargs = {
+        "deltas": deltas,
+        "tr_ratio": tr_ratio,
+        "order": 2,
+        "verbose": 2,
+        "copy": True,
+    }
 
     def setup():
         jax.clear_caches()
-        eq = desc.examples.get("SOLOVEV")
-        objective = get_equilibrium_objective(eq)
-        objective.build()
-        constraints = get_fixed_boundary_constraints(eq)
-        tr_ratio = [0.01, 0.25, 0.25]
-        dp = np.zeros_like(eq.p_l)
-        dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-        deltas = {"p_l": dp}
-
-        args = (
-            eq,
-            objective,
-            constraints,
-        )
-        kwargs = {
-            "deltas": deltas,
-            "tr_ratio": tr_ratio,
-            "order": 2,
-            "verbose": 2,
-            "copy": True,
-        }
         return args, kwargs
 
     benchmark.pedantic(perturb, setup=setup, rounds=10, iterations=1)
@@ -338,10 +339,10 @@ def test_proximal_jac_atf(benchmark):
     )
     prox.build()
     x = prox.x(eq)
-    prox.jac_scaled_error(x, prox.constants).block_until_ready()
+    prox.jac_scaled_error(x).block_until_ready()
 
     def run(x, prox):
-        prox.jac_scaled_error(x, prox.constants).block_until_ready()
+        prox.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=20, iterations=1)
 
@@ -374,12 +375,12 @@ def test_proximal_jac_atf_with_eq_update(benchmark):
     # we change x slightly to profile solve/perturb equilibrium too
     # this one will compile everything inside the function
     x = x.at[0].add(np.random.rand() * 0.001)
-    _ = prox.jac_scaled_error(x, prox.constants).block_until_ready()
+    _ = prox.jac_scaled_error(x).block_until_ready()
 
     def run(x, prox):
         # we change x slightly to profile solve/perturb equilibrium too
         x = x.at[0].add(np.random.rand() * 0.001)
-        prox.jac_scaled_error(x, prox.constants).block_until_ready()
+        prox.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
 
@@ -402,10 +403,10 @@ def test_proximal_freeb_compute(benchmark):
     )
     obj.build()
     x = obj.x(eq)
-    obj.compute_scaled_error(x, obj.constants).block_until_ready()
+    obj.compute_scaled_error(x).block_until_ready()
 
     def run(x, obj):
-        obj.compute_scaled_error(x, obj.constants).block_until_ready()
+        obj.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, obj), rounds=50, iterations=1)
 
@@ -428,10 +429,10 @@ def test_proximal_freeb_jac(benchmark):
     )
     obj.build()
     x = obj.x(eq)
-    obj.jac_scaled_error(x, prox.constants).block_until_ready()
+    obj.jac_scaled_error(x).block_until_ready()
 
     def run(x, obj, prox):
-        obj.jac_scaled_error(x, prox.constants).block_until_ready()
+        obj.jac_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, obj, prox), rounds=10, iterations=1)
 
@@ -547,9 +548,57 @@ def _test_objective_ripple(benchmark, use_bounce1d, method):
     )
     prox.build()
     x = prox.x(eq)
-    _ = getattr(prox, method)(x, prox.constants).block_until_ready()
+    _ = getattr(prox, method)(x).block_until_ready()
 
     def run(x, prox):
-        getattr(prox, method)(x, prox.constants).block_until_ready()
+        getattr(prox, method)(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
+
+
+def _test_quadratic_flux(N, method):
+    # NFP and sym of the equilibrium as well as the number of coils affect the number of
+    # for loops and hence the performance of the field computation
+    # use a mixed coilset and equilibrium that will hit all these possible bottlenecks
+    eq = desc.examples.get("precise_QH")
+    field_grid = LinearGrid(N=N)
+    modular = initialize_modular_coils(
+        eq, num_coils=6, r_over_a=2.5, check_intersection=False
+    ).to_FourierXYZ(N=8, grid=field_grid, check_intersection=False)
+    saddle = initialize_saddle_coils(
+        eq,
+        num_coils=2,
+        r_over_a=0.8,
+        offset=3.5,
+        position="outer",
+        check_intersection=False,
+    )
+    field = MixedCoilSet(modular, saddle, check_intersection=False)
+    objective = ObjectiveFunction(
+        QuadraticFlux(eq, field, field_grid=field_grid, vacuum=True)
+    )
+    objective.build(verbose=0)
+    x = objective.x()
+    fun = getattr(objective, method + "_scaled_error")
+    _ = fun(x).block_until_ready()
+
+    def run(x):
+        fun(x).block_until_ready()
+
+    return run, x
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_quadratic_flux_jac(benchmark):
+    """Benchmark computing jacobian of QuadraticFlux."""
+    run, x = _test_quadratic_flux(20, "jac")
+    benchmark.pedantic(run, args=(x,), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_objective_quadratic_flux_compute(benchmark):
+    """Benchmark computing QuadraticFlux."""
+    run, x = _test_quadratic_flux(100, "compute")
+    benchmark.pedantic(run, args=(x,), rounds=50, iterations=1)

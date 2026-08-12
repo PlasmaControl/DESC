@@ -2861,7 +2861,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         else:
             return [coilset]
 
-    coils_list = flatten_coils(coils)
+    coils_list = flatten_coils(coils, check_intersection=check_intersection)
     plot_data = {}
     plot_data["X"] = []
     plot_data["Y"] = []

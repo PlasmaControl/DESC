@@ -2,10 +2,9 @@ import inspect
 from functools import partial
 
 import numpy as np
-from jax import jit
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart

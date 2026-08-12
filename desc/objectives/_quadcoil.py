@@ -1,8 +1,6 @@
 import warnings
 
-from jax import jit
-
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.objectives.normalization import compute_scaling_factors
@@ -158,7 +156,6 @@ class QuadcoilProxy(_Objective):
         "_enable_net_current_plasma",
         "_eq_fixed",
         "_field_fixed",
-        "_bs_chunk_size",
         # Basics
         "_deriv_mode",
         "_verbose",

@@ -1800,6 +1800,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         self._secular_zeta = secular_zeta
         self._NFP = check_posint(NFP, "NFP", False)
         self._equilibrium = equilibrium
+        assert int(secular_theta) == secular_theta, "secular_theta must be an integer"
+        assert int(secular_zeta) == secular_zeta, "secular_zeta must be an integer"
 
         # Input validation
         errorif(
@@ -1813,10 +1815,9 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             from . import FourierRZToroidalSurface
 
             surface = FourierRZToroidalSurface()
-        check_nonnegint(secular_theta, "secular_theta", False)
-        check_nonnegint(secular_zeta, "secular_zeta", False)
+
         errorif(
-            np.gcd(secular_theta, secular_zeta) != 1,
+            np.gcd(abs(secular_theta), abs(secular_zeta)) != 1,
             ValueError,
             "secular_theta and secular_zeta should have a gcd of 1",
         )
@@ -1827,7 +1828,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             "NFP must divide secular_theta",
         )
         errorif(
-            NFP > 1 and np.gcd(secular_zeta, NFP) != 1,
+            NFP > 1 and np.gcd(abs(secular_zeta), NFP) != 1,
             ValueError,
             "secular_zeta and NFP should have a gcd of 1",
         )
@@ -2116,10 +2117,10 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         zeta = coords[:, 2]
 
         if secular_theta is None:
-            secular_theta = (theta[-1] - theta[0]) / (s[-1] - s[0])
+            secular_theta = np.asarray((theta[-1] - theta[0]) / (s[-1] - s[0]))
             secular_theta = np.round(secular_theta).astype(int)
         if secular_zeta is None:
-            secular_zeta = (zeta[-1] - zeta[0]) / (s[-1] - s[0])
+            secular_zeta = np.asarray((zeta[-1] - zeta[0]) / (s[-1] - s[0]))
             secular_zeta = np.round(secular_zeta).astype(int)
 
         theta_single_val = theta - secular_theta * s

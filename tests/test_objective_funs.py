@@ -2389,6 +2389,76 @@ class TestObjectiveFunction:
         with pytest.raises(ValueError, match=">= 2"):
             TrappedResonance(eq, rho=1).build(verbose=0)
 
+    def test_trapped_resonance_analytic_omega_prime(self):
+        """Analytic Ω'(s) matches a small step finite difference of Ω."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        num_rho = 3
+        rho0 = np.linspace(0, 1, num_rho + 1)[1:]
+        # Pinning the pitch grid keeps λ the same on every displaced radial
+        # grid, which is the variable Ω'(s) is defined at fixed value of, and
+        # makes compute return the raw per-(rho, pitch, well) dict.
+        B = eq.compute(["min_tz |B|", "max_tz |B|"])
+        pitch_invs = np.linspace(
+            1.02 * np.min(B["min_tz |B|"]), 0.98 * np.max(B["max_tz |B|"]), 16
+        )
+        obj = TrappedResonance(
+            eq,
+            rho=num_rho,
+            use_bounce1d=True,
+            num_eta=8,
+            num_transit=4,
+            knots_per_transit=60,
+            num_quad=16,
+            N=0,
+            M=1,
+            p_max=1,
+            q_max=1,
+            res_range_min=-1,
+            res_range_max=1,
+            pitch_invs=pitch_invs,
+            Omega_prime_method="analytic",
+        )
+        obj.build(verbose=0)
+
+        def compute_at(rho_shift):
+            """Rerun the objective with its radial grid displaced."""
+            obj._grid_1dr = LinearGrid(
+                rho=rho0 + rho_shift, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
+            obj._constants["transforms_1dr"] = get_transforms(
+                obj._keys_1dr, eq, obj._grid_1dr
+            )
+            obj._constants["profiles"] = get_profiles(
+                obj._keys_1dr + [obj._key], eq, obj._grid_1dr
+            )
+            return {k: np.asarray(v) for k, v in obj.compute(eq.params_dict).items()}
+
+        ref = compute_at(0.0)
+        analytic = ref["Omega_prime_s"] * 2 * np.asarray(ref["rhos"])[:, None, None]
+
+        fd = {}
+        for h in (2e-3, 6e-4):
+            up, down = compute_at(h), compute_at(-h)
+            fd[h] = (
+                (up["Omega"] - down["Omega"]) / (2 * h),
+                ref["valid_prime"] & up["valid_prime"] & down["valid_prime"],
+            )
+
+        # Ω is not smooth in ρ everywhere: wells and the set of trapped field
+        # lines both change from surface to surface, so a difference quotient
+        # straddling one of those changes measures nothing. Compare only where
+        # the finite difference has itself converged.
+        (coarse, ok_c), (fine, ok_f) = fd[2e-3], fd[6e-4]
+        converged = ok_c & ok_f & (np.abs(coarse - fine) <= 1e-2 * np.abs(fine))
+        assert converged.sum() >= 5, (
+            f"only {converged.sum()} points to compare; the test resolution no "
+            "longer resolves enough trapped particles to be meaningful"
+        )
+        np.testing.assert_allclose(analytic[converged], fine[converged], rtol=1e-2)
+
     @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
@@ -4557,6 +4627,18 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "bump weighting"
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(
+                eq,
+                TrappedResonance,
+                Omega_prime_method="analytic",
+                use_bounce1d=True,
+            )
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "analytic Omega'(s)"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

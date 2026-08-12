@@ -3,13 +3,14 @@
 import numpy as np
 from interpax_fft import cheb_pts, fourier_pts
 from orthax.legendre import leggauss
+from scipy.constants import elementary_charge
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms
-from desc.compute._trapped_resonance import _build_eta_grid
+from desc.compute._trapped_resonance import _build_eta_grid, _build_eta_source_grid
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import _parse_parameterization
+from desc.compute.utils import _parse_parameterization, get_data_deps
 from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, get_vander_spline
 from desc.integrals.bounce_integral import Bounce1D, Bounce2D
@@ -22,6 +23,109 @@ from ..integrals.quad_utils import (
 )
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
+
+
+def _seed_tangent_key(name):
+    """Name of the compute quantity holding d(``name``)/dρ."""
+    return name + "r" if name.endswith("_r") or name.endswith("_rr") else name + "_r"
+
+
+def _seeded_keys(keys, parameterization):
+    """Per-surface keys seeded onto a field line grid, and those it reads.
+
+    ``_compute`` skips any quantity already present in ``data``, so a seeded
+    quantity shadows its own dependencies: only the seeded keys that some
+    recomputed quantity depends on directly can influence the result. Those are
+    the ones whose radial derivative has to be supplied for an analytic Ω'(s).
+
+    Parameters
+    ----------
+    keys : list[str]
+        Quantities requested on the field line grid.
+    parameterization : str
+        Parameterization of the thing being computed, e.g.
+        ``"desc.equilibrium.equilibrium.Equilibrium"``.
+
+    Returns
+    -------
+    seeded, consumed : tuple[set[str]]
+
+    """
+    index = data_index[parameterization]
+    closure = set(get_data_deps(keys, obj=parameterization)) | set(keys)
+    seeded = {k for k in closure if index.get(k, {}).get("coordinates", "") == "r"}
+
+    consumed, visited, stack = set(), set(), list(keys)
+    while stack:
+        key = stack.pop()
+        if key in visited:
+            continue
+        visited.add(key)
+        if key in seeded and key not in keys:
+            continue  # seeded, so it is not recomputed and its deps are unused
+        for dep in index.get(key, {}).get("dependencies", {}).get("data", []):
+            if dep in seeded:
+                consumed.add(dep)
+            stack.append(dep)
+    return seeded, consumed
+
+
+def _tangent_keys(parameterization, keys):
+    """Map each seeded per-surface key to the key holding its radial derivative.
+
+    Raises if a key the field line compute actually reads has no radial
+    derivative registered in ``data_index``, so that a missing tangent can
+    never quietly turn into a wrong Ω'(s).
+    """
+    seeded, consumed = _seeded_keys(keys, parameterization)
+    index = data_index[parameterization]
+    tangent = {
+        key: _seed_tangent_key(key) for key in seeded if _seed_tangent_key(key) in index
+    }
+    # "rho" differentiates to 1; "p_r" is covered by _p_rr.
+    missing = sorted(consumed - set(tangent) - {"rho", "p_r"})
+    if missing:
+        raise NotImplementedError(
+            "Omega_prime_method='analytic' needs the radial derivative of "
+            f"{missing}, which DESC has no compute quantity for. "
+            "Use Omega_prime_method='fd'."
+        )
+    return tangent
+
+
+def _p_rr(params, profiles, grid, data):
+    """d²p/dρ², which has no compute quantity of its own to read it from.
+
+    Mirrors how ``p_r`` itself is computed, one derivative higher.
+    """
+    if profiles.get("pressure", None) is not None:
+        return profiles["pressure"].compute(grid, params["p_l"], dr=2)
+    return elementary_charge * (
+        data["ne_rr"] * data["Te"]
+        + 2 * data["ne_r"] * data["Te_r"]
+        + data["ne"] * data["Te_rr"]
+        + data["ni_rr"] * data["Ti"]
+        + 2 * data["ni_r"] * data["Ti_r"]
+        + data["ni"] * data["Ti_rr"]
+    )
+
+
+def _seed_tangents(params, profiles, grid, data, seed_1d, tangent_keys):
+    """d/dρ of each per-surface quantity seeded onto a field line grid."""
+    seed_dot = {}
+    for key, val in seed_1d.items():
+        if key == "rho":
+            seed_dot[key] = jnp.ones_like(val)
+        elif key == "p_r":
+            seed_dot[key] = _p_rr(params, profiles, grid, data)
+        elif key in tangent_keys:
+            seed_dot[key] = data[tangent_keys[key]]
+        else:
+            # Nothing on the field line grid reads this, as _tangent_keys
+            # checked. min_tz |B| and max_tz |B| land here on purpose: the
+            # pitch grid must stay put so the derivative is taken at fixed λ.
+            seed_dot[key] = jnp.zeros_like(val)
+    return seed_dot
 
 
 # New resonance objective from John Anthony Labbate
@@ -129,6 +233,17 @@ class TrappedResonance(_Objective):
         If ``True``, zero out wells whose poloidal bounce width exceeds 2π
         (barely-trapped filter) before the resonance physics calculation.
         Defaults to ``False``.
+    Omega_prime_method : {"fd", "analytic"}, optional
+        How to obtain Ω'(s), the radial derivative of the normalized precession
+        frequency that sets the island width. ``"fd"`` finite differences Ω
+        across neighbouring surfaces of the radial grid, so its accuracy is
+        limited by the radial grid spacing and it is undefined on the
+        surfaces at either end. ``"analytic"`` instead differentiates the
+        bounce integrals with respect to rho directly, at fixed λ and η, which
+        is exact for any radial grid and defined on every surface, at the cost
+        of roughly doubling the work on the eta grid. Only implemented for
+        ``use_bounce1d=True``.
+        Defaults to ``"fd"``.
     """
 
     _scalar = False
@@ -188,7 +303,19 @@ class TrappedResonance(_Objective):
         Y_B=None,
         spline=True,
         nufft_eps=1e-10,
+        Omega_prime_method="fd",
     ):
+        if Omega_prime_method not in ("fd", "analytic"):
+            raise ValueError(
+                'Omega_prime_method must be "fd" or "analytic", '
+                f"got {Omega_prime_method}."
+            )
+        if Omega_prime_method == "analytic" and not use_bounce1d:
+            raise NotImplementedError(
+                "Omega_prime_method='analytic' is only implemented for the "
+                "Bounce1D path. Pass use_bounce1d=True, or use "
+                "Omega_prime_method='fd'."
+            )
         if target is None and bounds is None:
             target = 1e-8
         self._use_bounce1d = bool(use_bounce1d)
@@ -227,6 +354,7 @@ class TrappedResonance(_Objective):
             "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
             "use_bounce1d": self._use_bounce1d,
+            "Omega_prime_method": Omega_prime_method,
         }
         if not self._use_bounce1d:
             self._hyperparameters["Y_B"] = Y_B
@@ -421,11 +549,13 @@ class TrappedResonance(_Objective):
 
         base_grid = self._grid_1dr
         iotas = base_grid.compress(data["iota"])
+        iotas_r = base_grid.compress(data["iota_r"])
         rhos = base_grid.compress(base_grid.nodes[:, 0])
         M = self._hyperparameters["M"]
         N = self._hyperparameters["N"]
         nfp = eq.NFP
         zeta = constants.get("zeta", None)
+        analytic = self._hyperparameters["Omega_prime_method"] == "analytic"
         num_eta = self._hyperparameters["num_eta"]
 
         eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
@@ -481,8 +611,10 @@ class TrappedResonance(_Objective):
                 return data[self._key]
             return base_grid.compress(data[self._key])
 
-        eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
-        eta_grid = eta_desc_grid.source_grid
+        # The field line following grid the bounce integrals run along. It
+        # needs no coordinate map, so it is built here rather than pulled off
+        # the (rho, theta, zeta) grid, which _eta_data rebuilds at shifted rho.
+        eta_grid = _build_eta_source_grid(rhos, alpha_per_rho, zeta)
 
         alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
         psa_desc_grid = eq._get_rtz_grid(
@@ -510,6 +642,18 @@ class TrappedResonance(_Objective):
         ]
         all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
 
+        # An analytic Omega'(s) needs the radial derivative of every
+        # per-surface quantity seeded onto the eta grid; without it the seed
+        # would look constant in rho and the derivative would come out wrong.
+        _p = _parse_parameterization(eq)
+        tangent_keys = _tangent_keys(_p, eta_data_keys) if analytic else {}
+        if analytic:
+            extra = list(tangent_keys.values())
+            if eq.pressure is None:
+                # _p_rr then builds d²p/dρ² out of the kinetic profiles.
+                extra += ["ne_rr", "ni_rr", "Te_rr", "Ti_rr"]
+            all_needed_keys = list(set(all_needed_keys + extra))
+
         # Pre-compute all transitive dependencies on the base grid (which has
         # spacing for surface integrals).  This gives us 1D intermediates like
         # iota_den, iota_num, Psi, etc. that the 3D grids cannot compute.
@@ -525,25 +669,54 @@ class TrappedResonance(_Objective):
 
         # Seed only per-surface (coordinates="r") quantities onto the 3D grids.
         # 3D quantities will be recomputed with proper angular resolution.
-        _p = _parse_parameterization(eq)
         seed_1d = {}
         for key, val in base_data.items():
             entry = data_index.get(_p, {}).get(key, None)
             if entry is not None and entry.get("coordinates", "") == "r":
                 seed_1d[key] = val
 
-        eta_seed = {
-            key: eta_desc_grid.copy_data_from_other(val, base_grid)
-            for key, val in seed_1d.items()
-        }
-        data_eta = compute_fun(
-            eq,
-            eta_data_keys,
-            params,
-            get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
-            internal_profiles,
-            data=eta_seed,
+        seed_dot = (
+            _seed_tangents(
+                params, internal_profiles, base_grid, base_data, seed_1d, tangent_keys
+            )
+            if analytic
+            else None
         )
+
+        def _eta_data(t):
+            """Field line data on the eta grid, with rho displaced by ``t``.
+
+            Written as a function of a radial displacement so that its forward
+            mode derivative at ``t = 0`` is d/dρ at fixed eta and zeta. It is
+            eta, not alpha, that is held fixed: alpha follows rho through iota,
+            exactly as it does when Omega is instead finite differenced across
+            neighbouring surfaces.
+            """
+            iotas_t = iotas + t * iotas_r
+            alpha_t = eta_vals[None, :] * (N * nfp - iotas_t[:, None] * M) / nfp
+            grid_t = _build_eta_grid(eq, rhos + t, alpha_t, zeta, iotas_t, params)
+            seed_t = (
+                seed_1d
+                if seed_dot is None
+                else {key: val + t * seed_dot[key] for key, val in seed_1d.items()}
+            )
+            eta_seed = {
+                key: grid_t.copy_data_from_other(val, base_grid)
+                for key, val in seed_t.items()
+            }
+            return compute_fun(
+                eq,
+                eta_data_keys,
+                params,
+                get_transforms(eta_data_keys, eq, grid_t, jitable=True),
+                internal_profiles,
+                data=eta_seed,
+            )
+
+        if analytic:
+            data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
+        else:
+            data_eta, data_eta_r = _eta_data(0.0), None
 
         psa_seed = {
             key: psa_desc_grid.copy_data_from_other(val, base_grid)
@@ -571,6 +744,7 @@ class TrappedResonance(_Objective):
             _eta_grid=eta_grid,
             _psa_grid=psa_grid,
             _data_eta=data_eta,
+            _data_eta_r=data_eta_r,
             _data_psa=data_psa,
             **quad2,
             **self._hyperparameters,

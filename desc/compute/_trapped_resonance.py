@@ -2,7 +2,7 @@
 
 from quadax import simpson
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.grid import Grid
 
 from ..batching import batch_map
@@ -36,10 +36,13 @@ def _masked_sum(x, mask, axis=None):
     return jnp.sum(jnp.where(mask, x, jnp.zeros_like(x)), axis=axis)
 
 
-def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
-    """Build a DESC grid with per-rho alpha values derived from uniform eta."""
-    from desc.equilibrium.coords import map_coordinates
+def _build_eta_source_grid(rhos, alpha_per_rho, zeta):
+    """Build the (rho, alpha, zeta) grid with alpha derived from uniform eta.
 
+    This is the field line following grid that ``Bounce1D`` integrates along.
+    It is built from array arithmetic alone, unlike the (rho, theta, zeta)
+    grid of ``_build_eta_grid``, which needs a coordinate map.
+    """
     num_rho = len(rhos)
     num_eta = alpha_per_rho.shape[1]
     num_zeta = len(zeta)
@@ -64,7 +67,7 @@ def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
     inverse_poloidal_idx = jnp.tile(jnp.arange(num_eta), num_rho * num_zeta)
     inverse_zeta_idx = jnp.repeat(jnp.arange(num_zeta), num_rho * num_eta)
 
-    raz_grid = Grid(
+    return Grid(
         nodes=raz_nodes,
         coordinates="raz",
         period=(jnp.inf, jnp.inf, jnp.inf),
@@ -78,6 +81,13 @@ def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
         _inverse_poloidal_idx=inverse_poloidal_idx,
         _inverse_zeta_idx=inverse_zeta_idx,
     )
+
+
+def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
+    """Build a DESC grid with per-rho alpha values derived from uniform eta."""
+    from desc.equilibrium.coords import map_coordinates
+
+    raz_grid = _build_eta_source_grid(rhos, alpha_per_rho, zeta)
 
     iota_expanded = raz_grid.expand(jnp.atleast_1d(jnp.asarray(iotas)))
     rtz_nodes = map_coordinates(
@@ -96,8 +106,8 @@ def _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params):
         source_grid=raz_grid,
         sort=False,
         jitable=True,
-        _unique_rho_idx=unique_rho_idx,
-        _inverse_rho_idx=inverse_rho_idx,
+        _unique_rho_idx=raz_grid.unique_rho_idx,
+        _inverse_rho_idx=raz_grid.inverse_rho_idx,
     )
 
 
@@ -267,6 +277,115 @@ def _alpha_drift_integrand(data, B, pitch):
     )
 
 
+# Alpha particle (⁴He nucleus) constants, used to turn bounce-averaged
+# drifts into physical frequencies.
+_M_ALPHA = 6.6446573450e-27  # mass, kg
+_E_CHARGE = 1.602e-19  # elementary charge, C
+_Z_ALPHA = 2  # charge number
+# 3.5 MeV, the birth energy of alpha particles from D-T fusion.
+_E_BIRTH = 5.6076e-13  # J
+
+# Field line data the bounce stage reads. ``_ETA_BOUNCE_KEYS`` is exactly the
+# set of eta grid quantities whose radial derivatives determine ∂Ω/∂ρ.
+_BOUNCE_INTEGRAND_KEYS = ("cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)")
+_ETA_BOUNCE_KEYS = tuple(Bounce1D.required_names) + _BOUNCE_INTEGRAND_KEYS
+
+
+def _global_pitch_quad(base_grid, data, num_pitch, pitch_invs):
+    """Pitch grid shared by every flux surface.
+
+    Built from the base grid's min/max |B|, which comes from the equilibrium's
+    full Fourier resolution and so does not move with ``num_transit``.
+
+    Returns
+    -------
+    pitch_inv, pitch_inv_weight : tuple[jnp.ndarray]
+        ``pitch_inv_weight`` is ``None`` when ``pitch_invs`` was supplied, in
+        which case ``_compute1D`` falls back to uniform weights.
+
+    """
+    if pitch_invs is not None:
+        return pitch_invs, None
+    B_min = jnp.min(base_grid.compress(data["min_tz |B|"]))
+    B_max = jnp.max(base_grid.compress(data["max_tz |B|"]))
+    pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        jnp.array([B_min]), jnp.array([B_max]), num_pitch, simp=True
+    )
+    return pitch_inv[0], weight[0]
+
+
+def _frequencies(
+    alpha_drift_out, s_drift_out, vtau_out, iotas, KE_frac, nfp, M, N, fill_value
+):
+    """Turn bounce-averaged drifts into frequencies and precession Omega.
+
+    Parameters
+    ----------
+    alpha_drift_out, s_drift_out : jnp.ndarray
+        Shape (rho, alpha, Bcrit, well).
+        Bounce-averaged poloidal and radial drift, before energy scaling.
+    vtau_out : jnp.ndarray
+        Shape (rho, alpha, Bcrit, well).
+        Bounce integral of v·τ.
+    iotas : jnp.ndarray, shape (rho,)
+        Rotational transform per surface.
+    KE_frac : float
+        Fraction of the 3.5 MeV D-T fusion alpha-particle birth energy to use
+        for the energetic particle kinetic energy.
+    nfp : int
+        Number of field periods.
+    M, N : int
+        Generalized omnigenous helicity.
+    fill_value : float
+        Value bounce integration outputs take when no well is found.
+
+    Returns
+    -------
+    dict
+        ``Omega`` plus the intermediates it is built from. ``valid`` is
+        ``True`` where a trapped particle exists at every alpha and ``Omega``
+        is defined.
+
+    """
+    KE = KE_frac * _E_BIRTH
+    v2 = 2 * KE / _M_ALPHA
+
+    # Bounce-averaged drifts → physical frequencies
+    alpha_drift = alpha_drift_out * KE / (_Z_ALPHA * _E_CHARGE)
+    iotas_omega = jnp.broadcast_to(iotas[..., None, None, None], alpha_drift.shape)
+    eta_drift = safediv(nfp * alpha_drift, N * nfp - iotas_omega * M, fill=fill_value)
+
+    s_drift = s_drift_out * KE / (_Z_ALPHA * _E_CHARGE)
+    tau_bounce = vtau_out / jnp.sqrt(v2)
+    omega_bounce = safediv(2 * jnp.pi, tau_bounce, fill=fill_value)
+
+    # Require particle to be trapped at all alpha/eta values for a given
+    # (rho, pitch, well).
+    all_alpha_valid = (_is_valid_value(omega_bounce, fill_value)).all(
+        axis=1
+    )  # (rho, pitch, well)
+
+    # Alpha-averaged frequencies → normalized precession Omega
+    omega_bounce_avg = _jnpmean_nz(omega_bounce, axis=1, fill=fill_value)
+    eta_drift_avg = _jnpmean_nz(eta_drift, axis=1, fill=fill_value)
+    Omega = safediv(eta_drift_avg, omega_bounce_avg, fill=fill_value)
+    valid = (
+        _is_valid_value(eta_drift_avg, fill_value)
+        & _is_valid_value(omega_bounce_avg, fill_value)
+        & all_alpha_valid
+    )
+    return {
+        "Omega": jnp.where(valid, Omega, fill_value),
+        "valid": valid,
+        "omega_bounce_avg": omega_bounce_avg,
+        "eta_drift_avg": eta_drift_avg,
+        "omega_bounce": omega_bounce,
+        "eta_drift": eta_drift,
+        "tau_bounce": tau_bounce,
+        "s_drift": s_drift,
+    }
+
+
 _bounce1D_doc = {
     "num_quad": _bounce_doc["num_quad"],
     "num_pitch": _bounce_doc["num_pitch"],
@@ -374,6 +493,18 @@ _resonance_doc = {
         ``TrappedResonance.compute``. This private parameter is intended to
         be used only by developers for objectives.
         """,
+    "Omega_prime_method": """str :
+        ``"fd"`` estimates Ω'(s) by finite differences across the surfaces of
+        the radial grid. ``"analytic"`` instead differentiates the bounce
+        integrals with respect to rho directly, using ``_data_eta_r``.
+        """,
+    "_data_eta_r": """dict[str, jnp.ndarray] or None :
+        Radial derivatives, at fixed eta and zeta, of the field data in
+        ``_data_eta``, built by ``TrappedResonance.compute``. Only the keys in
+        ``_ETA_BOUNCE_KEYS`` are read. If given, Ω'(s) is computed
+        analytically instead of by finite differences. This private parameter
+        is intended to be used only by developers for objectives.
+        """,
     "_data_psa": """dict[str, jnp.ndarray] :
         Field data evaluated on ``_psa_grid``, built by
         ``TrappedResonance.compute``. This private parameter is intended to
@@ -476,6 +607,7 @@ def _resonance_physics(
     fill_value,
     stab_sacrifice,
     cropping_DOmega=False,
+    dOmega_drho=None,
 ):
     """Compute resonance frequencies, weights, island widths, and f_res.
 
@@ -528,6 +660,13 @@ def _resonance_physics(
         This must be when using the ``bump`` weighting method and
         ``Delta_Omega = None`` case. Otherwise this quantity is ignored.
         Defaults to ``False``.
+    dOmega_drho : jnp.ndarray or None
+        Shape (rho, pitch, well).
+        Analytic ∂Ω/∂ρ at fixed λ and η. If ``None``, ∂Ω/∂ρ is instead
+        estimated by finite differences across the surfaces of ``rhos``, which
+        needs both neighbours of a surface to be valid and is only as accurate
+        as ``rho_res`` allows.
+        Defaults to ``None``.
 
     Returns
     -------
@@ -559,8 +698,8 @@ def _resonance_physics(
             Eta precession frequency ω_η per field line, before
             alpha-averaging.
         Omega_prime_s : jnp.ndarray, shape (rho, pitch, well)
-            Radial derivative dOmega/ds, where s = rho², via finite
-            differences in rho.
+            Radial derivative dOmega/ds, where s = rho², from ``dOmega_drho``
+            if given and otherwise from finite differences in rho.
         res_weight : jnp.ndarray, shape (rho, pitch, well, res)
             Weight assigning each (rho, pitch, well) to each resonance in
             ``res_arr``, via 2-point linear interpolation or a smooth bump
@@ -579,76 +718,56 @@ def _resonance_physics(
             Boolean mask, ``True`` where a trapped particle exists at all
             alpha/eta and both ``Omega`` and ``Omega_prime_s`` are defined.
     """
-    m_alpha = 6.6446573450e-27  # alpha particle (⁴He nucleus) mass, kg
-    e_charge = 1.602e-19  # elementary charge, C
-    Z = 2  # alpha particle charge number
-    # 5.6076e-13 J = 3.5 MeV, the birth energy of alpha particles from D-T
-    # fusion; KE_frac is the fraction of that birth energy being considered.
-    KE = KE_frac * 5.6076e-13
-    v2 = 2 * KE / m_alpha
+    freq = _frequencies(
+        alpha_drift_out, s_drift_out, vtau_out, iotas, KE_frac, nfp, M, N, fill_value
+    )
+    Omega = freq["Omega"]
+    valid = freq["valid"]
+    omega_bounce_avg = freq["omega_bounce_avg"]
+    eta_drift_avg = freq["eta_drift_avg"]
+    omega_bounce = freq["omega_bounce"]
+    eta_drift = freq["eta_drift"]
+    tau_bounce = freq["tau_bounce"]
+    s_drift = freq["s_drift"]
 
-    # Bounce-averaged drifts → physical frequencies
-    alpha_drift = alpha_drift_out * KE / (Z * e_charge)
-    ado_shape = alpha_drift.shape
-    iotas_omega = jnp.broadcast_to(
-        iotas[..., None, None, None],
-        (iotas.shape[0], ado_shape[1], ado_shape[2], ado_shape[3]),
-    )
-    eta_drift = safediv(nfp * alpha_drift, N * nfp - iotas_omega * M, fill=fill_value)
-
-    s_drift = s_drift_out * KE / (Z * e_charge)
-    tau_bounce = vtau_out / jnp.sqrt(v2)
-    omega_bounce = safediv(2 * jnp.pi, tau_bounce, fill=fill_value)
-
-    # Require particle to be trapped at all alpha/eta values for a given
-    # (rho, pitch, well).
-    all_alpha_valid = (_is_valid_value(omega_bounce, fill_value)).all(
-        axis=1
-    )  # (rho, pitch, well)
-
-    # Alpha-averaged frequencies → normalized precession Omega
-    omega_bounce_avg = _jnpmean_nz(omega_bounce, axis=1, fill=fill_value)
-    eta_drift_avg = _jnpmean_nz(eta_drift, axis=1, fill=fill_value)
-    Omega = safediv(eta_drift_avg, omega_bounce_avg, fill=fill_value)
-    valid = (
-        _is_valid_value(eta_drift_avg, fill_value)
-        & _is_valid_value(omega_bounce_avg, fill_value)
-        & all_alpha_valid
-    )
-    Omega = jnp.where(valid, Omega, fill_value)
-
-    # Omega'(s) via finite differences
-    # Use "double-where" to replace invalid Omega with 0 before arithmetic,
-    # preventing NaN gradients from flowing through unused jnp.where branches.
-    Omega_safe = jnp.where(valid, Omega, 0.0)
-    valid_prev = jnp.concatenate(
-        [jnp.zeros((1,) + valid.shape[1:], dtype=bool), valid[:-1]], axis=0
-    )
-    valid_next = jnp.concatenate(
-        [valid[1:], jnp.zeros((1,) + valid.shape[1:], dtype=bool)], axis=0
-    )
-    Omega_prev_safe = jnp.concatenate(
-        [jnp.zeros((1,) + Omega.shape[1:]), Omega_safe[:-1]], axis=0
-    )
-    Omega_next_safe = jnp.concatenate(
-        [Omega_safe[1:], jnp.zeros((1,) + Omega.shape[1:])], axis=0
-    )
-    grad_central = (Omega_next_safe - Omega_prev_safe) / (2 * rho_res)
-    grad_forward = (Omega_next_safe - Omega_safe) / rho_res
-    grad_backward = (Omega_safe - Omega_prev_safe) / rho_res
-    dOmega_drho = jnp.where(
-        valid & valid_prev & valid_next,
-        grad_central,
-        jnp.where(
-            valid & valid_next & ~valid_prev,
-            grad_forward,
+    if dOmega_drho is None:
+        # Omega'(s) via finite differences
+        # Use "double-where" to replace invalid Omega with 0 before arithmetic,
+        # preventing NaN gradients from flowing through unused jnp.where branches.
+        Omega_safe = jnp.where(valid, Omega, 0.0)
+        valid_prev = jnp.concatenate(
+            [jnp.zeros((1,) + valid.shape[1:], dtype=bool), valid[:-1]], axis=0
+        )
+        valid_next = jnp.concatenate(
+            [valid[1:], jnp.zeros((1,) + valid.shape[1:], dtype=bool)], axis=0
+        )
+        Omega_prev_safe = jnp.concatenate(
+            [jnp.zeros((1,) + Omega.shape[1:]), Omega_safe[:-1]], axis=0
+        )
+        Omega_next_safe = jnp.concatenate(
+            [Omega_safe[1:], jnp.zeros((1,) + Omega.shape[1:])], axis=0
+        )
+        grad_central = (Omega_next_safe - Omega_prev_safe) / (2 * rho_res)
+        grad_forward = (Omega_next_safe - Omega_safe) / rho_res
+        grad_backward = (Omega_safe - Omega_prev_safe) / rho_res
+        dOmega_drho = jnp.where(
+            valid & valid_prev & valid_next,
+            grad_central,
             jnp.where(
-                valid & valid_prev & ~valid_next,
-                grad_backward,
-                fill_value,
+                valid & valid_next & ~valid_prev,
+                grad_forward,
+                jnp.where(
+                    valid & valid_prev & ~valid_next,
+                    grad_backward,
+                    fill_value,
+                ),
             ),
-        ),
-    )
+        )
+    else:
+        # Analytic ∂Ω/∂ρ needs no neighbouring surface, so it is defined
+        # wherever Omega itself is.
+        dOmega_drho = jnp.where(valid, dOmega_drho, fill_value)
+
     Omega_prime_s = safediv(dOmega_drho, 2 * rhos[:, None, None], fill=fill_value)
     Omega_prime_s = jnp.where(
         _is_valid_value(dOmega_drho, fill_value), Omega_prime_s, fill_value
@@ -817,7 +936,7 @@ def _resonance_physics(
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota", "min_tz |B|", "max_tz |B|", "Psi", "V_psi"],
+    data=["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi", "V_psi"],
     grid_requirement={"is_meshgrid": True},
     public=False,
     **_bounce1D_doc,
@@ -877,31 +996,22 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     vander = kwargs.get("_vander", None)
 
     nufft_eps = kwargs.get("nufft_eps", 1e-10)
+    data_eta_r = kwargs.get("_data_eta_r", None)
+    if kwargs.get("Omega_prime_method", "fd") != "analytic":
+        data_eta_r = None
 
     base_grid = transforms["grid"]
     iotas = base_grid.compress(data["iota"])
+    iotas_r = base_grid.compress(data["iota_r"])
     rhos = base_grid.compress(base_grid.nodes[:, 0])
     eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
 
     # --- 1. Bounce integrals on the eta grid ---
-    # Build a global pitch grid from the base grid's min/max |B|, which is
-    # computed from the equilibrium's full Fourier resolution and is independent
-    # of num_transit.
-    if pitch_invs is None:
-        B_min_base = base_grid.compress(data["min_tz |B|"])  # (num_rho,)
-        B_max_base = base_grid.compress(data["max_tz |B|"])  # (num_rho,)
-        B_min_scalar = jnp.min(B_min_base)
-        B_max_scalar = jnp.max(B_max_base)
-        p_global, w_global = Bounce1D.get_pitch_inv_quad(
-            jnp.array([B_min_scalar]), jnp.array([B_max_scalar]), num_pitch, simp=True
-        )
-        pitch_invs_use = p_global[0]
-        pitch_inv_weight_use = w_global[0]
-    else:
-        pitch_invs_use = pitch_invs
-        pitch_inv_weight_use = None
+    pitch_invs_use, pitch_inv_weight_use = _global_pitch_quad(
+        base_grid, data, num_pitch, pitch_invs
+    )
 
-    drift_names = ["cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)"]
+    drift_names = list(_BOUNCE_INTEGRAND_KEYS)
 
     if use_bounce1d:
 
@@ -917,18 +1027,64 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
             )
             _alpha_drift = safediv(_alpha_drift, v_tau)
             _s_drift = 4 * safediv(_s_drift, v_tau)
-            return _alpha_drift, _s_drift, points, v_tau, data_in
+            return _alpha_drift, _s_drift, points, v_tau, data_in["pitch_inv"]
 
-        alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute1D(
-            drifts,
-            {name: data_eta[name] for name in drift_names},
-            data_eta,
-            eta_grid,
-            num_pitch,
-            surf_batch_size,
-            pitch_invs=pitch_invs_use,
-            pitch_inv_weight=pitch_inv_weight_use,
-        )
+        def bounce_and_omega(data_in, iotas_in):
+            """Bounce integrals and Omega, as a function of the field line data.
+
+            Kept as its own function so that pushing the radial derivatives of
+            the field line data through it in forward mode gives the exact
+            ∂Ω/∂ρ. The pitch grid is closed over rather than passed in, so that
+            derivative is taken at fixed λ, as the resonance condition requires.
+            """
+            _alpha_drift, _s_drift, _points, _v_tau, _pitch_inv = _compute1D(
+                drifts,
+                {name: data_in[name] for name in drift_names},
+                data_in,
+                eta_grid,
+                num_pitch,
+                surf_batch_size,
+                pitch_invs=pitch_invs_use,
+                pitch_inv_weight=pitch_inv_weight_use,
+            )
+            _Omega = _frequencies(
+                _alpha_drift,
+                _s_drift,
+                _v_tau,
+                iotas_in,
+                KE_frac,
+                nfp,
+                M,
+                N,
+                fill_value,
+            )["Omega"]
+            return (
+                _alpha_drift,
+                _s_drift,
+                _points[0],
+                _points[1],
+                _v_tau,
+                _pitch_inv,
+                _Omega,
+            )
+
+        eta_bounce_data = {name: data_eta[name] for name in _ETA_BOUNCE_KEYS}
+        if data_eta_r is None:
+            bounce_out = bounce_and_omega(eta_bounce_data, iotas)
+            dOmega_drho = None
+        else:
+            # ∂Ω/∂ρ at fixed λ and η, from the radial derivatives of the field
+            # line data. Forward mode differentiates the bounce points along
+            # with the quadrature, so the endpoint motion is accounted for
+            # exactly.
+            bounce_out, bounce_dot = jax.jvp(
+                bounce_and_omega,
+                (eta_bounce_data, iotas),
+                ({name: data_eta_r[name] for name in _ETA_BOUNCE_KEYS}, iotas_r),
+            )
+            dOmega_drho = bounce_dot[-1]
+        alpha_drift_out, s_drift_out, z1, z2, vtau_out, pitch_inv_out = bounce_out[:-1]
+        points = (z1, z2)
     else:
         # eta -> alpha, which differs between flux surfaces because it depends
         # on iota. Carried with rho leading so ``batch_map`` slices it with the
@@ -976,6 +1132,10 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
             pitch_invs=pitch_invs_use,
             pitch_inv_weight=pitch_inv_weight_use,
         )
+        pitch_inv_out = _data["pitch_inv"]
+        # Only the Bounce1D path can produce an analytic ∂Ω/∂ρ. The objective
+        # rejects the combination before we reach here, so this is a floor.
+        dOmega_drho = None
 
     # --- 1b. Barely-trapped filter ---
     # Zero out wells whose poloidal bounce width delta_chi > 2*pi.
@@ -1011,6 +1171,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
         fill_value,
         stab_sacrifice,
         cropping_DOmega,
+        dOmega_drho,
     )
 
     # --- 3. Phase-space average on the PSA grid (uniform in alpha) ---
@@ -1129,7 +1290,7 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
         # just return the raw resonance physics results
         data["trapped EP resonance"] = {
             **res,
-            "pitch_inv": _data["pitch_inv"],
+            "pitch_inv": pitch_inv_out,
             "res_arr": res_arr,
             "p_arr": p_arr,
             "q_arr": q_arr,

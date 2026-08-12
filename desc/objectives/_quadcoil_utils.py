@@ -340,6 +340,8 @@ def _create_source(eq, source_grid, eval_grid):
 def _quadcoil_kwargs_to_field_kwargs(  # noqa: C901
     quadcoil_kwargs, quadcoil_dofs, sym_default, target_type, verbose, flip_phi=False
 ):
+    # This helper function converts information in a quadcoil object into
+    # a kwargs for DESC FourierCurrentPotentialField.
     # Importing QUADCOIL
     try:
         from quadcoil import QuadcoilParams

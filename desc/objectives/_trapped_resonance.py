@@ -1,6 +1,7 @@
 """Objectives for trapped energetic particle resonance."""
 
 import numpy as np
+from interpax_fft import cheb_pts, fourier_pts
 from orthax.legendre import leggauss
 
 from desc.backend import jnp
@@ -13,7 +14,6 @@ from desc.grid import LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, get_vander_spline
 from desc.integrals.bounce_integral import Bounce1D, Bounce2D
 from desc.utils import Timer, errorif
-from interpax_fft import cheb_pts, fourier_pts
 
 from ..integrals.quad_utils import (
     automorphism_sin,

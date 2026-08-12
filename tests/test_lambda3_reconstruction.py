@@ -62,8 +62,6 @@ def test_lambda3_au_diag_reconstruction_matches_full_path(dtype):
     n_total = 23
 
     rho_idx = slice(0, n_total)
-    theta_idx = slice(n_total, 2 * n_total)
-    zeta_idx = slice(2 * n_total, 3 * n_total)
 
     au_raw = rng.normal(size=n_total)
     d = 0.5 + rng.random(3 * n_total)
@@ -145,8 +143,7 @@ def test_lambda3_xi_reconstruction_matches_linvt_full_path():
 
     xi_full_new = np.concatenate(
         [
-            d[rho_idx]
-            * (linv[:, 0, 0] * vr + linv[:, 1, 0] * vv + linv[:, 2, 0] * vz),
+            d[rho_idx] * (linv[:, 0, 0] * vr + linv[:, 1, 0] * vv + linv[:, 2, 0] * vz),
             d[theta_idx] * (linv[:, 1, 1] * vv + linv[:, 2, 1] * vz),
             d[zeta_idx] * (linv[:, 2, 2] * vz),
         ]

@@ -1,6 +1,7 @@
 """AGNI finite-n stability tests.
 
-Ground truth for all tests: ``finite-n lambda`` (dense Cholesky-transformed eigensolver).
+Ground truth for all tests: ``finite-n lambda`` using the dense Cholesky-transformed
+eigensolver.
 
 test_lambda31       — finite-n lambda31 (psi_r-rescaled tangential variables) eigenvalue
                       and eigenfunction match finite-n lambda.  lambda31 can be removed
@@ -21,6 +22,7 @@ Set AGNI_EQ_PATH to override the equilibrium file.
 
 import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -55,72 +57,87 @@ def _load_old_equilibrium(path):
 # ---------------------------------------------------------------------------
 
 _RES = os.environ.get("AGNI_TEST_RES", "12,14,15")
-_N_RHO, _N_THETA, _N_ZETA = [int(v) for v in _RES.split(",")]
+_N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 
-_EQ = _load_old_equilibrium(
+_EQ_PATH = Path(
     os.environ.get(
         "AGNI_EQ_PATH",
-        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/qh_beta1.5_imin1.02_modprof_221410.h5",
+        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/"
+        "qh_beta1.5_imin1.02_modprof_221410.h5",
     )
 )
+_AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {_EQ_PATH}"
+pytestmark = pytest.mark.skipif(not _EQ_PATH.is_file(), reason=_AGNI_SKIP_REASON)
 
-# Radial quadrature: Gauss-Lobatto nodes mapped through staircase automorphism
-_x_lob, _ = leggauss_lob(_N_RHO)
-_rho = automorphism_staircase1(_x_lob, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
+if _EQ_PATH.is_file():
+    _EQ = _load_old_equilibrium(str(_EQ_PATH))
 
-# Jacobian of the automorphism — needed for chain-rule correction to D and W
-_d_automorphism = jax.vmap(
-    lambda x: jax.grad(automorphism_staircase1, argnums=0)(
-        x, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0
+    # Radial quadrature: Gauss-Lobatto nodes mapped through staircase automorphism
+    _x_lob, _ = leggauss_lob(_N_RHO)
+    _rho = automorphism_staircase1(_x_lob, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
+
+    # Jacobian of the automorphism — needed for chain-rule correction to D and W
+    _d_automorphism = jax.vmap(
+        lambda x: jax.grad(automorphism_staircase1, argnums=0)(
+            x, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0
+        )
+    )(
+        _x_lob
+    )  # shape (N_RHO,)
+
+    _d_rho_raw, _w_rho_raw = legendre_diffmat(_N_RHO)
+    _d_rho = _d_rho_raw / _d_automorphism[:, None]
+    _w_rho = _w_rho_raw * _d_automorphism[:, None]
+
+    _theta = jnp.linspace(0.0, 2.0 * jnp.pi, _N_THETA, endpoint=False)
+    _d_theta, _w_theta = fourier_diffmat(_N_THETA)
+
+    _zeta = jnp.linspace(0.0, 2.0 * jnp.pi / _EQ.NFP, _N_ZETA, endpoint=False)
+    _d_zeta, _w_zeta = fourier_diffmat(_N_ZETA)
+    _d_zeta = _d_zeta * _EQ.NFP  # toroidal periodicity
+    _w_zeta = _w_zeta / _EQ.NFP
+
+    _DIFFMAT = DiffMat(
+        D_rho=_d_rho,
+        W_rho=jnp.diagonal(_w_rho),
+        D_theta=_d_theta,
+        W_theta=jnp.diagonal(_w_theta),
+        D_zeta=_d_zeta,
+        W_zeta=jnp.diagonal(_w_zeta),
     )
-)(_x_lob)  # shape (N_RHO,)
 
-_d_rho_raw, _w_rho_raw = legendre_diffmat(_N_RHO)
-_d_rho = _d_rho_raw / _d_automorphism[:, None]   # chain rule: D_rho = D_x / (dx/dρ)
-_w_rho = _w_rho_raw * _d_automorphism[:, None]   # weight correction
+    # Map PEST coordinates to DESC straight-field-line coordinates
+    _grid0 = LinearGrid(rho=_rho, theta=_theta, zeta=_zeta, NFP=1, sym=False)
+    _rtz_nodes = _EQ.map_coordinates(
+        jnp.reshape(_grid0.meshgrid_reshape(_grid0.nodes, order="rtz"), (-1, 3)),
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+        tol=1e-6,  # 1e-12 is overkill for tests and very slow on CPU
+        maxiter=20,
+    )
+    _GRID = Grid(_rtz_nodes)
 
-_theta = jnp.linspace(0.0, 2.0 * jnp.pi, _N_THETA, endpoint=False)
-_d_theta, _w_theta = fourier_diffmat(_N_THETA)
+    _N = _N_RHO * _N_THETA * _N_ZETA  # total grid points
+    _N_SHELL = _N_THETA * _N_ZETA  # one theta-zeta shell
+    _N_KEEP = 3 * _N - 2 * _N_SHELL  # DOFs after xi^rho Dirichlet BCs
 
-_zeta = jnp.linspace(0.0, 2.0 * jnp.pi / _EQ.NFP, _N_ZETA, endpoint=False)
-_d_zeta, _w_zeta = fourier_diffmat(_N_ZETA)
-_d_zeta = _d_zeta * _EQ.NFP    # toroidal periodicity
-_w_zeta = _w_zeta / _EQ.NFP
+    # Common kwargs for every eq.compute call in this file
+    _KW = dict(
+        grid=_GRID,
+        diffmat=_DIFFMAT,
+        incompressible=False,
+        gamma=5.0 / 3.0,
+        v_guess=np.ones(_N_KEEP),
+    )
 
-_DIFFMAT = DiffMat(
-    D_rho=_d_rho,    W_rho=jnp.diagonal(_w_rho),
-    D_theta=_d_theta, W_theta=jnp.diagonal(_w_theta),
-    D_zeta=_d_zeta,   W_zeta=jnp.diagonal(_w_zeta),
-)
-
-# Map PEST coordinates to DESC straight-field-line coordinates
-_grid0 = LinearGrid(rho=_rho, theta=_theta, zeta=_zeta, NFP=1, sym=False)
-_rtz_nodes = _EQ.map_coordinates(
-    jnp.reshape(_grid0.meshgrid_reshape(_grid0.nodes, order="rtz"), (-1, 3)),
-    inbasis=("rho", "theta_PEST", "zeta"),
-    outbasis=("rho", "theta", "zeta"),
-    period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-    tol=1e-6,   # 1e-12 is overkill for tests and very slow on CPU
-    maxiter=20,
-)
-_GRID = Grid(_rtz_nodes)
-
-_N = _N_RHO * _N_THETA * _N_ZETA           # total grid points
-_N_SHELL = _N_THETA * _N_ZETA              # one theta-zeta shell
-_N_KEEP = 3 * _N - 2 * _N_SHELL           # DOFs after xi^rho Dirichlet BCs
-
-# Common kwargs for every eq.compute call in this file
-_KW = dict(
-    grid=_GRID,
-    diffmat=_DIFFMAT,
-    incompressible=False,
-    gamma=5.0 / 3.0,
-    v_guess=np.ones(_N_KEEP),
-)
-
-# Compute ground-truth results once and share across all tests
-_LAM  = _EQ.compute("finite-n lambda",  **_KW)
-_LAM3 = _EQ.compute("finite-n lambda3", **_KW)
+    # Compute ground-truth results once and share across all tests
+    _LAM = _EQ.compute("finite-n lambda", **_KW)
+    _LAM3 = _EQ.compute("finite-n lambda3", **_KW)
+else:
+    _EQ = _GRID = _DIFFMAT = _LAM = _LAM3 = None
+    _N = _N_SHELL = _N_KEEP = 0
+    _KW = {}
 
 
 # ---------------------------------------------------------------------------
@@ -141,17 +158,19 @@ def test_lambda31():
     Inverse of the rescaling (see _AGNI31 docstring):
         xi^rho   = xr               (not rescaled)
         xi^zeta  = xz * psi_r_norm  (xz is the scaled xi^zeta_s)
-        xi^theta = (xv + xz) * psi_r_norm  (xv is scaled upsilon_s = (xi^theta-xi^zeta)/psi_r)
+        xi^theta = (xv + xz) * psi_r_norm
+                   (xv is scaled upsilon_s = (xi^theta-xi^zeta)/psi_r)
 
     Also checks that xi^rho vanishes at the inner and outer radial boundaries.
     """
-    lam   = _LAM
+    lam = _LAM
     lam31 = _EQ.compute("finite-n lambda31", **_KW)
 
-    lam_val   = float(np.asarray(lam["finite-n lambda"])[0])
+    lam_val = float(np.asarray(lam["finite-n lambda"])[0])
     lam31_val = float(np.asarray(lam31["finite-n lambda31"])[0])
+    reldiff = abs(lam31_val - lam_val) / (abs(lam_val) + 1e-300)
     print(f"\n  lambda   = {lam_val:.6e}")
-    print(f"  lambda31 = {lam31_val:.6e}  (reldiff={abs(lam31_val-lam_val)/(abs(lam_val)+1e-300):.2e})")
+    print(f"  lambda31 = {lam31_val:.6e}  (reldiff={reldiff:.2e})")
 
     np.testing.assert_allclose(
         np.asarray(lam31["finite-n lambda31"]),
@@ -167,16 +186,16 @@ def test_lambda31():
     psi_r_norm = np.asarray(eq_scalars["psi_r"]) / (a_N**2 * B_N)  # shape (_N,)
 
     xi31 = np.asarray(lam31["finite-n xi"])
-    xi31_rho  = xi31[:_N]
-    xi31_ups_s = xi31[_N : 2 * _N]   # upsilon / psi_r
-    xi31_zeta_s = xi31[2 * _N :]     # xi^zeta / psi_r
+    xi31_rho = xi31[:_N]
+    xi31_ups_s = xi31[_N : 2 * _N]  # upsilon / psi_r
+    xi31_zeta_s = xi31[2 * _N :]  # xi^zeta / psi_r
 
     # Invert psi_r rescaling to get physical (rho, theta, zeta) components
-    xi31_zeta  = xi31_zeta_s * psi_r_norm
+    xi31_zeta = xi31_zeta_s * psi_r_norm
     xi31_theta = (xi31_ups_s + xi31_zeta_s) * psi_r_norm
-    xi31_rtz   = np.concatenate([xi31_rho, xi31_theta, xi31_zeta])
+    xi31_rtz = np.concatenate([xi31_rho, xi31_theta, xi31_zeta])
 
-    ref  = np.asarray(lam["finite-n xi"]).reshape(-1)
+    ref = np.asarray(lam["finite-n xi"]).reshape(-1)
     cand = xi31_rtz.reshape(-1)
     # Align global sign and amplitude before comparing shapes
     phase = np.vdot(cand, ref)
@@ -189,7 +208,7 @@ def test_lambda31():
 
     # xi^rho must be zero at both radial boundaries (Dirichlet BC)
     xi_rho = xi31_rho.reshape(_N_RHO, _N_THETA, _N_ZETA)
-    np.testing.assert_allclose(xi_rho[0],  0.0, atol=1e-8)
+    np.testing.assert_allclose(xi_rho[0], 0.0, atol=1e-8)
     np.testing.assert_allclose(xi_rho[-1], 0.0, atol=1e-8)
 
 
@@ -199,18 +218,20 @@ def test_lambda3():
     """finite-n lambda3 eigenvalue and eigenfunction match finite-n lambda.
 
     finite-n lambda3 uses upsilon = xi^theta - xi^zeta as an independent DOF
-    instead of xi^theta.  The inverse of this substitution is xi^theta = upsilon + xi^zeta,
-    after which the eigenvector must agree with the lambda result.
+    instead of xi^theta. The inverse of this substitution is
+    xi^theta = upsilon + xi^zeta, after which the eigenvector must agree with the
+    lambda result.
 
     Also checks that xi^rho vanishes at the inner and outer radial boundaries.
     """
-    lam  = _LAM
+    lam = _LAM
     lam3 = _LAM3
 
-    lam_val  = float(np.asarray(lam["finite-n lambda"])[0])
+    lam_val = float(np.asarray(lam["finite-n lambda"])[0])
     lam3_val = float(np.asarray(lam3["finite-n lambda3"])[0])
+    reldiff = abs(lam3_val - lam_val) / (abs(lam_val) + 1e-300)
     print(f"\n  lambda  = {lam_val:.6e}")
-    print(f"  lambda3 = {lam3_val:.6e}  (reldiff={abs(lam3_val-lam_val)/(abs(lam_val)+1e-300):.2e})")
+    print(f"  lambda3 = {lam3_val:.6e}  (reldiff={reldiff:.2e})")
 
     np.testing.assert_allclose(
         np.asarray(lam3["finite-n lambda3"]),
@@ -221,13 +242,13 @@ def test_lambda3():
 
     # xi3 is in (rho, upsilon, zeta) basis — recover physical (rho, theta, zeta)
     xi3 = np.asarray(lam3["finite-n xi"])
-    xi3_rho   = xi3[:_N]
-    xi3_ups   = xi3[_N : 2 * _N]
-    xi3_zeta  = xi3[2 * _N :]
-    xi3_theta = xi3_ups + xi3_zeta       # invert: upsilon = xi^theta - xi^zeta
-    xi3_rtz   = np.concatenate([xi3_rho, xi3_theta, xi3_zeta])
+    xi3_rho = xi3[:_N]
+    xi3_ups = xi3[_N : 2 * _N]
+    xi3_zeta = xi3[2 * _N :]
+    xi3_theta = xi3_ups + xi3_zeta  # invert: upsilon = xi^theta - xi^zeta
+    xi3_rtz = np.concatenate([xi3_rho, xi3_theta, xi3_zeta])
 
-    ref  = np.asarray(lam["finite-n xi"]).reshape(-1)
+    ref = np.asarray(lam["finite-n xi"]).reshape(-1)
     cand = xi3_rtz.reshape(-1)
     phase = np.vdot(cand, ref)
     if abs(phase) > 0:
@@ -239,7 +260,7 @@ def test_lambda3():
 
     # xi^rho must be zero at both radial boundaries
     xi_rho = xi3_rho.reshape(_N_RHO, _N_THETA, _N_ZETA)
-    np.testing.assert_allclose(xi_rho[0],  0.0, atol=1e-8)
+    np.testing.assert_allclose(xi_rho[0], 0.0, atol=1e-8)
     np.testing.assert_allclose(xi_rho[-1], 0.0, atol=1e-8)
 
 
@@ -271,11 +292,13 @@ def test_lambda_matfree():
         try:
             _EQ.compute(
                 "finite-n lambda matfree",
-                **{**_KW,
-                   "v_guess": v_dense,
-                   "matfree_solver": "eigsh_shiftinvert",
-                   "eigsh_tol": 1e-6,
-                   "eigsh_maxiter": 3000},
+                **{
+                    **_KW,
+                    "v_guess": v_dense,
+                    "matfree_solver": "eigsh_shiftinvert",
+                    "eigsh_tol": 1e-6,
+                    "eigsh_maxiter": 3000,
+                },
             )
         except ArpackNoConvergence:
             pass  # We only need Aop, not the matfree eigenvalue
@@ -290,11 +313,14 @@ def test_lambda_matfree():
 
     lo, hi = np.percentile(ratios, [20, 80])
     trimmed = ratios[(ratios >= lo) & (ratios <= hi)]
-    ratio_mean   = float(np.mean(trimmed))
-    ratio_spread = float(np.max(np.abs(trimmed - ratio_mean)) / (abs(ratio_mean) + 1e-12))
+    ratio_mean = float(np.mean(trimmed))
+    ratio_spread = float(
+        np.max(np.abs(trimmed - ratio_mean)) / (abs(ratio_mean) + 1e-12)
+    )
 
     print(f"\n  dense eigenvalue  = {eigenvalue:.6e}")
-    print(f"  Av/v ratio mean   = {ratio_mean:.6e}  (reldiff={abs(ratio_mean-eigenvalue)/(abs(eigenvalue)+1e-300):.2e})")
+    reldiff = abs(ratio_mean - eigenvalue) / (abs(eigenvalue) + 1e-300)
+    print(f"  Av/v ratio mean   = {ratio_mean:.6e}  (reldiff={reldiff:.2e})")
     print(f"  Av/v ratio spread = {ratio_spread:.3e}")
     assert ratio_spread < 3.5e-1, f"Av/v not constant: spread={ratio_spread:.3e}"
     np.testing.assert_allclose(ratio_mean, eigenvalue, rtol=3e-1, atol=2e-4)
@@ -324,11 +350,13 @@ def test_lambda3_matfree():
         try:
             _EQ.compute(
                 "finite-n lambda3 matfree",
-                **{**_KW,
-                   "v_guess": v_dense3,
-                   "matfree_solver": "eigsh_shiftinvert",
-                   "eigsh_tol": 1e-6,
-                   "eigsh_maxiter": 3000},
+                **{
+                    **_KW,
+                    "v_guess": v_dense3,
+                    "matfree_solver": "eigsh_shiftinvert",
+                    "eigsh_tol": 1e-6,
+                    "eigsh_maxiter": 3000,
+                },
             )
         except ArpackNoConvergence:
             pass  # We only need Aop, not the matfree eigenvalue
@@ -343,11 +371,14 @@ def test_lambda3_matfree():
 
     lo, hi = np.percentile(ratios, [20, 80])
     trimmed = ratios[(ratios >= lo) & (ratios <= hi)]
-    ratio_mean   = float(np.mean(trimmed))
-    ratio_spread = float(np.max(np.abs(trimmed - ratio_mean)) / (abs(ratio_mean) + 1e-12))
+    ratio_mean = float(np.mean(trimmed))
+    ratio_spread = float(
+        np.max(np.abs(trimmed - ratio_mean)) / (abs(ratio_mean) + 1e-12)
+    )
 
     print(f"\n  dense eigenvalue3  = {eigenvalue3:.6e}")
-    print(f"  Av/v ratio mean    = {ratio_mean:.6e}  (reldiff={abs(ratio_mean-eigenvalue3)/(abs(eigenvalue3)+1e-300):.2e})")
+    reldiff = abs(ratio_mean - eigenvalue3) / (abs(eigenvalue3) + 1e-300)
+    print(f"  Av/v ratio mean    = {ratio_mean:.6e}  (reldiff={reldiff:.2e})")
     print(f"  Av/v ratio spread  = {ratio_spread:.3e}")
     assert ratio_spread < 3.5e-1, f"Av/v not constant: spread={ratio_spread:.3e}"
     np.testing.assert_allclose(ratio_mean, eigenvalue3, rtol=3e-1, atol=2e-4)

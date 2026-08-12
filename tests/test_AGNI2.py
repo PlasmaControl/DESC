@@ -30,66 +30,75 @@ def _load_old_equilibrium(path):
 
 
 RES = os.environ.get("AGNI2_TEST_RES", "12,12,12")
-N_RHO, N_THETA, N_ZETA = [int(v.strip()) for v in RES.split(",")]
+N_RHO, N_THETA, N_ZETA = (int(v.strip()) for v in RES.split(","))
 
 EQ_PATH = Path(
     os.environ.get(
         "AGNI_EQ_PATH",
-        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/qh_beta1.5_imin1.02_modprof_221410.h5",
+        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/"
+        "qh_beta1.5_imin1.02_modprof_221410.h5",
     )
 )
-EQ = _load_old_equilibrium(str(EQ_PATH))
+AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {EQ_PATH}"
+pytestmark = pytest.mark.skipif(not EQ_PATH.is_file(), reason=AGNI_SKIP_REASON)
 
-x, _ = leggauss_lob(N_RHO)
-rho = automorphism_staircase1(x, eps=1e-2, x_0=0.7, m_1=2.0, m_2=3.0)
-dx_f = jax.vmap(
-    lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
-        x_val, eps=1e-2, x_0=0.7, m_1=2.0, m_2=3.0
+if EQ_PATH.is_file():
+    EQ = _load_old_equilibrium(str(EQ_PATH))
+
+    x, _ = leggauss_lob(N_RHO)
+    rho = automorphism_staircase1(x, eps=1e-2, x_0=0.7, m_1=2.0, m_2=3.0)
+    dx_f = jax.vmap(
+        lambda x_val: jax.grad(automorphism_staircase1, argnums=0)(
+            x_val, eps=1e-2, x_0=0.7, m_1=2.0, m_2=3.0
+        )
     )
-)
-scale_vector = 1.0 / (dx_f(x)[:, None])
-scale_vector_inv = dx_f(x)[:, None]
+    scale_vector = 1.0 / (dx_f(x)[:, None])
+    scale_vector_inv = dx_f(x)[:, None]
 
-d_rho, w_rho = legendre_diffmat(N_RHO)
-d_rho = d_rho * scale_vector
-w_rho = w_rho * scale_vector_inv
+    d_rho, w_rho = legendre_diffmat(N_RHO)
+    d_rho = d_rho * scale_vector
+    w_rho = w_rho * scale_vector_inv
 
-theta = jnp.linspace(0.0, 2.0 * jnp.pi, N_THETA, endpoint=False)
-d_theta, w_theta = fourier_diffmat(N_THETA)
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, N_THETA, endpoint=False)
+    d_theta, w_theta = fourier_diffmat(N_THETA)
 
-zeta = jnp.linspace(0.0, 2.0 * jnp.pi / EQ.NFP, N_ZETA, endpoint=False)
-d_zeta, w_zeta = fourier_diffmat(N_ZETA)
-d_zeta = d_zeta * EQ.NFP
-w_zeta = w_zeta / EQ.NFP
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / EQ.NFP, N_ZETA, endpoint=False)
+    d_zeta, w_zeta = fourier_diffmat(N_ZETA)
+    d_zeta = d_zeta * EQ.NFP
+    w_zeta = w_zeta / EQ.NFP
 
-diffmat = DiffMat(
-    D_rho=d_rho,
-    W_rho=jnp.diagonal(w_rho),
-    D_theta=d_theta,
-    W_theta=jnp.diagonal(w_theta),
-    D_zeta=d_zeta,
-    W_zeta=jnp.diagonal(w_zeta),
-)
+    diffmat = DiffMat(
+        D_rho=d_rho,
+        W_rho=jnp.diagonal(w_rho),
+        D_theta=d_theta,
+        W_theta=jnp.diagonal(w_theta),
+        D_zeta=d_zeta,
+        W_zeta=jnp.diagonal(w_zeta),
+    )
 
-grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
-reshaped_nodes = jnp.reshape(
-    grid0.meshgrid_reshape(grid0.nodes, order="rtz"),
-    (N_RHO * N_THETA * N_ZETA, 3),
-)
-rtz_nodes = EQ.map_coordinates(
-    reshaped_nodes,
-    inbasis=("rho", "theta_PEST", "zeta"),
-    outbasis=("rho", "theta", "zeta"),
-    period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-    tol=1e-12,
-    maxiter=50,
-)
-grid = Grid(rtz_nodes)
+    grid0 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+    reshaped_nodes = jnp.reshape(
+        grid0.meshgrid_reshape(grid0.nodes, order="rtz"),
+        (N_RHO * N_THETA * N_ZETA, 3),
+    )
+    rtz_nodes = EQ.map_coordinates(
+        reshaped_nodes,
+        inbasis=("rho", "theta_PEST", "zeta"),
+        outbasis=("rho", "theta", "zeta"),
+        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+        tol=1e-12,
+        maxiter=50,
+    )
+    grid = Grid(rtz_nodes)
 
-N_TOTAL = N_RHO * N_THETA * N_ZETA
-N_SHELL = N_THETA * N_ZETA
-N_KEEP = 3 * N_TOTAL - 2 * N_SHELL
-V_GUESS = np.ones(N_KEEP)
+    N_TOTAL = N_RHO * N_THETA * N_ZETA
+    N_SHELL = N_THETA * N_ZETA
+    N_KEEP = 3 * N_TOTAL - 2 * N_SHELL
+    V_GUESS = np.ones(N_KEEP)
+else:
+    EQ = grid = diffmat = None
+    N_TOTAL = N_SHELL = N_KEEP = 0
+    V_GUESS = None
 
 
 def dense_eigsh(a, *args, **kwargs):
@@ -352,7 +361,9 @@ def test_lambda_matfree():
     hi = np.percentile(ratios, 90)
     trimmed = ratios[(ratios >= lo) & (ratios <= hi)]
     ratio_mean = float(np.mean(trimmed))
-    ratio_spread = float(np.max(np.abs(trimmed - ratio_mean)) / (np.abs(ratio_mean) + 1e-12))
+    ratio_spread = float(
+        np.max(np.abs(trimmed - ratio_mean)) / (np.abs(ratio_mean) + 1e-12)
+    )
 
     assert ratio_spread < 4e-1
     np.testing.assert_allclose(

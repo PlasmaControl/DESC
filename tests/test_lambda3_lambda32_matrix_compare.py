@@ -151,7 +151,9 @@ def _run_lambda3_capture(eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir
 
     def _capture(A, *args, **kwargs):
         A = np.asarray(A)
-        a3_mm = np.lib.format.open_memmap(str(a3_path), mode="w+", dtype=A.dtype, shape=A.shape)
+        a3_mm = np.lib.format.open_memmap(
+            str(a3_path), mode="w+", dtype=A.dtype, shape=A.shape
+        )
         chunk = int(os.environ.get("AGNI_LAMBDA32_A3_DUMP_CHUNK", "512"))
         for i0 in range(0, A.shape[0], chunk):
             i1 = min(i0 + chunk, A.shape[0])
@@ -214,7 +216,9 @@ def _run_lambda32_dump(eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir):
     try:
         os.environ["AGNI_LAMBDA32_DUMP_DIR"] = str(artifact_dir)
         os.environ["AGNI_LAMBDA32_DUMP_BASENAME"] = base
-        os.environ["AGNI_LAMBDA32_PROGRESS"] = os.environ.get("AGNI_LAMBDA32_PROGRESS", "0")
+        os.environ["AGNI_LAMBDA32_PROGRESS"] = os.environ.get(
+            "AGNI_LAMBDA32_PROGRESS", "0"
+        )
         print("[lambda-compare] phase=lambda32_dump start", flush=True)
         eq.compute(
             "finite-n lambda32",
@@ -253,7 +257,9 @@ def _run_lambda32_dump(eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir):
         artifact_dir.glob(f"{base}_*_{shape_tag}_keep.npy"),
         key=lambda p: p.stat().st_mtime,
     )
-    assert keep_files, f"No lambda32 dump files found for shape {shape_tag} in {artifact_dir}"
+    assert (
+        keep_files
+    ), f"No lambda32 dump files found for shape {shape_tag} in {artifact_dir}"
     prefix = str(keep_files[-1])[: -len("_keep.npy")]
     (artifact_dir / "lambda32_prefix.txt").write_text(prefix + "\n")
     print(f"[lambda-compare] phase=lambda32_dump done prefix={prefix}", flush=True)
@@ -365,7 +371,9 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
             tile4 = np.einsum("aik,akbl->aibl", li, tile4, optimize=True)
             tile4 = np.einsum("aibl,blj->aibj", tile4, linv_t[j0:j1], optimize=True)
             tile = tile4.reshape(3 * (i1 - i0), 3 * (j1 - j0))
-            A32[np.ix_(row_red[row_mask], col_red[col_mask])] = tile[np.ix_(row_mask, col_mask)]
+            A32[np.ix_(row_red[row_mask], col_red[col_mask])] = tile[
+                np.ix_(row_mask, col_mask)
+            ]
 
     A32.flat[:: A32.shape[1] + 1] += 1e-11
     A32.flush()
@@ -385,8 +393,8 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
             rtol=1e-8,
             atol=1e-10,
             err_msg=(
-                f"matrix mismatch at n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta}, "
-                f"row_block={i0}:{i1}"
+                f"matrix mismatch at n_rho={n_rho}, n_theta={n_theta}, "
+                f"n_zeta={n_zeta}, row_block={i0}:{i1}"
             ),
         )
 
@@ -400,15 +408,23 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
     lam32_rq = np.real_if_close(rq)
 
     mask = np.abs(v3) > 1e-5
-    assert np.any(mask), "No reliable entries in eigenvector after |v| > 1e-5 filtering."
+    assert np.any(
+        mask
+    ), "No reliable entries in eigenvector after |v| > 1e-5 filtering."
     ratio = av[mask] / v3[mask]
     ratio = ratio[np.isfinite(ratio)]
     assert ratio.size > 0, "All filtered (A v)/v entries are non-finite."
     ratio_err = np.max(np.abs(ratio - lam3))
-    assert ratio_err < 5e-4, f"filtered (A v)/v - lambda mismatch too large: maxabs={ratio_err:.3e}"
+    assert (
+        ratio_err < 5e-4
+    ), f"filtered (A v)/v - lambda mismatch too large: maxabs={ratio_err:.3e}"
 
     eval_mode = os.environ.get("AGNI_LAMBDA32_EIGVEC_COMPARE", "1").lower() not in {
-        "", "0", "false", "no", "off"
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
     }
     overlap = np.nan
     vrel = np.nan
@@ -417,7 +433,14 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
         from scipy.sparse.linalg import eigsh
 
         print("[lambda-compare] phase=compare eigsh(A32) start", flush=True)
-        w32, v32 = eigsh(np.asarray(A32), k=1, sigma=-1e-3, which="LM", tol=1e-8, return_eigenvectors=True)
+        w32, v32 = eigsh(
+            np.asarray(A32),
+            k=1,
+            sigma=-1e-3,
+            which="LM",
+            tol=1e-8,
+            return_eigenvectors=True,
+        )
         lam32 = np.asarray(w32).reshape(-1)[0]
         vv32 = np.asarray(v32[:, 0]).reshape(-1)
         v3n = v3 / (np.linalg.norm(v3) + 1e-300)
@@ -448,7 +471,10 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
         w3.reshape(-1),
         rtol=1e-6,
         atol=1e-8,
-        err_msg=f"eigenvalue mismatch (rq) at n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta}",
+        err_msg=(
+            f"eigenvalue mismatch (rq) at n_rho={n_rho}, n_theta={n_theta}, "
+            f"n_zeta={n_zeta}"
+        ),
     )
     if eval_mode:
         np.testing.assert_allclose(
@@ -456,7 +482,10 @@ def _compare_saved_outputs(artifact_dir, n_rho, n_theta, n_zeta):
             w3.reshape(-1),
             rtol=1e-6,
             atol=1e-8,
-            err_msg=f"eigenvalue mismatch (eigsh) at n_rho={n_rho}, n_theta={n_theta}, n_zeta={n_zeta}",
+            err_msg=(
+                f"eigenvalue mismatch (eigsh) at n_rho={n_rho}, "
+                f"n_theta={n_theta}, n_zeta={n_zeta}"
+            ),
         )
         assert overlap > 0.95, f"eigenvector overlap too low: {overlap:.6e}"
 
@@ -487,22 +516,32 @@ def test_lambda3_lambda32_final_matrix_and_eigenvalue(tmp_path):
     - ``AGNI_LAMBDA32_MODE`` in {``lambda3``, ``lambda32``, ``compare``, ``all``}.
     - ``AGNI_LAMBDA32_ARTIFACT_DIR`` shared directory used across separate jobs.
     """
-    if os.environ.get("AGNI_LAMBDA32_ENABLE", "0").lower() in {"", "0", "false", "no", "off"}:
+    if os.environ.get("AGNI_LAMBDA32_ENABLE", "0").lower() in {
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
         pytest.skip("Set AGNI_LAMBDA32_ENABLE=1 to run this heavy comparison test.")
 
     n_rho = int(os.environ.get("AGNI_LAMBDA32_COMPARE_N_RHO", "30"))
     n_theta = int(os.environ.get("AGNI_LAMBDA32_COMPARE_N_THETA", "36"))
     n_zeta = int(os.environ.get("AGNI_LAMBDA32_COMPARE_N_ZETA", "24"))
-    eq_path = os.environ.get(
-        "AGNI_EQ_PATH",
-        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/qh_beta1.5_imin1.02_modprof_221410.h5",
+    eq_path = Path(
+        os.environ.get(
+            "AGNI_EQ_PATH",
+            "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/"
+            "qh_beta1.5_imin1.02_modprof_221410.h5",
+        )
     )
     mode = os.environ.get("AGNI_LAMBDA32_MODE", "all").strip().lower()
     artifact_dir = Path(os.environ.get("AGNI_LAMBDA32_ARTIFACT_DIR", str(tmp_path)))
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     print(
-        f"[lambda-compare] mode={mode} n_rho={n_rho} n_theta={n_theta} n_zeta={n_zeta} artifact_dir={artifact_dir}",
+        f"[lambda-compare] mode={mode} n_rho={n_rho} n_theta={n_theta} "
+        f"n_zeta={n_zeta} artifact_dir={artifact_dir}",
         flush=True,
     )
 
@@ -510,10 +549,14 @@ def test_lambda3_lambda32_final_matrix_and_eigenvalue(tmp_path):
         raise AssertionError(f"Unknown AGNI_LAMBDA32_MODE={mode!r}")
 
     if mode in {"all", "lambda3", "lambda32"}:
-        eq = Equilibrium.load(eq_path)
+        if not eq_path.is_file():
+            pytest.skip(f"AGNI equilibrium fixture not found: {eq_path}")
+        eq = Equilibrium.load(str(eq_path))
         grid, diffmat = _build_grid_diffmat(eq, n_rho, n_theta, n_zeta)
         if mode in {"all", "lambda3"}:
-            _run_lambda3_capture(eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir)
+            _run_lambda3_capture(
+                eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir
+            )
         if mode in {"all", "lambda32"}:
             _run_lambda32_dump(eq, grid, diffmat, n_rho, n_theta, n_zeta, artifact_dir)
 

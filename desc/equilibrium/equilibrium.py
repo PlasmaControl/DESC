@@ -166,6 +166,7 @@ class Equilibrium(IOAble, Optimizable):
         "_Psi",
         "_NFP",
         "_L",
+        "_L_lambda",
         "_M",
         "_N",
         "_R_lmn",
@@ -197,6 +198,7 @@ class Equilibrium(IOAble, Optimizable):
         "_Z_sym",
         "_NFP",
         "_L",
+        "_L_lambda",
         "_M",
         "_N",
         "_L_grid",
@@ -217,6 +219,7 @@ class Equilibrium(IOAble, Optimizable):
         L=None,
         M=None,
         N=None,
+        L_lambda=None,
         L_grid=None,
         M_grid=None,
         N_grid=None,
@@ -289,6 +292,8 @@ class Equilibrium(IOAble, Optimizable):
 
         # resolution
         L = check_nonnegint(L, "L")
+        L_lambda = check_nonnegint(L_lambda, "L_lambda")
+
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
         L_grid = check_nonnegint(L_grid, "L_grid")
@@ -306,6 +311,7 @@ class Equilibrium(IOAble, Optimizable):
                 ),
             )
         )
+        self._L_lambda = L_lambda
         self._L_grid = setdefault(L_grid, 2 * self.L)
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
@@ -331,7 +337,7 @@ class Equilibrium(IOAble, Optimizable):
             spectral_indexing=self.spectral_indexing,
         )
         self._L_basis = FourierZernikeBasis(
-            L=self.L,
+            L=self.L_lambda,
             M=self.M,
             N=self.N,
             NFP=self.NFP,
@@ -452,6 +458,8 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self._L_lambda is None:
+            self._L_lambda = int(self._L)
 
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
@@ -591,6 +599,7 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         NFP=None,
         sym=None,
+        L_lambda=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 
@@ -621,6 +630,7 @@ class Equilibrium(IOAble, Optimizable):
             + "Recommend calling `eq.surface = eq.get_surface_at(rho=1.0)`",
         )
         self._L = int(setdefault(L, self.L))
+        self._L_lambda = int(setdefault(L_lambda, self.L_lambda))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
         self._L_grid = int(setdefault(L_grid, self.L_grid))
@@ -640,7 +650,11 @@ class Equilibrium(IOAble, Optimizable):
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
         )
         self.L_basis.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            self.L_lambda,
+            self.M,
+            self.N,
+            NFP=self.NFP,
+            sym="sin" if self.sym else self.sym,
         )
 
         for profile in [
@@ -1601,6 +1615,11 @@ class Equilibrium(IOAble, Optimizable):
     def L(self):
         """int: Maximum radial mode number."""
         return self._L
+
+    @property
+    def L_lambda(self):
+        """int: Maximum radial mode number for lambda."""
+        return self._L_lambda
 
     @property
     def M(self):

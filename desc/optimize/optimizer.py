@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import jnp, tree_map
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -124,7 +124,7 @@ class Optimizer(IOAble):
             Stopping tolerance on infinity norm of the constraint violation.
             Optimization will stop when ctol and one of the other tolerances
             are satisfied. If None, defaults to 1e-4.
-        x_scale : array, list[dict | ``'ess'``], ``'ess'`` or ``'auto'``, optional
+        x_scale : array, list[dict | ``'ess'``, ``'auto'``], ``'ess'`` or ``'auto'``
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
             An alternative view is that the size of a trust region along jth
@@ -134,17 +134,20 @@ class Optimizer(IOAble):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with two parameters, ``ess_alpha`` and ``ess_order``
-            which are passed through ``options``. ``ess_alpha`` is the decay rate of
-            the scaling, and ``ess_order`` is the norm order for multi-index modes,
-            which can be ``1``, ``2``, or ``np.inf``. If not provided in ``options``,
-            the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'`` and
-            ``ess_min_value=1e-7`` (minimum allowed scale value). If an array, should
-            be the same size as sum(thing.dim_x for thing in things). If a list, the
-            list should have 1 element for each thing, and each element should either
-            be ``'ess'`` to use exponential spectral scaling for that thing, or a dict
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
+            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
+            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
+            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
+            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
+            sets the default scale for variables without an ess rule defined.
+            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
+            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
+            If an array, should be the same size as sum(thing.dim_x for thing in
+            things). If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'`` to use exponential
+            spectral scaling or automatic jacobian scaling for that thing, or a dict
             with the same keys and dimensions as thing.params_dict to specify scales
-            manually.
+            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -210,7 +213,6 @@ class Optimizer(IOAble):
         )
         if isinstance(x_scale, (list, tuple)):
             # make sure it stays in sync with things
-            x_scale = flatten_list(x_scale, flatten_tuple=True)
             assert len(x_scale) == len(
                 indices
             ), f"expected {len(indices)} x_scales for {len(indices)} things but "
@@ -224,8 +226,7 @@ class Optimizer(IOAble):
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
         x_scale = _parse_x_scale(x_scale, things, options)
-        # at this point x_scale is either "auto", an array matching with objective.x,
-        # or a list of scales in sync with things
+        # at this point x_scale is a list of scales in sync with things
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
@@ -252,34 +253,32 @@ class Optimizer(IOAble):
 
         timer.start("Initializing the optimization")
         if not is_linear_proj:
-            objective, nonlinear_constraint = get_combined_constraint_objectives(
-                eq,
-                constraints,
-                objective,
-                things,
-                self.method,
-                method,
-                verbose,
-                options,
+            objective, nonlinear_constraint, x_scale_projected = (
+                get_combined_constraint_objectives(
+                    eq,
+                    constraints,
+                    objective,
+                    things,
+                    self.method,
+                    method,
+                    verbose,
+                    x_scale,
+                    options,
+                )
             )
         else:
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
+            x_scale_projected = _project_x_scale_prox(x_scale, things, objective)
+            x_scale_projected = _project_x_scale_linear(
+                x_scale_projected, things, objective
+            )
         # we have to use this cumbersome indexing in this method when passing things
         # to objective to guard against the passed-in things having an ordering
         # different from objective.things, to ensure the correct order is passed
         # to the objective
         x0 = objective.x(*[things[things.index(t)] for t in objective.things])
-        if isinstance(x_scale, (list, tuple)):
-            # sort by things to make x_scale match with objective.x
-            x_scale = [x_scale[things.index(t)] for t in objective.things]
-            x_scale = jnp.concatenate(x_scale)
-        # at this point x_scale is either "auto" or an array matching with objective.x
-        # but we may need to project it down if objective got wrapped by
-        # eg LinearConstraintProjection
-
-        x_scale_projected = _project_x_scale(x_scale, objective)
 
         stoptol = _get_default_tols(
             method,
@@ -386,62 +385,80 @@ class Optimizer(IOAble):
 
 
 def _parse_x_scale(x_scale, things, options):
-    """Convert lists/dicts of scales into arrays for all dofs.
-
-    If x_scale is "auto" we just return it since that's passed directly to optimizer
-    If its an array, we assume its already sorted to match objective.x and return it
-    Otherwise, we return a list of x_scale for each thing, which may get re-ordered
-    later before its concatenated.
-    """
+    """Convert str/lists/dicts of scales into arrays for all dofs."""
     if isinstance(x_scale, str):
         if x_scale == "auto":
-            return x_scale
-        if x_scale == "ess":
+            x_scale = ["auto"] * len(things)
+        elif x_scale == "ess":
             x_scale = ["ess"] * len(things)
         else:
             raise ValueError(
                 "only 'auto' and 'ess' are allowed string values for x_scale"
             )
-    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) or (
-        np.isscalar(x_scale) and not isinstance(x_scale, str)
-    ):
-        dimx_all = sum([t.dim_x for t in things])
-        return jnp.broadcast_to(x_scale, (dimx_all,))
+    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) and not np.isscalar(x_scale):
+        warnings.warn(
+            "Passing in an array for x_scale has been deprecated and in the "
+            "future will throw an error. Instead, pass in a dict of arrays for each "
+            "Optimizable object, with each dict having the same structure as "
+            "thing.params_dict",
+            DeprecationWarning,
+        )
+        dimx_all = np.cumsum([t.dim_x for t in things])[:-1]
+        x_scale = jnp.split(x_scale, dimx_all)
+    if np.isscalar(x_scale) and not isinstance(x_scale, str):
+        full_like = lambda x: jnp.full_like(x, x_scale)
+        x_scale = [tree_map(full_like, t.params_dict) for t in things]
+
     if len(things) == 1 and not isinstance(x_scale, (list, tuple)):
         x_scale = [x_scale]
-    assert len(x_scale) == len(
-        things
-    ), f"expected {len(things)} x_scales for {len(things)} things but "
-    f"only got {len(x_scale)}"
+    assert len(x_scale) == len(things), (
+        f"expected {len(things)} x_scales for {len(things)} things but "
+        f" got {len(x_scale)}"
+    )
 
     all_scales = []
     ess_alpha = options.pop("ess_alpha", 1.2)
     ess_order = options.pop("ess_order", np.inf)
     ess_min_value = options.pop("ess_min_value", 1e-7)
+    ess_default = options.pop("ess_default", 0.0)
 
     for xsc, tng in zip(x_scale, things):
         if isinstance(xsc, (jnp.ndarray, np.ndarray)) or (
             np.isscalar(xsc) and not isinstance(xsc, str)
         ):
-            all_scales.append(jnp.broadcast_to(xsc, (tng.dim_x,)))
+            warnif(
+                not np.isscalar(xsc),
+                DeprecationWarning,
+                "Passing in an array for x_scale has been deprecated and in the "
+                "future will throw an error. Instead, pass in a dict of arrays for "
+                "each Optimizable object, with each dict having the same structure "
+                "as thing.params_dict",
+            )
+            all_scales.append(tng.unpack_params(jnp.broadcast_to(xsc, (tng.dim_x,))))
         elif isinstance(xsc, dict) or (
             isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
         ):
-            all_scales.append(tng.pack_params(xsc))
+            # we pack then unpack as a check for the correct size/structure
+            all_scales.append(tng.unpack_params(tng.pack_params(xsc)))
         elif isinstance(xsc, str) and xsc == "ess":
-            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value)
-            all_scales.append(tng.pack_params(scl))
+            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value, ess_default)
+            all_scales.append(scl)
+        elif isinstance(xsc, str) and xsc == "auto":
+            scl = tree_map(jnp.zeros_like, tng.params_dict)
+            all_scales.append(scl)
         else:
             raise TypeError(
-                f"all x_scales should be either 'ess', array, or dict, got {type(xsc)}"
+                f"all x_scales should be either 'ess', 'auto', or dict, got {type(xsc)}"
             )
     return all_scales
 
 
-def _project_x_scale(x_scale, objective):
-    """Project x_scale vector to remove fixed DoFs etc."""
-    if isinstance(x_scale, str):
-        return x_scale
+def _project_x_scale_prox(x_scale, things, objective):
+    """Project x_scale through proximal wrapper to remove internal DoFs etc."""
+    # sort by things to make x_scale match with objective.x
+    if isinstance(x_scale, (list, tuple)):
+        x_scale = [t.pack_params(x_scale[things.index(t)]) for t in objective.things]
+        x_scale = jnp.concatenate(x_scale)
 
     is_prox = isinstance(objective, ProximalProjection) or (
         isinstance(objective, LinearConstraintProjection)
@@ -466,12 +483,30 @@ def _project_x_scale(x_scale, objective):
         x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
         x_scale = jnp.concatenate(x_scale)
 
+    return x_scale
+
+
+def _project_x_scale_linear(x_scale, things, objective):
+    """Project x_scale through linear constriant wrapper to remove fixed DoFs etc."""
+    # sort by things to make x_scale match with objective.x
+    if isinstance(x_scale, (list, tuple)):
+        x_scale = [t.pack_params(x_scale[things.index(t)]) for t in objective.things]
+        x_scale = jnp.concatenate(x_scale)
+
     if isinstance(objective, LinearConstraintProjection):
+        # x_scale is already included in D matrix in constraint projection
+        # but still need to tell optimizer about automatic scaling and
         # need to project x_scale down to correct size
         Z = objective._Z
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
-        x_scale = jnp.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+        # this is equivalent to diag(Z.T @ diag(x) @ Z) but more efficient
+        x_scale = jnp.abs(Z**2 * x_scale[objective._unfixed_idx, None]).sum(axis=0)
+        # x_scale is 0 or 1, 0 means use auto jac scaling, 1 means the user scale was
+        # set as part of D
+        x_scale = jnp.where(
+            jnp.abs(x_scale) < np.finfo(x_scale.dtype).eps * max(Z.shape), 0, 1
+        )
+
     return x_scale
 
 
@@ -620,6 +655,7 @@ def get_combined_constraint_objectives(  # noqa: C901
     opt_method,
     method,
     verbose,
+    x_scale,
     options,
 ):
     """Combine constraints and objective.
@@ -709,16 +745,23 @@ def get_combined_constraint_objectives(  # noqa: C901
         f"optimizer got things {set(things)}"
     )
 
+    # this removes dofs for proximal, needs to happen before we use this
+    # for LinearConstraintProjection
+    x_scale = _project_x_scale_prox(x_scale, things, objective)
+
     # wrap to handle linear constraints
     if linear_constraint is not None:
-        linear_constraint_options = options.pop("linear_constraint_options", {})
         objective = LinearConstraintProjection(
-            objective, linear_constraint, **linear_constraint_options
+            objective,
+            linear_constraint,
+            x_scale=x_scale,
         )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
-                nonlinear_constraint, linear_constraint
+                nonlinear_constraint,
+                linear_constraint,
+                x_scale=x_scale,
             )
             nonlinear_constraint.build(verbose=verbose)
 
@@ -731,8 +774,10 @@ def get_combined_constraint_objectives(  # noqa: C901
                 "yellow",
             )
         )
+    # final projection for linear constraints
+    x_scale_projected = _project_x_scale_linear(x_scale, things, objective)
 
-    return objective, nonlinear_constraint
+    return objective, nonlinear_constraint, x_scale_projected
 
 
 def _get_default_tols(

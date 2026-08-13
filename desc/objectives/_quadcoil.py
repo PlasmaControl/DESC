@@ -75,12 +75,14 @@ class QuadcoilProxy(_Objective):
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     quadcoil_kwargs : dict
-        A dictionary containing all inputs for
-        ``quadcoil.quadcoil`` (see the [QUADCOIL documentation](
-        https://quadcoil.readthedocs.io/en/latest/tutorial_outputs.html)
-        )). The following quantities are automatically extracted from DESC and
+        A dictionary containing all inputs for ``quadcoil.quadcoil`` (see the
+        `QUADCOIL documentation
+        <https://quadcoil.readthedocs.io/en/latest/tutorial_outputs.html>`__).
+        The following quantities are automatically extracted from DESC and
         will be ignored:
+
         .. code-block:: python
+
             nfp,
             stellsym,
             plasma_mpol, plasma_ntor,

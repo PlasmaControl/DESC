@@ -912,6 +912,174 @@ class SectionLambdaSelfConsistency(_Objective):
         return jnp.dot(self._A, params["L_lmn"]) - params["Lp_lmn"]
 
 
+class SectionAxisRSelfConsistency(_Objective):
+    """Ensure that the Rp_lmn and Ra_n are self-consistent.
+
+    IE, the cross-section evaluated at rho=0 must equal the axis evaluated at zeta=0.
+    This is only needed when the cross-section and the axis are both optimized
+    without R_lmn, see ``ProximalProjection``. Otherwise it is implied by
+    ``SectionRSelfConsistency`` and ``AxisRSelfConsistency``.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Section-axis R self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section axis R",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        section = eq.xsection
+        errorif(
+            section.zeta != 0,
+            f"Cross-section zeta value must be 0, the given value is {section.zeta}",
+        )
+
+        self._dim_f = 1
+        # rho=0 for the cross-section basis, zeta=0 for the axis basis
+        node = np.zeros((1, 3))
+        self._A = np.asarray(section.R_basis.evaluate(node))
+        self._B = np.asarray(eq.axis.R_basis.evaluate(node))
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute cross-section to axis R self-consistency errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            cross-section to axis R self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["Rp_lmn"]) - jnp.dot(self._B, params["Ra_n"])
+
+
+class SectionAxisZSelfConsistency(_Objective):
+    """Ensure that the Zp_lmn and Za_n are self-consistent.
+
+    IE, the cross-section evaluated at rho=0 must equal the axis evaluated at zeta=0.
+    This is only needed when the cross-section and the axis are both optimized
+    without Z_lmn, see ``ProximalProjection``. Otherwise it is implied by
+    ``SectionZSelfConsistency`` and ``AxisZSelfConsistency``.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Section-axis Z self consistency error: "
+
+    def __init__(
+        self,
+        eq,
+        name="self_consistency section axis Z",
+    ):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        section = eq.xsection
+        errorif(
+            section.zeta != 0,
+            f"Cross-section zeta value must be 0, the given value is {section.zeta}",
+        )
+
+        self._dim_f = 1
+        # rho=0 for the cross-section basis, zeta=0 for the axis basis
+        node = np.zeros((1, 3))
+        self._A = np.asarray(section.Z_basis.evaluate(node))
+        self._B = np.asarray(eq.axis.Z_basis.evaluate(node))
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute cross-section to axis Z self-consistency errors.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            cross-section to axis Z self-consistency errors.
+
+        """
+        return jnp.dot(self._A, params["Zp_lmn"]) - jnp.dot(self._B, params["Za_n"])
+
+
 class AxisRSelfConsistency(_Objective):
     """Ensure consistency between Zernike and Fourier coefficients on axis.
 

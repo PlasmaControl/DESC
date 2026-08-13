@@ -7,8 +7,12 @@ import numpy as np
 from desc.backend import jit, jnp, put
 from desc.batching import batched_vectorize
 from desc.objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    FixAxisR,
+    FixAxisZ,
     ObjectiveFunction,
     SectionRSelfConsistency,
     SectionZSelfConsistency,
@@ -580,7 +584,8 @@ class ProximalProjection(ObjectiveFunction):
     solve_method: str
         Method to use for internal equilibrium solve. Options are 'lcfs' and 'section'.
         'lcfs' uses fixed boundary constraints, 'section' uses fixed cross-section
-        constraints. Default is 'lcfs'.
+        and fixed axis constraints, since the cross-section alone does not determine
+        the axis. Default is 'lcfs'.
     """
 
     def __init__(
@@ -653,19 +658,22 @@ class ProximalProjection(ObjectiveFunction):
                 "Zp_lmn",
             ]
         elif self._solve_method == "section":
+            # the cross-section does not pin down the axis away from zeta=0, so the
+            # axis is an optimization variable as well, and the internal solve is
+            # done with a fixed axis in addition to the fixed cross-section
             args2remove = [
                 "R_lmn",
                 "Z_lmn",
                 "L_lmn",
-                "Ra_n",
-                "Za_n",
                 "Rb_lmn",
                 "Zb_lmn",
                 "Lp_lmn",
             ]
         # the eq optimizable variables for proximal are the Rb, Zb and profile
         # coefficients (or Poincare). Once these are chosen, we will solve the eq
-        # to find the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n. That is why we remove them
+        # to find the R_lmn, Z_lmn, L_lmn (and Ra_n, Za_n for the lcfs method,
+        # they are optimization variables for the section method). That is why
+        # we remove them
         # from the list of optimizable variables. This is accompanied by not including
         # self-consistency constraints (see get_combined_constraint_objectives in
         # desc.optimize.optimizer) and also removing columns corresponding to these
@@ -684,8 +692,32 @@ class ProximalProjection(ObjectiveFunction):
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
+        # Rp_lmn and Ra_n both constrain R_lmn (same for Zp_lmn and Za_n), so their
+        # self-consistency matrices have to be inverted together, otherwise dxdc
+        # would not satisfy both of them at the same time. The two are kept
+        # compatible during the optimization by SectionAxis{R,Z}SelfConsistency.
+        if "Rp_lmn" in self._args and "Ra_n" in self._args:
+            cRp = get_instance(self._eq_linear_constraints, SectionRSelfConsistency)
+            cRa = get_instance(self._eq_linear_constraints, AxisRSelfConsistency)
+            nRp = self._eq.dimensions["Rp_lmn"]
+            # We have AR @ R_lmn = [Rp_lmn, Ra_n]
+            AR = np.vstack(
+                [cRp.jac_unscaled(xz)[0]["R_lmn"], cRa.jac_unscaled(xz)[0]["R_lmn"]]
+            )
+            ARinv = np.linalg.pinv(AR)
+            dxdcR = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ ARinv
+        if "Zp_lmn" in self._args and "Za_n" in self._args:
+            cZp = get_instance(self._eq_linear_constraints, SectionZSelfConsistency)
+            cZa = get_instance(self._eq_linear_constraints, AxisZSelfConsistency)
+            nZp = self._eq.dimensions["Zp_lmn"]
+            AZ = np.vstack(
+                [cZp.jac_unscaled(xz)[0]["Z_lmn"], cZa.jac_unscaled(xz)[0]["Z_lmn"]]
+            )
+            AZinv = np.linalg.pinv(AZ)
+            dxdcZ = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ AZinv
+
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Rp_lmn", "Zp_lmn", "Ra_n", "Za_n"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
@@ -703,18 +735,16 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
+            # the columns of dxdcR (dxdcZ) belonging to Rp_lmn (Zp_lmn) and Ra_n
+            # (Za_n) are the corresponding blocks of the joint pseudo-inverse
             if arg == "Rp_lmn":
-                c = get_instance(self._eq_linear_constraints, SectionRSelfConsistency)
-                A = c.jac_unscaled(xz)[0]["R_lmn"]
-                Ainv = np.linalg.pinv(A)
-                dxdRp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
-                dxdc.append(dxdRp)
+                dxdc.append(dxdcR[:, :nRp])
+            if arg == "Ra_n":
+                dxdc.append(dxdcR[:, nRp:])
             if arg == "Zp_lmn":
-                c = get_instance(self._eq_linear_constraints, SectionZSelfConsistency)
-                A = c.jac_unscaled(xz)[0]["Z_lmn"]
-                Ainv = np.linalg.pinv(A)
-                dxdZp = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
-                dxdc.append(dxdZp)
+                dxdc.append(dxdcZ[:, :nZp])
+            if arg == "Za_n":
+                dxdc.append(dxdcZ[:, nZp:])
 
         # dxdc is a matrix that when multiplied by the optimization variables (only
         # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
@@ -751,9 +781,11 @@ class ProximalProjection(ObjectiveFunction):
         if self._solve_method == "lcfs":
             self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
         else:
+            # the axis is an optimization variable for the section method, so it is
+            # fixed during the internal solve, see _set_eq_state_vector
             self._eq_linear_constraints = get_fixed_xsection_constraints(
                 eq=self._eq, fix_lambda=False
-            )
+            ) + (FixAxisR(eq=self._eq), FixAxisZ(eq=self._eq))
         self._eq_linear_constraints = maybe_add_self_consistency(
             self._eq, self._eq_linear_constraints
         )
@@ -805,7 +837,7 @@ class ProximalProjection(ObjectiveFunction):
         # however, sub-objectives only need the part for their thing. We will
         # use this to split the state vector into its components
         self._dimx_per_thing = [t.dim_x for t in self.things]
-        # we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium params
+        # we remove the R_lmn, Z_lmn, L_lmn etc. from the equilibrium params
         # dimc_per_thing accounts for that, don't confuse it with reduced state vector
         self._dimc_per_thing = [t.dim_x for t in self.things]
         self._dimc_per_thing[self._eq_idx] = np.sum(
@@ -890,7 +922,7 @@ class ProximalProjection(ObjectiveFunction):
                     {
                         arg: jnp.zeros_like(xis)
                         for arg, xis in t.params_dict.items()
-                        if arg not in self._args  # R_lmn, Z_lmn, L_lmn, Ra_n, Za_n
+                        if arg not in self._args  # R_lmn, Z_lmn, L_lmn etc.
                     }
                 )
                 params += [p]
@@ -910,8 +942,8 @@ class ProximalProjection(ObjectiveFunction):
     def x(self, *things):
         """Return the full state vector from the Optimizable objects things.
 
-        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
-        params.
+        Note that we remove the R_lmn, Z_lmn, L_lmn etc. from the equilibrium
+        params, see ``_set_eq_state_vector``.
         """
         # TODO (#1392): also check resolution etc?
         things = things or self.things
@@ -933,8 +965,8 @@ class ProximalProjection(ObjectiveFunction):
     def dim_x(self):
         """int: Dimension of the state vector.
 
-        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
-        params.
+        Note that we remove the R_lmn, Z_lmn, L_lmn etc. from the equilibrium
+        params, see ``_set_eq_state_vector``.
         """
         s = 0
         for t in self.things:
@@ -951,7 +983,7 @@ class ProximalProjection(ObjectiveFunction):
         ----------
         x : ndarray
             New values of the state vector of equilibrium (except R_lmn, Z_lmn,
-            L_lmn, Ra_n, Za_n) and all the parameters of the other things.
+            L_lmn etc.) and all the parameters of the other things.
         store : bool
             Whether the new x should be stored in self.history
 

@@ -16,6 +16,8 @@ from desc.objectives import (
     FixSectionR,
     FixSectionZ,
     ObjectiveFunction,
+    SectionAxisRSelfConsistency,
+    SectionAxisZSelfConsistency,
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import combine_args
@@ -665,6 +667,13 @@ def get_combined_constraint_objectives(  # noqa: C901
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used
             # see ProximalProjection._set_eq_state_vector
+            if t is objective._eq and objective._solve_method == "section":
+                # cross-section and axis are both optimized, so they must agree
+                # at rho=0, zeta=0
+                if "Rp_lmn" in t.params_dict:
+                    linear_constraints += (SectionAxisRSelfConsistency(t),)
+                if "Zp_lmn" in t.params_dict:
+                    linear_constraints += (SectionAxisZSelfConsistency(t),)
             continue
         linear_constraints = maybe_add_self_consistency(t, linear_constraints)
     linear_constraint = _combine_constraints(linear_constraints)

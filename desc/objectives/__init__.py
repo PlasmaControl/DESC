@@ -107,6 +107,8 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    SectionAxisRSelfConsistency,
+    SectionAxisZSelfConsistency,
     SectionLambdaSelfConsistency,
     SectionRSelfConsistency,
     SectionZSelfConsistency,

@@ -69,7 +69,7 @@ def _bounce_points(
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
     sentinel : float
-        Sentinel value which should be less ζ coordinate of all bounce points,
+        Sentinel value which should be less than ζ coordinate of all bounce points,
         which can be guaranteed by choosing branch cut for α appropriately.
         Default is -1.
     return_mask : bool

@@ -301,8 +301,15 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        if "num_transit" in kwargs and num_field_periods == 20:  # default value
-            num_field_periods = kwargs["num_transit"] * grid.NFP
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                DeprecationWarning,
+                "argument num_transit has been deprecated in favor of"
+                " num_field_periods, converting to"
+                " num_field_periods = num_transit*eq.NFP",
+            )
+            num_field_periods = kwargs.pop("num_transit") * grid.NFP
 
         if quad is None:
             quad = Options._quad(eta=-2, num_quad=32)
@@ -807,7 +814,10 @@ class Bounce2D(_Bounce):
             See ``self.points`` for the description of this parameter.
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
-            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+            transform (NUFFT).
+            If positive but less than ``1e-14`` then NUFFT will not be used.
+            If negative, then the nufft_eps assigned to the Bounce2D object
+            at instantiation will be used.
         loop : bool
             Whether to use loops to compute sums where a loop option is implemented.
             This is slower to differentiate with JAX.
@@ -969,7 +979,10 @@ class Bounce2D(_Bounce):
             between ``z1`` and ``z2`` resides in the epigraph of B.
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
-            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+            transform (NUFFT).
+            If positive but less than ``1e-14`` then NUFFT will not be used.
+            If negative, then the nufft_eps assigned to the Bounce2D object
+            at instantiation will be used.
 
         Returns
         -------
@@ -1995,7 +2008,7 @@ class Options(NamedTuple):
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
             ``num_field_periods*mins_per_field_period`` to enhance performance,
-            yet sill remain loose enough that all wells are always detected.
+            yet still remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2

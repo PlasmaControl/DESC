@@ -123,6 +123,20 @@ class GammaC(_Objective):
             nufft_eps = 0.0
         nufft_eps = float(nufft_eps)
 
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                DeprecationWarning,
+                "argument num_transit has been deprecated in favor of "
+                "num_field_periods, converting to"
+                " num_field_periods = num_transit*eq.NFP",
+            )
+            num_field_periods = kwargs.pop("num_transit") * eq.NFP
+        warnif(
+            "jac_chunk_size" in kwargs,
+            DeprecationWarning,
+            "ignoring jac_chunk_size as it is not used for this objective",
+        )
         if target is None and bounds is None:
             target = 0.0
 

@@ -359,7 +359,6 @@ class ObjectiveFunction(IOAble):
         "_use_jit",
     ]
     _static_attrs = [
-        "_static_attrs",  # A bug as of Oct 10 2025
         "_built",
         "_compile_mode",
         "_compiled",

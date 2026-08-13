@@ -158,9 +158,6 @@ class QuadcoilProxy(_Objective):
         "_enable_net_current_plasma",
         "_eq_fixed",
         "_field_fixed",
-        # Basics
-        "_deriv_mode",
-        "_verbose",
         # Free-boundary-related
         "_bplasma_chunk_size",
         "_vacuum",
@@ -649,6 +646,7 @@ class QuadcoilProxy(_Objective):
         The scalar quadcoil proxy.
 
         """
+        constants = self._get_deprecated_constants(constants)
         # We prohibit the user from providing constants
         return self.solve_quadcoil(*all_params, full_mode=False)
 

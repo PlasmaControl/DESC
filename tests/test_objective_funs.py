@@ -557,8 +557,8 @@ class TestObjectiveFunction:
                 # must be passed in as the *arg.
                 *objective_nescoil.xs(quadcoil_test_eq)
             )
-            source_grid = objective_nescoil.constants["source_grid"]
-            eval_grid = objective_nescoil.constants["eval_grid"]
+            source_grid = objective_nescoil._constants["source_grid"]
+            eval_grid = objective_nescoil._constants["eval_grid"]
             fields, data = solve_regularized_surface_current(
                 scf_nescoil,
                 eq=quadcoil_test_eq,
@@ -585,8 +585,8 @@ class TestObjectiveFunction:
             fields_regcoil, data_regcoil = solve_regularized_surface_current(
                 scf_nescoil,
                 eq=quadcoil_test_eq,
-                source_grid=objective_nescoil.constants["source_grid"],
-                eval_grid=objective_nescoil.constants["eval_grid"],
+                source_grid=source_grid,
+                eval_grid=eval_grid,
                 current_helicity=(
                     1,
                     0,
@@ -599,8 +599,8 @@ class TestObjectiveFunction:
             obj_flux = QuadraticFlux(
                 field=fields[0],
                 eq=quadcoil_test_eq,
-                eval_grid=objective_nescoil.constants["eval_grid"],
-                field_grid=objective_nescoil.constants["source_grid"],
+                eval_grid=eval_grid,
+                field_grid=source_grid,
                 vacuum=False,
                 bs_chunk_size=10,
                 normalize=False,
@@ -610,7 +610,7 @@ class TestObjectiveFunction:
             chi_2_B_regcoil = obj_flux.compute_scalar(*obj_flux.xs(fields_regcoil[0]))
             obj_regularization = SurfaceCurrentRegularization(
                 surface_current_field=fields[0],
-                source_grid=objective_nescoil.constants["source_grid"],
+                source_grid=source_grid,
                 weight=1,
                 normalize=False,
                 # don't use normalizations, to match the REGCOIL problem exactly

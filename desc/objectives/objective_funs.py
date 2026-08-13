@@ -1235,6 +1235,7 @@ class _Objective(IOAble, ABC):
 
     _scalar = False
     _linear = False
+    _print_error = False
     _coordinates = ""
     _units = "(Unknown)"
     _equilibrium = False
@@ -1699,7 +1700,11 @@ class _Objective(IOAble, ABC):
             # the first value in the {} string, so the second one is unused.
             # That is why we set f0 to f.
             print_value_fmt = f"{self._print_value_fmt:<{PRINT_WIDTH}}" + "{:10.3e} "
-
+        if self._print_error:
+            # this is an error metric, makes sense to print the error and not the
+            # absolute value
+            f_unscaled = f_unscaled - self.target
+            f0_unscaled = f0_unscaled - self.target
         if self.linear:
             # probably a Fixed* thing, just need to know norm
             f = jnp.linalg.norm(f_shifted)
@@ -1735,7 +1740,7 @@ class _Objective(IOAble, ABC):
             else:
                 w = constants["quad_weights"]
 
-            # target == 0 probably indicates f is some sort of error metric,
+            # target == 0 or self._print_error indicates f is likely an error metric,
             # mean abs makes more sense than mean
             abserr = jnp.all(self.target == 0)
             f = jnp.abs(f_unscaled) if abserr else f_unscaled

@@ -19,6 +19,15 @@ For information on using conda, see `here <https://conda.io/projects/conda/en/la
     For instructions to install WSL see `here <https://learn.microsoft.com/en-us/windows/wsl/install>`__.
     To use WSL in VS code see `here <https://code.visualstudio.com/docs/remote/wsl>`__.
 
+.. attention::
+
+        If you don't require the full history of the github repo when cloning, the depth=1 option can reduce the
+        quantity of older data downloaded when cloning the repository:
+
+        .. code-block:: sh
+
+            git clone --depth=1 git@github.com:PlasmaControl/DESC.git
+
 
 On Your Local Machine
 *********************
@@ -120,7 +129,7 @@ On Your Local Machine
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.13' 'fftw' 'gxx<12'
+            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.14' 'fftw' 'gxx<12'
             conda activate desc-env
 
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
@@ -128,7 +137,7 @@ On Your Local Machine
 
             export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
             pip install --editable .
-            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+            pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0, <= 1.3.1'
 
         Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
         in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
@@ -226,7 +235,7 @@ On Most Linux Computing Clusters
             We base our instructions below off of `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__.
             If this does not work, please check the link to install JAX with the most recent recommendations from the Princeton computing services.
 
-            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2025 September 9.
+            These instructions were verified to work on the Della and Stellar clusters at Princeton on 2026 July 23.
 
             .. code-block:: sh
 
@@ -243,7 +252,7 @@ On Most Linux Computing Clusters
 
                 export CMAKE_PREFIX_PATH=$CONDA_PREFIX:$CMAKE_PREFIX_PATH
                 pip install --editable .
-                pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0'
+                CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=80" pip install -Ccmake.define.JAX_FINUFFT_USE_CUDA=ON --no-binary=jax-finufft 'jax-finufft >= 1.1.0, <= 1.3.1'
 
             Note that on BSD systems, the ``sed`` command that replaces ``jax`` with ``jax[cuda12]``
             in the ``requirements.txt`` file is ``sed -i '' '1 s/^jax/jax[cuda12]/' requirements.txt``.
@@ -257,36 +266,37 @@ On Most Linux Computing Clusters
 
         .. dropdown:: RAVEN (IPP, Germany)
 
-            These instructions were verified to work on the RAVEN cluster at IPP on Aug 18, 2024.
+            These instructions were verified to work on the RAVEN cluster at IPP on Jul 31, 2026.
             They do not install FINUFFT with GPU support.
 
             .. code-block:: sh
 
                 module load anaconda/3/2023.03
-                CONDA_OVERRIDE_CUDA="12.2" conda create --name desc-env "jax==0.4.23" "jaxlib==0.4.23=cuda12*" -c conda-forge
+                conda create --name desc-env -c conda-forge
                 conda activate desc-env
+                conda install python=3.12 -c conda-forge -y
 
                 git clone https://github.com/PlasmaControl/DESC
                 cd DESC
 
-            Top pin the allowed ``scipy`` version as follows by editing the ``requirements.txt`` file in the current directory.
-
-            .. code-block:: sh
-
-                scipy >= 1.7.0, <= 1.11.3
-
-            Now install DESC.
+            Now install DESC and JAX (necessary for GPU Support).
 
             .. code-block:: sh
 
                 pip install --editable .
+                pip install "jax[cuda13]" -y
 
             You may optionally install developer requirements if you want to run tests.
 
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
+            
+            Run a test by replacing path_to_DESC with your path
 
+            .. code-block:: sh
+
+                srun -n 1 -p gpudev --gres=gpu:a100:1 --time=00:10:00 --mem=10G $HOME/conda-envs/desc-env/bin/python -m desc -vv $HOME/path_to_DESC/desc/examples/SOLOVEV -g
 
 Verifying your Installation
 ***************************

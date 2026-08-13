@@ -487,6 +487,16 @@ def compute_jac_scale(A, prev_scale_inv=None):
     return 1 / scale_inv, scale_inv
 
 
+@functools.partial(jit, donate_argnums=0)
+def scale_columns(A, d):
+    """Compute `A * d` reusing `A`'s buffer instead of allocating a second copy.
+
+    `A` is invalid after this call, so callers must rebind, ie
+    `A = scale_columns(A, d)`.
+    """
+    return A * d
+
+
 @jit
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""

@@ -989,6 +989,7 @@ def plot_2d(  # noqa : C901
                 "$" + data_index[parameterization][normalize]["label"] + "$",
             )
         )
+    _set_tight_layout(fig)
     plot_data = {
         xlabel.strip("$").strip("\\"): xx,
         ylabel.strip("$").strip("\\"): yy,

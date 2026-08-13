@@ -632,7 +632,7 @@ class FourierXYZCurve(Curve):
         )
 
     @classmethod
-    def from_simsopt(curve_simsopt, name=""):
+    def from_simsopt(cls, curve_simsopt, name=""):
         """Load a simsopt CurveXYZFourier as a FourierXYZCurve.
 
         Parameters
@@ -650,9 +650,7 @@ class FourierXYZCurve(Curve):
         try:
             from simsopt.geo import CurveXYZFourier
         except ModuleNotFoundError:
-            raise ModuleNotFoundError(
-                "desc.geometry.from_simsopt requires simsopt package."
-            )
+            raise ModuleNotFoundError("from_simsopt method requires simsopt package.")
         if not isinstance(curve_simsopt, CurveXYZFourier):
             raise AttributeError("The imput curve must be a Simsopt CurveXYZFourier")
         dofs = curve_simsopt.get_dofs()
@@ -672,8 +670,7 @@ class FourierXYZCurve(Curve):
         yn = convert_x(y)
         zn = convert_x(z)
         modes = np.arange(-order, order + 1)
-        curve_desc = FourierXYZCurve(xn, yn, zn, modes=modes, name=name)
-        return curve_desc
+        return cls(xn, yn, zn, modes=modes, name=name)
 
     def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
         """Create x_scale using exponential spectral scaling.

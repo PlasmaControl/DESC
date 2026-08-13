@@ -284,24 +284,16 @@ class QuadcoilProxy(_Objective):
             # Makign them into iterables will make things easier when
             # scaling in the end.
             metric_name = (metric_name,)
-            metric_weight = jnp.array(
-                [
-                    metric_weight,
-                ]
-            )
-            metric_target = jnp.array(
-                [
-                    metric_target,
-                ]
-            )
+            metric_weight = jnp.array([metric_weight])
+            metric_target = jnp.array([metric_target])
         elif isinstance(metric_name, tuple):
             if len(metric_target) != len(metric_name):
                 raise KeyError(
-                    "metric_name and metric_target have mismatching lengths!."
+                    "metric_name and metric_target have mismatching lengths!"
                 )
             if len(metric_weight) != len(metric_name):
                 raise KeyError(
-                    "metric_name and metric_weight have mismatching lengths!."
+                    "metric_name and metric_weight have mismatching lengths!"
                 )
         else:
             raise ValueError("metric_name must be a tuple or a str.")
@@ -646,7 +638,7 @@ class QuadcoilProxy(_Objective):
         The scalar quadcoil proxy.
 
         """
-        constants = self._get_deprecated_constants(constants)
+        _ = self._get_deprecated_constants(constants)
         # We prohibit the user from providing constants
         return self.solve_quadcoil(*all_params, full_mode=False)
 

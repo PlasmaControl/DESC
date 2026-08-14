@@ -8,7 +8,7 @@ from desc.backend import jit, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
-from desc.utils import warnif
+from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_linear_transform
 
 # Used in create_source_grid only
@@ -30,32 +30,66 @@ _BCOIL_DATA_KEYS = ["R", "Z", "n_rho", "phi", "|e_theta x e_zeta|"]
 
 
 # ----- Helper functions -----
-def _compute_Bnormal_plasma(constants, params_eq, _bplasma_chunk_size):
-    # Using the stored transforms to calculate B_normal_plasma
+def _compute_Bplasma(
+    constants,
+    params_eq,
+    chunk_size,
+    data_keys=_BPLASMA_DATA_KEYS,
+    K_sheet=None,
+):
+    """Virtual-casing plasma field on the evaluation grid.
+
+    Parameters
+    ----------
+    constants : dict
+        Must contain source/eval transforms and profiles, and interpolator.
+    params_eq : dict
+        Equilibrium parameters.
+    chunk_size : int or None
+        Chunk size for the singular integral.
+    data_keys : list of str
+        Data keys to compute on the source and evaluation grids.
+    K_sheet : ndarray or None
+        Optional sheet current density to add into ``source_data["K_vc"]``.
+
+    Returns
+    -------
+    Bplasma : ndarray, shape(n_eval, 3)
+        Plasma field in the rpz basis, including the B/2 surface term.
+    eval_data : dict
+        Equilibrium data on the evaluation grid.
+    """
     source_data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
-        _BPLASMA_DATA_KEYS,
+        data_keys,
         params=params_eq,
         transforms=constants["source_transforms"],
         profiles=constants["source_profiles"],
     )
     eval_data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
-        _BPLASMA_DATA_KEYS,
+        data_keys,
         params=params_eq,
         transforms=constants["eval_transforms"],
         profiles=constants["eval_profiles"],
     )
+    if K_sheet is not None:
+        source_data["K_vc"] = source_data["K_vc"] + K_sheet
     Bplasma = virtual_casing_biot_savart(
         eval_data,
         source_data,
         constants["interpolator"],
-        chunk_size=_bplasma_chunk_size,
+        chunk_size=chunk_size,
     )
     # need extra factor of B/2 bc we're evaluating on plasma surface
     Bplasma = Bplasma + eval_data["B"] / 2
-    Bnormal_plasma = jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
-    return Bnormal_plasma
+    return Bplasma, eval_data
+
+
+def _compute_Bnormal_plasma(constants, params_eq, _bplasma_chunk_size):
+    # Using the stored transforms to calculate B_normal_plasma
+    Bplasma, eval_data = _compute_Bplasma(constants, params_eq, _bplasma_chunk_size)
+    return jnp.sum(Bplasma * eval_data["n_rho"], axis=1)
 
 
 def _compute_eval_data_coils(constants, params_eq):
@@ -314,6 +348,89 @@ def _quadcoil_phi_to_desc_phi(phi_mn_quadcoil, stellsym, mpol, ntor):
     modes_M, modes_N, Phi_mn = ptolemy_identity_fwd(mc, nc, phis, phic)
     Phi_mn = Phi_mn.flatten()
     return Phi_mn, modes_M, modes_N
+
+
+def _quadcoil_phi_to_desc_phi_gather(n_phi, stellsym, mpol, ntor, Phi_basis):
+    """Precompute a sparse gather mapping QUADCOIL phi dofs to DESC Phi_mn.
+
+    Builds the dense linear map with one batched ``ptolemy_identity_fwd`` solve
+    (identity along the ``surfs`` axis), reindexes into ``Phi_basis.modes``
+    order (matching ``FourierCurrentPotentialField``'s ``copy_coeffs``), then
+    compresses each row to at most two nonzeros.
+
+    At compute time::
+
+        Phi_mn = jnp.sum(coef * phi[idx], axis=1)
+
+    Parameters
+    ----------
+    n_phi : int
+        Length of the QUADCOIL ``phi`` vector.
+    stellsym : bool
+        Whether the current potential has stellarator symmetry.
+    mpol, ntor : int
+        Poloidal / toroidal resolution of the current potential.
+    Phi_basis : DoubleFourierSeries
+        Target DESC Fourier basis for ``Phi_mn``.
+
+    Returns
+    -------
+    idx : ndarray, shape(Phi_basis.num_modes, 2)
+        Gather indices into the QUADCOIL ``phi`` vector.
+    coef : ndarray, shape(Phi_basis.num_modes, 2)
+        Gather coefficients. Unused slots are ``(0, 0.0)``.
+    """
+    try:
+        from quadcoil import make_rzfourier_mc_ms_nc_ns
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
+    eye = np.eye(n_phi)
+    if stellsym:
+        phis = np.concatenate([np.zeros((n_phi, 1)), eye], axis=1)
+        phic = np.zeros_like(phis)
+    else:
+        len_sin = n_phi // 2
+        phis = np.concatenate(
+            [np.zeros((n_phi, 1)), eye[:, -len_sin:]],
+            axis=1,
+        )
+        phic = eye[:, :-len_sin]
+
+    mc, _, nc, _ = make_rzfourier_mc_ms_nc_ns(mpol, ntor)
+    modes_M, modes_N, Phi_cols = ptolemy_identity_fwd(mc, nc, phis, phic)
+    # Phi_cols: (n_phi, n_desc_modes) — each row is the image of a unit vector.
+    # We want T such that T @ phi = Phi_mn, shape (n_desc_modes, n_phi).
+    T_ptolemy = np.asarray(Phi_cols).T
+
+    # Reindex rows into Phi_basis.modes[:, 1:] order (copy_coeffs semantics).
+    src_modes = np.stack((np.asarray(modes_M), np.asarray(modes_N)), axis=1).astype(
+        np.int32
+    )
+    dst_modes = np.asarray(Phi_basis.modes[:, 1:]).astype(np.int32)
+    T = np.zeros((Phi_basis.num_modes, n_phi))
+    src_index = {tuple(mn): i for i, mn in enumerate(src_modes)}
+    for j, mn in enumerate(dst_modes):
+        i = src_index.get(tuple(mn))
+        if i is not None:
+            T[j] = T_ptolemy[i]
+
+    # Compress to at most two nonzeros per row.
+    scale = np.max(np.abs(T)) if T.size else 1.0
+    thresh = 1e-10 * max(scale, 1.0)
+    idx = np.zeros((Phi_basis.num_modes, 2), dtype=np.int32)
+    coef = np.zeros((Phi_basis.num_modes, 2))
+    for j, row in enumerate(T):
+        nz = np.flatnonzero(np.abs(row) > thresh)
+        errorif(
+            len(nz) > 2,
+            ValueError,
+            f"phi->Phi_mn row {j} has {len(nz)} nonzeros; expected at most 2.",
+        )
+        for k, col in enumerate(nz):
+            idx[j, k] = col
+            coef[j, k] = row[col]
+    return idx, coef
 
 
 def _create_source(eq, source_grid, eval_grid):

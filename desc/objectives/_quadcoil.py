@@ -1,11 +1,15 @@
 import warnings
 
+import numpy as np
+from scipy.constants import mu_0
+
 from desc.backend import jit, jnp
 from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer
+from desc.utils import Timer, errorif
 
 from ._quadcoil_utils import (
     _BCOIL_DATA_KEYS,
@@ -13,12 +17,14 @@ from ._quadcoil_utils import (
     _compute_Bnormal,
     _compute_Bnormal_ext,
     _compute_Bnormal_plasma,
+    _compute_Bplasma,
     _compute_eval_data_coils,
     _compute_G,
     _create_source,
     _ptolemy_identity_rev_compute,
     _ptolemy_identity_rev_precompute,
     _quadcoil_kwargs_to_field_kwargs,
+    _quadcoil_phi_to_desc_phi_gather,
 )
 
 # ----- A QUADCOIL wrapper -----
@@ -195,6 +201,8 @@ class QuadcoilProxy(_Objective):
     _units = "N/A"  # units of the output
     # string with python string formatting for printing the value
     _print_value_fmt = "QUADCOIL subproblem: "
+    # Subclasses can append extra equilibrium data keys for the eval grid.
+    _extra_eval_data_keys = []
 
     def __init__(  # noqa: C901
         self,
@@ -403,6 +411,9 @@ class QuadcoilProxy(_Objective):
             eval_data_keys = eval_data_keys + _BCOIL_DATA_KEYS
         if not self._vacuum:
             eval_data_keys = eval_data_keys + _BPLASMA_DATA_KEYS
+        eval_data_keys = list(
+            dict.fromkeys(eval_data_keys + list(self._extra_eval_data_keys))
+        )
         eval_profiles = get_profiles(eval_data_keys, obj=eq, grid=eval_grid)
         eval_transforms = get_transforms(eval_data_keys, obj=eq, grid=eval_grid)
         self._constants["eval_grid"] = eval_grid
@@ -449,32 +460,13 @@ class QuadcoilProxy(_Objective):
             jac_chunk_size=jac_chunk_size,
         )
 
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
+    def _build_quadcoil_constants(self, verbose=1):
+        """Precompute ptolemy maps, transforms, and eq_fixed quantities.
 
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
+        Shared by ``QuadcoilProxy.build`` and subclasses that set their own
+        ``_dim_f`` / ``quad_weights`` before calling ``_Objective.build``.
         """
-        # Importing QUADCOIL
-        try:
-            from quadcoil.io import generate_desc_scaling
-        except ModuleNotFoundError:
-            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
-
-        # ----- Starting and timing-----
-        # things is the list of things that will be optimized,
-        # we assigned things to be just eq in the init, so we know that the
-        # first (and only) element of things is the equilibrium
         eq = self._eq
-        # dim_f = size of the output vector returned by self.compute.
-        # This is a scalar objective.
-        self._dim_f = 1
-        # some helper code for profiling and logging
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -585,6 +577,33 @@ class QuadcoilProxy(_Objective):
                         self._bs_chunk_size,
                     )
 
+        # ----- Wrapping up and timing -----
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        # Importing QUADCOIL
+        try:
+            from quadcoil.io import generate_desc_scaling
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
+
+        # dim_f = size of the output vector returned by self.compute.
+        # This is a scalar objective.
+        self._dim_f = 1
+        self._build_quadcoil_constants(verbose=verbose)
+
         # ----- Normalization scales -----
         # We try to normalize things to order(1) by dividing things by some
         # characteristic scale for a given quantity.
@@ -594,17 +613,12 @@ class QuadcoilProxy(_Objective):
         # that act on self.scales and returns a number. Example:
         # K.desc_unit = lambda scales: scales["B"] / mu_0 # noqa: E800
         if self._normalize:
-            self.scales = compute_scaling_factors(eq)
+            self.scales = compute_scaling_factors(self._eq)
             obj_unit_new, cons_unit_new = generate_desc_scaling(
                 self.objective_name, self.constraint_name, self.scales
             )
             self.objective_unit = obj_unit_new
             self.constraint_unit = cons_unit_new
-
-        # ----- Wrapping up and timing -----
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
 
         # ----- Fixing a key error -----
         # The QUADCOIL has np coordinates. To prevent a key error when DESC
@@ -642,6 +656,46 @@ class QuadcoilProxy(_Objective):
         # We prohibit the user from providing constants
         return self.solve_quadcoil(*all_params, full_mode=False)
 
+    def _quadcoil_inputs(self, *all_params):
+        """Resolve eq/field params, plasma dofs, and net poloidal current G.
+
+        Returns
+        -------
+        params_eq : dict
+        params_field : dict or tuple
+        plasma_dofs : ndarray
+        net_poloidal_current_amperes : float
+        """
+        constants = self._constants
+
+        if self._eq_fixed:
+            params_eq = self._eq.params_dict
+            params_field = all_params
+        else:
+            params_eq = all_params[0]
+            if self._field:
+                if self._field_fixed:
+                    params_field = constants["sum_field"].params_dict
+                else:
+                    params_field = all_params[1:]
+            else:
+                params_field = {}
+
+        if self._eq_fixed:
+            plasma_dofs = constants["plasma_dofs"]
+        else:
+            plasma_dofs = self.compute_plasma_surface_dofs_simsopt(params_eq)
+
+        if self._enable_net_current_plasma:
+            if self._eq_fixed:
+                net_poloidal_current_amperes = constants["G"]
+            else:
+                net_poloidal_current_amperes = _compute_G(params_eq, constants)
+        else:
+            net_poloidal_current_amperes = 0.0
+
+        return params_eq, params_field, plasma_dofs, net_poloidal_current_amperes
+
     def solve_quadcoil(self, *all_params, full_mode=True):
         """Calls QUADCOIL.
 
@@ -674,34 +728,13 @@ class QuadcoilProxy(_Objective):
         except ModuleNotFoundError:
             raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
 
-        # Loading constants
-        constants = self._constants
-
-        # Load fixed params
-        if self._eq_fixed:
-            params_eq = self._eq.params_dict
-            params_field = all_params
-        else:
-            params_eq = all_params[0]
-            if self._field:
-                if self._field_fixed:
-                    params_field = constants["sum_field"].params_dict
-                else:
-                    params_field = all_params[1:]
-            else:
-                params_field = {}
-
-        # ----- Quantities with pre-computation -----
-
-        # Plasma dofs
-        if self._eq_fixed:
-            plasma_dofs = constants["plasma_dofs"]
-        else:
-            plasma_dofs = self.compute_plasma_surface_dofs_simsopt(params_eq)
+        params_eq, params_field, plasma_dofs, net_poloidal_current_amperes = (
+            self._quadcoil_inputs(*all_params)
+        )
 
         Bnormal = _compute_Bnormal(
             field=self._field,
-            constants=constants,
+            constants=self._constants,
             Bnormal_shape=self._Bnormal_shape,
             vacuum=self._vacuum,
             eq_fixed=self._eq_fixed,
@@ -711,15 +744,6 @@ class QuadcoilProxy(_Objective):
             bs_chunk_size=self._bs_chunk_size,
             bplasma_chunk_size=self._bplasma_chunk_size,
         )
-
-        # ----- Calling the net poloidal current -----
-        if self._enable_net_current_plasma:
-            if self._eq_fixed:
-                net_poloidal_current_amperes = constants["G"]
-            else:
-                net_poloidal_current_amperes = _compute_G(params_eq, constants)
-        else:
-            net_poloidal_current_amperes = 0.0
 
         # ----- Calling the quadcoil wrapper with custom_vjp -----
         if full_mode:
@@ -813,28 +837,11 @@ class QuadcoilProxy(_Objective):
             plasma_dofs = jnp.concatenate([rc, rs, zc, zs])
         return plasma_dofs
 
-    def solve_quadcoil_surface_current(self, *all_params):
-        """Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
-
-        Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
-        For use with DESC's built-in REGCOIL and coil-cutting features.
-
-        Parameters
-        ----------
-        params_eq : dict
-            Dictionary of equilibrium degrees of freedom, eg
-            Equilibrium.params_dict.
-
-        Returns
-        -------
-        A FourierCurrentPotentialField containing the QUADCOIL solution.
-        """
+    def _build_field_from_quadcoil(self, quadcoil_qp, quadcoil_dofs):
+        """Build a ``FourierCurrentPotentialField`` from a QUADCOIL solution."""
         # Prevents circular import
         from desc.magnetic_fields import FourierCurrentPotentialField
 
-        _, quadcoil_qp, quadcoil_dofs, _ = self.solve_quadcoil(
-            *all_params, full_mode=True
-        )
         quadcoil_kwargs_temp = {
             "winding_stellsym": quadcoil_qp.winding_surface.stellsym,
             "winding_mpol": quadcoil_qp.winding_surface.mpol,
@@ -879,3 +886,323 @@ class QuadcoilProxy(_Objective):
             check_orientation=True,
             **filtered,
         )
+
+    def solve_quadcoil_surface_current(self, *all_params):
+        """Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
+
+        Calls QUADCOIL and returns the solution as a FourierCurrentPotentialField.
+        For use with DESC's built-in REGCOIL and coil-cutting features.
+
+        Parameters
+        ----------
+        params_eq : dict
+            Dictionary of equilibrium degrees of freedom, eg
+            Equilibrium.params_dict.
+
+        Returns
+        -------
+        A FourierCurrentPotentialField containing the QUADCOIL solution.
+        """
+        _, quadcoil_qp, quadcoil_dofs, _ = self.solve_quadcoil(
+            *all_params, full_mode=True
+        )
+        return self._build_field_from_quadcoil(quadcoil_qp, quadcoil_dofs)
+
+
+class QuadcoilFreeBoundaryError(QuadcoilProxy):
+    """Free-boundary residual with external field from a QUADCOIL solve.
+
+    Solves QUADCOIL for the differentiable current potential ``phi_dofs`` and
+    evaluates the same residual blocks as :class:`BoundaryError`, with the
+    winding-surface field playing the role of the external coil field.
+
+    The winding-surface geometry is frozen at ``build`` time; only ``Phi(eq)``
+    and the evaluation geometry carry equilibrium gradients.
+    """
+
+    _static_attrs = QuadcoilProxy._static_attrs + [
+        "_eq_data_keys",
+        "_sheet_current",
+        "_sheet_data_keys",
+    ]
+
+    _scalar = False
+    _coordinates = "rtz"
+    _units = "(T*m^2, T^2*m^2, T*m^2)"
+    _print_value_fmt = "Quadcoil boundary error: "
+    _extra_eval_data_keys = _BPLASMA_DATA_KEYS + ["p"]
+
+    def __init__(
+        self,
+        eq,
+        quadcoil_kwargs,
+        plasma_M_theta=None,
+        plasma_N_phi=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        vacuum=False,
+        normalize=True,
+        normalize_target=True,
+        verbose=0,
+        name="Quadcoil free boundary error",
+        source_grid=None,
+        field=None,
+        field_grid=None,
+        winding_grid=None,
+        enable_net_current_plasma=True,
+        eq_fixed=False,
+        field_fixed=False,
+        s=None,
+        q=None,
+        B_plasma_chunk_size=None,
+        jac_chunk_size=None,
+        bs_chunk_size=None,
+    ):
+        errorif(
+            eq_fixed,
+            ValueError,
+            "QuadcoilFreeBoundaryError does not support eq_fixed=True "
+            "(the residual would be constant).",
+        )
+        self._sheet_current = hasattr(eq.surface, "Phi_mn")
+        self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
+        self._q = q
+        super().__init__(
+            eq=eq,
+            quadcoil_kwargs=quadcoil_kwargs,
+            plasma_M_theta=plasma_M_theta,
+            plasma_N_phi=plasma_N_phi,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            metric_name="phi_dofs",
+            metric_weight=1.0,
+            metric_target=0.0,
+            vacuum=vacuum,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            verbose=verbose,
+            name=name,
+            source_grid=source_grid,
+            field=field,
+            field_grid=field_grid,
+            enable_net_current_plasma=enable_net_current_plasma,
+            eq_fixed=eq_fixed,
+            field_fixed=field_fixed,
+            B_plasma_chunk_size=B_plasma_chunk_size,
+            jac_chunk_size=jac_chunk_size,
+            bs_chunk_size=bs_chunk_size,
+        )
+        self._constants["winding_grid"] = winding_grid
+        self._eq_data_keys = list(self._extra_eval_data_keys)
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self._eq
+        self._build_quadcoil_constants(verbose=verbose)
+
+        # Source transforms from _create_source only cover _BPLASMA_DATA_KEYS;
+        # rebuild with the full free-boundary keys (includes "p") when needed.
+        if not self._vacuum:
+            self._constants["source_profiles"] = get_profiles(
+                self._eq_data_keys, obj=eq, grid=self._constants["source_grid"]
+            )
+            self._constants["source_transforms"] = get_transforms(
+                self._eq_data_keys, obj=eq, grid=self._constants["source_grid"]
+            )
+
+        # Freeze winding geometry at a concrete QUADCOIL solution.
+        _, qp, dofs, _ = self.solve_quadcoil(eq.params_dict, full_mode=True)
+        # Building a static FourierCurrentPotentialField from the QUADCOIL solution
+        # that serves to store its static attributes.
+        field = self._build_field_from_quadcoil(qp, dofs)
+        phi = np.asarray(dofs["phi"])
+        # Calculating static operator that converts a quadcoil current potential
+        # to a DESC current potential.
+        # Works like this: Phi_mn_gather = np.sum(coef * phi[idx], axis=1)
+        idx, coef = _quadcoil_phi_to_desc_phi_gather(
+            len(phi), qp.stellsym, qp.mpol, qp.ntor, field.Phi_basis
+        )
+        self._constants["winding_field"] = field
+        self._constants["phi_gather_idx"] = idx
+        self._constants["phi_gather_coef"] = coef
+
+        if self._sheet_current:
+            self._sheet_data_keys = ["K"]
+            self._constants["sheet_source_transforms"] = get_transforms(
+                self._sheet_data_keys,
+                obj=eq.surface,
+                grid=self._constants["source_grid"],
+            )
+            self._constants["sheet_eval_transforms"] = get_transforms(
+                self._sheet_data_keys,
+                obj=eq.surface,
+                grid=self._constants["eval_grid"],
+            )
+
+        eval_grid = self._constants["eval_grid"]
+        neq = 3 if self._sheet_current else 2
+        self._dim_f = neq * eval_grid.num_nodes
+        self._constants["quad_weights"] = np.sqrt(np.tile(eval_grid.weights, neq))
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            Bn_norm = (
+                np.ones(eval_grid.num_nodes) * scales["B"] * scales["R0"] * scales["a"]
+            )
+            B2_norm = (
+                np.ones(eval_grid.num_nodes)
+                * scales["B"] ** 2
+                * scales["R0"]
+                * scales["a"]
+            )
+            self._normalization = np.concatenate([Bn_norm, B2_norm])
+            if self._sheet_current:
+                self._normalization = np.concatenate([self._normalization, Bn_norm])
+
+        _Objective.build(self, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *all_params, constants=None):
+        """Compute free-boundary residual with QUADCOIL external field.
+
+        Parameters
+        ----------
+        *all_params : dict
+            Dictionaries of equilibrium/coils degrees of freedom.
+        constants : dict
+            Deprecated; ignored. Constants are taken from ``self._constants``.
+
+        Returns
+        -------
+        f : ndarray
+            Boundary error residuals. First block is √g B·n, second is
+            √g[[B² + 2μ₀p]], and (if sheet current) third is
+            √g||μ₀K − n × [B]||.
+        """
+        _ = self._get_deprecated_constants(constants)
+        constants = self._constants
+
+        params_eq, params_field, plasma_dofs, G = self._quadcoil_inputs(*all_params)
+
+        sheet_source_data = None
+        sheet_eval_data = None
+        if self._sheet_current:
+            sheet_params = {
+                "R_lmn": params_eq["Rb_lmn"],
+                "Z_lmn": params_eq["Zb_lmn"],
+                "I": params_eq["I"],
+                "G": params_eq["G"],
+                "Phi_mn": params_eq["Phi_mn"],
+            }
+            sheet_source_data = compute_fun(
+                self._eq.surface,
+                self._sheet_data_keys,
+                params=sheet_params,
+                transforms=constants["sheet_source_transforms"],
+                profiles={},
+            )
+            sheet_eval_data = compute_fun(
+                self._eq.surface,
+                self._sheet_data_keys,
+                params=sheet_params,
+                transforms=constants["sheet_eval_transforms"],
+                profiles={},
+            )
+
+        if self._vacuum:
+            eval_data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
+                self._eq_data_keys,
+                params=params_eq,
+                transforms=constants["eval_transforms"],
+                profiles=constants["eval_profiles"],
+            )
+            Bplasma = 0.0
+        else:
+            K_sheet = sheet_source_data["K"] if sheet_source_data is not None else None
+            Bplasma, eval_data = _compute_Bplasma(
+                constants,
+                params_eq,
+                self._bplasma_chunk_size,
+                self._eq_data_keys,
+                K_sheet=K_sheet,
+            )
+
+        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+        Bnormal = jnp.sum(Bplasma * eval_data["n_rho"], axis=-1).reshape(
+            self._Bnormal_shape
+        )
+        if self._field:
+            constants["coils_x"] = x
+            constants["coils_n_rho"] = eval_data["n_rho"]
+            Bnormal = Bnormal + _compute_Bnormal_ext(
+                constants, params_field, self._bs_chunk_size
+            ).reshape(self._Bnormal_shape)
+
+        phi = self._quadcoil_for_diff(
+            plasma_dofs=plasma_dofs,
+            net_poloidal_current_amperes=G,
+            net_toroidal_current_amperes=self.net_toroidal_current_amperes,
+            Bnormal_plasma=Bnormal,
+            plasma_coil_distance=self.plasma_coil_distance,
+            winding_dofs=self.winding_dofs,
+            objective_weight=self.objective_weight,
+            constraint_value=self.constraint_value,
+        )["phi_dofs"]
+
+        Phi_mn = jnp.sum(
+            constants["phi_gather_coef"] * phi[constants["phi_gather_idx"]],
+            axis=1,
+        )
+        winding_field = constants["winding_field"]
+        Bext = winding_field.compute_magnetic_field(
+            x,
+            params={
+                **winding_field.params_dict,
+                "Phi_mn": Phi_mn,
+                "G": G,
+                "I": self.net_toroidal_current_amperes,
+            },
+            basis="rpz",
+            source_grid=constants["winding_grid"],
+            chunk_size=self._bs_chunk_size,
+        )
+        if self._field:
+            Bext = Bext + constants["sum_field"].compute_magnetic_field(
+                x,
+                source_grid=constants["field_grid"],
+                basis="rpz",
+                params=params_field,
+                chunk_size=self._bs_chunk_size,
+            )
+
+        Bex_total = Bext + Bplasma
+        Bin_total = eval_data["B"]
+        Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)
+
+        bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
+        bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
+
+        g = eval_data["|e_theta x e_zeta|"]
+        Bn_err = Bn * g
+        Bsq_err = jnp.where(
+            eval_data["p"] == 0,
+            (bsq_in - bsq_out) * g,
+            (bsq_in - bsq_out + eval_data["p"] * 2 * mu_0) * g,
+        )
+        Bjump = Bex_total - Bin_total
+        if self._sheet_current:
+            Kerr = mu_0 * sheet_eval_data["K"] - jnp.cross(eval_data["n_rho"], Bjump)
+            Kerr = jnp.linalg.norm(Kerr, axis=-1) * g
+            return jnp.concatenate([Bn_err, Bsq_err, Kerr])
+        return jnp.concatenate([Bn_err, Bsq_err])

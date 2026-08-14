@@ -82,6 +82,7 @@ from desc.objectives import (
     PlasmaVesselDistance,
     Pressure,
     PrincipalCurvature,
+    QuadcoilFreeBoundaryError,
     QuadcoilProxy,
     QuadraticFlux,
     QuasisymmetryBoozer,
@@ -504,6 +505,8 @@ class TestObjectiveFunction:
         # 5% normalized error in Phi Fourier coefficients
         thres_phi = 0.01
         thres_G = 0.001  # to be decreased
+        # Free-boundary residual should match BoundaryError on the same field
+        thres_fbe = 1e-8
 
         # ----- Test 1: NESCOIL, value only -----
         def run_regcoil(vacuum):
@@ -542,7 +545,7 @@ class TestObjectiveFunction:
                 # this constant.
                 "objective_unit": None,
             }
-            from desc.objectives import QuadcoilProxy
+            from desc.objectives import QuadcoilFreeBoundaryError, QuadcoilProxy
 
             # Define a QuadcoilProxy with the simplest possible
             # signature
@@ -650,6 +653,41 @@ class TestObjectiveFunction:
                 jnp.abs(phi1_regcoil)
             )
             assert norm_error <= thres_phi
+
+            # ----- QuadcoilFreeBoundaryError vs BoundaryError -----
+            fbe_quadcoil = QuadcoilFreeBoundaryError(
+                eq=quadcoil_test_eq,
+                quadcoil_kwargs=quadcoil_kwargs_regcoil,
+                vacuum=vacuum,
+            )
+            fbe_quadcoil.build()
+            f_quadcoil = fbe_quadcoil.compute_unscaled(
+                *fbe_quadcoil.xs(quadcoil_test_eq)
+            )
+
+            fbe_kwargs = dict(
+                eq=quadcoil_test_eq,
+                field=scf_regcoil,
+                eval_grid=fbe_quadcoil._constants["eval_grid"],
+                field_grid=fbe_quadcoil._constants["winding_grid"],
+                field_fixed=True,
+                normalize=False,
+                normalize_target=False,
+            )
+            if vacuum:
+                fbe_regcoil = VacuumBoundaryError(**fbe_kwargs)
+            else:
+                fbe_regcoil = BoundaryError(
+                    source_grid=fbe_quadcoil._constants["source_grid"], **fbe_kwargs
+                )
+            fbe_regcoil.build()
+            f_regcoil = fbe_regcoil.compute_unscaled(*fbe_regcoil.xs(quadcoil_test_eq))
+
+            assert f_quadcoil.shape == f_regcoil.shape
+            fbe_norm_error = np.max(np.abs(f_quadcoil - f_regcoil)) / np.max(
+                np.abs(f_regcoil)
+            )
+            assert fbe_norm_error <= thres_fbe
 
         run_regcoil(True)
         run_regcoil(False)
@@ -3510,6 +3548,7 @@ class TestComputeScalarResolution:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        QuadcoilFreeBoundaryError,
         QuadcoilProxy,
         SurfaceQuadraticFlux,
         ToroidalFlux,
@@ -4033,6 +4072,7 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
         QuadraticFlux,
+        QuadcoilFreeBoundaryError,
         QuadcoilProxy,
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,

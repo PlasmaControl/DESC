@@ -946,6 +946,23 @@ class QuadcoilFreeBoundaryError(QuadcoilProxy):
             "QuadcoilFreeBoundaryError does not support eq_fixed=True "
             "(the residual would be constant).",
         )
+        obj_name = quadcoil_kwargs.get("objective_name")
+        if isinstance(obj_name, str):
+            has_f_B = "f_B" in obj_name
+        elif isinstance(obj_name, (tuple, list)):
+            has_f_B = any("f_B" in name for name in obj_name)
+        else:
+            has_f_B = False
+        if not has_f_B:
+            warnings.warn(
+                "objective_name does not contain f_B. This is discouraged for "
+                "free boundary quasi-single-stage optimization. "
+                "QuadcoilFreeBoundary minimizes the free boundary error using "
+                "external magnetic fields generated a QUADCOIL solve (and some "
+                "other fields, if provided). If the QUADCOIL objective does not "
+                "contain 'f_B', then QUADCOIL may not push f_B low enough for "
+                "free boundary error to also be low."
+            )
         self._sheet_current = hasattr(eq.surface, "Phi_mn")
         self._st, self._sz = s if isinstance(s, (tuple, list)) else (s, s)
         self._q = q

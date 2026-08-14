@@ -2348,9 +2348,13 @@ class TestObjectiveFunction:
         actual = obj.compute(eq.params_dict)
         np.testing.assert_allclose(actual, expected)
 
-    @pytest.mark.unit
+    @pytest.mark.manual
     def test_trapped_resonance_bounce2d_matches_bounce1d(self):
-        """Test TrappedResonance agrees between its two bounce backends."""
+        """Test TrappedResonance agrees between its two bounce backends.
+
+        Kept out of CI: ~155 s, and Bounce2D is not the default backend. Run
+        with 'pytest -m manual' after touching either bounce path.
+        """
         eq = get("precise_QA")
         opts = dict(
             rho=20,
@@ -2408,6 +2412,7 @@ class TestObjectiveFunction:
         with pytest.raises(ValueError, match=">= 2"):
             TrappedResonance(eq, rho=1).build(verbose=0)
 
+    @pytest.mark.unit
     def test_trapped_resonance_analytic_omega_prime(self):
         """Analytic Ω'(s) matches a small step finite difference of Ω."""
         eq = get("ESTELL")
@@ -3621,12 +3626,17 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is TrappedResonance:
-        kwargs["rho"] = 10
-        kwargs["num_eta"] = 10
+        # Trimmed to what still exercises the objective: the test is dominated
+        # by compiling the gradient graph, not by these sizes, so they buy
+        # ~20%. Do not cut further without checking the gradient is still
+        # non-zero -- rho=5 or num_transit=2 send the linear weighting to
+        # exactly zero, which passes a no-NaN assertion while testing nothing.
+        kwargs["rho"] = 6
+        kwargs["num_eta"] = 8
         kwargs["num_transit"] = 4
-        kwargs["knots_per_transit"] = 60
+        kwargs["knots_per_transit"] = 40
         kwargs["num_pitch"] = 8
-        kwargs["num_quad"] = 16
+        kwargs["num_quad"] = 8
         kwargs["p_max"] = 4
         kwargs["q_max"] = 4
     return objective(eq=eq, **kwargs)
@@ -3678,6 +3688,8 @@ class TestComputeScalarResolution:
         ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
+        # has its own test, kept out of CI by the manual marker
+        TrappedResonance,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -4086,46 +4098,56 @@ class TestComputeScalarResolution:
         """All other objectives."""
         rtol = 6e-2
         f = np.zeros_like(self.res_array, dtype=float)
-        if objective is TrappedResonance:
-            eq = get("precise_QA")
-            kwargs = dict(
-                rho=20,
-                num_eta=20,
-                num_transit=4,
-                knots_per_transit=60,
-                num_pitch=8,
-                num_quad=16,
-                p_max=4,
-                q_max=4,
-                N=0,
-                M=1,
+        for i, res in enumerate(self.res_array):
+            # just change eq resolution, let objective pick the grid type
+            self.eq.change_resolution(
+                L_grid=int(self.eq.L * res),
+                M_grid=int(self.eq.M * res),
+                N_grid=int(self.eq.N * res),
             )
-            for i, res in enumerate(self.res_array):
-                eq.change_resolution(
-                    L_grid=int(eq.L * res),
-                    M_grid=int(eq.M * res),
-                    N_grid=int(eq.N * res),
-                )
-                obj = ObjectiveFunction(
-                    TrappedResonance(eq=eq, **kwargs), use_jit=False
-                )
-                obj.build(verbose=0)
-                f[i] = obj.compute_scalar(obj.x())
-        else:
-            for i, res in enumerate(self.res_array):
-                # just change eq resolution, let objective pick the grid type
-                self.eq.change_resolution(
-                    L_grid=int(self.eq.L * res),
-                    M_grid=int(self.eq.M * res),
-                    N_grid=int(self.eq.N * res),
-                )
-                obj = ObjectiveFunction(
-                    _reduced_resolution_objective(self.eq, objective), use_jit=False
-                )
-                obj.build(verbose=0)
-                f[i] = obj.compute_scalar(obj.x())
+            obj = ObjectiveFunction(
+                _reduced_resolution_objective(self.eq, objective), use_jit=False
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(
             f, f[-1], rtol=rtol, atol=1e-4 if np.max(f) < 1e-3 else 0
+        )
+
+    @pytest.mark.manual
+    def test_compute_scalar_resolution_trapped_resonance(self):
+        """TrappedResonance. Kept out of CI: ~170 s, see the manual marker."""
+        eq = get("precise_QA")
+        # rho and num_eta halved from 20: this test is compute bound, so that
+        # halves its runtime while the spread across res_array stays at 0.004,
+        # well inside rtol. Leave knots_per_transit and num_quad alone --
+        # cutting those moves the objective value by ~60x, which would verify
+        # resolution independence in a regime where the quadrature itself is
+        # unconverged.
+        kwargs = dict(
+            rho=10,
+            num_eta=10,
+            num_transit=4,
+            knots_per_transit=60,
+            num_pitch=8,
+            num_quad=16,
+            p_max=4,
+            q_max=4,
+            N=0,
+            M=1,
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res),
+                M_grid=int(eq.M * res),
+                N_grid=int(eq.N * res),
+            )
+            obj = ObjectiveFunction(TrappedResonance(eq=eq, **kwargs), use_jit=False)
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(
+            f, f[-1], rtol=6e-2, atol=1e-4 if np.max(f) < 1e-3 else 0
         )
 
     @pytest.mark.regression

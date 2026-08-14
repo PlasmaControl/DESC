@@ -38,7 +38,7 @@ class AbstractGridCurve(AbstractGrid):
         if label in {"x0", "x1", "x2"}:
             return label
         x2 = {"s": "s"}[self.coordinates[2]]
-        return {x2: "x2"}[label]
+        return {x2: "x2", "toroidal": "x2"}[label]
 
     @property
     def coordinates(self):

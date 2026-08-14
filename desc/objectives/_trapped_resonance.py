@@ -137,7 +137,7 @@ def _tangent_keys(parameterization, keys):
     seeded, consumed = _seeded_keys(keys, parameterization)
     index = data_index[parameterization]
     tangent = {
-        key: _seed_tangent_key(key) for key in seeded if _seed_tangent_key(key) in index
+        key: t_key for key in seeded if (t_key := _seed_tangent_key(key)) in index
     }
     # "rho" differentiates to 1; "p_r" is covered by _p_rr.
     missing = sorted(consumed - set(tangent) - {"rho", "p_r"})

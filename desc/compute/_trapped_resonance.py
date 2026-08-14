@@ -8,15 +8,9 @@ from desc.grid import Grid
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce1D, Bounce2D
 from ..utils import safediv
-from ._fast_ion import _radial_drift
+from ._fast_ion import _radial_drift, _v_tau
 from ._neoclassical import _bounce_doc
 from .data_index import register_compute_fun
-
-
-def _v_tau(data, B, pitch):
-    # Note v τ = 4λ⁻²B₀⁻¹ ∂I/∂((λB₀)⁻¹) where v is the particle velocity,
-    # τ is the bounce time, and I is defined in Nemov et al. eq. 36.
-    return safediv(2.0, jnp.sqrt(jnp.abs(1 - pitch * B)))
 
 
 def _jnpmean_nz(x, axis=0, fill=jnp.nan):
@@ -906,8 +900,10 @@ def _resonance_physics(
     # Island widths
     q_iw = q_arr[None, None, None, :]
     denom = jnp.pi * q_iw * jnp.abs(Omega_prime_s[..., None])
-    Delta_s_profile = 4 * jnp.sqrt(safediv(f_q_abs, denom, fill=0.0))
-    Delta_s_sq_profile = 16 * safediv(f_q_abs, denom, fill=0.0)
+    # (Delta_s / 4)² = f_q / (pi q |Omega'|), so both forms share one quotient.
+    width_sq = safediv(f_q_abs, denom, fill=0.0)
+    Delta_s_profile = 4 * jnp.sqrt(width_sq)
+    Delta_s_sq_profile = 16 * width_sq
     Delta_s_sq_sum = (Delta_s_sq_profile * res_weight).sum(axis=-1)
 
     if stab_sacrifice:
@@ -1240,10 +1236,6 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 pitch_inv_weight=pitch_inv_weight_use,
             )
             num_rho_psa = psa_grid.num_rho
-            if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
-                vtau_psa = vtau_psa.reshape(
-                    num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
-                )
         else:
             # The phase-space average is taken over field lines uniform in
             # alpha, unlike the eta grid above, so the labels are the same on
@@ -1292,10 +1284,15 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 pitch_inv_weight=pitch_inv_weight_use,
             )
             num_rho_psa = rhos.size
-            if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
-                vtau_psa = vtau_psa.reshape(
-                    num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
-                )
+
+        # Batching can return the flux surface and field line axes flattened
+        # together. ``_phase_space_average`` averages over field lines on
+        # axis 1, so restore them; otherwise it silently reduces over the
+        # wrong axis and only the magnitude is wrong.
+        if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
+            vtau_psa = vtau_psa.reshape(
+                num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
+            )
 
         fl_length = _field_line_length(
             use_bounce1d, psa_grid, data_psa, zeta, num_transit, base_grid, data

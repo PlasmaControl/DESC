@@ -839,36 +839,35 @@ def _resonance_physics(
         # Double-where: use Omega_safe (0 at invalid entries) so that
         # safediv never sees fill_value operands, preventing NaN gradients.
         Omega_safe_lin = jnp.where(valid, Omega, 0.0)
-        Omega_prev_lin = jnp.concatenate(
-            [jnp.zeros_like(Omega_safe_lin[:1]), Omega_safe_lin[:-1]], axis=0
-        )[..., None]
-        Omega_next_lin = jnp.concatenate(
-            [Omega_safe_lin[1:], jnp.zeros_like(Omega_safe_lin[:1])], axis=0
-        )[..., None]
         Omega_broad_safe = Omega_safe_lin[..., None]
-        valid_next_lin = jnp.concatenate(
-            [valid[1:], jnp.zeros_like(valid[:1])], axis=0
-        )[..., None]
-        valid_prev_lin = jnp.concatenate(
-            [jnp.zeros_like(valid[:1]), valid[:-1]], axis=0
-        )[..., None]
-        between_next = valid_next_lin & (
-            ((Omega_next_lin >= res_broad) & (res_broad >= Omega_broad_safe))
-            | ((Omega_next_lin <= res_broad) & (res_broad <= Omega_broad_safe))
-        )
-        w_next = safediv(
-            Omega_next_lin - res_broad, Omega_next_lin - Omega_broad_safe, fill=0.0
-        )
-        between_prev = valid_prev_lin & (
-            ((Omega_prev_lin >= res_broad) & (res_broad >= Omega_broad_safe))
-            | ((Omega_prev_lin <= res_broad) & (res_broad <= Omega_broad_safe))
-        )
-        w_prev = safediv(
-            Omega_prev_lin - res_broad, Omega_prev_lin - Omega_broad_safe, fill=0.0
-        )
-        res_weight = jnp.where(
-            between_next, w_next, jnp.where(between_prev, w_prev, 0.0)
-        )
+        zero_O = jnp.zeros_like(Omega_safe_lin[:1])
+        zero_v = jnp.zeros_like(valid[:1])
+        # Neighbouring surfaces, zero padded at the ends where there is none.
+        # A resonance is bracketed when it lies between this surface's Omega
+        # and the neighbour's, in either direction; the weight is the linear
+        # interpolant across that bracket. Ordered prev then next, so that
+        # next overwrites prev where both bracket the same resonance.
+        res_weight = 0.0
+        for Omega_nb, valid_nb in (
+            (
+                jnp.concatenate([zero_O, Omega_safe_lin[:-1]], axis=0),
+                jnp.concatenate([zero_v, valid[:-1]], axis=0),
+            ),
+            (
+                jnp.concatenate([Omega_safe_lin[1:], zero_O], axis=0),
+                jnp.concatenate([valid[1:], zero_v], axis=0),
+            ),
+        ):
+            Omega_nb = Omega_nb[..., None]
+            between = valid_nb[..., None] & (
+                ((Omega_nb >= res_broad) & (res_broad >= Omega_broad_safe))
+                | ((Omega_nb <= res_broad) & (res_broad <= Omega_broad_safe))
+            )
+            res_weight = jnp.where(
+                between,
+                safediv(Omega_nb - res_broad, Omega_nb - Omega_broad_safe, fill=0.0),
+                res_weight,
+            )
 
     # Set weight to zero for invalid points.
     res_weight = jnp.where(valid[..., None], res_weight, 0)
@@ -944,7 +943,7 @@ def _resonance_physics(
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi", "V_psi"],
+    data=["iota", "iota_r", "min_tz |B|", "max_tz |B|", "V_psi"],
     grid_requirement={"is_meshgrid": True},
     public=False,
     **_bounce1D_doc,
@@ -1285,10 +1284,6 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
             )
             num_rho_psa = rhos.size
 
-        # Batching can return the flux surface and field line axes flattened
-        # together. ``_phase_space_average`` averages over field lines on
-        # axis 1, so restore them; otherwise it silently reduces over the
-        # wrong axis and only the magnitude is wrong.
         if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
             vtau_psa = vtau_psa.reshape(
                 num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]

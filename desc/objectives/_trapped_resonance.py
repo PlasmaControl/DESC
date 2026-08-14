@@ -295,16 +295,7 @@ class TrappedResonance(_Objective):
     -----
     Ω'(s), the radial derivative of the normalized precession frequency that
     sets the island width, is obtained by differentiating the bounce integrals
-    with respect to rho at fixed λ and η. That is exact for any radial grid and
-    defined on every surface, and costs roughly double the work of evaluating
-    the field data and the bounce integrals.
-
-    It replaced a finite difference of Ω across neighbouring surfaces, which
-    was removed: on a stellarator dΩ/dρ swings over orders of magnitude between
-    adjacent surfaces, so that estimate does not converge at any practical
-    number of surfaces, and it is biased low because a secant cannot resolve
-    |Ω'| below the scale set by the radial grid spacing. The two agree exactly
-    when ``stab_sacrifice=True``, where Ω' cancels out of the objective.
+    with respect to rho at fixed λ and η.
     """
 
     _scalar = False
@@ -316,8 +307,6 @@ class TrappedResonance(_Objective):
         "_hyperparameters",
         "_keys_1dr",
         "_key",
-        # Selects which branch ``compute`` takes, so it must stay concrete
-        # under jit rather than becoming a traced leaf.
         "_use_bounce1d",
         "_X",
         "_Y",
@@ -534,19 +523,15 @@ class TrappedResonance(_Objective):
 
         for p in range(0, p_max + 1):
             for q in range(1, q_max + 1):
-                condition = np.logical_and(
-                    p / q >= res_range_min, p / q <= res_range_max
-                )
-                if condition:
-                    res_arr[res_arr_set] = p / q
+                ratio = p / q
+                if not res_range_min <= ratio <= res_range_max:
+                    continue
+                # +p/q and -p/q are distinct resonances unless p is zero.
+                for sign in (1, -1) if p else (1,):
+                    res_arr[res_arr_set] = sign * ratio
                     q_arr[res_arr_set] = q
-                    p_arr[res_arr_set] = p
+                    p_arr[res_arr_set] = sign * p
                     res_arr_set += 1
-                    if p != 0:
-                        res_arr[res_arr_set] = -p / q
-                        q_arr[res_arr_set] = q
-                        p_arr[res_arr_set] = -p
-                        res_arr_set += 1
 
         res_arr = res_arr[:res_arr_set]
         q_arr = q_arr[:res_arr_set]

@@ -165,7 +165,9 @@ def _compute2D(
     """
     for name in Bounce2D.required_names:
         fun_data[name] = data[name]
-    fun_data.pop("iota", None)
+    # iota is per-surface, not a (θ, ζ) field, so it must stay out of the
+    # transform below and come back compressed instead.
+    fun_data.pop("iota")
     for name in fun_data:
         fun_data[name] = Bounce2D.fourier(Bounce2D.reshape(grid, fun_data[name]))
     fun_data["iota"] = grid.compress(data["iota"])
@@ -285,10 +287,9 @@ _Z_ALPHA = 2  # charge number
 # 3.5 MeV, the birth energy of alpha particles from D-T fusion.
 _E_BIRTH = 5.6076e-13  # J
 
-# Field line data the bounce stage reads. ``_ETA_BOUNCE_KEYS`` is exactly the
-# set of eta grid quantities whose radial derivatives determine ∂Ω/∂ρ.
 _BOUNCE_INTEGRAND_KEYS = ("cvdrift0", "gbdrift (periodic)", "cvdrift (periodic)")
 _ETA_BOUNCE_KEYS = tuple(Bounce1D.required_names) + _BOUNCE_INTEGRAND_KEYS
+_FFT_BOUNCE_KEYS = tuple(Bounce2D.required_names) + _BOUNCE_INTEGRAND_KEYS
 
 
 def _global_pitch_quad(base_grid, data, num_pitch, pitch_invs):
@@ -312,6 +313,30 @@ def _global_pitch_quad(base_grid, data, num_pitch, pitch_invs):
         jnp.array([B_min]), jnp.array([B_max]), num_pitch, simp=True
     )
     return pitch_inv[0], weight[0]
+
+
+def _barely_trapped_filter(s_drift, points, iotas, M, N, nfp, fill_value):
+    """Zero out wells whose poloidal bounce width exceeds 2π.
+
+    Those particles are barely trapped: they sample the whole poloidal angle
+    within one bounce, so the resonance analysis does not describe them.
+
+    Parameters
+    ----------
+    s_drift : jnp.ndarray
+        Shape (rho, alpha, Bcrit, well). Bounce-averaged radial drift.
+    points : tuple[jnp.ndarray]
+        ζ at the start and end of each bounce.
+
+    Returns
+    -------
+    s_drift : jnp.ndarray
+        ``s_drift`` with the filtered wells set to ``fill_value``.
+
+    """
+    z1, z2 = points
+    delta_chi = jnp.abs(jnp.abs(z1 - z2) * (M * iotas[:, None, None, None] - N * nfp))
+    return jnp.where(delta_chi < 2 * jnp.pi, s_drift, fill_value)
 
 
 def _frequencies(
@@ -352,8 +377,9 @@ def _frequencies(
 
     # Bounce-averaged drifts → physical frequencies
     alpha_drift = alpha_drift_out * KE / (_Z_ALPHA * _E_CHARGE)
-    iotas_omega = jnp.broadcast_to(iotas[..., None, None, None], alpha_drift.shape)
-    eta_drift = safediv(nfp * alpha_drift, N * nfp - iotas_omega * M, fill=fill_value)
+    eta_drift = safediv(
+        nfp * alpha_drift, N * nfp - iotas[:, None, None, None] * M, fill=fill_value
+    )
 
     s_drift = s_drift_out * KE / (_Z_ALPHA * _E_CHARGE)
     tau_bounce = vtau_out / jnp.sqrt(v2)
@@ -493,17 +519,23 @@ _resonance_doc = {
         ``TrappedResonance.compute``. This private parameter is intended to
         be used only by developers for objectives.
         """,
-    "Omega_prime_method": """str :
-        ``"fd"`` estimates Ω'(s) by finite differences across the surfaces of
-        the radial grid. ``"analytic"`` instead differentiates the bounce
-        integrals with respect to rho directly, using ``_data_eta_r``.
+    "_data_fft_r": """dict[str, jnp.ndarray] :
+        Radial derivatives, at fixed theta and zeta, of the field data in
+        ``_data_fft``. The Bounce2D counterpart of ``_data_eta_r``. Required
+        on the Bounce2D path.
         """,
-    "_data_eta_r": """dict[str, jnp.ndarray] or None :
+    "_angle_r": """jnp.ndarray :
+        Radial derivative of ``_angle``, required alongside ``_data_fft_r``
+        because the poloidal angle map moves with rho through both iota and
+        lambda.
+        """,
+    "_data_eta_r": """dict[str, jnp.ndarray] :
         Radial derivatives, at fixed eta and zeta, of the field data in
         ``_data_eta``, built by ``TrappedResonance.compute``. Only the keys in
-        ``_ETA_BOUNCE_KEYS`` are read. If given, Ω'(s) is computed
-        analytically instead of by finite differences. This private parameter
-        is intended to be used only by developers for objectives.
+        ``_ETA_BOUNCE_KEYS`` are read. Required on the Bounce1D path: Ω'(s) is
+        obtained by differentiating the bounce integrals through them. This
+        private parameter is intended to be used only by developers for
+        objectives.
         """,
     "_data_psa": """dict[str, jnp.ndarray] :
         Field data evaluated on ``_psa_grid``, built by
@@ -511,6 +543,31 @@ _resonance_doc = {
         be used only by developers for objectives.
         """,
 }
+
+
+def _field_line_length(
+    use_bounce1d, psa_grid, data_psa, zeta, num_transit, base_grid, data
+):
+    """Alpha-averaged field line length of a single toroidal transit, ∫dl/B.
+
+    ∫dl/B = ∫dζ/B^ζ, integrated along the field lines of the phase-space
+    average grid for Bounce1D. Bounce2D does not materialize those field
+    lines, so the identity V_psi = ∬ |𝐁⋅∇ζ|⁻¹ dα dζ over (α, ζ) ∈ [0, 2π)²
+    is used instead, making the alpha-averaged single transit length
+    V_psi / 2π.
+
+    Returns
+    -------
+    fl_length : jnp.ndarray, shape (rho, )
+
+    """
+    if not use_bounce1d:
+        return base_grid.compress(data["V_psi"]) / (2 * jnp.pi)
+    Bzeta_psa = Bounce1D.reshape(psa_grid, data_psa["B^zeta"])
+    n_1t = len(zeta) // num_transit
+    return jnp.abs(
+        simpson(1 / Bzeta_psa[..., :n_1t], x=zeta[:n_1t], axis=-1).mean(axis=1)
+    )
 
 
 def _phase_space_average(
@@ -606,8 +663,8 @@ def _resonance_physics(
     wd_blur,
     fill_value,
     stab_sacrifice,
+    dOmega_drho,
     cropping_DOmega=False,
-    dOmega_drho=None,
 ):
     """Compute resonance frequencies, weights, island widths, and f_res.
 
@@ -654,19 +711,16 @@ def _resonance_physics(
         adjacent-surface Omega spacing when ``Delta_Omega`` is not provided.
     stab_sacrifice : bool
         Whether to sacrifice accuracy for stability in island widths.
+    dOmega_drho : jnp.ndarray
+        Shape (rho, pitch, well).
+        ∂Ω/∂ρ at fixed λ and η, obtained by differentiating the bounce
+        integrals.
     cropping_DOmega : bool
         If ``True``, Delta_Omega calculation is clipped by
         ``0.01 * max(Omega_eta) < Delta_Omega < 0.10 * max(Omega_eta)``.
         This must be when using the ``bump`` weighting method and
         ``Delta_Omega = None`` case. Otherwise this quantity is ignored.
         Defaults to ``False``.
-    dOmega_drho : jnp.ndarray or None
-        Shape (rho, pitch, well).
-        Analytic ∂Ω/∂ρ at fixed λ and η. If ``None``, ∂Ω/∂ρ is instead
-        estimated by finite differences across the surfaces of ``rhos``, which
-        needs both neighbours of a surface to be valid and is only as accurate
-        as ``rho_res`` allows.
-        Defaults to ``None``.
 
     Returns
     -------
@@ -698,8 +752,7 @@ def _resonance_physics(
             Eta precession frequency ω_η per field line, before
             alpha-averaging.
         Omega_prime_s : jnp.ndarray, shape (rho, pitch, well)
-            Radial derivative dOmega/ds, where s = rho², from ``dOmega_drho``
-            if given and otherwise from finite differences in rho.
+            Radial derivative dOmega/ds, where s = rho², from ``dOmega_drho``.
         res_weight : jnp.ndarray, shape (rho, pitch, well, res)
             Weight assigning each (rho, pitch, well) to each resonance in
             ``res_arr``, via 2-point linear interpolation or a smooth bump
@@ -714,7 +767,7 @@ def _resonance_physics(
             Per-surface island width (s = rho² units) at each resonance.
         s_res : jnp.ndarray, shape (pitch, well, res)
             Resonance-weighted mean s = rho² location of each resonance.
-        valid_prime : jnp.ndarray, shape (rho, pitch, well)
+        valid : jnp.ndarray, shape (rho, pitch, well)
             Boolean mask, ``True`` where a trapped particle exists at all
             alpha/eta and both ``Omega`` and ``Omega_prime_s`` are defined.
     """
@@ -730,55 +783,14 @@ def _resonance_physics(
     tau_bounce = freq["tau_bounce"]
     s_drift = freq["s_drift"]
 
-    if dOmega_drho is None:
-        # Omega'(s) via finite differences
-        # Use "double-where" to replace invalid Omega with 0 before arithmetic,
-        # preventing NaN gradients from flowing through unused jnp.where branches.
-        Omega_safe = jnp.where(valid, Omega, 0.0)
-        valid_prev = jnp.concatenate(
-            [jnp.zeros((1,) + valid.shape[1:], dtype=bool), valid[:-1]], axis=0
-        )
-        valid_next = jnp.concatenate(
-            [valid[1:], jnp.zeros((1,) + valid.shape[1:], dtype=bool)], axis=0
-        )
-        Omega_prev_safe = jnp.concatenate(
-            [jnp.zeros((1,) + Omega.shape[1:]), Omega_safe[:-1]], axis=0
-        )
-        Omega_next_safe = jnp.concatenate(
-            [Omega_safe[1:], jnp.zeros((1,) + Omega.shape[1:])], axis=0
-        )
-        grad_central = (Omega_next_safe - Omega_prev_safe) / (2 * rho_res)
-        grad_forward = (Omega_next_safe - Omega_safe) / rho_res
-        grad_backward = (Omega_safe - Omega_prev_safe) / rho_res
-        dOmega_drho = jnp.where(
-            valid & valid_prev & valid_next,
-            grad_central,
-            jnp.where(
-                valid & valid_next & ~valid_prev,
-                grad_forward,
-                jnp.where(
-                    valid & valid_prev & ~valid_next,
-                    grad_backward,
-                    fill_value,
-                ),
-            ),
-        )
-    else:
-        # Analytic ∂Ω/∂ρ needs no neighbouring surface, so it is defined
-        # wherever Omega itself is.
-        dOmega_drho = jnp.where(valid, dOmega_drho, fill_value)
-
-    Omega_prime_s = safediv(dOmega_drho, 2 * rhos[:, None, None], fill=fill_value)
+    dOmega_drho = jnp.where(valid, dOmega_drho, fill_value)
     Omega_prime_s = jnp.where(
-        _is_valid_value(dOmega_drho, fill_value), Omega_prime_s, fill_value
+        valid, dOmega_drho / (2 * rhos[:, None, None]), fill_value
     )
 
     # Resonance weights
     Omega_broad = Omega[..., None]
     res_broad = res_arr[None, None, None, :]
-
-    # Indices are valid if Omega_prime_s is valid and Omega is valid.
-    valid_prime = valid & _is_valid_value(Omega_prime_s, fill_value)
 
     if weight_method == "bump":
         if Delta_Omega is None:
@@ -828,7 +840,7 @@ def _resonance_physics(
         C_norm = safediv(71.12518788738504, Delta_Omega_val, fill=0.0)
         w_raw = rho_res * C_norm * jnp.abs(dOmega_drho[..., None]) * jnp.exp(exp_arg)
         # Weight is non-zero only if in interval and valid
-        res_weight = jnp.where(in_interval & valid_prime[..., None], w_raw, 0)
+        res_weight = jnp.where(in_interval & valid[..., None], w_raw, 0)
     else:
         # Double-where: use Omega_safe (0 at invalid entries) so that
         # safediv never sees fill_value operands, preventing NaN gradients.
@@ -841,10 +853,10 @@ def _resonance_physics(
         )[..., None]
         Omega_broad_safe = Omega_safe_lin[..., None]
         valid_next_lin = jnp.concatenate(
-            [valid_prime[1:], jnp.zeros_like(valid_prime[:1])], axis=0
+            [valid[1:], jnp.zeros_like(valid[:1])], axis=0
         )[..., None]
         valid_prev_lin = jnp.concatenate(
-            [jnp.zeros_like(valid_prime[:1]), valid_prime[:-1]], axis=0
+            [jnp.zeros_like(valid[:1]), valid[:-1]], axis=0
         )[..., None]
         between_next = valid_next_lin & (
             ((Omega_next_lin >= res_broad) & (res_broad >= Omega_broad_safe))
@@ -865,7 +877,7 @@ def _resonance_physics(
         )
 
     # Set weight to zero for invalid points.
-    res_weight = jnp.where(valid_prime[..., None], res_weight, 0)
+    res_weight = jnp.where(valid[..., None], res_weight, 0)
 
     # Fourier analysis of radial drift.
     # Only perform FT if all eta points are valid.
@@ -889,7 +901,7 @@ def _resonance_physics(
     f_q_abs = jnp.where(is_zero, 0.0, f_q_abs)
 
     # Filter FT results to valid points.
-    f_q_abs = jnp.where(valid_prime[..., None], f_q_abs, 0.0)
+    f_q_abs = jnp.where(valid[..., None], f_q_abs, 0.0)
 
     # Island widths
     q_iw = q_arr[None, None, None, :]
@@ -921,7 +933,7 @@ def _resonance_physics(
         "Delta_s": Delta_s,  # (pitch, well, res), rho-weighted diagnostic
         "Delta_s_prof": Delta_s_profile,  # (rho, pitch, well, res)
         "s_res": s_res,  # (pitch, well, res), rho-weighted resonance location
-        "valid_prime": valid_prime,  # (rho, pitch, well)
+        "valid": valid,  # (rho, pitch, well)
     }
 
 
@@ -958,47 +970,44 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
     ``data``) to remain properly differentiable and dispatchable for any
     parameterization.
     """
-    num_pitch = kwargs.get("num_pitch", None)
+    num_pitch = kwargs.get("num_pitch")
     num_well = 1
     M = kwargs.get("M", 1)
     N = kwargs.get("N", 1)
-    nfp = kwargs.get("nfp", None)
-    KE_frac = kwargs.get("KE_frac", None)
-    pitch_invs = kwargs.get("pitch_invs", None)
-    rho_res = kwargs.get("rho_res", None)
-    eta_res = kwargs.get("eta_res", None)
-    res_arr = kwargs.get("res_arr", None)
-    p_arr = kwargs.get("p_arr", None)
-    q_arr = kwargs.get("q_arr", None)
-    quad = kwargs.get("quad", None)
+    nfp = kwargs.get("nfp")
+    KE_frac = kwargs.get("KE_frac")
+    pitch_invs = kwargs.get("pitch_invs")
+    rho_res = kwargs.get("rho_res")
+    eta_res = kwargs.get("eta_res")
+    res_arr = kwargs.get("res_arr")
+    p_arr = kwargs.get("p_arr")
+    q_arr = kwargs.get("q_arr")
+    quad = kwargs.get("quad")
     surf_batch_size = kwargs.get("surf_batch_size", 1)
-    num_eta = kwargs.get("num_eta", None)
+    num_eta = kwargs.get("num_eta")
     weight_method = kwargs.get("weight_method", "linear")
-    Delta_Omega = kwargs.get("Delta_Omega", None)
+    Delta_Omega = kwargs.get("Delta_Omega")
     wd_blur = kwargs.get("wd_blur", 1.25)
     fill_value = kwargs.get("fill_value", 11)
-    zeta = kwargs.get("zeta", None)
+    zeta = kwargs.get("zeta")
     stab_sacrifice = kwargs.get("stab_sacrifice", False)
     bt_filter_flag = kwargs.get("bt_filter_flag", False)
     cropping_DOmega = kwargs.get("cropping_DOmega", False)
-    eta_grid = kwargs.get("_eta_grid", None)
-    psa_grid = kwargs.get("_psa_grid", None)
-    data_eta = kwargs.get("_data_eta", None)
-    data_psa = kwargs.get("_data_psa", None)
+    eta_grid = kwargs.get("_eta_grid")
+    psa_grid = kwargs.get("_psa_grid")
+    data_eta = kwargs.get("_data_eta")
+    data_psa = kwargs.get("_data_psa")
     num_transit = kwargs.get("num_transit", 1)
     use_bounce1d = kwargs.get("use_bounce1d", False)
     # Bounce2D path only.
-    angle = kwargs.get("_angle", None)
-    fft_grid = kwargs.get("_fft_grid", None)
-    data_fft = kwargs.get("_data_fft", None)
-    Y_B = kwargs.get("Y_B", None)
+    angle = kwargs.get("_angle")
+    fft_grid = kwargs.get("_fft_grid")
+    data_fft = kwargs.get("_data_fft")
+    Y_B = kwargs.get("Y_B")
     spline = kwargs.get("spline", True)
-    vander = kwargs.get("_vander", None)
+    vander = kwargs.get("_vander")
 
     nufft_eps = kwargs.get("nufft_eps", 1e-10)
-    data_eta_r = kwargs.get("_data_eta_r", None)
-    if kwargs.get("Omega_prime_method", "fd") != "analytic":
-        data_eta_r = None
 
     base_grid = transforms["grid"]
     iotas = base_grid.compress(data["iota"])
@@ -1068,29 +1077,19 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 _Omega,
             )
 
+        data_eta_r = kwargs["_data_eta_r"]
         eta_bounce_data = {name: data_eta[name] for name in _ETA_BOUNCE_KEYS}
-        if data_eta_r is None:
-            bounce_out = bounce_and_omega(eta_bounce_data, iotas)
-            dOmega_drho = None
-        else:
-            # ∂Ω/∂ρ at fixed λ and η, from the radial derivatives of the field
-            # line data. Forward mode differentiates the bounce points along
-            # with the quadrature, so the endpoint motion is accounted for
-            # exactly.
-            bounce_out, bounce_dot = jax.jvp(
-                bounce_and_omega,
-                (eta_bounce_data, iotas),
-                ({name: data_eta_r[name] for name in _ETA_BOUNCE_KEYS}, iotas_r),
-            )
-            dOmega_drho = bounce_dot[-1]
+        # ∂Ω/∂ρ at fixed λ and η, from the radial derivatives of the field line
+        # data.
+        bounce_out, bounce_dot = jax.jvp(
+            bounce_and_omega,
+            (eta_bounce_data, iotas),
+            ({name: data_eta_r[name] for name in _ETA_BOUNCE_KEYS}, iotas_r),
+        )
+        dOmega_drho = bounce_dot[-1]
         alpha_drift_out, s_drift_out, z1, z2, vtau_out, pitch_inv_out = bounce_out[:-1]
         points = (z1, z2)
     else:
-        # eta -> alpha, which differs between flux surfaces because it depends
-        # on iota. Carried with rho leading so ``batch_map`` slices it with the
-        # rest of the data; ``Bounce2D`` wants (num alpha, num rho).
-        ft_denom = N * nfp - iotas * M
-        alpha_eta = eta_vals[None, :] * ft_denom[:, None] / nfp
 
         def drifts(data_in):
             bounce = Bounce2D(
@@ -1115,39 +1114,78 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 num_well=num_well,
                 nufft_eps=nufft_eps,
                 is_fourier=True,
+                low_ram=True,
             )
             _alpha_drift = safediv(_alpha_drift, v_tau)
             _s_drift = 4 * safediv(_s_drift, v_tau)
-            return _alpha_drift, _s_drift, points, v_tau, data_in
+            return _alpha_drift, _s_drift, points, v_tau, data_in["pitch_inv"]
 
-        alpha_drift_out, s_drift_out, points, vtau_out, _data = _compute2D(
-            drifts,
-            {name: data_fft[name] for name in drift_names},
-            data_fft,
-            fft_grid,
-            angle,
-            alpha_eta,
-            num_pitch,
-            surf_batch_size,
-            pitch_invs=pitch_invs_use,
-            pitch_inv_weight=pitch_inv_weight_use,
+        def bounce_and_omega(data_in, angle_in, iotas_in):
+            """Bounce integrals and Omega, as a function of the field data.
+
+            The Bounce2D counterpart of the Bounce1D closure above, and
+            differentiated the same way. ``fft_grid`` enters only through
+            reshapes and compressions, so it stays fixed while the data it
+            indexes carries the radial tangents.
+            """
+            # eta -> alpha, which differs between flux surfaces because it
+            # depends on iota, and so moves with rho. Carried with rho leading
+            # so ``batch_map`` slices it with the rest of the data;
+            # ``Bounce2D`` wants (num alpha, num rho).
+            _alpha_eta = eta_vals[None, :] * (N * nfp - iotas_in[:, None] * M) / nfp
+            _alpha_drift, _s_drift, _points, _v_tau, _pitch_inv = _compute2D(
+                drifts,
+                {name: data_in[name] for name in drift_names},
+                data_in,
+                fft_grid,
+                angle_in,
+                _alpha_eta,
+                num_pitch,
+                surf_batch_size,
+                pitch_invs=pitch_invs_use,
+                pitch_inv_weight=pitch_inv_weight_use,
+            )
+            _Omega = _frequencies(
+                _alpha_drift,
+                _s_drift,
+                _v_tau,
+                iotas_in,
+                KE_frac,
+                nfp,
+                M,
+                N,
+                fill_value,
+            )["Omega"]
+            return (
+                _alpha_drift,
+                _s_drift,
+                _points[0],
+                _points[1],
+                _v_tau,
+                _pitch_inv,
+                _Omega,
+            )
+
+        data_fft_r, angle_r = kwargs["_data_fft_r"], kwargs["_angle_r"]
+        fft_bounce_data = {name: data_fft[name] for name in _FFT_BOUNCE_KEYS}
+        bounce_out, bounce_dot = jax.jvp(
+            bounce_and_omega,
+            (fft_bounce_data, angle, iotas),
+            (
+                {name: data_fft_r[name] for name in _FFT_BOUNCE_KEYS},
+                angle_r,
+                iotas_r,
+            ),
         )
-        pitch_inv_out = _data["pitch_inv"]
-        # Only the Bounce1D path can produce an analytic ∂Ω/∂ρ. The objective
-        # rejects the combination before we reach here, so this is a floor.
-        dOmega_drho = None
+        dOmega_drho = bounce_dot[-1]
+        alpha_drift_out, s_drift_out, z1, z2, vtau_out, pitch_inv_out = bounce_out[:-1]
+        points = (z1, z2)
 
     # --- 1b. Barely-trapped filter ---
-    # Zero out wells whose poloidal bounce width delta_chi > 2*pi.
     if bt_filter_flag:
-        points_0 = points[0]  # zeta at bounce start, shape (rho, alpha, pitch, well)
-        points_1 = points[1]  # zeta at bounce end
-        iotas_bc = jnp.broadcast_to(
-            iotas[..., None, None, None],
-            (iotas.shape[0], points_0.shape[1], points_0.shape[2], points_0.shape[3]),
+        s_drift_out = _barely_trapped_filter(
+            s_drift_out, points, iotas, M, N, nfp, fill_value
         )
-        delta_chi = jnp.abs(jnp.abs(points_0 - points_1) * (M * iotas_bc - N * nfp))
-        s_drift_out = jnp.where(delta_chi < float(2 * jnp.pi), s_drift_out, fill_value)
 
     # --- 2. Resonance physics (cross-surface) ---
     res = _resonance_physics(
@@ -1170,8 +1208,8 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
         wd_blur,
         fill_value,
         stab_sacrifice,
-        cropping_DOmega,
         dOmega_drho,
+        cropping_DOmega,
     )
 
     # --- 3. Phase-space average on the PSA grid (uniform in alpha) ---
@@ -1254,27 +1292,14 @@ def _trapped_EP_resonance(params, transforms, profiles, data, **kwargs):
                 pitch_inv_weight=pitch_inv_weight_use,
             )
             num_rho_psa = rhos.size
-            # Batching can return the flux surface and field line axes flattened
-            # together. ``_phase_space_average`` averages over field lines on
-            # axis 1, so restore them; otherwise it silently reduces over the
-            # wrong axis and only the magnitude is wrong.
             if vtau_psa.ndim == 3 and vtau_psa.shape[0] == num_rho_psa * num_alpha_psa:
                 vtau_psa = vtau_psa.reshape(
                     num_rho_psa, num_alpha_psa, vtau_psa.shape[1], vtau_psa.shape[2]
                 )
 
-        # Normalize by length of single toroidal transit.
-        # Field-line length ∫dl/B = ∫dζ/B^ζ
-        if use_bounce1d:
-            Bzeta_psa = Bounce1D.reshape(psa_grid, data_psa["B^zeta"])
-            n_1t = len(zeta) // num_transit
-            fl_length = jnp.abs(
-                simpson(1 / Bzeta_psa[..., :n_1t], x=zeta[:n_1t], axis=-1).mean(axis=1)
-            )
-        else:
-            # V_psi = ∬ |𝐁⋅∇ζ|⁻¹ dα dζ over (α, ζ) ∈ [0, 2π)², so the
-            # alpha-averaged single transit field line length is V_psi / 2π.
-            fl_length = base_grid.compress(data["V_psi"]) / (2 * jnp.pi)
+        fl_length = _field_line_length(
+            use_bounce1d, psa_grid, data_psa, zeta, num_transit, base_grid, data
+        )
 
         f_res_avg = _phase_space_average(
             vtau_psa,

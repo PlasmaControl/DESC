@@ -7,11 +7,15 @@ from scipy.constants import elementary_charge
 
 from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms
-from desc.compute._trapped_resonance import _build_eta_grid, _build_eta_source_grid
+from desc.compute._trapped_resonance import (
+    _FFT_BOUNCE_KEYS,
+    _build_eta_grid,
+    _build_eta_source_grid,
+)
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import _parse_parameterization, get_data_deps
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.integrals._bounce_utils import Y_B_rule, get_vander_spline
 from desc.integrals.bounce_integral import Bounce1D, Bounce2D
 from desc.utils import Timer, errorif
@@ -23,6 +27,59 @@ from ..integrals.quad_utils import (
 )
 from .objective_funs import _Objective
 from .utils import _parse_callable_target_bounds
+
+
+def _shift_grid_rho(grid, drho):
+    """``grid`` with rho displaced by ``drho``, traceable in ``drho``.
+
+    A ``LinearGrid`` is built from numpy and so cannot carry a tangent in rho.
+    This rebuilds it as a jitable ``Grid`` over the same nodes, which lets the
+    quantities computed on it be differentiated with respect to rho.
+
+    Everything copied over is either untouched by a radial shift or describes
+    the (theta, zeta) structure, which a radial shift leaves alone:
+    ``spacing`` and ``weights`` because surface integrals are over theta and
+    zeta; ``fft_poloidal`` and ``fft_toroidal`` because they record uniformity
+    in those angles, and ``_partial_sum`` refuses a grid without the former.
+
+    ``M`` and ``N`` must be copied rather than left to the ``Grid`` defaults,
+    which report 0 instead of the source ``LinearGrid``'s resolution. Dropping
+    them zeroes the Fourier resolution silently rather than raising.
+
+    Parameters
+    ----------
+    grid : Grid
+    drho : float or jnp.ndarray
+        Radial displacement.
+
+    Returns
+    -------
+    Grid
+
+    """
+    rho, theta, zeta = grid.nodes.T
+    out = Grid(
+        nodes=jnp.column_stack([rho + drho, theta, zeta]),
+        spacing=grid.spacing,
+        weights=grid.weights,
+        coordinates=grid.coordinates,
+        period=grid.period,
+        NFP=grid.NFP,
+        sort=False,
+        is_meshgrid=grid.is_meshgrid,
+        jitable=True,
+        _unique_rho_idx=grid.unique_rho_idx,
+        _unique_poloidal_idx=grid.unique_poloidal_idx,
+        _unique_zeta_idx=grid.unique_zeta_idx,
+        _inverse_rho_idx=grid.inverse_rho_idx,
+        _inverse_poloidal_idx=grid.inverse_poloidal_idx,
+        _inverse_zeta_idx=grid.inverse_zeta_idx,
+    )
+    out._fft_poloidal = grid.fft_poloidal
+    out._fft_toroidal = grid.fft_toroidal
+    out._M = grid.M
+    out._N = grid.N
+    return out
 
 
 def _seed_tangent_key(name):
@@ -86,9 +143,9 @@ def _tangent_keys(parameterization, keys):
     missing = sorted(consumed - set(tangent) - {"rho", "p_r"})
     if missing:
         raise NotImplementedError(
-            "Omega_prime_method='analytic' needs the radial derivative of "
-            f"{missing}, which DESC has no compute quantity for. "
-            "Use Omega_prime_method='fd'."
+            f"TrappedResonance needs the radial derivative of {missing} to "
+            "differentiate the bounce integrals, and DESC has no compute "
+            "quantity for it."
         )
     return tangent
 
@@ -98,7 +155,7 @@ def _p_rr(params, profiles, grid, data):
 
     Mirrors how ``p_r`` itself is computed, one derivative higher.
     """
-    if profiles.get("pressure", None) is not None:
+    if profiles.get("pressure") is not None:
         return profiles["pressure"].compute(grid, params["p_l"], dr=2)
     return elementary_charge * (
         data["ne_rr"] * data["Te"]
@@ -233,17 +290,21 @@ class TrappedResonance(_Objective):
         If ``True``, zero out wells whose poloidal bounce width exceeds 2π
         (barely-trapped filter) before the resonance physics calculation.
         Defaults to ``False``.
-    Omega_prime_method : {"fd", "analytic"}, optional
-        How to obtain Ω'(s), the radial derivative of the normalized precession
-        frequency that sets the island width. ``"fd"`` finite differences Ω
-        across neighbouring surfaces of the radial grid, so its accuracy is
-        limited by the radial grid spacing and it is undefined on the
-        surfaces at either end. ``"analytic"`` instead differentiates the
-        bounce integrals with respect to rho directly, at fixed λ and η, which
-        is exact for any radial grid and defined on every surface, at the cost
-        of roughly doubling the work on the eta grid. Only implemented for
-        ``use_bounce1d=True``.
-        Defaults to ``"fd"``.
+
+    Notes
+    -----
+    Ω'(s), the radial derivative of the normalized precession frequency that
+    sets the island width, is obtained by differentiating the bounce integrals
+    with respect to rho at fixed λ and η. That is exact for any radial grid and
+    defined on every surface, and costs roughly double the work of evaluating
+    the field data and the bounce integrals.
+
+    It replaced a finite difference of Ω across neighbouring surfaces, which
+    was removed: on a stellarator dΩ/dρ swings over orders of magnitude between
+    adjacent surfaces, so that estimate does not converge at any practical
+    number of surfaces, and it is biased low because a secant cannot resolve
+    |Ω'| below the scale set by the radial grid spacing. The two agree exactly
+    when ``stab_sacrifice=True``, where Ω' cancels out of the objective.
     """
 
     _scalar = False
@@ -303,19 +364,7 @@ class TrappedResonance(_Objective):
         Y_B=None,
         spline=True,
         nufft_eps=1e-10,
-        Omega_prime_method="fd",
     ):
-        if Omega_prime_method not in ("fd", "analytic"):
-            raise ValueError(
-                'Omega_prime_method must be "fd" or "analytic", '
-                f"got {Omega_prime_method}."
-            )
-        if Omega_prime_method == "analytic" and not use_bounce1d:
-            raise NotImplementedError(
-                "Omega_prime_method='analytic' is only implemented for the "
-                "Bounce1D path. Pass use_bounce1d=True, or use "
-                "Omega_prime_method='fd'."
-            )
         if target is None and bounds is None:
             target = 1e-8
         self._use_bounce1d = bool(use_bounce1d)
@@ -354,7 +403,6 @@ class TrappedResonance(_Objective):
             "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
             "use_bounce1d": self._use_bounce1d,
-            "Omega_prime_method": Omega_prime_method,
         }
         if not self._use_bounce1d:
             self._hyperparameters["Y_B"] = Y_B
@@ -554,8 +602,7 @@ class TrappedResonance(_Objective):
         M = self._hyperparameters["M"]
         N = self._hyperparameters["N"]
         nfp = eq.NFP
-        zeta = constants.get("zeta", None)
-        analytic = self._hyperparameters["Omega_prime_method"] == "analytic"
+        zeta = constants.get("zeta")
         num_eta = self._hyperparameters["num_eta"]
 
         eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
@@ -570,24 +617,55 @@ class TrappedResonance(_Objective):
                 "min_tz |B|",
                 "max_tz |B|",
             ]
-            data_fft = compute_fun(
-                eq,
-                fft_keys,
-                params,
-                get_transforms(fft_keys, eq, base_grid, jitable=True),
-                get_profiles(fft_keys, eq),
-                data=data,
+            fft_profiles = get_profiles(fft_keys, eq)
+            lambda_grid = constants["lambda"].grid
+
+            def _fft_stage(t):
+                """Field data and angle map on surfaces displaced by ``t``.
+
+                Written as a function of a radial displacement so that its
+                forward mode derivative at ``t = 0`` is d/dρ at fixed theta
+                and zeta, which is what Omega'(s) needs. Unlike the Bounce1D
+                path there is nothing to seed: the grid carries the whole
+                radial dependence, so every quantity moves with it.
+                """
+                grid_t = _shift_grid_rho(base_grid, t)
+                data_t = compute_fun(
+                    eq,
+                    self._keys_1dr,
+                    params,
+                    get_transforms(self._keys_1dr, eq, grid_t, jitable=True),
+                    constants["profiles"],
+                )
+                data_fft_t = compute_fun(
+                    eq,
+                    fft_keys,
+                    params,
+                    get_transforms(fft_keys, eq, grid_t, jitable=True),
+                    fft_profiles,
+                    data=data_t,
+                )
+                # Poloidal angle map, rebuilt every call since it moves with
+                # rho through both iota and lambda.
+                angle_t = eq._map_poloidal_coordinates(
+                    grid_t.compress(data_t["iota"]),
+                    constants["x"],
+                    constants["y"],
+                    params["L_lmn"],
+                    get_transforms(
+                        "lambda",
+                        eq,
+                        grid=_shift_grid_rho(lambda_grid, t),
+                        jitable=True,
+                    )["L"],
+                    outbasis="delta",
+                    tol=1e-8,
+                )[..., ::-1]
+                return {k: data_fft_t[k] for k in _FFT_BOUNCE_KEYS}, angle_t
+
+            (data_fft, angle), (data_fft_r, angle_r) = jax.jvp(
+                _fft_stage, (0.0,), (1.0,)
             )
-            # Poloidal angle map, rebuilt every call since it depends on iota.
-            angle = eq._map_poloidal_coordinates(
-                iotas,
-                constants["x"],
-                constants["y"],
-                params["L_lmn"],
-                constants["lambda"],
-                outbasis="delta",
-                tol=1e-8,
-            )[..., ::-1]
 
             data = compute_fun(
                 eq,
@@ -600,14 +678,16 @@ class TrappedResonance(_Objective):
                 nfp=nfp,
                 zeta=zeta,
                 _angle=angle,
+                _angle_r=angle_r,
                 _fft_grid=base_grid,
                 _data_fft=data_fft,
+                _data_fft_r=data_fft_r,
                 _vander=constants["_vander"],
                 **quad2,
                 **self._hyperparameters,
                 **self._params2,
             )
-            if self._hyperparameters.get("pitch_invs", None) is not None:
+            if self._hyperparameters.get("pitch_invs") is not None:
                 return data[self._key]
             return base_grid.compress(data[self._key])
 
@@ -646,13 +726,12 @@ class TrappedResonance(_Objective):
         # per-surface quantity seeded onto the eta grid; without it the seed
         # would look constant in rho and the derivative would come out wrong.
         _p = _parse_parameterization(eq)
-        tangent_keys = _tangent_keys(_p, eta_data_keys) if analytic else {}
-        if analytic:
-            extra = list(tangent_keys.values())
-            if eq.pressure is None:
-                # _p_rr then builds d²p/dρ² out of the kinetic profiles.
-                extra += ["ne_rr", "ni_rr", "Te_rr", "Ti_rr"]
-            all_needed_keys = list(set(all_needed_keys + extra))
+        tangent_keys = _tangent_keys(_p, eta_data_keys)
+        extra = list(tangent_keys.values())
+        if eq.pressure is None:
+            # _p_rr then builds d²p/dρ² out of the kinetic profiles.
+            extra += ["ne_rr", "ni_rr", "Te_rr", "Ti_rr"]
+        all_needed_keys = list(set(all_needed_keys + extra))
 
         # Pre-compute all transitive dependencies on the base grid (which has
         # spacing for surface integrals).  This gives us 1D intermediates like
@@ -671,16 +750,12 @@ class TrappedResonance(_Objective):
         # 3D quantities will be recomputed with proper angular resolution.
         seed_1d = {}
         for key, val in base_data.items():
-            entry = data_index.get(_p, {}).get(key, None)
+            entry = data_index.get(_p, {}).get(key)
             if entry is not None and entry.get("coordinates", "") == "r":
                 seed_1d[key] = val
 
-        seed_dot = (
-            _seed_tangents(
-                params, internal_profiles, base_grid, base_data, seed_1d, tangent_keys
-            )
-            if analytic
-            else None
+        seed_dot = _seed_tangents(
+            params, internal_profiles, base_grid, base_data, seed_1d, tangent_keys
         )
 
         def _eta_data(t):
@@ -695,11 +770,7 @@ class TrappedResonance(_Objective):
             iotas_t = iotas + t * iotas_r
             alpha_t = eta_vals[None, :] * (N * nfp - iotas_t[:, None] * M) / nfp
             grid_t = _build_eta_grid(eq, rhos + t, alpha_t, zeta, iotas_t, params)
-            seed_t = (
-                seed_1d
-                if seed_dot is None
-                else {key: val + t * seed_dot[key] for key, val in seed_1d.items()}
-            )
+            seed_t = {key: val + t * seed_dot[key] for key, val in seed_1d.items()}
             eta_seed = {
                 key: grid_t.copy_data_from_other(val, base_grid)
                 for key, val in seed_t.items()
@@ -713,10 +784,7 @@ class TrappedResonance(_Objective):
                 data=eta_seed,
             )
 
-        if analytic:
-            data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
-        else:
-            data_eta, data_eta_r = _eta_data(0.0), None
+        data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
 
         psa_seed = {
             key: psa_desc_grid.copy_data_from_other(val, base_grid)
@@ -750,6 +818,6 @@ class TrappedResonance(_Objective):
             **self._hyperparameters,
             **self._params2,
         )
-        if self._hyperparameters.get("pitch_invs", None) is not None:
+        if self._hyperparameters.get("pitch_invs") is not None:
             return data[self._key]
         return self._grid_1dr.compress(data[self._key])

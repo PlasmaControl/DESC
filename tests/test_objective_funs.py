@@ -107,6 +107,7 @@ from desc.objectives import (
     get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives._trapped_resonance import _seed_tangents, _tangent_keys
 from desc.objectives.nae_utils import (
     _calc_1st_order_NAE_coeffs,
     _calc_2nd_order_NAE_coeffs,
@@ -2251,6 +2252,11 @@ class TestObjectiveFunction:
             "|B|",
         ]
         all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
+        # the radial tangents of the seeded per-surface quantities are extra
+        # compute keys, so they have to be requested before base_data is built
+        _p = _parse_parameterization(eq)
+        tangent_keys = _tangent_keys(_p, eta_data_keys)
+        all_needed_keys = list(set(all_needed_keys + list(tangent_keys.values())))
         internal_profiles = get_profiles(all_needed_keys, eq)
         base_data = compute_fun(
             eq,
@@ -2260,24 +2266,36 @@ class TestObjectiveFunction:
             internal_profiles,
             data=data,
         )
-        _p = _parse_parameterization(eq)
         seed_1d = {
             key: val
             for key, val in base_data.items()
             if data_index.get(_p, {}).get(key, {}).get("coordinates", "") == "r"
         }
-        eta_seed = {
-            key: eta_desc_grid.copy_data_from_other(val, grid)
-            for key, val in seed_1d.items()
-        }
-        data_eta = compute_fun(
-            eq,
-            eta_data_keys,
-            params,
-            get_transforms(eta_data_keys, eq, eta_desc_grid, jitable=True),
-            internal_profiles,
-            data=eta_seed,
+        # Omega'(s) comes from differentiating the bounce integrals, so the
+        # compute function needs d(field data)/drho as well as the field data.
+        # Build both the way the objective does: as the forward mode derivative
+        # of the eta grid data with respect to a radial displacement.
+        seed_dot = _seed_tangents(
+            params, internal_profiles, grid, base_data, seed_1d, tangent_keys
         )
+
+        def _eta_data(t):
+            iotas_t = iotas + t * grid.compress(data["iota_r"])
+            alpha_t = eta_vals[None, :] * (N * nfp - iotas_t[:, None] * M) / nfp
+            grid_t = _build_eta_grid(eq, rhos + t, alpha_t, zeta, iotas_t, params)
+            seed_t = {k: v + t * seed_dot[k] for k, v in seed_1d.items()}
+            return compute_fun(
+                eq,
+                eta_data_keys,
+                params,
+                get_transforms(eta_data_keys, eq, grid_t, jitable=True),
+                internal_profiles,
+                data={
+                    k: grid_t.copy_data_from_other(v, grid) for k, v in seed_t.items()
+                },
+            )
+
+        data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
         psa_seed = {
             key: psa_desc_grid.copy_data_from_other(val, grid)
             for key, val in seed_1d.items()
@@ -2304,6 +2322,7 @@ class TestObjectiveFunction:
             _eta_grid=eta_grid,
             _psa_grid=psa_grid,
             _data_eta=data_eta,
+            _data_eta_r=data_eta_r,
             _data_psa=data_psa,
             num_eta=num_eta,
             num_transit=num_transit,
@@ -2419,7 +2438,6 @@ class TestObjectiveFunction:
             res_range_min=-1,
             res_range_max=1,
             pitch_invs=pitch_invs,
-            Omega_prime_method="analytic",
         )
         obj.build(verbose=0)
 
@@ -2444,7 +2462,7 @@ class TestObjectiveFunction:
             up, down = compute_at(h), compute_at(-h)
             fd[h] = (
                 (up["Omega"] - down["Omega"]) / (2 * h),
-                ref["valid_prime"] & up["valid_prime"] & down["valid_prime"],
+                ref["valid"] & up["valid"] & down["valid"],
             )
 
         # Ω is not smooth in ρ everywhere: wells and the set of trapped field
@@ -4627,18 +4645,6 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g)), "bump weighting"
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(
-                eq,
-                TrappedResonance,
-                Omega_prime_method="analytic",
-                use_bounce1d=True,
-            )
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g)), "analytic Omega'(s)"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

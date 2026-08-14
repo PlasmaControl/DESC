@@ -4,6 +4,7 @@ Changelog
 Performance Improvements
 
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+- Switches to QR decomposition in the matrix inversion required for implicit differentiation used in optimizations where equilibrium force balance is enforced as a non-linear constraint (i.e. ``proximal-`` methods). Although the method is designed to closely match the previous SVD based algorithm, there can be slight numerical differences. The old behavior can be obtained by passing ``options = {"prox_inv_method": "svd"}`` to the optimizer.
 
 
 Bug Fixes

@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
-from .utils import f_where_x
+from .utils import f_where_x, scale_columns, scatter_rows
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -133,11 +133,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         )
         # inverse of the linear constraint matrix A without any scaling
         self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
-        # nullspace of the linear constraint matrix A without any scaling
-        self._ZA = self._D[self._unfixed_idx, None] * self._Z
-        self._ZA = self._ZA / jnp.linalg.norm(self._ZA, axis=0)
         self._dim_x = self._objective.dim_x
         self._dim_x_reduced = self._Z.shape[1]
+
+        # nullspace scaled by D
+        DZ = scale_columns(self._Z.copy(), self._D[self._unfixed_idx, None])
 
         # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
         # Represents the tangent directions of the reduced parameters in full space
@@ -156,7 +156,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         # x_full_unscaled = D(xp + Z @ x_reduced)                           # noqa: E800
         # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
         # Since the fixed parameters stay constant, we add 0 rows by below operation
-        self._feasible_tangents = jnp.diag(self._D)[:, self._unfixed_idx] @ self._Z
+        self._feasible_tangents = scatter_rows(self._dim_x, self._unfixed_idx, DZ)
+
+        # nullspace of the linear constraint matrix A without any scaling
+        self._ZA = scale_columns(DZ, 1 / jnp.linalg.norm(DZ, axis=0))
 
         self._built = True
         timer.stop(f"{self.name} build")

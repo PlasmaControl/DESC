@@ -308,17 +308,7 @@ class QuadcoilProxy(_Objective):
         # Detect if the user has provided any arguments
         # that will also-be extracted from DESC.
         # If there are, these objectives will be discarded.
-        if normalize:
-            # When normalize is set to true, we
-            # use quantities from DESC to perform
-            # normalization instead.
-            overridden_argnames = _DESC_DERIVED_ARGNAMES + [
-                "objective_unit",
-                "constraint_unit",
-            ]
-        else:
-            overridden_argnames = _DESC_DERIVED_ARGNAMES
-        redundant_arg_names = set(overridden_argnames) & quadcoil_kwargs.keys()
+        redundant_arg_names = set(_DESC_DERIVED_ARGNAMES) & quadcoil_kwargs.keys()
         if redundant_arg_names:
             warnings.warn(
                 f"Redundant arguments detected: {redundant_arg_names}. "
@@ -593,32 +583,23 @@ class QuadcoilProxy(_Objective):
             Level of output.
 
         """
-        # Importing QUADCOIL
-        try:
-            from quadcoil.io import generate_desc_scaling
-        except ModuleNotFoundError:
-            raise ModuleNotFoundError("QuadcoilProxy requires a QUADCOIL installation.")
-
         # dim_f = size of the output vector returned by self.compute.
         # This is a scalar objective.
         self._dim_f = 1
         self._build_quadcoil_constants(verbose=verbose)
 
         # ----- Normalization scales -----
-        # We try to normalize things to order(1) by dividing things by some
+        # We try to normalize metrics to order(1) by dividing things by some
         # characteristic scale for a given quantity.
         # See ``desc.objectives.compute_scaling_factors`` for examples.
-        # The unit for each objective is implemented as the attribute ``desc_unit``
+        # The unit for each quantity is implemented as the attribute ``desc_unit``
         # of the corresponding function. These attributes are lambda functions
         # that act on self.scales and returns a number. Example:
         # K.desc_unit = lambda scales: scales["B"] / mu_0 # noqa: E800
+        # NOTE: the units of objectives and constraints still needs to be
+        # provided in quadcoil_kwargs.
         if self._normalize:
             self.scales = compute_scaling_factors(self._eq)
-            obj_unit_new, cons_unit_new = generate_desc_scaling(
-                self.objective_name, self.constraint_name, self.scales
-            )
-            self.objective_unit = obj_unit_new
-            self.constraint_unit = cons_unit_new
 
         # ----- Fixing a key error -----
         # The QUADCOIL has np coordinates. To prevent a key error when DESC

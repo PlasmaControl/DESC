@@ -147,9 +147,8 @@ def _halley(o, pitch_inv, z, mask, nufft_eps, diagnostic=0):
         Shape (num ρ ?, num α, num pitch, num well).
         Subset of points to refine.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
     diagnostic : int
         Positive integer denoting iteration step to print.
@@ -987,8 +986,8 @@ def fast_cubic_spline(
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_t : jnp.ndarray
         Precomputed transform matrix.
     vander_z : jnp.ndarray

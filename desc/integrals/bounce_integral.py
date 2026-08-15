@@ -79,7 +79,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -122,7 +122,7 @@ class _Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
-    get_pitch_inv_quad = pitch_quad
+    get_pitch_inv_quad = get_pitch_inv_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
@@ -1975,7 +1975,7 @@ class BounceOptions(NamedTuple):
     num_field_periods: int
     num_well: int
     pitch_batch_size: int
-    pitch_quad: tuple[jnp.ndarray]
+    get_pitch_inv_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
     spline: bool
     surf_batch_size: int
@@ -2045,7 +2045,7 @@ class BounceOptions(NamedTuple):
             num_field_periods=num_field_periods,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
-            pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
+            get_pitch_inv_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
             quad=BounceOptions._quad(eta, num_quad) if quad is None else quad,
             spline=spline,
             surf_batch_size=surf_batch_size,

@@ -497,6 +497,17 @@ def scale_columns(A, d):
     return A * d
 
 
+@functools.partial(jit, donate_argnums=0)
+def normalize_columns(A, d):
+    """Rescale the columns of `A` so that the columns of `d[:, None] * A` are unit.
+
+    The row scaling is fused into the reduction and `A`'s buffer is donated, so a
+    second copy of `A` is never allocated. `A` is invalid after this call, so callers
+    must rebind, ie `A = normalize_columns(A, d)`.
+    """
+    return A / jnp.linalg.norm(A * d[:, None], axis=0)
+
+
 @functools.partial(jit, static_argnums=0)
 def scatter_rows(n, idx, A):
     """Scatter the rows of `A` into rows `idx` of an `(n, A.shape[1])` zero matrix.

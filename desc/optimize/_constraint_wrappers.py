@@ -21,7 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
-from .utils import f_where_x, scale_columns, scatter_rows
+from .utils import f_where_x, normalize_columns
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -116,9 +116,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._scalar = self._objective.scalar
         (
             self._xp,
-            self._A,
+            _,
             self._b,
-            self._Z,
+            _,
             self._D,
             self._unfixed_idx,
             self._project,
@@ -131,35 +131,16 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._constraint,
             self._x_scale,
         )
-        # inverse of the linear constraint matrix A without any scaling
-        self._Ainv = self._D[self._unfixed_idx, None] * self._ADinv
+        # inverse of the linear constraint matrix A without any scaling. Only used
+        # when the constraint target is updated, so keep it off the device.
+        self._ADinv = np.asarray(self._ADinv)
+        self._Ainv = np.asarray(self._D)[self._unfixed_idx, None] * self._ADinv
         self._dim_x = self._objective.dim_x
-        self._dim_x_reduced = self._Z.shape[1]
-
-        # nullspace scaled by D
-        DZ = scale_columns(self._Z.copy(), self._D[self._unfixed_idx, None])
-
-        # equivalent matrix for A[unfixed_idx] @ D @ Z == A @ feasible_tangents
-        # Represents the tangent directions of the reduced parameters in full space
-        # During optimization, we have the reduced parameters x_reduced, and we need
-        # to compute the derivatives for that, but since compute functions are written
-        # for the full state vector, we have to compute the derivatives with
-        # these tangents.
-        # For example, let's say the full state vector X has constraints X1=X2 and
-        # X = [X1 X2 X3]. The reduced state vector of this is Y = [Y1 Y2]. We can take
-        # Y1=X1=X2 and Y2=X3. Then df/dY1 = df/dX1 + df/dX2 and df/dY2 = df/dX3.
-        # in this case, feasible_tangents = [ [1 , 0], [1, 0], [0,1]]
-        # and is a shape 3x2 matrix equivalent to dx/dy
-        # s.t. df/dy = df/dx @ dx/dy
-
-        # df/dx_reduced = df/dx_full_unscaled @ dx_full_unscaled/dx_reduced # noqa: E800
-        # x_full_unscaled = D(xp + Z @ x_reduced)                           # noqa: E800
-        # So, the feasible tangents (aka. dx_full_unscaled/dx_reduced) is D@Z
-        # Since the fixed parameters stay constant, we add 0 rows by below operation
-        self._feasible_tangents = scatter_rows(self._dim_x, self._unfixed_idx, DZ)
-
-        # nullspace of the linear constraint matrix A without any scaling
-        self._ZA = scale_columns(DZ, 1 / jnp.linalg.norm(DZ, axis=0))
+        # D @ Z with 0 rows for the fixed parameters, see factorize_linear_constraints.
+        # Z itself is not kept: it is only ever needed as D @ Z, and at high resolution
+        # it is comparable in size to the Jacobian.
+        self._feasible_tangents = self._recover.feasible_tangents
+        self._dim_x_reduced = self._feasible_tangents.shape[1]
 
         self._built = True
         timer.stop(f"{self.name} build")
@@ -247,21 +228,25 @@ class LinearConstraintProjection(ObjectiveFunction):
             # since D has changed, we need to update the ADinv
             # as mentioned above A does not change, so we can use the same Ainv
             # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D
-            self._ADinv = (1 / self._D)[unfixed_idx, None] * self._Ainv
+            self._ADinv = (1 / np.asarray(self._D))[unfixed_idx, None] * self._Ainv
             # we also need to update the nullspace Z of AD in a similar way
             # A @ ZA = 0 -> (A @ D) @ ((1 / D) @ ZA) = 0 -> Z = (1 / D) @ ZA
-            # where ZA is the nullspace of A, and Z is the nullspace of AD
-            self._Z = (1 / self._D)[self._unfixed_idx, None] * self._ZA
-            # we also normalize Z to make each column have unit norm
-            self._Z = self._Z / jnp.linalg.norm(self._Z, axis=0)
+            # where ZA is the nullspace of A, and Z is the nullspace of AD, with unit
+            # norm columns. The tangents are D @ Z, so they are ZA up to a column
+            # scaling, and so are the old tangents. Updating them for the new D is
+            # then just a rescaling by the new column norms, and neither ZA nor Z has
+            # to be stored.
+            self._feasible_tangents = normalize_columns(
+                self._feasible_tangents, 1 / self._D
+            )
 
         xp = put(xp, unfixed_idx, self._ADinv @ b)
         xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
         # cast to jnp arrays
         self._xp = jnp.asarray(xp)
 
-        self._project = _Project(self._Z, self._D, self._xp, self._unfixed_idx)
-        self._recover = _Recover(self._Z, self._D, self._xp, self._unfixed_idx, dim_x)
+        self._project = _Project(self._feasible_tangents, self._D, self._xp)
+        self._recover = _Recover(self._feasible_tangents, self._D, self._xp)
 
     def compute_unscaled(self, x_reduced, constants=None):
         """Compute the unscaled form of the objective function.
@@ -360,7 +345,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x, constants)
-        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+        return df @ self._feasible_tangents
 
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -380,10 +365,11 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         df = self._objective.hess(x, constants)
+        # (1 / D) @ Z on the left, D @ Z on the right, both from the tangents
         return (
-            (self._Z.T * (1 / self._D)[None, self._unfixed_idx])
-            @ df[self._unfixed_idx, :][:, self._unfixed_idx]
-            @ (self._Z * self._D[self._unfixed_idx, None])
+            (self._feasible_tangents.T * (1 / self._D**2)[None, :])
+            @ df
+            @ self._feasible_tangents
         )
 
     def _jac(self, x_reduced, constants=None, op="scaled"):
@@ -500,7 +486,7 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _vjp(self, v, x_reduced, constants=None, op="vjp_scaled"):
         x = self.recover(x_reduced)
         df = getattr(self._objective, op)(v, x, constants)
-        return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+        return df @ self._feasible_tangents
 
     def vjp_scaled(self, v, x_reduced, constants=None):
         """Compute vector-Jacobian product of self.compute_scaled.
@@ -642,8 +628,8 @@ class ProximalProjection(ObjectiveFunction):
         for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self._args.remove(arg)
 
-        self._eq_Z, self._eq_D, self._eq_unfixed_idx = (
-            self._eq_solve_objective._Z,
+        self._eq_feasible_tangents, self._eq_D, self._eq_unfixed_idx = (
+            self._eq_solve_objective._feasible_tangents,
             self._eq_solve_objective._D,
             self._eq_solve_objective._unfixed_idx,
         )
@@ -770,9 +756,9 @@ class ProximalProjection(ObjectiveFunction):
         # Since here we are setting the feasible direction for eq parameters only,
         # we need to add 0 rows for eq fixed parameters and non-eq parameters which we
         # handle by below operation
-        self._feasible_tangents[self._eq_idx] = self._feasible_tangents[self._eq_idx][
-            :, self._eq_unfixed_idx
-        ] @ (self._eq_Z * self._eq_D[self._eq_unfixed_idx, None])
+        self._feasible_tangents[self._eq_idx] = (
+            self._feasible_tangents[self._eq_idx] @ self._eq_feasible_tangents
+        )
         self._feasible_tangents = jnp.concatenate(
             [np.atleast_2d(foo) for foo in self._feasible_tangents], axis=-1
         )

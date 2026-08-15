@@ -82,11 +82,6 @@ def _shift_grid_rho(grid, drho):
     return out
 
 
-def _seed_tangent_key(name):
-    """Name of the compute quantity holding d(``name``)/dρ."""
-    return name + "r" if name.endswith("_r") or name.endswith("_rr") else name + "_r"
-
-
 def _seeded_keys(keys, parameterization):
     """Per-surface keys seeded onto a field line grid, and those it reads.
 
@@ -136,8 +131,12 @@ def _tangent_keys(parameterization, keys):
     """
     seeded, consumed = _seeded_keys(keys, parameterization)
     index = data_index[parameterization]
+    # DESC spells d/dρ by appending "_r", so a key already carrying one takes
+    # a bare "r" instead: "iota" -> "iota_r", but "iota_r" -> "iota_rr".
     tangent = {
-        key: t_key for key in seeded if (t_key := _seed_tangent_key(key)) in index
+        key: t_key
+        for key in seeded
+        if (t_key := key + "r" if key.endswith(("_r", "_rr")) else key + "_r") in index
     }
     # "rho" differentiates to 1; "p_r" is covered by _p_rr.
     missing = sorted(consumed - set(tangent) - {"rho", "p_r"})
@@ -290,12 +289,24 @@ class TrappedResonance(_Objective):
         If ``True``, zero out wells whose poloidal bounce width exceeds 2π
         (barely-trapped filter) before the resonance physics calculation.
         Defaults to ``False``.
+    Omega_prime_method : {"analytic", "fd"}, optional
+        How to obtain Ω'(s), the radial derivative of the normalized precession
+        frequency that sets the island width. ``"analytic"`` differentiates the
+        bounce integrals with respect to rho at fixed λ and η, which is exact
+        for any radial grid and defined on every surface. ``"fd"`` finite
+        differences Ω across neighbouring surfaces, so its accuracy is limited
+        by the radial grid spacing and it is undefined on the surfaces at
+        either end. Defaults to ``"analytic"``; see the Notes.
 
     Notes
     -----
-    Ω'(s), the radial derivative of the normalized precession frequency that
-    sets the island width, is obtained by differentiating the bounce integrals
-    with respect to rho at fixed λ and η.
+    ``"fd"`` does not converge to Ω'(s) at any practical number of surfaces:
+    on a stellarator dΩ/dρ swings over orders of magnitude between adjacent
+    surfaces, and a secant cannot resolve |Ω'| below the scale set by the
+    radial grid spacing, which biases it low by ~22% even on the finest grid
+    tested. ``"analytic"`` costs 1.27x the objective evaluation and 1.64x the
+    gradient, measured on ESTELL at rho=10, num_eta=10. The two agree exactly
+    when ``stab_sacrifice=True``, where Ω' cancels out of the objective.
     """
 
     _scalar = False
@@ -353,7 +364,13 @@ class TrappedResonance(_Objective):
         Y_B=None,
         spline=True,
         nufft_eps=1e-10,
+        Omega_prime_method="analytic",
     ):
+        if Omega_prime_method not in ("fd", "analytic"):
+            raise ValueError(
+                'Omega_prime_method must be "fd" or "analytic", '
+                f"got {Omega_prime_method}."
+            )
         if target is None and bounds is None:
             target = 1e-8
         self._use_bounce1d = bool(use_bounce1d)
@@ -392,6 +409,7 @@ class TrappedResonance(_Objective):
             "cropping_DOmega": cropping_DOmega,
             "bt_filter_flag": bt_filter_flag,
             "use_bounce1d": self._use_bounce1d,
+            "Omega_prime_method": Omega_prime_method,
         }
         if not self._use_bounce1d:
             self._hyperparameters["Y_B"] = Y_B
@@ -589,6 +607,7 @@ class TrappedResonance(_Objective):
         nfp = eq.NFP
         zeta = constants.get("zeta")
         num_eta = self._hyperparameters["num_eta"]
+        analytic = self._hyperparameters["Omega_prime_method"] == "analytic"
 
         eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
         ft_denom = N * nfp - iotas * M
@@ -648,9 +667,13 @@ class TrappedResonance(_Objective):
                 )[..., ::-1]
                 return {k: data_fft_t[k] for k in _FFT_BOUNCE_KEYS}, angle_t
 
-            (data_fft, angle), (data_fft_r, angle_r) = jax.jvp(
-                _fft_stage, (0.0,), (1.0,)
-            )
+            if analytic:
+                (data_fft, angle), (data_fft_r, angle_r) = jax.jvp(
+                    _fft_stage, (0.0,), (1.0,)
+                )
+            else:
+                data_fft, angle = _fft_stage(0.0)
+                data_fft_r = angle_r = None
 
             data = compute_fun(
                 eq,
@@ -711,12 +734,13 @@ class TrappedResonance(_Objective):
         # per-surface quantity seeded onto the eta grid; without it the seed
         # would look constant in rho and the derivative would come out wrong.
         _p = _parse_parameterization(eq)
-        tangent_keys = _tangent_keys(_p, eta_data_keys)
-        extra = list(tangent_keys.values())
-        if eq.pressure is None:
-            # _p_rr then builds d²p/dρ² out of the kinetic profiles.
-            extra += ["ne_rr", "ni_rr", "Te_rr", "Ti_rr"]
-        all_needed_keys = list(set(all_needed_keys + extra))
+        tangent_keys = _tangent_keys(_p, eta_data_keys) if analytic else {}
+        if analytic:
+            extra = list(tangent_keys.values())
+            if eq.pressure is None:
+                # _p_rr then builds d²p/dρ² out of the kinetic profiles.
+                extra += ["ne_rr", "ni_rr", "Te_rr", "Ti_rr"]
+            all_needed_keys = list(set(all_needed_keys + extra))
 
         # Pre-compute all transitive dependencies on the base grid (which has
         # spacing for surface integrals).  This gives us 1D intermediates like
@@ -739,8 +763,12 @@ class TrappedResonance(_Objective):
             if entry is not None and entry.get("coordinates", "") == "r":
                 seed_1d[key] = val
 
-        seed_dot = _seed_tangents(
-            params, internal_profiles, base_grid, base_data, seed_1d, tangent_keys
+        seed_dot = (
+            _seed_tangents(
+                params, internal_profiles, base_grid, base_data, seed_1d, tangent_keys
+            )
+            if analytic
+            else None
         )
 
         def _eta_data(t):
@@ -755,7 +783,11 @@ class TrappedResonance(_Objective):
             iotas_t = iotas + t * iotas_r
             alpha_t = eta_vals[None, :] * (N * nfp - iotas_t[:, None] * M) / nfp
             grid_t = _build_eta_grid(eq, rhos + t, alpha_t, zeta, iotas_t, params)
-            seed_t = {key: val + t * seed_dot[key] for key, val in seed_1d.items()}
+            seed_t = (
+                seed_1d
+                if seed_dot is None
+                else {key: val + t * seed_dot[key] for key, val in seed_1d.items()}
+            )
             eta_seed = {
                 key: grid_t.copy_data_from_other(val, base_grid)
                 for key, val in seed_t.items()
@@ -769,7 +801,10 @@ class TrappedResonance(_Objective):
                 data=eta_seed,
             )
 
-        data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
+        if analytic:
+            data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
+        else:
+            data_eta, data_eta_r = _eta_data(0.0), None
 
         psa_seed = {
             key: psa_desc_grid.copy_data_from_other(val, base_grid)

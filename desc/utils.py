@@ -510,7 +510,7 @@ def parse_argname_change(arg, kwargs, oldname, newname):
     if oldname in kwargs:
         warnings.warn(
             FutureWarning(
-                f"Argument {oldname} has been renamed to {newname}, "
+                f"Argument {oldname} has been renamed to {newname}, and "
                 + f"{oldname} will be removed in a future release."
             )
         )

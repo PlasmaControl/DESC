@@ -79,7 +79,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=True):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -96,6 +96,13 @@ class _Bounce(eqx.Module, ABC):
             points xₖ and weights wₖ for the approximation of the integral
             ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). Then this method simply rescales
             the quadrature for integration between ``min_B`` and ``max_B``.
+        simp : bool, optional
+            If ``True``, then the pitch angles are chosen so that the quadrature
+            over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
+            interior completed by an open midpoint scheme near the boundary such
+            that an accuracy of fourth order is preserved.
+            If ``False``, then an open midpoint scheme is returned, which is only
+            recommended for plotting purposes.
 
         Returns
         -------
@@ -110,7 +117,6 @@ class _Bounce(eqx.Module, ABC):
                 msg="Floating point error impedes detection of bounce points "
                 f"near global extrema. Choose {num_pitch} < 1e5.",
             )
-            simp = kwargs.get("simp", True)
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
 
         if jnp.ndim(min_B):

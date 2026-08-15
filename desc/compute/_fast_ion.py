@@ -5,7 +5,7 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..utils import cross, dot, parse_argname_change, safediv
 from .data_index import register_compute_fun
 
@@ -114,9 +114,9 @@ def _poloidal_drift_secular(data, B, pitch):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -150,7 +150,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = BounceOptions.guess(-2, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
@@ -222,9 +222,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -239,7 +239,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, loop=True, **kwargs)
+    opts = BounceOptions.guess(-2, grid, loop=True, **kwargs)
 
     def gamma_c0(data):
         pitch_inv, _ = Bounce2D.pitch_quad(
@@ -302,9 +302,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
 
@@ -327,7 +327,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-1, grid, **kwargs)
+    opts = BounceOptions.guess(-1, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)

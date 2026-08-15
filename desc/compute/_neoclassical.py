@@ -5,7 +5,7 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..integrals.surface_integral import surface_integrals
 from ..utils import parse_argname_change, safediv
 from .data_index import register_compute_fun
@@ -73,9 +73,9 @@ def _dI_2(data, B, pitch):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
@@ -100,7 +100,7 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     )
     # TODO: in future don't close over grid so that sharding works
     grid = transforms["grid"]
-    opts = Options.guess(1, grid, **kwargs)
+    opts = BounceOptions.guess(1, grid, **kwargs)
 
     def eps_32(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)

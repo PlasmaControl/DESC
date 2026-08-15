@@ -5,7 +5,7 @@ from packaging import version
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
-from desc.integrals.bounce_integral import Options
+from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
@@ -183,7 +183,7 @@ class GammaC(_Objective):
             Level of output.
 
         """
-        Options._build_objective(
+        BounceOptions._build_objective(
             self, self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
         )
         super().build(use_jit=use_jit, verbose=verbose)

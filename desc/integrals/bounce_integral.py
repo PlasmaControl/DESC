@@ -332,7 +332,7 @@ class Bounce2D(_Bounce):
             num_field_periods = kwargs.pop("num_transit") * grid.NFP
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -374,7 +374,7 @@ class Bounce2D(_Bounce):
         self._nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
         if spline:
             self._B, self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -709,7 +709,7 @@ class Bounce2D(_Bounce):
 
         """
         if num_well is None:
-            num_well = Options._guess_num_well(
+            num_well = BounceOptions._guess_num_well(
                 num_field_periods=self._theta.X,
                 NFP=self._NFP,
                 mins_per_field_period=getattr(self._B, "Y", jnp.inf) // 2,
@@ -1433,7 +1433,7 @@ class Bounce1D(_Bounce):
         )
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -1859,7 +1859,7 @@ class Bounce1D(_Bounce):
         return plot_ppoly(PPoly(B.T, self._knots), **kwargs)
 
 
-class Options(NamedTuple):
+class BounceOptions(NamedTuple):
     """Parameter container for Bounce2D."""
 
     # TODO(#2152): Consider instead of having users pass in 10 kwargs
@@ -2029,10 +2029,10 @@ class Options(NamedTuple):
         nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
 
         if num_well is None:
-            num_well = Options._guess_num_well(
+            num_well = BounceOptions._guess_num_well(
                 num_field_periods=num_field_periods,
                 NFP=grid.NFP,
                 mins_per_field_period=Y_B if spline else (Y_B // 2),
@@ -2046,7 +2046,7 @@ class Options(NamedTuple):
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
             pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
-            quad=Options._quad(eta, num_quad) if quad is None else quad,
+            quad=BounceOptions._quad(eta, num_quad) if quad is None else quad,
             spline=spline,
             surf_batch_size=surf_batch_size,
             vander=kwargs.get("_vander", None),
@@ -2153,9 +2153,9 @@ class Options(NamedTuple):
 
         Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            o._hyperparam["Y_B"] = Y_B = Options._guess_Y_B(o._grid)
+            o._hyperparam["Y_B"] = Y_B = BounceOptions._guess_Y_B(o._grid)
         if o._hyperparam["num_well"] is None:
-            o._hyperparam["num_well"] = Options._guess_num_well(
+            o._hyperparam["num_well"] = BounceOptions._guess_num_well(
                 num_field_periods=o._hyperparam["num_field_periods"],
                 NFP=eq.NFP,
                 mins_per_field_period=Y_B if o._hyperparam["spline"] else (Y_B // 2),
@@ -2170,7 +2170,7 @@ class Options(NamedTuple):
             if o._hyperparam["spline"]
             else {}
         )
-        o._constants["quad"] = Options._quad(eta, o._hyperparam.pop("num_quad"))
+        o._constants["quad"] = BounceOptions._quad(eta, o._hyperparam.pop("num_quad"))
 
         rho = o._grid.compress(o._grid.nodes[:, 0])
         o._constants["lambda"] = get_transforms(

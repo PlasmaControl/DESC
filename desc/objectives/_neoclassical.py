@@ -5,7 +5,7 @@ from packaging import version
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
-from desc.integrals.bounce_integral import Options
+from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
@@ -161,7 +161,7 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        Options._build_objective(self, "effective ripple", eta=1)
+        BounceOptions._build_objective(self, "effective ripple", eta=1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

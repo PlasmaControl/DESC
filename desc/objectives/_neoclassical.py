@@ -102,11 +102,16 @@ class EffectiveRipple(_Objective):
             nufft_eps = 0.0
         nufft_eps = float(nufft_eps)
 
+        warnif(
+            "use_bounce1d" in kwargs,
+            FutureWarning,
+            "Argument use_bounce1d has been deprecated and is no longer used.",
+        )
         if "num_transit" in kwargs:
             warnif(
                 True,
                 FutureWarning,
-                "argument num_transit has been deprecated in favor of "
+                "Argument num_transit has been deprecated in favor of "
                 "num_field_periods, converting to"
                 " num_field_periods = num_transit*eq.NFP",
             )

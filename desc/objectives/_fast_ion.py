@@ -123,6 +123,11 @@ class GammaC(_Objective):
             nufft_eps = 0.0
         nufft_eps = float(nufft_eps)
 
+        warnif(
+            "use_bounce1d" in kwargs,
+            FutureWarning,
+            "Argument use_bounce1d has been deprecated and is no longer used.",
+        )
         if "num_transit" in kwargs:
             warnif(
                 True,

@@ -301,6 +301,26 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
+        warnif(
+            "is_reshaped" in kwargs,
+            FutureWarning,
+            "Argument is_reshaped has been deprecated and is no longer used.",
+        )
+        warnif(
+            "is_fourier" in kwargs,
+            FutureWarning,
+            "Argument is_fourier has been deprecated and is no longer used.",
+        )
+        warnif(
+            "Bref" in kwargs,
+            FutureWarning,
+            "Argument Bref has been deprecated and is no longer used.",
+        )
+        warnif(
+            "Lref" in kwargs,
+            FutureWarning,
+            "Argument Lref has been deprecated and is no longer used.",
+        )
         if "num_transit" in kwargs:
             warnif(
                 True,
@@ -1361,6 +1381,21 @@ class Bounce1D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
+        warnif(
+            "is_reshaped" in kwargs,
+            FutureWarning,
+            "Argument is_reshaped has been deprecated and is no longer used.",
+        )
+        warnif(
+            "Bref" in kwargs,
+            FutureWarning,
+            "Argument Bref has been deprecated and is no longer used.",
+        )
+        warnif(
+            "Lref" in kwargs,
+            FutureWarning,
+            "Argument Lref has been deprecated and is no longer used.",
+        )
 
         if quad is None:
             quad = Options._quad(eta=-2, num_quad=32)

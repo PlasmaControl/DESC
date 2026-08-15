@@ -400,7 +400,17 @@ class Bounce2D(_Bounce):
             )
 
     @staticmethod
-    def batch(fun, fun_data, desc_data, angle, grid, surf_batch_size=1, sparse=True):
+    def batch(
+        fun,
+        fun_data,
+        desc_data,
+        angle,
+        grid,
+        *,
+        surf_batch_size=1,
+        sparse=True,
+        **kwargs,
+    ):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -447,6 +457,22 @@ class Bounce2D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
+        warnif(
+            "num_pitch" in kwargs,
+            FutureWarning,
+            "Argument num_pitch has been deprecated and is no longer used.",
+        )
+        warnif(
+            "simp" in kwargs,
+            FutureWarning,
+            "Argument simp has been deprecated and is no longer used.",
+        )
+        warnif(
+            "expand_out" in kwargs,
+            FutureWarning,
+            "Argument expand_out has been deprecated and is no longer used.",
+        )
+
         for name in Bounce2D.required_names:
             fun_data[name] = desc_data[name]
         fun_data.pop("iota", None)
@@ -1436,7 +1462,9 @@ class Bounce1D(_Bounce):
         )
 
     @staticmethod
-    def batch(fun, fun_data, desc_data, grid, surf_batch_size=1, sparse=True):
+    def batch(
+        fun, fun_data, desc_data, grid, *, surf_batch_size=1, sparse=True, **kwargs
+    ):
         """Compute function ``fun`` over phase space in batches.
 
         This is a utility method to compute some function of bounce integrals
@@ -1480,6 +1508,22 @@ class Bounce1D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
+        warnif(
+            "num_pitch" in kwargs,
+            FutureWarning,
+            "Argument num_pitch has been deprecated and is no longer used.",
+        )
+        warnif(
+            "simp" in kwargs,
+            FutureWarning,
+            "Argument simp has been deprecated and is no longer used.",
+        )
+        warnif(
+            "expand_out" in kwargs,
+            FutureWarning,
+            "Argument expand_out has been deprecated and is no longer used.",
+        )
+
         for name in Bounce1D.required_names:
             fun_data[name] = desc_data[name]
         for name in fun_data:

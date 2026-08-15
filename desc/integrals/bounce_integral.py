@@ -1035,6 +1035,12 @@ class Bounce2D(_Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
+        warnif(
+            "is_fourier" in kwargs,
+            FutureWarning,
+            "Argument is_fourier has been deprecated and is no longer used.",
+        )
+
         if nufft_eps < 0:
             nufft_eps = self._nufft_eps
         f = _fourier_if_real(f)
@@ -1259,6 +1265,11 @@ class Bounce2D(_Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
+        warnif(
+            "truncate" in kwargs,
+            FutureWarning,
+            "Argument truncate has been deprecated and is no longer used.",
+        )
         kwargs = kwargs.copy()
         kwargs.setdefault("fignum", 0)
         kwargs.setdefault("cmap", "turbo")

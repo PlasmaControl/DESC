@@ -8,7 +8,7 @@ from functools import partial
 
 from desc.backend import jit, jnp
 
-from ..integrals.bounce_integral import Bounce1D, Options
+from ..integrals.bounce_integral import Bounce1D, BounceOptions
 from ..utils import safediv
 from ._fast_ion import (
     _gamma_c_data,
@@ -21,11 +21,11 @@ from ._neoclassical import _dI_1, _dI_2
 from .data_index import register_compute_fun
 
 _bounce1D_doc = {
-    "num_well": Options._doc["num_well"],
-    "num_quad": Options._doc["num_quad"],
-    "num_pitch": Options._doc["num_pitch"],
-    "surf_batch_size": Options._doc["surf_batch_size"],
-    "quad": Options._doc["quad"],
+    "num_well": BounceOptions._doc["num_well"],
+    "num_quad": BounceOptions._doc["num_quad"],
+    "num_pitch": BounceOptions._doc["num_pitch"],
+    "surf_batch_size": BounceOptions._doc["surf_batch_size"],
+    "quad": BounceOptions._doc["quad"],
 }
 
 
@@ -66,7 +66,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    opts = Options.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    opts = BounceOptions.guess(eta=1, grid=grid, Y_B=grid.num_zeta, **kwargs)
     num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
@@ -186,7 +186,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    opts = Options.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    opts = BounceOptions.guess(eta=-2, grid=grid, Y_B=grid.num_zeta, **kwargs)
     num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
@@ -256,7 +256,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"].source_grid
-    opts = Options.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
+    opts = BounceOptions.guess(eta=-1, grid=grid, Y_B=grid.num_zeta, **kwargs)
     num_well = kwargs.get("num_well", -1)
 
     def _poloidal_drift_secular(data, B, pitch):

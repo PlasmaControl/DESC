@@ -304,10 +304,10 @@ class Bounce2D(_Bounce):
         if "num_transit" in kwargs:
             warnif(
                 True,
-                DeprecationWarning,
-                "argument num_transit has been deprecated in favor of"
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of"
                 " num_field_periods, converting to"
-                " num_field_periods = num_transit*eq.NFP",
+                " num_field_periods = num_transit*eq.NFP.",
             )
             num_field_periods = kwargs.pop("num_transit") * grid.NFP
 

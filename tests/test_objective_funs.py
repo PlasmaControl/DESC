@@ -2119,11 +2119,11 @@ class TestObjectiveFunction:
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_field_periods = 20
+        field_period_transits = 20
         opts = dict(
             Y_B=13,
-            num_field_periods=num_field_periods,
-            num_well=3 * num_field_periods,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
@@ -3284,8 +3284,8 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_field_periods"] = 10
-        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)

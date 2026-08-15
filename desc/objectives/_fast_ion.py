@@ -94,7 +94,7 @@ class GammaC(_Objective):
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         num_well=None,
         num_quad=32,
         num_pitch=65,
@@ -133,10 +133,10 @@ class GammaC(_Objective):
                 True,
                 FutureWarning,
                 "Argument num_transit has been deprecated in favor of "
-                "num_field_periods, converting to"
-                " num_field_periods = num_transit*eq.NFP",
+                "field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP",
             )
-            num_field_periods = kwargs.pop("num_transit") * eq.NFP
+            field_period_transits = kwargs.pop("num_transit") * eq.NFP
         if target is None and bounds is None:
             target = 0.0
 
@@ -148,7 +148,7 @@ class GammaC(_Objective):
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,

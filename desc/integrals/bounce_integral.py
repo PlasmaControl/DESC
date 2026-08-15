@@ -248,7 +248,7 @@ class Bounce2D(_Bounce):
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
         multiple field lines until the surface is covered sufficiently.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
         In axisymmetric configurations, integration along the field line for a
         single poloidal transit between two global maxima of B is sufficient for
@@ -295,7 +295,7 @@ class Bounce2D(_Bounce):
         angle,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         quad=None,
         *,
         automorphism=None,
@@ -332,10 +332,10 @@ class Bounce2D(_Bounce):
                 True,
                 FutureWarning,
                 "Argument num_transit has been deprecated in favor of"
-                " num_field_periods, converting to"
-                " num_field_periods = num_transit*eq.NFP.",
+                " field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP.",
             )
-            num_field_periods = kwargs.pop("num_transit") * grid.NFP
+            field_period_transits = kwargs.pop("num_transit") * grid.NFP
 
         if quad is None:
             quad = BounceOptions._quad(eta=-2, num_quad=32)
@@ -374,7 +374,7 @@ class Bounce2D(_Bounce):
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
         iota, alpha = jnp.atleast_1d(iota, jnp.zeros(1) if alpha is None else alpha)
         self._theta = theta_on_fieldlines(
-            angle, iota, alpha, num_field_periods, grid.NFP
+            angle, iota, alpha, field_period_transits, grid.NFP
         )
 
         self._nufft_eps = float(nufft_eps)
@@ -716,7 +716,7 @@ class Bounce2D(_Bounce):
         """
         if num_well is None:
             num_well = BounceOptions._guess_num_well(
-                num_field_periods=self._theta.X,
+                field_period_transits=self._theta.X,
                 NFP=self._NFP,
                 mins_per_field_period=getattr(self._B, "Y", jnp.inf) // 2,
             )
@@ -1900,7 +1900,7 @@ class BounceOptions(NamedTuple):
             non-axisymmetric configurations, it is necessary to integrate along
             multiple field lines until the surface is covered sufficiently.
             """,
-        "num_field_periods": """int :
+        "field_period_transits": """int :
             Number of field periods to follow field line.
             In axisymmetric configurations, integration along the field line for a
             single poloidal transit between two global maxima of B is sufficient for
@@ -1965,7 +1965,7 @@ class BounceOptions(NamedTuple):
 
     _static_argnames = (
         "nufft_eps",
-        "num_field_periods",
+        "field_period_transits",
         "num_pitch",
         "num_quad",
         "num_well",
@@ -1978,7 +1978,7 @@ class BounceOptions(NamedTuple):
     alpha: jnp.ndarray
     loop: bool
     nufft_eps: float
-    num_field_periods: int
+    field_period_transits: int
     num_well: int
     pitch_batch_size: int
     get_pitch_inv_quad: tuple[jnp.ndarray]
@@ -1997,7 +1997,7 @@ class BounceOptions(NamedTuple):
         alpha=None,
         loop=False,
         nufft_eps=-1.0,
-        num_field_periods=20,
+        field_period_transits=20,
         num_pitch=None,
         num_quad=32,
         num_well=None,
@@ -2039,7 +2039,7 @@ class BounceOptions(NamedTuple):
 
         if num_well is None:
             num_well = BounceOptions._guess_num_well(
-                num_field_periods=num_field_periods,
+                field_period_transits=field_period_transits,
                 NFP=grid.NFP,
                 mins_per_field_period=Y_B if spline else (Y_B // 2),
             )
@@ -2048,7 +2048,7 @@ class BounceOptions(NamedTuple):
             alpha=jnp.zeros(1) if alpha is None else alpha,
             loop=loop,
             nufft_eps=nufft_eps,
-            num_field_periods=num_field_periods,
+            field_period_transits=field_period_transits,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
             get_pitch_inv_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
@@ -2081,12 +2081,12 @@ class BounceOptions(NamedTuple):
         return quad
 
     @staticmethod
-    def _guess_num_well(*, num_field_periods, NFP, mins_per_field_period=jnp.inf):
+    def _guess_num_well(*, field_period_transits, NFP, mins_per_field_period=jnp.inf):
         """Guess upper bound for number of wells based on spectrum.
 
         Parameters
         ----------
-        num_field_periods : int
+        field_period_transits : int
             Number of field periods to follow field line.
         NFP : int
             Number of field periods per toroidal transit.
@@ -2101,13 +2101,13 @@ class BounceOptions(NamedTuple):
             A guess for the max number of wells that exist for any pitch angle
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
-            ``num_field_periods*mins_per_field_period`` to enhance performance,
+            ``field_period_transits*mins_per_field_period`` to enhance performance,
             yet still remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
-        num_well = round(num_field_periods * (1 + 20 / NFP))
-        return min(num_well, num_field_periods * mins_per_field_period)
+        num_well = round(field_period_transits * (1 + 20 / NFP))
+        return min(num_well, field_period_transits * mins_per_field_period)
 
     @staticmethod
     def _guess_Y_B(grid):
@@ -2162,7 +2162,7 @@ class BounceOptions(NamedTuple):
             o._hyperparam["Y_B"] = Y_B = BounceOptions._guess_Y_B(o._grid)
         if o._hyperparam["num_well"] is None:
             o._hyperparam["num_well"] = BounceOptions._guess_num_well(
-                num_field_periods=o._hyperparam["num_field_periods"],
+                field_period_transits=o._hyperparam["field_period_transits"],
                 NFP=eq.NFP,
                 mins_per_field_period=Y_B if o._hyperparam["spline"] else (Y_B // 2),
             )

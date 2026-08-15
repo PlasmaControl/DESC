@@ -176,6 +176,20 @@ def gershgorin_bounds(H):
 
 
 @jit
+def _chol_failed(L):
+    """Whether a Cholesky factor is unusable because the matrix was not positive.
+
+    ``potrf`` only errors out, and so returns nan, when a pivot comes out
+    non-positive. A pivot at the noise level instead completes but gives a factor that
+    is useless to solve with, and which of the two a marginal matrix gets depends on
+    the LAPACK build, so treat both as a failure.
+    """
+    d = jnp.diag(L)
+    tol = L.shape[-1] * jnp.finfo(L.dtype).eps
+    return jnp.any(jnp.isnan(L)) | (jnp.min(d) ** 2 <= tol * jnp.max(d) ** 2)
+
+
+@jit
 def _cholmod(A, maxiter=4):
     """Modified Cholesky factorization of indefinite matrix.
 
@@ -233,13 +247,13 @@ def _cholmod(A, maxiter=4):
     for i in range(maxiter):
         L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
         # check if it succeeded
-        isnan = jnp.any(jnp.isnan(L))
+        failed = _chol_failed(L)
         # adjust bounds for correction
-        klow = isnan * kbest + (1 - isnan) * klow
-        khigh = isnan * khigh + (1 - isnan) * kbest
+        klow = failed * kbest + (1 - failed) * klow
+        khigh = failed * khigh + (1 - failed) * kbest
         kbest = (klow + khigh) // 2
         # if it succeeded, mark it as the best so far
-        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, None)
+        Lbest = cond(failed, lambda _: Lbest, lambda _: L, None)
     return Lbest
 
 
@@ -263,7 +277,7 @@ def chol(A):
 
     """
     L = jnp.linalg.cholesky(A)
-    L = cond(jnp.any(jnp.isnan(L)), lambda A: _cholmod(A), lambda A: L, A)
+    L = cond(_chol_failed(L), lambda A: _cholmod(A), lambda A: L, A)
     return L
 
 

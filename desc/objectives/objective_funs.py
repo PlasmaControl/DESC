@@ -232,7 +232,6 @@ def collect_docs(
     normalize_target_detail=None,
     loss_detail=None,
     coil=False,
-    jac_chunk_size=True,
 ):
     """Collect default parameters for the docstring of Objective.
 
@@ -256,8 +255,6 @@ def collect_docs(
     coil : bool, optional
         Whether the objective is a coil objective. If ``True``, updates docs
         of ``target``, ``weight``, ``bounds``, and ``loss_function``.
-    jac_chunk_size : bool
-        Whether to include the ``jac_chunk_size`` parameter in the docstring.
 
     Returns
     -------
@@ -269,9 +266,6 @@ def collect_docs(
 
     # Copy to allow for objective-specific updates to docs
     docs_obj = docs.copy()
-    if not jac_chunk_size:
-        del docs_obj["jac_chunk_size"]
-
     if coil:
         docs_obj["target"] = doc_target_coil
         docs_obj["bounds"] = doc_bounds_coil

@@ -88,6 +88,8 @@ class EffectiveRipple(_Objective):
         nufft_eps=1e-6,
         spline=True,
         use_bounce1d=False,
+        device_id=0,
+        rank=None,
         **kwargs,
     ):
         try:
@@ -138,6 +140,8 @@ class EffectiveRipple(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

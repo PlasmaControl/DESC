@@ -1969,10 +1969,12 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
     @property
     def N_effective(self):
-        """Frequency necessary to resolve surface quantities.
+        r"""Frequency necessary to resolve surface quantities.
 
         Differs from self.N, as the latter only captures the
-        resolution of the curve.
+        resolution of the curve. Note this is an approximation,
+        most accurate when |\theta'(s)|*M_surf, |\\zeta'(s)|*N_surf
+        are not too large.
         """
         surface = self.surface
         M_surf = max(surface.R_basis.M, surface.Z_basis.M)
@@ -2129,8 +2131,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         # Sort and remove duplicate values of s
         # This isn't needed anymore, since we are not modding
         s, idx = np.unique(s, return_index=True)
-        theta_single_val = theta_single_val[idx]
-        zeta_single_val = zeta_single_val[idx]
+        theta_single_val = np.mod(theta_single_val[idx], 2 * np.pi)
+        zeta_single_val = np.mod(zeta_single_val[idx], 2 * np.pi)
 
         if N_theta is None:
             theta_n = None

@@ -137,6 +137,12 @@ class GammaC(_Objective):
                 " field_period_transits = num_transit*eq.NFP",
             )
             field_period_transits = kwargs.pop("num_transit") * eq.NFP
+        warnif(
+            "jac_chunk_size" in kwargs,
+            DeprecationWarning,
+            "ignoring jac_chunk_size as it is not used for this objective",
+        )
+        # TODO: change deriv_mode to "auto" once we have jax > 0.11.0 supported
         if target is None and bounds is None:
             target = 0.0
 

@@ -13,7 +13,7 @@ Breaking Changes and Deprecations
 
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
-- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0. These objectives' derivatives are inefficient in fwd mode, so rev mode should be used for them, which is significantly more efficient with the introduction of sparse reverse-mode differentiation.
+- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 
 
 Bug Fixes

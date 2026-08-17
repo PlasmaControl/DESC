@@ -19,6 +19,7 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
+from desc import config as desc_config
 from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
@@ -58,16 +59,16 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -77,22 +78,43 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Returns
     -------
     B : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic field in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic field in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # We want sum_M (rs-re) x JdV / |rs-re|^3, where rs, JdV are (M x 3) and re
+    # is (N x 3). Forming (rs-re) x JdV gives an (N x M x 3) array, which is
+    # very large. Instead we split it as rs x JdV - re x JdV, so that
+    # K = rs x JdV is only (M x 3). Then, with w = 1/|rs-re|^3 of shape
+    # (N x M), the contractions w @ K and w @ JdV sum over the sources directly
+    # and give (N x 3); only the latter is crossed with re. This way dr is the
+    # only (N x M x 3) array, and it is immediately reduced to (N x M) by the
+    # norm, which XLA can handle easily.
+    # Note that for AD, this approach removes multiple intermediate arrays.
+    # This trick was first suggested by Claude Fable 5, then implemented by Yigit
+    K = jnp.cross(rs, JdV, axis=-1)
+    # The split adds a bit of rounding error for points very close to a source,
+    # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,
+    # so for a 1e-3m distance, error is ~1e-11 in a 20m device. This kernel is never
+    # used for singular or near-singular integrals, so we should be fine.
 
     def biot(re):
-        dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1) ** 3)
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            w = w[..., jnp.newaxis]
+            B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
+        else:
+            B = w @ K - jnp.cross(re, w @ JdV, axis=-1)
+        return B * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def biot_savart_general_vector_potential(
@@ -103,16 +125,16 @@ def biot_savart_general_vector_potential(
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -122,8 +144,8 @@ def biot_savart_general_vector_potential(
     Returns
     -------
     A : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic vector potential in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic vector potential in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -131,12 +153,18 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1))
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            A = (w[..., jnp.newaxis] * JdV).sum(axis=-2)
+        else:
+            A = w @ JdV
+        return A * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -2597,6 +2625,7 @@ def field_line_integrate(
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     options=None,
@@ -2636,6 +2665,13 @@ def field_line_integrate(
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
         Defaults to (-np.inf, np.inf)
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Only used if underlying field implements
+        the precomputation via `_as_precomputed_source` method. Default is True.
     chunk_size : int or None
         Chunk of field lines to trace at once. If None, traces all at once.
         Defaults to None.
@@ -2692,6 +2728,7 @@ def field_line_integrate(
         stepsize_controller=stepsize_controller,
         event=event,
         adjoint=adjoint,
+        use_precomputed_source=use_precomputed_source,
         chunk_size=chunk_size,
         bs_chunk_size=bs_chunk_size,
         options=options,
@@ -2714,6 +2751,7 @@ def _field_line_integrate(
     event,
     adjoint,
     options,
+    use_precomputed_source=True,
     chunk_size=None,
     bs_chunk_size=None,
     return_aux=False,
@@ -2739,6 +2777,15 @@ def _field_line_integrate(
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use ``diffrax.ForwardMode()``.
     """
+    # For supported fields, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing, i.e. the coil geometry (which is independent of the evaluation
+    # points) at every step of every field line.
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
+        field = field._as_precomputed_source(source_grid, params)
+        params = None
+        source_grid = None
+
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()

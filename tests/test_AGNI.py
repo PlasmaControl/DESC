@@ -1,22 +1,43 @@
 """AGNI finite-n stability tests.
 
-Ground truth for all tests: ``finite-n lambda3`` using the dense Cholesky-transformed
-eigensolver.
+Ground truth for the solver tests: ``finite-n lambda3``, the dense
+Cholesky-transformed assembly solved by ARPACK ``eigsh``. Every other solver path
+must reproduce it on the same equilibrium, grid and shift.
 
-test_lambda3_matfree — finite-n lambda3 matfree operator satisfies A*v ≈ lambda3*v.
+test_stability_kwargs_are_registered
+    Every kwarg read by ``desc/compute/_stability.py`` is declared on some
+    ``register_compute_fun``. Undeclared kwargs are REJECTED at runtime by
+    ``desc/compute/utils.py`` (``bad_kwargs = kwargs.keys() - allowed_kwargs``),
+    so a kwarg that is read but never declared is dead on arrival. Needs no
+    equilibrium, so it runs everywhere and is the cheap guard against a
+    registration being dropped while its reader stays.
 
+test_jax_lanczos_matches_dense
+    ``AGNI_EIGENSOLVER=jax_lanczos`` (JAX assembly + exact LU shift-invert
+    Lanczos) reproduces the dense eigenvalue through
+    ``finite-n lambda3 rayleigh``.
+
+test_matfree_operator_matches_dense_matrix
+    The matrix-free operator, materialized column by column, equals the dense
+    ``_agni3_assemble`` matrix entry-for-entry on the kept DOFs.
+
+The equilibrium ships with the repository as ``tests/inputs/AGNI_QH_lowres.h5``
+(the low-resolution Patil QH case), so these tests need no external files.
 Grid and equilibrium are built once at module level and shared across all tests.
-Set AGNI_TEST_RES=N_RHO,N_THETA,N_ZETA (default 12,14,15) to control resolution.
+Set AGNI_TEST_RES=N_RHO,N_THETA,N_ZETA (default 16,12,8) to change resolution.
+The default is radial-heavy on purpose: these modes need rho resolution, and
+starving it makes the eigensolve pick the wrong mode rather than merely a
+less accurate one.
 Set AGNI_EQ_PATH to override the equilibrium file.
 """
 
 import os
+import re
 import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
-from scipy.sparse.linalg import ArpackNoConvergence
 
 from desc import set_device
 
@@ -46,20 +67,26 @@ def _load_old_equilibrium(path):
 # Module-level grid / equilibrium — built once, shared across all tests
 # ---------------------------------------------------------------------------
 
-_RES = os.environ.get("AGNI_TEST_RES", "12,14,15")
+_RES = os.environ.get("AGNI_TEST_RES", "16,12,8")
 _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 
-_EQ_PATH = Path(
-    os.environ.get(
-        "AGNI_EQ_PATH",
-        "/pscratch/sd/r/rgaur/AGNI_var/matrix-free/"
-        "qh_beta1.5_imin1.02_modprof_221410.h5",
-    )
-)
+# Ships with the repo, so these tests need no machine-specific paths.
+_DEFAULT_EQ = Path(__file__).parent / "inputs" / "AGNI_QH_lowres.h5"
+_EQ_PATH = Path(os.environ.get("AGNI_EQ_PATH", _DEFAULT_EQ))
 _AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {_EQ_PATH}"
-pytestmark = pytest.mark.skipif(not _EQ_PATH.is_file(), reason=_AGNI_SKIP_REASON)
 
-if _EQ_PATH.is_file():
+
+@pytest.fixture(scope="module")
+def agni(request):
+    """Dict of equilibrium, PEST grid, DiffMat and the dense lambda3 ground truth.
+
+    Module-scoped and LAZY. Building this costs a coordinate map plus a dense
+    eigensolve, so it must not run at import time: doing so charges every
+    collection -- including `--collect-only` and tests that need no equilibrium
+    at all, like the kwarg-registration guard -- for the full solve.
+    """
+    if not _EQ_PATH.is_file():
+        pytest.skip(_AGNI_SKIP_REASON)
     _EQ = _load_old_equilibrium(str(_EQ_PATH))
 
     # Radial quadrature: Gauss-Lobatto nodes mapped through staircase automorphism
@@ -121,12 +148,24 @@ if _EQ_PATH.is_file():
         v_guess=np.ones(_N_KEEP),
     )
 
-    # Compute ground-truth results once and share across all tests
+    # Dense ground truth, computed once and shared by every solver test.
     _LAM3 = _EQ.compute("finite-n lambda3", **_KW)
-else:
-    _EQ = _GRID = _DIFFMAT = _LAM3 = None
-    _N = _N_SHELL = _N_KEEP = 0
-    _KW = {}
+
+    return dict(
+        eq=_EQ,
+        grid=_GRID,
+        diffmat=_DIFFMAT,
+        kw=_KW,
+        lam3=_LAM3,
+        n_total=_N,
+        n_keep=_N_KEEP,
+        # Dirichlet keep-mask: xi^rho is dropped on the innermost and outermost
+        # rho shells; the other two components are kept everywhere.
+        keep=np.concatenate(
+            [np.arange(_N_SHELL, _N - _N_SHELL), np.arange(_N, 3 * _N)]
+        ),
+        res=(_N_RHO, _N_THETA, _N_ZETA),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -135,58 +174,137 @@ else:
 
 
 @pytest.mark.unit
-@pytest.mark.slow
-def test_lambda3_matfree():
-    """finite-n lambda3 matfree operator satisfies A*v ≈ lambda3*v.
+def test_stability_kwargs_are_registered():
+    """Every kwarg read in _stability.py is declared on a register_compute_fun.
 
-    Uses the lambda3 matfree operator and the eigenvector from the dense
-    lambda3 solve.
+    ``desc/compute/utils.py`` rejects any kwarg missing from ``allowed_kwargs``
+    with ``ValueError: Unrecognized argument(s)``, and ``allowed_kwargs`` is
+    populated ONLY from ``register_compute_fun`` declarations. So a kwarg that
+    the code reads but no registration declares can never be supplied by a
+    caller -- the read silently falls back to its default forever, or the call
+    raises. Dropping a declaration while leaving its reader in place is exactly
+    that bug, and it is invisible to every other test.
     """
-    lam3 = _LAM3
-    eigenvalue3 = float(np.asarray(lam3["finite-n lambda3"])[0])
-    v_dense3 = np.asarray(lam3["finite-n eigenfunction3"]).reshape(-1)
+    from desc.compute.data_index import allowed_kwargs
 
-    Aop = {}
-    original_eigsh = stability.eigsh
+    src = (
+        Path(stability.__file__).read_text()
+        if Path(stability.__file__).is_file()
+        else ""
+    )
+    assert src, "could not read desc/compute/_stability.py"
 
-    def capture_and_solve(op, *args, **kwargs):
-        Aop["op"] = op
-        return original_eigsh(op, *args, **kwargs)
+    read = set(re.findall(r"kwargs\.get\(\s*[\"'](\w+)[\"']", src))
+    read |= set(re.findall(r"kwargs\[\s*[\"'](\w+)[\"']\s*\]", src))
+    read |= set(re.findall(r"kwargs\.pop\(\s*[\"'](\w+)[\"']", src))
+    assert read, "found no kwargs reads -- the regex needs updating"
 
-    stability.eigsh = capture_and_solve
-    try:
-        try:
-            _EQ.compute(
-                "finite-n lambda3 matfree",
-                **{
-                    **_KW,
-                    "v_guess": v_dense3,
-                    "matfree_solver": "eigsh_shiftinvert",
-                    "eigsh_tol": 1e-6,
-                    "eigsh_maxiter": 3000,
-                },
-            )
-        except ArpackNoConvergence:
-            pass  # We only need Aop, not the matfree eigenvalue
-    finally:
-        stability.eigsh = original_eigsh
+    # Known pre-existing gaps, present before this test was written. Listed
+    # explicitly so the guard cannot be weakened silently: to remove one, either
+    # declare the kwarg on the compute function that reads it, or delete the read.
+    known_unregistered = {
+        "jq_lower_metric",  # read in _agni3_assemble
+        "mirror",  # read in _agni3_assemble
+        "phase_offset",  # read in _AGNI3
+        # `ring_nodes` is INTERNAL: `_agni3_assemble` is called directly as a
+        # Python function with ring_nodes=..., never through `eq.compute`, so it
+        # never reaches the allowed_kwargs check. Declaring it on a registration
+        # would advertise a user-facing knob that is not one.
+        "ring_nodes",
+    }
 
-    assert "op" in Aop, "Matfree operator was never built — eigsh was never called"
-
-    av = np.asarray(Aop["op"] @ v_dense3)
-    dominant = np.abs(v_dense3) > 0.2 * np.max(np.abs(v_dense3))
-    ratios = np.real(av[dominant] / v_dense3[dominant])
-
-    lo, hi = np.percentile(ratios, [20, 80])
-    trimmed = ratios[(ratios >= lo) & (ratios <= hi)]
-    ratio_mean = float(np.mean(trimmed))
-    ratio_spread = float(
-        np.max(np.abs(trimmed - ratio_mean)) / (abs(ratio_mean) + 1e-12)
+    missing = sorted(read - allowed_kwargs - known_unregistered)
+    assert not missing, (
+        "kwargs read by _stability.py but declared on no register_compute_fun, "
+        f"so DESC will reject them at compute time: {missing}"
     )
 
-    print(f"\n  dense eigenvalue3  = {eigenvalue3:.6e}")
-    reldiff = abs(ratio_mean - eigenvalue3) / (abs(eigenvalue3) + 1e-300)
-    print(f"  Av/v ratio mean    = {ratio_mean:.6e}  (reldiff={reldiff:.2e})")
-    print(f"  Av/v ratio spread  = {ratio_spread:.3e}")
-    assert ratio_spread < 3.5e-1, f"Av/v not constant: spread={ratio_spread:.3e}"
-    np.testing.assert_allclose(ratio_mean, eigenvalue3, rtol=3e-1, atol=2e-4)
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_matfree_operator_matches_dense_matrix(agni):
+    """The matrix-free operator equals the dense assembled matrix, exactly.
+
+    Materializes the operator column by column as ``Ax(e_j)`` and compares
+    against ``_agni3_assemble``'s dense ``A`` on the kept DOFs. The two are the
+    same operator by construction -- one applied, one assembled -- so this is an
+    equality test, not an approximation test.
+
+    This is the check that keeps ``_agni3_matfree_operator`` honest, and it
+    matters well beyond any single compute key: ``finite-n lambda3 rayleigh``
+    builds its ``jax_lanczos`` and ``pcg_deflated`` operators from this same
+    helper, and the ring preconditioner's blocks are sub-blocks of this matrix.
+    """
+    from desc.compute.data_index import data_index
+
+    deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["finite-n lambda3"][
+        "dependencies"
+    ]["data"]
+    data = agni["eq"].compute(deps, grid=agni["grid"], diffmat=agni["diffmat"])
+    transforms = {"grid": agni["grid"], "diffmat": agni["diffmat"]}
+    kw = {k: v for k, v in agni["kw"].items() if k not in ("grid", "diffmat")}
+
+    op = stability._agni3_matfree_operator(
+        agni["eq"].params_dict, transforms, {}, data, **kw
+    )
+    Ax, n_keep = op["Ax"], int(op["n_keep"])
+
+    eye = jnp.eye(n_keep, dtype=Ax(jnp.ones(n_keep)).dtype)
+    A_mf = np.asarray(jax.vmap(Ax)(eye)).T  # column j = A e_j
+
+    dense = stability._agni3_assemble(
+        agni["eq"].params_dict, transforms, {}, data, **kw
+    )
+    A_dense = np.asarray(dense["A"])
+
+    assert A_mf.shape == A_dense.shape, f"{A_mf.shape} vs {A_dense.shape}"
+    err = np.max(np.abs(A_mf - A_dense)) / np.max(np.abs(A_dense))
+    print(f"\n  max|A_matfree - A_dense| / max|A_dense| = {err:.3e}")
+    assert err < 1e-10, f"matrix-free operator disagrees with dense assembly: {err:.3e}"
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_jax_lanczos_matches_dense(agni, monkeypatch):
+    """AGNI_EIGENSOLVER=jax_lanczos reproduces the dense ARPACK eigenvalue.
+
+    ``finite-n lambda3 rayleigh`` returns the Rayleigh quotient of a freshly
+    eigensolved vector. With ``jax_lanczos`` that solve is a pure-JAX assembly
+    plus an exact LU shift-invert Lanczos -- entirely different machinery from
+    the dense ``finite-n lambda3`` + scipy ARPACK path -- so agreement between
+    them is a real cross-check of the operator and the shift, not a tautology.
+
+    ``sigma`` must sit BELOW the most-negative eigenvalue or shift-invert
+    converges to the wrong mode, which is why it is derived from the dense
+    answer rather than left at the default.
+    """
+    lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
+
+    kw = {k: v for k, v in agni["kw"].items() if k != "v_guess"}
+    data = agni["eq"].compute("finite-n lambda3 rayleigh", **kw, sigma=1.3 * lam_dense)
+    lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
+    resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
+
+    reldiff = abs(lam_R - lam_dense) / (abs(lam_dense) + 1e-300)
+    print(f"\n  lambda3 (dense ARPACK) = {lam_dense:.9e}")
+    print(f"  lam_R   (jax_lanczos)  = {lam_R:.9e}  (reldiff={reldiff:.2e})")
+    print(f"  Rayleigh residual      = {resid:.3e}")
+
+    assert np.sign(lam_R) == np.sign(lam_dense), (
+        f"jax_lanczos flipped the sign of the growth rate: {lam_R:.6e} vs "
+        f"{lam_dense:.6e} -- a stable/unstable misclassification"
+    )
+    # The EIGENVALUE is the assertion that matters here, and it is checked
+    # tightly below. The Rayleigh residual measures EIGENVECTOR convergence,
+    # which lags badly and is strongly resolution-dependent -- MEASURED
+    # 1.947e-03 at 12x14x15 and 1.861e-02 at 16x12x8, both with 100 matvecs,
+    # while lam_R matched dense to 2.6e-11 and 6.0e-10 respectively. So this
+    # bound is deliberately loose: it exists to catch a solve that diverged or
+    # locked onto the wrong mode, not to police the Lanczos tail. Two earlier
+    # values of this bound were guessed from a single resolution and both were
+    # wrong; it is now set from the worst measurement, with margin.
+    assert resid < 0.1, f"Rayleigh residual {resid:.3e} -- eigenvector not converged"
+    np.testing.assert_allclose(lam_R, lam_dense, rtol=1e-4)

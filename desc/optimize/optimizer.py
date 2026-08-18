@@ -28,7 +28,11 @@ from desc.utils import (
     warnif,
 )
 
-from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection, ProximalState
+from ._constraint_wrappers import (
+    LinearConstraintProjection,
+    ProximalProjection,
+    ProximalState,
+)
 
 
 class Optimizer(IOAble):
@@ -530,6 +534,8 @@ def _combine_constraints(constraints):
         Otherwise returns None.
 
     """
+    if len(constraints)==1 and isinstance(constraints[0], ObjectiveFunction):
+        return constraints[0]
     if len(constraints):
         objective = ObjectiveFunction(constraints)
     else:
@@ -581,8 +587,8 @@ def _split_equilibrium_constraints(eq, nonlinear_constraints):
     for con in nonlinear_constraints:
         if con._equilibrium and con.bounds is None and con.things == [eq]:
             eq_constraints.append(con)
-    else:
-        other_constraints.append(con)
+        else:
+            other_constraints.append(con)
     return eq_constraints, other_constraints
 
 
@@ -609,25 +615,31 @@ def _maybe_wrap_nonlinear_constraints(
                 """))
         wrapper = "proximal"
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
-        eq_constraints, other_constraints = _split_equilibrium_constraints(eq, nonlinear_constraints)
+        eq_constraints, other_constraints = _split_equilibrium_constraints(
+            eq, nonlinear_constraints
+        )
+
+        if other_constraints is not None and not optimizers[method]["equality_constraints"]:
+            raise ValueError(
+                f"Wrapper method cannot accept nonlinear constraints {wrapper}."
+                )
+
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
         state = ProximalState(
             eq,
             _combine_constraints(eq_constraints),
             perturb_options=perturb_options,
-            solve_options=solve_options)
-
-
-        
-        objective = ProximalProjection(
-            objective,
-            state=state
+            solve_options=solve_options,
         )
+
+        objective = ProximalProjection(objective, state=state)
         nonlinear_constraints = (
-            ProximalProjection(_combine_constraints(other_constraints),state=state)
-            ) if len(other_constraints) else ()
-    
+            (ProximalProjection(_combine_constraints(other_constraints), state=state),)
+            if len(other_constraints)
+            else ()
+        )
+
     return objective, nonlinear_constraints
 
 

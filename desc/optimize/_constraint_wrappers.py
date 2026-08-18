@@ -5,7 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, put
-from desc.batching import batched_vectorize
+#from desc.batching import batched_vectorize
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -582,8 +582,8 @@ class ProximalProjection(ObjectiveFunction):
     def __init__(
         self,
         objective,
-        constraint,
-        eq,
+        constraint=None,
+        eq=None,
         perturb_options=None,
         solve_options=None,
         state=None,
@@ -594,7 +594,7 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._objective = objective
         if state is None:
-            self._state = ProximalState(eq, constraint, perturb_options,solve_options)
+            self._state = ProximalState(eq, constraint, perturb_options, solve_options)
         else:
             self._state = state
         self._built = False
@@ -658,14 +658,14 @@ class ProximalProjection(ObjectiveFunction):
     #     #     jnp.zeros_like(Rb_lmn), jnp.zeros_like(Zb_lmn),     # noqa : E800
     #     #     p_l, i_l,                                           # noqa : E800
     #     # ]                                                       # noqa : E800
-        # self._dxdc = jnp.hstack(dxdc)
+    # self._dxdc = jnp.hstack(dxdc)
 
     @property
     def _eq(self):
         return self._state.eq
 
     @_eq.setter
-    def _eq(self,new):
+    def _eq(self, new):
         self._state.eq = new
 
     @property
@@ -704,8 +704,8 @@ class ProximalProjection(ObjectiveFunction):
     def _dimc_per_thing(self):
         return self._state.dimc_per_thing
 
-    @property 
-    def perturb_options(self):
+    @property
+    def _perturb_options(self):
         return self._state.perturb_options
 
     @property
@@ -749,9 +749,8 @@ class ProximalProjection(ObjectiveFunction):
         return self._state.history
 
     @history.setter
-    def history(self,new):
+    def history(self, new):
         self._state.history = new
-
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
@@ -871,13 +870,11 @@ class ProximalProjection(ObjectiveFunction):
             self._scalar = True
         else:
             self._scalar = False
-        
 
         self._built = True
         timer.stop("Proximal projection build")
         if verbose > 1:
             timer.disp("Proximal projection build")
-
 
     def _set_things(self, things=None):
         super()._set_things(things)
@@ -1034,14 +1031,14 @@ class ProximalProjection(ObjectiveFunction):
             self._allx.append(x)
             self._allxopt.append(xopt)
             self._allxeq.append(xeq)
-            self._state.eq_is_current=False
+            self._state.eq_is_current = False
 
         if store:
             x_list = self.unpack_state(x, False)
             xeq_dict = self._eq.unpack_params(xeq)
             self._eq.params_dict = xeq_dict
             x_list[self._eq_idx] = xeq_dict
-            if np.array_equal( jnp.asarray(x), jnp.asarray(self._state.x_old)):
+            if np.array_equal(jnp.asarray(x), jnp.asarray(self._state.x_old)):
                 self._state.history[-1] = x_list
             else:
                 self._state.history.append(x_list)
@@ -1051,7 +1048,7 @@ class ProximalProjection(ObjectiveFunction):
             if not self._eq_is_current:
                 self._eq.params_dict = self.history[-1][self._eq_idx]
                 self._state.eq_solve_objective.update_constraint_target(self._eq)
-        self._state.eq_is_current=True
+        self._state.eq_is_current = True
 
         return xopt, xeq
 
@@ -1154,7 +1151,7 @@ class ProximalProjection(ObjectiveFunction):
         # Then, the gradient is ∇L = G.T @ J_of_G
         # where J_of_G is the Jacobian of G with respect to the optimization variables
         # This is a vjp with G serving as the cotangents.
-        v = jnp.eye(x.shape[0])
+        #v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, _ = self._update_equilibrium(x, store=True)
         # jvpfun = lambda u: self._get_tangent(u, xf, constants, op="scaled_error")
@@ -1181,23 +1178,21 @@ class ProximalProjection(ObjectiveFunction):
                 state.dxdc,
                 state.dimc_per_thing,
                 state.eq_idx,
-                op
+                op,
             )
 
-        return state.get_tangents(x, op, constants[1], build)
+        return state.get_tangents(x, op, build)
 
-    def _jvp_tangents_cached(self, tangents, x, constants,op):
+    def _jvp_tangents_cached(self, tangents, x, constants, op):
         if self._objective._deriv_mode == "batched":
-            return getattr(self._objective, "jvp_"+op)(tangents, x, constants[0])
+            return getattr(self._objective, "jvp_" + op)(tangents, x, constants[0])
         else:
             return _proximal_jvp_blocked_pure(
                 self._objective,
-                jnp.split(tangents, np.cumsum(self._dimx_per_thing),axis=-1),
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
                 jnp.split(x, np.cumsum(self._dimx_per_thing)),
-                op
+                op,
             )
-
-
 
     def hess(self, x, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -1221,13 +1216,11 @@ class ProximalProjection(ObjectiveFunction):
         J = self.jac_scaled_error(x, constants)
         return J.T @ J
 
-
     def _jac(self, x, constants=None, op="scaled"):
-        constants=setdefault(constants, [None,None])
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        tangents = self._full_tangents(x,xf,constants,op)
+        tangents = self._full_tangents(x, xf, constants, op)
         return self._jvp_tangents_cached(tangents, xg, constants, op).T
-
 
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled.
@@ -1245,7 +1238,7 @@ class ProximalProjection(ObjectiveFunction):
             Jacobian matrix.
 
         """
-        return self._jac(x,constants,"scaled")
+        return self._jac(x, constants, "scaled")
 
     def jac_scaled_error(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled_error.
@@ -1263,7 +1256,7 @@ class ProximalProjection(ObjectiveFunction):
             Jacobian matrix.
 
         """
-        return self._jac(x,constants,"scaled_error")
+        return self._jac(x, constants, "scaled_error")
 
     def jac_unscaled(self, x, constants=None):
         """Compute Jacobian of self.compute_unscaled.
@@ -1280,7 +1273,7 @@ class ProximalProjection(ObjectiveFunction):
         J : ndarray
             Jacobian matrix.
         """
-        return self._jac(x,constants,"unscaled")
+        return self._jac(x, constants, "unscaled")
 
     def jvp_scaled(self, v, x, constants=None):
         """Compute Jacobian-vector product of self.compute_scaled.
@@ -1355,26 +1348,25 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
+        #jvpfun = lambda u: self._get_tangent(u, xf, constants, op=op)
         tangents = _proximal_get_tangents(
-                self._constraint,
-                xf,
-                v,
-                constants[1],
-                self._eq_solve_objective._feasible_tangents,
-                self._dxdc,
-                self._dimc_per_thing,
-                self._eq_idx,
-                op,
-            )
+            self._constraint,
+            xf,
+            v,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents,
+            self._dxdc,
+            self._dimc_per_thing,
+            self._eq_idx,
+            op,
+        )
         return self._jvp_tangents_cached(tangents, xg, constants, op)
 
-       
     def _vjp(self, v, x, constants=None, op="scaled"):
-        constants=setdefault(constants,[None,None])
+        constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        tangents = self._full_tangents(x,xf,constants,op)
-        v_vjp = getattr(self._objective, "vjp_"+op)(v, xg, constants[0])
+        tangents = self._full_tangents(x, xf, constants, op)
+        v_vjp = getattr(self._objective, "vjp_" + op)(v, xg, constants[0])
         return tangents @ v_vjp
 
     def vjp_scaled(self, v, x, constants):
@@ -1384,7 +1376,7 @@ class ProximalProjection(ObjectiveFunction):
         return self._vjp(v, x, constants, "scaled_error")
 
     def vjp_unscaled(self, v, x, constants):
-        return self._vjp(v,x,constants, "unscaled")
+        return self._vjp(v, x, constants, "unscaled")
 
     @property
     def constants(self):
@@ -1407,13 +1399,14 @@ class ProximalProjection(ObjectiveFunction):
 class ProximalState:
     """Shared state manager for all objectives and constraints wrapped by a ProximalProjection."""
 
-    def __init__(self,
-                 eq,
-                 constraint,
-                 perturb_options=None,
-                 solve_options=None,
-                 ):
-    
+    def __init__(
+        self,
+        eq=None,
+        constraint=None,
+        perturb_options=None,
+        solve_options=None,
+    ):
+
         assert isinstance(constraint, ObjectiveFunction), (
             "constraint should be instance of ObjectiveFunction." ""
         )
@@ -1435,11 +1428,9 @@ class ProximalState:
 
         self.eq = eq
         self.constraint = constraint
-        
 
-
-        perturb_options=setdefault(perturb_options,{})
-        solve_options=setdefault(solve_options,{})
+        perturb_options = setdefault(perturb_options, {})
+        solve_options = setdefault(solve_options, {})
         self._solve_during_proximal_build = solve_options.pop(
             "solve_during_proximal_build", True
         )  # If user does not want the solve during build, mainly for debug purposes
@@ -1457,17 +1448,17 @@ class ProximalState:
         self.history = []
         self.eq_is_current = True
         self._tangent_x = None
-        self._tangent_constants = None
         self._tangents = {}
-        self._built=False
-        
+        self._built = False
 
     def build(self, use_jit=None, verbose=1):
         if self.built:
             return
 
         self.eq_linear_constraints = get_fixed_boundary_constraints(eq=self.eq)
-        self.eq_linear_constraints = maybe_add_self_consistency(self.eq, self._eq_linear_constraints)
+        self.eq_linear_constraints = maybe_add_self_consistency(
+            self.eq, self.eq_linear_constraints
+        )
 
         if not self.constraint.built:
             self.constraint.build(use_jit=use_jit, verbose=verbose)
@@ -1485,7 +1476,7 @@ class ProximalState:
         errorif(
             self.constraint.things != [self.eq],
             ValueError,
-            "ProximalProjection can only handle constraints on the equilibrium."
+            "ProximalProjection can only handle constraints on the equilibrium.",
         )
 
         self._set_eq_state_vector()
@@ -1497,8 +1488,7 @@ class ProximalState:
                 **self.solve_options,
             )
 
-        self._built=True
-
+        self._built = True
 
     @property
     def built(self):
@@ -1508,7 +1498,7 @@ class ProximalState:
         full_args = self.eq.optimizable_params.copy()
         self.args = self.eq.optimizable_params.copy()
 
-        for arg in ["R_lmn","Z_lmn","L_lmn","Ra_n","Za_n"]:
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
             self.args.remove(arg)
 
         self._eq_Z, self._eq_D, self._eq_unfixed_idx = (
@@ -1517,13 +1507,13 @@ class ProximalState:
             self.eq_solve_objective._unfixed_idx,
         )
 
-        dxdc=[]
+        dxdc = []
         xz = {arg: np.zeros(self.eq.dimensions[arg]) for arg in full_args}
 
-        for arg in self._args:
+        for arg in self.args:
             if arg not in ["Rb_lmn", "Zb_lmn"]:
                 x_idx = self.eq.x_idx[arg]
-                dxdc.append(np.eye(self.eq.dim_x)[:,x_idx])
+                dxdc.append(np.eye(self.eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
                 c = get_instance(self.eq_linear_constraints, BoundaryRSelfConsistency)
                 A = c.jac_unscaled(xz)[0]["R_lmn"]
@@ -1538,11 +1528,12 @@ class ProximalState:
                 dxdc.append(dxdZb)
         self.dxdc = jnp.hstack(dxdc)
 
-    def set_layout(self):
+    def set_layout(self,things):
+        things=list(things)
         self.eq_idx = self.things.index(self.eq)
-
+        self.things=things
         self.dimx_per_thing = [t.dim_x for t in self.things]
-        self.dimc_per_thing = [t.dim_X for t in self.things]
+        self.dimc_per_thing = [t.dim_x for t in self.things]
         self.dimc_per_thing[self.eq_idx] = np.sum(
             [self.eq.dimensions[arg] for arg in self.args]
         )
@@ -1553,27 +1544,28 @@ class ProximalState:
         if self.x_old is None or self.x_old.size != sum(self.dimc_per_thing):
             self._initialize_record()
 
-
     def _initialize_record(self):
 
         xs = []
         for t in self.things:
             if t == self.eq:
-                xs += [jnp.concatenate([jnp.atleast_1d(t.params_dict[arg]) for arg in self.args])]
+                xs += [
+                    jnp.concatenate(
+                        [jnp.atleast_1d(t.params_dict[arg]) for arg in self.args]
+                    )
+                ]
             else:
                 xs += [t.pack_params(t.params_dict)]
         xopt = jnp.concatenate([t.pack_params(t.params_dict) for t in self.things])
-            
-        self.x_old = xs
+
+        self.x_old = jnp.concatenate(xs)
         self.allx = [self.x_old]
-        self.xopt = xopt
+        self.allxopt = xopt
         self.allxeq = [self.eq.pack_params(self.eq.params_dict)]
         self.history = [[t.params_dict.copy() for t in self.things]]
         self.eq_is_current = True
-        self._tangent_x=None
-        self._tangents={}
-
-
+        self._tangent_x = None
+        self._tangents = {}
 
     def get_tangents(self, x, op, build):
 
@@ -1583,11 +1575,11 @@ class ProximalState:
             key = "unscaled"
         x = jnp.asarray(x)
 
-        if self._tangent_x is None or not np.array_equal(self._tangent_x, x):
+        if (self._tangent_x is None) or (not np.array_equal(self._tangent_x, x)) or (key not in self._tangents):
+            self._tangent_x = x
             self._tangents[key] = build()
 
         return self._tangents[key]
-        
 
     # def update_record(self, x_new, x_params_new):
     #     if np.array_equal( jnp.asarray(x_new), jnp.asarray(self.x_old)):
@@ -1597,7 +1589,6 @@ class ProximalState:
 
     #     self.x_old=x_new
     #     self.eq_is_current = True
-        
 
     # def rollback_record(self):
     #     if self.eq_is_current:
@@ -1696,7 +1687,8 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
             out.append(outi)
     return jnp.concatenate(out).T
 
-jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
+
+@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
 def _proximal_get_tangents(
     constraint,
     xf,

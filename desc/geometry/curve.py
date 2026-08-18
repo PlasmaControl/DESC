@@ -1731,18 +1731,22 @@ class FourierRZSurfaceCurve(SurfaceCurve):
     modes_theta: array-like, optional
         Mode numbers associated with theta. If
         not given, defaults to [-N_theta:N_theta],
-        where N_theta = len(theta_n)//2.
+        where N_theta = len(theta_n)//2. If given
+        alongside theta_n, must have the same length.
     modes_zeta: array-like, optional
         Mode numbers associated with zeta. If
         not given, defaults to [-N_theta:N_theta],
-        where N_theta = len(theta_n)//2.
+        where N_theta = len(theta_n)//2. If given
+        alongside zeta_n, must have the same length.
     sym_theta: str, optional
         If "sin"/"cos", retains only the corresponding
-        modes in the series for theta(s). Defaults
+        modes in the series for theta(s). In this case,
+        modes_theta should also be given. Defaults
         to None, i.e. all modes are kept.
     sym_zeta: bool, optional
         If "sin"/"cos", retains only the corresponding
-        modes in the series for zeta(s). Defaults
+        modes in the series for zeta(s). In this case,
+        modes_zeta should also be given. Defaults
         to None, i.e. all modes are kept.
     NFP: positive int, optional
         Field period symmetry of the curve. Defaults to 1.
@@ -1801,18 +1805,13 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         self._NFP = check_posint(NFP, "NFP", False)
         self._equilibrium = equilibrium
 
-        # Input validation
         errorif(
-            surface is not None and equilibrium is not None,
+            all([surface, equilibrium]) or not any([surface, equilibrium]),
             ValueError,
-            "Either surface or equilibrium is required",
+            "Exactly one of surface or equilibrium is required",
         )
         if equilibrium is not None:
             surface = equilibrium.surface
-        elif surface is None:
-            from . import FourierRZToroidalSurface
-
-            surface = FourierRZToroidalSurface()
 
         check_nonnegint(secular_theta, "secular_theta", False)
         check_nonnegint(secular_zeta, "secular_zeta", False)
@@ -1837,6 +1836,11 @@ class FourierRZSurfaceCurve(SurfaceCurve):
             ValueError,
             "a modular curve (secular_zeta=0) requires NFP=1",
         )
+        errorif(
+            (sym_theta and modes_theta is None) or (sym_zeta and modes_zeta is None),
+            ValueError,
+            "sym option given without corresponding mode numbers",
+        )
 
         super().__init__(surface=surface, name=name)
 
@@ -1860,6 +1864,12 @@ class FourierRZSurfaceCurve(SurfaceCurve):
                 self._theta_n = jnp.zeros_like(self._modes_theta, dtype=float)
             else:
                 self._theta_n = jnp.array(theta_n)
+            errorif(
+                len(self._theta_n) != len(self._modes_theta),
+                ValueError,
+                "theta_n and modes_theta must have same length",
+            )
+
             N = np.max(np.abs(self._modes_theta))
             self._theta_basis = FourierSeries(N, sym=sym_theta, NFP=NFP)
             self._theta_n = copy_coeffs(
@@ -1879,6 +1889,11 @@ class FourierRZSurfaceCurve(SurfaceCurve):
                 self._zeta_n = jnp.zeros_like(self._modes_zeta, dtype=float)
             else:
                 self._zeta_n = jnp.array(zeta_n)
+            errorif(
+                len(self._zeta_n) != len(self._modes_zeta),
+                ValueError,
+                "zeta_n and modes_zeta must have same length",
+            )
             N = np.max(np.abs(self._modes_zeta))
             self._zeta_basis = FourierSeries(N, NFP=NFP, sym=sym_zeta)
             self._zeta_n = copy_coeffs(

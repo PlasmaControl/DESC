@@ -2893,6 +2893,17 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
+    def to_FourierRZSurface(
+        self,
+        surface=None,
+        secular_theta=0,
+        secular_zeta=1,
+        grid=None,
+        name="",
+        check_intersection=False,
+    ):
+        pass
+
     def is_self_intersecting(self, grid=None, tol=None):
         """Check if any coils in the CoilSet intersect.
 
@@ -3511,6 +3522,9 @@ class MixedCoilSet(CoilSet):
             for coil in self
         ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierRZSurface(self):
+        pass
 
     def __add__(self, other):
         if isinstance(other, (CoilSet, MixedCoilSet)):

@@ -12,6 +12,7 @@ from desc.coils import (
     CoilSet,
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierRZSurfaceCoil,
     FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
@@ -23,7 +24,12 @@ from desc.coils import (
 from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import (
+    FourierRZCurve,
+    FourierRZSurfaceCurve,
+    FourierRZToroidalSurface,
+    FourierXYZCurve,
+)
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
@@ -185,6 +191,37 @@ class TestCoil:
             B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
         )
 
+        # FourierRZSurfaceCoil
+        surf = FourierRZToroidalSurface()
+        coil = FourierRZSurfaceCoil(I, surface=surf, secular_zeta=0, secular_theta=1)
+        B_xyz = coil.compute_magnetic_field(
+            grid_xyz, basis="xyz", source_grid=coil_grid
+        )
+        B_rpz = coil.compute_magnetic_field(
+            grid_rpz, basis="rpz", source_grid=coil_grid
+        )
+        np.testing.assert_allclose(
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierRZSurfaceCoil",
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierRZSurfaceCoil",
+        )
+        np.testing.assert_allclose(
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=1e-10,
+            err_msg="Using FourierRZSurfaceCoil",
+        )
+
     @pytest.mark.unit
     def test_biot_savart_vector_potential_all_coils(self):
         """Test biot-savart vec potential implementation against analytic formula."""
@@ -245,6 +282,11 @@ class TestCoil:
         coil3 = MixedCoilSet(coil2, coil, check_intersection=False)
         coil3[1].current = 0
         test(coil3, grid_xyz, grid_rpz)
+
+        # FourierRZSurfaceCoil
+        surf = FourierRZToroidalSurface()
+        coil = FourierRZSurfaceCoil(I, surface=surf, secular_zeta=0, secular_theta=1)
+        test(coil, grid_xyz, grid_rpz)
 
     @pytest.mark.unit
     def test_biot_savart_vector_potential_integral_all_coils(self):
@@ -395,6 +437,25 @@ class TestCoil:
                 atol=1e-12,
             )
 
+            # FourierRZSurfaceCoil
+            # surface has major radius R+1, minor radius 1, so a coil on inner
+            # midboard has the correct dimensions
+            surf = FourierRZToroidalSurface(
+                R_lmn=[R + 1, 1], Z_lmn=[0, -1], modes_R=[[0, 1]], modes_Z=[[0, -1]]
+            )
+            coil = FourierRZSurfaceCoil(
+                I, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi]
+            )
+            test(
+                coil,
+                grid_xyz,
+                grid_rpz,
+                A_true_rpz,
+                correct_flux,
+                rtol=1e-8,
+                atol=1e-12,
+            )
+
     @pytest.mark.unit
     def test_properties(self):
         """Test getting/setting attributes for Coil class."""
@@ -461,6 +522,10 @@ class TestCoil:
         coil4 = coil1.to_FourierRZ(N=coil1.N)
         coil5 = coil1.to_FourierXY(N=10, basis="rpz")
         coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
+        surf = FourierRZToroidalSurface(
+            R_lmn=[0, 10, 1], modes_R=[[0, -1], [0, 0], [0, 1]]
+        )
+        coil7 = coil1.to_FourierRZSurface(surface=surf, secular_theta=0, secular_zeta=1)
 
         grid = LinearGrid(zeta=s)
         x1 = coil1.compute("x", grid=grid, basis="xyz")["x"]
@@ -474,6 +539,7 @@ class TestCoil:
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x7 = coil7.compute("x", grid=grid_planar, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -493,17 +559,22 @@ class TestCoil:
         B6 = coil6.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
+        B7 = coil7.compute_magnetic_field(
+            np.zeros((1, 3)), source_grid=grid, basis="xyz"
+        )
 
         np.testing.assert_allclose(x1, x2, atol=1e-12)
         np.testing.assert_allclose(x1, x3, atol=1e-12)
         np.testing.assert_allclose(x1, x4, atol=1e-12)
         np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(x1, x6, atol=1e-10)
+        np.testing.assert_allclose(x1, x7, atol=1e-10)
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(B1, B7, rtol=1e-6, atol=1e-7)
 
 
 class TestCoilSet:
@@ -817,6 +888,16 @@ class TestCoilSet:
         coils2 = coils0.to_FourierXYZ(grid=grid, check_intersection=False)
         coils3 = coils0.to_FourierXY(grid=grid, check_intersection=False)
         coils4 = coils0.to_FourierPlanar(grid=grid, check_intersection=False)
+        surf = FourierRZToroidalSurface(
+            R_lmn=[0, 10, 1], modes_R=[[0, -1], [0, 0], [0, 1]]
+        )
+        coils5 = coils0.to_FourierRZSurface(
+            grid=grid,
+            check_intersection=False,
+            surface=surf,
+            secular_theta=0,
+            secular_zeta=1,
+        )
         assert isinstance(coils1, MixedCoilSet)
         assert isinstance(coils2, MixedCoilSet)
         assert isinstance(coils3, MixedCoilSet)

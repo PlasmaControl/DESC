@@ -1315,11 +1315,15 @@ def test_proximal_jacobian():
     # this is basically the old method we're benchmarking against
     xf = con1.x(eq1)
     xg = obj1.x(eq1)
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    eq_Z = (1 / prox1._eq_D)[prox1._eq_unfixed_idx, None] * (
+        prox1._eq_feasible_tangents[prox1._eq_unfixed_idx]
+    )
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1331,8 +1335,8 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Fxh = Fx[:, prox1._eq_unfixed_idx] @ eq_Z
+    Gxh = Gx[:, prox1._eq_unfixed_idx] @ eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1491,8 +1495,10 @@ def test_LinearConstraint_jacobian():
 
     x = obj1.x()
     x_reduced = lc1.x()
-    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
-    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    Z1 = (1 / lc1._D)[lc1._unfixed_idx, None] * lc1._feasible_tangents[lc1._unfixed_idx]
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ Z1
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ Z1
     jvp_scaled = jac_scaled @ vl
     jvp_unscaled = jac_unscaled @ vl
     vjp_scaled = jac_scaled.T @ vr

@@ -134,13 +134,10 @@ docs = {
 doc_bounce = """
     Notes
     -----
-    Consider using an optimizer that uses a scalar output loss function
-    to improve performance before reducing ``jac_chunk_size``.
-
     Developer notes: Performance will improve significantly by resolving GitHub issues:
       * ``1206`` Upsample data above midplane to full grid assuming stellarator symmetry
       * ``1034`` Optimizers/objectives with auxiliary output
-      * ``2168`` Sparse cotangent pullbacks
+      * ``2171`` Single cotangent pullback through compute pipeline.
 
     Parameters
     ----------
@@ -163,29 +160,29 @@ doc_bounce = """
         Default is 32.
     Y_B : int
         Desired resolution for algorithm to compute bounce points.
-        If the option ``spline`` is ``True``, the bounce points are found with
-        8th order accuracy in this parameter. If the option ``spline`` is ``False``,
-        then the bounce points are found with spectral accuracy in this parameter.
-        A reference value for the ``spline=True`` option is
-        ``grid.NFP*(grid.num_theta+grid.num_zeta)//2``.
-        A reference value for the ``spline=False`` option is
-        ``(grid.num_theta+grid.num_zeta)//2``.
+        A reference value is ``(grid.num_theta+grid.num_zeta)//2``.
 
-        An error of ε in a bounce point manifests
-        𝒪(ε¹ᐧ⁵) error in bounce integrals with (v_∥)¹ and
-        𝒪(ε⁰ᐧ⁵) error in bounce integrals with (v_∥)⁻¹.
+        If the option ``spline`` is ``True``, the bounce points are found with
+        𝒪(Y_B⁻¹²) error. In this case, the final error will be of order
+        𝒪(Y_B⁻¹⁸) in bounce integrals with (v_∥)¹ and
+        𝒪(Y_B⁻⁶)  in bounce integrals with (v_∥)⁻¹.
+
+        If the option ``spline`` is ``False``, the bounce points are found such
+        that the bounce integrals have exponential accuracy in this parameter.
     alpha : jnp.ndarray
         Shape (num alpha, ).
         Starting field line poloidal labels.
-        Default is single field line. To compute a surface average
-        on a rational surface, it is necessary to average over multiple
-        field lines until the surface is covered sufficiently.
-    num_transit : int
-        Number of toroidal transits to follow field line.
-        In an axisymmetric device, field line integration over a single poloidal
-        transit is sufficient to capture a surface average. For a 3D
-        configuration, more transits will approximate surface averages on an
-        irrational magnetic surface better, with diminishing returns.
+        Default is single field line.
+        On irrational magnetic surfaces, it is sufficient to integrate along a
+        single field line. On a rational or near-rational surface in
+        non-axisymmetric configurations, it is necessary to integrate along
+        multiple field lines until the surface is covered sufficiently.
+    num_field_periods : int
+        Number of field periods to follow field line.
+        In axisymmetric configurations, integration along the field line for a
+        single poloidal transit between two global maxima of B is sufficient for
+        convergence. For a 3D configuration, the magnetic surface should be covered
+        sufficiently.
     num_well : int
         Maximum number of wells to detect for each pitch and field line.
         Giving ``-1`` will detect all wells but due to current limitations in
@@ -217,7 +214,9 @@ doc_bounce = """
         transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
-        instead of Chebyshev series. Default is ``True``.
+        instead of Chebyshev series. Default is ``True``. It can be preferable
+        to set to ``False`` on equilibria with high ``NFP``, (such cases make
+        smaller ``Y_B`` feasible), or on GPUs where eigenvalue solves are fast.
     """.rstrip()
 
 
@@ -233,6 +232,7 @@ def collect_docs(
     normalize_target_detail=None,
     loss_detail=None,
     coil=False,
+    jac_chunk_size=True,
 ):
     """Collect default parameters for the docstring of Objective.
 
@@ -256,6 +256,8 @@ def collect_docs(
     coil : bool, optional
         Whether the objective is a coil objective. If ``True``, updates docs
         of ``target``, ``weight``, ``bounds``, and ``loss_function``.
+    jac_chunk_size : bool
+        Whether to include the ``jac_chunk_size`` parameter in the docstring.
 
     Returns
     -------
@@ -267,6 +269,9 @@ def collect_docs(
 
     # Copy to allow for objective-specific updates to docs
     docs_obj = docs.copy()
+    if not jac_chunk_size:
+        del docs_obj["jac_chunk_size"]
+
     if coil:
         docs_obj["target"] = doc_target_coil
         docs_obj["bounds"] = doc_bounds_coil

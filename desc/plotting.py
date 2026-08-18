@@ -24,7 +24,6 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
-from desc.integrals._bounce_utils import Y_B_rule, num_well_rule
 from desc.magnetic_fields import field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
@@ -4699,7 +4698,7 @@ def plot_gammac(
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
-        * ``num_transit``: int
+        * ``num_field_periods``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
 
@@ -4733,14 +4732,9 @@ def plot_gammac(
 
     # TODO(#1352)
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
-    kwargs.pop("pitch_batch_size", None)
-    kwargs.pop("surf_batch_size", None)
     X = kwargs.pop("X", 32)
     Y = kwargs.pop("Y", 32)
-    Y_B = kwargs.pop("Y_B", Y_B_rule(grid, spline=True))
-    num_quad = kwargs.pop("num_quad", 32)
-    num_transit = kwargs.pop("num_transit", 2)
-    num_well = kwargs.pop("num_well", num_well_rule(num_transit, eq.NFP, Y_B))
+    num_field_periods = kwargs.pop("num_field_periods", 5)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4755,18 +4749,16 @@ def plot_gammac(
         "gamma_c",
         grid=grid,
         angle=Bounce2D.angle(eq, X, Y, rho),
-        Y_B=Y_B,
-        num_transit=num_transit,
-        num_quad=num_quad,
+        num_field_periods=num_field_periods,
         num_pitch=num_pitch,
-        num_well=num_well,
         alpha=alphas,
+        **kwargs,
     )
 
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.pitch_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

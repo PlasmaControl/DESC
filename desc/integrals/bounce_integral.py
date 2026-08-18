@@ -97,18 +97,14 @@ class _Bounce(eqx.Module, ABC):
             ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). Then this method simply rescales
             the quadrature for integration between ``min_B`` and ``max_B``.
         simp : bool, optional
-            If ``True``, then the pitch angles are chosen so that the quadrature
-            over the velocity coordinate of 1/λ is done with Simpson’s 1/3 in the
-            interior completed by an open midpoint scheme near the boundary such
-            that an accuracy of fourth order is preserved.
+            If ``True``, then the pitch angles are chosen according to Simpson’s 1/3.
             If ``False``, then an open midpoint scheme is returned, which is only
             recommended for plotting purposes.
 
         Returns
         -------
         pitch_inv, weight : tuple[jnp.ndarray]
-            Shape (min_B.shape, num pitch).
-            1/λ values and weights.
+            Shape (min_B.shape, num pitch). 1/λ values and weights.
 
         """
         if isinstance(num_pitch, int):
@@ -127,8 +123,6 @@ class _Bounce(eqx.Module, ABC):
         x = bijection_from_disc(x, min_B, max_B)
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
-
-    get_pitch_inv_quad = get_pitch_inv_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
@@ -1241,6 +1235,7 @@ class Bounce2D(_Bounce):
         norm=LogNorm(1e-7),
         h_ax_numticks=None,
         v_ax_numticks=None,
+        truncate=0,
         **kwargs,
     ):
         """Plot frequency spectrum of the given inverse stream map.
@@ -1260,6 +1255,10 @@ class Bounce2D(_Bounce):
             If given, labels at most ``h_ax_numticks`` marks on the horizontal axis.
         v_ax_numticks : int
             If given, labels at most ``v_ax_numticks`` marks on the vertical axis.
+        truncate : int
+            Index at which to truncate any Chebyshev series. This will remove aliasing
+            error at the shortest wavelengths where the signal to noise ratio is lowest.
+            The default value is zero which is interpreted as no truncation.
         kwargs
             Keyword arguments to pass to ``matplotlib``.
 
@@ -1269,11 +1268,6 @@ class Bounce2D(_Bounce):
             Matplotlib (fig, ax) tuple.
 
         """
-        warnif(
-            "truncate" in kwargs,
-            FutureWarning,
-            "Argument truncate has been deprecated and is no longer used.",
-        )
         kwargs = kwargs.copy()
         kwargs.setdefault("fignum", 0)
         kwargs.setdefault("cmap", "turbo")
@@ -1293,9 +1287,7 @@ class Bounce2D(_Bounce):
                 rf"on $\rho_{{l={l}}}$",
             )
 
-            c = FourierChebyshevSeries(
-                angle, (jnp.nan, jnp.nan), truncate=kwargs.get("truncate", 0)
-            )._c
+            c = FourierChebyshevSeries(angle, (jnp.nan, jnp.nan), truncate=truncate)._c
             c = cheb_from_dct(
                 c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2
             )
@@ -1979,7 +1971,7 @@ class BounceOptions(NamedTuple):
     field_period_transits: int
     num_well: int
     pitch_batch_size: int
-    get_pitch_inv_quad: tuple[jnp.ndarray]
+    pitch_quad: tuple[jnp.ndarray]
     quad: tuple[jnp.ndarray]
     spline: bool
     surf_batch_size: int
@@ -2049,7 +2041,7 @@ class BounceOptions(NamedTuple):
             field_period_transits=field_period_transits,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
-            get_pitch_inv_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
+            pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
             quad=BounceOptions._quad(eta, num_quad) if quad is None else quad,
             spline=spline,
             surf_batch_size=surf_batch_size,

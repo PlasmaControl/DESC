@@ -176,7 +176,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.get_pitch_inv_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,
@@ -245,7 +245,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     def gamma_c0(data):
         pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.get_pitch_inv_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
         points = bounce.points(pitch_inv, opts.num_well)
@@ -346,7 +346,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
         pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
-            data["min_tz |B|"], data["max_tz |B|"], opts.get_pitch_inv_quad
+            data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
             batch_map(fun, pitch_inv, opts.pitch_batch_size) * weight / pitch_inv**2,

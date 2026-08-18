@@ -5,7 +5,6 @@ these utilities are private, and although it is unlikely,
 their API may change without warning.
 """
 
-import warnings
 from functools import partial
 
 import numpy as np
@@ -283,18 +282,6 @@ def _acrobatics(z, t, c, NFP, eps, mask):
         .reshape((-1,) + swapped_shape)  # then shape is (-1, ρ ?, b, α, λ, w)
         .swapaxes(1, -4)  # recover shape (-1, b, ρ ?, α, λ, w)
     )
-
-
-@partial(jax.custom_jvp, nondiff_argnums=(2,))
-def regular_points(o, pitch_inv, num_well):
-    """Alias of the function bounce_points."""
-    warnings.warn(
-        FutureWarning(
-            "Function regular_points has been renamed to bounce_points, and "
-            + "bounce_points will be removed in a future release."
-        )
-    )
-    return bounce_points(o, pitch_inv, num_well)
 
 
 @partial(jax.custom_jvp, nondiff_argnums=(2,))

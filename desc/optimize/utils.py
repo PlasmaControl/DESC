@@ -229,6 +229,7 @@ def _cholmod(A, maxiter=4):
     # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
     # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
     # that it's actually greater than the maximum alpha
+    # TODO: add special handling for lb = 0, i.e. 0 row of A, rest diag dominant
     ub = jnp.log10(jnp.abs(lb)) + 1
     # we know alpha > 0 because otherwise initial factorization would have succeeded
     # but we'd like to be a bit better (in log scaling). This is just a heuristic but

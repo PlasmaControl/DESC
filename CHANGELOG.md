@@ -4,10 +4,7 @@ Changelog
 Performance Improvements
 
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
-- Sparse reverse-mode differentiation was introduced to DESC
-  to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170).
-  Plumbing to use this method was added to DESC that
-  will be progressively taken advantage of in the future.
+- Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 
 Breaking Changes and Deprecations
 
@@ -15,10 +12,10 @@ Breaking Changes and Deprecations
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 
-
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+
 
 v0.17.3
 -------
@@ -48,10 +45,10 @@ Bug Fixes
     - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
 - Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
 
-
 Breaking Changes
 
 - Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
+
 
 v0.17.2
 -------
@@ -85,8 +82,6 @@ Performance Improvements
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
 - ``ObjectiveFunction.print_value`` can now use the previously computed ``compute_scaled_error`` values to print. For bounded objectives, we fall back to computing ``compute_unscaled``. Additionally, ``compute_scaled_error`` and array splitting are used in other parts of the code to prevent recompilation for one-time tasks, which makes initialization faster.
-
-
 
 Deprecations
 

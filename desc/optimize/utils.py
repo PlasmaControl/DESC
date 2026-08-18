@@ -176,6 +176,20 @@ def gershgorin_bounds(H):
 
 
 @jit
+def _chol_failed(L):
+    """Whether a Cholesky factor is unusable because the matrix was not positive.
+
+    ``potrf`` only errors out, and so returns nan, when a pivot comes out
+    non-positive. A pivot at the noise level instead completes but gives a factor that
+    is useless to solve with, and which of the two a marginal matrix gets depends on
+    the LAPACK build, so treat both as a failure.
+    """
+    d = jnp.diag(L)
+    tol = L.shape[-1] * jnp.finfo(L.dtype).eps
+    return jnp.any(jnp.isnan(L)) | (jnp.min(d) ** 2 <= tol * jnp.max(d) ** 2)
+
+
+@jit
 def _cholmod(A, maxiter=4):
     """Modified Cholesky factorization of indefinite matrix.
 
@@ -215,6 +229,7 @@ def _cholmod(A, maxiter=4):
     # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
     # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
     # that it's actually greater than the maximum alpha
+    # TODO(#2296): add special handling for lb = 0, i.e. 0 row of A, rest diag dominant
     ub = jnp.log10(jnp.abs(lb)) + 1
     # we know alpha > 0 because otherwise initial factorization would have succeeded
     # but we'd like to be a bit better (in log scaling). This is just a heuristic but
@@ -225,21 +240,21 @@ def _cholmod(A, maxiter=4):
     alphas = jnp.logspace(lb, ub, k)
     kbest = k // 2
     klow = 0
-    khigh = k
+    khigh = k - 1
     # first we try alpha = max, which we know will succeed by gershgorin bounds
     # but might be too big a correction, so then we try to reduce it while keeping
     # A + alpha*I positive definite
-    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    Lbest = jnp.linalg.cholesky(A + alphas[-1] * eye)
     for i in range(maxiter):
         L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
         # check if it succeeded
-        isnan = jnp.any(jnp.isnan(L))
+        failed = _chol_failed(L)
         # adjust bounds for correction
-        klow = isnan * kbest + (1 - isnan) * klow
-        khigh = isnan * khigh + (1 - isnan) * kbest
+        klow = failed * kbest + (1 - failed) * klow
+        khigh = failed * khigh + (1 - failed) * kbest
         kbest = (klow + khigh) // 2
         # if it succeeded, mark it as the best so far
-        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, None)
+        Lbest = cond(failed, lambda _: Lbest, lambda _: L, None)
     return Lbest
 
 
@@ -263,7 +278,7 @@ def chol(A):
 
     """
     L = jnp.linalg.cholesky(A)
-    L = cond(jnp.any(jnp.isnan(L)), lambda A: _cholmod(A), lambda A: L, A)
+    L = cond(_chol_failed(L), lambda A: _cholmod(A), lambda A: L, A)
     return L
 
 

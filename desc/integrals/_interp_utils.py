@@ -424,10 +424,25 @@ def _root_cubic(a, b, c, d, sentinel, eps, distinct):
         c = c / a
         Q = (b**2 - 3 * c) / 9
         R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
+        three_real = R**2 < Q**3
+        # Double where. jnp.where evaluates both branches, and each is
+        # singular exactly where the other is selected: arccos leaves [-1, 1]
+        # when R² ≥ Q³, and Q / A divides by zero when Q = R = 0. Discarding
+        # the value is not enough, because the nan derivative of the discarded
+        # branch survives the where in reverse mode. Substituting a harmless
+        # argument there leaves every selected value untouched.
         return jnp.where(
-            R**2 < Q**3,
-            irreducible(jnp.abs(Q), R, b),
-            reducible(Q, R, b),
+            three_real,
+            irreducible(
+                jnp.where(three_real, jnp.abs(Q), 1.0),
+                jnp.where(three_real, R, 0.0),
+                b,
+            ),
+            reducible(
+                jnp.where(three_real, 1.0, Q),
+                jnp.where(three_real, 1.0, R),
+                b,
+            ),
         )
 
     return jnp.where(

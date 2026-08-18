@@ -11,6 +11,7 @@ import warnings
 
 import numpy as np
 import pytest
+from orthax.legendre import leggauss
 from packaging.version import Version
 from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
@@ -25,12 +26,21 @@ from desc.coils import (
     MixedCoilSet,
     initialize_modular_coils,
 )
-from desc.compute import get_transforms
+from desc.compute import get_profiles, get_transforms
+from desc.compute._trapped_resonance import _build_eta_grid
+from desc.compute.data_index import data_index
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import _parse_parameterization
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.integrals import Bounce2D
+from desc.integrals import Bounce1D, Bounce2D
+from desc.integrals.quad_utils import (
+    automorphism_sin,
+    get_quadrature,
+    grad_automorphism_sin,
+)
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -91,11 +101,13 @@ from desc.objectives import (
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
+    TrappedResonance,
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
 )
 from desc.objectives._free_boundary import BoundaryErrorNESTOR
+from desc.objectives._trapped_resonance import _seed_tangents, _tangent_keys
 from desc.objectives.nae_utils import (
     _calc_1st_order_NAE_coeffs,
     _calc_2nd_order_NAE_coeffs,
@@ -2172,6 +2184,305 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_objective_against_compute_trapped_resonance(self):
+        """Test TrappedResonance objective matches a direct compute call."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        num_rho = 3
+        num_eta = 8
+        num_transit = 4
+        knots_per_transit = 60
+        num_quad = 16
+        opts = dict(
+            num_pitch=8,
+            KE_frac=np.array([1]),
+            N=0,
+            M=1,
+            p_max=0,
+            q_max=1,
+            res_range_min=-1,
+            res_range_max=1,
+            weight_method="linear",
+            use_bounce1d=True,
+        )
+
+        rho = np.linspace(0, 1, num_rho + 1)[1:]
+        zeta = np.linspace(0, 2 * np.pi * num_transit, knots_per_transit * num_transit)
+        grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        quad = get_quadrature(
+            leggauss(num_quad), (automorphism_sin, grad_automorphism_sin)
+        )
+        keys_1dr = ["iota", "iota_r", "min_tz |B|", "max_tz |B|", "Psi"]
+        profiles = get_profiles(keys_1dr + ["trapped EP resonance"], eq, grid)
+        params = eq.params_dict
+        data = compute_fun(
+            eq, keys_1dr, params, get_transforms(keys_1dr, eq, grid), profiles
+        )
+
+        # Build the eta/PSA grids and evaluate field data on them by hand,
+        iotas = grid.compress(data["iota"])
+        rhos = grid.compress(grid.nodes[:, 0])
+        M, N, nfp = opts["M"], opts["N"], eq.NFP
+        eta_vals = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        ft_denom = N * nfp - iotas * M
+        alpha_per_rho = eta_vals[None, :] * ft_denom[:, None] / nfp
+
+        eta_desc_grid = _build_eta_grid(eq, rhos, alpha_per_rho, zeta, iotas, params)
+        eta_grid = eta_desc_grid.source_grid
+
+        alpha_psa = jnp.linspace(0, 2 * jnp.pi, num_eta, endpoint=False)
+        psa_desc_grid = eq._get_rtz_grid(
+            rhos, alpha_psa, zeta, coordinates="raz", iota=iotas, params=params
+        )
+        psa_grid = psa_desc_grid.source_grid
+
+        eta_data_keys = list(Bounce1D.required_names) + [
+            "cvdrift0",
+            "gbdrift (periodic)",
+            "cvdrift (periodic)",
+            "iota",
+            "min_tz |B|",
+            "max_tz |B|",
+        ]
+        psa_bounce_keys = list(Bounce1D.required_names) + [
+            "min_tz |B|",
+            "max_tz |B|",
+            "|B|",
+        ]
+        all_needed_keys = list(set(eta_data_keys + psa_bounce_keys))
+        # the radial tangents of the seeded per-surface quantities are extra
+        # compute keys, so they have to be requested before base_data is built
+        _p = _parse_parameterization(eq)
+        tangent_keys = _tangent_keys(_p, eta_data_keys)
+        all_needed_keys = list(set(all_needed_keys + list(tangent_keys.values())))
+        internal_profiles = get_profiles(all_needed_keys, eq)
+        base_data = compute_fun(
+            eq,
+            all_needed_keys,
+            params,
+            get_transforms(all_needed_keys, eq, grid, jitable=True),
+            internal_profiles,
+            data=data,
+        )
+        seed_1d = {
+            key: val
+            for key, val in base_data.items()
+            if data_index.get(_p, {}).get(key, {}).get("coordinates", "") == "r"
+        }
+        # Omega'(s) comes from differentiating the bounce integrals, so the
+        # compute function needs d(field data)/drho as well as the field data.
+        # Build both the way the objective does: as the forward mode derivative
+        # of the eta grid data with respect to a radial displacement.
+        seed_dot = _seed_tangents(
+            params, internal_profiles, grid, base_data, seed_1d, tangent_keys
+        )
+
+        def _eta_data(t):
+            iotas_t = iotas + t * grid.compress(data["iota_r"])
+            alpha_t = eta_vals[None, :] * (N * nfp - iotas_t[:, None] * M) / nfp
+            grid_t = _build_eta_grid(eq, rhos + t, alpha_t, zeta, iotas_t, params)
+            seed_t = {k: v + t * seed_dot[k] for k, v in seed_1d.items()}
+            return compute_fun(
+                eq,
+                eta_data_keys,
+                params,
+                get_transforms(eta_data_keys, eq, grid_t, jitable=True),
+                internal_profiles,
+                data={
+                    k: grid_t.copy_data_from_other(v, grid) for k, v in seed_t.items()
+                },
+            )
+
+        data_eta, data_eta_r = jax.jvp(_eta_data, (0.0,), (1.0,))
+        psa_seed = {
+            key: psa_desc_grid.copy_data_from_other(val, grid)
+            for key, val in seed_1d.items()
+        }
+        data_psa = compute_fun(
+            eq,
+            psa_bounce_keys,
+            params,
+            get_transforms(psa_bounce_keys, eq, psa_desc_grid, jitable=True),
+            internal_profiles,
+            data=psa_seed,
+        )
+
+        data = compute_fun(
+            eq,
+            "trapped EP resonance",
+            params,
+            get_transforms("trapped EP resonance", eq, grid, jitable=True),
+            profiles,
+            data=data,
+            quad=quad,
+            nfp=eq.NFP,
+            zeta=zeta,
+            _eta_grid=eta_grid,
+            _psa_grid=psa_grid,
+            _data_eta=data_eta,
+            _data_eta_r=data_eta_r,
+            _data_psa=data_psa,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            rho_res=1.0 / num_rho,
+            eta_res=2 * np.pi / num_eta,
+            res_arr=np.array([0.0]),
+            q_arr=np.array([1]),
+            p_arr=np.array([0]),
+            **opts,
+        )
+        expected = grid.compress(data["trapped EP resonance"])
+
+        obj = TrappedResonance(
+            eq,
+            rho=num_rho,
+            num_eta=num_eta,
+            num_transit=num_transit,
+            knots_per_transit=knots_per_transit,
+            num_quad=num_quad,
+            **opts,
+        )
+        obj.build(verbose=0)
+        actual = obj.compute(eq.params_dict)
+        np.testing.assert_allclose(actual, expected)
+
+    @pytest.mark.manual
+    def test_trapped_resonance_bounce2d_matches_bounce1d(self):
+        """Test TrappedResonance agrees between its two bounce backends.
+
+        Kept out of CI: ~155 s, and Bounce2D is not the default backend. Run
+        with 'pytest -m manual' after touching either bounce path.
+        """
+        eq = get("precise_QA")
+        opts = dict(
+            rho=20,
+            num_eta=10,
+            num_transit=4,
+            knots_per_transit=60,
+            num_pitch=8,
+            num_quad=16,
+            p_max=4,
+            q_max=4,
+            N=0,
+            M=1,
+        )
+        f = {}
+        for use_bounce1d in (True, False):
+            obj = TrappedResonance(eq, use_bounce1d=use_bounce1d, **opts)
+            ObjectiveFunction(obj, use_jit=False).build(verbose=0)
+            f[use_bounce1d] = np.asarray(obj.compute(eq.params_dict)).ravel()
+        b1d, b2d = f[True], f[False]
+
+        assert np.count_nonzero(b1d) > 3, "no resonance crossings detected"
+        # Both backends should mark the same surfaces as resonant.
+        np.testing.assert_array_equal(b1d != 0, b2d != 0)
+        np.testing.assert_allclose(b2d.sum(), b1d.sum(), rtol=0.1)
+
+    @pytest.mark.unit
+    def test_trapped_resonance_rho_array(self):
+        """Custom rho arrays must be increasing, linearly spaced, off-axis."""
+        eq = Equilibrium()
+
+        # an int and the equivalent explicit array build identical grids
+        obj_int = TrappedResonance(eq, rho=4)
+        obj_arr = TrappedResonance(eq, rho=np.linspace(0, 1, 5)[1:])
+        obj_int.build(verbose=0)
+        obj_arr.build(verbose=0)
+        np.testing.assert_allclose(obj_int._constants["rho"], obj_arr._constants["rho"])
+        assert obj_int._params2["rho_res"] == obj_arr._params2["rho_res"]
+
+        # a custom array avoiding the edge, e.g. for equilibria whose
+        # pressure profile is not well-defined at rho=1
+        rho = np.linspace(0.1, 0.9, 5)
+        obj = TrappedResonance(eq, rho=rho)
+        obj.build(verbose=0)
+        np.testing.assert_allclose(obj._constants["rho"], rho)
+        np.testing.assert_allclose(obj._params2["rho_res"], 0.2)
+
+        with pytest.raises(ValueError, match="linearly spaced"):
+            TrappedResonance(eq, rho=np.array([0.1, 0.3, 0.9])).build(verbose=0)
+        with pytest.raises(ValueError, match="linearly spaced"):
+            TrappedResonance(eq, rho=np.array([0.9, 0.6, 0.3])).build(verbose=0)
+        with pytest.raises(ValueError, match="axis"):
+            TrappedResonance(eq, rho=np.array([0.0, 0.5, 1.0])).build(verbose=0)
+        with pytest.raises(ValueError, match=">= 2"):
+            TrappedResonance(eq, rho=np.array([0.5])).build(verbose=0)
+        with pytest.raises(ValueError, match=">= 2"):
+            TrappedResonance(eq, rho=1).build(verbose=0)
+
+    @pytest.mark.unit
+    def test_trapped_resonance_analytic_omega_prime(self):
+        """Analytic Ω'(s) matches a small step finite difference of Ω."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        num_rho = 3
+        rho0 = np.linspace(0, 1, num_rho + 1)[1:]
+        # Pinning the pitch grid keeps λ the same on every displaced radial
+        # grid, which is the variable Ω'(s) is defined at fixed value of, and
+        # makes compute return the raw per-(rho, pitch, well) dict.
+        B = eq.compute(["min_tz |B|", "max_tz |B|"])
+        pitch_invs = np.linspace(
+            1.02 * np.min(B["min_tz |B|"]), 0.98 * np.max(B["max_tz |B|"]), 16
+        )
+        obj = TrappedResonance(
+            eq,
+            rho=num_rho,
+            use_bounce1d=True,
+            num_eta=8,
+            num_transit=4,
+            knots_per_transit=60,
+            num_quad=16,
+            N=0,
+            M=1,
+            p_max=1,
+            q_max=1,
+            res_range_min=-1,
+            res_range_max=1,
+            pitch_invs=pitch_invs,
+        )
+        obj.build(verbose=0)
+
+        def compute_at(rho_shift):
+            """Rerun the objective with its radial grid displaced."""
+            obj._grid_1dr = LinearGrid(
+                rho=rho0 + rho_shift, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
+            obj._constants["transforms_1dr"] = get_transforms(
+                obj._keys_1dr, eq, obj._grid_1dr
+            )
+            obj._constants["profiles"] = get_profiles(
+                obj._keys_1dr + [obj._key], eq, obj._grid_1dr
+            )
+            return {k: np.asarray(v) for k, v in obj.compute(eq.params_dict).items()}
+
+        ref = compute_at(0.0)
+        analytic = ref["Omega_prime_s"] * 2 * np.asarray(ref["rhos"])[:, None, None]
+
+        fd = {}
+        for h in (2e-3, 6e-4):
+            up, down = compute_at(h), compute_at(-h)
+            fd[h] = (
+                (up["Omega"] - down["Omega"]) / (2 * h),
+                ref["valid"] & up["valid"] & down["valid"],
+            )
+
+        # Ω is not smooth in ρ everywhere: wells and the set of trapped field
+        # lines both change from surface to surface, so a difference quotient
+        # straddling one of those changes measures nothing. Compare only where
+        # the finite difference has itself converged.
+        (coarse, ok_c), (fine, ok_f) = fd[2e-3], fd[6e-4]
+        converged = ok_c & ok_f & (np.abs(coarse - fine) <= 1e-2 * np.abs(fine))
+        assert converged.sum() >= 5, (
+            f"only {converged.sum()} points to compare; the test resolution no "
+            "longer resolves enough trapped particles to be meaningful"
+        )
+        np.testing.assert_allclose(analytic[converged], fine[converged], rtol=1e-2)
+
+    @pytest.mark.unit
     def test_objective_against_compute_ballooning(self):
         """To avoid issues such as #1424."""
         eq = get("W7-X")
@@ -3314,6 +3625,20 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is TrappedResonance:
+        # Trimmed to what still exercises the objective: the test is dominated
+        # by compiling the gradient graph, not by these sizes, so they buy
+        # ~20%. Do not cut further without checking the gradient is still
+        # non-zero -- rho=5 or num_transit=2 send the linear weighting to
+        # exactly zero, which passes a no-NaN assertion while testing nothing.
+        kwargs["rho"] = 6
+        kwargs["num_eta"] = 8
+        kwargs["num_transit"] = 4
+        kwargs["knots_per_transit"] = 40
+        kwargs["num_pitch"] = 8
+        kwargs["num_quad"] = 8
+        kwargs["p_max"] = 4
+        kwargs["q_max"] = 4
     return objective(eq=eq, **kwargs)
 
 
@@ -3363,6 +3688,8 @@ class TestComputeScalarResolution:
         ExternalObjective,
         LinearObjectiveFromUser,
         ObjectiveFromUser,
+        # has its own test, kept out of CI by the manual marker
+        TrappedResonance,
     ]
     other_objectives = list(set(objectives) - set(specials))
 
@@ -3769,9 +4096,10 @@ class TestComputeScalarResolution:
     )
     def test_compute_scalar_resolution_others(self, objective):
         """All other objectives."""
+        rtol = 6e-2
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
-            # just change eq resolution and let objective pick the right grid type
+            # just change eq resolution, let objective pick the grid type
             self.eq.change_resolution(
                 L_grid=int(self.eq.L * res),
                 M_grid=int(self.eq.M * res),
@@ -3780,6 +4108,42 @@ class TestComputeScalarResolution:
             obj = ObjectiveFunction(
                 _reduced_resolution_objective(self.eq, objective), use_jit=False
             )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(
+            f, f[-1], rtol=rtol, atol=1e-4 if np.max(f) < 1e-3 else 0
+        )
+
+    @pytest.mark.manual
+    def test_compute_scalar_resolution_trapped_resonance(self):
+        """TrappedResonance. Kept out of CI: ~170 s, see the manual marker."""
+        eq = get("precise_QA")
+        # rho and num_eta halved from 20: this test is compute bound, so that
+        # halves its runtime while the spread across res_array stays at 0.004,
+        # well inside rtol. Leave knots_per_transit and num_quad alone --
+        # cutting those moves the objective value by ~60x, which would verify
+        # resolution independence in a regime where the quadrature itself is
+        # unconverged.
+        kwargs = dict(
+            rho=10,
+            num_eta=10,
+            num_transit=4,
+            knots_per_transit=60,
+            num_pitch=8,
+            num_quad=16,
+            p_max=4,
+            q_max=4,
+            N=0,
+            M=1,
+        )
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            eq.change_resolution(
+                L_grid=int(eq.L * res),
+                M_grid=int(eq.M * res),
+                N_grid=int(eq.N * res),
+            )
+            obj = ObjectiveFunction(TrappedResonance(eq=eq, **kwargs), use_jit=False)
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(
@@ -3876,6 +4240,7 @@ class TestObjectiveNaNGrad:
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,
         ToroidalFlux,
+        TrappedResonance,
         VacuumBoundaryError,
         # we do not test these since they depend too much on what the user wants
         ExternalObjective,
@@ -4281,6 +4646,27 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_trapped_resonance(self):
+        """TrappedResonance."""
+        eq = get("ESTELL")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 2, 4, 4, 4)
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="linear")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "linear weighting"
+
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, TrappedResonance, weight_method="bump")
+        )
+        obj.build(verbose=0)
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "bump weighting"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

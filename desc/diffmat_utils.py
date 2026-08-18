@@ -123,7 +123,23 @@ class DiffMat(IOAble):
         "zernike_penalty_projector",
         "zernike_penalty_rank",
     ]
-    _static_attrs = ["_token"]
+    # These are hyperparameters, not data: they drive PYTHON branches
+    # (`_get_zernike_penalty` does `alpha <= 0.0`, and `_agni3_matfree_operator`
+    # does `apply_penalty = alpha > 0.0`), so they must survive flattening as
+    # concrete values. Left as ordinary leaves they become traced float64
+    # scalars under jit and the first branch raises TracerBoolConversionError
+    # -- job 56806913, _stability.py:64.
+    #
+    # `zernike_penalty_rank` is an int used only for reporting, and
+    # `zernike_penalty_svd_tol` is a construction-time tolerance; neither is
+    # differentiated, so making them static costs nothing and keeps the three
+    # scalar knobs consistent.
+    _static_attrs = [
+        "_token",
+        "zernike_penalty_alpha",
+        "zernike_penalty_svd_tol",
+        "zernike_penalty_rank",
+    ]
 
     def __init__(
         self,

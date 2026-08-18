@@ -1,9 +1,12 @@
 """Objectives for targeting MHD stability."""
 
+import os
+
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms
+from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
@@ -744,6 +747,36 @@ class FinitenStability(_Objective):
         "_incompressible",
         "_density",
         "_metric",
+        # 1D rho nodes of each level, as tuples of Python floats. Static because
+        # `compute_data` passes them into the compute function, where an ordinary
+        # pytree leaf arrives as a tracer and cannot be used to build the
+        # prolongation operator.
+        #
+        # DECLARED HERE, at class level, NOT appended in build(). `_static_attrs`
+        # is itself a member of `_static_attrs`, so rebinding it per instance
+        # changes that objective's treedef relative to the class default;
+        # ProximalProjection flattens and unflattens the objective across its
+        # blocked JVP and that mismatch surfaced as
+        #   TypeError: No constant handler for type: DynamicJaxprTracer
+        # in job 56838367, after a forward evaluation that had succeeded.
+        # Every other _static_attrs in DESC is composed at class definition.
+        "_fine_rho1d",
+        "_coarse_rho1d",
+        # The coarse level's grid, DiffMat and density are CONSTRUCTION-TIME
+        # constants, exactly like their fine counterparts `_diffmat`/`_density`
+        # above. Declared static for the same reason.
+        #
+        # Omitting them was the bug behind
+        #   TypeError: No constant handler for type: DynamicJaxprTracer
+        # (jobs 56838367, 56870962, 56919036). Left as ordinary leaves, the
+        # coarse DiffMat is a TRACER inside the compute -- measured, against
+        # `transforms['diffmat']` which is concrete -- so it gets closed into the
+        # `_v_primal` custom_vjp, lands in that jaxpr's CONSTANTS, and MLIR
+        # lowering dies in `ir_constant`. It fails at LOWERING, not tracing,
+        # which is why `jax.eval_shape` reported the trace clean.
+        "_coarse_grid",
+        "_coarse_diffmat",
+        "_coarse_density",
     ]
 
     _coordinates = "r"
@@ -769,6 +802,9 @@ class FinitenStability(_Objective):
         incompressible=False,
         density=None,
         diffmat=None,
+        coarse_grid=None,
+        coarse_diffmat=None,
+        coarse_density=None,
         state_solver="dense_eigsh",
         matfree_solver=None,
         sigma_factor=1.3,
@@ -797,6 +833,13 @@ class FinitenStability(_Objective):
         self._density = density
         self._diffmat = diffmat
         self._grid = grid
+        # OPTIONAL SECOND LEVEL, for coarse-space deflation (AGNI_COARSE_DEFL).
+        # A coarse PEST grid + DiffMat whose generalized modes are prolonged to
+        # supply the fine solve's seed and deflation basis. See
+        # precond_stage2/METHOD.md sections 5 and 10. Unset -> nothing changes.
+        self._coarse_grid = coarse_grid
+        self._coarse_diffmat = coarse_diffmat
+        self._coarse_density = coarse_density
         self._state_solver = state_solver
         self._matfree_solver = matfree_solver
         self._sigma_factor = sigma_factor
@@ -922,10 +965,62 @@ class FinitenStability(_Objective):
         _, unique_rho_idx, inverse_rho_idx = np.unique(
             rho_PEST, return_index=True, return_inverse=True
         )
+        # 1D radial nodes for the prolongation operator, kept as a concrete
+        # numpy array on `self`. They cannot be recovered inside `compute_data`:
+        # the mapped grid's nodes are built from params, and `constants` cross
+        # the jit boundary as arguments, so BOTH are traced there (jobs 56808299
+        # and 56809400). build() is the last place they are unambiguously
+        # concrete.
+        # Stored as TUPLES OF PYTHON FLOATS and registered STATIC. Two separate
+        # trace boundaries have to be crossed and each needs its own measure:
+        #
+        #  - `self` is a pytree, so an ordinary attribute becomes a traced leaf
+        #    when it is flattened for jit. That is why these read as tracers
+        #    inside compute_data despite being concrete ndarrays on the object
+        #    (job 56810529) -- the same failure as DiffMat.zernike_penalty_alpha.
+        #    `_static_attrs` keeps them out of the flattening.
+        #  - kwargs ARRAYS are traced crossing into the compute function
+        #    (job 56809995); Python scalars are not. Hence tuples, not ndarrays.
+        #
+        # 32 and 16 values, so the transport costs nothing.
+        self._fine_rho1d = tuple(float(_x) for _x in rho_PEST.reshape(n_rho, -1)[:, 0])
+        if not hasattr(self, "_coarse_rho1d"):
+            self._coarse_rho1d = None
         v_guess = self._v_guess
         if v_guess is None:
             v_guess = np.ones(3 * n_rho * n_theta * n_zeta)
         lambda_guess = setdefault(self._lambda_guess, -1e-1)
+
+        # Coarse level, mirroring the fine one. rho is invariant under the
+        # PEST->DESC map on either grid, so the same precomputed-index trick makes
+        # the coarse mapped grid rebuildable from traced nodes.
+        coarse_constants = {}
+        if self._coarse_grid is not None:
+            cg = self._coarse_grid
+            c_nodes = jnp.reshape(
+                cg.meshgrid_reshape(cg.nodes, order="rtz"),
+                (cg.num_rho * cg.num_theta * cg.num_zeta, 3),
+            )
+            c_rho = np.asarray(c_nodes[:, 0])
+            _, c_uidx, c_iidx = np.unique(c_rho, return_index=True, return_inverse=True)
+            self._coarse_rho1d = tuple(
+                float(_x) for _x in c_rho.reshape(cg.num_rho, -1)[:, 0]
+            )
+            # The flux functions are constant on a rho surface, so they need their
+            # OWN LinearGrid over the coarse rho values -- the fine one's rho set
+            # is different and copying across would be silently wrong.
+            c_flux_grid = LinearGrid(
+                rho=np.unique(c_rho), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
+            )
+            coarse_constants = {
+                "coarse_PEST_nodes": c_nodes,
+                "coarse_unique_rho_idx": jnp.asarray(c_uidx),
+                "coarse_inverse_rho_idx": jnp.asarray(c_iidx),
+                "coarse_flux_transforms": get_transforms(
+                    flux_keys, obj=eq, grid=c_flux_grid
+                ),
+                "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
+            }
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -940,10 +1035,11 @@ class FinitenStability(_Objective):
             "w0": self._w0,
             "v_guess": jnp.asarray(v_guess).reshape(-1),
             "lambda_guess": jnp.asarray(lambda_guess),
+            **coarse_constants,
         }
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _mapped_grid(self, params, constants):
+    def _mapped_grid(self, params, constants, level="fine"):
         """Map the PEST nodes to DESC coordinates at THESE parameters.
 
         The PEST grid is fixed in PEST coordinates, but the DESC coordinates of
@@ -964,8 +1060,14 @@ class FinitenStability(_Objective):
           them from traced values.
         """
         eq = self.things[0]
+        pre = "" if level == "fine" else "coarse_"
+        errorif(
+            level != "fine" and (pre + "PEST_nodes") not in constants,
+            ValueError,
+            "_mapped_grid(level='coarse') needs a coarse_grid at construction.",
+        )
         DESC_nodes = eq.map_coordinates(
-            constants["PEST_nodes"],  # (ρ,θ_PEST,ζ)
+            constants[pre + "PEST_nodes"],  # (ρ,θ_PEST,ζ)
             inbasis=("rho", "theta_PEST", "zeta"),
             outbasis=("rho", "theta", "zeta"),
             period=(jnp.inf, 2 * jnp.pi, jnp.inf),
@@ -978,11 +1080,11 @@ class FinitenStability(_Objective):
             coordinates="rtz",
             sort=False,
             jitable=True,
-            _unique_rho_idx=constants["unique_rho_idx"],
-            _inverse_rho_idx=constants["inverse_rho_idx"],
+            _unique_rho_idx=constants[pre + "unique_rho_idx"],
+            _inverse_rho_idx=constants[pre + "inverse_rho_idx"],
         )
 
-    def _flux_data(self, params, constants, grid):
+    def _flux_data(self, params, constants, grid, level="fine"):
         """Prefill the quantities that must not be computed on the AGNI grid.
 
         Two distinct kinds, on two distinct grids, matching what
@@ -996,6 +1098,12 @@ class FinitenStability(_Objective):
         ...) which is grid-insensitive and correct on the AGNI grid directly.
         """
         eq = self.things[0]
+        # The 0-D quantities live on a QuadratureGrid and are grid-independent, so
+        # both levels share them. The 1-D flux functions are constant on a rho
+        # surface and must come from THIS level's rho set -- the coarse grid has
+        # different rho values, so reusing the fine transforms would be silently
+        # wrong rather than an error.
+        _pre = "" if level == "fine" else "coarse_"
         # 0-D first, then seed it into the flux compute, mirroring the
         # `data=data1dr_seed | data0d_seed` ordering in Equilibrium.compute.
         zero_d_data = compute_fun(
@@ -1011,11 +1119,11 @@ class FinitenStability(_Objective):
             eq,
             self._flux_keys,
             params=params,
-            transforms=constants["flux_transforms"],
-            profiles=constants["flux_profiles"],
+            transforms=constants[_pre + "flux_transforms"],
+            profiles=constants[_pre + "flux_profiles"],
             data=dict(data),
         )
-        flux_grid = constants["flux_transforms"]["grid"]
+        flux_grid = constants[_pre + "flux_transforms"]["grid"]
         for key in self._flux_keys:
             data[key] = grid.copy_data_from_other(
                 jnp.asarray(flux_data[key]), flux_grid, surface_label="rho"
@@ -1042,6 +1150,69 @@ class FinitenStability(_Objective):
 
         grid = self._mapped_grid(params, constants)
 
+        # COARSE-SPACE DEFLATION (AGNI_COARSE_DEFL=1 and a coarse_grid supplied).
+        #
+        # The coarse level is rebuilt at THIS evaluation's parameters, because H_c
+        # is assembled from the equilibrium geometry and a space built at an
+        # earlier boundary is invalid once the boundary moves.
+        #
+        # stop_gradient is not an approximation here. Z and v0 only affect how
+        # fast the fine eigenvector is found, never its value at the primal point,
+        # so they carry no derivative -- the same reason the eigensolve itself sits
+        # outside AD behind custom_vjp. dlambda/dp flows solely through the FINE
+        # matrix-free contraction v'Ax(v)/v'v with v frozen.
+        coarse_opts = {}
+        if self._coarse_grid is not None and os.environ.get(
+            "AGNI_COARSE_DEFL", "0"
+        ).lower() not in {"0", "false", "no", ""}:
+            _pc = jax.lax.stop_gradient(params)
+            _grid_c = self._mapped_grid(_pc, constants, level="coarse")
+            # The coarse operator needs the same GEOMETRY quantities the fine one
+            # does (`sqrt(g)_PEST`, the metric components, ...), evaluated on the
+            # COARSE grid. `_flux_data` supplies only the 0-D and flux-function
+            # prefill; DESC fills the geometry from the key's declared `data=[...]`
+            # deps, and it only does that for the grid it was called with. So the
+            # coarse level gets its own compute over exactly that dependency list.
+            _ckeys = data_index["desc.equilibrium.equilibrium.Equilibrium"][
+                "finite-n lambda3 rayleigh"
+            ]["dependencies"]["data"]
+            _cdata = eq.compute(
+                _ckeys,
+                grid=_grid_c,
+                diffmat=self._coarse_diffmat,
+                params=_pc,
+                data=self._flux_data(_pc, constants, _grid_c, "coarse"),
+                override_grid=False,
+            )
+            _cg0 = self._coarse_grid
+            coarse_opts = {
+                "coarse_grid": _grid_c,
+                "coarse_diffmat": self._coarse_diffmat,
+                "coarse_data": _cdata,
+                "coarse_params": _pc,
+                # The coupled Zernike operator reshapes by n_rho_coupled /
+                # n_theta_coupled. Inheriting the FINE values reshapes the coarse
+                # arrays into the fine shape and raises. Taken from the PEST grid,
+                # whose counts are concrete, not from the traced mapped grid.
+                "coarse_res": (_cg0.num_rho, _cg0.num_theta, _cg0.num_zeta),
+                # Radial nodes for the prolongation operator, taken from the
+                # PEST nodes rather than from the MAPPED grid. `_mapped_grid`
+                # builds its nodes with `eq.map_coordinates(params=...)`, so
+                # `grid.nodes` is traced and `np.asarray` on it raises
+                # (TracerArrayConversionError float64[6144], job 56808299).
+                # rho is invariant under the PEST->DESC map -- see
+                # `_mapped_grid.__doc__`, which relies on the same fact for the
+                # rho compress/expand indices -- so these ARE the mapped grid's
+                # rho values, just obtained concretely.
+                # Already tuples of Python floats, built in `build()`. Do NOT
+                # re-convert here: that reintroduces float() on what may be a
+                # traced leaf.
+                "coarse_rho": self._coarse_rho1d,
+                "fine_rho": self._fine_rho1d,
+            }
+            if self._coarse_density is not None:
+                coarse_opts["coarse_density"] = self._coarse_density
+
         options = {
             "axisym": self._axisym,
             "n_mode_axisym": self._n_mode_axisym,
@@ -1064,6 +1235,7 @@ class FinitenStability(_Objective):
         }
         if self._density is not None:
             options["density"] = self._density
+        options.update(coarse_opts)
 
         return eq.compute(
             "finite-n lambda3 rayleigh",
@@ -1104,10 +1276,35 @@ class FinitenStability(_Objective):
         constants = self._constants if constants is None else constants
         state_solver = str(self._state_solver).lower()
         if state_solver in {"matfree", "shiftinvert_cg"}:
-            raise ValueError(
-                "state_solver='matfree' is not supported: it runs the matrix-free "
-                "eigensolver. Use state_solver='dense_eigsh'."
-            )
+            # MATRIX-FREE REFRESH. Required above ~32x32x12: the dense branch
+            # below assembles the full fine matrix, which is 10.4 GB at
+            # 32x32x12 and 53.5 GB at 48x48x12 -- jobs 56818234 and 56818235
+            # both died there, in exactly this call.
+            #
+            # WHAT THIS GIVES UP, and why it is affordable here:
+            #   * `finite-n lambda3` -- there is no dense eigenvalue, so callers
+            #     lose the independent ARPACK cross-check. `finite-n lambda3
+            #     rayleigh` is returned instead and callers must handle the
+            #     absence of the dense key.
+            #   * `v_guess` -- the matrix-free path exposes no eigenvector as a
+            #     data key, so the cached start vector is LEFT UNCHANGED. That is
+            #     harmless with coarse deflation, which overrides the seed with
+            #     the prolonged coarse mode (`_seed_v0`) anyway, and merely
+            #     un-warm-started without it.
+            #
+            # `lambda_guess` IS refreshed, so AGNI_SIGMA_MODE=track still works.
+            #
+            # Cost: one extra eigensolve per OUTER step -- not per objective
+            # call -- so it amortises over the optimizer's inner evaluations.
+            # solve=False: `compute_data` rejects solve=True, and it does not
+            # need it. With AGNI_EIGENSOLVER=pcg_deflated the eigensolve happens
+            # INSIDE the `finite-n lambda3 rayleigh` compute chain on every call,
+            # so this already performs a full matrix-free solve.
+            data = self.compute_data(params, constants=constants, solve=False)
+            lam = jnp.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0]
+            if hasattr(self, "_constants"):
+                self._constants["lambda_guess"] = lam
+            return data
         elif state_solver in {"dense", "dense_eigsh", "eigsh"}:
             eq = self.things[0]
             grid = self._mapped_grid(params, constants)

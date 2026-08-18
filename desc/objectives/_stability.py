@@ -52,7 +52,7 @@ def _agni_sigma_shift(obj, constants):
     mu = 1/|sigma|, while the wanted mode's mu = 1/(lambda - sigma) moves as the
     optimizer drives lambda -> 0. With sigma pinned, the wanted mode slides INTO
     the cluster: separation 1.150 at the start, 1.023 at the observed drift point,
-    1.0046 at job 56105697. At separation 1.0134 the objective read +2.14e-02 on a
+    1.0046. At separation 1.0134 the objective read +2.14e-02 on a
     genuinely UNSTABLE equilibrium. See BENCHMARKING.md section 10.
 
     SCOPE (BENCHMARKING.md 10.8): this re-bases sigma from the value refreshed once
@@ -758,7 +758,7 @@ class FinitenStability(_Objective):
         # ProximalProjection flattens and unflattens the objective across its
         # blocked JVP and that mismatch surfaced as
         #   TypeError: No constant handler for type: DynamicJaxprTracer
-        # in job 56838367, after a forward evaluation that had succeeded.
+        # in, after a forward evaluation that had succeeded.
         # Every other _static_attrs in DESC is composed at class definition.
         "_fine_rho1d",
         "_coarse_rho1d",
@@ -768,7 +768,7 @@ class FinitenStability(_Objective):
         #
         # Omitting them was the bug behind
         #   TypeError: No constant handler for type: DynamicJaxprTracer
-        # (jobs 56838367, 56870962, 56919036). Left as ordinary leaves, the
+        # . Left as ordinary leaves, the
         # coarse DiffMat is a TRACER inside the compute -- measured, against
         # `transforms['diffmat']` which is concrete -- so it gets closed into the
         # `_v_primal` custom_vjp, lands in that jaxpr's CONSTANTS, and MLIR
@@ -968,19 +968,18 @@ class FinitenStability(_Objective):
         # 1D radial nodes for the prolongation operator, kept as a concrete
         # numpy array on `self`. They cannot be recovered inside `compute_data`:
         # the mapped grid's nodes are built from params, and `constants` cross
-        # the jit boundary as arguments, so BOTH are traced there (jobs 56808299
-        # and 56809400). build() is the last place they are unambiguously
-        # concrete.
+        # the jit boundary as arguments, so BOTH are traced there. build() is
+        # the last place they are unambiguously concrete.
         # Stored as TUPLES OF PYTHON FLOATS and registered STATIC. Two separate
         # trace boundaries have to be crossed and each needs its own measure:
         #
         #  - `self` is a pytree, so an ordinary attribute becomes a traced leaf
         #    when it is flattened for jit. That is why these read as tracers
         #    inside compute_data despite being concrete ndarrays on the object
-        #    (job 56810529) -- the same failure as DiffMat.zernike_penalty_alpha.
+        # -- the same failure as DiffMat.zernike_penalty_alpha.
         #    `_static_attrs` keeps them out of the flattening.
         #  - kwargs ARRAYS are traced crossing into the compute function
-        #    (job 56809995); Python scalars are not. Hence tuples, not ndarrays.
+        # ; Python scalars are not. Hence tuples, not ndarrays.
         #
         # 32 and 16 values, so the transport costs nothing.
         self._fine_rho1d = tuple(float(_x) for _x in rho_PEST.reshape(n_rho, -1)[:, 0])
@@ -1199,7 +1198,7 @@ class FinitenStability(_Objective):
                 # PEST nodes rather than from the MAPPED grid. `_mapped_grid`
                 # builds its nodes with `eq.map_coordinates(params=...)`, so
                 # `grid.nodes` is traced and `np.asarray` on it raises
-                # (TracerArrayConversionError float64[6144], job 56808299).
+                # (TracerArrayConversionError float64[6144]).
                 # rho is invariant under the PEST->DESC map -- see
                 # `_mapped_grid.__doc__`, which relies on the same fact for the
                 # rho compress/expand indices -- so these ARE the mapped grid's
@@ -1278,7 +1277,7 @@ class FinitenStability(_Objective):
         if state_solver in {"matfree", "shiftinvert_cg"}:
             # MATRIX-FREE REFRESH. Required above ~32x32x12: the dense branch
             # below assembles the full fine matrix, which is 10.4 GB at
-            # 32x32x12 and 53.5 GB at 48x48x12 -- jobs 56818234 and 56818235
+            # 32x32x12 and 53.5 GB at 48x48x12 --
             # both died there, in exactly this call.
             #
             # WHAT THIS GIVES UP, and why it is affordable here:
@@ -1308,18 +1307,6 @@ class FinitenStability(_Objective):
         elif state_solver in {"dense", "dense_eigsh", "eigsh"}:
             eq = self.things[0]
             grid = self._mapped_grid(params, constants)
-            if bool(__import__("os").environ.get("AGNI_OBJECTIVE_DEBUG", "")):
-                _sig = self._sigma_factor * constants.get(
-                    "lambda_guess", self._lambda_guess
-                )
-                print(
-                    "[FinitenStability dense_eigsh] "
-                    f"sigma={_sig} "
-                    f"eigsh_tol={self._eigsh_tol} coupled_rt={self._coupled_rt} "
-                    f"n_rho_coupled={self._n_rho_coupled} "
-                    f"n_theta_coupled={self._n_theta_coupled} grid=bare",
-                    flush=True,
-                )
             options = {
                 "axisym": self._axisym,
                 "n_mode_axisym": self._n_mode_axisym,

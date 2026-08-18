@@ -354,9 +354,16 @@ def test_port_matches_original_precond_implementations():
         if p not in sys.path:
             sys.path.insert(0, p)
 
-    import inner_solve_gj_balanced_jax as gj
-    import pcg_test as old_pcg
-    import transfer as old_tr
+    try:
+        import inner_solve_gj_balanced_jax as gj
+        import pcg_test as old_pcg
+        import transfer as old_tr
+    except Exception as err:  # pragma: no cover - environment, not a result
+        # `pcg_test` calls `set_device` at import, which goes through pynvml and
+        # raises NVMLError_DriverNotLoaded on a CPU node. Skipping is correct:
+        # the originals could not be imported, so nothing was compared. Failing
+        # here would report an environment fact as a numerical disagreement.
+        pytest.skip(f"original precond modules not importable here: {err!r}")
 
     from desc.compute import _stability_solvers as new
 
@@ -500,3 +507,56 @@ def test_port_matches_original_precond_implementations():
     assert int(k1) == int(k2), f"iteration count {int(k1)} vs {int(k2)}"
     same("pcg solution", x1, x2)
     same("pcg relres", r1, r2)
+
+
+@pytest.mark.unit
+def test_block_cholesky_factorization_residual():
+    """L L^T reproduces the blocks it was factored from.
+
+    Replaces the ``AGNI_FACTOR_DIAG >= 2`` diagnostic, which computed
+    ``||M - L L^T||_F / ||M||_F`` and printed it. As a test it is strictly more
+    useful: the number is checked rather than eyeballed, and it runs without
+    anyone remembering to set an environment variable.
+
+    Also pins the ridge behaviour. On an SPD block diagonal the factorization
+    must succeed at ridge 0 -- a nonzero ridge means the shift has drifted into
+    the spectrum, which is a real problem and not something to absorb silently.
+    """
+    rng = np.random.default_rng(11)
+    m, b = 10, 8
+    X = rng.standard_normal((m, b, b))
+    blocks = jnp.asarray(np.einsum("mij,mkj->mik", X, X) + b * np.eye(b)[None])
+
+    L, ok, ridge = factor_ring_blocks(blocks)
+    assert ok, "Cholesky failed on an SPD block diagonal"
+    assert ridge == 0.0, f"needed ridge {ridge:.3e} on SPD blocks; shift is wrong"
+
+    recon = np.einsum("mij,mkj->mik", np.asarray(L), np.asarray(L))
+    num = np.linalg.norm(recon - np.asarray(blocks))
+    den = np.linalg.norm(np.asarray(blocks))
+    rel = num / den
+    print(f"\n  ||M - L L^T||_F / ||M||_F = {rel:.3e}")
+    assert rel < 1e-13, f"factorization residual {rel:.3e} is too large"
+
+
+@pytest.mark.unit
+def test_indefinite_blocks_are_reported_not_hidden():
+    """A block diagonal that is not SPD escalates the ridge and says so.
+
+    The ridge is a MEASUREMENT, not a knob: it says how far the blocks are from
+    positive definite, which is how far ``sigma`` has drifted into the spectrum.
+    This pins that a non-SPD input does not silently sail through at ridge 0.
+    """
+    rng = np.random.default_rng(12)
+    m, b = 6, 5
+    X = rng.standard_normal((m, b, b))
+    blocks = np.einsum("mij,mkj->mik", X, X) + b * np.eye(b)[None]
+    blocks[0] -= (np.linalg.eigvalsh(blocks[0])[-1] + 1.0) * np.eye(
+        b
+    )  # force indefinite
+
+    L, ok, ridge = factor_ring_blocks(jnp.asarray(blocks))
+    assert ok, "ridge escalation failed to find any workable ridge"
+    assert (
+        ridge > 0.0
+    ), "an indefinite block factored at ridge 0 -- escalation is broken"

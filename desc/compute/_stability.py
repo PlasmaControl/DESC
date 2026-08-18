@@ -30,22 +30,6 @@ from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
-def _agni_mem_trace_enabled(kwargs):
-    flag = os.environ.get("AGNI_MEM_TRACE", "0").strip().lower()
-    return bool(kwargs.get("debug_matfree", False)) or flag not in {
-        "",
-        "0",
-        "false",
-        "no",
-        "off",
-    }
-
-
-def _agni_mem_trace(kwargs, *parts):
-    if _agni_mem_trace_enabled(kwargs):
-        print(*parts)
-
-
 def _get_zernike_penalty(transforms, rt_size):
     """Return ``(alpha, Q_rt, rank)`` for a DiffMat-owned penalty."""
     diffmat = transforms.get("diffmat", None)
@@ -1274,14 +1258,14 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     if coupled_rt and zernike_penalty_alpha > 0.0:
         # Q_rt is the DiffMat's penalty projector, a real data leaf of the
         # pytree and therefore a tracer under jit -- `np.kron` on it raises
-        # (job 56808102, TracerArrayConversionError float64[512,512]).
+        # .
         #
         # But `jnp.kron` UNCONDITIONALLY was a memory regression: it moves the
         # (rt_size*n_zeta)^2 intermediate onto the DEVICE, where np.kron kept it
         # on the host for free. At 32x32x12 that is 1.21 GB for Q and another
         # 1.21 GB for `penalty`, and this assembly already peaks at 69.18 GB of
         # a 73.70 GB limit (METHOD.md 5.2) -- 4.5 GB of headroom. Job 56839366,
-        # a case that had COMPLETED as job 56734923, then OOMed on the 10.42 GB
+        # a case that had COMPLETED as, then OOMed on the 10.42 GB
         # gather below.
         #
         # So: device only when the input is actually traced.
@@ -1323,7 +1307,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # is released -- see the optimization_barrier below. Doing it here holds
     # A_old + A_new + a broadcast transient WHILE B_old + B_new are also live: ~5 full
     # (3*n_total)^2 copies. Measured peak with it here 28.9 GB @24 / 51.5 GB @32;
-    # deferred, 19.97 GB @24 / 34.51 GB @32 (jobs 56091564/65).
+    # deferred, 19.97 GB @24 / 34.51 GB @32.
     au_diag = d[rho_idx] ** 2 * au_diag
     B = d[:, None] * B * d[None, :]
 
@@ -1394,7 +1378,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # which raises under jit (jax_lanczos path). Skip when B_blocks is a tracer; the
     # dense/callback/eager paths still print it. Silent when AGNI_DIAG=0.
     # try/except is LOAD-BEARING, not defensive habit: this diagnostic CRASHED a
-    # real optimization (job 56161838, UNFIX_K=4). np.linalg.eigvalsh raised
+    # real optimization. np.linalg.eigvalsh raised
     # "Eigenvalues did not converge" on a B_blocks the optimizer had wandered into,
     # killing a run whose PHYSICS was fine -- the eigensolve never got to run. A
     # diagnostic must never be able to terminate the job it is reporting on. If the
@@ -1633,12 +1617,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
                 f"finite-n lambda ignoring v_guess: got size={v0.size}, expected={A.shape[0]}"
             )
             v0 = None
-    _agni_mem_trace(
-        kwargs,
-        "[finite-n lambda:dense] preparing scipy.eigsh",
-        f"n_keep={A.shape[0]}",
-        "converting A2 to NumPy",
-    )
 
     sigma = kwargs.get("sigma", -1e-1)
     full_spectrum = kwargs.get("full_spectrum", False)
@@ -1684,11 +1662,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     idxs = jnp.where(jnp.abs(v) > 5e-5)[0]
     y = A @ v
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(f"eigval res={jnp.linalg.norm(y[idxs]/v[idxs]-w)}")
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(f"eigenvalue: {w}")
-
     # Reduced eigenvector -> full component-major vector [rho,theta,zeta].
     v_mode = v[:, 0] if jnp.ndim(v) == 2 else v
     v_full = jnp.zeros(3 * n_total, dtype=v_mode.dtype).at[keep].set(v_mode)
@@ -1744,6 +1717,10 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
 
     # Phase rotation doesn't change the physics. Here, we use it to make the eigenmode up-down symmetric.
     # phase_offset (default 0) is an optional tunable rotation applied on top of the mean-based alignment.
+    # RG: need to make this consistent with the dense case. `phase_offset` is
+    # declared on no register_compute_fun, so it cannot be set through
+    # `eq.compute` and is always 0. Cosmetic only -- the rotation does not
+    # change the physics -- so either declare it or drop it.
     phase_offset = kwargs.get("phase_offset", 0.0)
     xi_ref = xi_full[rho_idx]
     phase_angle = jnp.arctan2(jnp.mean(xi_ref.real), jnp.mean(xi_ref.imag))
@@ -1753,14 +1730,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     threshold = 0.01 * jnp.max(mags)
     mask = mags > threshold
     angle_diff_valid = jnp.where(mask, jnp.abs(angle_diff), jnp.nan)
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(
-            f"phase_angle (mean-based): {phase_angle:.4f} rad  |  per-elem deviation (all): max={jnp.max(jnp.abs(angle_diff)):.4f}, mean={jnp.mean(jnp.abs(angle_diff)):.4f}, std={jnp.std(angle_diff):.4f} rad"
-        )
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(
-            f"  deviation (|xi|>1% max, n={int(jnp.sum(mask))}/{xi_ref.size}): max={float(jnp.nanmax(angle_diff_valid)):.4f}, mean={float(jnp.nanmean(angle_diff_valid)):.4f} rad"
-        )
     xr = (
         xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
         * jnp.exp(1j * (phase_angle + phase_offset))
@@ -1792,11 +1761,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     psi_rr = d_dr(D_rho0, psi_r)  # dρ(ι ψ′² xr)
     iota_r = d_dr(D_rho0, iota)  # dρ(ι ψ′² xr)
 
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(
-            f"xr_v shape: {xr_v.shape}, xv_z shape: {xv_z.shape}, xz_z shape: {xz_z.shape}, xr_r shape: {xr_r.shape}, psi_r shape: {psi_r.shape}, psi_rr shape: {psi_rr.shape}, iota_r shape: {iota_r.shape}"
-        )
-
     deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
     deltaB_v = psi_r_over_sqrtg * (
         1.0 * (test_z)
@@ -1809,11 +1773,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     deltaV_r = psi_r * xr
     deltaV_v = xv + xz
     deltaV_z = xz * 1 / iota
-
-    if os.environ.get("AGNI_DIAG", "1") != "0":
-        print(
-            f"deltaB_r shape: {deltaB_r.shape}, deltaB_v shape: {deltaB_v.shape}, deltaB_z shape: {deltaB_z.shape}"
-        )
 
     deltaB2 = (
         g_rr * deltaB_r**2
@@ -1969,13 +1928,10 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     g_vp = _reshape(data["g_vp|PEST"]) / a_N**2
 
     g_sup_rr = _reshape(data["g^rr"]) * a_N**2
-    g_sup_rv = _reshape(data["g^rv"]) * a_N**2
-    g_sup_rp = _reshape(data["g^rz"]) * a_N**2
 
     # Match _agni3_assemble's route to g^rv/g^rz exactly: build them from the PEST
     # lower metric via g¹² = (g₁₃g₂₃ - g₁₂g₃₃)/(√g)², rather than reading data["g^rv"].
     # These absorb a psi_r*sqrtg: g_sup_rv_term == psi_r * sqrtg * g^rv.
-    jq_lower_metric = kwargs.get("jq_lower_metric", True)
     g_sup_rv_term = psi_r_over_sqrtg * (g_rp * g_vp - g_rv * g_pp)
     g_sup_rp_term = psi_r_over_sqrtg * (g_rv * g_vp - g_rp * g_vv)
 
@@ -2022,6 +1978,13 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     B_blocks = B_blocks.at[:, 0, 1].set((n0 * W * psi_r * sqrtg * g_rv).flatten())
     B_blocks = B_blocks.at[:, 1, 0].set((n0 * W * psi_r * sqrtg * g_rv).flatten())
 
+    # RG: need to make this consistent with the dense case. `_agni3_assemble`
+    # auto-detects the mirror from the equilibrium (`ismirror = jnp.all(jnp.abs(iota)
+    # < 1e-12)`, traced, jit-safe), while this path takes a manual `mirror` kwarg
+    # that defaults to False and is declared on no register_compute_fun, so it
+    # cannot be set through `eq.compute` at all. On a real mirror equilibrium the
+    # dense assembler switches on the extra B_blocks couplings below and the
+    # matrix-free operator does not, so the two disagree.
     ismirror = bool(kwargs.get("mirror", False))
     if ismirror:
         B_blocks = B_blocks.at[:, 2, 2].set((n0 * W * sqrtg * g_pp).flatten())
@@ -2087,18 +2050,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     if apply_penalty:
         # Fold alpha into the projector so a single matmul applies the penalty.
         alphaQ_rt = jnp.asarray(zernike_penalty_alpha * Q_rt)
-        if os.environ.get("AGNI_DIAG", "1") != "0":
-            rank_msg = "unknown" if penalty_rank is None else str(penalty_rank)
-            penalized_msg = (
-                "unknown" if penalty_rank is None else str(rt_size - penalty_rank)
-            )
-            print(
-                "[agni3 matfree operator:coupled penalty]",
-                f"alpha={zernike_penalty_alpha:.3e}",
-                f"rank={rank_msg}/{rt_size}",
-                f"penalized_rt={penalized_msg}",
-                flush=True,
-            )
 
         def _apply_penalty(u):
             # Q = kron(Q_rt, I_zeta) acting on rho-major (rho, theta, zeta) data.
@@ -2203,25 +2154,16 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         )
         Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
-        # J cross Q terms. The two branches are algebraically identical; they differ
-        # only in how g^rv/g^rz are obtained. jq_lower_metric=True is the dense
-        # _agni3_assemble route (the _term factors already carry psi_r*sqrtg, hence
-        # psi_r2 here where the other branch has psi_r3*sqrtg).
-        if jq_lower_metric:
-            jq = (
-                psi_r2
-                * W
-                * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
-                / g_sup_rr
-            )
-        else:
-            jq = (
-                psi_r3
-                * sqrtg
-                * W
-                * (j_sup_theta * g_sup_rp - j_sup_zeta * g_sup_rv)
-                / g_sup_rr
-            )
+        # J cross Q terms, by the same route as dense `_agni3_assemble`: g^rv and
+        # g^rz come from the PEST LOWER metric via g12 = (g13 g23 - g12 g33)/(sqrt(g))^2
+        # rather than from data["g^rv"]/data["g^rz"]. The `_term` factors already
+        # carry psi_r*sqrtg, hence psi_r2 here.
+        jq = (
+            psi_r2
+            * W
+            * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
+            / g_sup_rr
+        )
         Ar += +(jq * (iota * xr_v + xr_z))
         Ar += -(psi_r * sqrtg * W * j_sup_zeta) * xr1_r
         Ar += +(psi_r * sqrtg * W * j_sup_theta) * xr2_r
@@ -2354,8 +2296,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         "g_vp|PEST",
         "g_pp|PEST",
         "g^rr",
-        "g^rv",
-        "g^rz",
         "J^theta_PEST",
         "J^zeta",
         "|J|",
@@ -2449,7 +2389,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     A value/gradient gate uses:
 
-    ``sbatch --export=ALL,AGNI_KEEP_CHECKS=1 job_regression.sl``
     """
     # noqa: unused dependency
     _ = params["Psi"]
@@ -2506,7 +2445,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         -------------
         The regression job exercises this path by default:
 
-        ``sbatch --export=ALL,AGNI_KEEP_CHECKS=1 job_regression.sl``
 
         The GPU optimizer also uses this unless ``AGNI_EIGENSOLVER`` is changed:
 
@@ -2607,10 +2545,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # 0 off, 1 time the factorization alone, 2 also its Frobenius backward error
     # (needs `M` kept alive plus one n x n product -- small resolutions only).
     # Eager path only; see the timing block in `_solve_at`.
-    _factor_diag = int(os.environ.get("AGNI_FACTOR_DIAG", "0"))
     _diag = int(os.environ.get("AGNI_DIAG", "1"))
     _xcheck = _diag >= 1
-    _rmu_diag = _diag >= 2
     _xcheck_tol = 1e-2  # a constant, not a knob: nothing ever needed to tune it
 
     def _eigensolve_jax(params_d, data_d):
@@ -2645,7 +2581,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         Use the same regression or optimizer scripts with the JAX eigensolver
         explicitly enabled:
 
-        ``sbatch --export=ALL,AGNI_EIGENSOLVER=jax_lanczos,AGNI_KEEP_CHECKS=1 job_regression.sl``
 
         ``sbatch --export=ALL,AGNI_EIGENSOLVER=jax_lanczos,AGNI_SIGMA_MODE=adapt,LAMBDA_FLOOR=-1e-6,UNFIX_K=4,N_STEPS=1 job_sigma_repeat.sl``
         """
@@ -2717,40 +2652,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 # timing dilutes the effect. Eager only -- under jit there is no
                 # host-side boundary to measure across.
                 _t_fac = time.perf_counter() - _t_fac0
-                if _factor_diag >= 1:
-                    print(
-                        "[factor] {} n={} sigma={:+.6e} factor_time={:.3f}s".format(
-                            _factor, nA, float(sig), _t_fac
-                        ),
-                        flush=True,
-                    )
-                if _factor_diag >= 2:
-                    # ||M - F F^T||_F / ||M||_F for Cholesky, ||M - P L U||_F /
-                    # ||M||_F for LU. Needs `M` alive and one extra n x n
-                    # product, so it is gated separately from the timing.
-                    _mn = jnp.linalg.norm(M)
-                    if _factor == "cholesky":
-                        # `_tril` already zeroed the strict upper triangle.
-                        _rec = fac[0] @ fac[0].T
-                    else:
-                        # LAPACK `ipiv` is a sequence of row SWAPS, not a
-                        # permutation, so replay them to get the permutation
-                        # `p` with `M[p] = L U`, then undo it.
-                        _p = np.arange(nA)
-                        _ipiv = np.asarray(fac[1])
-                        for _i in range(nA):
-                            _j = int(_ipiv[_i])
-                            _p[_i], _p[_j] = _p[_j], _p[_i]
-                        _lu = fac[0]
-                        _L = jnp.tril(_lu, -1) + jnp.eye(nA, dtype=_lu.dtype)
-                        _rec = (_L @ jnp.triu(_lu))[np.argsort(_p)]
-                    _fr = float(jnp.linalg.norm(M - _rec) / _mn)
-                    print(
-                        "[factor] {} n={} backward_error=||M-F||_F/||M||_F="
-                        "{:.3e}".format(_factor, nA, _fr),
-                        flush=True,
-                    )
-                    del _rec
                 try:
                     M.delete()
                 except Exception:
@@ -2785,28 +2686,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             lam_out = sig + 1.0 / jnp.where(mu_i == 0, jnp.inf, mu_i)
             ordered = jnp.abs(mu[jnp.argsort(-jnp.abs(mu))])
             sep_out = ordered[0] / jnp.where(ordered[1] == 0, jnp.inf, ordered[1])
-
-            if _rmu_diag:
-                res = _OPinv(v_out) - mu_i * v_out
-                r_mu = jnp.linalg.norm(res) / (jnp.abs(mu_i) * jnp.linalg.norm(v_out))
-                mu_s = mu[jnp.argsort(-jnp.abs(mu))][:6]
-                jax.debug.print(
-                    "[rmu] sigma={s:.6e}  num_matvecs={k}\n"
-                    "[rmu] r_mu={r:.6e}   (>1e-5 => DANGER, not converged)\n"
-                    "[rmu] mu_sel={m:.8e}  lam_from_mu={l:.8e}\n"
-                    "[rmu] separation |mu_1|/|mu_2| = {sep:.4f}"
-                    "   (~1 => clustered, more matvecs cannot help)\n"
-                    "[rmu] top |mu|: {mus}\n"
-                    "[rmu] implied lam: {lams}",
-                    s=sig,
-                    k=_num_matvecs,
-                    r=r_mu,
-                    m=mu_i,
-                    l=sig + 1.0 / mu_i,
-                    sep=jnp.abs(mu_s[0]) / jnp.abs(mu_s[1]),
-                    mus=mu_s,
-                    lams=sig + 1.0 / mu_s,
-                )
 
             # Catch the NaN wherever it surfaced: a bad `potrf` poisons the
             # factor, but it also poisons everything downstream of it, so test
@@ -2851,16 +2730,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     s=sigma2,
                     ok=ok2,
                 )
-            if _rmu_diag:
-                jax.debug.print(
-                    "[adapt] sigma1={s1:.6e} sep1={p1:.4f} -> sigma2={s2:.6e} "
-                    "sep2={p2:.4f}  lam_mu={l:.8e}",
-                    s1=sigma,
-                    p1=sep_pass1,
-                    s2=sigma2,
-                    p2=sep,
-                    l=lam_mu,
-                )
 
         return v, lam_mu
 
@@ -2879,7 +2748,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         Deflation vectors are the Lanczos Ritz vectors of the previous
         evaluation, which are otherwise discarded. Offline replay over a real
-        optimiser trajectory (job 56606783) measured one-step-old vectors giving
+        optimiser trajectory measured one-step-old vectors giving
         ~4x fewer inner iterations, with a stale space costing ITERATIONS and not
         CORRECTNESS. They are carried in ``ritz_store``, an eager-only module
         global -- see that file for why this is temporary and what it guards.
@@ -2947,7 +2816,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # with n_shell = n_theta_max*n_zeta_max -- so it is fixed once the
         # resolution is fixed and carries no dependence on params. Reading it out
         # of the dict made it a TRACER inside the custom_vjp primal and jit died
-        # on it (job 56804704, TracerArrayConversionError, int64[36096]).
+        # on it.
         #
         # It has to be host-concrete, not merely jnp: the consumers build `sel`
         # and `pad` of shape (m, b) where b is the largest surviving ring, and b
@@ -3015,7 +2884,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # inputs. Those results have nowhere to live in the custom_vjp's jaxpr
         # and ended up as jaxpr CONSTANTS, so MLIR lowering died in
         # `ir_constant` with "No constant handler for DynamicJaxprTracer"
-        # (jobs 56838367, 56870962, 56919036, 56927582). Bisected with the
+        # . Bisected with the
         # local lowering probe: gradient lowers CLEAN with AGNI_COARSE_DEFL=0
         # and BLOCKS with it on, traced rings/deflation identical in both.
         if _Zc_in is not None:
@@ -3040,91 +2909,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             "",
         )
         fine_res = (n_rho, n_theta, n_zeta)
-
-        if os.environ.get("AGNI_RING_COMPARE", "0").lower() not in (
-            "0",
-            "false",
-            "no",
-            "",
-        ):
-            # DIAGNOSTIC. Build the ring blocks BOTH ways on the same inputs and
-            # compare, then exit. This is the honest form of the eager-vs-traced
-            # question: job 56804704 compared end-to-end EIGENVALUES at a CG
-            # budget where neither arm had converged (relres ~7), so a 2.3e-05
-            # difference could not be attributed to the assembly at all. The
-            # blocks are a deterministic function of the inputs -- no solve, no
-            # iteration count, nothing to confound.
-            _f2r_c = _np.ones(3 * n_total, dtype=_np.int64) * -1
-            _f2r_c[_keep] = _np.arange(_keep.size)
-            _grp_c = []
-            for _i in range(n_rho):
-                for _k in range(n_zeta):
-                    _nd = _ring_nodes_fn(n_rho, n_theta, n_zeta, _i, _k)
-                    _fl = _np.concatenate([_nd, _nd + n_total, _nd + 2 * n_total])
-                    _grp_c.append((_nd, _f2r_c[_fl]))
-            _bc = max(int((_g >= 0).sum()) for _, _g in _grp_c)
-            _Ae = _np.zeros((len(_grp_c), _bc, _bc))
-            _Ge = -_np.ones((len(_grp_c), _bc), dtype=_np.int64)
-            for _gi, (_nd, _red) in enumerate(_grp_c):
-                _o = _agni3_assemble(
-                    params_d,
-                    transforms,
-                    profiles,
-                    d_h,
-                    ring_nodes=jnp.asarray(_nd),
-                    **kwargs,
-                )
-                _bk = _np.asarray(
-                    jax.device_get(
-                        _finish_blk(_o["A"], _o["Linv"], _o["au_diag"], _nd.size)
-                    )
-                )
-                _al = _red >= 0
-                _ix = _red[_al]
-                _na_c = int(_ix.size)
-                _sb = _bk[_np.ix_(_al, _al)]
-                _Ae[_gi, :_na_c, :_na_c] = 0.5 * (_sb + _sb.T)
-                _Ge[_gi, :_na_c] = _ix
-
-            _sl_c, _pd_c, _Gt = _ring_maps(_keep, fine_res)
-            _At = _np.asarray(
-                jax.device_get(
-                    _build_rings(
-                        _agni3_assemble,
-                        params_d,
-                        transforms,
-                        profiles,
-                        d_h,
-                        kwargs,
-                        fine_res,
-                        _sl_c,
-                        _pd_c,
-                        0.0,
-                    )
-                )
-            )
-            _Gtn = _np.asarray(_Gt)
-            _pdn = _np.asarray(jax.device_get(_pd_c))
-            _w_c = _pdn[:, :, None] * _pdn[:, None, :]
-            _dE = _np.abs(_At * _w_c - _Ae * _w_c).max()
-            _sc = max(_np.abs(_Ae).max(), 1e-300)
-            print(
-                "[ring_compare] shapes eager={} traced={}".format(_Ae.shape, _At.shape),
-                flush=True,
-            )
-            print(
-                "[ring_compare] index maps identical = {}".format(
-                    bool(_Gtn.shape == _Ge.shape and _np.array_equal(_Gtn, _Ge))
-                ),
-                flush=True,
-            )
-            print(
-                "[ring_compare] blocks max|diff| = {:.6e}  rel = {:.6e}".format(
-                    _dE, _dE / _sc
-                ),
-                flush=True,
-            )
-            raise SystemExit(0)
         if use_traced_rings:
             # `_rpb` is imported inside the coarse-deflation branch above, which
             # may not have run; the traced ring build is independent of it.
@@ -3371,9 +3155,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 # full copy of the Ax subgraph PER COLUMN into the jaxpr. That
                 # is tolerable for _HZ at k=50; at _num_matvecs=100 stacked on
                 # top of it, XLA compile time blew past the 30-minute wall
-                # without the solve ever starting (jobs 57077809/57077811 --
-                # 12 min in, still no `[coarse_defl]`, which is a debug.print
-                # and therefore only fires at EXECUTION). lax.map traces Ax once
+                # without the solve ever starting. lax.map traces Ax once
                 # and loops at runtime, so the graph stays O(1) in m.
                 #
                 # Not vmap: that would batch 100 simultaneous Ax applications
@@ -3470,7 +3252,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         """
         # Same sys.path setup `_eigensolve_pcg` does at its top. This function
         # now runs BEFORE it, so it cannot inherit that side effect --
-        # ModuleNotFoundError('coarse_deflation'), job 56928590. Note the local
+        # ModuleNotFoundError('coarse_deflation'). Note the local
         # probe cannot catch this class: it puts precond_stage2 on sys.path
         # itself, so the import always resolves there.
         import sys as _sys
@@ -3579,7 +3361,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # These come in as kwargs from the PEST grids rather than being read
             # off `_cg.nodes` / `transforms["grid"].nodes`. Those grids are built
             # by `eq.map_coordinates(params=...)`, so their nodes are TRACED and
-            # `_np.asarray` on them raises (job 56808299). rho is invariant under
+            # `_np.asarray` on them raises. rho is invariant under
             # the PEST->DESC map, so the values are the same either way.
             _rho_c = _np.asarray(kwargs["coarse_rho"], dtype=float).reshape(-1)
             _rho_f = _np.asarray(kwargs["fine_rho"], dtype=float).reshape(-1)
@@ -3661,43 +3443,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             params_d,
             data_d,
         )
-
-    if os.environ.get("AGNI_TRACE_AUDIT", "0") != "0":
-        # Which values CLOSED OVER by _v_primal are tracers? A custom_vjp cannot
-        # take a closed-over outer tracer as a jaxpr input, so it becomes a
-        # jaxpr CONSTANT and lowering dies in ir_constant. Arguments are fine;
-        # closures are not. This prints the distinction instead of assuming it.
-        def _isT(x):
-            return isinstance(x, jax.core.Tracer)
-
-        def _anyT(x):
-            try:
-                return any(_isT(l) for l in jax.tree_util.tree_leaves(x))
-            except Exception:
-                return "?"
-
-        _items = [
-            ("ARG  params", _anyT(params)),
-            ("ARG  _array_data", _anyT(_array_data)),
-            (
-                "CLOS transforms['grid'].nodes",
-                _isT(getattr(transforms.get("grid", None), "nodes", None)),
-            ),
-            ("CLOS transforms['diffmat']", _anyT(transforms.get("diffmat", None))),
-            ("CLOS profiles", _anyT(profiles)),
-            ("CLOS kwargs['coarse_params']", _anyT(kwargs.get("coarse_params", None))),
-            ("CLOS kwargs['coarse_data']", _anyT(kwargs.get("coarse_data", None))),
-            (
-                "CLOS kwargs['coarse_grid'].nodes",
-                _isT(getattr(kwargs.get("coarse_grid", None), "nodes", None)),
-            ),
-            (
-                "CLOS kwargs['coarse_diffmat']",
-                _anyT(kwargs.get("coarse_diffmat", None)),
-            ),
-        ]
-        for _nm, _tv in _items:
-            print(f"[trace_audit] {_nm:38s} tracer={_tv}", flush=True)
 
     # Built OUTSIDE the custom_vjp, then passed in. See `_coarse_space`.
     _Zc_ext, _v0c_ext = _coarse_space(params, _array_data)

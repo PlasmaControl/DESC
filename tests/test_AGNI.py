@@ -203,7 +203,6 @@ def test_stability_kwargs_are_registered():
     # explicitly so the guard cannot be weakened silently: to remove one, either
     # declare the kwarg on the compute function that reads it, or delete the read.
     known_unregistered = {
-        "jq_lower_metric",  # read in _agni3_assemble
         "mirror",  # read in _agni3_assemble
         "phase_offset",  # read in _AGNI3
         # `ring_nodes` is INTERNAL: `_agni3_assemble` is called directly as a
@@ -237,9 +236,9 @@ def test_matfree_operator_matches_dense_matrix(agni):
     """
     from desc.compute.data_index import data_index
 
-    deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["finite-n lambda3"][
-        "dependencies"
-    ]["data"]
+    deps = data_index["desc.equilibrium.equilibrium.Equilibrium"][
+        "finite-n lambda3 rayleigh"
+    ]["dependencies"]["data"]
     data = agni["eq"].compute(deps, grid=agni["grid"], diffmat=agni["diffmat"])
     transforms = {"grid": agni["grid"], "diffmat": agni["diffmat"]}
     kw = {k: v for k, v in agni["kw"].items() if k not in ("grid", "diffmat")}
@@ -308,3 +307,94 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
     # wrong; it is now set from the worst measurement, with margin.
     assert resid < 0.1, f"Rayleigh residual {resid:.3e} -- eigenvector not converged"
     np.testing.assert_allclose(lam_R, lam_dense, rtol=1e-4)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
+    """Both ring-block builds reproduce the dense matrix's sub-blocks.
+
+    The solver assembles the ring preconditioner's blocks two ways: a vmapped
+    build over all rings at once (``build_ring_blocks``) and a plain host loop
+    over rings. They must agree, and both must equal the corresponding
+    sub-blocks of the dense assembled matrix.
+
+    This replaces the ``AGNI_RING_COMPARE`` environment-variable block that used
+    to live inside the compute function and ended in ``raise SystemExit(0)``. It
+    is a stronger check than that was: the old one compared the two builds
+    against EACH OTHER, so a shared error would have passed. Comparing both
+    against the dense assembly catches that.
+
+    Recorded reference: the restricted assembler matched dense to <= 2.8e-16 on
+    all 192 rings at GJ 16x32x12 (precond_stage2/VERIFICATION.md).
+    """
+    from desc.compute._stability_solvers import (
+        build_ring_blocks,
+        finish_ring_block,
+        ring_index_maps,
+        ring_nodes,
+    )
+    from desc.compute.data_index import data_index
+
+    deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["finite-n lambda3"][
+        "dependencies"
+    ]["data"]
+    data = agni["eq"].compute(deps, grid=agni["grid"], diffmat=agni["diffmat"])
+    transforms = {"grid": agni["grid"], "diffmat": agni["diffmat"]}
+    kw = {k: v for k, v in agni["kw"].items() if k not in ("grid", "diffmat")}
+    params = agni["eq"].params_dict
+
+    dense = stability._agni3_assemble(params, transforms, {}, data, **kw)
+    A = np.asarray(dense["A"])
+    keep = np.asarray(dense["keep"])
+
+    res = agni["res"]
+    n_rho, n_theta, n_zeta = res
+    sel, pad, G = ring_index_maps(keep, res)
+
+    # vmapped build, sigma=0 so the blocks are of A itself
+    vmapped = np.asarray(
+        build_ring_blocks(
+            stability._agni3_assemble,
+            params,
+            transforms,
+            {},
+            data,
+            kw,
+            res,
+            sel,
+            pad,
+            0.0,
+        )
+    )
+
+    worst_v = worst_e = 0.0
+    for gi, g in enumerate(G):
+        live = g[g >= 0]
+        ref = A[np.ix_(live, live)]
+        scale = max(np.max(np.abs(ref)), 1e-300)
+
+        got_v = vmapped[gi][: live.size, : live.size]
+        worst_v = max(worst_v, float(np.max(np.abs(got_v - ref))) / scale)
+
+        # eager: one ring at a time through the same assembler
+        i, k = divmod(gi, n_zeta)
+        nodes = ring_nodes(n_rho, n_theta, n_zeta, i, k)
+        out = stability._agni3_assemble(
+            params, transforms, {}, data, ring_nodes=jnp.asarray(nodes), **kw
+        )
+        blk = np.asarray(
+            finish_ring_block(out["A"], out["Linv"], out["au_diag"], n_theta)
+        )
+        # `sel[gi]` holds the positions WITHIN the 3*n_theta ring ordering that
+        # survive the keep mask. G holds the reduced indices COMPACTED to the
+        # front, which is a different indexing entirely -- using G's positions
+        # here gathers the wrong entries out of the ring block.
+        pos = np.asarray(sel)[gi][: live.size]
+        got_e = blk[np.ix_(pos, pos)]
+        got_e = 0.5 * (got_e + got_e.T)
+        worst_e = max(worst_e, float(np.max(np.abs(got_e - ref))) / scale)
+
+    print(f"\n  vmapped vs dense: {worst_v:.3e}\n  eager   vs dense: {worst_e:.3e}")
+    assert worst_v < 5e-15, f"vmapped ring blocks disagree with dense: {worst_v:.3e}"
+    assert worst_e < 5e-15, f"eager ring blocks disagree with dense: {worst_e:.3e}"

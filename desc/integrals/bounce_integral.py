@@ -860,8 +860,7 @@ class Bounce2D(_Bounce):
             See ``self.points`` for the description of this parameter.
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
-            transform (NUFFT).
-            If less than ``1e-14`` then NUFFT will not be used.
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         loop : bool
             Whether to use loops to compute sums where a loop option is implemented.
             This is slower to differentiate with JAX.
@@ -1023,8 +1022,7 @@ class Bounce2D(_Bounce):
             between ``z1`` and ``z2`` resides in the epigraph of B.
         nufft_eps : float
             Precision requested for interpolation with non-uniform fast Fourier
-            transform (NUFFT).
-            If less than ``1e-14`` then NUFFT will not be used.
+            transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
 
         Returns
         -------

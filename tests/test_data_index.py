@@ -69,9 +69,12 @@ def test_data_index_deps():
     pattern_name = re.compile(r"(?<!_)name=\"(.*?)\"")
     pattern_computed = re.compile(r"(?<!_)data\[(.*?)] = ")
     pattern_data = re.compile(r"(?<!_)data\[(.*?)]")
+    pattern_RpZ_computed = re.compile(r"(?<!_)RpZ_data\[(.*?)] = ")
+    pattern_RpZ_data = re.compile(r"(?<!_)RpZ_data\[(.*?)]")
     pattern_profiles = re.compile(r"profiles\[(.*?)]")
     pattern_params = re.compile(r"params\[(.*?)]")
     pattern_dep_ignore = re.compile("noqa: unused dependency")
+
     for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
         if module_name[0] == "_":
             # JITed functions are not functions according to inspect,
@@ -86,6 +89,8 @@ def test_data_index_deps():
                 deps = {
                     "data": _get_matches(fun, pattern_data)
                     - _get_matches(fun, pattern_computed),
+                    "RpZ_data": _get_matches(fun, pattern_RpZ_data)
+                    - _get_matches(fun, pattern_RpZ_computed),
                     "profiles": _get_matches(fun, pattern_profiles),
                     "params": _get_matches(fun, pattern_params),
                     "ignore": bool(
@@ -129,10 +134,19 @@ def test_data_index_deps():
                 name not in queried_deps[p],
                 AssertionError,
                 "Did you reuse the function name (i.e. def_...) for"
-                f" '{name}' for some other quantity?" + "\n" + err_msg,
+                f" '{err_msg}' for some other quantity?",
             )
             # assert correct dependencies are queried
             if not queried_deps[p][name]["ignore"]:
-                assert queried_deps[p][name]["data"] == data | axis_limit_data, err_msg
+                rpz = {"R", "phi", "Z"}
+                assert (rpz & data) == (
+                    rpz & queried_deps[p][name]["data"]
+                ), f"{err_msg}.\n R, phi, Z for RpZ_data sbould never be a dependency."
+
+                besides_rpz = queried_deps[p][name]["RpZ_data"] - rpz
+                assert (queried_deps[p][name]["data"] | besides_rpz) == (
+                    data | axis_limit_data
+                ), err_msg
+
             assert queried_deps[p][name]["profiles"] == profiles, err_msg
             assert queried_deps[p][name]["params"] == params, err_msg

@@ -30,7 +30,12 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import CustomGridToroidalSurface, LinearGridCurve, LinearGridFlux
+from desc.grid import (
+    AbstractGridCurve,
+    CustomGridToroidalSurface,
+    LinearGridCurve,
+    LinearGridFlux,
+)
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -573,14 +578,14 @@ class _Coil(_MagneticField, Optimizable, ABC):
         """
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
-            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+            source_grid = LinearGridCurve(N=2 * self.N * NFP + 5)
         else:
             errorif(
                 getattr(source_grid, "NFP", 1) not in [1, NFP],
                 ValueError,
                 f"source_grid for coils must have NFP=1 or NFP={NFP}",
             )
-        assert isinstance(source_grid, _Grid)
+        assert isinstance(source_grid, AbstractGridCurve)
         if params is None:
             current = self.current
         else:
@@ -2041,8 +2046,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             "source_grid for CoilSet must have NFP=1",
         )
         if source_grid is None:
-            source_grid = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
-        assert isinstance(source_grid, _Grid)
+            source_grid = LinearGridCurve(
+                N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5
+            )
+        assert isinstance(source_grid, AbstractGridCurve)
         if params is None:
             current = self._all_currents()
         else:

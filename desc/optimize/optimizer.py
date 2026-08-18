@@ -28,7 +28,7 @@ from desc.utils import (
     warnif,
 )
 
-from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
+from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection, ProximalState
 
 
 class Optimizer(IOAble):
@@ -576,6 +576,16 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
+def _split_equilibrium_constraints(eq, nonlinear_constraints):
+    eq_constraints, other_constraints = [], []
+    for con in nonlinear_constraints:
+        if con._equilibrium and con.bounds is None and con.things == [eq]:
+            eq_constraints.append(con)
+    else:
+        other_constraints.append(con)
+    return eq_constraints, other_constraints
+
+
 def _maybe_wrap_nonlinear_constraints(
     eq, objective, nonlinear_constraints, method, options
 ):
@@ -599,16 +609,25 @@ def _maybe_wrap_nonlinear_constraints(
                 """))
         wrapper = "proximal"
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
+        eq_constraints, other_constraints = _split_equilibrium_constraints(eq, nonlinear_constraints)
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
+        state = ProximalState(
+            eq,
+            _combine_constraints(eq_constraints),
+            perturb_options=perturb_options,
+            solve_options=solve_options)
+
+
+        
         objective = ProximalProjection(
             objective,
-            constraint=_combine_constraints(nonlinear_constraints),
-            perturb_options=perturb_options,
-            solve_options=solve_options,
-            eq=eq,
+            state=state
         )
-        nonlinear_constraints = ()
+        nonlinear_constraints = (
+            ProximalProjection(_combine_constraints(other_constraints),state=state)
+            ) if len(other_constraints) else ()
+    
     return objective, nonlinear_constraints
 
 
@@ -718,7 +737,7 @@ def get_combined_constraint_objectives(  # noqa: C901
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
-                nonlinear_constraint, linear_constraint
+                nonlinear_constraint, linear_constraint, **linear_constraint_options
             )
             nonlinear_constraint.build(verbose=verbose)
 

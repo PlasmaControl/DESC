@@ -86,7 +86,7 @@ class GammaC(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="rev",
+        deriv_mode="rev",  # TODO: change to deriv_mode="auto" once jax>0.11.0
         jac_chunk_size=None,
         name="Gamma_c",
         grid=None,
@@ -137,15 +137,9 @@ class GammaC(_Objective):
                 " field_period_transits = num_transit*eq.NFP",
             )
             field_period_transits = kwargs.pop("num_transit") * eq.NFP
-        warnif(
-            "jac_chunk_size" in kwargs,
-            DeprecationWarning,
-            "ignoring jac_chunk_size as it is not used for this objective",
-        )
-        # TODO: change deriv_mode to "auto" once we have jax > 0.11.0 supported
+
         if target is None and bounds is None:
             target = 0.0
-
         self._grid = grid
         if alpha is None:
             alpha = jnp.zeros(1)

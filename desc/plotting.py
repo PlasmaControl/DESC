@@ -1842,7 +1842,7 @@ def plot_scalar(
     component : str, optional
         Label used to pick which scalar to plot. By default this is treated as
         the ``name`` passed to ``eq.compute``. If you have custom logic
-        (e.g. building a scalar from ``"finite-n eigenfunction"``), put that in
+        (e.g. building a scalar from ``"finite-n eigenfunction3"``), put that in
         the block where ``scalar`` is computed. Can be generalized to physical
         quantities later.
     ax : matplotlib.axes.Axes or ndarray of Axes, optional
@@ -1896,7 +1896,7 @@ def plot_scalar(
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 
-    name = "finite-n eigenfunction"
+    name = "finite-n eigenfunction3"
     data = eq.compute(
         name,
         grid=grid,

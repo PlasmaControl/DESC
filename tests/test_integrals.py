@@ -1091,7 +1091,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         bounce = Bounce1D(grid, data, check=True)
-        pitch_inv, _ = bounce.pitch_quad(
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1289,7 +1289,9 @@ class TestBounce:
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.pitch_quad(np.min(B), np.max(B), 100, simp=False)[0][:-1]
+        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100, simp=False)[
+            0
+        ][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1473,7 +1475,7 @@ class TestBounce2D:
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
-            num_field_periods=1,
+            field_period_transits=1,
             nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
@@ -1509,12 +1511,12 @@ class TestBounce2D:
             data,
             angle,
             alpha=alpha,
-            num_field_periods=38,
+            field_period_transits=38,
             check=True,
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
-        pitch_inv, _ = bounce.pitch_quad(
+        pitch_inv, _ = bounce.get_pitch_inv_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1601,7 +1603,7 @@ class TestBounce2D:
         )
 
         bounce = Bounce2D(
-            grid, data, angle, alpha=alpha, num_field_periods=38, check=True
+            grid, data, angle, alpha=alpha, field_period_transits=38, check=True
         )
         points = bounce.points(pitch_inv)
 
@@ -1649,7 +1651,7 @@ class TestBounce2D:
             Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
-            num_field_periods=3,
+            field_period_transits=3,
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,

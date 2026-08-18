@@ -515,13 +515,13 @@ def _test_objective_ripple(benchmark, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_field_periods = 100
+    field_period_transits = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_field_periods=num_field_periods,
-                num_well=2 * num_field_periods,
+                field_period_transits=field_period_transits,
+                num_well=2 * field_period_transits,
                 num_quad=16,
                 Y_B=13,
             )

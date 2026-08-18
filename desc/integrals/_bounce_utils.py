@@ -69,7 +69,7 @@ def _bounce_points(
         If there were fewer wells detected along a field line than the size of the
         last axis of the returned arrays, then that axis is padded with zero.
     sentinel : float
-        Sentinel value which should be less ζ coordinate of all bounce points,
+        Sentinel value which should be less than ζ coordinate of all bounce points,
         which can be guaranteed by choosing branch cut for α appropriately.
         Default is -1.
     return_mask : bool
@@ -147,9 +147,8 @@ def _halley(o, pitch_inv, z, mask, nufft_eps, diagnostic=0):
         Shape (num ρ ?, num α, num pitch, num well).
         Subset of points to refine.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
         Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
     diagnostic : int
         Positive integer denoting iteration step to print.
@@ -767,7 +766,7 @@ def argmin(z1, z2, f, mins, B_mins):
     return jnp.take_along_axis(f[..., None, None, :], where, axis=-1).squeeze(-1)
 
 
-def get_alphas(alpha, iota, num_field_periods, NFP):
+def get_alphas(alpha, iota, field_period_transits, NFP):
     """Get set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     Parameters
@@ -778,7 +777,7 @@ def get_alphas(alpha, iota, num_field_periods, NFP):
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
     NFP: int
         Number of field periods per toroidal transit.
@@ -792,10 +791,10 @@ def get_alphas(alpha, iota, num_field_periods, NFP):
     """
     alpha = alpha[:, None, None]
     iota = iota[:, None]
-    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_field_periods)
+    return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(field_period_transits)
 
 
-def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24):
+def theta_on_fieldlines(angle, iota, alpha, field_period_transits, NFP, *, X_min=24):
     """Parameterize θ on field lines α.
 
     Parameters
@@ -809,7 +808,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24)
     alpha : jnp.ndarray
         Shape (num α, ).
         Starting field line poloidal labels {αᵢ₀}.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
     NFP : int
         Number of field periods per toroidal transit.
@@ -867,7 +866,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24)
     domain = (0, 2 * jnp.pi / NFP)
 
     # peeling off field lines
-    alpha = get_alphas(alpha, iota, num_field_periods, NFP)
+    alpha = get_alphas(alpha, iota, field_period_transits, NFP)
     if angle.ndim == 2:
         alpha = alpha.squeeze(1)
 
@@ -882,7 +881,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_field_periods, NFP, *, X_min=24)
     )
     alpha = alpha.swapaxes(0, -2)
     delta = delta.at[..., 0].add(alpha)  # This is now θ = α + δ.
-    assert delta.shape == (*angle.shape[:-2], num_alpha, num_field_periods, Y)
+    assert delta.shape == (*angle.shape[:-2], num_alpha, field_period_transits, Y)
 
     if X < X_min:
         # This is needed as our algorithm assumes continuity of |B| along field
@@ -987,8 +986,8 @@ def fast_cubic_spline(
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_t : jnp.ndarray
         Precomputed transform matrix.
     vander_z : jnp.ndarray
@@ -1042,11 +1041,11 @@ def fast_cubic_spline(
     # f shape is (..., z_eff, modes_t.size)
 
     lines = theta.cheb.shape[:-2]  # (..., num α)
-    num_field_periods = theta.X
+    field_period_transits = theta.X
 
     # θ at uniform ζ on field lines
     t = idct_mmt(x, theta.cheb[..., None, :], vander=vander_t)
-    assert t.shape == (*lines, num_field_periods, Y)
+    assert t.shape == (*lines, field_period_transits, Y)
 
     if no_nufft(nufft_eps) or f.shape[-1] <= 16:
         f = f[..., None, None, :, :]
@@ -1065,11 +1064,13 @@ def fast_cubic_spline(
     f = f.reshape(*lines, -1)
 
     z = jnp.ravel(
-        z + (theta.domain[1] - theta.domain[0]) * jnp.arange(num_field_periods)[:, None]
+        z
+        + (theta.domain[1] - theta.domain[0])
+        * jnp.arange(field_period_transits)[:, None]
     )
     f = CubicSpline(x=z, y=f, axis=-1, check=check).c
     f = jnp.moveaxis(f, (0, 1), (-1, -2))
-    assert f.shape == (*lines, num_field_periods * Y - 1, 4)
+    assert f.shape == (*lines, field_period_transits * Y - 1, 4)
     return f, z
 
 

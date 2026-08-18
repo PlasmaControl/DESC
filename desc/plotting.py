@@ -4698,7 +4698,7 @@ def plot_gammac(
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
-        * ``num_field_periods``: int
+        * ``field_period_transits``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
 
@@ -4734,7 +4734,7 @@ def plot_gammac(
     grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     X = kwargs.pop("X", 32)
     Y = kwargs.pop("Y", 32)
-    num_field_periods = kwargs.pop("num_field_periods", 5)
+    field_period_transits = kwargs.pop("field_period_transits", 5)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4749,7 +4749,7 @@ def plot_gammac(
         "gamma_c",
         grid=grid,
         angle=Bounce2D.angle(eq, X, Y, rho),
-        num_field_periods=num_field_periods,
+        field_period_transits=field_period_transits,
         num_pitch=num_pitch,
         alpha=alphas,
         **kwargs,
@@ -4758,7 +4758,7 @@ def plot_gammac(
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch, _ = Bounce2D.pitch_quad(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

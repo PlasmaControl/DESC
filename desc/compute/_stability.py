@@ -14,7 +14,6 @@ import time
 from functools import partial
 
 import numpy as np
-from jax.scipy.sparse.linalg import bicgstab, cg, gmres
 
 try:
     from matfree import decomp, eig
@@ -45,15 +44,6 @@ def _agni_mem_trace_enabled(kwargs):
 def _agni_mem_trace(kwargs, *parts):
     if _agni_mem_trace_enabled(kwargs):
         print(*parts)
-
-
-def _require_matfree_backend():
-    if decomp is None or eig is None:
-        raise ModuleNotFoundError(
-            "matfree is required only for matfree_solver='shiftinvert_cg', "
-            "'shiftinvert_bicgstab', or 'shiftinvert_gmres'. "
-            "Install matfree or use matfree_solver='eigsh_shiftinvert'."
-        )
 
 
 def _get_zernike_penalty(transforms, rt_size):
@@ -796,22 +786,105 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
     n_total = n_rho_max * n_theta_max * n_zeta_max
 
+    # ------------------------------------------------------------------
+    # RING RESTRICTION. With `ring_nodes=None` every helper below is the
+    # IDENTITY, so the full-matrix path is bit-for-bit what it was. With a
+    # ring supplied, the same code assembles only that ring's block: the
+    # derivative matrices are sliced to the ring's columns (rows for the
+    # transposes), the accumulators shrink to 3*|R|, and node-diagonal
+    # quantities are restricted to the ring's nodes.
+    #
+    # This replaces `restricted_assemble._rewrite_source()`, which produced the
+    # same thing by reading THIS function's source with inspect.getsource,
+    # regex-rewriting it and exec'ing the result -- a construction that could
+    # not be packaged, could not be tested directly, and silently depended on
+    # the exact text below.
+    _Rnode = kwargs.get("ring_nodes", None)
+    if _Rnode is None:
+        _nR = n_total
+
+        def _selc(M):
+            return M
+
+        def _selr(M):
+            return M
+
+        def _nodesel(v):
+            return v
+
+        def _diag_r(v):
+            return jnp.diag(v)
+
+        def _diag_col(v):
+            return jnp.diag(jnp.asarray(v).reshape(-1))
+
+        def _fit(M):
+            return M
+
+    else:
+        _Rnode = jnp.asarray(_Rnode)
+        _nR = int(_Rnode.size)
+        _ar = jnp.arange(_nR)
+
+        def _selc(M):
+            return M[:, _Rnode]
+
+        def _selr(M):
+            return M[_Rnode, :]
+
+        def _nodesel(v):
+            v = jnp.asarray(v)
+            return v[_Rnode] if v.shape[0] == n_total else v
+
+        def _diag_r(v):
+            # 2-D in -> extraction from an already ring-local matrix.
+            v = jnp.asarray(v)
+            if v.ndim == 2:
+                return jnp.diag(v)
+            v = v.reshape(-1)
+            return jnp.diag(v[_Rnode]) if v.size == n_total else jnp.diag(v)
+
+        def _diag_col(v):
+            # A node-diagonal OPERATOR that gets added to a D matrix must be
+            # column-sliced, not reduced to a ring block: diag(v)[:, R].
+            v = jnp.asarray(v).reshape(-1)
+            return (
+                jnp.zeros((n_total, _nR), dtype=v.dtype).at[_Rnode, _ar].set(v[_Rnode])
+            )
+
+        def _fit(M):
+            # A term with a derivative on only one side keeps the full node
+            # dimension on the underived side, because the implicit identity
+            # there was never sliced. Restrict any surviving full-length axis.
+            M = jnp.asarray(M)
+            if M.ndim == 2 and M.shape[0] == n_total:
+                M = M[_Rnode, :]
+            if M.ndim == 2 and M.shape[1] == n_total:
+                M = M[:, _Rnode]
+            return M
+
+    D_rho = _selc(D_rho)
+    D_theta = _selc(D_theta)
+    D_zeta = _selc(D_zeta)
+    D_thetaT = _selr(D_thetaT)
+    D_zetaT = _selr(D_zetaT)
+
     # Arbitrary choice. Mostly used to decide the range of eigenvalues of
     # the mass matrix. Pre-conditioning should remove this factor
     n0 = jnp.asarray(kwargs.get("density", jnp.ones(n_total))).reshape(n_total, 1)
 
     # Define block indices
-    rho_idx = slice(0, n_total)
-    ups_idx = slice(n_total, 2 * n_total)
-    zeta_idx = slice(2 * n_total, 3 * n_total)
+    rho_idx = slice(0, _nR)
+    ups_idx = slice(_nR, 2 * _nR)
+    zeta_idx = slice(2 * _nR, 3 * _nR)
 
     ## Create the full matrix
     if axisym:
-        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.complex128)
-        B = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.complex128)
+        A = jnp.zeros((3 * _nR, 3 * _nR), dtype=jnp.complex128)
+        B = jnp.zeros((3 * _nR, 3 * _nR), dtype=jnp.complex128)
     else:
-        A = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.float64)
-        B = jnp.zeros((3 * n_total, 3 * n_total), dtype=jnp.float64)
+        A = jnp.zeros((3 * _nR, 3 * _nR), dtype=jnp.float64)
+        B = jnp.zeros((3 * _nR, 3 * _nR), dtype=jnp.float64)
 
     sqrtg = data["sqrt(g)_PEST"][:, None] * 1 / a_N**3
 
@@ -846,18 +919,20 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     F = -mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
 
-    C_zeta = jnp.diag(partial_z_log_sqrtg) + D_zeta
-    C_rho = jnp.diag(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
-    C_theta = jnp.diag(partial_v_log_sqrtg) + D_theta
+    C_zeta = _diag_col(partial_z_log_sqrtg) + D_zeta
+    C_rho = _diag_col(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
+    C_theta = _diag_col(partial_v_log_sqrtg) + D_theta
 
     ####################
     ####----Q²_ρρ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
-        D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
-        + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
-        + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
-        + _cT((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta) @ D_theta
+        _fit(
+            D_thetaT @ ((psi_r_over_sqrtg * iota**2 * psi_r3 * W * g_rr) * D_theta)
+            + D_zetaT @ ((psi_r_over_sqrtg * W * psi_r3 * g_rr) * D_zeta)
+            + D_thetaT @ ((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta)
+            + _cT((psi_r_over_sqrtg * iota * psi_r3 * W * g_rr) * D_zeta) @ D_theta
+        )
     )
 
     ####################
@@ -865,96 +940,149 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     ####################
     # enforcing symmetry exactly
     A = A.at[ups_idx, ups_idx].add(
-        0.5
-        * (
-            D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
-            + _cT((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta) @ D_zeta
+        _fit(
+            0.5
+            * (
+                D_zetaT @ ((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta)
+                + _cT((psi_r_over_sqrtg * psi_r * W * g_vv) * D_zeta) @ D_zeta
+            )
         )
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        +_cT(D_rho * iota_psi_r2.T)
-        @ ((psi_r_over_sqrtg * W * g_vv / psi_r) * (D_rho * iota_psi_r2.T))
+        _fit(
+            +_cT(D_rho * _nodesel(iota_psi_r2).T)
+            @ (
+                (psi_r_over_sqrtg * W * g_vv / psi_r)
+                * (D_rho * _nodesel(iota_psi_r2).T)
+            )
+        )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1 * _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
+        _fit(
+            -1
+            * _cT(D_rho * _nodesel(iota_psi_r2).T)
+            @ ((psi_r_over_sqrtg * W * g_vv) * D_zeta)
+        )
     )
 
     ####################
     ####----Q²_ζζ---####
     ####################
     A = A.at[ups_idx, ups_idx].add(
-        0.5
-        * (
-            _cT(D_theta) @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
-            + _cT((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta) @ D_theta
+        _fit(
+            0.5
+            * (
+                _cT(D_theta) @ ((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta)
+                + _cT((psi_r_over_sqrtg * psi_r * W * g_pp) * D_theta) @ D_theta
+            )
         )
     )
     A = A.at[rho_idx, rho_idx].add(
-        +_cT(D_rho * psi_r2.T)
-        @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * psi_r2.T))
+        _fit(
+            +_cT(D_rho * _nodesel(psi_r2).T)
+            @ ((psi_r_over_sqrtg * W * g_pp / psi_r) * (D_rho * _nodesel(psi_r2).T))
+        )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        1 * _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
+        _fit(
+            1
+            * _cT(D_rho * _nodesel(psi_r2).T)
+            @ ((psi_r_over_sqrtg * W * g_pp) * D_theta)
+        )
     )
 
     ####################
     ####----Q²_ρϑ----###
     ####################
     A = A.at[rho_idx, rho_idx].add(
-        -1
-        * (
-            _cT(D_theta)
-            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
-            + _cT(D_zeta)
-            @ ((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
+        _fit(
+            -1
+            * (
+                _cT(D_theta)
+                @ (
+                    (iota * psi_r * psi_r_over_sqrtg * W * g_rv)
+                    * (D_rho * _nodesel(iota_psi_r2).T)
+                )
+                + _cT(D_zeta)
+                @ (
+                    (psi_r * psi_r_over_sqrtg * W * g_rv)
+                    * (D_rho * _nodesel(iota_psi_r2).T)
+                )
+            )
         )
     )
 
     ## transposed part of the mixed term along the ρ-ρ block diagonal
     A = A.at[rho_idx, rho_idx].add(
-        -1
-        * (
-            _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
-            @ D_theta
-            + _cT((psi_r * psi_r_over_sqrtg * W * g_rv) * (D_rho * iota_psi_r2.T))
-            @ D_zeta
+        _fit(
+            -1
+            * (
+                _cT(
+                    (iota * psi_r * psi_r_over_sqrtg * W * g_rv)
+                    * (D_rho * _nodesel(iota_psi_r2).T)
+                )
+                @ D_theta
+                + _cT(
+                    (psi_r * psi_r_over_sqrtg * W * g_rv)
+                    * (D_rho * _nodesel(iota_psi_r2).T)
+                )
+                @ D_zeta
+            )
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
-        + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        _fit(
+            _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+            + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rv) * D_zeta)
+        )
     )
 
     ######################
     ####-----Q²_ρζ-----###
     ######################
     A = A.at[rho_idx, rho_idx].add(
-        -1
-        * (
-            _cT(D_theta)
-            @ ((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
-            + _cT(D_zeta) @ ((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
+        _fit(
+            -1
+            * (
+                _cT(D_theta)
+                @ (
+                    (iota * psi_r * psi_r_over_sqrtg * W * g_rp)
+                    * (D_rho * _nodesel(psi_r2).T)
+                )
+                + _cT(D_zeta)
+                @ ((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * _nodesel(psi_r2).T))
+            )
         )
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        -1
-        * (
-            _cT((iota * psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T))
-            @ D_theta
-            + _cT((psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * psi_r2.T)) @ D_zeta
+        _fit(
+            -1
+            * (
+                _cT(
+                    (iota * psi_r * psi_r_over_sqrtg * W * g_rp)
+                    * (D_rho * _nodesel(psi_r2).T)
+                )
+                @ D_theta
+                + _cT(
+                    (psi_r * psi_r_over_sqrtg * W * g_rp) * (D_rho * _nodesel(psi_r2).T)
+                )
+                @ D_zeta
+            )
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1
-        * (
-            _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
-            + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+        _fit(
+            -1
+            * (
+                _cT(D_theta) @ ((iota * psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+                + _cT(D_zeta) @ ((psi_r2 * psi_r_over_sqrtg * W * g_rp) * D_theta)
+            )
         )
     )
 
@@ -962,34 +1090,46 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     ######-----Q²_ϑζ-----#####
     ##########################
     A = A.at[ups_idx, ups_idx].add(
-        -1
-        * (
-            _cT(D_zeta) @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
-            + _cT((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta) @ D_zeta
+        _fit(
+            -1
+            * (
+                _cT(D_zeta) @ ((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta)
+                + _cT((psi_r_over_sqrtg * W * psi_r * g_vp) * D_theta) @ D_zeta
+            )
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        -1
-        * (
-            _cT(D_rho * psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
-            - _cT(D_rho * iota_psi_r2.T) @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
+        _fit(
+            -1
+            * (
+                _cT(D_rho * _nodesel(psi_r2).T)
+                @ ((psi_r_over_sqrtg * W * g_vp) * D_zeta)
+                - _cT(D_rho * _nodesel(iota_psi_r2).T)
+                @ ((psi_r_over_sqrtg * W * g_vp) * D_theta)
+            )
         )
     )
 
     A = A.at[rho_idx, rho_idx].add(
-        1
-        * (
-            _cT(D_rho * iota_psi_r2.T)
-            @ ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
+        _fit(
+            1
+            * (
+                _cT(D_rho * _nodesel(iota_psi_r2).T)
+                @ ((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * _nodesel(psi_r2).T))
+            )
         )
     )
     # ρ-ρ symmetrizing term
     A = A.at[rho_idx, rho_idx].add(
-        1
-        * (
-            _cT((psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * psi_r2.T))
-            @ (D_rho * iota_psi_r2.T)
+        _fit(
+            1
+            * (
+                _cT(
+                    (psi_r_over_sqrtg * W * g_vp / psi_r) * (D_rho * _nodesel(psi_r2).T)
+                )
+                @ (D_rho * _nodesel(iota_psi_r2).T)
+            )
         )
     )
 
@@ -997,25 +1137,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # \xi^{\rho} (\mathbf{J} \times \nabla\rho)/|\nabla \rho|^2 \cdot \mathbf{Q}
     # Some algebra is performed to replace g_sup_rv and g_sup_rp
     A = A.at[rho_idx, rho_idx].add(
-        1.0
-        * (
-            (
-                W
-                * psi_r2
-                * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
-                / g_sup_rr
-            )
-            * (iota * D_theta + D_zeta)
-            - (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T)
-            + (W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T)
-        )
-    )
-
-    # ρ-ρ block transposed for symmetry
-    A = A.at[rho_idx, rho_idx].add(
-        1.0
-        * (
-            _cT(
+        _fit(
+            1.0
+            * (
                 (
                     W
                     * psi_r2
@@ -1023,27 +1147,55 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                     / g_sup_rr
                 )
                 * (iota * D_theta + D_zeta)
+                - (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * _nodesel(iota_psi_r2).T)
+                + (W * sqrtg * psi_r * j_sup_theta) * (D_rho * _nodesel(psi_r2).T)
             )
-            - _cT((W * sqrtg * psi_r * j_sup_zeta) * (D_rho * iota_psi_r2.T))
-            + _cT((W * sqrtg * psi_r * j_sup_theta) * (D_rho * psi_r2.T))
+        )
+    )
+
+    # ρ-ρ block transposed for symmetry
+    A = A.at[rho_idx, rho_idx].add(
+        _fit(
+            1.0
+            * (
+                _cT(
+                    (
+                        W
+                        * psi_r2
+                        * (j_sup_theta * g_sup_rp_term - j_sup_zeta * g_sup_rv_term)
+                        / g_sup_rr
+                    )
+                    * (iota * D_theta + D_zeta)
+                )
+                - _cT(
+                    (W * sqrtg * psi_r * j_sup_zeta) * (D_rho * _nodesel(iota_psi_r2).T)
+                )
+                + _cT((W * sqrtg * psi_r * j_sup_theta) * (D_rho * _nodesel(psi_r2).T))
+            )
         )
     )
 
     A = A.at[rho_idx, ups_idx].add(
-        (W * psi_r2 * sqrtg * j_sup_theta) * D_theta
-        + (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        _fit(
+            (W * psi_r2 * sqrtg * j_sup_theta) * D_theta
+            + (W * psi_r2 * sqrtg * j_sup_zeta) * D_zeta
+        )
     )
 
     ## diagonal |J|² term
     A = A.at[rho_idx, rho_idx].add(
-        jnp.diag((psi_r2 * W * sqrtg * J2 / g_sup_rr).flatten())
+        _fit(_diag_r((psi_r2 * W * sqrtg * J2 / g_sup_rr).flatten()))
     )
 
     # Mass matrix (must be symmetric positive definite)
-    B = B.at[rho_idx, rho_idx].add(jnp.diag((n0 * W * psi_r2 * sqrtg * g_rr).flatten()))
-    B = B.at[ups_idx, ups_idx].add(jnp.diag((n0 * W * sqrtg * g_vv).flatten()))
+    B = B.at[rho_idx, rho_idx].add(
+        _fit(_diag_r((n0 * W * psi_r2 * sqrtg * g_rr).flatten()))
+    )
+    B = B.at[ups_idx, ups_idx].add(_fit(_diag_r((n0 * W * sqrtg * g_vv).flatten())))
 
-    B = B.at[rho_idx, ups_idx].add(jnp.diag((n0 * W * psi_r * sqrtg * g_rv).flatten()))
+    B = B.at[rho_idx, ups_idx].add(
+        _fit(_diag_r((n0 * W * psi_r * sqrtg * g_rv).flatten()))
+    )
 
     # typical in magnetic mirrors. `ismirror` is a TRACED bool (depends on iota), so a
     # Python `if ismirror` raises TracerBoolConversionError under jit (the assembly
@@ -1068,9 +1220,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         n0 * W * psi_r * sqrtg * g_vp,
         n0 * W * sqrtg * (g_vv + iotainv * g_vp),
     )
-    B = B.at[zeta_idx, zeta_idx].add(jnp.diag(zz.flatten()))
-    B = B.at[rho_idx, zeta_idx].add(jnp.diag(rz.flatten()))
-    B = B.at[ups_idx, zeta_idx].add(jnp.diag(uz.flatten()))
+    B = B.at[zeta_idx, zeta_idx].add(_fit(_diag_r(zz.flatten())))
+    B = B.at[rho_idx, zeta_idx].add(_fit(_diag_r(rz.flatten())))
+    B = B.at[ups_idx, zeta_idx].add(_fit(_diag_r(uz.flatten())))
 
     ##A = np.where(np.abs(A) >= 1e-11, 1.0, 0.0)
     # from matplotlib import pyplot as plt
@@ -1079,29 +1231,41 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     # purely stabilizing and doesn't change the marginal stability
     A = A.at[rho_idx, rho_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * (C_rho * psi_r.T))
+        _fit(
+            _cT(C_rho * _nodesel(psi_r).T)
+            @ ((gamma * sqrtg * W * p0) * (C_rho * _nodesel(psi_r).T))
+        )
     )
-    A = A.at[ups_idx, ups_idx].add(_cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta))
+    A = A.at[ups_idx, ups_idx].add(
+        _fit(_cT(C_theta) @ ((gamma * sqrtg * W * p0) * C_theta))
+    )
     A = A.at[rho_idx, ups_idx].add(
-        _cT(C_rho * psi_r.T) @ ((gamma * sqrtg * W * p0) * C_theta)
+        _fit(_cT(C_rho * _nodesel(psi_r).T) @ ((gamma * sqrtg * W * p0) * C_theta))
     )
 
     A = A.at[zeta_idx, zeta_idx].add(
-        _cT(C_theta + C_zeta * iotainv.T)
-        @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _fit(
+            _cT(C_theta + C_zeta * _nodesel(iotainv).T)
+            @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * _nodesel(iotainv).T))
+        )
     )
     A = A.at[rho_idx, zeta_idx].add(
-        _cT(C_rho * psi_r.T)
-        @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _fit(
+            _cT(C_rho * _nodesel(psi_r).T)
+            @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * _nodesel(iotainv).T))
+        )
     )
     A = A.at[ups_idx, zeta_idx].add(
-        _cT(C_theta) @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * iotainv.T))
+        _fit(
+            _cT(C_theta)
+            @ ((gamma * sqrtg * W * p0) * (C_theta + C_zeta * _nodesel(iotainv).T))
+        )
     )
 
     #### Instability drive term
     # Au = jnp.zeros((3 * n_total, 3 * n_total))
-    # Au = Au.at[rho_idx, rho_idx].add(jnp.diag((W * psi_r2 * sqrtg * F).flatten()))
-    au_diag = (W * psi_r2 * sqrtg * F).flatten()
+    # Au = Au.at[rho_idx, rho_idx].add(_diag_r((W * psi_r2 * sqrtg * F).flatten()))
+    au_diag = _nodesel((W * psi_r2 * sqrtg * F).flatten())
 
     rt_size = n_rho_max * n_theta_max
     zernike_penalty_alpha, Q_rt, penalty_rank = _get_zernike_penalty(
@@ -1130,9 +1294,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                 else np.kron(np.asarray(Q_rt), np.eye(n_zeta_max))
             )
         penalty = jnp.asarray(zernike_penalty_alpha * Q, dtype=A.dtype)
-        A = A.at[rho_idx, rho_idx].add(penalty)
-        A = A.at[ups_idx, ups_idx].add(penalty)
-        A = A.at[zeta_idx, zeta_idx].add(penalty)
+        A = A.at[rho_idx, rho_idx].add(_fit(penalty))
+        A = A.at[ups_idx, ups_idx].add(_fit(penalty))
+        A = A.at[zeta_idx, zeta_idx].add(_fit(penalty))
         rank_msg = "unknown" if penalty_rank is None else str(penalty_rank)
         # penalized_msg = (
         #    "unknown" if penalty_rank is None else str(rt_size - penalty_rank)
@@ -1153,7 +1317,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, rho_idx].set(_cT(B[rho_idx, zeta_idx]))
     B = B.at[zeta_idx, ups_idx].set(_cT(B[ups_idx, zeta_idx]))
 
-    d = 1 / jnp.sqrt(jnp.diag(B))  # 1D array
+    d = 1 / jnp.sqrt(_diag_r(B))  # 1D array
 
     # MEMORY (Step 1): the A whitening is DEFERRED to after B_blocks is extracted and B
     # is released -- see the optimization_barrier below. Doing it here holds
@@ -1166,24 +1330,24 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # TODO: B_blocks will always be real for axisym=True, complex data type
     # is used to avoid trivial dtype-related errors. Fix later!
     if axisym:
-        B_blocks = jnp.zeros((n_total, 3, 3), dtype=jnp.complex128)
-        I3 = jnp.tile(jnp.eye(3, dtype=jnp.complex128), (n_total, 1, 1))
+        B_blocks = jnp.zeros((_nR, 3, 3), dtype=jnp.complex128)
+        I3 = jnp.tile(jnp.eye(3, dtype=jnp.complex128), (_nR, 1, 1))
     else:
-        B_blocks = jnp.zeros((n_total, 3, 3))
-        I3 = jnp.tile(jnp.eye(3), (n_total, 1, 1))
+        B_blocks = jnp.zeros((_nR, 3, 3))
+        I3 = jnp.tile(jnp.eye(3), (_nR, 1, 1))
 
-    B_blocks = B_blocks.at[:, 0, 0].set(jnp.diag(B[rho_idx, rho_idx]))
-    B_blocks = B_blocks.at[:, 1, 1].set(jnp.diag(B[ups_idx, ups_idx]))
-    B_blocks = B_blocks.at[:, 2, 2].set(jnp.diag(B[zeta_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 0, 0].set(_diag_r(B[rho_idx, rho_idx]))
+    B_blocks = B_blocks.at[:, 1, 1].set(_diag_r(B[ups_idx, ups_idx]))
+    B_blocks = B_blocks.at[:, 2, 2].set(_diag_r(B[zeta_idx, zeta_idx]))
 
-    B_blocks = B_blocks.at[:, 0, 1].set(jnp.diag(B[rho_idx, ups_idx]))
-    B_blocks = B_blocks.at[:, 1, 0].set(jnp.diag(B[ups_idx, rho_idx]))
+    B_blocks = B_blocks.at[:, 0, 1].set(_diag_r(B[rho_idx, ups_idx]))
+    B_blocks = B_blocks.at[:, 1, 0].set(_diag_r(B[ups_idx, rho_idx]))
 
-    B_blocks = B_blocks.at[:, 2, 0].set(jnp.diag(B[rho_idx, zeta_idx]))
-    B_blocks = B_blocks.at[:, 0, 2].set(jnp.diag(B[zeta_idx, rho_idx]))
+    B_blocks = B_blocks.at[:, 2, 0].set(_diag_r(B[rho_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 0, 2].set(_diag_r(B[zeta_idx, rho_idx]))
 
-    B_blocks = B_blocks.at[:, 1, 2].set(jnp.diag(B[ups_idx, zeta_idx]))
-    B_blocks = B_blocks.at[:, 2, 1].set(jnp.diag(B[zeta_idx, ups_idx]))
+    B_blocks = B_blocks.at[:, 1, 2].set(_diag_r(B[ups_idx, zeta_idx]))
+    B_blocks = B_blocks.at[:, 2, 1].set(_diag_r(B[zeta_idx, ups_idx]))
 
     # B is DEAD here -- only the small (N,3,3) B_blocks is used downstream. Whiten A
     # NOW, after B can be released, so the two whitenings never overlap.
@@ -1203,15 +1367,22 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # jax_lanczos path where the assembly is traced.
     node_ids = np.arange(n_total)
     rho_shell = node_ids // n_per_shell
-    boundary = np.asarray((rho_shell == 0) | (rho_shell == (n_rho_max - 1)))
-    # boundary = (rho_shell == (n_rho_max - 1))
+    # jnp, not np: on the ring path `_nodesel` indexes this with `ring_nodes`,
+    # which is a TRACER under the vmap that builds all rings at once. numpy
+    # cannot be indexed by a tracer.
+    boundary = _nodesel(jnp.asarray((rho_shell == 0) | (rho_shell == (n_rho_max - 1))))
 
     # In lambda3 the local basis is (rho, upsilon, zeta)
-    # so remove rho-upsilon and rho-zeta couplings on the boundary
-    B_blocks = B_blocks.at[boundary, 0, 1].set(0)
-    B_blocks = B_blocks.at[boundary, 1, 0].set(0)
-    B_blocks = B_blocks.at[boundary, 0, 2].set(0)
-    B_blocks = B_blocks.at[boundary, 2, 0].set(0)
+    # so remove rho-upsilon and rho-zeta couplings on the boundary.
+    #
+    # Written as `jnp.where` over the full leading axis rather than
+    # `.at[boundary, i, j]`: a BOOLEAN-MASK index needs a concrete mask, and
+    # under the ring vmap `boundary` is traced. The two forms are identical
+    # elementwise.
+    for _i, _j in ((0, 1), (1, 0), (0, 2), (2, 0)):
+        B_blocks = B_blocks.at[:, _i, _j].set(
+            jnp.where(boundary, 0.0, B_blocks[:, _i, _j])
+        )
 
     L = jnp.linalg.cholesky(B_blocks)  # (N,3,3)
 
@@ -1292,6 +1463,13 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
         return perm
 
+    if _Rnode is not None:
+        # RING PATH ends here. Everything past this point -- the component/node
+        # permutation, the whitening, the keep-mask reduction -- is global to the
+        # full matrix and meaningless for a single ring block. The caller
+        # (`ring_block`) finishes the block from these three pieces.
+        return {"A": A, "Linv": Linv, "au_diag": au_diag}
+
     # components to node permutations
     p = component_to_node_permutn(n_total)
     A = A[p][:, p]
@@ -1305,12 +1483,12 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # Add a constant shift to the diagonal of A (in the whitened L^-1 A L^-T
     # basis) for positive-definiteness, BEFORE adding the instability drive.
     # This uniformly shifts every eigenvalue by the constant.
-    A = A.at[node_idx, :, node_idx, :].add(1e-14 * jnp.eye(3))
+    A = A.at[node_idx, :, node_idx, :].add(_fit(1e-14 * jnp.eye(3)))
 
     # Add transformed instability-drive contribution without materializing Au.
     L0 = Linv[:, :, 0]
     au_node = au_diag[:, None, None] * L0[:, :, None] * L0[:, None, :]
-    A = A.at[node_idx, :, node_idx, :].add(au_node)
+    A = A.at[node_idx, :, node_idx, :].add(_fit(au_node))
 
     A = A.reshape(3 * n_total, 3 * n_total)
 
@@ -1398,8 +1576,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     incompressible="bool: imposes incompressibility",
     gamma="float: adiabatic constant",
     density="ndarray: the radial density profile",
-    stable_only="bool: for testing only, materialize "
-    + "and eigendecompose the stable part of the matrix",
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
     coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier (rho, theta) "
@@ -1693,8 +1869,6 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     n_mode_axisym="int: toroidal mode number to study",
     incompressible="bool: imposes incompressibility",
     gamma="float: adiabatic constant",
-    stable_only="bool: for testing only, materialize "
-    + "and eigendecompose the stable part of the matrix",
     v_guess="ndarray: eigenfunction guess to initialize the "
     + "iterative eigenvalue solver",
     density="ndarray: the radial density profile",
@@ -1715,11 +1889,11 @@ def _AGNI_eigenfunction3(params, transforms, profiles, data, **kwargs):
 def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     """Build the reduced, whitened finite-n lambda3 operator ``Ax``.
 
-    This is the operator construction lifted verbatim out of
-    ``_AGNI3_matfree`` so that it has exactly one definition. Both the
-    matrix-free eigensolver (``finite-n lambda3 matfree``) and the
-    fixed-vector Rayleigh quotient (``finite-n lambda3 rayleigh``) call
-    this, so the two can never drift apart.
+    Single definition of the operator. ``finite-n lambda3 rayleigh`` builds its
+    ``jax_lanczos`` and ``pcg_deflated`` operators from this, and the ring
+    preconditioner's blocks are sub-blocks of the same matrix, so everything
+    matrix-free in this module agrees by construction rather than by
+    maintenance.
 
     Returns a dict of the operator plus the intermediates the callers need.
     """
@@ -1919,7 +2093,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
                 "unknown" if penalty_rank is None else str(rt_size - penalty_rank)
             )
             print(
-                "[finite-n lambda3 matfree:coupled penalty]",
+                "[agni3 matfree operator:coupled penalty]",
                 f"alpha={zernike_penalty_alpha:.3e}",
                 f"rank={rank_msg}/{rt_size}",
                 f"penalized_rt={penalized_msg}",
@@ -2160,415 +2334,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="finite-n lambda3 matfree",
-    label="low-\\n \\lambda = \\gamma^2",
-    units="~",
-    units_long="None",
-    description="Normalized squared growth rate using lambda3 algebra in matrix-free form",
-    dim=1,
-    params=["Psi"],
-    transforms={"grid": [], "diffmat": []},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "g_rr|PEST",
-        "g_rv|PEST",
-        "g_rp|PEST",
-        "g_vv|PEST",
-        "g_vp|PEST",
-        "g_pp|PEST",
-        "g^rr",
-        "g^rv",
-        "g^rz",
-        "J^theta_PEST",
-        "J^zeta",
-        "|J|",
-        "sqrt(g)_PEST",
-        "(sqrt(g)_PEST_r)|PEST",
-        "(sqrt(g)_PEST_v)|PEST",
-        "(sqrt(g)_PEST_p)|PEST",
-        "finite-n instability drive",
-        "iota",
-        "psi_r",
-        "psi_rr",
-        "p",
-        "p_r",
-        "a",
-    ],
-    axisym="bool: if the equilibrium is axisymmetric",
-    n_mode_axisym="int: toroidal mode number to study",
-    incompressible="bool: imposes incompressibility",
-    gamma="float: adiabatic constant",
-    stable_only="bool: for testing only, materialize and eigendecompose the stable part of the matrix",
-    v_guess="ndarray: eigenfunction guess to initialize the iterative eigenvalue solver",
-    matfree_solver="str: matrix-free eigensolver backend ('eigsh_shiftinvert' "
-    "(default), 'shiftinvert_cg', 'shiftinvert_bicgstab', or 'shiftinvert_gmres')",
-    eigsh_tol="float: tolerance for ARPACK eigsh in matrix-free mode",
-    eigsh_maxiter="int: max iterations for ARPACK eigsh in matrix-free mode",
-    eigsh_ncv="int: number of Lanczos vectors used by ARPACK eigsh",
-    debug_matfree="bool: print matrix-free solver diagnostics",
-    sigma="float: shift used by shiftinvert_cg solver",
-    num_matvecs="int: Lanczos matvec count for shiftinvert_cg solver",
-    cg_tol="float: CG tolerance inside shiftinvert_cg solver",
-    cg_maxiter="int: CG max iterations inside shiftinvert_cg solver",
-    check_v_guess_only="bool: apply matrix-free Ax to v_guess without eigensolve",
-    lambda_guess="float: eigenvalue used by check_v_guess_only",
-    build_matrix="bool: materialize and return the reduced operator A (column j = Ax(e_j))",
-    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier (rho, theta) "
-    "operators instead of separable 1D matrices",
-    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
-    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
-)
-def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
-    """Matrix-free version of finite-n lambda3 in the (rho, upsilon, zeta) basis.
-
-    When ``coupled_rt`` is set, ``D_rho0``/``D_theta0`` are the full,
-    non-separable 2D (rho, theta) Zernike-Fourier operators of shape
-    ``(n_rho*n_theta,)*2`` and the per-direction node counts come from
-    ``n_rho_coupled``/``n_theta_coupled``. This mirrors the ``coupled_rt``
-    treatment in ``finite-n lambda3`` (``_AGNI3``): the quadrature weights still
-    factorize (``W_rho (x) W_theta (x) W_zeta``), node ordering stays rho-major
-    (rho outer, theta inner, zeta innermost), and only the ``d_dr``/``d_dv``
-    derivative helpers change to flatten the (rho, theta) axes and apply the
-    full coupled operator.
-    """
-    # noqa: unused dependency
-    _ = params["Psi"]
-    _op = _agni3_matfree_operator(params, transforms, profiles, data, **kwargs)
-    Ax = _op["Ax"]
-    D_rho0 = _op["D_rho0"]
-    D_theta0 = _op["D_theta0"]
-    D_zeta0 = _op["D_zeta0"]
-    Linv_DT = _op["Linv_DT"]
-    diagBsqinv = _op["diagBsqinv"]
-    g_pp = _op["g_pp"]
-    g_rp = _op["g_rp"]
-    g_rr = _op["g_rr"]
-    g_rv = _op["g_rv"]
-    g_vp = _op["g_vp"]
-    g_vv = _op["g_vv"]
-    iota = _op["iota"]
-    keep = _op["keep"]
-    n_keep = _op["n_keep"]
-    n_rho = _op["n_rho"]
-    n_theta = _op["n_theta"]
-    n_total = _op["n_total"]
-    n_zeta = _op["n_zeta"]
-    psi_r = _op["psi_r"]
-    psi_r_over_sqrtg = _op["psi_r_over_sqrtg"]
-    d_dr = _op["d_dr"]
-    d_dv = _op["d_dv"]
-    d_dz = _op["d_dz"]
-
-    # Optionally materialize the reduced operator A (column j = Ax(e_j)).
-    # BATCHED + host-accumulated: never forms the full n x n identity (only small
-    # (b, n_keep) sub-identity blocks), vmaps Ax over one batch at a time, and moves
-    # each batch to host. So the DEVICE only ever holds one batch's intermediates
-    # (not the width-n vmap), which lets moderate/high n build on a GPU; the full
-    # A_mat lives on host (numpy) for the CPU eigh. Batch size via AGNI_BUILD_BATCH.
-    if bool(kwargs.get("build_matrix", False)):
-        import os as _os
-
-        _dt = Ax(jnp.ones(n_keep)).dtype
-        bs = int(
-            kwargs.get("build_matrix_batch", _os.environ.get("AGNI_BUILD_BATCH", 512))
-        )
-        bs = max(1, min(bs, n_keep))
-        rows = []
-        for j0 in range(0, n_keep, bs):
-            j1 = min(j0 + bs, n_keep)
-            blk = (
-                jnp.zeros((j1 - j0, n_keep), dtype=_dt)
-                .at[jnp.arange(j1 - j0), jnp.arange(j0, j1)]
-                .set(1.0)
-            )  # e_{j0..j1-1}
-            rows.append(np.asarray(jax.vmap(Ax)(blk)))  # row i = A e_{j0+i}
-        A_mat = np.concatenate(rows, axis=0).T  # columns = A e_j
-        data["finite-n lambda3 matfree operator"] = A_mat
-        data["finite-n lambda3 matfree keep"] = keep
-        return data
-
-    v0 = kwargs.get("v_guess", jnp.ones(n_keep))
-    v0 = jnp.asarray(v0).reshape(-1)
-    if v0.size == 3 * n_total:
-        v0 = v0[keep]
-    elif v0.size != n_keep:
-        print(
-            "finite-n lambda3 matfree ignoring invalid v_guess size:",
-            f"got={v0.size}, expected={n_keep} or {3 * n_total}",
-        )
-        v0 = jnp.ones(n_keep)
-
-    matfree_solver = str(kwargs.get("matfree_solver", "eigsh_shiftinvert")).lower()
-    debug_matfree = bool(kwargs.get("debug_matfree", False))
-    check_v_guess_only = bool(kwargs.get("check_v_guess_only", False))
-    shiftinvert_stats = None
-
-    if check_v_guess_only:
-        ax_v0 = Ax(v0)
-        lambda_guess = kwargs.get("lambda_guess", None)
-        if lambda_guess is None:
-            lambda_guess = jnp.real(jnp.vdot(v0, ax_v0) / jnp.vdot(v0, v0))
-        w = jnp.atleast_1d(jnp.asarray(lambda_guess, dtype=ax_v0.dtype))
-        v = v0
-        # Ratio residual: per-component (Av - lam v)/v evaluated ONLY where the
-        # eigenVECTOR is significant (|v| > 1e-5) -- i.e. on the mode's own support,
-        # where Av/v must equal lam. Masking on |v| (not |Av|) avoids keying on the
-        # high-mode-contaminated components, so this is far less sensitive to A's
-        # ~1e6 high modes than the relative_residual ||Av-lam v||/||Av|| below.
-        ratio_mask = jnp.abs(v0) > 1e-5
-        n_ratio = jnp.sum(ratio_mask)
-        safe_v = jnp.where(ratio_mask, v0, 1.0)
-        per_comp = jnp.where(ratio_mask, (ax_v0 - w[0] * v0) / safe_v, 0.0)
-        ratio_residual = jnp.linalg.norm(per_comp)
-        # dimensionless RMS: mean per-node |Av/v - lam| relative to |lam|
-        ratio_residual_rel = ratio_residual / (
-            jnp.abs(w[0]) * jnp.sqrt(jnp.maximum(n_ratio, 1))
-        )
-        relative_residual = jnp.linalg.norm(ax_v0 - w[0] * v0) / (
-            jnp.linalg.norm(ax_v0) + 1e-300
-        )
-        data["finite-n lambda3 matfree check ratio_residual"] = ratio_residual
-        data["finite-n lambda3 matfree check ratio_residual_rel"] = ratio_residual_rel
-        data["finite-n lambda3 matfree check relative_residual"] = relative_residual
-        data["finite-n lambda3 matfree check n_checked"] = n_ratio
-        # Norm-wise Rayleigh residual r = ||A v - lam_R v|| / (|lam_R| ||v||) with the
-        # Rayleigh quotient lam_R = v^H A v / v^H v. Unlike relative_residual (which is
-        # divided by ||Av|| and therefore deflated by A's ~1e6 high modes), this
-        # normalization exposes eigenvector contamination faithfully -- it is the metric
-        # the matfree-zernike convergence test compares v_mf against v_ref on.
-        lam_rayleigh = jnp.real(jnp.vdot(v0, ax_v0) / jnp.vdot(v0, v0))
-        rayleigh_residual = jnp.linalg.norm(ax_v0 - lam_rayleigh * v0) / (
-            jnp.abs(lam_rayleigh) * jnp.linalg.norm(v0) + 1e-300
-        )
-        data["finite-n lambda3 matfree check lambda_rayleigh"] = lam_rayleigh
-        data["finite-n lambda3 matfree check rayleigh_residual"] = rayleigh_residual
-    elif matfree_solver == "eigsh_shiftinvert":
-        # Matrix-free analogue of the dense path: build the shift-inverted
-        # operator (A - sigma I)^{-1} and ask ARPACK for its largest-magnitude
-        # eigenvalues (which="LM"), which map back to the eigenvalues of A
-        # nearest sigma -- i.e. the most-unstable mode. (A - sigma I) is SPD
-        # when sigma sits below the most-negative eigenvalue, so CG supplies
-        # OPinv without ever materializing A.
-        from scipy.sparse.linalg import cg as _scipy_cg
-
-        sigma = float(kwargs.get("sigma", -1e-1))
-        tol = float(kwargs.get("eigsh_tol", 1e-8))
-        maxiter = kwargs.get("eigsh_maxiter", None)
-        maxiter = None if maxiter is None else int(maxiter)
-        ncv = kwargs.get("eigsh_ncv", None)
-        ncv = None if ncv is None else int(ncv)
-        cg_tol = float(kwargs.get("cg_tol", 1e-8))
-        cg_maxiter = int(kwargs.get("cg_maxiter", 5 * n_keep))
-
-        v0_np = np.asarray(v0)
-        ax0 = np.asarray(Ax(jnp.asarray(v0_np)))
-        op_dtype = np.result_type(ax0.dtype, v0_np.dtype)
-
-        def _ax_np(x):
-            return np.asarray(Ax(jnp.asarray(x)), dtype=op_dtype)
-
-        Aop = LinearOperator(shape=(n_keep, n_keep), matvec=_ax_np, dtype=op_dtype)
-        Ashift = LinearOperator(
-            shape=(n_keep, n_keep),
-            matvec=lambda x: _ax_np(x) - sigma * x,
-            dtype=op_dtype,
-        )
-
-        shiftinvert_stats = {"solves": 0, "total_iters": 0, "infos": []}
-
-        def _opinv(b):
-            iters = {"n": 0}
-            y, _info = _scipy_cg(
-                Ashift,
-                b,
-                rtol=cg_tol,
-                atol=0.0,
-                maxiter=cg_maxiter,
-                callback=lambda _x: iters.__setitem__("n", iters["n"] + 1),
-            )
-            shiftinvert_stats["solves"] += 1
-            shiftinvert_stats["total_iters"] += iters["n"]
-            shiftinvert_stats["infos"].append(int(_info))
-            return y
-
-        OPinv = LinearOperator(shape=(n_keep, n_keep), matvec=_opinv, dtype=op_dtype)
-        w_np, v_np = eigsh(
-            Aop,
-            k=1,
-            sigma=sigma,
-            which="LM",
-            OPinv=OPinv,
-            v0=v0_np.astype(op_dtype, copy=False),
-            tol=tol,
-            maxiter=maxiter,
-            ncv=ncv,
-            return_eigenvectors=True,
-        )
-        w = jnp.asarray(w_np)
-        v = jnp.asarray(v_np[:, 0])
-    elif matfree_solver in {
-        "shiftinvert_cg",
-        "shiftinvert_bicgstab",
-        "shiftinvert_gmres",
-    }:
-        _require_matfree_backend()
-        # Default sigma must sit BELOW the most-unstable (most-negative)
-        # eigenvalue so (A - sigma I) is SPD and CG is valid; matches the
-        # scipy 'eigsh_shiftinvert' default.
-        sigma = kwargs.get("sigma", -1e-1)
-        num_matvecs = int(kwargs.get("num_matvecs", 20))
-        cg_tol = float(kwargs.get("cg_tol", 1e-5))
-        cg_maxiter = int(kwargs.get("cg_maxiter", n_keep))
-
-        # The operator is complex (e.g. axisym D_zeta = 1j n), so the jax CG
-        # while_loop carry must be complex from the start; a real v0 makes the
-        # carry input (real) and output (complex) dtypes disagree and crashes.
-        op_dtype = jnp.result_type(Ax(v0).dtype, v0.dtype)
-        v0 = v0.astype(op_dtype)
-
-        # Inner Krylov solver for (A - sigma I) x = b. cg assumes the shifted
-        # operator is Hermitian SPD; bicgstab/gmres are robust to a non-Hermitian
-        # Ax (e.g. if the raw operator is not exactly Hermitian), which can clean
-        # up the shift-invert Lanczos vectors.
-        _inner = {
-            "shiftinvert_cg": cg,
-            "shiftinvert_bicgstab": bicgstab,
-            "shiftinvert_gmres": gmres,
-        }[matfree_solver]
-
-        def OPinv(b):
-            def Ashift(x):
-                return Ax(x) - sigma * x
-
-            y, _ = _inner(
-                Ashift,
-                b.astype(op_dtype),
-                tol=cg_tol,
-                maxiter=cg_maxiter,
-            )
-            return y
-
-        tridiag = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
-        alg = eig.eigh_partial(tridiag)
-        mu, vecs = alg(lambda x: OPinv(x), v0)
-        sort_idxs = jnp.argsort(mu, descending=True)
-        w = sigma + 1.0 / mu[sort_idxs]
-        v = vecs[sort_idxs][0, :]
-    else:
-        raise ValueError(
-            f"Unknown matfree_solver={matfree_solver!r}; expected "
-            "'eigsh_shiftinvert', 'shiftinvert_cg', 'shiftinvert_bicgstab', "
-            "or 'shiftinvert_gmres'."
-        )
-
-    v_full = jnp.zeros(3 * n_total, dtype=v.dtype)
-    v_full = v_full.at[keep].set(v)
-
-    x = jnp.transpose(v_full.reshape(3, n_total), axes=(1, 0))
-    x = diagBsqinv * jnp.einsum("lij,lj->li", Linv_DT, x)
-    x = x.reshape((n_rho, n_theta, n_zeta, 3))
-    xr = x[..., 0]
-    xv = x[..., 1]
-    xz = x[..., 2]
-
-    # Phase rotation doesn't change the physics. Here, we use it to make the eigenmode up-down symmetric.
-    # phase_offset (default 0) is an optional tunable rotation applied on top of the mean-based alignment.
-    # Same post-processing as the dense solvers; for real (non-axisym) modes this reduces to the identity.
-    phase_offset = kwargs.get("phase_offset", 0.0)
-    xi_ref = xr
-    phase_angle = jnp.arctan2(jnp.mean(xi_ref.real), jnp.mean(xi_ref.imag))
-    xr = (xr * jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xv = (xv * jnp.exp(1j * (phase_angle + phase_offset))).imag
-    xz = (xz * jnp.exp(1j * (phase_angle + phase_offset))).imag
-
-    # Forward derivatives for the homogenized deltaB (matches finite-n lambda7).
-    xr_v = d_dv(D_theta0, xr)
-    xr_z = d_dz(D_zeta0, xr)
-    test_v = d_dv(D_theta0, xv)
-    test_z = d_dz(D_zeta0, xv)
-    xr_r = d_dr(D_rho0, xr)
-    psi_rr = d_dr(D_rho0, psi_r)
-    iota_r = d_dr(D_rho0, iota)
-
-    deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
-    deltaB_v = psi_r_over_sqrtg * (
-        1.0 * (test_z)
-        - 1.0 * (xr_r * iota * psi_r + (2 * iota * psi_rr + iota_r * psi_r) * xr)
-    )
-    deltaB_z = -psi_r_over_sqrtg * (
-        1.0 * (test_v) + 1.0 * (xr_r * psi_r + 2 * psi_rr * xr)
-    )
-
-    deltaV_r = psi_r * xr
-    deltaV_v = xv + xz
-    deltaV_z = xz * 1 / iota
-
-    deltaB2 = (
-        g_rr * deltaB_r**2
-        + 1.0 * g_vv * deltaB_v**2
-        + g_pp * deltaB_z**2
-        + 2.0
-        * (
-            g_rv * deltaB_r * deltaB_v
-            + g_rp * deltaB_r * deltaB_z
-            + g_vp * deltaB_v * deltaB_z
-        )
-    )
-    deltaV2 = (
-        g_rr * deltaV_r**2
-        + 1.0 * g_vv * deltaV_v**2
-        + g_pp * deltaV_z**2
-        + 2.0
-        * (
-            g_rv * deltaV_r * deltaV_v
-            + g_rp * deltaV_r * deltaV_z
-            + g_vp * deltaV_v * deltaV_z
-        )
-    )
-
-    data["finite-n lambda3 matfree"] = w
-    data["finite-n eigenfunction3 matfree"] = v_full
-    data["finite-n xi3 matfree"] = x.reshape((n_rho, n_theta, n_zeta, 3))
-    data["finite-n deltaB"] = jnp.sqrt(deltaB2)
-    data["finite-n deltaB_r"] = deltaB_r
-    data["finite-n deltaB_v"] = deltaB_v
-    data["finite-n deltaB_z"] = deltaB_z
-    data["finite-n deltaV"] = jnp.sqrt(deltaV2)
-    data["finite-n deltaV_r"] = deltaV_r
-    data["finite-n deltaV_v"] = deltaV_v
-    data["finite-n deltaV_z"] = deltaV_z
-    if shiftinvert_stats is not None:
-        data["finite-n lambda3 matfree shiftinvert solves"] = jnp.asarray(
-            shiftinvert_stats["solves"]
-        )
-        data["finite-n lambda3 matfree shiftinvert total_iters"] = jnp.asarray(
-            shiftinvert_stats["total_iters"]
-        )
-        data["finite-n lambda3 matfree shiftinvert infos"] = jnp.asarray(
-            shiftinvert_stats["infos"]
-        )
-        if debug_matfree:
-            print(
-                "[finite-n lambda3 matfree shiftinvert]",
-                f"solves={shiftinvert_stats['solves']}",
-                f"total_cg_iters={shiftinvert_stats['total_iters']}",
-                f"infos={shiftinvert_stats['infos']}",
-                flush=True,
-            )
-    if debug_matfree:
-        idxs = jnp.where(jnp.abs(v) > 1e-4)[0]
-        res = Ax(v)
-        print(
-            jnp.max(res[idxs] / v[idxs]),
-            jnp.min(res[idxs] / v[idxs]),
-            jnp.mean(res[idxs] / v[idxs]),
-        )
-
-    return data
-
-
-@register_compute_fun(
     name="finite-n lambda3 rayleigh",
     label="\\lambda_R = v^T A v / v^T v",
     units="~",
@@ -2612,7 +2377,13 @@ def _AGNI3_matfree(params, transforms, profiles, data, **kwargs):
     gamma="float: adiabatic constant",
     density="ndarray: the radial density profile",
     sigma="float: shift for the ARPACK eigsh that supplies the fresh eigenvector",
+    debug_matfree="bool: print matrix-free operator diagnostics (read by "
+    "`_agni3_matfree_operator`, which this compute function builds its "
+    "jax_lanczos and pcg_deflated operators from)",
     eigsh_tol="float: tolerance for the ARPACK eigsh",
+    num_matvecs="int: Lanczos matvec count for the jax_lanczos and pcg_deflated "
+    "eigensolvers (env AGNI_NUM_MATVECS overrides). Read at the "
+    "`_assemble_and_solve_host`/`_eigensolve_jax`/`_eigensolve_pcg` sites",
     coarse_grid="Grid: optional COARSE level (mapped to DESC coords at these "
     "params) whose generalized modes of (H_c, M_ring,c) supply the deflation "
     "space and the Lanczos seed. Active only with AGNI_COARSE_DEFL=1 and "
@@ -3122,18 +2893,24 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         """
         import sys as _sys
 
-        for _p in (
-            "/pscratch/sd/r/rgaur/AGNI_var/precond_harmonic",
-            "/pscratch/sd/r/rgaur/AGNI_var/precond_stage2",
-        ):
+        # `ritz_store` is the last remaining out-of-package import. It is an
+        # eager-only module global (see OPTIMIZATION.md item D) and is INERT
+        # under jit, so the deflated path does not depend on it; coarse-space
+        # deflation overrides it entirely.
+        for _p in ("/pscratch/sd/r/rgaur/AGNI_var/precond_stage2",):
             if _p not in _sys.path:
                 _sys.path.insert(0, _p)
         import numpy as _np
-        import restricted_assemble as _ra
         import ritz_store as _rs
-        from pcg_test import factor_blocks as _fb
-        from pcg_test import make_precond as _mp
-        from pcg_test import pcg as _pcg
+
+        from ._stability_solvers import build_ring_blocks as _build_rings
+        from ._stability_solvers import factor_ring_blocks as _fb
+        from ._stability_solvers import factor_ring_blocks_traced as _fbt
+        from ._stability_solvers import finish_ring_block as _finish_blk
+        from ._stability_solvers import make_block_precond as _mkprec
+        from ._stability_solvers import pcg as _pcg
+        from ._stability_solvers import ring_index_maps as _ring_maps
+        from ._stability_solvers import ring_nodes as _ring_nodes_fn
 
         _cgmax = int(os.environ.get("CG_MAXITER", "8000"))
         # COLD START. With no carried-over vectors the first evaluation has only
@@ -3277,32 +3054,29 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # difference could not be attributed to the assembly at all. The
             # blocks are a deterministic function of the inputs -- no solve, no
             # iteration count, nothing to confound.
-            import ring_precond_batched as _rpb_c
-
             _f2r_c = _np.ones(3 * n_total, dtype=_np.int64) * -1
             _f2r_c[_keep] = _np.arange(_keep.size)
             _grp_c = []
             for _i in range(n_rho):
                 for _k in range(n_zeta):
-                    _nd = _ra.ring_nodes(n_rho, n_theta, n_zeta, _i, _k)
+                    _nd = _ring_nodes_fn(n_rho, n_theta, n_zeta, _i, _k)
                     _fl = _np.concatenate([_nd, _nd + n_total, _nd + 2 * n_total])
                     _grp_c.append((_nd, _f2r_c[_fl]))
             _bc = max(int((_g >= 0).sum()) for _, _g in _grp_c)
             _Ae = _np.zeros((len(_grp_c), _bc, _bc))
             _Ge = -_np.ones((len(_grp_c), _bc), dtype=_np.int64)
-            _rasm_c, _ = _ra.make_restricted_assembler(n_total)
             for _gi, (_nd, _red) in enumerate(_grp_c):
-                _o = _rasm_c(
+                _o = _agni3_assemble(
                     params_d,
                     transforms,
                     profiles,
                     d_h,
-                    _ring_nodes=jnp.asarray(_nd),
+                    ring_nodes=jnp.asarray(_nd),
                     **kwargs,
                 )
                 _bk = _np.asarray(
                     jax.device_get(
-                        _ra.finish_block(_o["A"], _o["Linv"], _o["au_diag"], _nd.size)
+                        _finish_blk(_o["A"], _o["Linv"], _o["au_diag"], _nd.size)
                     )
                 )
                 _al = _red >= 0
@@ -3312,13 +3086,14 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _Ae[_gi, :_na_c, :_na_c] = 0.5 * (_sb + _sb.T)
                 _Ge[_gi, :_na_c] = _ix
 
-            _sl_c, _pd_c, _Gt = _rpb_c.ring_index_maps(_keep, fine_res)
+            _sl_c, _pd_c, _Gt = _ring_maps(_keep, fine_res)
             _At = _np.asarray(
                 jax.device_get(
-                    _rpb_c.build_ring_blocks_traced(
+                    _build_rings(
+                        _agni3_assemble,
                         params_d,
-                        transforms["grid"],
-                        transforms["diffmat"],
+                        transforms,
+                        profiles,
                         d_h,
                         kwargs,
                         fine_res,
@@ -3353,16 +3128,15 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         if use_traced_rings:
             # `_rpb` is imported inside the coarse-deflation branch above, which
             # may not have run; the traced ring build is independent of it.
-            import ring_precond_batched as _rpb  # noqa: F811
-
-            ring_sel, ring_pad, _G = _rpb.ring_index_maps(_np.asarray(_keep), fine_res)
+            ring_sel, ring_pad, _G = _ring_maps(_np.asarray(_keep), fine_res)
             _b = int(_G.shape[1])
             # sigma=0: assemble UNSHIFTED so the adapt second pass still costs a
             # diagonal subtraction rather than a reassembly.
-            _Ablk = _rpb.build_ring_blocks_traced(
+            _Ablk = _build_rings(
+                _agni3_assemble,
                 params_d,
-                transforms["grid"],
-                transforms["diffmat"],
+                transforms,
+                profiles,
                 d_h,
                 kwargs,
                 fine_res,
@@ -3380,7 +3154,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _grp = []
             for _i in range(n_rho):
                 for _k in range(n_zeta):
-                    _nodes = _ra.ring_nodes(n_rho, n_theta, n_zeta, _i, _k)
+                    _nodes = _ring_nodes_fn(n_rho, n_theta, n_zeta, _i, _k)
                     _full = _np.concatenate(
                         [_nodes, _nodes + n_total, _nodes + 2 * n_total]
                     )
@@ -3389,19 +3163,18 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _Ablk = _np.zeros((len(_grp), _b, _b))
             _nal = _np.zeros(len(_grp), dtype=int)
             _G = -_np.ones((len(_grp), _b), dtype=_np.int64)
-            _rasm, _ = _ra.make_restricted_assembler(n_total)
             for _gi, (_nodes, _red) in enumerate(_grp):
-                _out = _rasm(
+                _out = _agni3_assemble(
                     params_d,
                     transforms,
                     profiles,
                     d_h,
-                    _ring_nodes=jnp.asarray(_nodes),
+                    ring_nodes=jnp.asarray(_nodes),
                     **kwargs,
                 )
                 _blk = _np.asarray(
                     jax.device_get(
-                        _ra.finish_block(
+                        _finish_blk(
                             _out["A"], _out["Linv"], _out["au_diag"], _nodes.size
                         )
                     )
@@ -3444,9 +3217,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 # (precond_harmonic/), so trace through a stage-2 companion that
                 # factors once at ridge 0. See `factor_blocks_traced.__doc__` for
                 # what that gives up.
-                import ring_precond_batched as _rpb_f
-
-                _L, _ok, _ridge = _rpb_f.factor_blocks_traced(_bs)
+                _L, _ok, _ridge = _fbt(_bs)
             else:
                 _L, _ok, _ridge = _fb(_bs, 0.0)
             # Raise only when the flag is a concrete value. Under trace it is a
@@ -3465,7 +3236,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     f"pcg_deflated: ring blocks not SPD at sigma={_sig}. The shift "
                     "is above lambda_min, so H is indefinite and CG is not legal."
                 )
-            _Mr = _mp(_L, _Gs, _mask, nA)
+            _Mr = _mkprec(_L, _Gn, nA)
 
             def _Hs(x):
                 return _Ax(x) - _sig * x
@@ -3734,11 +3505,16 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # budget while fine Ritz vectors were the worst of the three arms.
         _cg = kwargs.get("coarse_grid", None)
         if _cg is not None:
-            import coarse_deflation as _cd
-            import ring_precond_batched as _rpb
-            from inner_solve_gj_balanced_jax import barycentric_matrix as _bary
-            from inner_solve_gj_balanced_jax import fourier_interp_matrix as _fint
-            from inner_solve_gj_balanced_jax import op_arrays as _oparr
+            # Fully in-package: prolongation, coarse generalized eigensolve and the
+            # deflation basis it supplies. Verified bit-identical to the
+            # precond_stage2 originals by
+            # tests/test_stability_solvers.py::test_port_matches_original_*.
+            from ._stability_solvers import barycentric_matrix as _bary
+            from ._stability_solvers import build_ring_blocks as _build_rings
+            from ._stability_solvers import coarse_seed_and_deflation as _cseed
+            from ._stability_solvers import fourier_interp_matrix as _fint
+            from ._stability_solvers import level_meta as _oparr
+            from ._stability_solvers import ring_index_maps as _ring_maps
 
             _cdm = kwargs["coarse_diffmat"]
             _cdata = kwargs["coarse_data"]
@@ -3784,11 +3560,12 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                         "coarse deflation: host-derived `keep` disagrees with "
                         f"the operator's ({_ckeep.size} vs {_ckeep_ref.size})."
                     )
-            _csel, _cpad, _cG = _rpb.ring_index_maps(_ckeep, _cres)
-            _cblk = _rpb.build_ring_blocks_traced(
+            _csel, _cpad, _cG = _ring_maps(_ckeep, _cres)
+            _cblk = _build_rings(
+                _agni3_assemble,
                 _cpar,
-                _cg,
-                _cdm,
+                _ctr,
+                profiles,
                 _cdata,
                 _ckw,
                 _cres,
@@ -3797,8 +3574,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 sigma,
             )
             _cGn = _np.asarray(_cG)
-            _cGs = jnp.asarray(_np.where(_cGn >= 0, _cGn, 0))
-            _cmask = jnp.asarray((_cGn >= 0).astype(_np.float64))
             # Interpolation matrices: radial node positions only, no equilibrium.
             #
             # These come in as kwargs from the PEST grids rather than being read
@@ -3831,21 +3606,18 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _pr = _bary(_rho_c, _rho_f)
             _pt = _fint(_cres[1], n_theta, 2.0 * _np.pi)
             _pz = _fint(_cres[2], n_zeta, 2.0 * _np.pi / _cop.get("NFP", 1))
-            _ma_c, _ints_c = _cd.split_meta(_cmeta)
-            _ma_f, _ints_f = _cd.split_meta(_oparr(_opm))
             _kc = min(_kdefl, _nc - 1)
-            _v0c, _Zc, _lamc = _cd.coarse_seed_and_deflation(
+            # `_cGn` carries -1 padding; the in-package routine derives its own
+            # mask from it, so no separate mask argument is passed.
+            _v0c, _Zc, _lamc = _cseed(
                 _cHc,
                 _cblk,
-                _cGs,
-                _cmask,
-                _ma_c,
-                _ma_f,
+                _cGn,
+                _cmeta,
+                _oparr(_opm),
                 _pr,
                 _pt,
                 _pz,
-                _ints_c,
-                _ints_f,
                 _kc,
                 int(os.environ.get("AGNI_NUM_MATVECS", "100")),
             )

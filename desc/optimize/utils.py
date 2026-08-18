@@ -239,11 +239,11 @@ def _cholmod(A, maxiter=4):
     alphas = jnp.logspace(lb, ub, k)
     kbest = k // 2
     klow = 0
-    khigh = k
+    khigh = k - 1
     # first we try alpha = max, which we know will succeed by gershgorin bounds
     # but might be too big a correction, so then we try to reduce it while keeping
     # A + alpha*I positive definite
-    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    Lbest = jnp.linalg.cholesky(A + alphas[-1] * eye)
     for i in range(maxiter):
         L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
         # check if it succeeded

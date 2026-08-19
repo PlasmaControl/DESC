@@ -1267,12 +1267,11 @@ class ProximalState:
         self.eq = eq
         self.constraint = constraint
 
-        perturb_options = setdefault(perturb_options, {})
-        solve_options = setdefault(solve_options, {})
+        perturb_options = dict(setdefault(perturb_options, {}))
+        solve_options = dict(setdefault(solve_options, {}))
         self._solve_during_proximal_build = solve_options.pop(
             "solve_during_proximal_build", True
         )  # If user does not want the solve during build, mainly for debug purposes
-        perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)

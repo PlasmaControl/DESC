@@ -35,6 +35,7 @@ from desc.objectives import (
     AspectRatio,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
+    CoilCurvature,
     CoilLength,
     Energy,
     FixBoundaryR,
@@ -1137,6 +1138,163 @@ def test_constrained_AL_scalar():
     np.testing.assert_array_less(-Dwell, ctol)
 
 
+@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_constrained_AL_lsq():
+    """Test proximal-lsq-auglag with a non-equilibrium nonlinear constraint."""
+    eq = desc.examples.get("SOLOVEV")
+    solve_options = {"ftol": 1e-8, "xtol": 1e-8, "gtol": 1e-8, "maxiter": 50}
+    volume_target = 0.95 * float(eq.compute("V")["V"])
+
+    coil = FourierPlanarCoil(
+        r_n=[1.0], center=[4.0, 0, 0], normal=[0, 1, 0], current=1e6
+    )
+    length_target = 1.1 * float(coil.compute("length")["length"])
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+
+    objective = ObjectiveFunction(
+        (
+            CoilCurvature(coil, target=0.5, weight=1e-2),
+            Volume(eq=eq, target=volume_target),
+        )
+    )
+    constraints = (
+        ForceBalance(eq=eq),  # absorbed by proximal
+        CoilLength(coil, target=length_target),  # auglag
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+        FixCoilCurrent(coil),
+    )
+
+    objective.build(verbose=0)
+    prox = ProximalProjection(objective, ObjectiveFunction(ForceBalance(eq=eq)), eq)
+    prox.build(verbose=0)
+    state = prox._state
+
+    for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        assert arg not in state.args
+    dim_eq = sum(eq.dimensions[arg] for arg in state.args)
+    assert dim_eq < eq.dim_x
+    assert prox.dim_x == dim_eq + coil.dim_x
+    assert state.dimc_per_thing[state.eq_idx] == dim_eq
+    assert state.dimx_per_thing[state.eq_idx] == eq.dim_x
+    assert state.dimc_per_thing[0] == state.dimx_per_thing[0] == coil.dim_x
+
+    (eq_opt, coil_opt), _ = eq.optimize(
+        (eq, coil),
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-lsq-auglag",
+        maxiter=30,
+        verbose=0,
+        copy=True,
+        options={"solve_options": solve_options},
+    )
+
+    np.testing.assert_allclose(
+        float(coil_opt.compute("length")["length"]), length_target, rtol=1e-8
+    )
+    np.testing.assert_allclose(
+        float(eq_opt.compute("V")["V"]), volume_target, rtol=1e-6
+    )
+
+    force = ObjectiveFunction(ForceBalance(eq=eq_opt))
+    force.build(verbose=0)
+    force_final = np.linalg.norm(force.compute_scaled_error(force.x(eq_opt)))
+    assert force_final < 1e-7
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+@pytest.mark.optimize
+def test_proximal_constrained_AL_scalar():
+    """Test proximal-fmin-auglag with a non-equilibrium nonlinear constraint."""
+    eq = desc.examples.get("SOLOVEV")
+    solve_options = {"ftol": 1e-8, "xtol": 1e-8, "gtol": 1e-8, "maxiter": 50}
+    volume_target = 0.95 * float(eq.compute("V")["V"])
+
+    coil = FourierPlanarCoil(
+        r_n=[1.0], center=[4.0, 0, 0], normal=[0, 1, 0], current=1e6
+    )
+    length_target = 1.1 * float(coil.compute("length")["length"])
+
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
+    ]
+
+    objective = ObjectiveFunction(GenericObjective("0", thing=eq))
+    constraints = (
+        ForceBalance(eq=eq),  # absorbed by proximal
+        CoilLength(coil, target=length_target),  # auglag
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+        FixCoilCurrent(coil),
+    )
+
+    objective.build(verbose=0)
+    prox = ProximalProjection(objective, ObjectiveFunction(ForceBalance(eq=eq)), eq)
+    prox.build(verbose=0)
+    state = prox._state
+
+    for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        assert arg not in state.args
+    dim_eq = sum(eq.dimensions[arg] for arg in state.args)
+    assert dim_eq < eq.dim_x
+    assert prox.dim_x == dim_eq + coil.dim_x
+    assert state.dimc_per_thing[state.eq_idx] == dim_eq
+    assert state.dimx_per_thing[state.eq_idx] == eq.dim_x
+    assert state.dimc_per_thing[0] == state.dimx_per_thing[0] == coil.dim_x
+
+    (eq_opt, coil_opt), _ = eq.optimize(
+        (eq, coil),
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-fmin-auglag",
+        maxiter=30,
+        verbose=0,
+        copy=True,
+        options={"solve_options": solve_options},
+    )
+
+    np.testing.assert_allclose(
+        float(coil_opt.compute("length")["length"]), length_target, rtol=1e-8
+    )
+    np.testing.assert_allclose(
+        float(eq_opt.compute("V")["V"]), volume_target, rtol=1e-6
+    )
+
+    force = ObjectiveFunction(ForceBalance(eq=eq_opt))
+    force.build(verbose=0)
+    force_final = np.linalg.norm(force.compute_scaled_error(force.x(eq_opt)))
+    assert force_final < 1e-7
+
+
 @pytest.mark.unit
 @pytest.mark.optimize
 def test_optimize_multiple_things_different_order():
@@ -1309,6 +1467,10 @@ def test_proximal_jacobian():
     prox2.build()
     prox3.build()
 
+    unfixed_idx = prox1._state.eq_solve_objective._unfixed_idx
+    Z = prox1._state.eq_solve_objective._Z
+    dxdc = prox1._state.dxdc
+
     x = prox1.x(eq)
     v = np.random.default_rng(1138).random(x.shape)
 
@@ -1318,10 +1480,10 @@ def test_proximal_jacobian():
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Fc = Fx @ prox1._dxdc
-    Gc = Gx @ prox1._dxdc
+    Fxh = Fx[:, unfixed_idx] @ Z
+    Gxh = Gx[:, unfixed_idx] @ Z
+    Fc = Fx @ dxdc
+    Gc = Gx @ dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization
@@ -1331,10 +1493,10 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Fc = Fx @ prox1._dxdc
-    Gc = Gx @ prox1._dxdc
+    Fxh = Fx[:, unfixed_idx] @ Z
+    Gxh = Gx[:, unfixed_idx] @ Z
+    Fc = Fx @ dxdc
+    Gc = Gx @ dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
     sf += sf[-1]  # add a tiny bit of regularization

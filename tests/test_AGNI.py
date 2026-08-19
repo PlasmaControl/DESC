@@ -24,10 +24,12 @@ test_matfree_operator_matches_dense_matrix
 The equilibrium ships with the repository as ``tests/inputs/AGNI_QH_lowres.h5``
 (the low-resolution Patil QH case), so these tests need no external files.
 Grid and equilibrium are built once at module level and shared across all tests.
-Set AGNI_TEST_RES=N_RHO,N_THETA,N_ZETA (default 16,12,8) to change resolution.
+Set AGNI_TEST_RES=N_RHO,N_THETA,N_ZETA (default 24,12,8) to change resolution.
 The default is radial-heavy on purpose: these modes need rho resolution, and
 starving it makes the eigensolve pick the wrong mode rather than merely a
-less accurate one.
+less accurate one. 24 radial specifically is the smallest fine level that sits
+above the MEASURED coarse floor of 16 (job 57261816) that the two-level test
+needs; do not lower it to save time.
 Set AGNI_EQ_PATH to override the equilibrium file.
 """
 
@@ -67,7 +69,7 @@ def _load_old_equilibrium(path):
 # Module-level grid / equilibrium — built once, shared across all tests
 # ---------------------------------------------------------------------------
 
-_RES = os.environ.get("AGNI_TEST_RES", "16,12,8")
+_RES = os.environ.get("AGNI_TEST_RES", "24,12,8")
 _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 
 # Ships with the repo, so these tests need no machine-specific paths.
@@ -85,8 +87,14 @@ def agni(request):
     collection -- including `--collect-only` and tests that need no equilibrium
     at all, like the kwarg-registration guard -- for the full solve.
     """
+    # FAIL, do not skip. The equilibrium is version-controlled at
+    # tests/inputs/AGNI_QH_lowres.h5, so a missing file means the checkout is
+    # broken -- not that the test is inapplicable. This used to skip, and when
+    # .gitignore's `*.h5` rule silently kept the fixture out of the repo, CI
+    # skipped 6 of these 8 tests and reported the whole finite-n solver as
+    # untested. A skip is invisible; a failure is not.
     if not _EQ_PATH.is_file():
-        pytest.skip(_AGNI_SKIP_REASON)
+        pytest.fail(_AGNI_SKIP_REASON)
     _EQ = _load_old_equilibrium(str(_EQ_PATH))
 
     # Radial quadrature: Gauss-Lobatto nodes mapped through staircase automorphism
@@ -335,8 +343,8 @@ def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     against EACH OTHER, so a shared error would have passed. Comparing both
     against the dense assembly catches that.
 
-    Recorded reference: the restricted assembler matched dense to <= 2.8e-16 on
-    all 192 rings at GJ 16x32x12 (precond_stage2/VERIFICATION.md).
+    The assertion below is the reference: the restricted assembler must match
+    the dense assembly to machine precision on every ring.
     """
     from desc.compute._stability_solvers import (
         build_ring_blocks,
@@ -569,17 +577,15 @@ def _build_pest_level(eq, n_rho, n_theta, n_zeta):
     return LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False), dm
 
 
-_twolevel_reason = None
-if os.environ.get("AGNI_GPU_TESTS", "0").strip() not in ("1", "true", "True"):
-    _twolevel_reason = (
-        "set AGNI_GPU_TESTS=1 to run; needs fine 32 / coarse 16 for BOTH levels "
-        "to resolve the mode, which is minutes, not seconds"
-    )
-
-
+# NOT opt-in. This is the ONLY coverage of `_eigensolve_pcg` and `_coarse_space`
+# -- the ring preconditioner, the deflation projector, the prolongation and the
+# coarse generalized eigensolve. Gating it behind an environment variable meant
+# CI never ran it and those ~770 lines were reported as untested. It is slow
+# (~500 s), not special: CI runs `-m unit` with `--splits 8` and
+# `--splitting-algorithm least_duration`, which absorbs one long test into one
+# of eight parallel groups, and does NOT deselect `slow`.
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.skipif(bool(_twolevel_reason), reason=str(_twolevel_reason))
 def test_pcg_deflated_two_level_matches_dense(agni, monkeypatch):
     """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
 

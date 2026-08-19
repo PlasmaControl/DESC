@@ -1690,7 +1690,7 @@ class UmbilicHighCurvature(_Objective):
             Dictionary of curve degrees of freedom, e.g. curve.params_dict.
         constants : dict
             Dictionary of constant data, e.g. transforms, profiles etc.
-            Defaults to self.constants.
+            Defaults to self.constants. (Deprecated)
 
         Returns
         -------
@@ -1700,7 +1700,7 @@ class UmbilicHighCurvature(_Objective):
         """
         curve = self.things[0]
         surface = curve.surface
-        constants = setdefault(constants, self.constants)
+        constants = self._get_deprecated_constants(constants)
         params = setdefault(params, self.things[0].params_dict)
 
         curve_data = compute_fun(

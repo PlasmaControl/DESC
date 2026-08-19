@@ -8,7 +8,7 @@ import desc.examples
 from desc.backend import jnp, put
 from desc.coils import CoilSet, FourierXYZCoil
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZSurfaceCurve, FourierRZToroidalSurface
 from desc.io import load
 from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
@@ -51,6 +51,7 @@ from desc.objectives import (
     LinearObjectiveFromUser,
     ObjectiveFunction,
     ShareParameters,
+    SurfaceCurveConsistency,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
@@ -1235,3 +1236,42 @@ def test_NAE_asym_with_sym_axis():
     conZ.build()
     assert conR._A.shape[0] == conR.dim_f
     assert conZ._A.shape[0] == conZ.dim_f
+
+
+@pytest.mark.unit
+def test_surface_curve_consistency():
+    """Test SurfaceCurveConsistency measures curve/surface parameter mismatch."""
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        Z_lmn=[-1, -0.2],
+        modes_Z=[[-1, 0], [0, -1]],
+        NFP=2,
+    )
+    curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+    obj = SurfaceCurveConsistency(surf, curve)
+    obj.build()
+    assert obj.dim_f == surf.R_basis.num_modes + surf.Z_basis.num_modes
+
+    # the curve carries a copy of the surface, so it starts out consistent
+    np.testing.assert_allclose(obj.compute(surf.params_dict, curve.params_dict), 0)
+
+    # residual is the mismatch once the source surface moves away from the copy
+    params = dict(surf.params_dict)
+    params["R_lmn"] = params["R_lmn"] + 0.1
+    np.testing.assert_allclose(
+        obj.compute(params, curve.params_dict),
+        np.concatenate(
+            [
+                np.full(surf.R_basis.num_modes, 0.1),
+                np.zeros(surf.Z_basis.num_modes),
+            ]
+        ),
+    )
+
+    # the curve's surface and the source must share the same bases
+    other = FourierRZToroidalSurface(
+        R_lmn=[10, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+    )
+    with pytest.raises(ValueError):
+        SurfaceCurveConsistency(other, curve).build()

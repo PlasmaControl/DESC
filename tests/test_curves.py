@@ -1374,6 +1374,37 @@ class TestFourierRZSurfaceCurve:
         np.testing.assert_allclose(c.compute("torsion")["torsion"], 0)
 
     @pytest.mark.unit
+    def test_frenet(self):
+        """Test frenet-serret frame of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=0,
+            secular_zeta=1,
+        )
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+
+    @pytest.mark.unit
     def test_to_FourierXYZCurve(self):
         """Test converting FourierRZSurfaceCurve to FourierXYZCurve object."""
         surf = FourierRZToroidalSurface()

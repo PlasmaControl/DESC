@@ -9,6 +9,7 @@ import pytest
 from desc.coils import (
     FourierPlanarCoil,
     FourierRZCoil,
+    FourierRZSurfaceCoil,
     FourierXYCoil,
     FourierXYZCoil,
     SplineXYZCoil,
@@ -19,6 +20,7 @@ from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZSurfaceCurve,
     FourierRZToroidalSurface,
     FourierXYCurve,
     FourierXYZCurve,
@@ -136,6 +138,13 @@ def test_compute_everything():
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
         ).to_SplineXYZ(grid=LinearGrid(N=50)),
+        "desc.geometry.curve.FourierRZSurfaceCurve": FourierRZSurfaceCurve(
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            secular_theta=1,
+            secular_zeta=2,
+            theta_n=[0.1, 0.2, 0.3],
+            zeta_n=[-0.1, 0.2, -0.3],
+        ),
         # surfaces
         "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(
             **elliptic_cross_section_with_torsion
@@ -192,6 +201,14 @@ def test_compute_everything():
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
+        "desc.coils.FourierRZSurfaceCoil": FourierRZSurfaceCoil(
+            current=5,
+            surface=FourierRZToroidalSurface(**elliptic_cross_section_with_torsion),
+            secular_theta=1,
+            secular_zeta=2,
+            theta_n=[0.1, 0.2, 0.3],
+            zeta_n=[-0.1, 0.2, -0.3],
+        ),
     }
     assert things.keys() == data_index.keys(), (
         f"Missing the parameterization {data_index.keys() - things.keys()}"
@@ -223,6 +240,8 @@ def test_compute_everything():
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierRZSurfaceCurve": {"grid": curvegrid1},
+        "desc.coils.FourierRZSurfaceCoil": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
 

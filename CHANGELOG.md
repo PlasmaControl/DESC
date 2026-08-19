@@ -10,6 +10,7 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 
 v0.17.3
 -------

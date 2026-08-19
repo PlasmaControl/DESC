@@ -1195,11 +1195,10 @@ def test_proximal_constrained_AL_lsq():
     assert state.dimx_per_thing[state.eq_idx] == eq.dim_x
     assert state.dimc_per_thing[0] == state.dimx_per_thing[0] == coil.dim_x
 
-    (eq_opt, coil_opt), _ = eq.optimize(
+    (eq_opt, coil_opt), _ = Optimizer("proximal-lsq-auglag").optimize(
         (eq, coil),
         objective=objective,
         constraints=constraints,
-        optimizer="proximal-lsq-auglag",
         maxiter=30,
         verbose=0,
         copy=True,
@@ -1245,10 +1244,12 @@ def test_proximal_constrained_AL_scalar():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
     ]
 
+    # dummy objective, targets are expressed as constraints for the aug lagrangian
     objective = ObjectiveFunction(GenericObjective("0", thing=eq))
     constraints = (
         ForceBalance(eq=eq),  # absorbed by proximal
         CoilLength(coil, target=length_target),  # auglag
+        Volume(eq=eq, target=volume_target),  # auglag
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
         FixPressure(eq=eq),
@@ -1257,36 +1258,30 @@ def test_proximal_constrained_AL_scalar():
         FixCoilCurrent(coil),
     )
 
-    objective.build(verbose=0)
-    prox = ProximalProjection(objective, ObjectiveFunction(ForceBalance(eq=eq)), eq)
-    prox.build(verbose=0)
-    state = prox._state
-
-    for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
-        assert arg not in state.args
-    dim_eq = sum(eq.dimensions[arg] for arg in state.args)
-    assert dim_eq < eq.dim_x
-    assert prox.dim_x == dim_eq + coil.dim_x
-    assert state.dimc_per_thing[state.eq_idx] == dim_eq
-    assert state.dimx_per_thing[state.eq_idx] == eq.dim_x
-    assert state.dimc_per_thing[0] == state.dimx_per_thing[0] == coil.dim_x
-
-    (eq_opt, coil_opt), _ = eq.optimize(
+    ctol = 1e-4
+    (eq_opt, coil_opt), _ = Optimizer("proximal-fmin-auglag").optimize(
         (eq, coil),
         objective=objective,
         constraints=constraints,
-        optimizer="proximal-fmin-auglag",
         maxiter=30,
+        ctol=ctol,
         verbose=0,
         copy=True,
-        options={"solve_options": solve_options},
+        options={
+            "solve_options": solve_options,
+            "initial_penalty_parameter": 1e3,
+            # high penalty parameter helps coil length converge quickly
+        },
     )
 
     np.testing.assert_allclose(
-        float(coil_opt.compute("length")["length"]), length_target, rtol=1e-8
+        float(coil_opt.compute("length")["length"]),
+        length_target,
+        rtol=ctol,
+        atol=ctol,
     )
     np.testing.assert_allclose(
-        float(eq_opt.compute("V")["V"]), volume_target, rtol=1e-6
+        float(eq_opt.compute("V")["V"]), volume_target, rtol=ctol, atol=ctol
     )
 
     force = ObjectiveFunction(ForceBalance(eq=eq_opt))

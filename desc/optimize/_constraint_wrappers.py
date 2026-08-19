@@ -1402,6 +1402,8 @@ class ProximalState:
     def set_layout(self, things):
         """Updates self.things and related attributes (e.g. arrays for indexing)."""
         things = list(things)
+
+        layout_changed = (not hasattr(self, "things")) or (self.things != things)
         self.eq_idx = things.index(self.eq)
         self.things = things
 
@@ -1420,7 +1422,7 @@ class ProximalState:
         # This method is called at different points in
         # desc.optimizer.get_combined_constraint_objectives
         # Important that attributes are rebuilt if self.things changes.
-        if self.x_old is None or self.x_old.size != sum(self.dimc_per_thing):
+        if layout_changed or self.x_old.size != sum(self.dimc_per_thing):
             self._initialize_record()
 
     def _initialize_record(self):

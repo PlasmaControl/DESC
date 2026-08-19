@@ -149,7 +149,6 @@ class QuasisymmetryBoozer(_Objective):
             "profiles": profiles,
             "matrix": matrix,
             "idx": idx,
-            "surf_batch_size": self._surf_batch_size,
         }
 
         timer.stop("Precomputing transforms")
@@ -188,7 +187,7 @@ class QuasisymmetryBoozer(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            surf_batch_size=constants["surf_batch_size"],
+            surf_batch_size=self._surf_batch_size,
         )
         B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
         B_mn = constants["matrix"] @ B_mn.T

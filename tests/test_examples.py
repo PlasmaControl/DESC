@@ -268,7 +268,7 @@ def test_qh_optimization():
 
     eq1 = run_qh_step(0, eq)
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1)
+    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1, surf_batch_size=1)
     obj.build()
     B_asym = obj.compute(*obj.xs(eq1))
 

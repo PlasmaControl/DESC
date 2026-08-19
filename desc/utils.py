@@ -984,7 +984,7 @@ def rotation_matrix(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
 
     NOTE: This function works but will have zero gradient w.r.t.
-    the axis when the angle is nearly zero (specifically, when
+    the angle when the angle is nearly zero (specifically, when
     the angle<sqrt(epsilon)) as there is a manual replacement of the
     result for this case to avoid a NaN leak due to 1/0 division.
 
@@ -1009,10 +1009,6 @@ def rotation_matrix(axis, angle=None):
     norm = safenorm(axis)
     if angle is None:
         angle = norm
-    # NOTE: this works but will lead to zero gradients for
-    # normals with [eps, eps, 1] where eps<1e-8
-    # though this could be bc when safe-normalized, these have
-    # 1 in the z-axis still when should be technically 1/(1+2eps**2)
     eps = jnp.sqrt(jnp.finfo(axis.dtype).eps)
     no_rotation = norm < eps
     # near-zero axis = no rotation; sanitize axis+angle so the unused where-branch

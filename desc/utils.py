@@ -1000,7 +1000,7 @@ def rotation_matrix(axis, angle=None):
     norm = safenorm(axis)
     if angle is None:
         angle = norm
-    eps = 1e2 * jnp.finfo(axis.dtype).eps
+    eps = jnp.sqrt(jnp.finfo(axis.dtype).eps)
     no_rotation = norm < eps
     # near-zero axis = no rotation; sanitize axis+angle so the unused where-branch
     # never forms cos(inf)/0-norm and can't leak a nan gradient (forward or reverse)

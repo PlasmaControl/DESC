@@ -1178,7 +1178,7 @@ def test_omnigenity_proximal():
         (
             GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
-            Omnigenity(eq=eq, field=field),  # field is not fixed
+            Omnigenity(eq=eq, field=field, surf_batch_size=1),  # field is not fixed
         )
     )
     constraints = (

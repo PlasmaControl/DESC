@@ -558,10 +558,7 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                # del J
-                # J = lagjac(z, y, mu, *args)
-                # njev += 1
-                J = J.at[f.size :].multiply(jnp.sqrt(mu)[:,None] / jnp.sqrt(mu_old)[:,None])
+                J = J.at[f.size :].multiply((jnp.sqrt(mu) / jnp.sqrt(mu_old))[:, None])
 
                 g = jnp.dot(L, J)
 

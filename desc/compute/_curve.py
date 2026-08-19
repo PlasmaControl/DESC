@@ -1270,7 +1270,7 @@ def _center_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     "This is not a position vector unless basis is cartesian. "
     "When basis is cartesian, the units are meters.",
     dim=3,
-    params=["R_lmn", "Z_lmn"],
+    params=["R_lmn", "Z_lmn", "rotmat", "shift"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -1293,6 +1293,13 @@ def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
 
     # Assuming zeta=phi
     coords = jnp.stack([data_surf["R"], data["zeta"], data_surf["Z"]], axis=1)
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz(coords)
+    coords = (
+        coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
+    )
+    # convert back to rpz
+    coords = xyz2rpz(coords)
     data["x"] = coords
     return data
 
@@ -1304,11 +1311,11 @@ def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["R_lmn", "Z_lmn"],
+    params=["R_lmn", "Z_lmn", "rotmat"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
-    data=["theta", "zeta", "theta_s", "zeta_s"],
+    data=["theta", "zeta", "theta_s", "zeta_s", "phi"],
     parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
@@ -1329,7 +1336,11 @@ def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     xs_p = data_surf["R"] * data["zeta_s"]
     xs_Z = data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"]
 
-    data["x_s"] = jnp.stack([xs_R, xs_p, xs_Z], axis=1)
+    coords = jnp.stack([xs_R, xs_p, xs_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_s"] = coords
     return data
 
 
@@ -1340,11 +1351,11 @@ def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["R_lmn", "Z_lmn"],
+    params=["R_lmn", "Z_lmn", "rotmat"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
-    data=["theta", "zeta", "theta_s", "zeta_s", "theta_ss", "zeta_ss"],
+    data=["theta", "zeta", "theta_s", "zeta_s", "theta_ss", "zeta_ss", "phi"],
     parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
@@ -1412,7 +1423,11 @@ def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     xss_p = dt_xs_p * t_s + dz_xs_p * z_s + ds_xs_p + xs_R * z_s
     xss_Z = dt_xs_Z * t_s + dz_xs_Z * z_s + ds_xs_Z
 
-    data["x_ss"] = jnp.stack([xss_R, xss_p, xss_Z], axis=1)
+    coords = jnp.stack([xss_R, xss_p, xss_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_ss"] = coords
     return data
 
 
@@ -1423,7 +1438,7 @@ def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["R_lmn", "Z_lmn"],
+    params=["R_lmn", "Z_lmn", "rotmat"],
     transforms={"surface": []},
     profiles=[],
     coordinates="s",
@@ -1436,7 +1451,7 @@ def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
         "zeta_ss",
         "theta_sss",
         "zeta_sss",
-        "x_ss",
+        "phi",
     ],
     parameterization="desc.geometry.core.SurfaceCurve",
 )
@@ -1501,8 +1516,17 @@ def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     z_ss = data["zeta_ss"]
     z_sss = data["zeta_sss"]
 
-    xss_R = data["x_ss"][:, 0]
-    xss_p = data["x_ss"][:, 1]
+    # rebuilt here rather than read from data["x_ss"], which carries the rigid
+    # transform and is expressed in the basis at phi, not at zeta
+    xss_R = (
+        R_tt * (t_s**2)
+        + 2 * R_tz * t_s * z_s
+        + R_zz * (z_s**2)
+        + R_t * t_ss
+        + R_z * z_ss
+        - R * (z_s**2)
+    )
+    xss_p = 2 * R_t * t_s * z_s + 2 * R_z * (z_s**2) + R * z_ss
 
     dt_xss_R = (
         R_ttt * (t_s**2)
@@ -1559,7 +1583,11 @@ def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     xsss_p = dt_xss_p * t_s + dz_xss_p * z_s + ds_xss_p + xss_R * z_s
     xsss_Z = dt_xss_Z * t_s + dz_xss_Z * z_s + ds_xss_Z
 
-    data["x_sss"] = jnp.stack([xsss_R, xsss_p, xsss_Z], axis=1)
+    coords = jnp.stack([xsss_R, xsss_p, xsss_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_sss"] = coords
     return data
 
 

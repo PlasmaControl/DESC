@@ -863,11 +863,11 @@ class SurfaceCurveConsistency(_Objective):
 
     Parameters
     ----------
-    curve: SurfaceCurve, FourierRZWindingCoil CoilSet
-            Curve or collection of curves carrying a copy of surface params.
     source: FourierRZToroidalSurface or Equilibrium
             Surface on which the curve input should lie. If Equilibrium is passed,
             surface is set to the equilibrium's rho=1 surface.
+    curve: SurfaceCurve, FourierRZWindingCoil CoilSet
+            Curve or collection of curves carrying a copy of surface params.
     name: str, optional
             Name of the objective function.
     """
@@ -883,7 +883,7 @@ class SurfaceCurveConsistency(_Objective):
     )
     _scalar = False
     _linear = True
-    _fixed = False  # not "diagonal", since it is fixing a sum
+    _fixed = False
     _units = "(m)"
     _print_value_fmt = "SurfaceCurve consistency error: "
 
@@ -891,8 +891,8 @@ class SurfaceCurveConsistency(_Objective):
 
     def __init__(
         self,
-        curve,
         source,
+        curve,
         name="SurfaceCurve consistency",
     ):
         # local import to avoid circular dependency
@@ -903,15 +903,9 @@ class SurfaceCurveConsistency(_Objective):
             ValueError,
             "Source must be a surface or equilibrium.",
         )
-        if isinstance(source, Equilibrium):
-            equilibrium = source
-        else:
-            equilibrium = None
 
-        if equilibrium is not None:
-            things = [curve, source]
-        else:
-            things = [curve, source]
+        things = [source, curve]
+
         super().__init__(
             things=things,
             target=0,
@@ -941,8 +935,8 @@ class SurfaceCurveConsistency(_Objective):
             return [curve]
 
         # in case the curve is a coilset, expand to a list of all individual curves
-        curve_expanded = _expand(self.things[0])
-        source = self.things[1]
+        curve_expanded = _expand(self.things[1])
+        source = self.things[0]
 
         if isinstance(source, Equilibrium):
             source_R_basis = source.surface.R_basis
@@ -975,7 +969,7 @@ class SurfaceCurveConsistency(_Objective):
         self._A = {"R": AR, "Z": AZ}
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, params_curve, params_surface, constants=None):
+    def compute(self, params_source, params_curve, constants=None):
         """Compute SurfaceCurveConsistency error.
 
         Measures the mismatch between the surface params attached to the curve,
@@ -983,11 +977,11 @@ class SurfaceCurveConsistency(_Objective):
 
         Parameters
         ----------
-        params_curve : dict
-            Dictionary of curve (or coilset) degrees of freedom
-        params_surface: dict
+        params_source: dict
             Dictionary of surface degrees of freedom, or if surface=equilibrium.surface,
             then the equilibrium degrees of freedom
+        params_curve : dict
+            Dictionary of curve (or coilset) degrees of freedom
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants. (Deprecated)
@@ -1003,9 +997,9 @@ class SurfaceCurveConsistency(_Objective):
                 block
                 for i in range(len(params_curve))
                 for block in (
-                    jnp.dot(self._A["R"][i], params_surface[self._src_params["R"]])
+                    jnp.dot(self._A["R"][i], params_source[self._src_params["R"]])
                     - params_curve[i]["R_lmn"],
-                    jnp.dot(self._A["Z"][i], params_surface[self._src_params["Z"]])
+                    jnp.dot(self._A["Z"][i], params_source[self._src_params["Z"]])
                     - params_curve[i]["Z_lmn"],
                 )
             ]

@@ -2143,11 +2143,10 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         theta_single_val = theta - secular_theta * s
         zeta_single_val = zeta - secular_zeta * s
 
-        # Sort and remove duplicate values of s
-        # This isn't needed anymore, since we are not modding
+        # Sort and remove duplicate values of s. Single valued parts are not modded.
         s, idx = np.unique(s, return_index=True)
-        theta_single_val = np.mod(theta_single_val[idx], 2 * np.pi)
-        zeta_single_val = np.mod(zeta_single_val[idx], 2 * np.pi)
+        theta_single_val = theta_single_val[idx]
+        zeta_single_val = zeta_single_val[idx]
 
         if N_theta is None:
             theta_n = None

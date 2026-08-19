@@ -1285,14 +1285,15 @@ class TestFourierRZSurfaceCurve:
         c = FourierRZSurfaceCurve(
             surface=surf,
             secular_theta=1,
-            theta_n=np.array([0, 1, 2]),
             secular_zeta=0,
-            zeta_n=np.array([2, -1, -0.5]),
-            sym_zeta=True,
+            zeta_n=np.array([2]),
+            modes_zeta=np.array([0]),
         )
 
         # Default surface has major radius 10
-        np.testing.assert_allclose(c.compute("center")["center"], [10, 2, 0])
+        np.testing.assert_allclose(
+            c.compute("center")["center"][0], [10, 2, 0], atol=1e-12
+        )
 
     @pytest.mark.unit
     def test_length(self):
@@ -1317,7 +1318,7 @@ class TestFourierRZSurfaceCurve:
 
         # Curve lies on the outboard midplane, tracing out a
         # circle with radius 11
-        np.testing.assert_allclose(c.compute("length")["length"], 2 * np.pi * 11**2)
+        np.testing.assert_allclose(c.compute("length")["length"], 2 * np.pi * 11)
 
     @pytest.mark.unit
     def test_coords(self):
@@ -1333,10 +1334,10 @@ class TestFourierRZSurfaceCurve:
         grid = LinearGrid(zeta=np.array([0, np.pi / 2, np.pi, 2 * np.pi]))
         xyz = c.compute("x", grid=grid, basis="xyz")["x"]
 
-        np.testing.assert_allclose(xyz[0], [11, 0, 0])
-        np.testing.assert_allclose(xyz[1], [-11, 0, -1])
-        np.testing.assert_allclose(xyz[2], [9, 0, 0])
-        np.testing.assert_allclose(xyz[3], [11, 0, 0])
+        np.testing.assert_allclose(xyz[0], [11, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(xyz[1], [-10, 0, -1], atol=1e-12)
+        np.testing.assert_allclose(xyz[2], [9, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(xyz[3], [11, 0, 0], atol=1e-12)
 
     @pytest.mark.unit
     def test_curvature(self):
@@ -1354,7 +1355,7 @@ class TestFourierRZSurfaceCurve:
         c = FourierRZSurfaceCurve(
             surface=surf,
             secular_theta=0,
-            theta_n=[np.pi / 4],
+            theta_n=[np.pi / 2],
             secular_zeta=1,
         )
 
@@ -1402,17 +1403,17 @@ class TestFourierRZSurfaceCurve:
         """Test asserts and errors of FourierRZSurfaceCurve."""
         surf = FourierRZToroidalSurface(NFP=8)
         with pytest.raises(ValueError):
-            c = FourierRZSurfaceCurve(surface=surf, secular_theta=2, secular_zeta=4)
+            _ = FourierRZSurfaceCurve(surface=surf, secular_theta=2, secular_zeta=4)
         with pytest.raises(ValueError):
-            c = FourierRZSurfaceCurve(
+            _ = FourierRZSurfaceCurve(
                 surface=surf, secular_theta=2, secular_zeta=3, NFP=4
             )
         with pytest.raises(ValueError):
-            c = FourierRZSurfaceCurve(
+            _ = FourierRZSurfaceCurve(
                 surface=surf, secular_theta=2, secular_zeta=3, NFP=5
             )
         with pytest.raises(ValueError):
-            c = FourierRZSurfaceCurve(surface=surf, theta_n=[0, 1, 2], sym_theta="sin")
+            _ = FourierRZSurfaceCurve(surface=surf, theta_n=[0, 1, 2], sym_theta="sin")
 
     @pytest.mark.unit
     def test_modes(self):
@@ -1421,8 +1422,9 @@ class TestFourierRZSurfaceCurve:
         c = FourierRZSurfaceCurve(
             surface=surf, secular_theta=2, secular_zeta=3, theta_n=[2, -1, 3, 0, 5]
         )
-        assert c.N == 5
-        assert c.theta_basis.N == 5
+
+        assert c.N == 2
+        assert c.theta_basis.N == 2
         assert c.zeta_basis.N == 0
 
         c = FourierRZSurfaceCurve(
@@ -1435,13 +1437,14 @@ class TestFourierRZSurfaceCurve:
         )
         assert c.sym_theta == "sin"
         assert c.N == 8
-        assert c.theta_basis.modes[:, 2] == [i for i in range(-8, 1)]
-        assert c.get_coeffs([-6, -5]) == [-1, 0]
+
+        np.testing.assert_allclose(c.theta_basis.modes[:, 2], np.arange(-8, 0))
+        np.testing.assert_allclose(c.get_coeffs([-6, -5])[0], [-1, 0])
         c.change_resolution(N_theta=12)
         c.set_coeffs(-9, theta_n=3)
         assert c.N == 12
-        assert c.theta_basis.modes[:, 2] == [i for i in range(-8, 1)]
-        assert c.get_coeffs([-9, -8, -7]) == [3, 2, 0]
+        np.testing.assert_allclose(c.theta_basis.modes[:, 2], np.arange(-12, 0))
+        np.testing.assert_allclose(c.get_coeffs([-9, -8, -7])[0], [3, 2, 0])
 
     @pytest.mark.unit
     def test_from_values(self):
@@ -1457,9 +1460,10 @@ class TestFourierRZSurfaceCurve:
             sym_theta="sin",
             NFP=2,
         )
-        curve_data = c.compute(names=["s", "theta", "zeta"])
+        grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, 201, endpoint=True))
+        curve_data = c.compute(names=["s", "theta", "zeta"], grid=grid)
         s, theta, zeta = curve_data["s"], curve_data["theta"], curve_data["zeta"]
-        coords = np.hstack([s, theta, zeta])
+        coords = np.vstack([s, theta, zeta]).T
 
         c2 = FourierRZSurfaceCurve.from_values(
             coords=coords,
@@ -1473,5 +1477,5 @@ class TestFourierRZSurfaceCurve:
 
         assert c2.secular_theta == c.secular_theta
         assert c2.secular_zeta == c.secular_zeta
-        np.testing.assert_allclose(c.theta_n, c2.theta_n)
-        np.testing.assert_allclose(c.zeta_n, c2.zeta_n)
+        np.testing.assert_allclose(c.theta_n, c2.theta_n, atol=1e-12)
+        np.testing.assert_allclose(c.zeta_n, c2.zeta_n, atol=1e-12)

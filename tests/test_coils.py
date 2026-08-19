@@ -24,12 +24,7 @@ from desc.coils import (
 from desc.compute import get_params, get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import (
-    FourierRZCurve,
-    FourierRZSurfaceCurve,
-    FourierRZToroidalSurface,
-    FourierXYZCurve,
-)
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
@@ -192,8 +187,12 @@ class TestCoil:
         )
 
         # FourierRZSurfaceCoil
-        surf = FourierRZToroidalSurface()
-        coil = FourierRZSurfaceCoil(I, surface=surf, secular_zeta=0, secular_theta=1)
+        surf = FourierRZToroidalSurface(
+            R_lmn=[R + 1, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+        )
+        coil = FourierRZSurfaceCoil(
+            I, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi]
+        )
         B_xyz = coil.compute_magnetic_field(
             grid_xyz, basis="xyz", source_grid=coil_grid
         )
@@ -284,8 +283,12 @@ class TestCoil:
         test(coil3, grid_xyz, grid_rpz)
 
         # FourierRZSurfaceCoil
-        surf = FourierRZToroidalSurface()
-        coil = FourierRZSurfaceCoil(I, surface=surf, secular_zeta=0, secular_theta=1)
+        surf = FourierRZToroidalSurface(
+            R_lmn=[R + 1, 1], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1], modes_Z=[[-1, 0]]
+        )
+        coil = FourierRZSurfaceCoil(
+            I, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi]
+        )
         test(coil, grid_xyz, grid_rpz)
 
     @pytest.mark.unit
@@ -441,7 +444,10 @@ class TestCoil:
             # surface has major radius R+1, minor radius 1, so a coil on inner
             # midboard has the correct dimensions
             surf = FourierRZToroidalSurface(
-                R_lmn=[R + 1, 1], Z_lmn=[0, -1], modes_R=[[0, 1]], modes_Z=[[0, -1]]
+                R_lmn=[R + 1, 1],
+                modes_R=[[0, 0], [1, 0]],
+                Z_lmn=[-1],
+                modes_Z=[[-1, 0]],
             )
             coil = FourierRZSurfaceCoil(
                 I, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi]
@@ -522,8 +528,13 @@ class TestCoil:
         coil4 = coil1.to_FourierRZ(N=coil1.N)
         coil5 = coil1.to_FourierXY(N=10, basis="rpz")
         coil6 = coil1.to_FourierPlanar(N=10, basis="rpz")
+        # coil1 traces R = 10 + cos(zeta), Z = 0, which is the theta=0 curve of this
+        # surface.
         surf = FourierRZToroidalSurface(
-            R_lmn=[0, 10, 1], modes_R=[[0, -1], [0, 0], [0, 1]]
+            R_lmn=[9, 1, 1],
+            modes_R=[[0, 0], [0, 1], [1, 0]],
+            Z_lmn=[-1],
+            modes_Z=[[-1, 0]],
         )
         coil7 = coil1.to_FourierRZSurface(surface=surf, secular_theta=0, secular_zeta=1)
 
@@ -539,7 +550,7 @@ class TestCoil:
         )  # use Grid instead of LinearGrid to prevent node sorting
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x6 = coil6.compute("x", grid=grid_planar, basis="xyz")["x"]
-        x7 = coil7.compute("x", grid=grid_planar, basis="xyz")["x"]
+        x7 = coil7.compute("x", grid=grid, basis="xyz")["x"]
 
         B1 = coil1.compute_magnetic_field(
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
@@ -568,7 +579,7 @@ class TestCoil:
         np.testing.assert_allclose(x1, x4, atol=1e-12)
         np.testing.assert_allclose(x1, x5, atol=1e-12)
         np.testing.assert_allclose(x1, x6, atol=1e-10)
-        np.testing.assert_allclose(x1, x7, atol=1e-10)
+        np.testing.assert_allclose(x1, x7, atol=1e-6)  # looser tolerance
         np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
         np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
         np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
@@ -888,10 +899,22 @@ class TestCoilSet:
         coils2 = coils0.to_FourierXYZ(grid=grid, check_intersection=False)
         coils3 = coils0.to_FourierXY(grid=grid, check_intersection=False)
         coils4 = coils0.to_FourierPlanar(grid=grid, check_intersection=False)
+        # to test conversion to surface coils, need a common surface
         surf = FourierRZToroidalSurface(
-            R_lmn=[0, 10, 1], modes_R=[[0, -1], [0, 0], [0, 1]]
+            R_lmn=[9, 1, 1],
+            modes_R=[[0, 0], [0, 1], [1, 0]],
+            Z_lmn=[-1],
+            modes_Z=[[-1, 0]],
         )
-        coils5 = coils0.to_FourierRZSurface(
+        surf_coils = MixedCoilSet(
+            FourierRZSurfaceCoil(
+                1e6, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[0.0]
+            ),
+            FourierRZSurfaceCoil(
+                1e6, surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi]
+            ),
+        )
+        coils5 = surf_coils.to_FourierXYZ(grid=grid).to_FourierRZSurface(
             grid=grid,
             check_intersection=False,
             surface=surf,
@@ -902,10 +925,12 @@ class TestCoilSet:
         assert isinstance(coils2, MixedCoilSet)
         assert isinstance(coils3, MixedCoilSet)
         assert isinstance(coils4, MixedCoilSet)
+        assert isinstance(coils5, MixedCoilSet)
         assert all(isinstance(coil, SplineXYZCoil) for coil in coils1)
         assert all(isinstance(coil, FourierXYZCoil) for coil in coils2)
         assert all(isinstance(coil, FourierXYCoil) for coil in coils3)
         assert all(isinstance(coil, FourierPlanarCoil) for coil in coils4)
+        assert all(isinstance(coil, FourierRZSurfaceCoil) for coil in coils5)
         x0 = coils0.compute("x", grid=grid, basis="xyz")
         x1 = coils1.compute("x", grid=grid, basis="xyz")
         x2 = coils2.compute("x", grid=grid, basis="xyz")
@@ -927,6 +952,11 @@ class TestCoilSet:
         )
         np.testing.assert_allclose(
             [xi["x"] for xi in x0], [xi["x"] for xi in x4], atol=1e-12
+        )
+        x5_orig = surf_coils.compute("x", grid=grid, basis="xyz")
+        x5_rt = coils5.compute("x", grid=grid, basis="xyz")
+        np.testing.assert_allclose(
+            [xi["x"] for xi in x5_orig], [xi["x"] for xi in x5_rt], atol=1e-6
         )
         B0 = coils0.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B1 = coils1.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)

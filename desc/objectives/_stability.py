@@ -737,9 +737,12 @@ class FinitenStability(_Objective):
         "_state_solver",
         "_matfree_solver",
         "_sigma_factor",
+        "_eigensolver",
         "_num_matvecs",
         "_cg_tol",
         "_cg_maxiter",
+        "_k_defl",
+        "_rr_refine",
         "_eigsh_tol",
         "_coupled_rt",
         "_n_rho_coupled",
@@ -808,9 +811,12 @@ class FinitenStability(_Objective):
         state_solver="dense_eigsh",
         matfree_solver=None,
         sigma_factor=1.3,
-        num_matvecs=64,
-        cg_tol=1e-6,
-        cg_maxiter=30000,
+        eigensolver=None,
+        num_matvecs=None,
+        cg_tol=None,
+        cg_maxiter=None,
+        k_defl=None,
+        rr_refine=None,
         eigsh_tol=1e-8,
         coupled_rt=False,
         n_rho_coupled=None,
@@ -843,9 +849,12 @@ class FinitenStability(_Objective):
         self._state_solver = state_solver
         self._matfree_solver = matfree_solver
         self._sigma_factor = sigma_factor
+        self._eigensolver = eigensolver
         self._num_matvecs = num_matvecs
         self._cg_tol = cg_tol
         self._cg_maxiter = cg_maxiter
+        self._k_defl = k_defl
+        self._rr_refine = rr_refine
         self._eigsh_tol = eigsh_tol
         self._coupled_rt = coupled_rt
         self._n_rho_coupled = n_rho_coupled
@@ -1232,6 +1241,31 @@ class FinitenStability(_Objective):
             "sigma": _agni_sigma_shift(self, constants),
             "eigsh_tol": self._eigsh_tol,
         }
+
+        # Solver options, forwarded as KWARGS -- but ONLY the ones the caller
+        # actually set. They used to be stored on `self` and never passed, so the
+        # compute function fell through to its environment fallbacks.
+        #
+        # Forwarding them unconditionally is WRONG even though it looks tidier:
+        # an unset parameter would send its own default down, and since the kwarg
+        # now beats the environment, that default would silently override every
+        # AGNI_* / CG_* variable in the job scripts. Measured: T1 has
+        # AGNI_NUM_MATVECS=50 and passes nothing, so an unconditional forward ran
+        # it at the objective's default of 64 instead -- same eigenvalue to 10
+        # digits, but |jit-dense| moved 7.163e-10 -> 7.154e-10.
+        #
+        # None therefore means "not set": fall through to the environment, then
+        # to the compute function's own default.
+        for _key, _val in (
+            ("eigensolver", self._eigensolver),
+            ("num_matvecs", self._num_matvecs),
+            ("cg_tol", self._cg_tol),
+            ("cg_maxiter", self._cg_maxiter),
+            ("k_defl", self._k_defl),
+            ("rr_refine", self._rr_refine),
+        ):
+            if _val is not None:
+                options[_key] = _val
         if self._density is not None:
             options["density"] = self._density
         options.update(coarse_opts)

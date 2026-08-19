@@ -19,6 +19,7 @@ where those are available, so the port is checked against the code that produced
 every recorded number rather than only against its own idea of correctness.
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -316,12 +317,26 @@ def test_pcg_deflated_without_Z_matches_pcg():
 # Equivalence against the original precond_stage2 implementations
 # ---------------------------------------------------------------------------
 
-_ORIG_PATHS = [
-    "/pscratch/sd/r/rgaur/AGNI_var/precond_harmonic",
-    "/pscratch/sd/r/rgaur/AGNI_var/precond_stage2",
-    "/pscratch/sd/r/rgaur/AGNI_var/dense-eigsh-optimization/precond_gj",
-]
-_orig_missing = [p for p in _ORIG_PATHS if not Path(p).is_dir()]
+# The original implementations live OUTSIDE the DESC repository, in the author's
+# working tree. Point AGNI_VAR_DIR at that tree to run the comparison; without it
+# this skips, which is the right behaviour anywhere else. No absolute path is
+# baked in: a test that only runs on one machine because someone's scratch
+# directory is hardcoded into it is not a portable test.
+_AGNI_VAR_DIR = os.environ.get("AGNI_VAR_DIR", "").strip()
+_ORIG_PATHS = (
+    [
+        str(Path(_AGNI_VAR_DIR) / "precond_harmonic"),
+        str(Path(_AGNI_VAR_DIR) / "precond_stage2"),
+        str(Path(_AGNI_VAR_DIR) / "dense-eigsh-optimization" / "precond_gj"),
+    ]
+    if _AGNI_VAR_DIR
+    else []
+)
+_orig_missing = (
+    ["set AGNI_VAR_DIR to the AGNI_var tree to run this comparison"]
+    if not _AGNI_VAR_DIR
+    else [p for p in _ORIG_PATHS if not Path(p).is_dir()]
+)
 
 
 @pytest.mark.unit
@@ -329,7 +344,7 @@ _orig_missing = [p for p in _ORIG_PATHS if not Path(p).is_dir()]
     bool(_orig_missing),
     reason=f"original precond modules not present: {_orig_missing}",
 )
-def test_port_matches_original_precond_implementations():
+def test_port_matches_original_precond_implementations(request):
     """Every ported routine reproduces the original bit-for-bit.
 
     The property tests above prove the module is self-consistent. They cannot
@@ -350,6 +365,11 @@ def test_port_matches_original_precond_implementations():
     """
     import sys
 
+    # Restore sys.path afterwards. Inserting and leaving it leaks these
+    # directories into every test that runs later in the same session, where
+    # they can shadow real modules by name.
+    _saved_path = list(sys.path)
+    request.addfinalizer(lambda: sys.path.__setitem__(slice(None), _saved_path))
     for p in _ORIG_PATHS:
         if p not in sys.path:
             sys.path.insert(0, p)
@@ -494,6 +514,16 @@ def test_port_matches_original_precond_implementations():
         ridge=0.0,
         seed=3,
     )
+    # deflation_Y: this one is on the DEFAULT path now that traced_defl defaults
+    # to True, so a drift here changes every pcg_deflated solve.
+    Zd = jnp.asarray(rng.standard_normal((60, 8)))
+    Bd = rng.standard_normal((60, 60))
+    Hd = jnp.asarray(Bd @ Bd.T + 60 * np.eye(60))
+    Yn, rank_n = new.deflation_Y(Zd, Hd @ Zd)
+    Yo, rank_o = old_cd.deflation_Y_traced(Zd, Hd @ Zd)
+    assert int(rank_n) == int(rank_o), f"rank {int(rank_n)} vs {int(rank_o)}"
+    same("deflation_Y", Yn, Yo)
+
     same("coarse seed v0", v0_n, v0_o)
     same("coarse deflation Z", Z_n, Z_o)
     same("coarse lam", lc_n, lc_o)
@@ -560,3 +590,69 @@ def test_indefinite_blocks_are_reported_not_hidden():
     assert (
         ridge > 0.0
     ), "an indefinite block factored at ridge 0 -- escalation is broken"
+
+
+# ---------------------------------------------------------------------------
+# Solver-option resolution
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_kwargs_win_over_environment(monkeypatch):
+    """An explicit keyword argument overrides the environment fallback.
+
+    This pins the fix for a real defect. The old code resolved several numerical
+    options as ``os.environ.get(VAR, str(kwargs.get(name, default)))``, which
+    used the kwarg only as the ENVIRONMENT'S default -- so whenever the variable
+    happened to be exported, an explicit argument was silently discarded. With
+    ``AGNI_NUM_MATVECS`` exported in 89 places across the job scripts, passing
+    ``num_matvecs=`` did nothing.
+
+    These are numerical choices that change the answer, so a caller that passes
+    one must get it. The environment stays as a fallback only.
+    """
+    from desc.compute._stability import _solver_flag, _solver_opt
+
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "999")
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "eigsh_callback")
+    monkeypatch.setenv("AGNI_RR_REFINE", "1")
+
+    # kwarg present -> kwarg wins, environment ignored
+    assert (
+        _solver_opt({"num_matvecs": 64}, "num_matvecs", "AGNI_NUM_MATVECS", 50, int)
+        == 64
+    )
+    assert (
+        _solver_opt(
+            {"eigensolver": "pcg_deflated"}, "eigensolver", "AGNI_EIGENSOLVER", "x"
+        )
+        == "pcg_deflated"
+    )
+    assert _solver_flag({"rr_refine": False}, "rr_refine", "AGNI_RR_REFINE") is False
+
+    # kwarg absent -> environment is the fallback
+    assert _solver_opt({}, "num_matvecs", "AGNI_NUM_MATVECS", 50, int) == 999
+    assert _solver_flag({}, "rr_refine", "AGNI_RR_REFINE") is True
+
+    # neither -> the declared default
+    monkeypatch.delenv("AGNI_NUM_MATVECS")
+    monkeypatch.delenv("AGNI_RR_REFINE")
+    assert _solver_opt({}, "num_matvecs", "AGNI_NUM_MATVECS", 50, int) == 50
+    assert _solver_flag({}, "rr_refine", "AGNI_RR_REFINE") is False
+
+    # None is treated as "not supplied", so callers can pass through optionals
+    assert (
+        _solver_opt({"num_matvecs": None}, "num_matvecs", "AGNI_NUM_MATVECS", 50, int)
+        == 50
+    )
+
+
+@pytest.mark.unit
+def test_solver_flag_accepts_bools_and_strings():
+    """The boolean resolver takes real bools as well as the shell spellings."""
+    from desc.compute._stability import _solver_flag
+
+    for truthy in (True, "1", "true", "TRUE", "yes", "on"):
+        assert _solver_flag({"f": truthy}, "f", "NOPE") is True, truthy
+    for falsy in (False, "0", "false", "no", "off", ""):
+        assert _solver_flag({"f": falsy}, "f", "NOPE") is False, falsy

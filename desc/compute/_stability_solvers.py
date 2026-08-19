@@ -45,6 +45,7 @@ __all__ = [
     "build_ring_blocks",
     "coarse_gen_modes",
     "coarse_seed_and_deflation",
+    "deflation_Y",
     "factor_ring_blocks",
     "finish_ring_block",
     "fourier_interp_matrix",
@@ -858,3 +859,44 @@ def factor_ring_blocks_traced(blocks, ridge=0.0):
     eye = jnp.eye(b, dtype=blocks.dtype)[None]
     L = jnp.linalg.cholesky(blocks + ridge * eye)
     return L, jnp.all(jnp.isfinite(L)), ridge
+
+
+def deflation_Y(Z, HZ, rcond=1e-12):
+    """``Y`` for ``M^-1 = M_ring^-1 + Y Y^T``, fully traced, fixed shape ``(n, k)``.
+
+    The obvious implementation selects surviving directions with BOOLEAN MASKS --
+    ``Z[:, live] @ Q[:, keep] / sqrt(w[keep])`` -- which is a variable-size gather
+    plus an ``int(keep.sum())`` Python branch. Neither can be traced, so that form
+    cannot be used under jit.
+
+    Same result at fixed shape: keep all ``k`` columns and ZERO the rejected ones.
+    ``Y Y^T`` is unchanged, because a zero column contributes nothing to the outer
+    product.
+
+    Dead directions (``diag(Z^T H Z) <= 0``) are handled by zeroing those COLUMNS
+    OF Z before the mixing, so whatever the eigenvectors do with them afterwards
+    they multiply a zero column and cannot re-enter ``Y``.
+
+    Returns
+    -------
+    Y : ndarray, (n, k)
+    rank : int
+        Number of directions that survived the ``rcond`` cut, as a traced scalar.
+    """
+    k = Z.shape[1]
+    A2 = jnp.swapaxes(Z, 0, 1) @ HZ
+    A2 = 0.5 * (A2 + jnp.swapaxes(A2, 0, 1))
+    dg = jnp.diagonal(A2)
+    live = dg > 0.0
+    d = jnp.where(live, jnp.sqrt(jnp.where(live, dg, 1.0)), 1.0)
+    Hh = (A2 / d[:, None]) / d[None, :]
+    eye = jnp.eye(k, dtype=A2.dtype)
+    both = live[:, None] & live[None, :]
+    # Dead rows/cols become identity so eigh stays well posed. Harmless: the
+    # matching columns of Z are zeroed below.
+    Hh = jnp.where(both, 0.5 * (Hh + jnp.swapaxes(Hh, 0, 1)), eye)
+    w, Q = jnp.linalg.eigh(Hh)
+    keep = w > rcond * jnp.max(w)
+    scale = jnp.where(keep, 1.0 / jnp.sqrt(jnp.where(keep, w, 1.0)), 0.0)
+    Zs = jnp.where(live[None, :], Z / d[None, :], 0.0)
+    return (Zs @ Q) * scale[None, :], jnp.sum(keep)

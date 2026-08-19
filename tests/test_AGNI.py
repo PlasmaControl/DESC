@@ -154,6 +154,10 @@ def agni(request):
     return dict(
         eq=_EQ,
         grid=_GRID,
+        # The PEST source grid, BEFORE mapping to DESC coordinates. Compute
+        # functions take the mapped grid; `FinitenStability` takes this one and
+        # maps it itself, per its build() error message.
+        pest_grid=_grid0,
         diffmat=_DIFFMAT,
         kw=_KW,
         lam3=_LAM3,
@@ -197,6 +201,12 @@ def test_stability_kwargs_are_registered():
     read = set(re.findall(r"kwargs\.get\(\s*[\"'](\w+)[\"']", src))
     read |= set(re.findall(r"kwargs\[\s*[\"'](\w+)[\"']\s*\]", src))
     read |= set(re.findall(r"kwargs\.pop\(\s*[\"'](\w+)[\"']", src))
+    # Options resolved through the kwarg-first helpers. Without these two the
+    # guard sees nothing: moving a read from `kwargs.get("cg_tol", ...)` to
+    # `_solver_opt(kwargs, "cg_tol", ...)` hid 16 options from it at once, and
+    # two of them (cg_tol, cg_maxiter) were unregistered and raised at runtime.
+    read |= set(re.findall(r"_solver_opt\(\s*kwargs,\s*[\"'](\w+)[\"']", src))
+    read |= set(re.findall(r"_solver_flag\(\s*kwargs,\s*[\"'](\w+)[\"']", src))
     assert read, "found no kwargs reads -- the regex needs updating"
 
     # Known pre-existing gaps, present before this test was written. Listed
@@ -398,3 +408,212 @@ def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     print(f"\n  vmapped vs dense: {worst_v:.3e}\n  eager   vs dense: {worst_e:.3e}")
     assert worst_v < 5e-15, f"vmapped ring blocks disagree with dense: {worst_v:.3e}"
     assert worst_e < 5e-15, f"eager ring blocks disagree with dense: {worst_e:.3e}"
+
+
+# ---------------------------------------------------------------------------
+# FinitenStability objective, at CPU scale
+#
+# These cover what the opt-in gates in test_AGNI_precond.py cover at 32x32x12 --
+# the objective wrapper, the Hellmann-Feynman gradient, update_state -- but small
+# enough to run anywhere. The big gates stay: they are the ones tied to recorded
+# numbers. These exist so the code paths are not left uncovered when those skip.
+# ---------------------------------------------------------------------------
+
+
+def _finiten_objective(agni, build=True, **kw):
+    """Build a FinitenStability on the fixture's PEST grid."""
+    from desc.objectives import FinitenStability
+
+    obj = FinitenStability(
+        eq=agni["eq"],
+        target=0.0,
+        weight=1.0,
+        normalize=False,
+        normalize_target=False,
+        grid=agni["pest_grid"],
+        diffmat=agni["diffmat"],
+        gamma=5.0 / 3.0,
+        metric="raw",
+        name="finite-n lambda3 rayleigh",
+        **kw,
+    )
+    if build:
+        obj.build(verbose=0)
+    return obj
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_finiten_objective_matches_direct_compute(agni):
+    """The objective returns the same lambda as a direct eq.compute.
+
+    Covers ``FinitenStability.build`` and ``compute_data`` -- the flux-key
+    gathering, the PEST grid mapping and the options dict -- none of which the
+    bare ``eq.compute`` tests touch. Those are the wrapper layers where a wrong
+    grid or a dropped option shows up as a plausible-looking wrong number rather
+    than an exception.
+    """
+    lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+
+    obj = _finiten_objective(agni, lambda_guess=lam_direct)
+    lam_obj = float(np.real(np.asarray(obj.compute(obj.things[0].params_dict))[0]))
+
+    reldiff = abs(lam_obj - lam_direct) / abs(lam_direct)
+    print(f"\n  direct  lambda3 = {lam_direct:.9e}")
+    print(f"  objective lam_R = {lam_obj:.9e}  (reldiff={reldiff:.2e})")
+    assert np.sign(lam_obj) == np.sign(lam_direct), (
+        "objective and direct compute disagree on the SIGN of the growth rate: "
+        f"{lam_obj:.6e} vs {lam_direct:.6e}"
+    )
+    np.testing.assert_allclose(lam_obj, lam_direct, rtol=1e-3)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_finiten_objective_gradient_is_hellmann_feynman(agni):
+    """The gradient exists, is finite, and is not identically zero.
+
+    ``finite-n lambda3 rayleigh`` freezes the eigenvector for AD, so the
+    derivative reduces to the Hellmann-Feynman contraction
+    ``v^T (dA/dp) v / v^T v``. That reduction happens through a ``custom_vjp``
+    whose backward rule is easy to get silently wrong -- a zero cotangent, or a
+    NaN, still "works" and just stops the optimizer moving.
+
+    This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``;
+    the recorded end-to-end check is the opt-in T2 optimizer gate.
+    """
+    from desc.objectives import ObjectiveFunction
+
+    lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    # `x()` and `grad()` belong to ObjectiveFunction, not to a single objective;
+    # this is how the drivers wrap it too.
+    objective = ObjectiveFunction(
+        _finiten_objective(agni, lambda_guess=lam_direct, build=False),
+        deriv_mode="blocked",
+    )
+    objective.build(verbose=0)
+
+    x = objective.x(agni["eq"])
+    g = np.asarray(objective.grad(x))
+
+    assert g.shape[0] == x.shape[0], f"gradient shape {g.shape} vs x {x.shape}"
+    assert np.all(np.isfinite(g)), (
+        f"gradient has {np.sum(~np.isfinite(g))} non-finite entries; a NaN here "
+        "propagates into the optimizer step without raising"
+    )
+    assert np.max(np.abs(g)) > 0.0, (
+        "gradient is identically zero -- the Hellmann-Feynman contraction is not "
+        "reaching the parameters, so the optimizer cannot move"
+    )
+    print(f"\n  |grad|_inf = {np.max(np.abs(g)):.6e}  n = {g.size}")
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_update_state_refreshes_the_eigenpair(agni):
+    """update_state(dense_eigsh) puts a fresh eigenpair into the constants.
+
+    Covers the dense-refresh branch of ``update_state``, which the optimizer
+    calls once per outer step. It is what supplies ``v_guess``/``lambda_guess``,
+    and a silent failure there means the optimizer minimizes against a stale
+    vector -- the failure mode WHY_V_CANNOT_BE_CACHED.md documents.
+    """
+    lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    obj = _finiten_objective(agni, lambda_guess=lam_direct, state_solver="dense_eigsh")
+
+    data = obj.update_state(obj.things[0].params_dict)
+
+    lam = float(np.asarray(data["finite-n lambda3"]).reshape(-1)[0])
+    assert np.isfinite(lam), "update_state produced a non-finite eigenvalue"
+    np.testing.assert_allclose(lam, lam_direct, rtol=1e-3)
+
+    # `finite-n eigenfunction3` is FULL length (3*n_total), not reduced to the
+    # kept DOFs -- the same distinction that the matrix-free operator test has to
+    # respect when it applies Ax.
+    v = np.asarray(obj._constants["v_guess"]).reshape(-1)
+    assert (
+        v.size == 3 * agni["n_total"]
+    ), f"v_guess size {v.size} != 3*n_total {3 * agni['n_total']}"
+    assert np.all(np.isfinite(v)) and np.max(np.abs(v)) > 0.0
+    np.testing.assert_allclose(
+        float(np.asarray(obj._constants["lambda_guess"])), lam, rtol=1e-12
+    )
+
+
+def _build_pest_level(eq, n_rho, n_theta, n_zeta):
+    """A PEST grid + matching DiffMat at an arbitrary resolution.
+
+    Same construction the module fixture uses, factored out so a COARSE level can
+    be built alongside the fine one.
+    """
+    x_lob, _ = leggauss_lob(n_rho)
+    rho = automorphism_staircase1(x_lob, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
+    dfa = jax.vmap(
+        lambda x: jax.grad(automorphism_staircase1, argnums=0)(
+            x, eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0
+        )
+    )(x_lob)
+    d_rho_raw, w_rho_raw = legendre_diffmat(n_rho)
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, n_theta, endpoint=False)
+    d_th, w_th = fourier_diffmat(n_theta)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
+    d_z, w_z = fourier_diffmat(n_zeta)
+    dm = DiffMat(
+        D_rho=d_rho_raw / dfa[:, None],
+        W_rho=jnp.diagonal(w_rho_raw * dfa[:, None]),
+        D_theta=d_th,
+        W_theta=jnp.diagonal(w_th),
+        D_zeta=d_z * eq.NFP,
+        W_zeta=jnp.diagonal(w_z / eq.NFP),
+    )
+    return LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False), dm
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_pcg_deflated_two_level_matches_dense(agni):
+    """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
+
+    This is the CPU-scale version of the `verify_coarse_defl` gate: a coarse
+    level is built at half the fine radial resolution, its softest generalized
+    modes are prolonged to seed and deflate the fine solve, and the resulting
+    Rayleigh quotient is compared against the dense ARPACK eigenvalue.
+
+    It is the only CPU-runnable coverage of ``_eigensolve_pcg`` and
+    ``_coarse_space`` -- roughly 770 lines that were otherwise exercised only by
+    a 20-minute GPU job. Those cover the ring preconditioner, the deflation
+    projector, the prolongation and the coarse generalized eigensolve.
+
+    The tolerance is loose on purpose. This is an inexact iterative solve at a
+    small CG budget, so the point is that the deflated path lands on the SAME
+    MODE with the same sign and the right magnitude -- not that it matches to
+    machine precision. `verify_coarse_defl` at 32x32x12 is what pins the digits.
+    """
+    nr, nt, nz = agni["res"]
+    lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+
+    coarse_grid, coarse_diffmat = _build_pest_level(agni["eq"], max(4, nr // 2), nt, nz)
+
+    obj = _finiten_objective(
+        agni,
+        lambda_guess=lam_dense,
+        sigma_factor=1.3,
+        coarse_grid=coarse_grid,
+        coarse_diffmat=coarse_diffmat,
+        eigensolver="pcg_deflated",
+        k_defl=8,
+        num_matvecs=40,
+        cg_tol=1e-8,
+        cg_maxiter=3000,
+    )
+    lam_pcg = float(np.real(np.asarray(obj.compute(obj.things[0].params_dict))[0]))
+
+    reldiff = abs(lam_pcg - lam_dense) / abs(lam_dense)
+    print(f"\n  dense lambda3   = {lam_dense:.9e}")
+    print(f"  pcg_deflated    = {lam_pcg:.9e}  (reldiff={reldiff:.2e})")
+    assert np.isfinite(lam_pcg), "pcg_deflated returned a non-finite eigenvalue"
+    assert np.sign(lam_pcg) == np.sign(lam_dense), (
+        f"pcg_deflated flipped the sign: {lam_pcg:.6e} vs dense {lam_dense:.6e} "
+        "-- an unstable equilibrium reported as stable"
+    )
+    np.testing.assert_allclose(lam_pcg, lam_dense, rtol=5e-2)

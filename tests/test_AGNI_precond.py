@@ -35,17 +35,36 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-_AGNI_VAR = Path("/pscratch/sd/r/rgaur/AGNI_var")
-_STAGE2 = _AGNI_VAR / "precond_stage2"
-_SHAKEOUT = _STAGE2 / "shakeout2_new.py"
-_REQUIRED = [
-    _SHAKEOUT,
-    _STAGE2 / "transfer.py",
-    _STAGE2 / "two_level.py",
-    _AGNI_VAR / "precond_harmonic",
-]
+# Device for the subprocess gates. CPU BY DEFAULT: nothing here needs an
+# accelerator to be CORRECT, only to be fast, and a test that silently demands
+# one cannot run on someone else's machine. Set AGNI_TEST_DEVICE=gpu to use one.
+_DEVICE = os.environ.get("AGNI_TEST_DEVICE", "cpu").strip().lower()
 
-_missing = [str(p) for p in _REQUIRED if not p.exists()]
+# No absolute path is baked in. Point AGNI_VAR_DIR at the AGNI_var tree to run
+# these; without it they skip, which is correct on any other machine.
+_AGNI_VAR = (
+    Path(os.environ.get("AGNI_VAR_DIR", ""))
+    if os.environ.get("AGNI_VAR_DIR", "").strip()
+    else None
+)
+_STAGE2 = (_AGNI_VAR / "precond_stage2") if _AGNI_VAR is not None else Path(".")
+_SHAKEOUT = _STAGE2 / "shakeout2_new.py"
+_REQUIRED = (
+    [
+        _SHAKEOUT,
+        _STAGE2 / "transfer.py",
+        _STAGE2 / "two_level.py",
+        _AGNI_VAR / "precond_harmonic",
+    ]
+    if _AGNI_VAR is not None
+    else []
+)
+
+_missing = (
+    ["set AGNI_VAR_DIR to the AGNI_var tree"]
+    if _AGNI_VAR is None
+    else [str(p) for p in _REQUIRED if not p.exists()]
+)
 pytestmark = pytest.mark.skipif(
     bool(_missing),
     reason=(
@@ -166,15 +185,21 @@ def test_shakeout2_reproduces_recorded_values():
     )
 
 
-# The T1 gate needs an 80 GB A100: at GJ 32x32x12 the dense A is 10.12 GB and the
-# assembly peaks near 54 GB. It cannot run on CPU or on a 40 GB card, so it is
-# opt-in rather than merely GPU-detected -- a confusing OOM is worse than a skip.
-_T1_EQ = Path(
-    "/pscratch/sd/r/rgaur/AGNI_var/dense-eigsh-optimization/eq_lowres_L10M10N10.h5"
+# The T1 gate is opt-in on MEMORY, not on hardware: at GJ 32x32x12 the dense A is
+# 10.12 GB with a ~54 GB assembly peak. It runs on CPU given enough RAM, and on a
+# GPU only with 80 GB. Opt-in rather than auto-detected because a confusing OOM
+# is worse than a skip.
+_T1_EQ = (
+    (_AGNI_VAR / "dense-eigsh-optimization" / "eq_lowres_L10M10N10.h5")
+    if _AGNI_VAR is not None
+    else Path("eq_lowres_L10M10N10.h5")
 )
 _t1_reason = None
 if os.environ.get("AGNI_GPU_TESTS", "0").strip() not in ("1", "true", "True"):
-    _t1_reason = "set AGNI_GPU_TESTS=1 to run; needs an 80 GB A100"
+    _t1_reason = (
+        "set AGNI_GPU_TESTS=1 to run; GJ 32x32x12 assembles a 10.12 GB dense A "
+        "with a ~54 GB peak, so it needs a large-memory node (CPU or GPU)"
+    )
 elif not _T1_EQ.is_file():
     _t1_reason = f"T1 equilibrium not found: {_T1_EQ}"
 
@@ -205,7 +230,8 @@ def test_t1_jax_lanczos_jit_reproduces_recorded_value():
     env = dict(os.environ)
     env.update(
         {
-            "DESC_DEVICE": "gpu",
+            "DESC_DEVICE": _DEVICE,
+            "JAX_PLATFORMS": "" if _DEVICE == "gpu" else "cpu",
             "JAX_ENABLE_X64": "1",
             "AGNI_EIGENSOLVER": "jax_lanczos",
             "AGNI_NUM_MATVECS": "50",
@@ -257,7 +283,10 @@ def test_t1_jax_lanczos_jit_reproduces_recorded_value():
 _T2_HISTORY_REF = _STAGE2 / "gj_opt_history_56670567.jsonl"
 _t2_reason = None
 if os.environ.get("AGNI_GPU_TESTS", "0").strip() not in ("1", "true", "True"):
-    _t2_reason = "set AGNI_GPU_TESTS=1 to run; needs an 80 GB A100, ~20 min"
+    _t2_reason = (
+        "set AGNI_GPU_TESTS=1 to run; a full optimization at GJ 32x32x12, "
+        "~20 min on a GPU and longer on CPU"
+    )
 elif not _T2_HISTORY_REF.is_file():
     _t2_reason = f"reference trajectory not found: {_T2_HISTORY_REF}"
 
@@ -293,7 +322,8 @@ def test_optimizer_reproduces_recorded_trajectory():
     env = dict(os.environ)
     env.update(
         {
-            "DESC_DEVICE": "gpu",
+            "DESC_DEVICE": _DEVICE,
+            "JAX_PLATFORMS": "" if _DEVICE == "gpu" else "cpu",
             "JAX_ENABLE_X64": "1",
             "AGNI_EIGENSOLVER": "jax_lanczos",
             "AGNI_NUM_MATVECS": "50",

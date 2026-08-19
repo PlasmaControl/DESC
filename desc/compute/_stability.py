@@ -30,6 +30,58 @@ from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
+class _NoRitzStore:
+    """Stand-in for `ritz_store` when it is not importable.
+
+    Reports an empty store and swallows writes, which is exactly what the real
+    module does under jit -- `put` refuses tracers and `get` returns None while
+    tracing. Recycling is an ITERATION-COUNT optimisation, never a correctness
+    one, so degrading to a cold start is the correct fallback.
+    """
+
+    @staticmethod
+    def get():
+        return None
+
+    @staticmethod
+    def put(Z, kmax=None):
+        return None
+
+    @staticmethod
+    def bump_solve():
+        return None
+
+
+def _solver_opt(kwargs, name, env, default, cast=None):
+    """Resolve a solver option: KWARG FIRST, then environment, then default.
+
+    The keyword argument wins. This inverts what several of these reads used to
+    do -- ``os.environ.get("AGNI_NUM_MATVECS", str(kwargs.get("num_matvecs", 50)))``
+    used the kwarg only as the environment's *default*, so an exported variable
+    silently discarded an explicit argument. A caller that passes a value must
+    get that value.
+
+    The environment is kept as a fallback so existing job scripts keep working,
+    but it can no longer override an argument. Anything resolved here is a
+    NUMERICAL choice that changes the answer, so it belongs in the call, not in
+    the shell.
+    """
+    val = kwargs.get(name, None)
+    if val is None:
+        val = os.environ.get(env, default)
+    return cast(val) if cast is not None else val
+
+
+def _solver_flag(kwargs, name, env, default="0"):
+    """Boolean solver option, kwarg first. Accepts bools or the usual strings."""
+    val = kwargs.get(name, None)
+    if val is None:
+        val = os.environ.get(env, default)
+    if isinstance(val, bool):
+        return val
+    return str(val).strip().lower() not in ("0", "false", "no", "off", "")
+
+
 def _get_zernike_penalty(transforms, rt_size):
     """Return ``(alpha, Q_rt, rank)`` for a DiffMat-owned penalty."""
     diffmat = transforms.get("diffmat", None)
@@ -2317,13 +2369,38 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     gamma="float: adiabatic constant",
     density="ndarray: the radial density profile",
     sigma="float: shift for the ARPACK eigsh that supplies the fresh eigenvector",
+    eigensolver="str: 'eigsh_callback' (default), 'jax_lanczos' or 'pcg_deflated'. "
+    "Env AGNI_EIGENSOLVER is a fallback only -- the kwarg wins",
+    coarse_num_matvecs="int: Lanczos matvec count for the COARSE generalized "
+    "solve (default 100). Deliberately separate from num_matvecs: the two levels "
+    "were never tied together, and the old code gave them different defaults "
+    "while reading one env var",
+    sigma_mode="str: 'fixed' (default) or 'adapt'. Env AGNI_SIGMA_MODE is a fallback",
+    sigma_factor="float: shift multiplier for sigma_mode='adapt' (default 2.5)",
+    factor="str: dense factorization for the shift-invert, 'lu' (default) or "
+    "'cholesky'. Env AGNI_FACTOR is a fallback",
+    gpu_lu="bool: keep the dense LU on device (default False)",
+    cg_maxiter_cold="int: CG budget on the first, un-warm-started solve "
+    "(default 6*cg_maxiter)",
+    cg_maxiter_pass1="int: CG budget for the adapt first pass",
+    k_defl="int: deflation rank (default 50). Env AGNI_K_DEFL is a fallback",
+    rr_refine="bool: Rayleigh-Ritz re-extraction of the eigenvector (default False)",
+    ring_traced="bool: build ring blocks with one vmapped call instead of a host "
+    "loop (default True). The host loop is not traceable, so it cannot be used "
+    "under jit",
+    traced_defl="bool: traced deflation-space truncation (default True). The "
+    "eager branch is not traceable",
+    z_init="str: path to a saved seed/deflation basis",
     debug_matfree="bool: print matrix-free operator diagnostics (read by "
     "`_agni3_matfree_operator`, which this compute function builds its "
     "jax_lanczos and pcg_deflated operators from)",
     eigsh_tol="float: tolerance for the ARPACK eigsh",
-    num_matvecs="int: Lanczos matvec count for the jax_lanczos and pcg_deflated "
-    "eigensolvers (env AGNI_NUM_MATVECS overrides). Read at the "
-    "`_assemble_and_solve_host`/`_eigensolve_jax`/`_eigensolve_pcg` sites",
+    num_matvecs="int: Lanczos matvec count for the FINE solve (default 50). "
+    "Env AGNI_NUM_MATVECS is a fallback only -- the kwarg wins",
+    cg_tol="float: relative-residual tolerance for the inner PCG (default 1e-10). "
+    "Env CG_TOL is a fallback only",
+    cg_maxiter="int: inner PCG iteration cap (default 8000). Env CG_MAXITER is a "
+    "fallback only. Hitting the cap is not an error -- check the reported relres",
     coarse_grid="Grid: optional COARSE level (mapped to DESC coords at these "
     "params) whose generalized modes of (H_c, M_ring,c) supply the deflation "
     "space and the Lanczos seed. Active only with AGNI_COARSE_DEFL=1 and "
@@ -2408,12 +2485,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     import jax.scipy.linalg as _jsla
 
-    _use_gpu_lu = os.environ.get("AGNI_GPU_LU", "0").lower() not in {
-        "0",
-        "false",
-        "no",
-        "off",
-    }
+    _use_gpu_lu = _solver_flag(kwargs, "gpu_lu", "AGNI_GPU_LU")
 
     def _assemble_and_solve_host(params_host, data_host):
         """Assemble ``A`` and run scipy ``eigsh`` for the rayleigh primal pass.
@@ -2518,11 +2590,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             np.asarray(w_h[0], dtype=A_np.dtype),
         )
 
-    _eigensolver = os.environ.get("AGNI_EIGENSOLVER", "eigsh_callback").lower()
-    _num_matvecs = int(
-        os.environ.get("AGNI_NUM_MATVECS", str(kwargs.get("num_matvecs", 50)))
-    )
-    _sigma_mode = os.environ.get("AGNI_SIGMA_MODE", "fixed").lower()
+    _eigensolver = str(
+        _solver_opt(kwargs, "eigensolver", "AGNI_EIGENSOLVER", "eigsh_callback")
+    ).lower()
+    _num_matvecs = int(_solver_opt(kwargs, "num_matvecs", "AGNI_NUM_MATVECS", 50))
+    _sigma_mode = str(
+        _solver_opt(kwargs, "sigma_mode", "AGNI_SIGMA_MODE", "fixed")
+    ).lower()
     _valid = {"fixed", "track", "adapt", "track+adapt", "adapt+track"}
     if _sigma_mode not in _valid:
         raise ValueError(
@@ -2531,13 +2605,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             )
         )
     _adapt = "adapt" in _sigma_mode
-    _adapt_factor = float(os.environ.get("AGNI_SIGMA_FACTOR", "2.5"))
+    _adapt_factor = _solver_opt(kwargs, "sigma_factor", "AGNI_SIGMA_FACTOR", 2.5, float)
     # Dense factorization used as the shift-invert OPinv in `_eigensolve_jax`.
     # `H = A - sigma I` is SPD whenever sigma sits below the whole spectrum, which
     # is the operating regime, so `potrf` (n^3/3) may replace `getrf` (2n^3/3).
     # Default stays `lu` so this is opt-in and A/B-able against every prior run.
     # See AGNI_var/precond_stage2/CHOLESKY_EFFICIENCY.md.
-    _factor = os.environ.get("AGNI_FACTOR", "lu").lower()
+    _factor = str(_solver_opt(kwargs, "factor", "AGNI_FACTOR", "lu")).lower()
     if _factor not in {"lu", "cholesky"}:
         raise ValueError(
             "AGNI_FACTOR must be 'lu' or 'cholesky', got {!r}".format(_factor)
@@ -2760,17 +2834,24 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         rebuilt EVERY evaluation -- a Python loop over ``n_rho*n_zeta`` rings.
         That is the dominant setup cost and the obvious thing to batch later.
         """
-        import sys as _sys
-
-        # `ritz_store` is the last remaining out-of-package import. It is an
-        # eager-only module global (see OPTIMIZATION.md item D) and is INERT
-        # under jit, so the deflated path does not depend on it; coarse-space
-        # deflation overrides it entirely.
-        for _p in ("/pscratch/sd/r/rgaur/AGNI_var/precond_stage2",):
-            if _p not in _sys.path:
-                _sys.path.insert(0, _p)
         import numpy as _np
-        import ritz_store as _rs
+
+        # `ritz_store` carries Ritz vectors between EAGER evaluations. It is
+        # explicitly a temporary shortcut (its own docstring: "deliberately
+        # temporary"), it REFUSES tracers, and coarse-space deflation overrides
+        # it when active -- so under jit, which is the production path, it does
+        # nothing at all.
+        #
+        # It therefore stays OPTIONAL rather than being vendored: importing it is
+        # a no-op for every jitted run, and requiring it would make the whole
+        # deflated path depend on a directory outside the package. Absent, the
+        # solve simply starts cold, which costs iterations and never correctness
+        # (PCG converges to the same solution for any SPD preconditioner, and the
+        # eigenvalue comes from Lanczos on the exact operator).
+        try:
+            import ritz_store as _rs
+        except ModuleNotFoundError:
+            _rs = _NoRitzStore()
 
         from ._stability_solvers import build_ring_blocks as _build_rings
         from ._stability_solvers import factor_ring_blocks as _fb
@@ -2781,7 +2862,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         from ._stability_solvers import ring_index_maps as _ring_maps
         from ._stability_solvers import ring_nodes as _ring_nodes_fn
 
-        _cgmax = int(os.environ.get("CG_MAXITER", "8000"))
+        _cgmax = _solver_opt(kwargs, "cg_maxiter", "CG_MAXITER", 8000, int)
         # COLD START. With no carried-over vectors the first evaluation has only
         # the ring preconditioner, and at 32x32x12 (n=36096) CG_MAXITER=8000 is
         # not enough: measured lam_R=+2.62 against a true -2.94e-04, i.e. lam_mu
@@ -2789,18 +2870,15 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # gradient and hence the optimiser's first step. Pay more once, then let
         # recycling carry the rest -- this is the "converged high-res solve, then
         # reuse its Ritz vectors" workflow, not a fudge.
-        _cgwarm = int(os.environ.get("CG_MAXITER_COLD", str(6 * _cgmax)))
-        _cgtol = float(os.environ.get("CG_TOL", "1e-10"))
-        _kdefl = int(os.environ.get("AGNI_K_DEFL", "50"))
+        _cgwarm = _solver_opt(
+            kwargs, "cg_maxiter_cold", "CG_MAXITER_COLD", 6 * _cgmax, int
+        )
+        _cgtol = _solver_opt(kwargs, "cg_tol", "CG_TOL", 1e-10, float)
+        _kdefl = _solver_opt(kwargs, "k_defl", "AGNI_K_DEFL", 50, int)
         # Rayleigh-Ritz re-extraction of the eigenvector. See the block in
         # `_solve_at` for what it does and why. Default off so it can be A/B'd
         # against the archived runs.
-        _rr_refine = os.environ.get("AGNI_RR_REFINE", "0").lower() not in (
-            "0",
-            "false",
-            "no",
-            "",
-        )
+        _rr_refine = _solver_flag(kwargs, "rr_refine", "AGNI_RR_REFINE")
 
         d_h = dict(_other_data)
         d_h.update(data_d)
@@ -2859,7 +2937,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # option. AGNI_Z_INIT points at an .npz from precond_stage2/make_seed.py.
         _seed_v0 = None
         if _rs.get() is None:
-            _zi = os.environ.get("AGNI_Z_INIT", "").strip()
+            _zi = str(_solver_opt(kwargs, "z_init", "AGNI_Z_INIT", "")).strip()
             if _zi:
                 _sd = _np.load(_zi)
                 if int(_sd["n_f"]) != nA:
@@ -2902,11 +2980,14 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # jittable: the eager version does a device_get per ring and a
         # variable-size boolean gather, both illegal under trace. Verified
         # against the eager blocks at 9.126e-17 relative; see METHOD.md 3.1.
-        use_traced_rings = os.environ.get("AGNI_RING_TRACED", "0").lower() not in (
-            "0",
-            "false",
-            "no",
-            "",
+        # DEFAULT TRACED. The eager branch does `np.asarray(jax.device_get(...))` per
+        # ring, which cannot survive a trace, so it made the whole pcg_deflated
+        # path unusable under jit -- and jit is the production path. The two
+        # builds are numerically identical: both reproduce the dense matrix's
+        # sub-blocks to 5.013e-16 (test_ring_blocks_eager_and_vmapped_both_match_dense).
+        # Set ring_traced=False / AGNI_RING_TRACED=0 for the host loop.
+        use_traced_rings = _solver_flag(
+            kwargs, "ring_traced", "AGNI_RING_TRACED", default="1"
         )
         fine_res = (n_rho, n_theta, n_zeta)
         if use_traced_rings:
@@ -3031,12 +3112,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _HZ = jnp.stack(
                     [_Hs(_Zj[:, _j]) for _j in range(_Zin.shape[1])], axis=1
                 )
-                if os.environ.get("AGNI_TRACED_DEFL", "0").lower() not in (
-                    "0",
-                    "false",
-                    "no",
-                    "",
-                ):
+                # DEFAULT TRACED, for the same reason as the ring build above: the eager
+                # branch device_gets a (k_defl, k_defl) array and dies under trace.
+                if _solver_flag(kwargs, "traced_defl", "AGNI_TRACED_DEFL", default="1"):
                     # TRACED truncation. The eager branch below selects surviving
                     # directions with boolean masks -- a variable-size gather plus
                     # `int(_kp.sum())` and a Python branch on it -- none of which
@@ -3044,12 +3122,12 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     # ZEROES the rejected ones: `Y Y^T` is identical because a
                     # zero column contributes nothing to the outer product.
                     # Verified against this branch to 1.17e-15 on `Y Y^T`.
-                    import coarse_deflation as _cdfl
+                    from ._stability_solvers import deflation_Y as _defl_Y
 
                     # Stays on device: the rank is consumed only by the
                     # [pcg_defl] debug print, which takes a tracer. The `int()`
                     # that used to be here forced a host sync on every solve.
-                    _Y, _rk = _cdfl.deflation_Y_traced(_Zj, _HZ)
+                    _Y, _rk = _defl_Y(_Zj, _HZ)
 
                     def _M_deflated(r, _Y=_Y, _Mr=_Mr):
                         return _Mr(r) + _Y @ (jnp.swapaxes(_Y, 0, 1) @ r)
@@ -3204,7 +3282,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # Pass 1 only needs lam_mu, which is the ROBUST quantity -- it stayed
         # accurate to 2.5e-06 in runs where the eigenvector was unusable. So it
         # runs at a fraction of the iterations.
-        _cgp1 = int(os.environ.get("CG_MAXITER_PASS1", str(max(1000, _cgfull // 4))))
+        _cgp1 = _solver_opt(
+            kwargs, "cg_maxiter_pass1", "CG_MAXITER_PASS1", max(1000, _cgfull // 4), int
+        )
 
         if _adapt:
             _, _lam1, _, _, _, _k1, _r1 = _solve_at(sigma, _cgp1, _Z)
@@ -3250,24 +3330,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         mathematically and legal for `jax.custom_vjp`, which cannot hold a
         freshly built traced subgraph among its jaxpr constants.
         """
-        # Same sys.path setup `_eigensolve_pcg` does at its top. This function
-        # now runs BEFORE it, so it cannot inherit that side effect --
-        # ModuleNotFoundError('coarse_deflation'). Note the local
-        # probe cannot catch this class: it puts precond_stage2 on sys.path
-        # itself, so the import always resolves there.
-        import sys as _sys
-
-        for _p in (
-            "/pscratch/sd/r/rgaur/AGNI_var/precond_harmonic",
-            "/pscratch/sd/r/rgaur/AGNI_var/precond_stage2",
-        ):
-            if _p not in _sys.path:
-                _sys.path.insert(0, _p)
         import numpy as _np  # aliased inside _eigensolve_pcg; needed here too
 
         _Z = None
         _seed_v0 = None
-        _kdefl = int(os.environ.get("AGNI_K_DEFL", "50"))
+        _kdefl = _solver_opt(kwargs, "k_defl", "AGNI_K_DEFL", 50, int)
         d_h = dict(_other_data)
         d_h.update(data_d)
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
@@ -3401,7 +3468,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _pt,
                 _pz,
                 _kc,
-                int(os.environ.get("AGNI_NUM_MATVECS", "100")),
+                _solver_opt(kwargs, "coarse_num_matvecs", "AGNI_NUM_MATVECS", 100, int),
             )
             # Stays on device. `_Z` is only ever passed to `_solve_at`, which
             # does `jnp.asarray(_Zin)` and reads `.shape` -- both fine for a

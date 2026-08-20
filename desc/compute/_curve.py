@@ -1247,16 +1247,18 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Centroid of the curve",
     dim=3,
-    params=["R_lmn", "Z_lmn"],
-    transforms={"surface": []},
+    params=[],
+    transforms={},
     profiles=[],
     coordinates="s",
-    data=["x"],
+    data=["x", "x_s", "ds"],
     parameterization="desc.geometry.core.SurfaceCurve",
 )
 def _center_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    # weight by arclength
     xyz = rpz2xyz(data["x"])
-    center = jnp.mean(xyz, axis=0)
+    w = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
+    center = jnp.sum(xyz * w[:, jnp.newaxis], axis=0) / jnp.sum(w)
     data["center"] = xyz2rpz(center) * jnp.ones_like(data["x"])
     return data
 

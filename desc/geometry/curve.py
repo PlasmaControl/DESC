@@ -1760,7 +1760,8 @@ class FourierRZSurfaceCurve(SurfaceCurve):
     """
 
     _io_attrs_ = SurfaceCurve._io_attrs_ + [
-        "_equilibrium",
+        "_theta_basis",
+        "_zeta_basis",
         "_secular_theta",
         "_secular_zeta",
         "_theta_n",
@@ -1772,6 +1773,10 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         "_NFP",
     ]
     _static_attrs = SurfaceCurve._static_attrs + [
+        "_theta_basis",
+        "_zeta_basis",
+        "_theta_n_fixed",
+        "_zeta_n_fixed",
         "_secular_theta",
         "_secular_zeta",
         "_modes_theta",
@@ -1803,7 +1808,6 @@ class FourierRZSurfaceCurve(SurfaceCurve):
         self._secular_theta = secular_theta
         self._secular_zeta = secular_zeta
         self._NFP = check_posint(NFP, "NFP", False)
-        self._equilibrium = equilibrium
         assert int(secular_theta) == secular_theta, "secular_theta must be an integer"
         assert int(secular_zeta) == secular_zeta, "secular_zeta must be an integer"
 

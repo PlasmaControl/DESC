@@ -984,12 +984,12 @@ class _Coil(_MagneticField, Optimizable, ABC):
             equilibrium = Equilibrium(surface=surface, L=1, M=M_source, N=N_source)
 
         # Compute rpz values along curve
-        if grid is None:
+        if grid is None and s is not None:
+            grid = LinearGrid(zeta=s)
+        elif grid is None:
             N = max(N_theta, N_zeta)
             N_eff = N * NFP + M_source * secular_theta + N_source * secular_zeta
             grid = LinearGrid(N=2 * N_eff + 5)
-        elif grid is None and s is not None:
-            grid = LinearGrid(zeta=s)
 
         coords_RpZ = self.compute("x", grid=grid, basis=basis)["x"]
         if basis.lower() == "xyz":

@@ -3847,6 +3847,29 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_umbilic_high_curvature(self):
+        """UmbilicHighCurvature."""
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 0.6, 0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            Z_lmn=[-1.4, -0.2],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=2,
+        )
+        curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                UmbilicHighCurvature(
+                    curve, curve_grid=LinearGrid(N=int(10 * res)), target=-2
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
 
 class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""

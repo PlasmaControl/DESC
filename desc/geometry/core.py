@@ -148,12 +148,15 @@ class Curve(IOAble, Optimizable, ABC):
             if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
         calc0d = bool(len(dep0d))
+        # some curves (e.g. SurfaceCurve) have a resolution
+        # requirement which can exceed self.N
+        N = getattr(self, "N_effective", self.N)
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            grid0d = LinearGrid(N=2 * N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,

@@ -1665,10 +1665,14 @@ class UmbilicHighCurvature(_Objective):
             has_axis=curve_grid.axis.size,
         )
 
+        # Once squared, gives w**2 ~ 1/N, implying the sum of residuals
+        # over grid points has the proper weight.
+        w = curve_grid.spacing[:, 2] * jnp.sqrt(curve_grid.num_nodes)
+
         self._constants = {
             "curve_transforms": curve_transforms,
             "curve_grid": curve_grid,
-            "quad_weights": 1,
+            "quad_weights": w,
         }
 
         timer.stop("Precomputing transforms")

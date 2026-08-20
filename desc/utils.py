@@ -1007,19 +1007,14 @@ def rotation_matrix(axis, angle=None):
     """
     axis = jnp.asarray(axis)
     norm = safenorm(axis)
+    axis = safenormalize(axis)
     if angle is None:
         angle = norm
     eps = jnp.sqrt(jnp.finfo(axis.dtype).eps)
-    no_rotation = norm < eps
-    # near-zero axis = no rotation; sanitize axis+angle so the unused where-branch
-    # never forms cos(inf)/0-norm and can't leak a nan gradient (forward or reverse)
-    axis = jnp.where(no_rotation, jnp.array([1.0, 0.0, 0.0], dtype=axis.dtype), axis)
-    angle = jnp.where(no_rotation, 0.0, angle)
-    axis = safenormalize(axis)
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
-    return jnp.where(no_rotation, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+    return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
 def rotate_vector_to_vector(u, v):

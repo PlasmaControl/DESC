@@ -1496,15 +1496,18 @@ class TestFourierRZSurfaceCurve:
         s, theta, zeta = curve_data["s"], curve_data["theta"], curve_data["zeta"]
         coords = np.vstack([s, theta, zeta]).T
 
-        c2 = FourierRZSurfaceCurve.from_values(
-            coords=coords,
-            surface=surf,
-            N_theta=c.N_theta,
-            N_zeta=c.N_zeta,
-            sym_theta=c.sym_theta,
-            sym_zeta=c.sym_zeta,
-            NFP=c.NFP,
-        )
+        with pytest.warns(
+            UserWarning, match="Unequal number of field periods for grid 1 and basis 2"
+        ):
+            c2 = FourierRZSurfaceCurve.from_values(
+                coords=coords,
+                surface=surf,
+                N_theta=c.N_theta,
+                N_zeta=c.N_zeta,
+                sym_theta=c.sym_theta,
+                sym_zeta=c.sym_zeta,
+                NFP=c.NFP,
+            )
 
         assert c2.secular_theta == c.secular_theta
         assert c2.secular_zeta == c.secular_zeta

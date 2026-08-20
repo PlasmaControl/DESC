@@ -1533,12 +1533,13 @@ class UmbilicHighCurvature(_Objective):
         The curve carries a copy of the underlying surface, and this
         objective is evaluated on that copy. By default, the surface params
         are optimizable. Two ways of modifying/properly enforcing this:
+
             - If the surface is meant to stay fixed, add an objective
               FixParameters(curve, {"R_lmn": True, "Z_lmn": True})
             - If the surface is optimizable, but is shared among objects
               or objectives (e.g. curve lies on a equilibrium flux surface
               and equilibrium is being optimized, or optimizing both winding
-              surface and coil lying on it),tie the parameters together
+              surface and coil lying on it), tie the parameters together
               using the objective SurfaceCurveConsistency(curve, *other surface*).
     target : {float, ndarray}, optional
         Target value(s) of the objective. Only used if bounds is None.

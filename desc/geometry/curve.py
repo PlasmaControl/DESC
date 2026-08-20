@@ -1698,11 +1698,12 @@ class SplineXYZCurve(Curve):
 class FourierRZSurfaceCurve(SurfaceCurve):
     r"""Fourier parameterized SurfaceCurve.
 
-    Poloidal and toroidal angles parameterized as follows:
-    theta(s) = theta_secular*s + sum_{0}^{N_theta} theta_n cos(NFP*n*s)
-                               + sum_{-N_theta}^{-1} theta_n sin(NFP*|n|*s)
-    zeta(s) = zeta_secular*s + sum_{0}^{N_zeta} theta_n cos(NFP*n*s)
-                               + sum_{-N_zeta}^{-1} theta_n sin(NFP*|n|*s)
+    Poloidal and toroidal angles parameterized as follows::
+
+        theta(s) = theta_secular*s + sum_{0}^{N_theta} theta_n cos(NFP*n*s)
+                                   + sum_{-N_theta}^{-1} theta_n sin(NFP*|n|*s)
+        zeta(s) = zeta_secular*s + sum_{0}^{N_zeta} theta_n cos(NFP*n*s)
+                                 + sum_{-N_zeta}^{-1} theta_n sin(NFP*|n|*s)
 
     Parameters
     ----------
@@ -1996,7 +1997,7 @@ class FourierRZSurfaceCurve(SurfaceCurve):
 
         Differs from self.N, as the latter only captures the
         resolution of the curve. Note this is an approximation,
-        most accurate when |\theta'(s)|*M_surf, |\\zeta'(s)|*N_surf
+        most accurate when ``|theta'(s)|*M_surf``, ``|zeta'(s)|*N_surf``
         are not too large.
         """
         surface = self.surface

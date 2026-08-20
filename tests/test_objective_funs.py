@@ -3152,6 +3152,96 @@ def test_objective_fun_things():
 
 
 @pytest.mark.unit
+def test_jac_scaled_batched_chunk_invariant_and_linearizes_once(monkeypatch):
+    """Jacobians must not depend on jac_chunk_size, and chunking should not
+    re-evaluate the (potentially expensive) nonlinear primal once per chunk.
+
+    Regression test for a redundant-recompute bug in
+    ObjectiveFunction._jvp_batched (used for "batched" deriv_mode): chunking a
+    batch of tangent directions with fresh jax.jvp calls re-evaluated the
+    primal once per chunk instead of once overall, so cost scaled with the
+    number of chunks rather than staying roughly constant. Derivative.linearize
+    should now be used instead whenever chunking actually occurs.
+
+    jac_chunk_size must be passed to the outer ObjectiveFunction here, not the
+    sub-objective -- passing it to the sub-objective forces "blocked"
+    deriv_mode (see the auto-deriv_mode selection in ObjectiveFunction.build),
+    which is the separate code path test_jac_scaled_blocked_... below covers.
+    """
+    from desc.derivatives import Derivative
+
+    eq = Equilibrium()
+    obj_ref = ObjectiveFunction(ForceBalance(eq), use_jit=False)
+    obj_ref.build(verbose=0)
+    x = obj_ref.x(eq)
+    jac_ref = obj_ref.jac_scaled(x)
+
+    obj_chunked = ObjectiveFunction(
+        ForceBalance(eq.copy()), jac_chunk_size=3, use_jit=False
+    )
+    obj_chunked.build(verbose=0)
+    assert obj_chunked._deriv_mode == "batched"
+    jac_chunked = obj_chunked.jac_scaled(x)
+    np.testing.assert_allclose(jac_chunked, jac_ref, atol=1e-10)
+
+    calls = {"n": 0}
+    real_linearize = Derivative.linearize.__func__
+
+    def counting_linearize(cls, *args, **kwargs):
+        calls["n"] += 1
+        return real_linearize(cls, *args, **kwargs)
+
+    monkeypatch.setattr(Derivative, "linearize", classmethod(counting_linearize))
+
+    obj_chunked.jac_scaled(x)  # dim_x=20, chunk_size=3 -> 7 scan chunks
+    assert calls["n"] == 1, f"expected linearize called once, got {calls['n']}"
+
+    calls["n"] = 0
+    obj_ref.jac_scaled(x)  # chunk_size=350 > dim_x -> single chunk
+    assert calls["n"] == 0, "single-chunk case should not need linearize"
+
+
+@pytest.mark.unit
+def test_jac_scaled_blocked_chunk_invariant_and_linearizes_once(monkeypatch):
+    """Same as test_jac_scaled_batched_... but for "blocked" deriv_mode.
+
+    "blocked" mode differentiates each sub-objective separately via its own
+    jvp_<op>, which for a "fwd"-mode sub-objective goes through
+    _Objective._jvp rather than ObjectiveFunction._jvp_batched -- a separate
+    implementation that had the same redundant-recompute bug, fixed the same
+    way. Passing jac_chunk_size to the sub-objective (rather than the outer
+    ObjectiveFunction) is what forces "blocked" deriv_mode here.
+    """
+    from desc.derivatives import Derivative
+
+    eq = Equilibrium()
+    obj_ref = ObjectiveFunction(ForceBalance(eq), use_jit=False)
+    obj_ref.build(verbose=0)
+    x = obj_ref.x(eq)
+    jac_ref = obj_ref.jac_scaled(x)
+
+    obj_chunked = ObjectiveFunction(
+        ForceBalance(eq.copy(), jac_chunk_size=3), use_jit=False
+    )
+    obj_chunked.build(verbose=0)
+    assert obj_chunked._deriv_mode == "blocked"
+    jac_chunked = obj_chunked.jac_scaled(x)
+    np.testing.assert_allclose(jac_chunked, jac_ref, atol=1e-10)
+
+    calls = {"n": 0}
+    real_linearize = Derivative.linearize.__func__
+
+    def counting_linearize(cls, *args, **kwargs):
+        calls["n"] += 1
+        return real_linearize(cls, *args, **kwargs)
+
+    monkeypatch.setattr(Derivative, "linearize", classmethod(counting_linearize))
+
+    obj_chunked.jac_scaled(x)  # dim_x=20, chunk_size=3 -> 7 scan chunks
+    assert calls["n"] == 1, f"expected linearize called once, got {calls['n']}"
+
+
+@pytest.mark.unit
 def test_jvp_scaled():
     """Test that jvps are scaled correctly."""
     eq = Equilibrium()

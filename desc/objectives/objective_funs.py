@@ -899,7 +899,19 @@ class ObjectiveFunction(IOAble):
 
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
-            jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
+            if (
+                self._jac_chunk_size is not None
+                and v[0].ndim > 1
+                and v[0].shape[0] > self._jac_chunk_size
+            ):
+                # More directions than fit in one chunk, so this will be split
+                # across multiple scan iterations. Linearize once here instead
+                # of chunking fresh compute_jvp calls -- see Derivative.linearize
+                # for what that buys us. Single-chunk calls are left as-is:
+                # there vmap already traces fun's primal once regardless.
+                _, jvpfun = Derivative.linearize(fun, 0, x)
+            else:
+                jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
                 jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
             )(v[0])
@@ -1571,10 +1583,18 @@ class _Objective(IOAble, ABC):
 
         if self._deriv_mode == "fwd":
             fun = lambda *x: getattr(self, "compute_" + op)(*x, constants=constants)
-            jvpfun = lambda *dx: Derivative.compute_jvp(
-                fun, tuple(range(len(x))), dx, *x
-            )
             sig = ",".join(f"(n{i})" for i in range(len(x))) + "->(k)"
+            if (
+                self._jac_chunk_size is not None
+                and v[0].ndim > 1
+                and v[0].shape[0] > self._jac_chunk_size
+            ):
+                # see Derivative.linearize
+                _, jvpfun = Derivative.linearize(fun, tuple(range(len(x))), *x)
+            else:
+                jvpfun = lambda *dx: Derivative.compute_jvp(
+                    fun, tuple(range(len(x))), dx, *x
+                )
             return batched_vectorize(
                 jvpfun, signature=sig, chunk_size=self._jac_chunk_size
             )(*v)

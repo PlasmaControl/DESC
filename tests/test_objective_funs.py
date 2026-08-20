@@ -28,7 +28,12 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZSurfaceCurve,
+    FourierRZToroidalSurface,
+    FourierXYZCurve,
+)
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
 from desc.io import load
@@ -60,6 +65,7 @@ from desc.objectives import (
     Elongation,
     Energy,
     ExternalObjective,
+    FixParameters,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
@@ -88,9 +94,11 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     SurfaceCurrentRegularization,
+    SurfaceCurveConsistency,
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
+    UmbilicHighCurvature,
     VacuumBoundaryError,
     Volume,
     get_NAE_constraints,
@@ -1921,6 +1929,41 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_umbilic_high_curvature(self):
+        """Test umbilic high curvature objective for FourierRZSurfaceCurve."""
+        # elliptical cross section. Most negative k2 is -a_Z/a_R**2
+        # at theta=pi/2. Least negative is -a_R/a_Z**2 at theta=0.
+        a_R, a_Z = 0.3, 1.5
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, a_R], modes_R=[[0, 0], [1, 0]], Z_lmn=[-a_Z], modes_Z=[[-1, 0]]
+        )
+
+        curve = FourierRZSurfaceCurve(
+            surface=surf, secular_theta=0, secular_zeta=1, theta_n=[0.0]
+        )
+        obj = UmbilicHighCurvature(curve, normalize=False)
+        obj.build()
+        np.testing.assert_allclose(obj.compute(curve.params_dict), -a_R / a_Z**2)
+
+        curve = FourierRZSurfaceCurve(
+            surface=surf, secular_theta=0, secular_zeta=1, theta_n=[np.pi / 2]
+        )
+        obj = UmbilicHighCurvature(curve, normalize=False)
+        obj.build()
+        np.testing.assert_allclose(obj.compute(curve.params_dict), -a_Z / a_R**2)
+
+        # with the surface fixed, the
+        # Jacobian wrt the remaining curve params vanishes
+        cons = FixParameters(curve, {"R_lmn": True, "Z_lmn": True})
+        objective = ObjectiveFunction((obj, cons))
+        objective.build()
+        jac = objective.jac_scaled(objective.x(curve))
+        assert not np.any(np.isnan(jac))
+        assert cons.dim_f == curve.R_basis.num_modes + curve.Z_basis.num_modes
+        idx = np.concatenate([curve.x_idx["theta_n"], curve.x_idx["zeta_n"]])
+        np.testing.assert_allclose(jac[: obj.dim_f, idx], 0, atol=1e-12)
+
+    @pytest.mark.unit
     def test_linking_current(self):
         """Test calculation of signed linking current from coils to plasma."""
         eq = Equilibrium()
@@ -3355,6 +3398,8 @@ class TestComputeScalarResolution:
         ToroidalFlux,
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
+        SurfaceCurveConsistency,
+        UmbilicHighCurvature,
         # no grid dependence for DeflationOperator
         DeflationOperator,
         # need to avoid blowup near the axis
@@ -3834,6 +3879,29 @@ class TestComputeScalarResolution:
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
+    @pytest.mark.unit
+    def test_compute_scalar_resolution_umbilic_high_curvature(self):
+        """UmbilicHighCurvature."""
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 0.6, 0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            Z_lmn=[-1.4, -0.2],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=2,
+        )
+        curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+        f = np.zeros_like(self.res_array, dtype=float)
+        for i, res in enumerate(self.res_array):
+            obj = ObjectiveFunction(
+                UmbilicHighCurvature(
+                    curve, curve_grid=LinearGrid(N=int(10 * res)), target=-2
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
+
 
 class TestObjectiveNaNGrad:
     """Make sure reverse mode AD works correctly for all objectives."""
@@ -3874,8 +3942,10 @@ class TestObjectiveNaNGrad:
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceCurrentRegularization,
+        SurfaceCurveConsistency,
         SurfaceQuadraticFlux,
         ToroidalFlux,
+        UmbilicHighCurvature,
         VacuumBoundaryError,
         # we do not test these since they depend too much on what the user wants
         ExternalObjective,
@@ -4145,6 +4215,32 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(field))
         assert not np.any(np.isnan(g)), "surface current regularization"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_umbilic_high_curvature(self):
+        """UmbilicHighCurvature."""
+        surf = FourierRZToroidalSurface(
+            R_lmn=[10, 1, 0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            Z_lmn=[-1, -0.2],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=2,
+        )
+        curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+        obj = ObjectiveFunction(UmbilicHighCurvature(curve), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(curve))
+        assert not np.any(np.isnan(g)), "umbilic high curvature"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_curve_consistency(self):
+        """SurfaceCurveConsistency."""
+        surf = FourierRZToroidalSurface()
+        curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+        obj = ObjectiveFunction(SurfaceCurveConsistency(surf, curve), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(surf, curve))
+        assert not np.any(np.isnan(g)), "surface curve consistency"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

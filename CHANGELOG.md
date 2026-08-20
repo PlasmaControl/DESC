@@ -6,6 +6,8 @@ Performance Improvements
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- Adds classes ``SurfaceCurve``, ``FourierRZSurfaceCurve``, and ``FourierRZSurfaceCoil`` to describe curves and coils constrained to lie on given FourierRZToroidalSurface objects. A new objective ``SurfaceCurveConsistency`` facilitates joint optimization of the curve and underlying surface.
+- Adds ``UmbilicHighCurvature`` objective for optimizing curves on surfaces, encouraging large, negative 2nd principal curvatures along the curve.
 
 Bug Fixes
 
@@ -19,6 +21,7 @@ New Features
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
 - Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
 - Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
+
 
 Performance Improvements
 

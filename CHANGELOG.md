@@ -11,6 +11,7 @@ Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Improves planar coil representation (``desc.coils.FourierPlanarCoil`` and ``desc.coils.FourierXYCoil``) internal rotation methods to avoid potential NaNs which could occur when the normal is parallel or antiparallel to Z-axis( to within machine epsilon), and also ensure the gradient at those edge cases is not only not NaN but also non-zero to avoid optimizer stalls at those cases.
+- Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 
 v0.17.3
 -------

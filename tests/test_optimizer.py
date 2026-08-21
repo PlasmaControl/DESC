@@ -843,13 +843,22 @@ def test_solve_with_x_scale():
             (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
             (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
             (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            # W_lmn, Wa_n and Wb_lmn are the generalized toroidal angle
+            # (phi = zeta + omega).  They sit at fixed places in _sort_args
+            # (after L_lmn, Za_n and Zb_lmn respectively), but every entry
+            # here is 1, so counting them into this block gives the right
+            # vector.  Sizes are 0 for a stellarator-symmetric equilibrium
+            # with omega = 0.
             jnp.ones(
-                eq.p_l.size
+                eq.W_lmn.size
+                + eq.p_l.size
                 + eq.c_l.size
                 + eq.Ra_n.size
                 + eq.Za_n.size
+                + eq.Wa_n.size
                 + eq.Rb_lmn.size
                 + eq.Zb_lmn.size
+                + eq.Wb_lmn.size
                 + 1
             ),
         ]
@@ -1964,8 +1973,15 @@ def test_get_ess_scale():  # noqa: C901
         axis_scale["Z_n"],
         np.exp(-alpha * np.linalg.norm(axis.Z_basis.modes, axis=1)) / np.exp(-alpha),
     )
+    # W_n is the generalized toroidal angle (phi = s + W(s)).  It is a Fourier
+    # series in the same variable as R_n, Z_n, so it gets the same spectral
+    # scaling.  Empty basis when omega == 0.
+    np.testing.assert_allclose(
+        axis_scale["W_n"],
+        np.exp(-alpha * np.linalg.norm(axis.W_basis.modes, axis=1)) / np.exp(-alpha),
+    )
     for key in axis_scale.keys():
-        if key in ["R_n", "Z_n"]:
+        if key in ["R_n", "Z_n", "W_n"]:
             continue
         np.testing.assert_allclose(axis_scale[key], 1)
 
@@ -1979,8 +1995,12 @@ def test_get_ess_scale():  # noqa: C901
         surf_scale["Z_lmn"],
         np.exp(-alpha * np.linalg.norm(surf.Z_basis.modes, axis=1)) / np.exp(-alpha),
     )
+    np.testing.assert_allclose(
+        surf_scale["W_lmn"],
+        np.exp(-alpha * np.linalg.norm(surf.W_basis.modes, axis=1)) / np.exp(-alpha),
+    )
     for key in surf_scale.keys():
-        if key in ["R_lmn", "Z_lmn"]:
+        if key in ["R_lmn", "Z_lmn", "W_lmn"]:
             continue
         np.testing.assert_allclose(surf_scale[key], 1)
 
@@ -2013,12 +2033,29 @@ def test_get_ess_scale():  # noqa: C901
         eq_scale["L_lmn"],
         np.exp(-alpha * np.linalg.norm(eq.L_basis.modes, axis=1)) / np.exp(-alpha),
     )
+    np.testing.assert_allclose(
+        eq_scale["W_lmn"],
+        np.exp(-alpha * np.linalg.norm(eq.W_basis.modes, axis=1)) / np.exp(-alpha),
+    )
     np.testing.assert_allclose(eq_scale["Ra_n"], axis_scale["R_n"])
     np.testing.assert_allclose(eq_scale["Za_n"], axis_scale["Z_n"])
+    np.testing.assert_allclose(eq_scale["Wa_n"], axis_scale["W_n"])
     np.testing.assert_allclose(eq_scale["Rb_lmn"], surf_scale["R_lmn"])
     np.testing.assert_allclose(eq_scale["Zb_lmn"], surf_scale["Z_lmn"])
+    np.testing.assert_allclose(eq_scale["Wb_lmn"], surf_scale["W_lmn"])
     for key in eq_scale.keys():
-        if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
+        if key in [
+            "R_lmn",
+            "Z_lmn",
+            "L_lmn",
+            "W_lmn",
+            "Rb_lmn",
+            "Zb_lmn",
+            "Wb_lmn",
+            "Ra_n",
+            "Za_n",
+            "Wa_n",
+        ]:
             continue
         np.testing.assert_allclose(eq_scale[key], 1)
 

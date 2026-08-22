@@ -3,7 +3,15 @@
 import numpy as np
 import pytest
 
-from desc.utils import rotation_matrix, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
+from desc.utils import (
+    rotate_vector_to_vector,
+    rotation_matrix,
+    rpz2xyz,
+    rpz2xyz_vec,
+    safenormalize,
+    xyz2rpz,
+    xyz2rpz_vec,
+)
 
 
 @pytest.mark.unit
@@ -12,6 +20,23 @@ def test_rotation_matrix():
     A = rotation_matrix([0, 0, np.pi / 2])
     At = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     np.testing.assert_allclose(A, At, atol=1e-10)
+
+
+@pytest.mark.unit
+def test_rotate_vector_to_vector():
+    """Test calculation of rotation matrices given two vectors."""
+    u = safenormalize(np.random.rand(3))
+    v = safenormalize(np.random.rand(3) + np.array([0.1, 0.2, 0.3]))
+    A = rotate_vector_to_vector(u, v)
+    np.testing.assert_allclose(v, u @ A.T)
+    # edge case: vectors parallel
+    v = u
+    A = rotate_vector_to_vector(u, v)
+    np.testing.assert_allclose(v, u @ A.T)
+    # edge case: vectors antiparallel
+    v = -u
+    A = rotate_vector_to_vector(u, v)
+    np.testing.assert_allclose(v, u @ A.T)
 
 
 @pytest.mark.unit

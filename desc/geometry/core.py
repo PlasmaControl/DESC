@@ -190,7 +190,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
-        R = rotation_matrix(axis=axis, angle=angle)
+        R = rotation_matrix(axis=np.asarray(axis).astype(float), angle=angle)
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 

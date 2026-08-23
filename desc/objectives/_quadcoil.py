@@ -166,6 +166,7 @@ class QuadcoilProxy(_Objective):
         "_enable_net_current_plasma",
         "_eq_fixed",
         "_field_fixed",
+        "_bs_chunk_size",
         # Free-boundary-related
         "_bplasma_chunk_size",
         "_vacuum",

@@ -64,6 +64,8 @@ class QuasisymmetryBoozer(_Objective):
         name="QS Boozer",
         jac_chunk_size=None,
         surf_batch_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -83,6 +85,8 @@ class QuasisymmetryBoozer(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
@@ -255,6 +259,8 @@ class QuasisymmetryTwoTerm(_Objective):
         helicity=(1, 0),
         name="QS two-term",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -271,6 +277,8 @@ class QuasisymmetryTwoTerm(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
@@ -416,6 +424,8 @@ class QuasisymmetryTripleProduct(_Objective):
         grid=None,
         name="QS triple product",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -431,6 +441,8 @@ class QuasisymmetryTripleProduct(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -592,6 +604,8 @@ class Omnigenity(_Objective):
         name="omnigenity",
         jac_chunk_size=None,
         surf_batch_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -625,6 +639,8 @@ class Omnigenity(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -915,6 +931,8 @@ class Isodynamicity(_Objective):
         grid=None,
         name="Isodynamicity",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -930,6 +948,8 @@ class Isodynamicity(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

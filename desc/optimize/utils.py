@@ -187,8 +187,9 @@ def _cholmod(A, maxiter=4):
     Attempts to find smallest alpha to the nearest order of magnitude,
     in maxiter steps (so 2**maxiter values of alpha will be scanned over).
     Scans over values of -log(abs(lb))< log(alpha) < log(abs(lb)). If the
-    Gershgorin lower bound is zero, a matrix-scaled machine epsilon supplies
-    the positive reference value for the logarithmic search.
+    Gershgorin lower bound is zero, a matrix-scaled machine epsilon, floored
+    at the dtype's smallest normal value, supplies the positive reference
+    value for the logarithmic search.
 
     Cost is approximately maxiter times the cost of a single cholesky
     factorization.
@@ -217,10 +218,14 @@ def _cholmod(A, maxiter=4):
     abs_lb = jnp.abs(lb)
     scale = jnp.max(jnp.abs(A))
     scale = jnp.where(scale > 0, scale, jnp.ones_like(scale))
+    fallback_scale = jnp.maximum(
+        jnp.finfo(scale.dtype).eps * scale,
+        jnp.finfo(scale.dtype).tiny,
+    )
     alpha_scale = jnp.where(
         abs_lb > 0,
         abs_lb,
-        jnp.finfo(scale.dtype).eps * scale,
+        fallback_scale,
     )
     # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
     # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure

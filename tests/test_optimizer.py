@@ -123,6 +123,26 @@ def test_chol_zero_gershgorin_lower_bound(matrix):
 
 
 @pytest.mark.unit
+def test_chol_extreme_small_zero_gershgorin_lower_bound():
+    """The zero-bound fallback remains positive below eps-scaled normal range."""
+    matrix = np.diag(np.array([1e-300, 0.0], dtype=np.float64))
+
+    factor = np.asarray(chol(jnp.asarray(matrix)))
+    reconstructed = factor @ factor.T
+    correction = reconstructed - matrix
+
+    assert np.isfinite(factor).all()
+    assert np.linalg.eigvalsh(reconstructed).min() > 0.0
+    np.testing.assert_allclose(
+        correction,
+        np.eye(2) * correction[0, 0],
+        rtol=0.0,
+        atol=np.finfo(np.float64).tiny,
+    )
+    assert 0.0 < correction[0, 0] < matrix[0, 0]
+
+
+@pytest.mark.unit
 def test_chol_positive_definite_path_unchanged():
     """Positive-definite input agrees with the unmodified Cholesky oracle."""
     matrix = np.array([[2.0, 0.2], [0.2, 1.0]])

@@ -155,7 +155,9 @@ class QuadcoilProxy(_Objective):
         then supply ``None``. Default = ``bs_chunk_size``.
     bs_chunk_size : int, optional
         Size to split Biot-Savart computation into chunks of evaluation points.
-        Default = None.
+        Forwarded to QUADCOIL as ``quadcoil_kwargs["bs_chunk_size"]`` so the
+        winding-surface and self-field kernels also walk evaluation points in
+        batches. Default = None.
     """
 
     # ----- Setting and registering keyword arguments -----
@@ -433,6 +435,10 @@ class QuadcoilProxy(_Objective):
         # partial(quadcoil, **quadcoil_kwargs), implemented in gen_quadcoil_for_diff.
         # The function also generates the custom_jvp rule based on the static arguments.
         # We store the resulting function as a static attribute.
+        # Forward DESC's eval-point Biot-Savart chunk size into Quadcoil so the
+        # winding-surface / self-field kernels use the same knob.
+        if bs_chunk_size is not None:
+            quadcoil_kwargs["bs_chunk_size"] = bs_chunk_size
         _quadcoil_values, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_kwargs)
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)

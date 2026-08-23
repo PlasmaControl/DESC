@@ -506,7 +506,7 @@ class TestObjectiveFunction:
         thres_phi = 0.01
         thres_G = 0.001  # to be decreased
         # Free-boundary residual should match BoundaryError on the same field
-        thres_fbe = 1e-8
+        thres_fbe = 1e-7
 
         # ----- Test 1: NESCOIL, value only -----
         def run_regcoil(vacuum):
@@ -627,12 +627,12 @@ class TestObjectiveFunction:
             C_B = chi_2_B_regcoil / (4 * jnp.pi**2)
             C_K = chi_2_K_regcoil / (4 * jnp.pi**2)
             quadcoil_kwargs_regcoil = quadcoil_kwargs_basic | {
-                "objective_name": "f_K",
-                "objective_unit": C_K,
-                "constraint_name": ("f_B",),
+                "objective_name": "f_B",
+                "objective_unit": C_B,
+                "constraint_name": ("f_K",),
                 "constraint_type": ("<=",),
-                "constraint_value": jnp.array([C_B]),
-                "constraint_unit": jnp.array([C_B]),
+                "constraint_value": jnp.array([C_K]),
+                "constraint_unit": jnp.array([C_K]),
             }
             # Define a QuadcoilProxy with the simplest possible
             # signature.

@@ -6,6 +6,8 @@ Performance Improvements
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- Additional memory reductions for the base memory usage.
+- Reduces the compilation time of custom `qr_multiply` algorithm.
 
 Bug Fixes
 

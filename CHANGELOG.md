@@ -10,6 +10,11 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes bug in modified Cholesky factorization used by the trust-region
+  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
+  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
+  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
+  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 
 v0.17.3
 -------

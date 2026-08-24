@@ -229,6 +229,7 @@ def _cholmod(A, maxiter=4):
     # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
     # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
     # that it's actually greater than the maximum alpha
+    # TODO(#2296): add special handling for lb = 0, i.e. 0 row of A, rest diag dominant
     ub = jnp.log10(jnp.abs(lb)) + 1
     # we know alpha > 0 because otherwise initial factorization would have succeeded
     # but we'd like to be a bit better (in log scaling). This is just a heuristic but
@@ -239,11 +240,11 @@ def _cholmod(A, maxiter=4):
     alphas = jnp.logspace(lb, ub, k)
     kbest = k // 2
     klow = 0
-    khigh = k
+    khigh = k - 1
     # first we try alpha = max, which we know will succeed by gershgorin bounds
     # but might be too big a correction, so then we try to reduce it while keeping
     # A + alpha*I positive definite
-    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    Lbest = jnp.linalg.cholesky(A + alphas[-1] * eye)
     for i in range(maxiter):
         L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
         # check if it succeeded

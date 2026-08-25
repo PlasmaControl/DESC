@@ -70,7 +70,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", -1)
 
     def eps_32(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         I_1, I_2 = Bounce1D(grid, data, opts.quad).integrate(
@@ -190,7 +190,7 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
     num_well = kwargs.get("num_well", -1)
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         bounce = Bounce1D(grid, data, opts.quad)
@@ -266,7 +266,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         )
 
     def Gamma_c(data):
-        pitch_inv, weight = Bounce1D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce1D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         v_tau, radial_drift, poloidal_drift = Bounce1D(grid, data, opts.quad).integrate(

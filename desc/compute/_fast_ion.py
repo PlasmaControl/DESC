@@ -175,7 +175,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
             )
             return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
-        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(
@@ -244,7 +244,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     opts = BounceOptions.guess(-2, grid, loop=True, **kwargs)
 
     def gamma_c0(data):
-        pitch_inv, _ = Bounce2D.get_pitch_inv_quad(
+        pitch_inv, _ = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         bounce = Bounce2D(grid, data, data["angle"], **opts)
@@ -345,7 +345,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
             gamma_c_pi_over_2 = jnp.arctan(safediv(radial_drift, poloidal_drift))
             return (v_tau * gamma_c_pi_over_2**2).sum(-1).mean(-2)
 
-        pitch_inv, weight = Bounce2D.get_pitch_inv_quad(
+        pitch_inv, weight = Bounce2D.pitch_quad(
             data["min_tz |B|"], data["max_tz |B|"], opts.pitch_quad
         )
         return jnp.sum(

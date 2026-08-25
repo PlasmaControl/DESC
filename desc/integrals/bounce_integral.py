@@ -79,7 +79,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def get_pitch_inv_quad(min_B, max_B, num_pitch, simp=True):
+    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -96,10 +96,6 @@ class _Bounce(eqx.Module, ABC):
             points xₖ and weights wₖ for the approximation of the integral
             ∫₋₁¹ f(x) dx ≈ ∑ₖ wₖ f(xₖ). Then this method simply rescales
             the quadrature for integration between ``min_B`` and ``max_B``.
-        simp : bool, optional
-            If ``True``, then the pitch angles are chosen according to Simpson’s 1/3.
-            If ``False``, then an open midpoint scheme is returned, which is only
-            recommended for plotting purposes.
 
         Returns
         -------
@@ -113,6 +109,8 @@ class _Bounce(eqx.Module, ABC):
                 msg="Floating point error impedes detection of bounce points "
                 f"near global extrema. Choose {num_pitch} < 1e5.",
             )
+            # by default, get pitch angles with Simpson's 1/3 rule
+            simp = kwargs.get("simp", True)
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
 
         if jnp.ndim(min_B):
@@ -123,6 +121,9 @@ class _Bounce(eqx.Module, ABC):
         x = bijection_from_disc(x, min_B, max_B)
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
+
+    # aliased for backwards-compatibility here
+    get_pitch_inv_quad = pitch_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
@@ -301,26 +302,6 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        warnif(
-            "is_reshaped" in kwargs,
-            FutureWarning,
-            "Argument is_reshaped has been deprecated and is no longer used.",
-        )
-        warnif(
-            "is_fourier" in kwargs,
-            FutureWarning,
-            "Argument is_fourier has been deprecated and is no longer used.",
-        )
-        warnif(
-            "Bref" in kwargs,
-            FutureWarning,
-            "Argument Bref has been deprecated and is no longer used.",
-        )
-        warnif(
-            "Lref" in kwargs,
-            FutureWarning,
-            "Argument Lref has been deprecated and is no longer used.",
-        )
         if "num_transit" in kwargs:
             warnif(
                 True,
@@ -461,11 +442,6 @@ class Bounce2D(_Bounce):
             "num_pitch" in kwargs,
             FutureWarning,
             "Argument num_pitch has been deprecated and is no longer used.",
-        )
-        warnif(
-            "simp" in kwargs,
-            FutureWarning,
-            "Argument simp has been deprecated and is no longer used.",
         )
         warnif(
             "expand_out" in kwargs,
@@ -1031,12 +1007,6 @@ class Bounce2D(_Bounce):
             ``f`` interpolated to the deepest point between ``points``.
 
         """
-        warnif(
-            "is_fourier" in kwargs,
-            FutureWarning,
-            "Argument is_fourier has been deprecated and is no longer used.",
-        )
-
         if nufft_eps < 0:
             nufft_eps = self._nufft_eps
         f = _fourier_if_real(f)
@@ -1410,21 +1380,6 @@ class Bounce1D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.is_meshgrid
-        warnif(
-            "is_reshaped" in kwargs,
-            FutureWarning,
-            "Argument is_reshaped has been deprecated and is no longer used.",
-        )
-        warnif(
-            "Bref" in kwargs,
-            FutureWarning,
-            "Argument Bref has been deprecated and is no longer used.",
-        )
-        warnif(
-            "Lref" in kwargs,
-            FutureWarning,
-            "Argument Lref has been deprecated and is no longer used.",
-        )
 
         if quad is None:
             quad = BounceOptions._quad(eta=-2, num_quad=32)
@@ -1517,11 +1472,6 @@ class Bounce1D(_Bounce):
             "num_pitch" in kwargs,
             FutureWarning,
             "Argument num_pitch has been deprecated and is no longer used.",
-        )
-        warnif(
-            "simp" in kwargs,
-            FutureWarning,
-            "Argument simp has been deprecated and is no longer used.",
         )
         warnif(
             "expand_out" in kwargs,

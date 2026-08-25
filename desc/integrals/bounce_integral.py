@@ -79,7 +79,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -122,8 +122,8 @@ class _Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
-    # aliased for backwards-compatibility here
-    get_pitch_inv_quad = pitch_quad
+    # aliased for convenience
+    pitch_quad = get_pitch_inv_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):

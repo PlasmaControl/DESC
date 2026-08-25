@@ -9,6 +9,7 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Adjusts the `quad_weights` of `CoilCurvature` and `CoilTorsion` to ensure their outputs are roughly independent of grid resolution.
 
 v0.17.3
 -------

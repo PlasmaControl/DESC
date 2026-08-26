@@ -177,7 +177,7 @@ doc_bounce = """
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
         multiple field lines until the surface is covered sufficiently.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
         In axisymmetric configurations, integration along the field line for a
         single poloidal transit between two global maxima of B is sufficient for
@@ -210,8 +210,8 @@ doc_bounce = """
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``. It can be preferable
@@ -232,7 +232,6 @@ def collect_docs(
     normalize_target_detail=None,
     loss_detail=None,
     coil=False,
-    jac_chunk_size=True,
 ):
     """Collect default parameters for the docstring of Objective.
 
@@ -256,8 +255,6 @@ def collect_docs(
     coil : bool, optional
         Whether the objective is a coil objective. If ``True``, updates docs
         of ``target``, ``weight``, ``bounds``, and ``loss_function``.
-    jac_chunk_size : bool
-        Whether to include the ``jac_chunk_size`` parameter in the docstring.
 
     Returns
     -------
@@ -269,9 +266,6 @@ def collect_docs(
 
     # Copy to allow for objective-specific updates to docs
     docs_obj = docs.copy()
-    if not jac_chunk_size:
-        del docs_obj["jac_chunk_size"]
-
     if coil:
         docs_obj["target"] = doc_target_coil
         docs_obj["bounds"] = doc_bounds_coil

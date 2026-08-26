@@ -1473,7 +1473,7 @@ class TestBounce2D:
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
             angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
-            num_field_periods=1,
+            field_period_transits=1,
             nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
@@ -1509,7 +1509,7 @@ class TestBounce2D:
             data,
             angle,
             alpha=alpha,
-            num_field_periods=38,
+            field_period_transits=38,
             check=True,
             spline=False,
             quad=chebgauss1(16),  # this is our own custom chebgauss1
@@ -1601,7 +1601,7 @@ class TestBounce2D:
         )
 
         bounce = Bounce2D(
-            grid, data, angle, alpha=alpha, num_field_periods=38, check=True
+            grid, data, angle, alpha=alpha, field_period_transits=38, check=True
         )
         points = bounce.points(pitch_inv)
 
@@ -1649,7 +1649,7 @@ class TestBounce2D:
             Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
-            num_field_periods=3,
+            field_period_transits=3,
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,

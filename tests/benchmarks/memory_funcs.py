@@ -189,13 +189,13 @@ def _test_proximal_ripple(method):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
-    num_field_periods = 100
+    field_period_transits = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_field_periods=num_field_periods,
-                num_well=2 * num_field_periods,
+                field_period_transits=field_period_transits,
+                num_well=2 * field_period_transits,
                 num_quad=16,
                 Y_B=13,
             )

@@ -88,7 +88,7 @@ def _epsilon_32_1D(params, transforms, profiles, data, **kwargs):
         {"|grad(rho)|*kappa_g": data["|grad(rho)|"] * data["kappa_g"]},
         data,
         grid,
-        opts.surf_batch_size,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["old effective ripple 3/2"] = (
@@ -214,7 +214,9 @@ def _Gamma_c_1D(params, transforms, profiles, data, **kwargs):
             axis=-1,
         )
 
-    out = Bounce1D.batch(Gamma_c, _gamma_c_data(data), data, grid, opts.surf_batch_size)
+    out = Bounce1D.batch(
+        Gamma_c, _gamma_c_data(data), data, grid, surf_batch_size=opts.surf_batch_size
+    )
     assert out.ndim == 1
     data["old Gamma_c"] = (
         grid.expand(out) / data["fieldline length"] / (2**1.5 * jnp.pi)
@@ -287,7 +289,7 @@ def _Gamma_c_Velasco_1D(params, transforms, profiles, data, **kwargs):
         {"cvdrift0": data["cvdrift0"], "gbdrift": data["gbdrift"]},
         data,
         grid,
-        opts.surf_batch_size,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["old Gamma_c Velasco"] = (

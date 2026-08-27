@@ -496,6 +496,84 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_qs_hat_modes(self):
+        """Test the dimensionless "hat" modes of the QS objectives."""
+        eq = get("HELIOTRON")
+        eq.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        helicity = (1, eq.NFP)
+        rho = np.array([0.6, 1.0])
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+
+        # the hat modes are already dimensionless, so normalize=True is not allowed
+        with pytest.raises(ValueError):
+            QuasisymmetryBoozer(eq=eq, mode="fb_hat")
+        with pytest.raises(ValueError):
+            QuasisymmetryTwoTerm(eq=eq, mode="fc_hat")
+        with pytest.raises(ValueError):
+            QuasisymmetryTripleProduct(eq=eq, mode="ft_hat")
+
+        booz = {"helicity": helicity, "M_booz": eq.M, "N_booz": eq.N}
+        objs = {
+            "fb": QuasisymmetryBoozer(eq=eq, grid=grid, mode="fb", **booz),
+            "fb_hat": QuasisymmetryBoozer(
+                eq=eq, grid=grid, mode="fb_hat", normalize=False, **booz
+            ),
+            "fc_hat": QuasisymmetryTwoTerm(
+                eq=eq, grid=grid, helicity=helicity, mode="fc_hat", normalize=False
+            ),
+            "ft_hat": QuasisymmetryTripleProduct(
+                eq=eq, grid=grid, mode="ft_hat", normalize=False
+            ),
+        }
+        f = {}
+        for mode, obj in objs.items():
+            obj.build()
+            if mode.endswith("_hat"):
+                assert obj._units == "(dimensionless)"
+                assert obj.normalization == 1
+            assert obj.compute_scaled_error(*obj.xs(eq)).size == obj.dim_f
+            f[mode] = obj.compute_unscaled(*obj.xs(eq))
+            assert np.all(np.isfinite(f[mode]))
+
+        # the harmonics on each surface are all scaled by the same factor, and the
+        # norm of the residuals on each surface should be between 0 and 1
+        ratio = (f["fb_hat"] / f["fb"]).reshape((rho.size, -1))
+        np.testing.assert_allclose(ratio / ratio[:, :1], 1, rtol=1e-12)
+        norm = np.linalg.norm(f["fb_hat"].reshape((rho.size, -1)), axis=-1)
+        assert np.all(norm > 0) and np.all(norm < 1)
+
+    @pytest.mark.unit
+    def test_qs_hat_modes_field_strength_invariance(self):
+        """Test that the QS "hat" modes are invariant to the field strength."""
+        # has an iota profile, so |B| is proportional to Psi
+        eq1 = get("HELIOTRON")
+        eq1.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        eq2 = eq1.copy()
+        eq2.Psi = 2 * eq1.Psi
+        helicity = (1, eq1.NFP)
+        grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, rho=np.array([0.6]))
+
+        def test(obj, mode, ratio, **kwargs):
+            obj1 = obj(eq=eq1, grid=grid, mode=mode, normalize=False, **kwargs)
+            obj1.build()
+            obj2 = obj(eq=eq2, grid=grid, mode=mode, normalize=False, **kwargs)
+            obj2.build()
+            f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))
+            f2 = obj2.compute_scaled_error(*obj2.xs(eq2))
+            np.testing.assert_allclose(
+                f2, f1, rtol=1e-10, atol=1e-10 * np.max(np.abs(f1))
+            )
+
+        # unhatted quantities scale as |B|^n, hatted ones are invariant
+        booz = {"helicity": helicity, "M_booz": eq1.M, "N_booz": eq1.N}
+        test(QuasisymmetryBoozer, "fb", 2, **booz)
+        test(QuasisymmetryBoozer, "fb_hat", 1, **booz)
+        test(QuasisymmetryTwoTerm, "fc", 2**3, helicity=helicity)
+        test(QuasisymmetryTwoTerm, "fc_hat", 1, helicity=helicity)
+        test(QuasisymmetryTripleProduct, "ft", 2**4)
+        test(QuasisymmetryTripleProduct, "ft_hat", 1)
+
+    @pytest.mark.unit
     def test_isodynamicity(self):
         """Test calculation of isodynamicity metric."""
 

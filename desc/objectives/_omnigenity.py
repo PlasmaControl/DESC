@@ -8,6 +8,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
+from desc.integrals import surface_averages
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -32,6 +33,13 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    mode : "fb" or "fb_hat", optional
+        Mode for the returned quantity. The hatted version divides each surface's
+        harmonics by the norm of all the harmonics on that surface, making the
+        output dimensionless and invariant to the magnetic field strength. Then
+        the norm of the residuals on a single surface is ``f_B_hat``, which lies
+        in [0, 1]. Default is "fb", no normalization. See Basic Optimization
+        tutorial for details.
     surf_batch_size: int
         Number of flux surfaces to compute simultaneously. Defaults to
         computing all flux surfaces simultaneously. Decrease to reduce
@@ -45,7 +53,11 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
-    _static_attrs = _Objective._static_attrs + ["_helicity", "_surf_batch_size"]
+    _static_attrs = _Objective._static_attrs + [
+        "_helicity",
+        "_surf_batch_size",
+        "_mode",
+    ]
 
     def __init__(
         self,
@@ -61,6 +73,7 @@ class QuasisymmetryBoozer(_Objective):
         helicity=(1, 0),
         M_booz=None,
         N_booz=None,
+        mode="fb",
         name="QS Boozer",
         jac_chunk_size=None,
         surf_batch_size=None,
@@ -72,6 +85,15 @@ class QuasisymmetryBoozer(_Objective):
         self.M_booz = M_booz
         self.N_booz = N_booz
         self._surf_batch_size = surf_batch_size
+        assert mode in ["fb", "fb_hat"]
+        self._mode = mode
+        if mode == "fb_hat":
+            errorif(
+                normalize,
+                ValueError,
+                'mode="fb_hat" is already dimensionless, use normalize=False',
+            )
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -178,7 +200,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Symmetry breaking harmonics of B (T).
+            Symmetry breaking harmonics of B (T), dimensionless for "fb_hat".
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -194,7 +216,12 @@ class QuasisymmetryBoozer(_Objective):
         B_mn = constants["matrix"] @ B_mn.T
         # output order = (rho, mn).flatten(), ie all the surfaces concatenated
         # one after the other
-        return B_mn[constants["idx"]].T.flatten()
+        if self._mode == "fb":
+            return B_mn[constants["idx"]].T.flatten()
+        else:
+            # B_mn has shape (num modes, num rho), normalize each surface
+            f = B_mn[constants["idx"]] / jnp.linalg.norm(B_mn, axis=0)
+            return f.T.flatten()
 
     @property
     def helicity(self):
@@ -230,6 +257,11 @@ class QuasisymmetryTwoTerm(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
+    mode : "fc" or "fc_hat", optional
+        Mode for the returned quantity. The hatted version divides by the cube of
+        the flux surface averaged field strength, making the output dimensionless
+        and invariant to the magnetic field strength. Default is "fc", no
+        normalization. See Basic Optimization tutorial for details.
 
     """
 
@@ -240,6 +272,7 @@ class QuasisymmetryTwoTerm(_Objective):
     _coordinates = "rtz"
     _units = "(T^3)"
     _print_value_fmt = "Quasi-symmetry two-term error: "
+    _static_attrs = _Objective._static_attrs + ["_mode"]
 
     def __init__(
         self,
@@ -253,6 +286,7 @@ class QuasisymmetryTwoTerm(_Objective):
         deriv_mode="auto",
         grid=None,
         helicity=(1, 0),
+        mode="fc",
         name="QS two-term",
         jac_chunk_size=None,
     ):
@@ -260,6 +294,15 @@ class QuasisymmetryTwoTerm(_Objective):
             target = 0
         self._grid = grid
         self.helicity = helicity
+        assert mode in ["fc", "fc_hat"]
+        self._mode = mode
+        if mode == "fc_hat":
+            errorif(
+                normalize,
+                ValueError,
+                'mode="fc_hat" is already dimensionless, use normalize=False',
+            )
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -309,6 +352,8 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
+        if self._mode == "fc_hat":
+            self._data_keys += ["|B|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
@@ -347,7 +392,8 @@ class QuasisymmetryTwoTerm(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Quasi-symmetry flux function error at each node (T^3), dimensionless
+            for "fc_hat".
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -359,7 +405,13 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-        return data["f_C"]
+        if self._mode == "fc":
+            return data["f_C"]
+        else:
+            Bave = surface_averages(
+                constants["transforms"]["grid"], q=data["|B|"], sqrt_g=data["sqrt(g)"]
+            )
+            return data["f_C"] / Bave**3
 
     @property
     def helicity(self):
@@ -392,6 +444,12 @@ class QuasisymmetryTripleProduct(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    mode : "ft" or "ft_hat", optional
+        Mode for the returned quantity. The hatted version multiplies by the
+        squared major radius and divides by the fourth power of the flux surface
+        averaged field strength, making the output dimensionless and invariant to
+        the magnetic field strength. Default is "ft", no normalization. See Basic
+        Optimization tutorial for details.
 
     """
 
@@ -402,6 +460,7 @@ class QuasisymmetryTripleProduct(_Objective):
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
     _print_value_fmt = "Quasi-symmetry error: "
+    _static_attrs = _Objective._static_attrs + ["_mode"]
 
     def __init__(
         self,
@@ -414,12 +473,22 @@ class QuasisymmetryTripleProduct(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        mode="ft",
         name="QS triple product",
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        assert mode in ["ft", "ft_hat"]
+        self._mode = mode
+        if mode == "ft_hat":
+            errorif(
+                normalize,
+                ValueError,
+                'mode="ft_hat" is already dimensionless, use normalize=False',
+            )
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -452,6 +521,8 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
+        if self._mode == "ft_hat":
+            self._data_keys += ["R0", "|B|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
@@ -489,7 +560,8 @@ class QuasisymmetryTripleProduct(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^4/m^2).
+            Quasi-symmetry flux function error at each node (T^4/m^2),
+            dimensionless for "ft_hat".
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -500,7 +572,13 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["f_T"]
+        if self._mode == "ft":
+            return data["f_T"]
+        else:
+            Bave = surface_averages(
+                constants["transforms"]["grid"], q=data["|B|"], sqrt_g=data["sqrt(g)"]
+            )
+            return data["R0"] ** 2 * data["f_T"] / Bave**4
 
 
 class Omnigenity(_Objective):

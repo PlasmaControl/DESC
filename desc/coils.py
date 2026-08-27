@@ -2868,11 +2868,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                     True,
                     UserWarning,
                     "Could not make a CoilSet from the two"
-                    "given coilsets, likely due to parametrizations"
-                    " being different for the two."
+                    "given coilsets, likely due to parametrizations or"
+                    "resolution being different for the two."
                     "Creating a MixedCoilSet instead from the two coilsets.",
                 )
-                return MixedCoilSet(*self.coils, *other.coils)
+                return MixedCoilSet(self, other)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
         else:

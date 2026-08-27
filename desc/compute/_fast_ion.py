@@ -184,7 +184,12 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
 
     out = Bounce2D.batch(
-        Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
+        Gamma_c,
+        _gamma_c_data(data),
+        data,
+        angle,
+        grid,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["Gamma_c"] = (
@@ -363,7 +368,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         data,
         angle,
         grid,
-        opts.surf_batch_size,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["Gamma_c Velasco"] = (

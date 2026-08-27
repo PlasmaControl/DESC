@@ -88,11 +88,7 @@ class QuasisymmetryBoozer(_Objective):
         assert mode in ["fb", "fb_hat"]
         self._mode = mode
         if mode == "fb_hat":
-            errorif(
-                normalize,
-                ValueError,
-                'mode="fb_hat" is already dimensionless, use normalize=False',
-            )
+            normalize = False
             self._units = "(dimensionless)"
         super().__init__(
             things=eq,
@@ -297,11 +293,7 @@ class QuasisymmetryTwoTerm(_Objective):
         assert mode in ["fc", "fc_hat"]
         self._mode = mode
         if mode == "fc_hat":
-            errorif(
-                normalize,
-                ValueError,
-                'mode="fc_hat" is already dimensionless, use normalize=False',
-            )
+            normalize = False
             self._units = "(dimensionless)"
         super().__init__(
             things=eq,
@@ -483,11 +475,7 @@ class QuasisymmetryTripleProduct(_Objective):
         assert mode in ["ft", "ft_hat"]
         self._mode = mode
         if mode == "ft_hat":
-            errorif(
-                normalize,
-                ValueError,
-                'mode="ft_hat" is already dimensionless, use normalize=False',
-            )
+            normalize = False
             self._units = "(dimensionless)"
         super().__init__(
             things=eq,

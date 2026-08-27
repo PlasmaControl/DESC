@@ -504,26 +504,14 @@ class TestObjectiveFunction:
         rho = np.array([0.6, 1.0])
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
 
-        # the hat modes are already dimensionless, so normalize=True is not allowed
-        with pytest.raises(ValueError):
-            QuasisymmetryBoozer(eq=eq, mode="fb_hat")
-        with pytest.raises(ValueError):
-            QuasisymmetryTwoTerm(eq=eq, mode="fc_hat")
-        with pytest.raises(ValueError):
-            QuasisymmetryTripleProduct(eq=eq, mode="ft_hat")
-
         booz = {"helicity": helicity, "M_booz": eq.M, "N_booz": eq.N}
         objs = {
             "fb": QuasisymmetryBoozer(eq=eq, grid=grid, mode="fb", **booz),
-            "fb_hat": QuasisymmetryBoozer(
-                eq=eq, grid=grid, mode="fb_hat", normalize=False, **booz
-            ),
+            "fb_hat": QuasisymmetryBoozer(eq=eq, grid=grid, mode="fb_hat", **booz),
             "fc_hat": QuasisymmetryTwoTerm(
-                eq=eq, grid=grid, helicity=helicity, mode="fc_hat", normalize=False
+                eq=eq, grid=grid, helicity=helicity, mode="fc_hat"
             ),
-            "ft_hat": QuasisymmetryTripleProduct(
-                eq=eq, grid=grid, mode="ft_hat", normalize=False
-            ),
+            "ft_hat": QuasisymmetryTripleProduct(eq=eq, grid=grid, mode="ft_hat"),
         }
         f = {}
         for mode, obj in objs.items():
@@ -555,8 +543,8 @@ class TestObjectiveFunction:
 
         def test(obj, mode, ratio, **kwargs):
             obj1 = obj(eq=eq1, grid=grid, mode=mode, normalize=False, **kwargs)
-            obj1.build()
             obj2 = obj(eq=eq2, grid=grid, mode=mode, normalize=False, **kwargs)
+            obj1.build()
             obj2.build()
             f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))
             f2 = obj2.compute_scaled_error(*obj2.xs(eq2))

@@ -1732,6 +1732,8 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         link : ndarray, shape(num_coils, num_coils)
             Linking number of each coil with each other coil. link=0 means they are not
             linked, +/- 1 means the coils link each other in one direction or another.
+            Diagonal entries represent the writhe of a coil, and can be non-zero for
+            non-planar coils.
 
         """
         if grid is None:

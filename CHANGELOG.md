@@ -9,6 +9,7 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 
 v0.17.3
 -------

@@ -2634,7 +2634,9 @@ class CoilSetLinkingNumber(_Objective):
             params=params, grid=constants["grid"]
         )
 
-        return jnp.abs(link).sum(axis=0)
+        # the diagonal entries of "link" should be excluded
+        mask = ~jnp.eye(self._dim_f, dtype=bool)
+        return jnp.abs(link).sum(axis=0, where=mask)
 
 
 class SurfaceCurrentRegularization(_Objective):

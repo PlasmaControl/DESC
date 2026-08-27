@@ -435,7 +435,6 @@ class PowerSeries(_Basis):
 
     _fft = [False, True, True]  # trivially true in poloidal and toroidal directions
     _dct = [False, False, False]
-    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
 
     def __init__(self, L, sym="even"):
         self._L = check_nonnegint(L, "L", False)
@@ -443,6 +442,9 @@ class PowerSeries(_Basis):
         self._N = 0
         self._NFP = 1
         self._sym = bool(sym) if not sym else str(sym)
+        self._tensor_product = (
+            self._sym == False  # noqa: E712
+        )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -549,7 +551,6 @@ class FourierSeries(_Basis):
 
     _fft = [False, True, True]  # trivially true in poloidal direction
     _dct = [False, False, False]
-    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
     _toroidal_coordinate = 2  # (_,_,x2) = (_,_,zeta)
 
     def __init__(self, N, NFP=1, sym=False):
@@ -558,6 +559,9 @@ class FourierSeries(_Basis):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
+        self._tensor_product = (
+            self._sym == False  # noqa: E712
+        )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(N=self.N)
@@ -675,7 +679,6 @@ class DoubleFourierSeries(_Basis):
 
     _fft = [False, True, True]
     _dct = [False, False, False]
-    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
     _toroidal_coordinate = 2  # (_,x1,x2) = (_,theta,zeta)
 
     def __init__(self, M, N, NFP=1, sym=False):
@@ -684,6 +687,9 @@ class DoubleFourierSeries(_Basis):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
+        self._tensor_product = (
+            self._sym == False  # noqa: E712
+        )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
         self._modes = self._get_modes(M=self.M, N=self.N)
         super().__init__()
@@ -1043,7 +1049,6 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
     _fft = [False, True, True]
     _dct = [True, False, False]
-    _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
     _toroidal_coordinate = 2  # (x0,x1,x2) = (rho,theta,zeta)
 
     def __init__(self, L, M, N, NFP=1, sym=False):
@@ -1052,6 +1057,9 @@ class ChebyshevDoubleFourierBasis(_Basis):
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
+        self._tensor_product = (
+            self._sym == False  # noqa: E712
+        )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
@@ -1215,10 +1223,6 @@ class DoubleChebyshevFourierBasis(_Basis):
         Maximum vertical resolution.
     NFP : int
         Number of field periods.
-    sym : {``'cos'``, ``'sin'``, ``False``}
-        * ``'cos'`` for cos(m*t-n*z) symmetry
-        * ``'sin'`` for sin(m*t-n*z) symmetry
-        * ``False`` for no symmetry (Default)
 
     """
 
@@ -1227,12 +1231,12 @@ class DoubleChebyshevFourierBasis(_Basis):
     _tensor_product = True  # tensor product of 1D bases in (x0,x1,x2)
     _toroidal_coordinate = 1  # (x0,x1,x2) = (R,phi,Z)
 
-    def __init__(self, L, M, N, NFP=1, sym=False):
+    def __init__(self, L, M, N, NFP=1):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._NFP = check_posint(NFP, "NFP", False)
-        self._sym = bool(sym) if not sym else str(sym)
+        self._sym = False
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
@@ -1286,9 +1290,9 @@ class DoubleChebyshevFourierBasis(_Basis):
             The Vandermonde matrix when ``modes is None`` is given by
             ``y.reshape(-1,L+1,2*M+1,2*N+1,3)`` and is
             an outer product of Chebyshev and Fourier matrices with order
-            [T₀(𝛒), T₁(𝛒), ..., T_L(𝛒)]
-            ⊗ [sin(M𝛉), ..., sin(𝛉), 1, cos(𝛉), ..., cos(M𝛉)]
-            ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
+            [T₀(R), T₁(R), ..., T_L(R)]
+            ⊗ [sin(M𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(M𝛇)]
+            ⊗ [T₀(Z), T₁(Z), ..., T_L(Z)].
 
         """
         if not isinstance(grid, AbstractGrid):

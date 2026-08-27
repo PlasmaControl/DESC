@@ -825,6 +825,11 @@ class MeshgridTransform(Transform):
         self._rcond = rcond if rcond is not None else "auto"
 
         errorif(
+            grid.__dict__.get("_sym", False),
+            msg="MeshgridTransform for symmetric grids has not been implemented.",
+            err=NotImplementedError,
+        )
+        errorif(
             not grid.is_meshgrid,
             msg=f"MeshgridTransform requires a meshgrid grid, got {grid}.",
         )
@@ -839,9 +844,7 @@ class MeshgridTransform(Transform):
         # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
         # so basis.NFP must equal grid.NFP.
         basis_idx = self.basis.toroidal_coordinate  # idx of toroidal coord in basis
-        basis_N = [self.basis.L, self.basis.M, self.basis.N][
-            basis_idx
-        ]  # res of toroidal coord in basis
+        basis_N = self.basis_res[basis_idx]  # res of toroidal coord in basis
         errorif(
             self.grid.NFP != self.basis.NFP
             and basis_N != 0
@@ -853,7 +856,7 @@ class MeshgridTransform(Transform):
             and np.any(self.grid.nodes[:, 2] != 0),
             msg=f"Unequal number of field periods for grid {self.grid.NFP} and "
             f"basis {self.basis.NFP}.",
-            err=NotImplementedError,
+            err=ValueError,
         )
 
         # Toroidal grids have phi/zeta as x2, but cylindrical grids have phi/zeta as x1
@@ -866,7 +869,7 @@ class MeshgridTransform(Transform):
                 basis_idx != grid_idx,
                 msg=f"Basis and grid have different toroidal coordinates: "
                 f"basis={basis_idx}, grid={grid_idx}.",
-                err=NotImplementedError,
+                err=ValueError,
             )
 
         self._built = False
@@ -878,8 +881,12 @@ class MeshgridTransform(Transform):
         self.dk = {}
 
         # resolution of basis and grid for easy indexing
-        self._basis_res = [basis.L, basis.M, basis.N]
-        self._grid_res = [grid.L, grid.M, grid.N]
+        undersampling = np.array(self.grid_res) < np.array(self.basis_res)
+        warnif(
+            undersampling.any(),
+            msg="Grid is undersampled along dimensions "
+            f"x{', x'.join(np.where(undersampling)[0].astype(str))}.",
+        )
 
         # assign according to logic in setter function
         self.method = method
@@ -898,6 +905,14 @@ class MeshgridTransform(Transform):
 
     def _check_inputs_fft(self, grid, basis, dim):
         """Check that inputs are formatted correctly for fft method."""
+        basis_res = [basis.L, basis.M, basis.N]
+        grid_res = [grid.L, grid.M, grid.N]
+
+        # Trivial cases where there is only one node or mode in this dimension
+        if (grid_res[dim] == 0) or (basis_res[dim] == 0):
+            self._method[dim] = "direct"
+            return
+
         if not grid.fft[dim]:
             warnings.warn(
                 colored(
@@ -921,25 +936,20 @@ class MeshgridTransform(Transform):
             return
 
         # Coefficients for Fourier derivatives in spectral coordinates
-        self.dk[dim] = basis.NFP * jnp.arange(
-            -self._basis_res[dim], self._basis_res[dim] + 1
-        )
+        NFP = basis.NFP if dim == basis.toroidal_coordinate else 1
+        self.dk[dim] = NFP * jnp.arange(-basis_res[dim], basis_res[dim] + 1)
         self._method[dim] = "fft"
 
     def _check_inputs_dct(self, grid, basis, dim):
         """Check that inputs are formatted correctly for dct method."""
         basis_res = [basis.L, basis.M, basis.N]
         grid_res = [grid.L, grid.M, grid.N]
-        if basis_res[dim] == 0:
-            warnings.warn(
-                colored(
-                    f"dct method along dimension x{dim} requires nonzero basis"
-                    f" resolution, got {basis_res[dim]} falling back to direct method.",
-                    "yellow",
-                )
-            )
+
+        # Trivial cases where there is only one node or mode in this dimension
+        if (grid_res[dim] == 0) or (basis_res[dim] == 0):
             self._method[dim] = "direct"
             return
+
         if not grid.dct[dim]:
             warnings.warn(
                 colored(
@@ -950,7 +960,8 @@ class MeshgridTransform(Transform):
             )
             self._method[dim] = "direct"
             return
-        if not grid.dct[dim]:
+
+        if not basis.dct[dim]:
             warnings.warn(
                 colored(
                     f"dct method along dimension x{dim} requires compatible basis,"
@@ -960,11 +971,12 @@ class MeshgridTransform(Transform):
             )
             self._method[dim] = "direct"
             return
+
         if basis_res[dim] != grid_res[dim]:
             warnings.warn(
                 colored(
                     f"dct method along dimension x{dim} requires grid and basis"
-                    f"to have the same resolution, got basis={basis_res[dim]},"
+                    f" to have the same resolution, got basis={basis_res[dim]},"
                     f" grid={grid_res[dim]} falling back to direct method.",
                     "yellow",
                 )
@@ -1075,7 +1087,7 @@ class MeshgridTransform(Transform):
                     axis, -2
                 )
             elif self.method[i] == "fft":
-                c = fftfit(c, axis, n=self._basis_res[i])
+                c = fftfit(c, axis, n=self.basis_res[i])
             elif self.method[i] == "dct":
                 c = chebfit(c, axis)
         c = c.flatten()
@@ -1131,9 +1143,14 @@ class MeshgridTransform(Transform):
                 (self.method[i] == "dct") and (d[i] > 0)
             ):
                 # if direct or dct with derivative, use matrix multiplication
-                x = (self.matrices[f"dx{i}"][d[i]] @ x.swapaxes(axis, -2)).swapaxes(
-                    axis, -2
-                )
+                A = self.matrices[f"dx{i}"].get(d[i], {})
+                if isinstance(A, dict):
+                    raise ValueError(
+                        colored(
+                            "Derivative orders are out of initialized bounds", "red"
+                        )
+                    )
+                x = (A @ x.swapaxes(axis, -2)).swapaxes(axis, -2)
             elif self.method[i] == "fft":
                 # differentiate coefficients in spectral space
                 # swap sine <--> cosine if derivative order is odd for axis
@@ -1141,9 +1158,15 @@ class MeshgridTransform(Transform):
                     slice(None) if j != axis else slice(None, None, (-1) ** d[i])
                     for j in range(3)
                 )
-                x = x[index] * self.dk[i].reshape((-1, 1)) ** d[i] * (-1) ** (d[i] > 1)
+                x = x[index]
+
+                # multiply by dk along axis
+                dk_shape = tuple(-1 if j == axis else 1 for j in range(4))
+                sign = (-1) ** (d[i] // 2)  # +, +, -, -, +, + etc.
+                x *= sign * self.dk[i].reshape(dk_shape) ** d[i]
+
                 # transform coefficients to real space using fast fourier transform
-                x = ifftfit(x, axis, n=self._grid_res[i])
+                x = ifftfit(x, axis, n=self.grid_res[i])
             elif self.method[i] == "dct":
                 # transform coefficients to real space using discrete cosine transform
                 x = ichebfit(x, axis)
@@ -1174,9 +1197,90 @@ class MeshgridTransform(Transform):
             * ``'dct'`` uses discrete cosine transforms and must have Chebyshev nodes.
             * ``'auto'`` selects the method based on the grid and basis resolution.
         """
-        super.change_resolution(
+        if grid is None:
+            grid = self.grid
+        if basis is None:
+            basis = self.basis
+
+        # make sure method is a list of length 3
+        errorif(
+            len(method) != 3,
+            msg="Method must be a list of length 3, got {}".format(method),
+        )
+        method = list(method)
+
+        # check for symmetric grids or bases, which are not supported
+        errorif(
+            grid.__dict__.get("_sym", False),
+            msg="MeshgridTransform for symmetric grids has not been implemented.",
+            err=NotImplementedError,
+        )
+
+        # check for meshgrid grid and tensor product basis
+        errorif(
+            not grid.is_meshgrid,
+            msg=f"MeshgridTransform requires a meshgrid grid, got {grid}.",
+        )
+        errorif(
+            not basis.tensor_product,
+            msg=f"MeshgridTransform requires a tensor product basis, got {basis}.",
+        )
+
+        # Check for undersampling of the grid relative to the basis
+        grid_res = [grid.L, grid.M, grid.N]
+        basis_res = [basis.L, basis.M, basis.N]
+        undersampling = np.array(grid_res) < np.array(basis_res)
+        warnif(
+            undersampling.any(),
+            msg="Grid is undersampled along dimensions "
+            f"x{', x'.join(np.where(undersampling)[0].astype(str))}.",
+        )
+
+        # DESC truncates the computational domain to ζ ∈ [0, 2π/grid.NFP)
+        # and changes variables to the spectrally condensed ζ* = basis.NFP ζ,
+        # so basis.NFP must equal grid.NFP.
+        basis_idx = basis.toroidal_coordinate  # idx of toroidal coord in basis
+        basis_N = basis_res[basis_idx]  # res of toroidal coord in basis
+        errorif(
+            grid.NFP != basis.NFP
+            and basis_N != 0
+            and not (
+                isinstance(grid, CustomGridCurve)
+                or isinstance(grid, CustomGridFlux)
+                or isinstance(grid, CustomGridToroidalSurface)
+            )
+            and np.any(grid.nodes[:, 2] != 0),
+            msg=f"Unequal number of field periods for grid {grid.NFP} and "
+            f"basis {basis.NFP}.",
+            err=ValueError,
+        )
+
+        # Toroidal grids have phi/zeta as x2, but cylindrical grids have phi/zeta as x1
+        # If NFP != 1, then the phi/zeta must be the same in both the basis and grid.
+        if grid.NFP != 1:
+            grid_idx = int(
+                grid.get_label("toroidal")[1]
+            )  # if NFP!=1, this shouldn't throw an error
+            errorif(
+                basis_idx != grid_idx,
+                msg=f"Basis and grid have different toroidal coordinates: "
+                f"basis={basis_idx}, grid={grid_idx}.",
+                err=ValueError,
+            )
+
+        super().change_resolution(
             grid=grid, basis=basis, build=build, build_pinv=build_pinv, method=method
         )
+
+    @property
+    def grid_res(self):
+        """list: resolution of grid in each dimension."""
+        return [self.grid.L, self.grid.M, self.grid.N]
+
+    @property
+    def basis_res(self):
+        """list: resolution of basis in each dimension."""
+        return [self.basis.L, self.basis.M, self.basis.N]
 
     @property
     def grid(self):
@@ -1189,9 +1293,9 @@ class MeshgridTransform(Transform):
             self._grid = grid
             for i in range(3):
                 if self.method[i] == "fft":
-                    self._check_inputs_fft(self.grid, self.basis)
+                    self._check_inputs_fft(self.grid, self.basis, i)
                 if self.method[i] == "dct":
-                    self._check_inputs_dct(self.grid, self.basis)
+                    self._check_inputs_dct(self.grid, self.basis, i)
             if self.built:
                 self._built = False
                 self.build()
@@ -1210,9 +1314,9 @@ class MeshgridTransform(Transform):
             self._basis = basis
             for i in range(3):
                 if self.method[i] == "fft":
-                    self._check_inputs_fft(self.grid, self.basis)
+                    self._check_inputs_fft(self.grid, self.basis, i)
                 if self.method[i] == "dct":
-                    self._check_inputs_dct(self.grid, self.basis)
+                    self._check_inputs_dct(self.grid, self.basis, i)
             if self.built:
                 self._built = False
                 self.build()
@@ -1234,9 +1338,7 @@ class MeshgridTransform(Transform):
 
         for i in range(3):
             val = method[i]
-            if (self._basis_res[i] == 0) or (self._grid_res[i] == 0):
-                self._method[i] = "direct"
-            elif val == "auto":
+            if val == "auto":
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     self._check_inputs_fft(self.grid, self.basis, i)

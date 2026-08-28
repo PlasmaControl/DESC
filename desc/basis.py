@@ -443,7 +443,7 @@ class PowerSeries(_Basis):
         self._NFP = 1
         self._sym = bool(sym) if not sym else str(sym)
         self._tensor_product = (
-            self._sym == False  # noqa: E712
+            self._sym is False
         )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 
@@ -560,7 +560,7 @@ class FourierSeries(_Basis):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._tensor_product = (
-            self._sym == False  # noqa: E712
+            self._sym is False
         )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 
@@ -688,7 +688,7 @@ class DoubleFourierSeries(_Basis):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._tensor_product = (
-            self._sym == False  # noqa: E712
+            self._sym is False
         )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
         self._modes = self._get_modes(M=self.M, N=self.N)
@@ -1058,7 +1058,7 @@ class ChebyshevDoubleFourierBasis(_Basis):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = bool(sym) if not sym else str(sym)
         self._tensor_product = (
-            self._sym == False  # noqa: E712
+            self._sym is False
         )  # tensor product of 1D bases in (x0,x1,x2)
         self._spectral_indexing = "linear"
 

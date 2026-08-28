@@ -270,7 +270,7 @@ def test_qh_optimization():
 
     obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1, surf_batch_size=1)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq1))
+    B_asym = obj.compute_unscaled(*obj.xs(eq1))
 
     np.testing.assert_array_less(np.abs(B_asym).max(), 1e-1)
     np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)

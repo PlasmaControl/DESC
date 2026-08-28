@@ -546,8 +546,12 @@ class TestObjectiveFunction:
         grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, rho=np.array([0.6]))
 
         def test(obj, mode, ratio, **kwargs):
-            obj1 = obj(eq=eq1, grid=grid, scale_invariant=mode, **kwargs)
-            obj2 = obj(eq=eq2, grid=grid, scale_invariant=mode, **kwargs)
+            obj1 = obj(
+                eq=eq1, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
+            obj2 = obj(
+                eq=eq2, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
             obj1.build()
             obj2.build()
             f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))

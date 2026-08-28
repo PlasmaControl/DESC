@@ -193,7 +193,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Symmetry breaking harmonics of B (T), dimensionless for "scale_invariant".
+            Symmetry breaking harmonics of B (T), dimensionless for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -381,7 +381,7 @@ class QuasisymmetryTwoTerm(_Objective):
         -------
         f : ndarray
             Quasi-symmetry flux function error at each node (T^3), dimensionless
-            for "scale_invariant".
+            for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -540,7 +540,7 @@ class QuasisymmetryTripleProduct(_Objective):
         -------
         f : ndarray
             Quasi-symmetry flux function error at each node (T^4/m^2),
-            dimensionless for "scale_invariant".
+            dimensionless for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)

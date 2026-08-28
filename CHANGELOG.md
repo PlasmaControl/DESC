@@ -3,7 +3,7 @@ Changelog
 
 New Features
 
-- Adds ``mode`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated magnetic field information instead of the precomputed constant normalization. For more details on these quantites, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated magnetic field information instead of the precomputed constant normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 
 Performance Improvements
 

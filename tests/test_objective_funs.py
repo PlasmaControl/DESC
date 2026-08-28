@@ -506,12 +506,16 @@ class TestObjectiveFunction:
 
         booz = {"helicity": helicity, "M_booz": eq.M, "N_booz": eq.N}
         objs = {
-            "fb": QuasisymmetryBoozer(eq=eq, grid=grid, mode="fb", **booz),
-            "fb_hat": QuasisymmetryBoozer(eq=eq, grid=grid, mode="fb_hat", **booz),
-            "fc_hat": QuasisymmetryTwoTerm(
-                eq=eq, grid=grid, helicity=helicity, mode="fc_hat"
+            "fb": QuasisymmetryBoozer(eq=eq, grid=grid, scale_invariant=False, **booz),
+            "fb_hat": QuasisymmetryBoozer(
+                eq=eq, grid=grid, scale_invariant=True, **booz
             ),
-            "ft_hat": QuasisymmetryTripleProduct(eq=eq, grid=grid, mode="ft_hat"),
+            "fc_hat": QuasisymmetryTwoTerm(
+                eq=eq, grid=grid, helicity=helicity, scale_invariant=True
+            ),
+            "ft_hat": QuasisymmetryTripleProduct(
+                eq=eq, grid=grid, scale_invariant=True
+            ),
         }
         f = {}
         for mode, obj in objs.items():
@@ -542,24 +546,23 @@ class TestObjectiveFunction:
         grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, rho=np.array([0.6]))
 
         def test(obj, mode, ratio, **kwargs):
-            obj1 = obj(eq=eq1, grid=grid, mode=mode, normalize=False, **kwargs)
-            obj2 = obj(eq=eq2, grid=grid, mode=mode, normalize=False, **kwargs)
+            obj1 = obj(eq=eq1, grid=grid, scale_invariant=mode, **kwargs)
+            obj2 = obj(eq=eq2, grid=grid, scale_invariant=mode, **kwargs)
             obj1.build()
             obj2.build()
             f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))
             f2 = obj2.compute_scaled_error(*obj2.xs(eq2))
-            np.testing.assert_allclose(
-                f2, f1, rtol=1e-10, atol=1e-10 * np.max(np.abs(f1))
-            )
+            atol = 1e-10 * np.max(np.abs(f1))
+            np.testing.assert_allclose(f2, f1, rtol=1e-10, atol=atol)
 
-        # unhatted quantities scale as |B|^n, hatted ones are invariant
+        # scale variant quantities scale as |B|^n, others are invariant
         booz = {"helicity": helicity, "M_booz": eq1.M, "N_booz": eq1.N}
-        test(QuasisymmetryBoozer, "fb", 2, **booz)
-        test(QuasisymmetryBoozer, "fb_hat", 1, **booz)
-        test(QuasisymmetryTwoTerm, "fc", 2**3, helicity=helicity)
-        test(QuasisymmetryTwoTerm, "fc_hat", 1, helicity=helicity)
-        test(QuasisymmetryTripleProduct, "ft", 2**4)
-        test(QuasisymmetryTripleProduct, "ft_hat", 1)
+        test(QuasisymmetryBoozer, False, 2, **booz)
+        test(QuasisymmetryBoozer, True, 1, **booz)
+        test(QuasisymmetryTwoTerm, False, 2**3, helicity=helicity)
+        test(QuasisymmetryTwoTerm, True, 1, helicity=helicity)
+        test(QuasisymmetryTripleProduct, False, 2**4)
+        test(QuasisymmetryTripleProduct, True, 1)
 
     @pytest.mark.unit
     def test_isodynamicity(self):

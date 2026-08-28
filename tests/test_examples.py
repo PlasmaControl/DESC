@@ -174,7 +174,15 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-3e3, 3e3), eq=eq)
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
+    # solve with bounds creates singular Jacobian which QR cannot handle
+    eq.solve(
+        objective=obj,
+        ftol=1e-16,
+        xtol=1e-16,
+        maxiter=200,
+        verbose=3,
+        options={"tr_method": "svd"},
+    )
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute_scaled_error(obj.x(eq))
@@ -1171,7 +1179,8 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+    with pytest.warns(UserWarning, match="use bounds instead of target"):
+        [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
     objective = ObjectiveFunction(
@@ -1188,9 +1197,10 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    (eq, field), _ = optimizer.optimize(
-        (eq, field), objective, constraints, maxiter=2, verbose=3
-    )
+    with pytest.warns(UserWarning, match="use bounds instead of target"):
+        (eq, field), _ = optimizer.optimize(
+            (eq, field), objective, constraints, maxiter=2, verbose=3
+        )
 
 
 @pytest.mark.unit
@@ -2408,7 +2418,9 @@ def test_ballooning_stability_opt():
         gtol=1e-6,
         maxiter=2,  # increase maxiter to 50 for a better result
         verbose=3,
-        options={"initial_trust_ratio": 2e-3},
+        # Jacobian has only 2 rows and 1 of them can be full of 0s
+        # default QR can fail, choose SVD instead
+        options={"initial_trust_ratio": 2e-3, "tr_method": "svd"},
     )
     data = eq.compute("ideal ballooning lambda", grid=grid)
     lam2_optimized = data["ideal ballooning lambda"].max((-1, -2, -3))

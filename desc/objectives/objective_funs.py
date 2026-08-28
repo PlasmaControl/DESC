@@ -511,9 +511,7 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
-        rev_objs = [
-            o.__name__ for o in self.objectives if o._deriv_mode == "rev"
-        ]
+        rev_objs = [o.name for o in self.objectives if o._deriv_mode == "rev"]
         warnif(
             len(rev_objs) > 0 and self._deriv_mode == "batched",
             UserWarning,

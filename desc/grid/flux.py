@@ -354,7 +354,7 @@ class AbstractGridFlux(AbstractGrid):
 
     @property
     def inverse_poloidal_idx(self):
-        """ndarray: Indices the recover the unique poloidal angle coordinates."""
+        """ndarray: Indices that recover the unique poloidal angle coordinates."""
         return self.inverse_x1_idx
 
     @property
@@ -514,8 +514,7 @@ class LinearGridFlux(AbstractGridFlux):
         self._endpoint = bool(endpoint)
         self._is_meshgrid = True
         # these are default values that may get overwritten in _create_nodes
-        self._fft_x1 = False
-        self._fft_x2 = False
+        self._fft = [False, False, False]
         self._can_fft2 = not sym and not endpoint
         self._poloidal_endpoint = False
         self._toroidal_endpoint = False
@@ -628,11 +627,11 @@ class LinearGridFlux(AbstractGridFlux):
             dr = np.ones_like(r)
 
         # theta
-        t, dt, self._fft_x1 = _create_linear_nodes(
+        t, dt, self._fft[1] = _create_linear_nodes(
             M, theta, theta_period, endpoint, sym=self.sym
         )
         # zeta
-        z, dz, self._fft_x2 = _create_linear_nodes(
+        z, dz, self._fft[2] = _create_linear_nodes(
             N, zeta, zeta_period, endpoint, NFP=NFP
         )
 
@@ -751,8 +750,7 @@ class QuadratureGridFlux(AbstractGridFlux):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = False
         self._is_meshgrid = True
-        self._fft_x1 = True
-        self._fft_x2 = True
+        self._fft = [False, True, True]
         self._can_fft2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
         # symmetry is never enforced for Quadrature CustomGridFlux
@@ -916,8 +914,7 @@ class ConcentricGridFlux(AbstractGridFlux):
         self._NFP = check_posint(NFP, "NFP", False)
         self._sym = sym
         self._is_meshgrid = False
-        self._fft_x1 = False
-        self._fft_x2 = True
+        self._fft = [False, False, True]
         self._can_fft2 = False
         self._nodes, self._spacing = self._create_nodes(
             L=L, M=M, N=N, NFP=NFP, axis=axis, node_pattern=node_pattern

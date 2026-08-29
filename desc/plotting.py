@@ -1660,15 +1660,13 @@ def _pest_phi_to_zeta(eq, nodes, niter=12, tol=1e-10):
     theta_pest = nodes[:, 1]
     phi_target = nodes[:, 2]
 
-    theta = theta_pest.copy()          # lambda is small, so this starts close
+    theta = theta_pest.copy()  # lambda is small, so this starts close
     zeta = phi_target.copy()
 
     for _ in range(niter):
         zeta_prev = zeta
         # step 1: theta fixed, find zeta with phi(rho, theta, zeta) = phi
-        zeta = _phi_to_zeta_bisect(
-            eq, np.stack([rho, theta, phi_target], axis=1)
-        )[:, 2]
+        zeta = _phi_to_zeta_bisect(eq, np.stack([rho, theta, phi_target], axis=1))[:, 2]
         # step 2: zeta fixed, find theta with theta + lambda = theta_PEST
         theta = np.asarray(
             map_coordinates(

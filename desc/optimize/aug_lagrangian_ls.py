@@ -25,7 +25,7 @@ from .utils import (
     inequality_to_bounds,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    scale_columns,
+    scale_matrix,
     solve_triangular_regularized,
 )
 
@@ -288,7 +288,7 @@ def lsq_auglag(  # noqa: C901
     # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
     # carrying so many J-sized matrices in memory, which can be large. The buffer is
     # donated so the scaling doesn't allocate a second copy of J.
-    J_h = scale_columns(J, d)
+    J_h = scale_matrix(J, d)
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -558,7 +558,7 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                J = J.at[f.size :].multiply((jnp.sqrt(mu) / jnp.sqrt(mu_old))[:, None])
+                J = scale_matrix(J, (jnp.sqrt(mu) / jnp.sqrt(mu_old))[:, None])
 
                 g = jnp.dot(L, J)
 
@@ -577,7 +577,7 @@ def lsq_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            J_h = scale_columns(J, d)
+            J_h = scale_matrix(J, d)
             del J
 
             if g_norm < gtol and constr_violation < ctol:
@@ -611,7 +611,7 @@ def lsq_auglag(  # noqa: C901
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
     # after overwriting J_h with J*d, we have to revert back and store the
     # unscaled version
-    J_h = scale_columns(J_h, 1 / d)
+    J_h = scale_matrix(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         s=s,

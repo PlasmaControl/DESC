@@ -222,7 +222,6 @@ def test_stability_kwargs_are_registered():
     # declare the kwarg on the compute function that reads it, or delete the read.
     known_unregistered = {
         "mirror",  # read in _agni3_assemble
-        "phase_offset",  # read in _AGNI3
         # `ring_nodes` is INTERNAL: `_agni3_assemble` is called directly as a
         # Python function with ring_nodes=..., never through `eq.compute`, so it
         # never reaches the allowed_kwargs check. Declaring it on a registration

@@ -1767,33 +1767,23 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
         ]
     )
 
-    # Phase rotation doesn't change the physics. Here, we use it to make the eigenmode up-down symmetric.
-    # phase_offset (default 0) is an optional tunable rotation applied on top of the mean-based alignment.
-    # RG: need to make this consistent with the dense case. `phase_offset` is
-    # declared on no register_compute_fun, so it cannot be set through
-    # `eq.compute` and is always 0. Cosmetic only -- the rotation does not
-    # change the physics -- so either declare it or drop it.
-    phase_offset = kwargs.get("phase_offset", 0.0)
-    xi_ref = xi_full[rho_idx]
-    phase_angle = jnp.arctan2(jnp.mean(xi_ref.real), jnp.mean(xi_ref.imag))
-    per_elem_angles = jnp.arctan2(xi_ref.real, xi_ref.imag)
-    angle_diff = per_elem_angles - phase_angle
-    mags = jnp.abs(xi_ref)
-    threshold = 0.01 * jnp.max(mags)
-    mask = mags > threshold
-    angle_diff_valid = jnp.where(mask, jnp.abs(angle_diff), jnp.nan)
-    xr = (
-        xi_full[rho_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
-        * jnp.exp(1j * (phase_angle + phase_offset))
-    ).imag
-    xv = (
-        xi_full[ups_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
-        * jnp.exp(1j * (phase_angle + phase_offset))
-    ).imag
-    xz = (
-        xi_full[zeta_idx].reshape(n_rho_max, n_theta_max, n_zeta_max)
-        * jnp.exp(1j * (phase_angle + phase_offset))
-    ).imag
+    # A is real unless `axisym=True` sets D_zeta0 = 1j * n_mode_axisym. A real
+    # eigenvector has no phase to fix: the rotation collapsed to a global sign
+    # set by sign(mean(xi_rho)), and that mean is ~1e-12 for an oscillatory
+    # mode, so the sign was noise. 3D takes the components as they are.
+    _shape = (n_rho_max, n_theta_max, n_zeta_max)
+    if jnp.iscomplexobj(xi_full):
+        # Align the mean phase to make the mode up-down symmetric. Cosmetic:
+        # the physics is invariant under it.
+        xi_ref = xi_full[rho_idx]
+        rot = jnp.exp(1j * jnp.arctan2(jnp.mean(xi_ref.real), jnp.mean(xi_ref.imag)))
+        xr = (xi_full[rho_idx].reshape(_shape) * rot).imag
+        xv = (xi_full[ups_idx].reshape(_shape) * rot).imag
+        xz = (xi_full[zeta_idx].reshape(_shape) * rot).imag
+    else:
+        xr = xi_full[rho_idx].reshape(_shape)
+        xv = xi_full[ups_idx].reshape(_shape)
+        xz = xi_full[zeta_idx].reshape(_shape)
 
     # precomputed forward derivatives (re-used below)
     xr_v = d_dv(D_theta0, xr)

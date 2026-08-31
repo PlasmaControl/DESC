@@ -645,7 +645,8 @@ def zernike_fourier_diffmat(
         One-dimensional radial and poloidal collocation nodes.
     L, M : int
         Zernike radial and poloidal resolutions. A value of ``-1`` chooses a
-        resolution from the supplied node counts.
+        resolution from the supplied node counts: ``M = (theta.size - 1) // 2``
+        and ``L = 2 * (rho.size // 2 - 1)``. See Notes on the choice of ``L``.
     spectral_indexing : {"ansi", "fringe"}
         Zernike spectral indexing convention.
 
@@ -654,6 +655,27 @@ def zernike_fourier_diffmat(
     D_rho, D_theta : tuple[jax.Array]
         Coupled first-derivative matrices, each with shape
         ``(rho.size * theta.size, rho.size * theta.size)``.
+
+    Notes
+    -----
+    The default ``L`` deliberately requests roughly half the radial degree the
+    node count could support, so the pseudo-inverse fit stays a comfortable
+    least-squares problem rather than approaching interpolation. Letting ``L``
+    grow to ``2 * (rho.size - 1)`` pushes the Zernike mode count to 61-87% of
+    the node count and the resulting radial operator becomes numerically
+    worthless -- measured ``||D_rho||_2``, with ``M`` fixed and ``theta``
+    unchanged:
+
+    ==================  ===================  =====================
+    ``rho x theta``     ``L = 2*(n-1)``      ``L = 2*(n//2-1)``
+    ==================  ===================  =====================
+    16 x 24             4.5e+08              1.5e+02
+    32 x 64             1.8e+13              1.2e+04
+    32 x 96             9.9e+12              6.0e+07
+    ==================  ===================  =====================
+
+    ``||D_theta||_2`` is identical under both (``M`` is unaffected), confirming
+    the blow-up is purely radial. Pass ``L`` explicitly to override.
     """
     from desc.basis import ZernikePolynomial
     from desc.grid import LinearGrid
@@ -672,7 +694,7 @@ def zernike_fourier_diffmat(
         "rho and theta cannot be empty.",
     )
     M = max((theta.size - 1) // 2, 0) if M == -1 else M
-    L = 2 * (rho.size - 1) if L == -1 else L
+    L = 2 * (rho.size // 2 - 1) if L == -1 else L
 
     grid = LinearGrid(rho=rho, theta=theta, NFP=1, sym=False)
     basis = ZernikePolynomial(

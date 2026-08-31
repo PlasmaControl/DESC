@@ -9,7 +9,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
-from desc.utils import Timer, errorif
+from desc.utils import Timer, errorif, isposint
 
 from ._quadcoil_utils import (
     _BCOIL_DATA_KEYS,
@@ -70,6 +70,33 @@ _normalize_target_detail = (
     "magnitudes from the DESC auto-calculated values. Setting "
     "this to ``True`` may impact QUADCOIL's accuracy."
 )
+
+_jac_chunk_size_detail = """
+    jac_chunk_size : int or ``auto``, optional
+        Will calculate the Jacobian
+        ``jac_chunk_size`` columns at a time, instead of all at once.
+        The memory usage of the Jacobian calculation is roughly
+        ``memory usage = m0+m1*jac_chunk_size``: the smaller the chunk size,
+        the less memory the Jacobian calculation will require (with some baseline
+        memory usage). The time it takes to compute the Jacobian is roughly
+        ``t = t0+t1/jac_chunk_size`` so the larger the ``jac_chunk_size``, the faster
+        the calculation takes, at the cost of requiring more memory.
+        If ``None``, it will use the largest size i.e ``obj.dim_x``.
+        Can also help with Hessian computation memory, as Hessian is essentially
+        ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
+        Defaults to ``chunk_size=None``.
+        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
+        accurately estimate the available device memory, so the ``auto`` chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
+        On this objective, a positive integer ``jac_chunk_size`` is additionally
+        forwarded to QUADCOIL as ``quadcoil_kwargs["jac_chunk_size"]`` to chunk
+        the KKT adjoint metric-row VJP (important for array-valued metrics such
+        as ``phi_dofs``). The string ``"auto"`` is not forwarded. Setting an
+        integer ``jac_chunk_size`` on a sub-objective also forces the parent
+        ``ObjectiveFunction`` into ``blocked`` deriv mode (and raises if the
+        parent is ``batched``).
+"""
 
 
 class QuadcoilProxy(_Objective):
@@ -196,6 +223,7 @@ class QuadcoilProxy(_Objective):
         target_default="``target=0``.",
         bounds_default="``bound=None``.",
         normalize_target_detail=_normalize_target_detail,
+        overwrite={"jac_chunk_size": _jac_chunk_size_detail},
     )
 
     _coordinates = ""  # What coordinates is this objective a function of, with
@@ -440,6 +468,10 @@ class QuadcoilProxy(_Objective):
         # winding-surface / self-field kernels use the same knob.
         if bs_chunk_size is not None:
             quadcoil_kwargs["bs_chunk_size"] = bs_chunk_size
+        # Also chunk QUADCOIL's KKT adjoint metric-row vmap. Guarded with
+        # isposint because DESC additionally accepts the string "auto".
+        if isposint(jac_chunk_size):
+            quadcoil_kwargs["jac_chunk_size"] = jac_chunk_size
         _quadcoil_values, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_kwargs)
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)
@@ -906,6 +938,16 @@ class QuadcoilFreeBoundaryError(QuadcoilProxy):
 
     The winding-surface geometry is frozen at ``build`` time; only ``Phi(eq)``
     and the evaluation geometry carry equilibrium gradients.
+
+    .. tip::
+
+        A positive ``jac_chunk_size`` is strongly recommended for this class.
+        It wraps QUADCOIL with a vector penalty (``metric_name="phi_dofs"``,
+        one component per current-potential DOF), so QUADCOIL's KKT adjoint
+        runs one ``vmap`` lane per DOF and peak memory grows with that count.
+        For details on vector penalties and adjoint chunking, see the
+        `QUADCOIL input tutorial
+        <https://quadcoil.readthedocs.io/en/latest/tutorial_inputs.html>`__.
     """
 
     _static_attrs = QuadcoilProxy._static_attrs + [

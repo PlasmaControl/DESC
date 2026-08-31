@@ -159,6 +159,7 @@ def lsqtr(  # noqa: C901
 
     """
     options = {} if options is None else options
+
     errorif(
         isinstance(x_scale, str) and x_scale not in ["jac", "auto"],
         ValueError,
@@ -238,6 +239,9 @@ def lsqtr(  # noqa: C901
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "qr")
+
+    print(f"tr_method is {tr_method}")
+    print(f"max_nfev is {max_nfev}")
 
     errorif(
         len(options) > 0,

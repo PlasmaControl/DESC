@@ -779,11 +779,15 @@ class ProximalProjection(ObjectiveFunction):
         # specified tolerances, necessary as we assume
         # eq is solved when taking the derivatives later
         if self._solve_during_proximal_build:
+            print()
+            print("prox solve ")
+            print(self._solve_options)
             self._eq.solve(
                 objective=self._eq_solve_objective,
                 constraints=None,
                 **self._solve_options,
             )
+            print()
         # then store the now-solved eq state as the initial state
         self._x_old = self.x(self.things)
         self._allx = [self._x_old]
@@ -932,11 +936,15 @@ class ProximalProjection(ObjectiveFunction):
                 deltas=deltas,
                 **self._perturb_options,
             )
+            print()
+            print("prox solve ")
+            print(self._solve_options)
             self._eq.solve(
                 objective=self._eq_solve_objective,
                 constraints=None,
                 **self._solve_options,
             )
+            print()
             xeq = self._eq.pack_params(self._eq.params_dict)
             x_list[self._eq_idx] = self._eq.params_dict.copy()
             xopt = jnp.concatenate(

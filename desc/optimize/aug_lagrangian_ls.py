@@ -555,10 +555,13 @@ def lsq_auglag(  # noqa: C901
                 else:
                     ctolk = max(eta / (jnp.mean(mu) ** alpha_eta), ctol)
                     gtolk = max(omega / (jnp.mean(mu) ** alpha_omega), gtol)
-                # if we update lagrangian params, need to recompute L and J
+                # if we update lagrangian params, need to recompute L and J.
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
-                J = scale_matrix(J, (jnp.sqrt(mu) / jnp.sqrt(mu_old))[:, None])
+                row_scale = jnp.concatenate(
+                    [jnp.ones_like(f), jnp.sqrt(mu) / jnp.sqrt(mu_old)]
+                )
+                J = scale_matrix(J, row_scale[:, None])
 
                 g = jnp.dot(L, J)
 

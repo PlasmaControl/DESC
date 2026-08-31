@@ -2745,16 +2745,38 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     return _jsla.cho_solve(fac, b)
                 return _jsla.lu_solve(fac, b)
 
+            # `decomp.tridiag_sym` is a real symmetric Lanczos (v^T w, not
+            # v^dagger w), so on the complex Hermitian A that `axisym=True`
+            # builds it returns wrong Ritz vectors; the values survive, so only
+            # the Rayleigh residual shows it. Run it on the real symmetric 2n
+            # embedding [[Re A, -Im A], [Im A, Re A]] and unstack afterward,
+            # keeping the cheaper complex n x n factorization.
+            _is_complex = bool(np.issubdtype(np.dtype(mat_dtype), np.complexfloating))
+
+            if _is_complex:
+
+                def _OPinv_real(b):
+                    """`_OPinv` lifted to the real 2n embedding."""
+                    z = _OPinv(b[:nA] + 1j * b[nA:])
+                    return jnp.concatenate([jnp.real(z), jnp.imag(z)])
+
+                _op, _kdim, _v0_dtype = _OPinv_real, 2 * nA, jnp.float64
+            else:
+                _op, _kdim, _v0_dtype = _OPinv, nA, mat_dtype
+
             _tri = decomp.tridiag_sym(_num_matvecs, reortho="full", materialize=True)
             _alg = eig.eigh_partial(_tri)
             _v0 = jnp.asarray(
-                np.random.default_rng(0).standard_normal(nA), dtype=mat_dtype
+                np.random.default_rng(0).standard_normal(_kdim), dtype=_v0_dtype
             )
             _v0 = _v0 / jnp.linalg.norm(_v0)
-            mu, vecs = _alg(_OPinv, _v0)
+            mu, vecs = _alg(_op, _v0)
 
             idx = jnp.argmax(jnp.abs(mu))
             v_out = vecs[idx]
+            if _is_complex:
+                # Unstack the embedding: [Re v; Im v] -> v.
+                v_out = v_out[:nA] + 1j * v_out[nA:]
 
             mu_i = mu[idx]
             lam_out = sig + 1.0 / jnp.where(mu_i == 0, jnp.inf, mu_i)

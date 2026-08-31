@@ -619,12 +619,6 @@ class ProximalProjection(ObjectiveFunction):
         # this resolve for another reason -- skipping it when `eq` is not
         # actually converged silently invalidates every sensitivity computed
         # afterward (they assume force balance holds at the start point).
-        # It is NOT merely a debug convenience: re-solving here also perturbs
-        # R_lmn/Z_lmn/L_lmn away from wherever `eq` started (measured: ~1%
-        # relative in L_lmn, a lambda-gauge slide, even at a fixed boundary --
-        # see AGNI_var/V_PRIMAL/WHY_UNSAFE_TRACED_20260822.md), which silently
-        # invalidates any externally-captured state (e.g. an eigenvector)
-        # tied to the pre-resolve `eq`.
         perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)

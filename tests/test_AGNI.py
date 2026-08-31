@@ -329,6 +329,73 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.slow
+def test_jax_lanczos_matches_dense_axisym(monkeypatch):
+    """``test_jax_lanczos_matches_dense`` for a complex A.
+
+    ``axisym=True`` makes the operator complex Hermitian. The module fixture is
+    3D and never builds one, so this builds its own one-zeta-plane level.
+    Without the fix: lam_R=+9.713e-02 vs dense -2.660e-03, residual 1.14e+03.
+    """
+    if not _EQ_PATH.is_file():
+        pytest.fail(_AGNI_SKIP_REASON)
+    eq = _load_old_equilibrium(str(_EQ_PATH))
+
+    n_rho, n_theta = _N_RHO, _N_THETA
+    pest_grid, diffmat = _build_pest_level(eq, n_rho, n_theta, 1)
+    grid = Grid(
+        eq.map_coordinates(
+            jnp.reshape(
+                pest_grid.meshgrid_reshape(pest_grid.nodes, order="rtz"), (-1, 3)
+            ),
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            tol=1e-6,
+            maxiter=20,
+        )
+    )
+
+    n_total = n_rho * n_theta
+    n_keep = 3 * n_total - 2 * n_theta  # one zeta plane, so n_shell == n_theta
+    kw = dict(
+        grid=grid,
+        diffmat=diffmat,
+        incompressible=False,
+        gamma=5.0 / 3.0,
+        axisym=True,
+        n_mode_axisym=1,
+    )
+
+    dense = eq.compute("finite-n lambda3", **kw, v_guess=np.ones(n_keep))
+    lam_dense = float(np.asarray(dense["finite-n lambda3"])[0])
+
+    # If A came out real the complex branch was never reached and this is vacuous.
+    assert np.iscomplexobj(
+        np.asarray(dense["finite-n xi"])
+    ), "axisym=True did not produce a complex operator"
+
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
+    data = eq.compute("finite-n lambda3 rayleigh", **kw, sigma=1.3 * lam_dense)
+    lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
+    resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
+
+    reldiff = abs(lam_R - lam_dense) / (abs(lam_dense) + 1e-300)
+    print(f"\n  lambda3 (dense ARPACK) = {lam_dense:.9e}")
+    print(f"  lam_R   (jax_lanczos)  = {lam_R:.9e}  (reldiff={reldiff:.2e})")
+    print(f"  Rayleigh residual      = {resid:.3e}")
+
+    assert np.sign(lam_R) == np.sign(lam_dense), (
+        f"jax_lanczos flipped the sign of the growth rate: {lam_R:.6e} vs "
+        f"{lam_dense:.6e} -- a stable/unstable misclassification"
+    )
+    # Tight, unlike the 3D sibling's 0.1: measured 1.2e-07 here with the fix.
+    assert resid < 1e-4, f"Rayleigh residual {resid:.3e} -- eigenvector not converged"
+    np.testing.assert_allclose(lam_R, lam_dense, rtol=1e-4)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
 def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     """Both ring-block builds reproduce the dense matrix's sub-blocks.
 

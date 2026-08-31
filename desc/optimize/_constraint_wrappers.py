@@ -653,9 +653,11 @@ class ProximalProjection(ObjectiveFunction):
         # Does not include self._constraint
         self._objective._set_things(self.things)
 
-        # Build elements of self._state which depend on the
-        # complete set of "things"
-        self._state.set_layout(self.things)
+        self._eq_idx = self.things.index(self._state.eq)
+        self._dimx_per_thing = [t.dim_x for t in self.things]
+        dimc_per_thing = [t.dim_x for t in self.things]
+        dimc_per_thing[self._eq_idx] = self._state.dim_ceq
+        self._dimc_per_thing = dimc_per_thing
 
     def unpack_state(self, x, per_objective=True):
         """Unpack the state vector into its components.
@@ -685,7 +687,7 @@ class ProximalProjection(ObjectiveFunction):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs = jnp.split(x, np.cumsum(self._state.dimc_per_thing))
+        xs = jnp.split(x, np.cumsum(self._dimc_per_thing)[:-1])
         params = []
         for t, xi in zip(self.things, xs):
             if t is self._state.eq:
@@ -740,6 +742,15 @@ class ProximalProjection(ObjectiveFunction):
 
         return jnp.concatenate(xs)
 
+    @property
+    def dim_x(self):
+        """int: Dimension of the state vector.
+
+        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
+        params.
+        """
+        return np.sum(self._dimc_per_thing)
+
     def _update_equilibrium(self, x, store=False):
         """Update the internal equilibrium with new boundary, profile etc.
 
@@ -749,33 +760,36 @@ class ProximalProjection(ObjectiveFunction):
             New values of the state vector of equilibrium (except R_lmn, Z_lmn,
             L_lmn, Ra_n, Za_n) and all the parameters of the other things.
         store : bool
-            Whether the new x should be stored in self.history
+            Whether the new x is stored as the next accepted iterate.
 
         Notes
         -----
         After updating, if store=False, self._state.eq will revert back to the previous
-        solution when store was True
+        solution when store was True.
 
         """
         # xopt is the full state vector of all the things
         # xeq is the full state vector of the equilibrium only
 
-        # TODO (#1720): We don't need to check the whole state vector, just the
-        # equilibrium parameters should be enough.
-        # first check if its something we've seen before, if it is just return
+        # first check if it's something we've seen before, if it is just return
         # cached value, no need to perturb + resolve
-        xopt = f_where_x(x, self._state.allx, self._state.allxopt)
-        xeq = f_where_x(x, self._state.allx, self._state.allxeq)
-        if xopt.size > 0 and xeq.size > 0:
+        xs = np.split(x, np.cumsum(self._dimc_per_thing)[:-1])
+        ceq = xs[self._eq_idx]
+        xeq = f_where_x(ceq, self._state.allceq, self._state.allxeq)
+        if xeq.size > 0:
             pass
         else:
-            # After unpack_state, R_lmn, Z_lmn, L_lmn, Ra_n and Za_n in below lists
-            # will be 0s
-            x_list = self.unpack_state(x, False)
-            x_list_old = self.unpack_state(self._state.x_old, False)
-            xeq_dict = x_list[self._state.eq_idx]
-            xeq_dict_old = x_list_old[self._state.eq_idx]
-            deltas = {str(key): xeq_dict[key] - xeq_dict_old[key] for key in xeq_dict}
+            # build a dictionary of the deltas between xeq and xeq_old,
+            # restricted to state.args
+            ceq_split = jnp.split(ceq, self._state.idx_ceq)
+            ceq_dict = dict(zip(self._state.args, ceq_split))
+            deltas = {
+                arg: ceq_dict[arg] - self._state.xeq_old[arg]
+                for arg in self._state.args
+            }
+            # clear cache to reduce memory
+            self._state._tangents = {}
+            self._state._tangent_xf = None
             # We pass in the LinearConstraintProjection object to skip some redundant
             # computations in the perturb and solve methods
             self._state.eq = self._state.eq.perturb(
@@ -790,32 +804,21 @@ class ProximalProjection(ObjectiveFunction):
                 **self._state.solve_options,
             )
             xeq = self._state.eq.pack_params(self._state.eq.params_dict)
-            x_list[self._state.eq_idx] = self._state.eq.params_dict.copy()
-            xopt = jnp.concatenate(
-                [t.pack_params(xi) for t, xi in zip(self.things, x_list)]
-            )
-            self._state.allx.append(x)
-            self._state.allxopt.append(xopt)
+            self._state.allceq.append(ceq)
             self._state.allxeq.append(xeq)
             self._state.eq_is_current = False
 
         if store:
-            x_list = self.unpack_state(x, False)
-            xeq_dict = self._state.eq.unpack_params(xeq)
-            self._state.eq.params_dict = xeq_dict
-            x_list[self._state.eq_idx] = xeq_dict
-            if np.array_equal(jnp.asarray(x), jnp.asarray(self._state.x_old)):
-                self._state.history[-1] = x_list
-            else:
-                self._state.history.append(x_list)
-            self._state.x_old = x
-        else:
+            eq_params = self._state.eq.unpack_params(xeq)
+            self._state.eq.params_dict = eq_params
+            self._state.xeq_old = eq_params
+        elif not self._state.eq_is_current:
             # reset to last good params
-            if not self._state.eq_is_current:
-                self._state.eq.params_dict = self._state.history[-1][self._state.eq_idx]
-                self._state.eq_solve_objective.update_constraint_target(self._state.eq)
+            self._state.eq.params_dict = self._state.xeq_old
+            self._state.eq_solve_objective.update_constraint_target(self._state.eq)
         self._state.eq_is_current = True
 
+        xopt = jnp.concatenate([*xs[: self._eq_idx], xeq, *xs[self._eq_idx + 1 :]])
         return xopt, xeq
 
     def compute_scaled(self, x, constants=None):
@@ -945,10 +948,8 @@ class ProximalProjection(ObjectiveFunction):
         return J.T @ J
 
     def _jac(self, x, constants=None, op="scaled"):
-        constants = setdefault(constants, [None, None])
-        xg, xf = self._update_equilibrium(x, store=True)
-        tangents = self._full_tangents(x, xf, constants, op)
-        return self._jvp_given_tangents(tangents, xg, constants, op).T
+        # passing v=None corresponds to jvp in all directions
+        return self._jvp(None, x, constants, op).T
 
     def jac_scaled(self, x, constants=None):
         """Compute Jacobian of self.compute_scaled.
@@ -1070,69 +1071,29 @@ class ProximalProjection(ObjectiveFunction):
         # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
         # First we will compute the tangent direction (see _proximal_get_tangents
         # for details), then we will compute the Jacobian.
-        state = self._state
         v = v[0] if isinstance(v, (tuple, list)) else v
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-
-        # we don't need to divide this part into blocked and batched because
-        # self._constraint._deriv_mode will handle it
-        tangents = _proximal_get_tangents(
-            state.constraint,
-            xf,
-            v,
-            constants[1],
-            state.eq_solve_objective._feasible_tangents,
-            state.dxdc,
-            state.dimc_per_thing,
-            state.eq_idx,
-            op,
+        tangents = self._state.get_tangents(
+            xf, self._eq_idx, self._dimc_per_thing, op, v, constants[1]
         )
-        return self._jvp_given_tangents(tangents, xg, constants, op)
-
-    def _full_tangents(self, x, xf, constants, op):
-        """Gets the full matrix of tangents from self._state."""
-        state = self._state
-
-        # If self._state has not yet computed and stored the tangents,
-        # this function gets called.
-        def build_tangents():
-            return _proximal_get_tangents(
-                state.constraint,
-                xf,
-                jnp.eye(x.shape[0]),
-                constants[1],
-                state.eq_solve_objective._feasible_tangents,
-                state.dxdc,
-                tuple(state.dimc_per_thing),
-                state.eq_idx,
-                op,
-            )
-
-        return state.get_tangents(x, op, build_tangents)
-
-    def _jvp_given_tangents(self, tangents, x, constants, op):
-        """Applies jvp when the tangents are given.
-
-        Needed because _jvp and _jac compute their tangents
-        differently (the latter goes through the cache in
-        self._state). Given tangents, the derivative computation
-        is the same.
-        """
         if self._objective._deriv_mode == "batched":
-            return getattr(self._objective, "jvp_" + op)(tangents, x, constants[0])
+            # objective's method already knows about its jac_chunk_size
+            return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
             return _proximal_jvp_blocked_pure(
                 self._objective,
-                jnp.split(tangents, np.cumsum(self._state.dimx_per_thing), axis=-1),
-                jnp.split(x, np.cumsum(self._state.dimx_per_thing)),
+                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
+                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
                 op,
             )
 
     def _vjp(self, v, x, constants=None, op="scaled"):
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        tangents = self._full_tangents(x, xf, constants, op)
+        tangents = self._state.get_tangents(
+            xf, self._eq_idx, self._dimc_per_thing, op, constants=constants[1]
+        )
         v_vjp = getattr(self._objective, "vjp_" + op)(v, xg, constants[0])
         return tangents @ v_vjp
 
@@ -1179,25 +1140,23 @@ class ProximalProjection(ObjectiveFunction):
         """
         return self._vjp(v, x, constants, "unscaled")
 
-    @property
-    def dim_x(self):
-        """int: Dimension of the state vector.
+    def history(self, allx):
+        """Builds list of params for each proximal iterate."""
+        out = []
+        for x in allx:
+            xs = np.split(x, np.cumsum(self._dimc_per_thing)[:-1])
+            ceq = xs[self._eq_idx]
 
-        Note that we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium
-        params.
-        """
-        s = 0
-        for t in self.things:
-            if t is self._state.eq:
-                s += sum(self._state.eq.dimensions[arg] for arg in self._state.args)
-            else:
-                s += t.dim_x
-        return s
+            # read the full equilibrium parameters corresponding to a given ceq
+            xeq = f_where_x(ceq, self._state.allceq, self._state.allxeq)
 
-    @property
-    def history(self):
-        """list: parameters of equilibria from each proximal step."""
-        return self._state.history
+            params = self.unpack_state(x, False)
+
+            # unpack_state leaves the solve-output equilibrium params as 0s
+            eq_params = self._state.eq.unpack_params(xeq)
+            params[self._eq_idx] = eq_params
+            out.append(params)
+        return out
 
     @property
     def constants(self):
@@ -1235,6 +1194,12 @@ class ProximalState:
     perturb_options, solve_options : dict
         Dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+    cache_tangents : bool
+        Whether to compute and store the full Equilibrium tangents by default.
+        If True, this applies even to callers asking for fewer than dim(xeq)
+        directions. This is useful when the state is shared by multiple
+        ProximalProjection wrappers, which happens in augmented Lagrangian solvers.
+        Default is False.
     """
 
     def __init__(
@@ -1243,6 +1208,7 @@ class ProximalState:
         constraint,
         perturb_options=None,
         solve_options=None,
+        cache_tangents=False,
     ):
 
         assert isinstance(constraint, ObjectiveFunction), (
@@ -1252,15 +1218,14 @@ class ProximalState:
             errorif(
                 not con._equilibrium,
                 ValueError,
-                "ProximalProjection method cannot handle general "
-                + f"nonlinear constraint {con}.",
+                "ProximalState cannot handle general " + f"nonlinear constraint {con}.",
             )
             # can't have bounds on constraint bc if constraint is satisfied then
             # Fx == 0, and that messes with Gx @ Fx^-1 Fc etc.
             errorif(
                 con.bounds is not None,
                 ValueError,
-                "ProximalProjection can only handle equality constraints, "
+                "ProximalState can only handle equality constraints, "
                 + f"got bounds for constraint {con}",
             )
 
@@ -1278,18 +1243,17 @@ class ProximalState:
 
         self.perturb_options = perturb_options
         self.solve_options = solve_options
-        self.allx = []
-        self.allxopt = []
         self.allxeq = []
-        self.x_old = None
-        self.history = []
+        self.allceq = []
+        self.xeq_old = None
         self.eq_is_current = True
 
-        # equilibrium parameters x at which tangents are computed
-        self._tangent_x = None
-
+        # full equilibrium parameters at which tangents are computed
+        self._tangent_xf = None
         # tangent cache
+        self._cache_tangents = cache_tangents
         self._tangents = {}
+
         self._built = False
 
     def build(self, use_jit=None, verbose=1):
@@ -1335,7 +1299,7 @@ class ProximalState:
         errorif(
             self.constraint.things != [self.eq],
             ValueError,
-            "ProximalProjection can only handle constraints on the equilibrium.",
+            "ProximalState can only handle constraints on the equilibrium.",
         )
 
         self._set_eq_state_vector()
@@ -1347,6 +1311,17 @@ class ProximalState:
                 **self.solve_options,
             )
 
+        dims = [self.eq.dimensions[arg] for arg in self.args]
+        self.dim_ceq = int(np.sum(dims))
+        self.idx_ceq = np.cumsum(dims)[:-1]
+        self.allceq = [
+            jnp.concatenate(
+                [jnp.atleast_1d(self.eq.params_dict[arg]) for arg in self.args]
+            )
+        ]
+        self.allxeq = [self.eq.pack_params(self.eq.params_dict)]
+        self.xeq_old = self.eq.params_dict.copy()
+        self.eq_is_current = True
         self._built = True
 
     def _set_eq_state_vector(self):
@@ -1399,86 +1374,77 @@ class ProximalState:
         # ]                                                       # noqa : E800
         self.dxdc = jnp.hstack(dxdc)
 
-    def set_layout(self, things):
-        """Updates self.things and related attributes (e.g. arrays for indexing)."""
-        things = list(things)
+    def get_tangents(self, xf, eq_idx, dimc_per_thing, op, v=None, constants=None):
+        """Computes tangent directions for the ProximalProjection wrapper.
 
-        layout_changed = (not hasattr(self, "things")) or (self.things != things)
-        self.eq_idx = things.index(self.eq)
-        self.things = things
-
-        # the full state vector includes all the parameters from all the things
-        # however, sub-objectives only need the part for their thing. We will
-        # use this to split the state vector into its components
-        self.dimx_per_thing = [t.dim_x for t in self.things]
-        # we remove the R_lmn, Z_lmn, L_lmn, Ra_n, Za_n from the equilibrium params
-        # dimc_per_thing accounts for that, don't confuse it with reduced state vector
-        dimc_per_thing = [t.dim_x for t in self.things]
-        dimc_per_thing[self.eq_idx] = np.sum(
-            [self.eq.dimensions[arg] for arg in self.args]
-        )
-        self.dimc_per_thing = tuple(dimc_per_thing)
-
-        # This method is called at different points in
-        # desc.optimizer.get_combined_constraint_objectives
-        # Important that attributes are rebuilt if self.things changes.
-        if layout_changed or self.x_old.size != sum(self.dimc_per_thing):
-            self._initialize_record()
-
-    def _initialize_record(self):
-        """Computes and records initial state of the optimization variables."""
-        xs = []
-        for t in self.things:
-            if t == self.eq:
-                xs += [
-                    jnp.concatenate(
-                        [jnp.atleast_1d(t.params_dict[arg]) for arg in self.args]
-                    )
-                ]
-            else:
-                xs += [t.pack_params(t.params_dict)]
-        xopt = jnp.concatenate([t.pack_params(t.params_dict) for t in self.things])
-
-        self.x_old = jnp.concatenate(xs)
-        self.allx = [self.x_old]
-        self.allxopt = [xopt]
-        self.allxeq = [self.eq.pack_params(self.eq.params_dict)]
-        self.history = [[t.params_dict.copy() for t in self.things]]
-        self.eq_is_current = True
-        self._tangent_x = None
-        self._tangents = {}
-
-    def get_tangents(self, x, op, build_tangents):
-        """Manage cache of tangents for the equilibrium subproblem.
-
-        Checks if (x, op) has been seen in the current iteration; if
-        so, returns the tangent matrix. Otherwise, calls a given
-        function to compute tangents, and stores the result.
+        Checks if (xf, op) has been seen in the current iteration; if
+        so, returns the tangent vector/matrix. Otherwise, calls a given
+        function to compute tangents.
 
         Parameters
         ----------
-        x : ndarray
+        xf : ndarray
             Equilibrium state vector to compute the tangents at.
+        eq_idx: int
+            index of the equilibrium in the full set of things. Comes
+            from the ProximalProjection wrapper.
+        dimc_per_thing: list[int]
+            Number of optimizable params per thing. Comes from the
+            ProximalProjection wrapper.
         op : str
             One of ``scaled``, ``scaled_error``, or ``unscaled``.
-        build_tangents: callable
-            Callable function with no parameters, which returns the tangent
-            matrix at x, with operation op.
+        v : ndarray, optional
+            Directions in the optimization variables. If None, the
+            identity directions are used and the result is cached.
+        constants : list
+            Constant parameters passed to the constraint.
+
+        Returns
+        -------
+        tangents : ndarray
+            Tangent directions in the full state vector of all the things.
+
         """
-        if op in ["scaled", "scaled_error"]:
-            key = "scaled"
-        else:
-            key = "unscaled"
-        x = jnp.asarray(x)
-
-        if (self._tangent_x is None) or (not np.array_equal(self._tangent_x, x)):
+        key = "scaled" if op in ["scaled", "scaled_error"] else "unscaled"
+        xf = jnp.asarray(xf)
+        if (self._tangent_xf is None) or (not np.array_equal(self._tangent_xf, xf)):
             self._tangents = {}
-            self._tangent_x = x
-            self._tangents[key] = build_tangents()
-        elif key not in self._tangents:
-            self._tangents[key] = build_tangents()
+            self._tangent_xf = xf
 
-        return self._tangents[key]
+        v = jnp.eye(sum(dimc_per_thing)) if v is None else jnp.asarray(v)
+        vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
+
+        # If caller is already asking for at least as many directions
+        # as dimc of the equilibrium, then might as well compute and
+        # store tangents.
+        full_tangents = (
+            self._cache_tangents or vs[eq_idx].shape[0] >= dimc_per_thing[eq_idx]
+        )
+        v_eq = jnp.eye(dimc_per_thing[eq_idx]) if full_tangents else vs[eq_idx]
+        if key in self._tangents:
+            eq_tangents = vs[eq_idx] @ self._tangents[key]
+        else:
+            eq_tangents = _proximal_get_tangents(
+                self.constraint,
+                xf,
+                v_eq,
+                constants,
+                self.eq_solve_objective._feasible_tangents,
+                self.dxdc,
+                op,
+            )
+            if full_tangents:
+                self._tangents[key] = eq_tangents
+                eq_tangents = vs[eq_idx] @ eq_tangents
+
+        return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
+
+
+# ProximalState holds explicit state that we keep track of (and add to as we go),
+# meaning if we jit anything with it static it doesn't update correctly, while if we
+# leave it unstatic then it recompiles every time because the pytree structure is
+# changing. To get around that we define these helper functions that are stateless
+# so we can safely jit them.
 
 
 def jit_if_possible(func=None, *, static_argnames=("op",)):
@@ -1563,16 +1529,14 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
     return jnp.concatenate(out).T
 
 
-@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
+@jit_if_possible(static_argnames=("op",))
 def _proximal_get_tangents(
     constraint,
     xf,
-    v,
+    veq,
     constants,
     eq_feasible_tangents,
     dxdc,
-    dimc_per_thing,
-    eq_idx,
     op="scaled_error",
 ):
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
@@ -1588,22 +1552,17 @@ def _proximal_get_tangents(
     # Note: We will never form full Jacobian J, we will just compute the above
     # expression by JVPs.
 
-    # v contains prox._args DoFs from eq and other objects (like coils, surfaces
-    # etc). Only the eq block changes when the equilibrium is re-solved.
-    vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
-    # JVPs are taken for the dxdc @ v tangents, but at most dimc of them are useful,
-    # so take whichever combination needs fewer of them. Applying v after the JVPs
-    # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
-
-    if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
-        eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
+    # veq contains prox._args DoFs from eq. This is the only block which changes
+    # when the equilibrium is re-solved.
+    if veq.ndim == 2 and veq.shape[0] > dxdc.shape[1]:
+        eq_tangents = veq @ _proximal_eq_tangents(
             constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
         )
     else:
-        dxdcv = vs[eq_idx] @ dxdc.T
+        dxdcv = veq @ dxdc.T
         # atleast_2d and reshape are to also handle a single (1D) direction
         eq_tangents = _proximal_eq_tangents(
             constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
         )
         eq_tangents = eq_tangents.reshape(dxdcv.shape)
-    return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
+    return eq_tangents

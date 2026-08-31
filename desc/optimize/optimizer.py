@@ -339,7 +339,7 @@ class Optimizer(IOAble):
             # reset eq params to initial
             if eq is not None:
                 eq.params_dict = eq_params_init
-            result["history"] = objective.history
+            result["history"] = objective.history(result["allx"])
             objective = objective._objective
         else:
             result["history"] = [
@@ -460,14 +460,14 @@ def _project_x_scale(x_scale, objective):
             else objective._objective
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
-        x_scale = jnp.split(x_scale, np.cumsum(prox_obj._state.dimx_per_thing)[:-1])
+        x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
         # Project equilibrium part: remove excluded parameters
         excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
         included_idx = []
         for arg in prox_obj._state.eq.optimizable_params:
             if arg not in excluded_params:
                 included_idx.extend(prox_obj._state.eq.x_idx[arg])
-        eq_idx = prox_obj._state.eq_idx
+        eq_idx = prox_obj._eq_idx
         x_scale[eq_idx] = x_scale[eq_idx][jnp.array(included_idx)]
         x_scale = jnp.concatenate(x_scale)
 
@@ -654,6 +654,7 @@ def _maybe_wrap_nonlinear_constraints(
             _combine_constraints(eq_constraints),
             perturb_options=perturb_options,
             solve_options=solve_options,
+            cache_tangents=bool(other_constraints),
         )
 
         objective = ProximalProjection(objective, state=state)

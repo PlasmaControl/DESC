@@ -1191,9 +1191,9 @@ def test_proximal_constrained_AL_lsq():
     dim_eq = sum(eq.dimensions[arg] for arg in state.args)
     assert dim_eq < eq.dim_x
     assert prox.dim_x == dim_eq + coil.dim_x
-    assert state.dimc_per_thing[state.eq_idx] == dim_eq
-    assert state.dimx_per_thing[state.eq_idx] == eq.dim_x
-    assert state.dimc_per_thing[0] == state.dimx_per_thing[0] == coil.dim_x
+    assert prox._dimc_per_thing[prox._eq_idx] == dim_eq
+    assert prox._dimx_per_thing[prox._eq_idx] == eq.dim_x
+    assert prox._dimc_per_thing[0] == prox._dimx_per_thing[0] == coil.dim_x
 
     (eq_opt, coil_opt), _ = Optimizer("proximal-lsq-auglag").optimize(
         (eq, coil),

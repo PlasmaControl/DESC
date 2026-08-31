@@ -3259,3 +3259,205 @@ class OmnigenousField(Optimizable, IOAble):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
+
+
+class SplineZeta(Optimizable, IOAble):
+    """Cubic spline control points defining zeta_min_Boozer(alpha) and zeta_max_Boozer(alpha).
+
+    The optimizable parameters are the zeta_min and zeta_max knot values
+    that, together with fixed alpha_knots, define periodic cubic splines for
+    the Boozer-toroidal-angle positions of |B| minimum (low-field side) and
+    |B| maximum (high-field side) within one field period, as a function of
+    the field-line label alpha.
+
+    With ``symmetry=True`` (default) stellarator symmetry is assumed: the
+    knots are the reduced free control points in (0, π) and the mirror knots
+    are expanded in the compute layer. With ``symmetry=False`` no
+    stellarator symmetry is assumed: the knots are the full set of free
+    control points spanning [0, 2π) and are used directly.
+
+    Parameters
+    ----------
+    n_control : int
+        Number of free spline control points. With ``symmetry=True`` they
+        lie in (0, π) and the full spline uses 2*n_control knots on
+        [0, 2π); with ``symmetry=False`` they span the full [0, 2π).
+    NFP : int
+        Number of field periods.
+    alpha_knots : ndarray, optional
+        Alpha positions of the free control points. Defaults to uniformly
+        spaced cell centers in (0, π) with ``symmetry=True`` (avoiding
+        duplicate mirrored knots at symmetry fixed points), or in [0, 2π)
+        with ``symmetry=False``.
+    zeta_min_knots : ndarray, optional
+        Zeta_min values at control points, shape (n_control,).
+        Defaults to π/NFP (center of one field period).
+    zeta_max_knots : ndarray, optional
+        Zeta_max values at control points, shape (n_control,).
+        Stored on the branch nearest the field-period boundary at ``ζ=0``,
+        i.e. wrapped to ``[-π/NFP, π/NFP)``. Defaults to 0.0.
+    symmetry : bool, optional
+        Whether to assume stellarator symmetry. Default True. With False,
+        the full-period knots are optimizable parameters and no mirror
+        expansion is applied in the soft-connectivity compute layer.
+    """
+
+    _io_attrs_ = [
+        "_NFP",
+        "_n_control",
+        "_alpha_knots",
+        "_zeta_min_knots",
+        "_zeta_max_knots",
+        "_symmetry",
+    ]
+    _static_attrs = Optimizable._static_attrs + [
+        "_NFP",
+        "_n_control",
+        "_alpha_knots",
+        "_symmetry",
+    ]
+
+    def __init__(
+        self,
+        n_control=8,
+        NFP=1,
+        alpha_knots=None,
+        zeta_min_knots=None,
+        zeta_max_knots=None,
+        symmetry=True,
+    ):
+        self._NFP = int(NFP)
+        self._n_control = int(n_control)
+        self._symmetry = bool(symmetry)
+        if alpha_knots is None:
+            period = np.pi if self._symmetry else 2 * np.pi
+            alpha_knots = (np.arange(n_control) + 0.5) * period / n_control
+        self._alpha_knots = np.asarray(alpha_knots, dtype=float)
+        errorif(
+            self._alpha_knots.size != self._n_control,
+            ValueError,
+            "alpha_knots must have length n_control.",
+        )
+        if zeta_min_knots is None:
+            zeta_min_knots = np.full(n_control, np.pi / NFP)
+        zeta_min_knots = np.asarray(zeta_min_knots, dtype=float)
+        errorif(
+            zeta_min_knots.size != self._n_control,
+            ValueError,
+            "zeta_min_knots must have length n_control.",
+        )
+        self._zeta_min_knots = zeta_min_knots
+        if zeta_max_knots is None:
+            zeta_max_knots = np.zeros(n_control)
+        zeta_max_knots = np.asarray(zeta_max_knots, dtype=float)
+        errorif(
+            zeta_max_knots.size != self._n_control,
+            ValueError,
+            "zeta_max_knots must have length n_control.",
+        )
+        self._zeta_max_knots = self._wrap_zeta_max_near_zero(zeta_max_knots)
+
+    def _set_up(self):
+        """Validate serialized SplineZeta state after loading."""
+        self._symmetry = bool(self._symmetry)
+        self._NFP = int(self._NFP)
+        self._n_control = int(self._n_control)
+        self._alpha_knots = np.asarray(self._alpha_knots, dtype=float)
+        errorif(
+            self._alpha_knots.size != self._n_control,
+            ValueError,
+            "Loaded SplineZeta alpha_knots must have length n_control.",
+        )
+        self._zeta_min_knots = np.asarray(self._zeta_min_knots, dtype=float)
+        errorif(
+            self._zeta_min_knots.size != self._n_control,
+            ValueError,
+            "Loaded SplineZeta zeta_min_knots must have length n_control.",
+        )
+        self._zeta_max_knots = self._wrap_zeta_max_near_zero(self._zeta_max_knots)
+        errorif(
+            self._zeta_max_knots.size != self._n_control,
+            ValueError,
+            "Loaded SplineZeta zeta_max_knots must have length n_control.",
+        )
+
+    def _wrap_zeta_max_near_zero(self, val):
+        """Wrap zeta_max values to the branch nearest the field-period boundary."""
+        span = 2 * np.pi / self._NFP
+        return np.mod(np.asarray(val, dtype=float) + span / 2, span) - span / 2
+
+    def _wrap_zeta_max_near_zero_jax(self, val):
+        """JAX version of ``_wrap_zeta_max_near_zero`` for optimization params."""
+        span = 2 * jnp.pi / self._NFP
+        return jnp.mod(jnp.asarray(val, dtype=float) + span / 2, span) - span / 2
+
+    def reduced_knots(self, params=None):
+        """Return the free knots used by the optimizer.
+
+        With ``symmetry=True`` these are the reduced knots in (0, π) that the
+        compute layer mirrors; with ``symmetry=False`` they are the full
+        knots spanning [0, 2π), used directly.
+        """
+        if params is None:
+            params = self.params_dict
+        return {
+            "reduced_alpha_knots": jnp.asarray(self._alpha_knots),
+            "zeta_min_knots": jnp.clip(
+                jnp.asarray(params["zeta_min_knots"]), 0.0, 2 * jnp.pi / self._NFP
+            ),
+            "zeta_max_knots": jnp.asarray(params["zeta_max_knots"]),
+        }
+
+    @property
+    def symmetry(self):
+        """bool: Whether stellarator symmetry is assumed for the knot layout."""
+        return self._symmetry
+
+    @property
+    def NFP(self):
+        """int: Number of field periods."""
+        return self._NFP
+
+    @optimizable_parameter
+    @property
+    def zeta_min_knots(self):
+        """ndarray: zeta_min values at spline control points."""
+        return self._zeta_min_knots
+
+    @zeta_min_knots.setter
+    def zeta_min_knots(self, val):
+        val = np.asarray(val, dtype=float)
+        errorif(
+            val.size != self._n_control,
+            ValueError,
+            "zeta_min_knots must have length n_control.",
+        )
+        self._zeta_min_knots = val
+
+    @optimizable_parameter
+    @property
+    def zeta_max_knots(self):
+        """ndarray: zeta_max values at spline control points."""
+        return self._zeta_max_knots
+
+    @zeta_max_knots.setter
+    def zeta_max_knots(self, val):
+        val = np.asarray(val, dtype=float)
+        errorif(
+            val.size != self._n_control,
+            ValueError,
+            "zeta_max_knots must have length n_control.",
+        )
+        self._zeta_max_knots = self._wrap_zeta_max_near_zero(val)
+
+    @property
+    def alpha_knots_full(self):
+        """Full alpha knots spanning [0, 2π) for the periodic spline.
+
+        With ``symmetry=False`` the stored knots already span [0, 2π).
+        """
+        if not self._symmetry:
+            return self._alpha_knots
+        return np.concatenate([self._alpha_knots, self._alpha_knots + np.pi])
+
+

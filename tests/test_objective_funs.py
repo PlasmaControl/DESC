@@ -2350,7 +2350,8 @@ def test_derivative_modes():
         jac_chunk_size="auto",
         use_jit=False,
     )
-    obj1.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj1.build()
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
@@ -2358,7 +2359,8 @@ def test_derivative_modes():
     assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
-    obj3.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj3.build()
     x = obj1.x(eq, surf)
     v = jnp.ones_like(x)
     g1 = obj1.grad(x)

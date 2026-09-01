@@ -962,16 +962,8 @@ def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
 def test_v_fixed_objective_jits_and_matches_gradient(agni):
     """`v_fixed` through the JITTED objective: same lambda, same gradient.
 
-    This is the risky path, not the bare compute call. ``_v_fixed`` is a DYNAMIC
-    pytree leaf -- `_generic_tree_flatten` sweeps every non-static attribute into
-    ``children`` -- so ``compute_data`` hands a traced array into the compute
-    kwargs. Marking it static instead put the array in aux_data, recompiling per
-    value with v baked in as an HLO constant, which OOM'd at 80.46 GiB.
-
-    At the same x, v_fixed must reproduce the ordinary result exactly: the
-    eigenvector is identical and `_v_primal`'s custom_vjp already freezes v, so
-    the gradient is the same Hellmann-Feynman contraction either way. A
-    discrepancy here means the bypass is differentiating something else.
+    ``_v_fixed`` must stay a dynamic pytree leaf. Marking it static bakes v into
+    aux_data as an HLO constant and recompiles per value.
     """
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
     params = agni["eq"].params_dict
@@ -999,10 +991,24 @@ def test_v_fixed_objective_jits_and_matches_gradient(agni):
     def _val(obj_, p):
         return jnp.real(obj_.compute(p)[0])
 
+    # Re-solving at the same x reproduces v only to the eigensolver's tolerance,
+    # ~5e-10. lambda is stationary in v and does not feel it; the gradient
+    # v'(dA/dp)v/v'v is first order in v and does. Hence the norm comparison.
+    v2 = np.asarray(obj.compute_data(params)["finite-n lambda3 rayleigh v"]).reshape(-1)
+    v2 = v2 * np.sign(np.dot(v2, v))
+    dv = np.linalg.norm(v2 - v) / np.linalg.norm(v)
+    print(f"\n  ||v2 - v|| / ||v|| = {dv:.3e}")
+    assert dv < 1e-6, f"eigenvector not reproducible at fixed x: {dv:.3e}"
+
     g = jax.grad(_val, argnums=1)(obj, params)
     g_fixed = jax.grad(_val, argnums=1)(obj_fixed, params)
     for key in ("R_lmn", "Z_lmn", "L_lmn", "Psi"):
         a, b = np.asarray(g[key]), np.asarray(g_fixed[key])
         assert np.all(np.isfinite(b)), f"v_fixed gradient has non-finite {key}"
-        print(f"  |d/d{key}| = {np.linalg.norm(a):.6e} vs {np.linalg.norm(b):.6e}")
-        np.testing.assert_allclose(b, a, rtol=1e-8, atol=1e-12)
+        rel = np.linalg.norm(b - a) / max(np.linalg.norm(a), 1e-300)
+        print(
+            f"  |d/d{key}| = {np.linalg.norm(a):.6e} vs {np.linalg.norm(b):.6e}"
+            f"   reldiff={rel:.3e}"
+        )
+        # A bypass differentiating the wrong thing is off by O(1), not by 1e-8.
+        assert rel < 1e-6, f"v_fixed gradient differs in d/d{key}: reldiff={rel:.3e}"

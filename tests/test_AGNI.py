@@ -48,10 +48,99 @@ if os.environ.get("AGNI_TEST_DEVICE", "cpu").strip().lower() == "gpu":
 
 from desc.backend import jax, jnp
 from desc.compute import _stability as stability
+from desc.compute.utils import _compute as compute_fun
+from desc.compute.utils import get_profiles, get_transforms
 from desc.diffmat_utils import DiffMat, fourier_diffmat, legendre_diffmat
 from desc.equilibrium import Equilibrium
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.integrals.quad_utils import automorphism_staircase1, leggauss_lob
+
+# Flux functions that must be evaluated on a rho LinearGrid, not on the AGNI
+# grid. Same list as ``FinitenStability._flux_keys``.
+_FLUX_KEYS = [
+    "iota",
+    "iota_r",
+    "iota_den",
+    "iota_den_r",
+    "iota_num",
+    "iota_num_r",
+    "iota_num current",
+    "iota_num_r current",
+    "iota_num vacuum",
+    "iota_num_r vacuum",
+    "psi_r",
+    "psi_rr",
+    "p",
+    "p_r",
+]
+
+
+def finiten_prefill(eq, grid, params=None):
+    """Data the finite-n keys need from grids other than the AGNI grid.
+
+    ``eq.compute`` picks these grids for you via ``override_grid``, but it is
+    the eager wrapper and cannot be traced. Under jit or AD you call
+    ``_compute`` and provide them yourself:
+
+    * 0-D ``a`` on a ``QuadratureGrid``. It sets the whole
+      non-dimensionalization -- ``B_N = |Psi| / (pi a^2)``, and the operator's
+      terms carry ``a**2``, ``a**3``, ``a**4`` -- and it comes out ~4% different
+      on any other grid, so taking it from the AGNI grid silently rescales the
+      operator.
+    * the 1-D flux functions on a ``LinearGrid`` over this grid's rho values,
+      copied onto the AGNI nodes.
+
+    Everything else the keys depend on is a pointwise evaluation and is correct
+    on the AGNI grid directly.
+    """
+    params = eq.params_dict if params is None else params
+
+    quad_grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+    zero_d = compute_fun(
+        eq,
+        ["a"],
+        params=params,
+        transforms=get_transforms(["a"], obj=eq, grid=quad_grid),
+        profiles=get_profiles(["a"], eq, quad_grid),
+    )
+    # Take ONLY `a`. `compute_fun` hands back every intermediate it touched,
+    # all shaped for quad_grid, and seeding those into the next call mixes grids.
+    data = {"a": jnp.asarray(zero_d["a"])}
+
+    rho = np.unique(np.asarray(grid.nodes[:, 0]))
+    flux_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    flux = compute_fun(
+        eq,
+        _FLUX_KEYS,
+        params=params,
+        transforms=get_transforms(_FLUX_KEYS, obj=eq, grid=flux_grid),
+        profiles=get_profiles(_FLUX_KEYS, eq, flux_grid),
+        data=dict(data),
+    )
+    for key in _FLUX_KEYS:
+        data[key] = grid.copy_data_from_other(
+            jnp.asarray(flux[key]), flux_grid, surface_label="rho"
+        )
+    return data
+
+
+def map_to_desc(eq, pest_grid):
+    """PEST (rho, theta_PEST, zeta) nodes -> DESC (rho, theta, zeta) nodes.
+
+    The compute functions take the MAPPED grid. rho is invariant under the map.
+    """
+    return Grid(
+        eq.map_coordinates(
+            jnp.reshape(
+                pest_grid.meshgrid_reshape(pest_grid.nodes, order="rtz"), (-1, 3)
+            ),
+            inbasis=("rho", "theta_PEST", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+            tol=1e-6,  # 1e-12 is overkill for tests and very slow on CPU
+            maxiter=20,
+        )
+    )
 
 
 def _load_old_equilibrium(path):
@@ -133,31 +222,30 @@ def agni(request):
 
     # Map PEST coordinates to DESC straight-field-line coordinates
     _grid0 = LinearGrid(rho=_rho, theta=_theta, zeta=_zeta, NFP=1, sym=False)
-    _rtz_nodes = _EQ.map_coordinates(
-        jnp.reshape(_grid0.meshgrid_reshape(_grid0.nodes, order="rtz"), (-1, 3)),
-        inbasis=("rho", "theta_PEST", "zeta"),
-        outbasis=("rho", "theta", "zeta"),
-        period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-        tol=1e-6,  # 1e-12 is overkill for tests and very slow on CPU
-        maxiter=20,
-    )
-    _GRID = Grid(_rtz_nodes)
+    _GRID = map_to_desc(_EQ, _grid0)
 
     _N = _N_RHO * _N_THETA * _N_ZETA  # total grid points
     _N_SHELL = _N_THETA * _N_ZETA  # one theta-zeta shell
     _N_KEEP = 3 * _N - 2 * _N_SHELL  # DOFs after xi^rho Dirichlet BCs
 
-    # Common kwargs for every eq.compute call in this file
+    # Solver kwargs shared by every compute_fun call in this file.
     _KW = dict(
-        grid=_GRID,
-        diffmat=_DIFFMAT,
         incompressible=False,
         gamma=5.0 / 3.0,
         v_guess=np.ones(_N_KEEP),
     )
 
     # Dense ground truth, computed once and shared by every solver test.
-    _LAM3 = _EQ.compute("finite-n lambda3", **_KW)
+    _name = "finite-n lambda3"
+    _LAM3 = compute_fun(
+        _EQ,
+        [_name],
+        params=_EQ.params_dict,
+        transforms=get_transforms([_name], obj=_EQ, grid=_GRID, diffmat=_DIFFMAT),
+        profiles=get_profiles([_name], _EQ, _GRID),
+        data=finiten_prefill(_EQ, _GRID),
+        **_KW,
+    )
 
     return dict(
         eq=_EQ,
@@ -256,9 +344,17 @@ def test_matfree_operator_matches_dense_matrix(agni):
     deps = data_index["desc.equilibrium.equilibrium.Equilibrium"][
         "finite-n lambda3 rayleigh"
     ]["dependencies"]["data"]
-    data = agni["eq"].compute(deps, grid=agni["grid"], diffmat=agni["diffmat"])
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    data = compute_fun(
+        eq,
+        deps,
+        params=eq.params_dict,
+        transforms=get_transforms(deps, obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles(deps, eq, grid),
+        data=finiten_prefill(eq, grid),
+    )
     transforms = {"grid": agni["grid"], "diffmat": agni["diffmat"]}
-    kw = {k: v for k, v in agni["kw"].items() if k not in ("grid", "diffmat")}
+    kw = dict(agni["kw"])
 
     op = stability._agni3_matfree_operator(
         agni["eq"].params_dict, transforms, {}, data, **kw
@@ -300,7 +396,18 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
     monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
 
     kw = {k: v for k, v in agni["kw"].items() if k != "v_guess"}
-    data = agni["eq"].compute("finite-n lambda3 rayleigh", **kw, sigma=1.3 * lam_dense)
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    name = "finite-n lambda3 rayleigh"
+    data = compute_fun(
+        eq,
+        [name],
+        params=eq.params_dict,
+        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles([name], eq, grid),
+        data=finiten_prefill(eq, grid),
+        **kw,
+        sigma=1.3 * lam_dense,
+    )
     lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
     resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
 
@@ -341,31 +448,29 @@ def test_jax_lanczos_matches_dense_axisym(monkeypatch):
 
     n_rho, n_theta = _N_RHO, _N_THETA
     pest_grid, diffmat = _build_pest_level(eq, n_rho, n_theta, 1)
-    grid = Grid(
-        eq.map_coordinates(
-            jnp.reshape(
-                pest_grid.meshgrid_reshape(pest_grid.nodes, order="rtz"), (-1, 3)
-            ),
-            inbasis=("rho", "theta_PEST", "zeta"),
-            outbasis=("rho", "theta", "zeta"),
-            period=(jnp.inf, 2 * jnp.pi, jnp.inf),
-            tol=1e-6,
-            maxiter=20,
-        )
-    )
+    grid = map_to_desc(eq, pest_grid)
 
     n_total = n_rho * n_theta
     n_keep = 3 * n_total - 2 * n_theta  # one zeta plane, so n_shell == n_theta
     kw = dict(
-        grid=grid,
-        diffmat=diffmat,
         incompressible=False,
         gamma=5.0 / 3.0,
         axisym=True,
         n_mode_axisym=1,
     )
 
-    dense = eq.compute("finite-n lambda3", **kw, v_guess=np.ones(n_keep))
+    dense = compute_fun(
+        eq,
+        ["finite-n lambda3"],
+        params=eq.params_dict,
+        transforms=get_transforms(
+            ["finite-n lambda3"], obj=eq, grid=grid, diffmat=diffmat
+        ),
+        profiles=get_profiles(["finite-n lambda3"], eq, grid),
+        data=finiten_prefill(eq, grid),
+        **kw,
+        v_guess=np.ones(n_keep),
+    )
     lam_dense = float(np.asarray(dense["finite-n lambda3"])[0])
 
     # If A came out real the complex branch was never reached and this is vacuous.
@@ -375,7 +480,17 @@ def test_jax_lanczos_matches_dense_axisym(monkeypatch):
 
     monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
     monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
-    data = eq.compute("finite-n lambda3 rayleigh", **kw, sigma=1.3 * lam_dense)
+    name = "finite-n lambda3 rayleigh"
+    data = compute_fun(
+        eq,
+        [name],
+        params=eq.params_dict,
+        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=diffmat),
+        profiles=get_profiles([name], eq, grid),
+        data=finiten_prefill(eq, grid),
+        **kw,
+        sigma=1.3 * lam_dense,
+    )
     lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
     resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
 
@@ -423,9 +538,17 @@ def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["finite-n lambda3"][
         "dependencies"
     ]["data"]
-    data = agni["eq"].compute(deps, grid=agni["grid"], diffmat=agni["diffmat"])
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    data = compute_fun(
+        eq,
+        deps,
+        params=eq.params_dict,
+        transforms=get_transforms(deps, obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles(deps, eq, grid),
+        data=finiten_prefill(eq, grid),
+    )
     transforms = {"grid": agni["grid"], "diffmat": agni["diffmat"]}
-    kw = {k: v for k, v in agni["kw"].items() if k not in ("grid", "diffmat")}
+    kw = dict(agni["kw"])
     params = agni["eq"].params_dict
 
     dense = stability._agni3_assemble(params, transforms, {}, data, **kw)
@@ -652,7 +775,7 @@ def _build_pest_level(eq, n_rho, n_theta, n_zeta):
 # of eight parallel groups, and does NOT deselect `slow`.
 @pytest.mark.unit
 @pytest.mark.slow
-def test_pcg_deflated_two_level_matches_dense(agni, monkeypatch):
+def test_pcg_deflated_two_level_matches_dense(agni):
     """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
 
     This is the CPU-scale version of the `verify_coarse_defl` gate: a coarse
@@ -699,14 +822,9 @@ def test_pcg_deflated_two_level_matches_dense(agni, monkeypatch):
     CG budget, the Lanczos dimension or the coarse resolution all produced
     positive lambda against a negative truth.
     """
-    # REQUIRED. Passing coarse_grid/coarse_diffmat is NOT enough: `compute_data`
-    # gates the whole coarse block on this variable, defaulting to "0", so the
-    # levels are silently discarded and the solve degrades to a cold ring-only
-    # PCG with no deflation and no seed. That case is documented to return a
-    # POSITIVE lam_R against a negative truth, which is exactly what this test
-    # produced at every budget before the variable was set.
-    monkeypatch.setenv("AGNI_COARSE_DEFL", "1")
-
+    # No AGNI_COARSE_DEFL here. That variable gates the coarse block inside
+    # `FinitenStability.compute_data`; the compute function itself has no such
+    # gate and simply uses the coarse options it is handed.
     nr, nt, nz = agni["res"]
     lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
 
@@ -716,16 +834,58 @@ def test_pcg_deflated_two_level_matches_dense(agni, monkeypatch):
     # Coarse level AT the resolution floor -- not below it. `verify_coarse_defl`
     # uses fine 32 / coarse 16 for the same reason.
     coarse_res = (int(os.environ.get("AGNI_TEST_CNR", 16)), nt, nz)
-    coarse_grid, coarse_diffmat = _build_pest_level(agni["eq"], *coarse_res)
+    coarse_pest, coarse_diffmat = _build_pest_level(agni["eq"], *coarse_res)
+    coarse_grid = map_to_desc(agni["eq"], coarse_pest)
     print(f"\n  fine {nr}x{nt}x{nz}  coarse {'x'.join(map(str, coarse_res))}")
 
-    obj = _finiten_objective(
-        agni,
-        lambda_guess=lam_dense,
-        sigma_factor=1.3,
+    from desc.compute.data_index import data_index
+
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    params = eq.params_dict
+    name = "finite-n lambda3 rayleigh"
+
+    # The coarse operator needs the same GEOMETRY quantities the fine one does
+    # (`sqrt(g)_PEST`, the metric components, ...) evaluated on the COARSE grid.
+    # `finiten_prefill` supplies only the 0-D and flux-function parts; DESC fills
+    # geometry from the key's declared dependencies, and only for the grid it was
+    # called with. So the coarse level gets its own compute over that list.
+    ckeys = data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
+        "dependencies"
+    ]["data"]
+    coarse_data = compute_fun(
+        eq,
+        ckeys,
+        params=params,
+        transforms=get_transforms(
+            ckeys, obj=eq, grid=coarse_grid, diffmat=coarse_diffmat
+        ),
+        profiles=get_profiles(ckeys, eq, coarse_grid),
+        data=finiten_prefill(eq, coarse_grid),
+    )
+
+    data = compute_fun(
+        eq,
+        [name],
+        params=params,
+        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles([name], eq, grid),
+        data=finiten_prefill(eq, grid),
+        gamma=5.0 / 3.0,
+        incompressible=False,
+        sigma=1.3 * lam_dense,
+        eigensolver="pcg_deflated",
         coarse_grid=coarse_grid,
         coarse_diffmat=coarse_diffmat,
-        eigensolver="pcg_deflated",
+        coarse_data=coarse_data,
+        coarse_params=params,
+        # The coupled Zernike operator reshapes by n_rho_coupled/n_theta_coupled;
+        # inheriting the FINE counts would reshape the coarse arrays and raise.
+        # Taken from the PEST grid, whose counts are concrete.
+        coarse_res=(coarse_pest.num_rho, coarse_pest.num_theta, coarse_pest.num_zeta),
+        # Radial nodes for the prolongation, from the PEST nodes. rho is
+        # invariant under the PEST->DESC map, so these are the mapped rho values.
+        coarse_rho=tuple(np.unique(np.asarray(coarse_pest.nodes[:, 0]))),
+        fine_rho=tuple(np.unique(np.asarray(agni["pest_grid"].nodes[:, 0]))),
         # DELIBERATELY SMALL BUDGET. This test exists to COVER `_eigensolve_pcg`
         # and `_coarse_space` -- the ring preconditioner, the deflation
         # projector, the prolongation and the coarse generalized eigensolve --
@@ -737,7 +897,7 @@ def test_pcg_deflated_two_level_matches_dense(agni, monkeypatch):
         cg_tol=1e-6,
         cg_maxiter=int(os.environ.get("AGNI_TEST_CG", "3000")),
     )
-    lam_pcg = float(np.real(np.asarray(obj.compute(obj.things[0].params_dict))[0]))
+    lam_pcg = float(np.real(np.asarray(data[name]).reshape(-1)[0]))
 
     reldiff = abs(lam_pcg - lam_dense) / abs(lam_dense)
     print(f"\n  dense lambda3   = {lam_dense:.9e}")

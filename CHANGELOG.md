@@ -19,6 +19,8 @@ Bug Fixes
   (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
   ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 
 
 v0.17.3

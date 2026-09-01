@@ -90,10 +90,13 @@ _jac_chunk_size_detail = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
         On this objective, a positive integer ``jac_chunk_size`` is additionally
-        forwarded to QUADCOIL as ``quadcoil_kwargs["jac_chunk_size"]`` to chunk
-        the KKT adjoint metric-row VJP (important for array-valued metrics such
-        as ``phi_dofs``). The string ``"auto"`` is not forwarded. Setting an
-        integer ``jac_chunk_size`` on a sub-objective also forces the parent
+        forwarded to QUADCOIL as ``quadcoil_kwargs["jac_chunk_size"]`` (via
+        ``setdefault``) to chunk QUADCOIL's KKT residual VJP (important for
+        array-valued metrics such as ``phi_dofs``). An explicit
+        ``quadcoil_kwargs["jac_chunk_size"]`` wins over this value, so
+        QUADCOIL's adjoint can be tuned independently of DESC's Jacobian
+        chunking. The string ``"auto"`` is not forwarded. Setting an integer
+        ``jac_chunk_size`` on a sub-objective also forces the parent
         ``ObjectiveFunction`` into ``blocked`` deriv mode (and raises if the
         parent is ``batched``).
 """
@@ -468,10 +471,11 @@ class QuadcoilProxy(_Objective):
         # winding-surface / self-field kernels use the same knob.
         if bs_chunk_size is not None:
             quadcoil_kwargs["bs_chunk_size"] = bs_chunk_size
-        # Also chunk QUADCOIL's KKT adjoint metric-row vmap. Guarded with
-        # isposint because DESC additionally accepts the string "auto".
+        # Also chunk QUADCOIL's metric Jacobians / KKT residual VJP. Guarded
+        # with isposint because DESC additionally accepts the string "auto".
+        # setdefault so an explicit quadcoil_kwargs["jac_chunk_size"] wins.
         if isposint(jac_chunk_size):
-            quadcoil_kwargs["jac_chunk_size"] = jac_chunk_size
+            quadcoil_kwargs.setdefault("jac_chunk_size", jac_chunk_size)
         _quadcoil_values, _quadcoil_for_diff = gen_quadcoil_for_diff(**quadcoil_kwargs)
         # Used later for Bnormal_plasma also
         self._quadcoil_for_diff = jit(_quadcoil_for_diff)

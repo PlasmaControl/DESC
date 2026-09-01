@@ -913,3 +913,96 @@ def test_pcg_deflated_two_level_matches_dense(agni):
         f"{lam_dense:.6e}. At this budget it need not converge, but it must land "
         "on the same mode."
     )
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
+    """`v_fixed` skips the eigensolve and reproduces lambda exactly.
+
+    The eigenvector comes back under ``"finite-n lambda3 rayleigh v"``; handing
+    it straight back as ``v_fixed`` leaves only the Rayleigh quotient to
+    evaluate. Valid ONLY at the same x -- reusing v after the equilibrium moves
+    is silently wrong.
+    """
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    name = "finite-n lambda3 rayleigh"
+    common = dict(
+        params=eq.params_dict,
+        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles([name], eq, grid),
+        gamma=5.0 / 3.0,
+        incompressible=False,
+        sigma=1.3 * lam_dense,
+    )
+
+    solved = compute_fun(eq, [name], data=finiten_prefill(eq, grid), **common)
+    lam = float(np.asarray(solved[name]).reshape(-1)[0])
+    v = np.asarray(solved[name + " v"]).reshape(-1)
+    assert v.size == agni["n_keep"]
+    assert np.all(np.isfinite(v))
+
+    reused = compute_fun(
+        eq, [name], data=finiten_prefill(eq, grid), v_fixed=v, **common
+    )
+    lam_fixed = float(np.asarray(reused[name]).reshape(-1)[0])
+    resid = float(np.asarray(reused[name + " residual"]).reshape(-1)[0])
+
+    print(f"\n  lambda           = {lam:.12e}")
+    print(f"  lambda (v_fixed) = {lam_fixed:.12e}  residual={resid:.3e}")
+    np.testing.assert_allclose(lam_fixed, lam, rtol=1e-12)
+    np.testing.assert_allclose(lam_fixed, lam_dense, rtol=1e-4)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_v_fixed_objective_jits_and_matches_gradient(agni):
+    """`v_fixed` through the JITTED objective: same lambda, same gradient.
+
+    This is the risky path, not the bare compute call. ``_v_fixed`` is a DYNAMIC
+    pytree leaf -- `_generic_tree_flatten` sweeps every non-static attribute into
+    ``children`` -- so ``compute_data`` hands a traced array into the compute
+    kwargs. Marking it static instead put the array in aux_data, recompiling per
+    value with v baked in as an HLO constant, which OOM'd at 80.46 GiB.
+
+    At the same x, v_fixed must reproduce the ordinary result exactly: the
+    eigenvector is identical and `_v_primal`'s custom_vjp already freezes v, so
+    the gradient is the same Hellmann-Feynman contraction either way. A
+    discrepancy here means the bypass is differentiating something else.
+    """
+    lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    params = agni["eq"].params_dict
+
+    obj = _finiten_objective(agni, lambda_guess=lam_direct, sigma_factor=1.3)
+    lam = float(np.real(np.asarray(obj.compute(params))[0]))
+    v = np.asarray(obj.compute_data(params)["finite-n lambda3 rayleigh v"]).reshape(-1)
+    assert v.size == agni["n_keep"]
+
+    # Built with use_jit=True, exactly as above but with the bypass on.
+    obj_fixed = _finiten_objective(
+        agni, lambda_guess=lam_direct, sigma_factor=1.3, v_fixed=v
+    )
+
+    # v must be a traced child, never static aux_data.
+    leaves = jax.tree_util.tree_flatten(obj_fixed)[0]
+    assert any(getattr(x, "size", None) == v.size for x in leaves), (
+        "v_fixed did not appear among the dynamic pytree leaves -- it went into "
+        "aux_data, which recompiles per value and bakes v in as a constant"
+    )
+
+    lam_fixed = float(np.real(np.asarray(obj_fixed.compute(params))[0]))
+    np.testing.assert_allclose(lam_fixed, lam, rtol=1e-9)
+
+    def _val(obj_, p):
+        return jnp.real(obj_.compute(p)[0])
+
+    g = jax.grad(_val, argnums=1)(obj, params)
+    g_fixed = jax.grad(_val, argnums=1)(obj_fixed, params)
+    for key in ("R_lmn", "Z_lmn", "L_lmn", "Psi"):
+        a, b = np.asarray(g[key]), np.asarray(g_fixed[key])
+        assert np.all(np.isfinite(b)), f"v_fixed gradient has non-finite {key}"
+        print(f"  |d/d{key}| = {np.linalg.norm(a):.6e} vs {np.linalg.norm(b):.6e}")
+        np.testing.assert_allclose(b, a, rtol=1e-8, atol=1e-12)

@@ -686,6 +686,11 @@ class FinitenStability(_Objective):
         Differentiation matrices for the PEST grid.
     v_guess : ndarray, optional
         Cached full eigenfunction. Updated by ``update_state``.
+    v_fixed : ndarray, optional
+        Skip the eigensolve and use this as the eigenvector, so only the
+        Rayleigh quotient is evaluated. Valid ONLY when it came from a call at
+        the same ``x``; reusing it after the equilibrium moves is silently
+        wrong. Not for use by an optimizer or line search. Default None.
     lambda_guess : float, optional
         Cached eigenvalue. Updated by ``update_state`` and used to set the
         shift-invert sigma.
@@ -733,6 +738,12 @@ class FinitenStability(_Objective):
         # eigenpair lives in `_constants`, which is traced. `_density` is likewise
         # a static ndarray and is safe only because it is never rebound.
         "_v_guess",
+        # `_v_fixed` is deliberately absent: it takes a different value every
+        # call, so it must stay a dynamic pytree leaf. Marking it static made
+        # DESC's generic flatten embed the array as compile-time aux_data -- a
+        # recompile per value, with v baked in as an HLO constant. That OOM'd at
+        # 32x48x16 matfree asking for 80.46 GiB. This bool is the static flag.
+        "_use_v_fixed",
         "_lambda_guess",
         "_state_solver",
         "_matfree_solver",
@@ -826,12 +837,15 @@ class FinitenStability(_Objective):
         w0=1.0,
         name="finite-n lambda3 rayleigh",
         jac_chunk_size=None,
+        v_fixed=None,
     ):
         if target is None and bounds is None:
             target = 0
 
         self._axisym = axisym
         self._v_guess = v_guess
+        self._v_fixed = None if v_fixed is None else jnp.asarray(v_fixed)
+        self._use_v_fixed = v_fixed is not None
         self._lambda_guess = setdefault(lambda_guess, -1e-1)
         self._gamma = gamma
         self._n_mode_axisym = n_mode_axisym
@@ -1170,9 +1184,16 @@ class FinitenStability(_Objective):
         # outside AD behind custom_vjp. dlambda/dp flows solely through the FINE
         # matrix-free contraction v'Ax(v)/v'v with v frozen.
         coarse_opts = {}
-        if self._coarse_grid is not None and os.environ.get(
-            "AGNI_COARSE_DEFL", "0"
-        ).lower() not in {"0", "false", "no", ""}:
+        # Skipped under v_fixed: the coarse space is consumed only by
+        # `_eigensolve_pcg`'s deflation, which v_fixed bypasses. Building it
+        # anyway was not merely wasted -- with no custom_vjp boundary around v to
+        # stop XLA tracing across it, it OOM'd at 80.46 GiB on 32x48x16 matfree.
+        if (
+            not self._use_v_fixed
+            and self._coarse_grid is not None
+            and os.environ.get("AGNI_COARSE_DEFL", "0").lower()
+            not in {"0", "false", "no", ""}
+        ):
             _pc = jax.lax.stop_gradient(params)
             _grid_c = self._mapped_grid(_pc, constants, level="coarse")
             # The coarse operator needs the same GEOMETRY quantities the fine one
@@ -1266,6 +1287,11 @@ class FinitenStability(_Objective):
         ):
             if _val is not None:
                 options[_key] = _val
+        # Gated on the static flag, not folded into the loop above: `_v_fixed` is
+        # a dynamic leaf, so this fixes the compiled structure once per instance
+        # while letting the array's contents change without retracing.
+        if self._use_v_fixed:
+            options["v_fixed"] = self._v_fixed
         if self._density is not None:
             options["density"] = self._density
         options.update(coarse_opts)

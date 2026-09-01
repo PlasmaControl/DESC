@@ -2411,6 +2411,8 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     "operators instead of separable 1D matrices",
     n_rho_coupled="int: number of rho nodes when coupled_rt is set",
     n_theta_coupled="int: number of theta nodes when coupled_rt is set",
+    v_fixed="array, optional: skip the eigensolve and use this as v. Only valid "
+    "when v came from a call at this exact same x. Default None.",
 )
 def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     """Fresh-eigenvector Rayleigh objective for finite-n lambda3.
@@ -3575,13 +3577,23 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     _v_primal.defvjp(_v_primal_fwd, _v_primal_bwd)
 
-    v, lam_mu = _v_primal(params, _array_data, _Zc_ext, _v0c_ext)
+    # Opt-in: when the caller already has v from a call at this EXACT SAME x,
+    # skip the eigensolve and treat v as a constant, so jax.grad differentiates
+    # only through Ax(v). Reusing v at a DIFFERENT x is a measured catastrophic
+    # failure -- a 7e-5 relative mesh shift flipped lam_R's sign and moved it
+    # 66x -- so this must not be reachable by an optimizer or line search.
+    _v_fixed = kwargs.get("v_fixed", None)
+    if _v_fixed is not None:
+        v = jnp.asarray(_v_fixed)
+        lam_mu = jnp.asarray(jnp.nan)  # no eigensolve ran
+    else:
+        v, lam_mu = _v_primal(params, _array_data, _Zc_ext, _v0c_ext)
 
     Av = _op["Ax"](v)
     vv = jnp.vdot(v, v)
     lam_R = jnp.real(jnp.vdot(v, Av) / vv)
 
-    if _xcheck:
+    if _xcheck and _v_fixed is None:
         _den = jnp.maximum(jnp.abs(lam_mu), 1e-300)
         _gap = jnp.abs(lam_R - lam_mu) / _den
         _sign_ok = jnp.sign(lam_R) == jnp.sign(lam_mu)
@@ -3602,4 +3614,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     data["finite-n lambda3 rayleigh"] = jnp.atleast_1d(lam_R)
     data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
+    # So a caller can take v from a value call and pass it back as `v_fixed`.
+    data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
     return data

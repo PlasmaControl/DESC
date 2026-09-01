@@ -74,10 +74,10 @@ from desc.optimize import (
 )
 from desc.optimize.optimizer import _parse_x_scale
 from desc.optimize.utils import (
-  chol, 
-  estimate_singular_value,
-  gershgorin_bounds,
-  solve_triangular_regularized,
+    chol,
+    estimate_singular_value,
+    gershgorin_bounds,
+    solve_triangular_regularized,
 )
 from desc.utils import get_all_instances
 

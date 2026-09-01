@@ -29,6 +29,8 @@ jobs:
             0.10.0,
             0.10.1,
             0.10.2,
+            0.11.0,
+            0.11.1,
           ]
           # 0.7.0 have performance issues but we still support it, see diffrax#680
           # 0.7.1 fails with equinox, see equinox#1081

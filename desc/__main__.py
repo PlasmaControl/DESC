@@ -12,7 +12,7 @@ def main(cl_args=sys.argv[1:]):
     and prints and plots the resulting equilibrium.
 
     """
-    ir = InputReader(cl_args=cl_args)
+    ir = InputReader(cl_args=cl_args, save_converted_vmec_input=True)
 
     if ir.args.version:
         return

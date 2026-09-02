@@ -160,24 +160,27 @@ class BootstrapRedlConsistency(_Objective):
             RuntimeError,
             "Bootstrap current calculation requires an ion temperature profile.",
         )
+        errorif(
+            eq.ion_density is None and eq.atomic_number is None,
+            RuntimeError,
+            "Bootstrap current calculation requires an ion density profile.",
+        )
 
         rho = grid.compress(grid.nodes[:, 0], "rho")
 
-        # check if profiles may go to zero
-        # if they are exactly zero this would cause NaNs since the profiles
-        # vanish.
-        errorif(
-            np.any(np.isclose(eq.electron_density(rho), 0.0, atol=1e-8)),
-            ValueError,
-            "Redl formula is undefined where kinetic profiles vanish, "
-            "but given electron density vanishes at at least one provided"
-            "rho grid point.",
-        )
+        # Check if profiles are exactly zero anywhere, since this would cause NaNs.
         errorif(
             np.any(np.isclose(eq.electron_temperature(rho), 0.0, atol=1e-8)),
             ValueError,
             "Redl formula is undefined where kinetic profiles vanish, "
             "but given electron temperature vanishes at at least one provided"
+            "rho grid point.",
+        )
+        errorif(
+            np.any(np.isclose(eq.electron_density(rho), 0.0, atol=1e-8)),
+            ValueError,
+            "Redl formula is undefined where kinetic profiles vanish, "
+            "but given electron density vanishes at at least one provided"
             "rho grid point.",
         )
         errorif(
@@ -187,44 +190,62 @@ class BootstrapRedlConsistency(_Objective):
             "but given ion temperature vanishes at at least one provided"
             "rho grid point.",
         )
+        if eq.ion_density is not None:
+            errorif(
+                np.any(np.isclose(eq.ion_density(rho), 0.0, atol=1e-8)),
+                ValueError,
+                "Redl formula is undefined where kinetic profiles vanish, "
+                "but given ion density vanishes at at least one provided"
+                "rho grid point.",
+            )
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         warnif(
-            jnp.any(eq.electron_density(rho) > 1e22),
-            UserWarning,
-            "Electron density is surprisingly high. It should have units of "
-            "1/meters^3",
-        )
-        warnif(
             jnp.any(eq.electron_temperature(rho) > 50e3),
             UserWarning,
-            "Electron temperature is surprisingly high. It should have units of eV",
+            "Electron temperature is surprisingly high. It should have units of eV.",
+        )
+        warnif(
+            jnp.any(eq.electron_density(rho) > 1e22),
+            UserWarning,
+            "Electron density is surprisingly high. "
+            + "It should have units of 1/meters^3.",
         )
         warnif(
             jnp.any(eq.ion_temperature(rho) > 50e3),
             UserWarning,
-            "Ion temperature is surprisingly high. It should have units of eV",
+            "Ion temperature is surprisingly high. It should have units of eV.",
         )
-
-        # Profiles may go to 0 at rho=1 (and we've already checked if our
-        # grid has points there), so exclude the last few grid points from lower
-        # bounds:
+        if eq.ion_density is not None:
+            warnif(
+                jnp.any(eq.ion_density(rho) > 1e22),
+                UserWarning,
+                "Ion density is surprisingly high. It should have units of 1/meters^3.",
+            )
+        # Profiles may go to 0 at rho=1 (and we have already checked if our grid has
+        # points there), so exclude the edge from lower bounds:
         rho = rho[rho < 0.85]
-        warnif(
-            jnp.any(eq.electron_density(rho) < 1e17),
-            UserWarning,
-            "Electron density is surprisingly low. It should have units 1/meters^3",
-        )
         warnif(
             jnp.any(eq.electron_temperature(rho) < 30),
             UserWarning,
-            "Electron temperature is surprisingly low. It should have units of eV",
+            "Electron temperature is surprisingly low. It should have units of eV.",
+        )
+        warnif(
+            jnp.any(eq.electron_density(rho) < 1e17),
+            UserWarning,
+            "Electron density is surprisingly low. It should have units of 1/meters^3.",
         )
         warnif(
             jnp.any(eq.ion_temperature(rho) < 30),
             UserWarning,
-            "Ion temperature is surprisingly low. It should have units of eV",
+            "Ion temperature is surprisingly low. It should have units of eV.",
         )
+        if eq.ion_density is not None:
+            warnif(
+                jnp.any(eq.ion_density(rho) < 1e17),
+                UserWarning,
+                "Ion density is surprisingly low. It should have units of 1/meters^3.",
+            )
 
         timer = Timer()
         if verbose > 0:

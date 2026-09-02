@@ -3,6 +3,8 @@ Changelog
 
 New Features
 
+- Adds ``SecondAdiabaticInvariantAlphaDerivative`` and ``SoftConnectivity`` objectives for omnigenity optimization targeting the second adiabatic invariant (bounce action) $J^*$ along Boozer magnetic field lines and enforcing clean single-well magnetic field structure.
+- Introduces ``SplineZeta`` parameterization in ``desc.magnetic_fields`` for managing toroidal extrema curves $\zeta_{\rm min}(\alpha)$ and $\zeta_{\rm max}(\alpha)$ with optional stellarator symmetry.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 
 Performance Improvements

@@ -25,7 +25,6 @@ SOFTPLUS_SHARPNESS = 100.0
 _trapz = getattr(jnp, "trapezoid", getattr(jnp, "trapz", None))
 
 
-
 @register_compute_fun(
     name="B_theta_mn",
     label="B_{\\theta, m, n}",
@@ -1350,9 +1349,7 @@ def boozer_soft_connectivity_penalty_from_data(
     # full [0, 2π) and every knot must be sampled: use the full period.
     alpha0 = jnp.pi - iota * (jnp.pi / nfp)
     alpha_span = jnp.pi if spline_symmetry else 2 * jnp.pi
-    alpha = (
-        jnp.linspace(-alpha_span, 0.0, num_alpha, endpoint=False) + alpha0[:, None]
-    )
+    alpha = jnp.linspace(-alpha_span, 0.0, num_alpha, endpoint=False) + alpha0[:, None]
 
     return boozer_soft_connectivity_penalty(
         basis,
@@ -1368,7 +1365,3 @@ def boozer_soft_connectivity_penalty_from_data(
         sigmoid_sharpness=sigmoid_sharpness,
         spline_symmetry=spline_symmetry,
     )
-
-
-
-

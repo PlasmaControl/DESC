@@ -22,7 +22,6 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
 
 
-
 class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error.
 

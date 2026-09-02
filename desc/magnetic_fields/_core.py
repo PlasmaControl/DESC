@@ -3459,5 +3459,3 @@ class SplineZeta(Optimizable, IOAble):
         if not self._symmetry:
             return self._alpha_knots
         return np.concatenate([self._alpha_knots, self._alpha_knots + np.pi])
-
-

@@ -115,8 +115,6 @@ class TestSecondAdiabaticInvariant:
         expected_grad = jac.T @ f
         np.testing.assert_allclose(grad, expected_grad, rtol=1e-8, atol=1e-8)
 
-
-
     @pytest.mark.unit
     def test_soft_connectivity_objective_build_and_compute(self):
         """Test SoftConnectivity objective build and evaluation."""
@@ -189,7 +187,11 @@ class TestSecondAdiabaticInvariant:
     def test_soft_connectivity_joint_objective_optimization(self):
         """Test joint optimization with eq and SplineZeta."""
         from desc.magnetic_fields import SplineZeta
-        from desc.objectives import FixParameters, ForceBalance, get_fixed_boundary_constraints
+        from desc.objectives import (
+            FixParameters,
+            ForceBalance,
+            get_fixed_boundary_constraints,
+        )
 
         eq = get("DSHAPE")
         spline = SplineZeta(n_control=4, NFP=eq.NFP)
@@ -218,6 +220,3 @@ class TestSecondAdiabaticInvariant:
         assert result.success or result.nfev >= 1
         assert np.all(np.isfinite(eq_opt.R_lmn))
         assert np.all(np.isfinite(spline_opt.zeta_min_knots))
-
-
-

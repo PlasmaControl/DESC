@@ -14,6 +14,7 @@ Performance Improvements
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero
   (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and

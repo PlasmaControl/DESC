@@ -247,6 +247,42 @@ class DiffMat(IOAble):
             ),
         )
 
+    @staticmethod
+    def _weight_vector(W):
+        """Return ``W`` as a 1D vector of per-node quadrature weights."""
+        if W is None:
+            return None
+        W = jnp.asarray(W)
+        return W if W.ndim == 1 else jnp.diagonal(W)
+
+    # Every `*_diffmat` builder in this module returns W as a square DIAGONAL
+    # MATRIX, while `zernike_nodes_weights` returns a 1D VECTOR. Both are legal
+    # inputs (see `_set_up`), so a caller mixing the two -- a Zernike rho/theta
+    # pair with a Fourier zeta pair, which is every coupled AGNI run -- had to
+    # remember which directions needed `jnp.diagonal` and which did not. That is
+    # a per-call-site convention, and call sites disagreed: one script passed the
+    # axisymmetric zeta weight as `[2*pi/NFP]` and another as `[[2*pi/NFP]]` so
+    # that a `jnp.diagonal` at the constructor would flatten it back.
+    #
+    # These three read through `_weight_vector`, so consumers that want
+    # per-direction weights (the finite-n paths kron them together) ask for
+    # `w_*` and never have to know how the pair was built. `W_*` still holds
+    # exactly what was passed in, for the ballooning path that wants the matrix.
+    @property
+    def w_rho(self):
+        """1D rho quadrature weights, whichever form ``W_rho`` was given in."""
+        return self._weight_vector(self.W_rho)
+
+    @property
+    def w_theta(self):
+        """1D theta quadrature weights, whichever form ``W_theta`` was given in."""
+        return self._weight_vector(self.W_theta)
+
+    @property
+    def w_zeta(self):
+        """1D zeta quadrature weights, whichever form ``W_zeta`` was given in."""
+        return self._weight_vector(self.W_zeta)
+
     @classmethod
     def from_zeta_grid(cls, zeta):
         """Create a ``DiffMat`` for a uniform zeta grid.

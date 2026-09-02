@@ -61,6 +61,7 @@ Geometry
     desc.objectives.BScaleLength
     desc.objectives.MirrorRatio
     desc.objectives.GoodCoordinates
+    desc.objectives.UmbilicHighCurvature
 
 
 Neoclassical
@@ -189,6 +190,7 @@ Fixing degrees of freedom
     desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
     desc.objectives.ShareParameters
+    desc.objectives.SurfaceCurveConsistency
 
 
 User defined objectives

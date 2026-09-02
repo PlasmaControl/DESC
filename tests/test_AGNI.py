@@ -158,6 +158,29 @@ def _load_old_equilibrium(path):
 # Module-level grid / equilibrium — built once, shared across all tests
 # ---------------------------------------------------------------------------
 
+# Measured peak RSS of this module at the default 24,12,8 fixture is 12.3 GB,
+# concentrated in four tests (the rise each one adds to the session high-water):
+#   test_v_fixed_objective_jits_and_matches_gradient     +5.15 GB -> 12.31
+#   test_matfree_operator_matches_dense_matrix           +3.66 GB ->  4.04
+#   test_finiten_objective_gradient_is_hellmann_feynman  +1.82 GB ->  7.16
+#   test_finiten_objective_matches_direct_compute        +1.11 GB ->  5.34
+# The AD tests dominate because jitting a gradient through the operator keeps
+# every forward intermediate alive for the backward pass. A GitHub runner has
+# ~8 GB, so it SWAPS rather than OOM-ing: `unit_tests.yml` hung for hours
+# instead of failing. Skip what will not fit; set AGNI_TEST_MEM_GB to override
+# the detected total (a plain number, in GB) to force them on or off.
+_TOTAL_GB = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+_MEM_GB = float(os.environ.get("AGNI_TEST_MEM_GB", _TOTAL_GB))
+
+
+def needs_memory(gb):
+    """Skip a test whose measured peak RSS does not fit the host."""
+    return pytest.mark.skipif(
+        _MEM_GB < gb,
+        reason=f"needs ~{gb} GB RAM (measured); host has {_MEM_GB:.1f} GB",
+    )
+
+
 _RES = os.environ.get("AGNI_TEST_RES", "24,12,8")
 _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 
@@ -326,6 +349,7 @@ def test_stability_kwargs_are_registered():
 
 @pytest.mark.unit
 @pytest.mark.slow
+@needs_memory(16)
 def test_matfree_operator_matches_dense_matrix(agni):
     """The matrix-free operator equals the dense assembled matrix, exactly.
 
@@ -361,8 +385,27 @@ def test_matfree_operator_matches_dense_matrix(agni):
     )
     Ax, n_keep = op["Ax"], int(op["n_keep"])
 
-    eye = jnp.eye(n_keep, dtype=Ax(jnp.ones(n_keep)).dtype)
-    A_mf = np.asarray(jax.vmap(Ax)(eye)).T  # column j = A e_j
+    # Materialize in COLUMN BLOCKS, not one `jax.vmap(Ax)(jnp.eye(n_keep))`.
+    # That one-liner cost 5.6 GB peak RSS at the default 24,12,8 fixture and is
+    # what made this test unrunnable on a GitHub runner: `jnp.eye(n_keep)` is
+    # 0.67 GB on its own, and vmapping over all n_keep columns promotes EVERY
+    # intermediate inside `Ax_full` -- and there are dozens -- from (n_rho,
+    # n_theta, n_zeta) to (n_keep, n_rho, n_theta, n_zeta), 0.23 GB apiece. The
+    # runner swapped instead of OOM-ing, so CI hung for hours rather than
+    # failing. Blocking caps the batch axis at `block` and leaves the assertion
+    # identical.
+    dtype = Ax(jnp.ones(n_keep)).dtype
+    block = 64
+    A_mf = np.empty((n_keep, n_keep), dtype=dtype)
+    _Ax_block = jax.jit(jax.vmap(Ax))
+    for j0 in range(0, n_keep, block):
+        w = min(block, n_keep - j0)
+        cols = (
+            jnp.zeros((w, n_keep), dtype)
+            .at[jnp.arange(w), jnp.arange(j0, j0 + w)]
+            .set(1.0)
+        )
+        A_mf[:, j0 : j0 + w] = np.asarray(_Ax_block(cols)).T  # column j = A e_j
 
     dense = stability._agni3_assemble(
         agni["eq"].params_dict, transforms, {}, data, **kw
@@ -711,6 +754,7 @@ def _finiten_objective(agni, build=True, **kw):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@needs_memory(16)
 def test_finiten_objective_matches_direct_compute(agni):
     """The objective returns the same lambda as a direct eq.compute.
 
@@ -737,6 +781,7 @@ def test_finiten_objective_matches_direct_compute(agni):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@needs_memory(16)
 def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     """The gradient exists, is finite, and is not identically zero.
 
@@ -1029,6 +1074,7 @@ def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@needs_memory(16)
 def test_v_fixed_objective_jits_and_matches_gradient(agni):
     """`v_fixed` through the JITTED objective: same lambda, same gradient.
 

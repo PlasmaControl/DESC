@@ -2023,10 +2023,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     # RG: need to make this consistent with the dense case. `_agni3_assemble`
     # auto-detects the mirror from the equilibrium (`ismirror = jnp.all(jnp.abs(iota)
     # < 1e-12)`, traced, jit-safe), while this path takes a manual `mirror` kwarg
-    # that defaults to False and is declared on no register_compute_fun, so it
-    # cannot be set through `eq.compute` at all. On a real mirror equilibrium the
-    # dense assembler switches on the extra B_blocks couplings below and the
-    # matrix-free operator does not, so the two disagree.
+    # TODO: test mirror geometry
     ismirror = bool(kwargs.get("mirror", False))
     if ismirror:
         B_blocks = B_blocks.at[:, 2, 2].set((n0 * W * sqrtg * g_pp).flatten())
@@ -2196,7 +2193,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         )
         Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
-        # J cross Q terms, by the same route as dense `_agni3_assemble`: g^rv and
+        # RG: J cross Q terms, by the same route as dense `_agni3_assemble`: g^rv and
         # g^rz come from the PEST LOWER metric via g12 = (g13 g23 - g12 g33)/(sqrt(g))^2
         # rather than from data["g^rv"]/data["g^rz"]. The `_term` factors already
         # carry psi_r*sqrtg, hence psi_r2 here.
@@ -2209,7 +2206,12 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Ar += +(jq * (iota * xr_v + xr_z))
         Ar += -(psi_r * sqrtg * W * j_sup_zeta) * xr1_r
         Ar += +(psi_r * sqrtg * W * j_sup_theta) * xr2_r
-        Ar += +(iota * d_dv(_cT(D_theta0), jq * xr) + d_dz(_cT(D_zeta0), jq * xr))
+        # RG: `iota` must sit INSIDE the transposed theta derivative.
+        # With separable D_theta the term and its Hermitian agree because iota = iota(rho)
+        # commutes with a pure-theta operator. But with coupled_rt D_theta is the
+        # full (rho, theta) Zernike-Fourier operator and they do not, which made
+        # this operator non-Hermitian and disagree with `_agni3_assemble`.
+        Ar += d_dv(_cT(D_theta0), iota * jq * xr) + d_dz(_cT(D_zeta0), jq * xr)
         Ar += -iota_psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_zeta * xr)
         Ar += psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_theta * xr)
 

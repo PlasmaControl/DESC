@@ -156,7 +156,6 @@ class QuasisymmetryBoozer(_Objective):
             "profiles": profiles,
             "matrix": matrix,
             "idx": idx,
-            "surf_batch_size": self._surf_batch_size,
         }
 
         timer.stop("Precomputing transforms")
@@ -195,7 +194,7 @@ class QuasisymmetryBoozer(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
-            surf_batch_size=constants["surf_batch_size"],
+            surf_batch_size=self._surf_batch_size,
         )
         B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
         B_mn = constants["matrix"] @ B_mn.T
@@ -731,8 +730,6 @@ class Omnigenity(_Objective):
             "eq_transforms": eq_transforms,
             "field_transforms": field_transforms,
             "quad_weights": w,
-            "helicity": self.helicity,
-            "surf_batch_size": self._surf_batch_size,
         }
 
         if self._eq_fixed:
@@ -754,7 +751,7 @@ class Omnigenity(_Objective):
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
                 profiles={},
-                helicity=self._constants["helicity"],
+                helicity=self.helicity,
                 surf_batch_size=self._surf_batch_size,
             )
             self._constants["field_data"] = field_data
@@ -815,14 +812,14 @@ class Omnigenity(_Objective):
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
-                surf_batch_size=constants["surf_batch_size"],
+                surf_batch_size=self._surf_batch_size,
             )
 
         # compute field data
         if self._field_fixed:
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
-            M, N = constants["helicity"]
+            M, N = self.helicity
             iota = eq_data["iota"][eq_grid.unique_rho_idx]
             theta_B, zeta_B = _omnigenity_mapping(
                 M,
@@ -839,9 +836,9 @@ class Omnigenity(_Objective):
                 params=field_params,
                 transforms=constants["field_transforms"],
                 profiles={},
-                helicity=constants["helicity"],
+                helicity=self.helicity,
                 iota=eq_data["iota"][eq_grid.unique_rho_idx],
-                surf_batch_size=constants["surf_batch_size"],
+                surf_batch_size=self._surf_batch_size,
             )
             theta_B = field_data["theta_B"]
             zeta_B = field_data["zeta_B"]
@@ -871,7 +868,7 @@ class Omnigenity(_Objective):
         B_eta_alpha = vmap_chunked(
             _compute_B_eta_alpha,
             in_axes=(0, 0, 0),
-            chunk_size=constants["surf_batch_size"],
+            chunk_size=self._surf_batch_size,
         )(theta_B, zeta_B, B_mn)
         B_eta_alpha = B_eta_alpha.reshape(
             (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)

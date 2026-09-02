@@ -398,18 +398,88 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
     kw = {k: v for k, v in agni["kw"].items() if k != "v_guess"}
     eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
     name = "finite-n lambda3 rayleigh"
+    # Request the mode-data keys BY NAME, not just off the side-effect dict that
+    # `finite-n lambda3 rayleigh` fills in. Only this exercises their
+    # `register_compute_fun` entries; a broken registration (wrong `data=`
+    # dependency, missing kwarg declaration) raises here and nowhere else.
+    names = [
+        name,
+        "finite-n eigenfunction3 rayleigh",
+        "finite-n xi rayleigh",
+        "finite-n deltaB rayleigh",
+        "finite-n deltaV rayleigh",
+    ]
     data = compute_fun(
         eq,
-        [name],
+        names,
         params=eq.params_dict,
-        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
-        profiles=get_profiles([name], eq, grid),
+        transforms=get_transforms(names, obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles(names, eq, grid),
         data=finiten_prefill(eq, grid),
         **kw,
         sigma=1.3 * lam_dense,
     )
     lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
     resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
+    nr, nt, nz = agni["res"]
+    n_total = nr * nt * nz
+    v = np.asarray(data[name + " v"]).reshape(-1)
+    ef = np.asarray(data["finite-n eigenfunction3 rayleigh"])
+    xi = np.asarray(data["finite-n xi rayleigh"])
+    dB = np.asarray(data["finite-n deltaB rayleigh"])
+    dV = np.asarray(data["finite-n deltaV rayleigh"])
+
+    assert ef.shape == (3 * n_total,)
+    assert xi.shape == (3 * n_total,)
+    assert dB.shape == (nr, nt, nz)
+    assert dV.shape == (nr, nt, nz)
+
+    # The scatter back to full length is the one step in
+    # `_agni3_store_rayleigh_mode_data` with no redundancy to catch it: an
+    # off-by-one in `keep` silently shifts the whole mode by a rho shell and
+    # every downstream field still looks plausible. Pin it exactly.
+    keep = agni["keep"]
+    np.testing.assert_allclose(ef[keep], v, rtol=0, atol=0)
+    dropped = np.setdiff1d(np.arange(3 * n_total), keep)
+    assert not np.any(ef[dropped]), "xi^rho Dirichlet slots must stay exactly zero"
+
+    # xi is the whitened eigenvector mapped back to the physical displacement,
+    # so it must be supported on the same DOF and be a genuinely nonzero mode --
+    # a silently all-zero field would pass every shape and finiteness check.
+    assert np.all(np.isfinite(xi)) and np.any(xi)
+    assert np.all(np.isfinite(dB)) and np.any(dB)
+    assert np.all(np.isfinite(dV)) and np.any(dV)
+    # deltaB and deltaV are magnitudes (sqrt of a metric contraction), so they
+    # are real and nonnegative by construction. A negative entry means the
+    # contraction lost a metric term or a sign.
+    assert dB.dtype.kind == "f" and dV.dtype.kind == "f"
+    assert np.all(dB >= 0.0) and np.all(dV >= 0.0)
+
+    # Same mode, computed by the dense `finite-n lambda3` path. This is the only
+    # check on the whitening transform and the derivative reconstruction inside
+    # `_agni3_store_rayleigh_mode_data`: get the Linv/diagBsqinv congruence or
+    # the d_dr/d_dv/d_dz plumbing wrong and xi is still finite, still the right
+    # shape, still supported on `keep` -- but it is no longer the mode, and the
+    # overlap collapses from 1 to O(0.1).
+    #
+    # Compared as an overlap, not elementwise: an eigenvector is defined up to a
+    # complex phase, and the two solvers fix it independently. The tolerance is
+    # deliberately loose for the same reason the eigenvalue tolerance is -- the
+    # two solvers can land on different vectors inside a near-degenerate cluster
+    # -- so this is a "same mode or not" check, not a precision check.
+    def _overlap(a, b):
+        a, b = np.asarray(a).reshape(-1), np.asarray(b).reshape(-1)
+        return abs(np.vdot(a / np.linalg.norm(a), b / np.linalg.norm(b)))
+
+    ov_xi = _overlap(xi, agni["lam3"]["finite-n xi"])
+    ov_dV = _overlap(dV, agni["lam3"]["finite-n deltaV"])
+    ov_dB = _overlap(dB, agni["lam3"]["finite-n deltaB"])
+    print(f"  |<xi_R, xi_dense>|     = {ov_xi:.6f}")
+    print(f"  |<dV_R, dV_dense>|     = {ov_dV:.6f}")
+    print(f"  |<dB_R, dB_dense>|     = {ov_dB:.6f}")
+    assert ov_xi > 0.99, f"Rayleigh xi is not the dense mode: overlap {ov_xi:.4f}"
+    assert ov_dV > 0.99, f"Rayleigh deltaV is not the dense field: {ov_dV:.4f}"
+    assert ov_dB > 0.99, f"Rayleigh deltaB is not the dense field: {ov_dB:.4f}"
 
     reldiff = abs(lam_R - lam_dense) / (abs(lam_dense) + 1e-300)
     print(f"\n  lambda3 (dense ARPACK) = {lam_dense:.9e}")

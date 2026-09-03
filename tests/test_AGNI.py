@@ -33,6 +33,7 @@ needs; do not lower it to save time.
 Set AGNI_EQ_PATH to override the equilibrium file.
 """
 
+import gc
 import os
 import re
 import warnings
@@ -158,17 +159,6 @@ def _load_old_equilibrium(path):
 # Module-level grid / equilibrium — built once, shared across all tests
 # ---------------------------------------------------------------------------
 
-# Off in CI until the stall is understood. Group 2 of `unit_tests.yml` burned
-# its whole budget without completing a single test, and moving this module to
-# `regression` only relocated it: two tests passed there and the job was
-# cancelled at 3.5h. Locally the whole module is 11 tests in ~15 min, so this is
-# not a slow test -- it is a stall specific to the runner, still undiagnosed.
-# Until then it does not get to spend CI hours. Set AGNI_RUN_IN_CI=1 to force.
-_SKIP_IN_CI = os.environ.get("CI") == "true" and os.environ.get("AGNI_RUN_IN_CI") != "1"
-pytestmark = pytest.mark.skipif(
-    _SKIP_IN_CI, reason="AGNI stalls on CI runners; set AGNI_RUN_IN_CI=1 to force"
-)
-
 _RES = os.environ.get("AGNI_TEST_RES", "24,12,8")
 _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 
@@ -176,6 +166,34 @@ _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 _DEFAULT_EQ = Path(__file__).parent / "inputs" / "AGNI_QH_lowres.h5"
 _EQ_PATH = Path(os.environ.get("AGNI_EQ_PATH", _DEFAULT_EQ))
 _AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {_EQ_PATH}"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _release_memory_after_module():
+    """Give back the memory this module's compiled code is holding.
+
+    Measured after the 11 tests here: 6.26 GB resident, and `gc.collect()`
+    alone returns NONE of it. Two different things are holding it. JAX caches
+    every compiled variant of the operator and never evicts them (2.53 GB), and
+    glibc keeps memory it has already freed rather than returning it to the OS
+    (a further 2.65 GB) -- the second is invisible from outside the process, so
+    it looks permanent when it is not. Releasing both drops the module to
+    1.08 GB against a 0.38 GB baseline.
+
+    This matters because `tests/test_AGNI.py` sorts first alphabetically, so it
+    runs before everything else in whatever pytest-split group it lands in. The
+    memory left behind was still gone for every later test in that group, on a
+    runner with 16 GB and coverage tracing on top -- they passed, then crawled.
+    """
+    yield
+    import ctypes
+
+    jax.clear_caches()
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass  # not glibc; the jax.clear_caches() above is the portable half
 
 
 @pytest.fixture(scope="module")
@@ -335,7 +353,7 @@ def test_stability_kwargs_are_registered():
     )
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_matfree_operator_matches_dense_matrix(agni):
     """The matrix-free operator equals the dense assembled matrix, exactly.
@@ -405,7 +423,7 @@ def test_matfree_operator_matches_dense_matrix(agni):
     assert err < 1e-10, f"matrix-free operator disagrees with dense assembly: {err:.3e}"
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_jax_lanczos_matches_dense(agni, monkeypatch):
     """AGNI_EIGENSOLVER=jax_lanczos reproduces the dense ARPACK eigenvalue.
@@ -533,7 +551,7 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
     np.testing.assert_allclose(lam_R, lam_dense, rtol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_jax_lanczos_matches_dense_axisym(monkeypatch):
     """``test_jax_lanczos_matches_dense`` for a complex A.
@@ -608,7 +626,7 @@ def test_jax_lanczos_matches_dense_axisym(monkeypatch):
     np.testing.assert_allclose(lam_R, lam_dense, rtol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     """Both ring-block builds reproduce the dense matrix's sub-blocks.
@@ -739,7 +757,7 @@ def _finiten_objective(agni, build=True, **kw):
     return obj
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_finiten_objective_matches_direct_compute(agni):
     """The objective returns the same lambda as a direct eq.compute.
@@ -765,7 +783,7 @@ def test_finiten_objective_matches_direct_compute(agni):
     np.testing.assert_allclose(lam_obj, lam_direct, rtol=1e-3)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     """The gradient exists, is finite, and is not identically zero.
@@ -805,7 +823,7 @@ def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     print(f"\n  |grad|_inf = {np.max(np.abs(g)):.6e}  n = {g.size}")
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_update_state_refreshes_the_eigenpair(agni):
     """update_state(dense_eigsh) puts a fresh eigenpair into the constants.
@@ -873,7 +891,7 @@ def _build_pest_level(eq, n_rho, n_theta, n_zeta):
 # (~500 s), not special: CI runs `-m unit` with `--splits 8` and
 # `--splitting-algorithm least_duration`, which absorbs one long test into one
 # of eight parallel groups, and does NOT deselect `slow`.
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_pcg_deflated_two_level_matches_dense(agni):
     """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
@@ -1015,7 +1033,7 @@ def test_pcg_deflated_two_level_matches_dense(agni):
     )
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
     """`v_fixed` skips the eigensolve and reproduces lambda exactly.
@@ -1057,7 +1075,7 @@ def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
     np.testing.assert_allclose(lam_fixed, lam_dense, rtol=1e-4)
 
 
-@pytest.mark.regression
+@pytest.mark.unit
 @pytest.mark.slow
 def test_v_fixed_objective_jits_and_matches_gradient(agni):
     """`v_fixed` through the JITTED objective: same lambda, same gradient.

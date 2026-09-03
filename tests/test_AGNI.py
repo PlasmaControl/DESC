@@ -158,6 +158,17 @@ def _load_old_equilibrium(path):
 # Module-level grid / equilibrium — built once, shared across all tests
 # ---------------------------------------------------------------------------
 
+# Off in CI until the stall is understood. Group 2 of `unit_tests.yml` burned
+# its whole budget without completing a single test, and moving this module to
+# `regression` only relocated it: two tests passed there and the job was
+# cancelled at 3.5h. Locally the whole module is 11 tests in ~15 min, so this is
+# not a slow test -- it is a stall specific to the runner, still undiagnosed.
+# Until then it does not get to spend CI hours. Set AGNI_RUN_IN_CI=1 to force.
+_SKIP_IN_CI = os.environ.get("CI") == "true" and os.environ.get("AGNI_RUN_IN_CI") != "1"
+pytestmark = pytest.mark.skipif(
+    _SKIP_IN_CI, reason="AGNI stalls on CI runners; set AGNI_RUN_IN_CI=1 to force"
+)
+
 _RES = os.environ.get("AGNI_TEST_RES", "24,12,8")
 _N_RHO, _N_THETA, _N_ZETA = (int(v) for v in _RES.split(","))
 

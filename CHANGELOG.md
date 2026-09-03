@@ -27,6 +27,7 @@ Bug Fixes
   ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 
 
 

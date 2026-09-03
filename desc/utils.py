@@ -1087,7 +1087,7 @@ def rotate_vector_to_vector(u, v):
         ]
     )
     # where to return antiparallel R if needed, else normal R
-    return jnp.where(jnp.allclose(dot, -1.0), R_antiparallel, R)
+    return jnp.where(jnp.allclose(dot, -1.0, atol=1e-8, rtol=1e-8), R_antiparallel, R)
 
 
 def xyz2rpz(pts):

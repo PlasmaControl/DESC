@@ -13,10 +13,13 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
+from desc.basis import DoubleFourierSeries
 from desc.compute._omnigenity import (
     _smoothmax_logsumexp,
     _softplus_relu,
     _softplus_relu_sigmoid,
+    boozer_second_adiabatic_invariant_alpha_derivative_analytical,
+    boozer_soft_connectivity_penalty,
 )
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -220,3 +223,150 @@ class TestSecondAdiabaticInvariant:
         assert result.success or result.nfev >= 1
         assert np.all(np.isfinite(eq_opt.R_lmn))
         assert np.all(np.isfinite(spline_opt.zeta_min_knots))
+
+    @pytest.mark.unit
+    def test_boozer_alpha_derivative_scalar_b_star(self):
+        """Test scalar B_star is promoted and matches the per-surface path."""
+        basis = DoubleFourierSeries(M=2, N=0, NFP=1, sym=False)
+        rng = np.random.default_rng(0)
+        coeff_B = (1.0 + 0.1 * rng.normal(size=basis.num_modes))[None, :]
+        rho = np.array([1.0])
+        iota = np.array([0.5])
+        alpha = np.linspace(-np.pi, 0.0, 6, endpoint=False)[None, :]
+
+        out_scalar = boozer_second_adiabatic_invariant_alpha_derivative_analytical(
+            basis, rho, iota, coeff_B, alpha, 1.0, nzeta=64, nfp=1
+        )
+        out_vector = boozer_second_adiabatic_invariant_alpha_derivative_analytical(
+            basis, rho, iota, coeff_B, alpha, np.array([1.0]), nzeta=64, nfp=1
+        )
+
+        assert np.all(np.isfinite(out_scalar))
+        np.testing.assert_allclose(out_scalar, out_vector, rtol=1e-10, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_soft_connectivity_penalty_asymmetric_spline(self):
+        """Test the compute-layer knot expansion with spline_symmetry=False."""
+        basis = DoubleFourierSeries(M=2, N=0, NFP=1, sym=False)
+        rng = np.random.default_rng(1)
+        coeff_B = (1.0 + 0.1 * rng.normal(size=basis.num_modes))[None, :]
+        rho = np.array([1.0])
+        iota = np.array([0.4])
+        n_control = 4
+        reduced_alpha_knots = (np.arange(n_control) + 0.5) * 2 * np.pi / n_control
+        zeta_min_knots = np.full(n_control, np.pi)
+        zeta_max_knots = np.zeros(n_control)
+        alpha = np.linspace(-2 * np.pi, 0.0, 12, endpoint=False)[None, :]
+        t = np.linspace(0.0, 1.0, 16)
+
+        penalty = boozer_soft_connectivity_penalty(
+            basis,
+            rho,
+            iota,
+            coeff_B,
+            alpha,
+            1,
+            t,
+            reduced_alpha_knots=reduced_alpha_knots,
+            zeta_min_knots=zeta_min_knots,
+            zeta_max_knots=zeta_max_knots,
+            spline_symmetry=False,
+        )
+
+        assert np.all(np.isfinite(penalty))
+        assert penalty.shape == (rho.size, alpha.shape[1], t.size)
+
+    @pytest.mark.unit
+    def test_soft_connectivity_penalty_no_zeta_max(self):
+        """Test the zeta_max_knots=None fallback of the connectivity penalty."""
+        basis = DoubleFourierSeries(M=2, N=0, NFP=1, sym=False)
+        rng = np.random.default_rng(2)
+        coeff_B = (1.0 + 0.1 * rng.normal(size=basis.num_modes))[None, :]
+        rho = np.array([1.0])
+        iota = np.array([0.4])
+        n_control = 4
+        reduced_alpha_knots = (np.arange(n_control) + 0.5) * np.pi / n_control
+        zeta_min_knots = np.full(n_control, np.pi)
+        alpha = np.linspace(-np.pi, 0.0, 12, endpoint=False)[None, :]
+        t = np.linspace(0.0, 1.0, 16)
+
+        penalty = boozer_soft_connectivity_penalty(
+            basis,
+            rho,
+            iota,
+            coeff_B,
+            alpha,
+            1,
+            t,
+            reduced_alpha_knots=reduced_alpha_knots,
+            zeta_min_knots=zeta_min_knots,
+            zeta_max_knots=None,
+            spline_symmetry=True,
+        )
+
+        assert np.all(np.isfinite(penalty))
+        assert penalty.shape == (rho.size, alpha.shape[1], t.size)
+
+    @pytest.mark.unit
+    def test_soft_connectivity_symmetry_false_objective(self):
+        """Test SoftConnectivity end-to-end with a non-symmetric SplineZeta."""
+        from desc.magnetic_fields import SplineZeta
+
+        eq = get("DSHAPE")
+        spline = SplineZeta(n_control=4, NFP=eq.NFP, symmetry=False)
+        obj = SoftConnectivity(
+            eq=eq,
+            spline=spline,
+            num_alpha=8,
+            t=np.linspace(0.0, 1.0, 16),
+            M_booz=2,
+            N_booz=0,
+        )
+        obj.build()
+        residuals = obj.compute(eq.params_dict, spline.params_dict)
+
+        assert np.all(np.isfinite(residuals))
+        assert residuals.ndim == 1
+        assert len(residuals) > 0
+
+    @pytest.mark.unit
+    def test_spline_zeta_save_load_roundtrip(self, tmpdir_factory):
+        """Test SplineZeta serialization roundtrip, which invokes _set_up."""
+        from desc.io import load
+        from desc.magnetic_fields import SplineZeta
+
+        spline = SplineZeta(n_control=4, NFP=2, symmetry=False)
+        tmpdir = tmpdir_factory.mktemp("test_spline_zeta_io")
+        spline.save(tmpdir.join("spline_zeta.h5"))
+        loaded = load(tmpdir.join("spline_zeta.h5"))
+
+        assert loaded.symmetry == spline.symmetry
+        assert loaded.NFP == 2
+        np.testing.assert_allclose(loaded.zeta_min_knots, spline.zeta_min_knots)
+        np.testing.assert_allclose(loaded.zeta_max_knots, spline.zeta_max_knots)
+        np.testing.assert_allclose(loaded._alpha_knots, spline._alpha_knots)
+
+    @pytest.mark.unit
+    def test_spline_zeta_set_up_validation(self):
+        """Test _set_up raises ValueError on inconsistent loaded state."""
+        from desc.magnetic_fields import SplineZeta
+
+        for attr in ["_alpha_knots", "_zeta_min_knots", "_zeta_max_knots"]:
+            spline = SplineZeta(n_control=4, NFP=2)
+            setattr(spline, attr, np.zeros(5))
+            with pytest.raises(ValueError):
+                spline._set_up()
+
+    @pytest.mark.unit
+    def test_spline_zeta_wrap_zeta_max_jax(self):
+        """Test the JAX branch wrap matches the numpy implementation."""
+        from desc.magnetic_fields import SplineZeta
+
+        spline = SplineZeta(n_control=4, NFP=2)
+        vals = np.linspace(-3.0, 3.0, 25)
+        np.testing.assert_allclose(
+            np.asarray(spline._wrap_zeta_max_near_zero_jax(vals)),
+            spline._wrap_zeta_max_near_zero(vals),
+            rtol=1e-12,
+            atol=1e-12,
+        )

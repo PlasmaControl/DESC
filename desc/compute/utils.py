@@ -1,4 +1,4 @@
-"""Functions for flux surface averages and vector algebra operations."""
+"""Utilities for computing dependencies and transforms."""
 
 import copy
 import inspect
@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
-from ..utils import errorif, rpz2xyz, rpz2xyz_vec
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec, setdefault, warnif
 from .data_index import _topological_order, allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
@@ -36,7 +36,14 @@ def _parse_parameterization(p):
 
 
 def compute(  # noqa: C901
-    parameterization, names, params, transforms, profiles, data=None, **kwargs
+    parameterization,
+    names,
+    params,
+    transforms,
+    profiles,
+    data=None,
+    RpZ_data=None,
+    **kwargs,
 ):
     """Compute the quantity given by name on grid.
 
@@ -50,7 +57,7 @@ def compute(  # noqa: C901
         Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
         Defaults to attributes of self.
     transforms : dict of Transform
-        Transforms for R, Z, lambda, etc. Default is to build from grid
+        Transforms for R, Z, lambda, etc. Default is to build from grid.
     profiles : dict of Profile
         Profile objects for pressure, iota, current, etc. Defaults to attributes
         of self
@@ -59,13 +66,24 @@ def compute(  # noqa: C901
         Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
         v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
         of the cylindrical coordinates R, ϕ, Z.
+    RpZ_data : dict[str, jnp.ndarray]
+        Data evaluated so far on the (R, ϕ, Z) coordinates in this dictionary.
+        Should store the three entries ``"R"``, ``"phi"``, and ``"Z"``
+        if the intention is to compute something at these coordinates.
 
     Returns
     -------
-    data : dict of ndarray
-        Computed quantity and intermediate variables.
+    data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        grid attached to the transforms.
+    RpZ_data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        (R, ϕ, Z) coordinates in ``RpZ_data``. If ``RpZ_data``
+        was not given then this dictionary will not be returned.
 
     """
+    return_RpZ_data = RpZ_data is not None
+
     basis = kwargs.pop("basis", "rpz").lower()
     errorif(basis not in {"rpz", "xyz"}, NotImplementedError)
     p = _parse_parameterization(parameterization)
@@ -77,20 +95,18 @@ def compute(  # noqa: C901
     with warnings.catch_warnings():
         warnings.simplefilter("always", DeprecationWarning)
         for name in names:
-            if name not in data_index[p]:
-                raise ValueError(
-                    f"Unrecognized value '{name}' for parameterization {p}."
-                )
-            if name in list(deprecated_names.keys()):
-                warnings.warn(
-                    f"Variable name {name} is deprecated and will be removed in a "
-                    f"future DESC version, use name {deprecated_names[name]} "
-                    "instead.",
-                    DeprecationWarning,
-                )
+            errorif(
+                name not in data_index[p],
+                msg=f"Unrecognized value '{name}' for parameterization {p}.",
+            )
+            warnif(
+                name in list(deprecated_names.keys()),
+                DeprecationWarning,
+                f"Variable name {name} is deprecated and will be removed in a future "
+                f"DESC version, use name {deprecated_names.get(name, None)} instead.",
+            )
     bad_kwargs = kwargs.keys() - allowed_kwargs
-    if len(bad_kwargs) > 0:
-        raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
+    errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:
         assert _has_params(name, params, p), f"Don't have params to compute {name}"
@@ -134,6 +150,9 @@ def compute(  # noqa: C901
     if data is None:
         data = {}
 
+    # Need to query this before JIT barriers detach them from each other.
+    same_grid = data is RpZ_data
+
     data = _compute(
         p,
         names,
@@ -141,12 +160,41 @@ def compute(  # noqa: C901
         transforms=transforms,
         profiles=profiles,
         data=data,
+        RpZ_data=RpZ_data,
         **kwargs,
     )
+    if return_RpZ_data:
+        if same_grid:
+            RpZ_data = data
+        RpZ_data = _compute_RpZ_data(
+            p,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            RpZ_data=RpZ_data,
+            **kwargs,
+        )
+        if same_grid:
+            data = RpZ_data
 
+    data = _convert_basis(p, data, basis)
+
+    if return_RpZ_data:
+        if data is not RpZ_data:
+            RpZ_data = _convert_basis(p, RpZ_data, basis)
+        return data, RpZ_data
+    else:
+        return data
+
+
+def _convert_basis(p, data, basis):
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
         for name in data.keys():
+            if name == "potential data":
+                continue
             errorif(
                 data_index[p][name]["dim"] == (3, 3),
                 NotImplementedError,
@@ -157,24 +205,29 @@ def compute(  # noqa: C901
                     data[name] = rpz2xyz(data[name])
                 else:
                     data[name] = rpz2xyz_vec(data[name], phi=data["phi"])
-
     return data
 
 
 def _compute(
     parameterization, names, params, transforms, profiles, data=None, **kwargs
 ):
-    """Same as above but without checking inputs for faster recursion.
+    """Compute quantities without input validation.
 
     Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
     v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
     of the cylindrical coordinates R, ϕ, Z.
 
-    We need to directly call this function in objectives, since the checks in above
-    function are not compatible with JIT. This function computes given names while
-    using recursion to compute dependencies. If you want to call this function, you
-    cannot give the argument basis='xyz' since that will break the recursion. In that
-    case, either call above function or manually convert the output to xyz basis.
+    This function is called directly by objectives because the validation in
+    :func:`compute` is not compatible with JIT. Dependencies are evaluated in
+    topological order. The argument ``basis="xyz"`` is not supported; call
+    :func:`compute` or convert the output manually instead.
+
+    Returns
+    -------
+    data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        grid attached to the transforms.
+
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
     p = _parse_parameterization(parameterization)
@@ -191,11 +244,75 @@ def _compute(
         if name in data:
             # a previously-called fun may have populated this already
             continue
-        data = data_index[p][name]["fun"](
-            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
-        )
-
+        # RpZ quantities are evaluated separately on the coordinates in RpZ_data.
+        if data_index[p][name]["coordinates"] != "RpZ":
+            data = data_index[p][name]["fun"](
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                **kwargs,
+            )
     return data
+
+
+def _compute_RpZ_data(
+    parameterization,
+    names,
+    params,
+    transforms,
+    profiles,
+    data,
+    RpZ_data,
+    **kwargs,
+):
+    """Compute quantities on the coordinates in ``RpZ_data`` without validation.
+
+    Any vector v = v¹ R̂ + v² ϕ̂ + v³ Ẑ should be given in components
+    v = [v¹, v², v³] where R̂, ϕ̂, Ẑ are the normalized basis vectors
+    of the cylindrical coordinates R, ϕ, Z.
+
+    Dependencies are evaluated in topological order. Quantities evaluated on the
+    transform grid are read from ``data``; quantities whose coordinates are ``RpZ``
+    are evaluated into ``RpZ_data``.
+
+    Returns
+    -------
+    RpZ_data : dict[str, jnp.ndarray]
+        Quantities and intermediate variables computed on the
+        (R, ϕ, Z) coordinates in ``RpZ_data``.
+
+    """
+    assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
+    p = _parse_parameterization(parameterization)
+    if isinstance(names, str):
+        names = [names]
+
+    # A quantity evaluated on the transform grid cannot satisfy the same quantity
+    # evaluated at RpZ_data's coordinates. Other transform-grid quantities can be
+    # reused as dependencies, as can everything already evaluated in RpZ_data.
+    available = {
+        name
+        for name in data
+        if name not in data_index[p] or data_index[p][name]["coordinates"] != "RpZ"
+    }
+    available.update(RpZ_data)
+    has_axis = bool(transforms["grid"].axis.size)
+    needed = _get_deps(p, names, data=available, has_axis=has_axis)
+    needed = sorted(needed, key=_topological_order[p].__getitem__)
+
+    for name in needed:
+        if data_index[p][name]["coordinates"] != "RpZ" or name in RpZ_data:
+            continue
+        RpZ_data = data_index[p][name]["fun"](
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            RpZ_data=RpZ_data,
+            **kwargs,
+        )
+    return RpZ_data
 
 
 @execute_on_cpu
@@ -399,7 +516,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
-def get_params(keys, obj, has_axis=False, basis="rpz"):
+def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
     """Get parameters needed to compute a given quantity.
 
     Parameters
@@ -412,6 +529,8 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
+    params : dict[str, jnp.ndarray]
+        Params computed so far.
 
     Returns
     -------
@@ -424,30 +543,40 @@ def get_params(keys, obj, has_axis=False, basis="rpz"):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
-    params = set()
+    param_names = set()
     # below loop doesn't consider extra "phi" in basis="xyz" case
     # but since "phi" doesn't have any params, no problem
     # this way we skip calling get_data_deps again
     # TODO (#568): This will probably need w_lmn
     for key in keys:
-        params.update(data_index[p][key][deps_type]["params"])
-    params = sorted(params)
+        param_names.update(data_index[p][key][deps_type]["params"])
+    param_names = sorted(param_names)
 
     if isinstance(obj, str) or inspect.isclass(obj):
-        return list(params)
-    temp_params = {}
-    for name in params:
-        p = getattr(obj, name)
-        if isinstance(p, dict):
-            temp_params[name] = p.copy()
-        else:
-            temp_params[name] = jnp.atleast_1d(p)
-    return temp_params
+        return param_names
+
+    params = setdefault(params, {})
+    for name in param_names:
+        if name not in params:
+            value = getattr(obj, name)
+            params[name] = (
+                value.copy()
+                if isinstance(value, dict)
+                else (None if value is None else jnp.atleast_1d(value))
+            )
+    return params
 
 
 @execute_on_cpu
-def get_transforms(
-    keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
+def get_transforms(  # noqa: C901
+    keys,
+    obj,
+    grid,
+    jitable=False,
+    has_axis=False,
+    basis="rpz",
+    transforms=None,
+    **kwargs,
 ):
     """Get transforms needed to compute a given quantity on a given grid.
 
@@ -465,10 +594,12 @@ def get_transforms(
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
+    transforms : dict[str, Transform]
+        Transforms that are already computed.
 
     Returns
     -------
-    transforms : dict of Transform
+    transforms : dict[str, Transform]
         Transforms needed to compute key.
         Keys for R, Z, L, etc
 
@@ -481,8 +612,14 @@ def get_transforms(
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
-    transforms = {"grid": grid}
+
+    transforms = setdefault(transforms, {})
+    transforms.setdefault("grid", grid)
+    p = _parse_parameterization(obj)
+
     for c in derivs.keys():
+        if c in transforms:
+            continue
         if hasattr(obj, c + "_basis"):  # regular stuff like R, Z, lambda etc.
             basis = getattr(obj, c + "_basis")
             # first check if we already have a transform with a compatible basis
@@ -494,6 +631,11 @@ def get_transforms(
                         ).astype(int)
                         # don't build until we know all the derivs we need
                         transform.change_derivatives(ders, build=False)
+                        if c == "Phi_tilde" and p in (
+                            "desc.magnetic_fields._laplace.SourceFreeField",
+                            "desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+                        ):
+                            transform.build_pinv()
                         c_transform = transform
                         break
                 else:  # if we didn't exit the loop early
@@ -502,6 +644,12 @@ def get_transforms(
                         basis,
                         derivs=derivs[c],
                         build=False,
+                        build_pinv=c == "Phi_tilde"
+                        and (
+                            p == "desc.magnetic_fields._laplace.SourceFreeField"
+                            or p
+                            == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                        ),
                         method=method,
                     )
             else:  # don't perform checks if jitable=True as they are not jit-safe
@@ -510,6 +658,11 @@ def get_transforms(
                     basis,
                     derivs=derivs[c],
                     build=False,
+                    build_pinv=c == "Phi_tilde"
+                    and (
+                        p == "desc.magnetic_fields._laplace.SourceFreeField"
+                        or p == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
+                    ),
                     method=method,
                 )
             transforms[c] = c_transform

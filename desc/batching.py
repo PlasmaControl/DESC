@@ -9,7 +9,6 @@ from jax._src.api import (
     _check_output_dtype_jacrev,
     _jacfwd_unravel,
     _jacrev_unravel,
-    _jvp,
     _std_basis,
     _vjp,
 )
@@ -463,24 +462,33 @@ def jacfwd_chunked(
 
     @wraps(fun, docstr=docstr, argnums=argnums)
     def jacfun(*args, **kwargs):
+        argnums_ = (argnums,) if isinstance(argnums, int) else argnums
+        n = sum(x.size for i in argnums_ for x in tree_leaves(args[i]))
+        if chunk_size is None or n <= chunk_size:
+            # No chunking needed -- this function exists only to add chunking
+            # on top of jax.jacfwd, so defer to it directly rather than
+            # reimplementing it (including its has_aux handling).
+            return jax.jacfwd(fun, argnums, has_aux, holomorphic)(*args, **kwargs)
+
+        # More directions than fit in one chunk, so this will be split across
+        # multiple scan iterations. Linearize once here instead of chunking
+        # fresh _jvp calls -- see Derivative.linearize (in desc/derivatives.py)
+        # for the mechanism; same idea, just built on jax.linearize/WrappedFun
+        # directly since desc.derivatives can't be imported here without a
+        # circular import.
         f = lu.wrap_init(fun, kwargs)
         f_partial, dyn_args = argnums_partial(
             f, argnums, args, require_static_args_hashable=False
         )
         tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
-        if not has_aux:
-            pushfwd = partial(_jvp, f_partial, dyn_args)
-            y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(_std_basis(dyn_args))
-            y = tree_map(lambda x: x[0], y)
-            jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
-        else:
-            pushfwd = partial(_jvp, f_partial, dyn_args, has_aux=True)
-            y, jac, aux = vmap_chunked(pushfwd, chunk_size=chunk_size)(
-                _std_basis(dyn_args)
+        if has_aux:
+            y, jvp_fn, aux = jax.linearize(
+                lambda t: f_partial.call_wrapped(*t), dyn_args, has_aux=True
             )
-            y = tree_map(lambda x: x[0], y)
-            jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
-            aux = tree_map(lambda x: x[0], aux)
+        else:
+            y, jvp_fn = jax.linearize(lambda t: f_partial.call_wrapped(*t), dyn_args)
+        jac = vmap_chunked(jvp_fn, chunk_size=chunk_size)(_std_basis(dyn_args))
+        jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
         tree_map(partial(_check_output_dtype_jacfwd, holomorphic), y)
         example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
         jac_tree = tree_map(partial(_jacfwd_unravel, example_args), y, jac)

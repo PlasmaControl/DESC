@@ -38,6 +38,9 @@ Performance Improvements
 - Adds a pure-JAX ``qr_multiply`` fallback (a blocked Householder / compact-WY implementation) for ``jax < 0.10.0``, so the above ``Q``-avoidance speedup is available on the currently pinned JAX with no jaxlib rebuild (~1.5-2x faster than forming ``Q`` on CPU for tall Jacobians, larger on GPU).
 - Adds ``surf_batch_size`` kwarg to Boozer and omnigenous field compute variables, to allow for tuning of the memory usage when computing these quantities by choosing how many surfaces to simultaneously compute.
   - Also adds ``surf_batch_size`` as an additional kwarg to ``make_boozmn_output``, as well as the objectives ``Omnigenity`` and ``QuasisymmetryBoozer``
+- Speeds up chunked forward-mode Jacobians by using ``jax.linearize`` to partially evaluate the function once up front and reusing the resulting linear map across all chunks, instead of issuing a fresh ``jax.jvp`` call per chunk (which repeated that partial evaluation every chunk). This affects ``desc.batching.jacfwd_chunked`` and the ``jvp_scaled``/``jvp_unscaled`` paths of ``ObjectiveFunction`` and ``_Objective`` when ``jac_chunk_size`` is set small enough to require more than one chunk.
+  - ``jacfwd_chunked`` now defers directly to ``jax.jacfwd`` when no chunking is required.
+  - Adds ``desc.derivatives.AutoDiffDerivative.linearize``, a thin wrapper around ``jax.linearize``, for use in place of repeated ``compute_jvp`` calls at a fixed point.
 
 Bug Fixes
 

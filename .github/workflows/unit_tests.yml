@@ -101,7 +101,11 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          python -m pytest -v -m unit \
+          # -u: unbuffered. CI captures stdout through a pipe, so Python block
+          # buffers it and a hung run flushes NOTHING after the collection line
+          # -- the per-test output is stuck in the buffer, which is why a
+          # 6-hour hang looked like it stalled at collection.
+          python -u -m pytest -v -m unit \
             --durations=0 \
             --cov-report xml:cov.xml \
             --cov-config=setup.cfg \

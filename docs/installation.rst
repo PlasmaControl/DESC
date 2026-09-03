@@ -291,7 +291,7 @@ On Most Linux Computing Clusters
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
-            
+
             Run a test by replacing path_to_DESC with your path
 
             .. code-block:: sh

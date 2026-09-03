@@ -26,11 +26,13 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms
+from desc.diffmat_utils import DiffMat, fourier_diffmat, legendre_diffmat
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
+from desc.integrals.quad_utils import leggauss_lob
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -60,6 +62,7 @@ from desc.objectives import (
     Elongation,
     Energy,
     ExternalObjective,
+    FinitenStability,
     ForceBalance,
     ForceBalanceAnisotropic,
     FusionPower,
@@ -2188,6 +2191,7 @@ class TestObjectiveFunction:
                 coordinates="raz",
             ),
         )["ideal ballooning lambda"]
+
         lambda0, w0, w1 = (
             obj._constants["lambda0"],
             obj._constants["w0"],
@@ -3316,7 +3320,38 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
         kwargs["num_well"] = 15 * kwargs["num_transit"]
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
+    if objective is FinitenStability:
+        kwargs["grid"], kwargs["diffmat"] = _finite_n_pest_grid_and_diffmat(eq)
     return objective(eq=eq, **kwargs)
+
+
+def _finite_n_pest_grid_and_diffmat(eq, n_rho=4, n_theta=4, n_zeta=4):
+    """Build a small PEST grid and matching DiffMat for FinitenStability tests."""
+    x, _ = leggauss_lob(n_rho)
+    rho_scale = 0.45
+    rho = 0.55 + rho_scale * x
+    d_rho, w_rho = legendre_diffmat(n_rho)
+    d_rho = d_rho / rho_scale
+    w_rho = w_rho * rho_scale
+
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, n_theta, endpoint=False)
+    d_theta, w_theta = fourier_diffmat(n_theta)
+
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / eq.NFP, n_zeta, endpoint=False)
+    d_zeta, w_zeta = fourier_diffmat(n_zeta)
+    d_zeta = d_zeta * eq.NFP
+    w_zeta = w_zeta / eq.NFP
+
+    diffmat = DiffMat(
+        D_rho=d_rho,
+        W_rho=jnp.diagonal(w_rho),
+        D_theta=d_theta,
+        W_theta=jnp.diagonal(w_theta),
+        D_zeta=d_zeta,
+        W_zeta=jnp.diagonal(w_zeta),
+    )
+    grid = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False)
+    return grid, diffmat
 
 
 class TestComputeScalarResolution:
@@ -3864,6 +3899,7 @@ class TestObjectiveNaNGrad:
         CoilSetMinDistance,
         CoilTorsion,
         EffectiveRipple,
+        FinitenStability,
         ForceBalanceAnisotropic,
         DeflationOperator,
         FusionPower,
@@ -4155,7 +4191,9 @@ class TestObjectiveNaNGrad:
     def test_objective_no_nangrad(self, objective):
         """Generic test for other objectives."""
         eq = Equilibrium(L=2, M=2, N=2)
-        obj = ObjectiveFunction(objective(eq), use_jit=False)
+        obj = ObjectiveFunction(
+            _reduced_resolution_objective(eq, objective), use_jit=False
+        )
         obj.build()
         g = obj.grad(obj.x(eq))
         assert not np.any(np.isnan(g)), str(objective)
@@ -4206,6 +4244,29 @@ class TestObjectiveNaNGrad:
             N_x=1,
             NFP=eq.NFP,
             helicity=helicity,
+            B_lm=np.array(
+                [
+                    [0.8, 1.0, 1.2],
+                    [-0.4, 0.0, 0.6],
+                ]
+            ).flatten(),
+            x_lmn=0.03
+            * np.array(
+                [
+                    0.0,
+                    0.5,
+                    -0.25,
+                    0.125,
+                    0.0,
+                    -0.5,
+                    0.25,
+                    -0.125,
+                    0.0,
+                    0.4,
+                    -0.2,
+                    0.1,
+                ]
+            ),
         )
 
         obj = ObjectiveFunction(Omnigenity(eq=eq, field=field))

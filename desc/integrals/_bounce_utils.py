@@ -687,8 +687,9 @@ def get_alphas(alpha, iota, num_transit, NFP):
     Parameters
     ----------
     alpha : jnp.ndarray
-        Shape (num α, ).
-        Starting field line poloidal labels {αᵢ₀}.
+        Shape (num α, ) or (num α, num ρ).
+        Starting field line poloidal labels {αᵢ₀}. If two-dimensional, then
+        the labels may differ between flux surfaces. 
     iota : jnp.ndarray
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
@@ -704,7 +705,7 @@ def get_alphas(alpha, iota, num_transit, NFP):
         Set of field line poloidal coordinates {Aᵢ | Aᵢ = (αᵢ₀, αᵢ₁, ..., αᵢ₍ₘ₋₁₎)}.
 
     """
-    alpha = alpha[:, None, None]
+    alpha = alpha[:, None, None] if alpha.ndim == 1 else alpha[..., None]
     iota = iota[:, None]
     return alpha + iota * (2 * jnp.pi / NFP) * jnp.arange(num_transit * NFP)
 
@@ -721,8 +722,8 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
         Shape (num ρ, ).
         Rotational transform normalized by 2π.
     alpha : jnp.ndarray
-        Shape (num α, ).
-        Starting field line poloidal labels {αᵢ₀}.
+        Shape (num α, ) or (num α, num ρ).
+        Starting field line poloidal labels {αᵢ₀}. See ``get_alphas``.
     num_transit : int
         Number of toroidal transits to follow field line.
     NFP : int
@@ -777,7 +778,7 @@ def theta_on_fieldlines(angle, iota, alpha, num_transit, NFP, *, X_min=24):
     """
     X = angle.shape[-2]
     Y = truncate_rule(angle.shape[-1])
-    num_alpha = alpha.size
+    num_alpha = alpha.shape[0]
     domain = (0, 2 * jnp.pi / NFP)
 
     # peeling off field lines

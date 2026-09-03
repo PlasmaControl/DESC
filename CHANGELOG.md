@@ -81,7 +81,6 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
-- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 - Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
 - `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.

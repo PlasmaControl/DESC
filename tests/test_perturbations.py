@@ -6,7 +6,7 @@ import pytest
 import desc.examples
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
-from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.grid import ConcentricGridFlux, QuadratureGridFlux
 from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
@@ -77,7 +77,9 @@ def test_perturbation_orders():
     eqS.solve(ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
-    grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
+    grid = ConcentricGridFlux(
+        2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi"
+    )
     data0 = eq0.compute("|F|", grid=grid)
     data1 = eq1.compute("|F|", grid=grid)
     data2 = eq2.compute("|F|", grid=grid)
@@ -134,7 +136,7 @@ def test_optimal_perturb():
     eq1.surface = eq1.get_surface_at(1.0)
     objective = ObjectiveFunction(
         ToroidalCurrent(
-            eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1
+            eq=eq1, grid=QuadratureGridFlux(eq1.L, eq1.M, eq1.N), target=0, weight=1
         ),
         use_jit=False,
     )

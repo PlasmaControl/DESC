@@ -13,7 +13,7 @@ import numpy as np
 from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.objectives import (
     AspectRatio,
     FixBoundaryR,
@@ -40,7 +40,9 @@ eq = solve_continuation_automatic(eq, objective="force", verbose=3)[-1]
 eqfam = EquilibriaFamily(eq)
 
 # optimize in steps
-grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True)
+grid = LinearGridFlux(
+    M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+)
 for n in range(1, eq.M + 1):
     print("\n==================================")
     print("Optimizing boundary modes M,N <= {}".format(n))

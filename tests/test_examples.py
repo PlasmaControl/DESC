@@ -25,7 +25,12 @@ from desc.continuation import solve_continuation_automatic
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import Grid, LinearGrid
+from desc.grid import (
+    CustomGridFlux,
+    LinearGridCurve,
+    LinearGridFlux,
+    LinearGridToroidalSurface,
+)
 from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
@@ -207,7 +212,7 @@ def test_1d_optimization():
 def run_qh_step(n, eq):
     """Run 1 step of the precise QH optimization example from Landreman & Paul."""
     print(f"==========QH step {n+1}==========")
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )
 
@@ -404,7 +409,7 @@ def test_simsopt_QH_comparison():
     # Objective function, for both desc and simsopt:
     # f = (aspect - 8)^2 + (2pi)^{-2} \int dtheta \int d\zeta [f_C(rho=1)]^2
     # grid for quasisymmetry objective:
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         M=eq.M,
         N=eq.N,
         rho=[1.0],
@@ -482,7 +487,7 @@ def test_NAE_QSC_solve():
             xtol=1e-6,
             constraints=constraints,
         )
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
     for eqq, string in zip(
         [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
@@ -493,7 +498,7 @@ def test_NAE_QSC_solve():
 
         # Make sure iota of solved equilibrium is same on-axis as QSC
 
-        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+        iota = eqq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
@@ -540,7 +545,7 @@ def test_NAE_QSC_2nd_order_solve():
         xtol=2.5e-7,
         constraints=cs,
     )
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
 
     np.testing.assert_array_almost_equal(orig_Rax_val, eq.axis.R_n)
@@ -548,7 +553,7 @@ def test_NAE_QSC_2nd_order_solve():
 
     # Make sure iota of solved equilibrium is same on-axis as QSC
 
-    iota = eq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+    iota = eq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
     np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4)
 
@@ -568,7 +573,7 @@ def test_NAE_QSC_2nd_order_solve():
     # only check to within 10% as the quantity needs higher resolution
     # to accurately resolve, if we are within 10% at these resolutions we are
     # doing extremely well compared to a fixed bdry solve at this aspect ratio
-    grid = LinearGrid(
+    grid = LinearGridFlux(
         rho=1e-3,
         axis=False,
         M=40,
@@ -634,7 +639,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
             xtol=1e-6,
             constraints=constraints,
         )
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
     for eqq, string in zip(
         [eq, eq_lambda_fixed_0th_order, eq_lambda_fixed_1st_order],
@@ -645,7 +650,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq():
 
         # Make sure iota of solved equilibrium is same on axis as QSC
 
-        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+        iota = eqq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
@@ -705,7 +710,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
             gtol=1e-8,
             constraints=constraints,
         )
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     for eqq, string in zip(
         [eq, eq_2nd_order],
         ["RZ O(rho)", "RZ O(rho^2)"],
@@ -715,7 +720,7 @@ def test_NAE_QSC_solve_near_axis_based_off_eq_asym():
 
         # Make sure iota of solved equilibrium is same on axis as QSC
 
-        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+        iota = eqq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
@@ -780,7 +785,7 @@ def test_NAE_QSC_solve_near_axis_asym():
             gtol=1e-8,
             constraints=constraints,
         )
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, N=eq.N_grid, NFP=eq.NFP)
     # Make sure axis is same
     for eqq, string in zip(
         [eq, eq_2nd_order],
@@ -791,7 +796,7 @@ def test_NAE_QSC_solve_near_axis_asym():
 
         # Make sure iota of solved equilibrium is same on axis as QSC
 
-        iota = eqq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+        iota = eqq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
         np.testing.assert_allclose(iota[0], qsc.iota, rtol=1e-4, err_msg=string)
 
@@ -846,11 +851,11 @@ def test_NAE_QIC_solve():
     np.testing.assert_array_almost_equal(orig_Zax_val, eq.axis.Z_n)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
-    iota = eq.compute("iota", grid=LinearGrid(rho=0.0))["iota"]
+    iota = eq.compute("iota", grid=LinearGridFlux(rho=0.0))["iota"]
 
     np.testing.assert_allclose(iota[0], qic.iota, rtol=1e-5)
 
-    grid_axis = LinearGrid(rho=0.0, theta=0.0, zeta=qic.phi, NFP=eq.NFP)
+    grid_axis = LinearGridFlux(rho=0.0, theta=0.0, zeta=qic.phi, NFP=eq.NFP)
     phi = grid_axis.nodes[:, 2].squeeze()
 
     # check lambda to match on-axis
@@ -976,13 +981,17 @@ def test_omnigenity_qa():
         L_B=1, M_B=4, L_x=1, M_x=1, N_x=1, NFP=eq.NFP, helicity=(1, 0)
     )
 
-    eq_axis_grid = LinearGrid(rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
-    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_axis_grid = LinearGridFlux(
+        rho=1e-2, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False
+    )
+    eq_lcfs_grid = LinearGridFlux(
+        rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False
+    )
 
-    field_axis_grid = LinearGrid(
+    field_axis_grid = LinearGridFlux(
         rho=1e-2, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
     )
-    field_lcfs_grid = LinearGrid(
+    field_lcfs_grid = LinearGridFlux(
         rho=1.0, theta=2 * field.M_B, N=2 * field.N_x, NFP=field.NFP, sym=False
     )
 
@@ -1023,12 +1032,12 @@ def test_omnigenity_qa():
     np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
 
     # check that magnetic well parameters get |B| on axis correct
-    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
+    grid = LinearGridFlux(N=eq.N_grid, NFP=eq.NFP, rho=0)
     data = eq.compute("|B|", grid=grid)
     np.testing.assert_allclose(B0, np.mean(data["|B|"]), rtol=1e-3)
 
     # check that magnetic well parameters get |B| min & max on LCFS correct
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
+    grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
     data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
     np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3)
     np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
@@ -1076,11 +1085,19 @@ def test_omnigenity_optimization():
         )
         return f
 
-    eq_half_grid = LinearGrid(rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
-    eq_lcfs_grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    eq_half_grid = LinearGridFlux(
+        rho=0.5, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False
+    )
+    eq_lcfs_grid = LinearGridFlux(
+        rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False
+    )
 
-    field_half_grid = LinearGrid(rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False)
-    field_lcfs_grid = LinearGrid(rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False)
+    field_half_grid = LinearGridFlux(
+        rho=0.5, theta=16, zeta=8, NFP=field.NFP, sym=False
+    )
+    field_lcfs_grid = LinearGridFlux(
+        rho=1.0, theta=16, zeta=8, NFP=field.NFP, sym=False
+    )
 
     objective = ObjectiveFunction(
         (
@@ -1122,7 +1139,7 @@ def test_omnigenity_optimization():
     np.testing.assert_allclose(f[2:], 0, atol=1.2e-2)  # f[:2] is R0 and R0/a
 
     # check mirror ratio is correct
-    grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))
+    grid = LinearGridFlux(N=eq.N_grid, NFP=eq.NFP, rho=np.array([0]))
     data = eq.compute("|B|", grid=grid)
     np.testing.assert_allclose(np.min(data["|B|"]), 0.8, atol=2e-2)
     np.testing.assert_allclose(np.max(data["|B|"]), 1.2, atol=2e-2)
@@ -1218,14 +1235,15 @@ def test_non_eq_optimization():
         PrincipalCurvature(surf, bounds=(0, 15)),
     )
 
-    grid = LinearGrid(M=18, N=0, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=18, N=0, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=18, N=0, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=0.5,
         use_softmin=True,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         softmin_alpha=5000,
     )
     objective = ObjectiveFunction((obj,))
@@ -1479,12 +1497,12 @@ def test_regcoil_axisymmetric():
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
 
-    grid = LinearGrid(N=10, M=10, NFP=surface_current_field.NFP)
+    grid = LinearGridToroidalSurface(N=10, M=10, NFP=surface_current_field.NFP)
     correct_phi = G * grid.nodes[:, 2] / 2 / np.pi
     np.testing.assert_allclose(
         surface_current_field.compute("Phi", grid=grid)["Phi"], correct_phi, atol=5e-9
@@ -1494,8 +1512,8 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq=eq,
-        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGrid(M=40, N=40, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGridToroidalSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
         regularization_type="simple",
@@ -1510,7 +1528,7 @@ def test_regcoil_axisymmetric():
     )
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf, rtol=1e-4, atol=1e-8)
@@ -1519,8 +1537,8 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq=eq,
-        eval_grid=LinearGrid(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
-        source_grid=LinearGrid(M=40, N=80, NFP=eq.NFP),
+        eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        source_grid=LinearGridToroidalSurface(M=40, N=80, NFP=eq.NFP),
         lambda_regularization=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal
         # and we want this to provide half the field the surface current's
@@ -1541,7 +1559,7 @@ def test_regcoil_axisymmetric():
     np.testing.assert_allclose(data["chi^2_B"][0], 0, atol=1e-11)
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=200, N=200, NFP=surf_winding.NFP),
+        source_grid=LinearGridToroidalSurface(M=200, N=200, NFP=surf_winding.NFP),
         chunk_size=20,
     )
     np.testing.assert_allclose(B, B_from_surf * 2, rtol=1e-4, atol=1e-8)
@@ -1561,12 +1579,16 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
     surface_current_field = initial_surface_current_field.copy()
 
     np.testing.assert_array_less(chi_B, 1e-6)
-    coords = eq.compute(["R", "phi", "Z", "B"], grid=LinearGrid(M=20, N=20, NFP=eq.NFP))
+    coords = eq.compute(
+        ["R", "phi", "Z", "B"], grid=LinearGridFlux(M=20, N=20, NFP=eq.NFP)
+    )
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=LinearGrid(M=60, N=60, NFP=surface_current_field.NFP),
+        source_grid=LinearGridToroidalSurface(
+            M=60, N=60, NFP=surface_current_field.NFP
+        ),
         basis="rpz",
         chunk_size=20,
     )
@@ -1709,7 +1731,7 @@ def test_quadratic_flux_optimization_with_analytic_field():
     """
     eq = get("precise_QA")
     field = ToroidalMagneticField(1, 1)
-    eval_grid = LinearGrid(
+    eval_grid = LinearGridFlux(
         rho=np.array([1.0]),
         M=eq.M_grid,
         N=eq.N_grid,
@@ -1753,7 +1775,7 @@ def test_qfm_optimization_with_analytic_field():
     surface = get("HELIOTRON", data="boundary")
     surface.change_resolution(M=2, N=1)
     field = ToroidalMagneticField(1, 1)
-    eval_grid = LinearGrid(
+    eval_grid = LinearGridFlux(
         rho=np.array([1.0]),
         M=10,
         N=4,
@@ -1855,14 +1877,14 @@ def test_second_stage_optimization_CoilSet():
         ),
         check_intersection=False,
     )
-    grid = LinearGrid(M=5)
+    grid = LinearGridFlux(M=5)
     objective = ObjectiveFunction(
         QuadraticFlux(
             eq=eq,
             field=field,
             vacuum=True,
             eval_grid=grid,
-            field_grid=LinearGrid(N=15),
+            field_grid=LinearGridCurve(N=15),
             bs_chunk_size=10,
         )
     )
@@ -1918,8 +1940,8 @@ def test_optimize_with_all_coil_types(DummyCoilSet, DummyMixedCoilSet, coil_type
     eq = Equilibrium()
     # not attempting to accurately calc B for this test,
     # so make the grids very coarse
-    quad_eval_grid = LinearGrid(M=2, sym=True)
-    quad_field_grid = LinearGrid(N=2)
+    quad_eval_grid = LinearGridFlux(M=2, sym=True)
+    quad_field_grid = LinearGridCurve(N=2)
 
     spline_coil = mixed_coils.coils[-1].copy()
 
@@ -2014,8 +2036,8 @@ def test_coilset_geometry_optimization():
     assert coils.num_coils == 8
 
     # grids
-    plasma_grid = LinearGrid(M=8, zeta=64)
-    coil_grid = LinearGrid(N=8)
+    plasma_grid = LinearGridFlux(M=8, zeta=64)
+    coil_grid = LinearGridCurve(N=8)
 
     #### optimize coils with fixed equilibrium ####
     # optimizing for target coil-plasma distance and maximum coil-coil distance
@@ -2175,7 +2197,7 @@ def test_external_vs_generic_objectives(tmpdir_factory):
         s_full = np.linspace(0, 1, surfs)
         r_full = np.sqrt(s_full)
         file.createDimension("radius", surfs)
-        grid_full = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
+        grid_full = LinearGridFlux(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
         data_full = eq.compute(["p"], grid=grid_full)
         data_quad = eq.compute(["<beta>_vol", "<beta_pol>_vol", "<beta_tor>_vol"])
         betatotal = file.createVariable("betatotal", np.float64)
@@ -2206,7 +2228,7 @@ def test_external_vs_generic_objectives(tmpdir_factory):
             GenericObjective("<beta_pol>_vol", thing=eq0, target=target[1]),
             GenericObjective("<beta_tor>_vol", thing=eq0, target=target[2]),
             GenericObjective(
-                "p", thing=eq0, target=0, grid=LinearGrid(rho=[1], M=0, N=0)
+                "p", thing=eq0, target=0, grid=LinearGridFlux(rho=[1], M=0, N=0)
             ),
         )
     )
@@ -2364,7 +2386,7 @@ def test_ballooning_stability_opt():
     nturns = 2
     N0 = 2 * nturns * eq.M_grid * eq.N_grid + 1
     zeta = np.linspace(-jnp.pi * nturns, jnp.pi * nturns, N0)
-    grid = Grid.create_meshgrid([surfaces, alpha, zeta], coordinates="raz")
+    grid = CustomGridFlux.create_meshgrid([surfaces, alpha, zeta], coordinates="raz")
     data = eq.compute("ideal ballooning lambda", grid=grid)
     lam2_initial = data["ideal ballooning lambda"].max((-1, -2, -3))
 
@@ -2428,13 +2450,14 @@ def test_signed_PlasmaVesselDistance():
 
     target_dist = -0.25
 
-    grid = LinearGrid(M=10, N=4, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=10, N=4, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=10, N=4, NFP=eq.NFP)
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
         eq_fixed=True,
     )
@@ -2456,8 +2479,8 @@ def test_signed_PlasmaVesselDistance():
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
         use_softmin=True,
         softmin_alpha=100,
@@ -2483,14 +2506,15 @@ def test_signed_PlasmaVesselDistance():
     eq = Equilibrium(M=1, N=1)
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
-    grid = LinearGrid(M=20, N=8, NFP=eq.NFP)
+    surface_grid = LinearGridToroidalSurface(M=20, N=8, NFP=eq.NFP)
+    plasma_grid = LinearGridFlux(M=20, N=8, NFP=eq.NFP)
 
     obj = PlasmaVesselDistance(
         surface=surf,
         eq=eq,
         target=target_dist,
-        surface_grid=grid,
-        plasma_grid=grid,
+        surface_grid=surface_grid,
+        plasma_grid=plasma_grid,
         use_signed_distance=True,
     )
     objective = ObjectiveFunction(obj)
@@ -2554,8 +2578,8 @@ def test_share_parameters():
     surf3.change_Phi_resolution(M=4, N=2)
 
     ## setup opt problem
-    surf_grid = LinearGrid(M=10, N=10, NFP=surf1.NFP)
-    eval_grid = LinearGrid(M=10, N=10, NFP=surf1.NFP, sym=True)
+    surf_grid = LinearGridToroidalSurface(M=10, N=10, NFP=surf1.NFP)
+    eval_grid = LinearGridFlux(M=10, N=10, NFP=surf1.NFP, sym=True)
     # let surfs and Phi change while keeping their geometry shared
     obj = ObjectiveFunction(
         (
@@ -2690,8 +2714,8 @@ def test_share_parameters_coilsets():
     eq2 = eq1.copy()
     eq2.change_resolution(8, 2, 2, 12, 4, 4)
     ## setup opt problem
-    coil_grid = LinearGrid(N=10)
-    eval_grid = LinearGrid(M=10, N=10, NFP=eq1.NFP, sym=True)
+    coil_grid = LinearGridCurve(N=10)
+    eval_grid = LinearGridFlux(M=10, N=10, NFP=eq1.NFP, sym=True)
     # let surfs and Phi change while keeping their geometry shared
     obj = ObjectiveFunction(
         (

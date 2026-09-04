@@ -1390,6 +1390,21 @@ class _PrecomputedFourierZernikeBasis(FourierZernikeBasis):
     """
 
     _io_attrs_ = FourierZernikeBasis._io_attrs_ + ["_radial_coeffs"]
+    # the mode numbers and the index tables derived from them are integers that
+    # are never differentiated, but as pytree children they would be traced
+    # whenever the basis is passed through jit, which both forbids using them
+    # as static index arrays and leaves the mode numbers as runtime values
+    _static_attrs = FourierZernikeBasis._static_attrs + [
+        "_modes",
+        "_unique_L_idx",
+        "_inverse_L_idx",
+        "_unique_M_idx",
+        "_inverse_M_idx",
+        "_unique_N_idx",
+        "_inverse_N_idx",
+        "_unique_LM_idx",
+        "_inverse_LM_idx",
+    ]
 
     def __init__(self, basis, dr_max=2):
         self._L = basis.L

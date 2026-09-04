@@ -63,6 +63,14 @@ def _precompute_zernike_bases(eq):
     else:
         bases["Z"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
         bases["L"] = _PrecomputedFourierZernikeBasis(eq.L_basis)
+    # stellarator symmetry only drops (m,n) sign combinations, so the bases
+    # usually keep the same (l,m) pairs and therefore the same radial
+    # polynomials. Share the one array, so that the radial factor of all of
+    # them is a single computation the compiler can evaluate once.
+    lm = bases["R"].modes[bases["R"].unique_LM_idx, :2]
+    for b in bases.values():
+        if b is not bases["R"] and np.array_equal(b.modes[b.unique_LM_idx, :2], lm):
+            b._radial_coeffs = bases["R"]._radial_coeffs
     return bases
 
 
@@ -76,11 +84,16 @@ class _StackedTransform:
     ``transform`` does one matrix-vector product per derivative order — many
     tiny kernels per ODE step. This class instead computes each factor once for
     all derivative orders (the basis functions of all orders are combinations
-    of only ``dr x dt x dz`` factor sets) and assembles the matrices of all
-    derivative orders in a single fused operation. ``transform`` evaluates all
-    derivative orders of a coefficient vector in a single matrix-vector
-    product, cached per coefficient vector, so repeated calls for the other
-    derivative orders are free.
+    of only ``dr x dt x dz`` factor sets) and evaluates all of them together.
+
+    Rather than assembling the ``num_derivs x num_modes`` matrix of every basis
+    function at the node and contracting it with the coefficients, the sum over
+    modes is split: the toroidal factor is contracted with the coefficients
+    first, leaving a sum over the much smaller set of ``(l,m)`` pairs. That
+    costs ``n_dz x num_modes + num_derivs x K_lm`` instead of
+    ``num_derivs x num_modes`` multiply-adds per node — with only three
+    distinct toroidal derivative orders and ``K_lm ~ num_modes / (2N+1)``, an
+    order of magnitude less work.
 
     Parameters
     ----------
@@ -95,13 +108,13 @@ class _StackedTransform:
     def __init__(self, grid, basis, derivs):
         self._grid = grid
         self._basis = basis
+        self._cache = {}
         derivs = np.atleast_2d(derivs).astype(int)
         self._idx = {(d[0], d[1], d[2]): i for i, d in enumerate(derivs.tolist())}
-        self._cache = {}
 
-        coeffs = basis._radial_coeffs  # (n_dr, K_lm, lmax + 1)
-        n_dr, K_lm, _ = coeffs.shape
-        lmax = coeffs.shape[-1] - 1
+        rad_coeffs = basis._radial_coeffs  # (n_dr, K_lm, lmax + 1)
+        n_dr, K_lm, _ = rad_coeffs.shape
+        lmax = rad_coeffs.shape[-1] - 1
         errorif(
             derivs[:, 0].max() >= n_dr,
             NotImplementedError,
@@ -110,34 +123,69 @@ class _StackedTransform:
         )
         r, t, z = grid.nodes.T
         _, m, n = basis.modes.T
+        dr, dt, self._dz = derivs.T
 
-        # radial factors of all radial derivative orders in a single matrix
-        # product, with shape num_nodes x n_dr x K_lm
-        rho_pows = r[:, np.newaxis] ** jnp.arange(lmax, -1, -1)
-        radial = (rho_pows @ coeffs.reshape((-1, lmax + 1)).T).reshape((-1, n_dr, K_lm))
+        # Static mode bookkeeping, all on the numpy mode tables of the basis.
+        # Split the spectrum into dense (LM x N) blocks by grouping the (l,m)
+        # pairs by the set of toroidal modes they appear with: stellarator
+        # symmetry gives two blocks (m>=0 with n>=0 and m<0 with n<0), no
+        # symmetry gives one. The blocks partition the modes, so the toroidal
+        # contraction costs exactly one pass over the spectrum per order.
+        inv_M = np.asarray(basis.inverse_M_idx)
+        inv_LM = np.asarray(basis.inverse_LM_idx)
+        inv_N = np.asarray(basis.inverse_N_idx)
+        present = np.zeros((K_lm, basis.unique_N_idx.size), dtype=bool)
+        present[inv_LM, inv_N] = True
+        mode_of = np.zeros_like(present, dtype=int)
+        mode_of[inv_LM, inv_N] = np.arange(basis.num_modes)
+        patterns, group = np.unique(present, axis=0, return_inverse=True)
+        group = group.ravel()  # numpy has shipped both 1d and 2d for this
+        lm_blocks = [np.flatnonzero(group == p) for p in range(len(patterns))]
+        n_blocks = [np.flatnonzero(pat) for pat in patterns]
+        # mode index of each (N, LM) pair of a block, so that indexing the
+        # coefficients with it puts the contracted toroidal axis first
+        self._blocks = [
+            (mode_of[np.ix_(lm, nb)].T, nb) for lm, nb in zip(lm_blocks, n_blocks)
+        ]
+        lm_perm = np.concatenate(lm_blocks)
+
+        # radial factors of all radial derivative orders, by Horner's scheme on
+        # the polynomial coefficients (which are in descending powers of rho).
+        # Contracting the powers of rho against the coefficients instead would
+        # be a matrix product whose contraction axis is only lmax+1 long, which
+        # spends most of its GEMM tiles on padding, while the Horner chain is
+        # elementwise and fuses into a single kernel.
+        # has shape num_nodes x n_dr x K_lm
+        rho = r[:, np.newaxis]
+        cf = rad_coeffs.reshape((-1, lmax + 1))
+        radial = jnp.broadcast_to(cf[:, 0], (rho.shape[0], cf.shape[0]))
+        for p in range(1, lmax + 1):
+            radial = radial * rho + cf[:, p]
+        radial = radial.reshape((-1, n_dr, K_lm))
 
         def fourier_all(x, mm, NFP, n_dt):
-            # same expression as desc.basis.fourier, with the derivative
-            # order broadcast on a new axis. shape (num_nodes, n_dt, K)
-            dt = jnp.arange(n_dt)[:, np.newaxis]
-            m_pos = (mm >= 0).astype(int)
-            m_abs = jnp.abs(mm) * NFP
-            shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
-            return m_abs**dt * jnp.sin(m_abs * x[:, np.newaxis, np.newaxis] + shift)
+            # same expression as desc.basis.fourier, with the derivative order
+            # broadcast on a new axis. shape (num_nodes, n_dt, K). Successive
+            # derivative orders of a sinusoid alternate between its sine and
+            # cosine, so all of them follow from evaluating each once — the
+            # only transcendentals in the whole right hand side
+            m_abs = np.abs(mm) * NFP
+            arg = m_abs * x[:, np.newaxis] + (mm >= 0) * (np.pi / 2)
+            ders = [jnp.sin(arg), m_abs * jnp.cos(arg)][:n_dt]
+            while len(ders) < n_dt:
+                ders.append(-(m_abs**2) * ders[-2])
+            return jnp.stack(ders, axis=1)
 
         poloidal = fourier_all(t, m[basis.unique_M_idx], 1, derivs[:, 1].max() + 1)
-        toroidal = fourier_all(
+        self._toroidal = fourier_all(
             z, n[basis.unique_N_idx], basis.NFP, derivs[:, 2].max() + 1
         )
-
-        # select the derivative order of each factor for each requested
-        # derivative combination and gather back to the full mode set, then
-        # combine in one fused product. shape (num_nodes, num_derivs, num_modes)
-        dr, dt, dz = derivs.T
-        self._A = (
-            radial[:, dr][:, :, basis.inverse_LM_idx]
-            * poloidal[:, dt][:, :, basis.inverse_M_idx]
-            * toroidal[:, dz][:, :, basis.inverse_N_idx]
+        # radial x poloidal factor of every requested derivative order over the
+        # (l,m) pairs, ordered to match the toroidal contraction blocks.
+        # has shape num_nodes x num_derivs x K_lm
+        self._RT = (
+            radial[:, dr][:, :, lm_perm]
+            * poloidal[:, dt][:, :, inv_M[basis.unique_LM_idx][lm_perm]]
         )
 
     @property
@@ -150,17 +198,35 @@ class _StackedTransform:
         """Grid: nodes being evaluated at."""
         return self._grid
 
+    def _evaluate(self, c):
+        """Evaluate all derivative orders of coefficients c, shape(num_modes,)."""
+        # Contract the toroidal factor with the coefficients block by block,
+        # leaving a sum over (l,m) pairs. shape (num_nodes, n_dz, K_lm).
+        # Written as a broadcast reduction rather than a matrix product on
+        # purpose: the contracted axis is only 2N+1 long, so a GEMM spends most
+        # of its tiles on padding, while this fuses into a single reduce loop.
+        G = jnp.concatenate(
+            [
+                (self._toroidal[:, :, nb, np.newaxis] * c[modes]).sum(axis=2)
+                for modes, nb in self._blocks
+            ],
+            axis=2,
+        )
+        # sum over the (l,m) pairs, the minor axis of both operands, so that
+        # the radial and poloidal factors fuse into the reduction
+        return (self._RT * G[:, self._dz]).sum(axis=-1)
+
     def transform(self, c, dr=0, dt=0, dz=0):
         """Transform from spectral to physical space. See Transform.transform.
 
-        The values at the nodes are computed for all derivative orders in a
-        single matrix-vector product on the first call with a given
-        coefficient vector, and cached (the cache is only valid within a
-        single jit trace, as is this whole class).
+        All derivative orders are evaluated on the first call with a given
+        coefficient vector and cached, so the calls for the remaining
+        derivative orders are free (the cache is only valid within a single jit
+        trace, as is this whole class).
         """
         val = self._cache.get(id(c))
         if val is None or val[0] is not c:
-            val = (c, self._A @ c)
+            val = (c, self._evaluate(c))
             self._cache[id(c)] = val
         return val[1][:, self._idx[(dr, dt, dz)]]
 

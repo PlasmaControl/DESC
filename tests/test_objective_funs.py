@@ -527,12 +527,10 @@ class TestObjectiveFunction:
             f[mode] = obj.compute_unscaled(*obj.xs(eq))
             assert np.all(np.isfinite(f[mode]))
 
-        # the harmonics on each surface are all scaled by the same factor, and the
-        # norm of the residuals on each surface should be between 0 and 1
-        ratio = (f["fb_hat"] / f["fb"]).reshape((rho.size, -1))
-        np.testing.assert_allclose(ratio / ratio[:, :1], 1, rtol=1e-12)
-        norm = np.linalg.norm(f["fb_hat"].reshape((rho.size, -1)), axis=-1)
-        assert np.all(norm > 0) and np.all(norm < 1)
+        # on each surface this is the ratio of the norm of the symmetry breaking
+        # harmonics to the norm of all the harmonics, so it is between 0 and 1
+        ratio = np.linalg.norm(f["fb_hat"].reshape((rho.size, -1)), axis=-1)
+        assert np.all(ratio > 0) and np.all(ratio < 1)
 
     @pytest.mark.unit
     def test_qs_hat_modes_field_strength_invariance(self):

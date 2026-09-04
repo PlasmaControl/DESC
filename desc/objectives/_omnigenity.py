@@ -18,6 +18,17 @@ from .objective_funs import _Objective, collect_docs
 class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error.
 
+    Quasi-symmetry of helicity (M, N) requires the field strength in Boozer
+    coordinates to depend on the angles only through Mϑ_B - Nζ_B, so the residuals
+    are the symmetry breaking harmonics on each surface:
+
+    f_B = {B_mn(ρ) | m/n ≠ M/N}  (T)
+
+    With ``scale_invariant`` these are divided by the norm of all the harmonics on
+    that surface, so that ||f̂_B(ρ)|| ∈ [0, 1]:
+
+    f̂_B = f_B / (Σ_mn B_mn(ρ)²)^½
+
     Parameters
     ----------
     eq : Equilibrium
@@ -241,6 +252,14 @@ class QuasisymmetryBoozer(_Objective):
 class QuasisymmetryTwoTerm(_Objective):
     """Quasi-symmetry two-term error.
 
+    With B = ||𝐁||, ι the rotational transform, and G, I the Boozer currents:
+
+    f_C = [(M ι - N) (𝐁 × ∇ψ) - (M G + N I) 𝐁] ⋅ ∇B  (T³)
+
+    With ``scale_invariant`` this is divided by the local field strength cubed:
+
+    f̂_C = f_C / B³
+
     Parameters
     ----------
     eq : Equilibrium
@@ -251,10 +270,10 @@ class QuasisymmetryTwoTerm(_Objective):
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
     scale_invariant : bool, optional
-        Mode for the returned quantity. The scale_invariant version divides by the
-        cube of the local field strength, making the output dimensionless
-        and invariant to the magnetic field strength. Default is False, no
-        normalization. See Basic Optimization tutorial for details.
+        The scale_invariant version divides by the cube of the local field
+        strength, making the output dimensionless and invariant to the magnetic
+        field strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 
@@ -422,6 +441,15 @@ class QuasisymmetryTwoTerm(_Objective):
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error.
 
+    With B = ||𝐁||:
+
+    f_T = ∇ψ × ∇B ⋅ ∇(𝐁 ⋅ ∇B)  (T⁴/m²)
+
+    With ``scale_invariant`` this is made dimensionless with the major radius and
+    the local field strength:
+
+    f̂_T = R² f_T / B⁴
+
     Parameters
     ----------
     eq : Equilibrium
@@ -430,10 +458,10 @@ class QuasisymmetryTripleProduct(_Objective):
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     scale_invariant : bool, optional
-        Mode for the returned quantity. The scale_invariant version multiplies by the
-        R² and divides by the local B⁴, making the output dimensionless and invariant to
-        the magnetic field strength. Default is False, no normalization. See Basic
-        Optimization tutorial for details.
+        The scale_invariant version multiplies by R² and divides by the local B⁴,
+        making the output dimensionless and invariant to the magnetic field
+        strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 

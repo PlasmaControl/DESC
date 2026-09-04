@@ -788,7 +788,11 @@ class TestBouncePoints:
         )
         pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
         z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        z = np.stack((z1, z2))
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        assert not np.any(
+            (z > 0) & (z < 2)
+        ), "This triple root intersect should be removed."
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -874,9 +878,6 @@ class TestBouncePoints:
         np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
 
 
-auto_sin = (automorphism_sin, grad_automorphism_sin)
-
-
 class TestBounceQuadrature:
     """Test bounce quadrature."""
 
@@ -885,8 +886,12 @@ class TestBounceQuadrature:
         "is_strong, quad, automorphism",
         [
             (True, tanh_sinh(30), None),
-            (True, leggauss(25), auto_sin),
-            (False, leggauss_lob(8, interior_only=True), auto_sin),
+            (True, leggauss(25), (automorphism_sin, grad_automorphism_sin)),
+            (
+                False,
+                leggauss_lob(8, interior_only=True),
+                (automorphism_sin, grad_automorphism_sin),
+            ),
             (False, chebgauss2(21), None),
         ],
     )

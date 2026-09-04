@@ -518,7 +518,7 @@ def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(
-        scale_inv < jnp.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+        scale_inv < jnp.finfo(H.dtype).eps * max(H.shape) * 1e1, 1, scale_inv
     )
 
     if prev_scale_inv is not None:

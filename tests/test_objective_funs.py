@@ -4085,7 +4085,12 @@ class TestObjectiveNaNGrad:
         test([0, 0, -1])  # antiparallel
         test([0, 1e-4, 1])  # nearly parallel
         test([0, 1e-4, -1])  # nearly antiparallel
-
+        test([0, 1e-6, 1])  # nearly parallel
+        test([0, 1e-6, -1])  # nearly antiparallel
+        test([0, 1e-8, 1])  # nearly parallel
+        test([0, 1e-8, -1])  # nearly antiparallel
+        test([0, 1e-12, 1])  # nearly parallel
+        test([0, 1e-12, -1])  # nearly antiparallel
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)

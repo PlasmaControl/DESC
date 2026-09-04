@@ -18,6 +18,21 @@ from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
 
+# Shared caveat for the constant-zeta cross-section family.  With a generalized
+# toroidal angle (omega != 0) a constant-zeta surface is not planar, and the
+# quadrature branch of _compute_A_of_z integrates the area OF THAT WARPED SHEET.
+# Measured on a racetrack with |W_lmn| = 0.53: A is 24 % high and elongation
+# 33 % low.  The error grows with the shaping, so it is worst exactly where
+# these quantities matter -- an elongated or high-torsion magnetic axis, or
+# other exotic shapes.
+NOTE_CONST_ZETA = (
+    " NOTE: defined on a constant zeta surface. With a generalized toroidal"
+    " angle (omega != 0) that surface is not planar, and this quantity can be"
+    " badly wrong for an elongated or high-torsion magnetic axis or other"
+    " exotic shapes. Compute it on a LinearGrid with sym=False and"
+    " override_grid=False to select the line-integral branch."
+)
+
 
 @register_compute_fun(
     name="V",
@@ -210,7 +225,7 @@ def _compute_A_of_z(grid, data, extrap=False, mean=False, expand_out=False):
     units="m^{2}",
     units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant zeta surface), "
-    "extrapolated to last closed flux surface",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -235,7 +250,7 @@ def _A_of_z(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "extrapolated to last closed flux surface",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -257,7 +272,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Area of enclosed cross-section (enclosed constant zeta surface), "
-    "extrapolated to last closed flux surface",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -282,7 +297,7 @@ def _A_of_z_cross_section_surface(params, transforms, profiles, data, **kwargs):
     units="m^{2}",
     units_long="square meters",
     description="Average enclosed cross-sectional (constant zeta surface) area, "
-    "extrapolated to last closed flux surface",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=0,
     params=[],
     transforms={"grid": []},
@@ -502,7 +517,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     label="a",
     units="m",
     units_long="meters",
-    description="Average minor radius",
+    description="Average minor radius." + NOTE_CONST_ZETA,
     dim=0,
     params=[],
     transforms={},
@@ -520,11 +535,37 @@ def _a(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="a(z)",
+    label="a(\\zeta)",
+    units="m",
+    units_long="meters",
+    description="Effective minor radius of the enclosed cross-section (enclosed "
+    "constant zeta surface), sqrt(A(zeta)/pi). NOTE: with a generalized toroidal "
+    "angle (omega != 0) a constant zeta surface is not planar; see the note on "
+    "A(z).",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="z",
+    data=["A(z)"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _a_of_z(params, transforms, profiles, data, **kwargs):
+    data["a(z)"] = jnp.sqrt(data["A(z)"] / jnp.pi)
+    return data
+
+
+@register_compute_fun(
     name="R0/a",
     label="R_{0} / a",
     units="~",
     units_long="None",
-    description="Aspect ratio",
+    description="Aspect ratio." + NOTE_CONST_ZETA,
     dim=0,
     params=[],
     transforms={},
@@ -547,7 +588,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     units="m",
     units_long="meters",
     description="Perimeter of enclosed cross-section (enclosed constant zeta surface), "
-    "extrapolated to last closed flux surface",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -632,7 +673,7 @@ def _ramanujan(A, P):
     units="~",
     units_long="None",
     description="Elongation at a toroidal cross-section (constant zeta surface), "
-    "extrapolated to last closed flux surface.",
+    "extrapolated to last closed flux surface." + NOTE_CONST_ZETA,
     dim=1,
     params=[],
     transforms={"grid": []},

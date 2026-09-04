@@ -42,6 +42,7 @@ from .data_index import register_compute_fun
     "to reduce memory required for computation.",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     B_theta = transforms["grid"].meshgrid_reshape(data["B_theta"], "rtz")
 
     def fitfun(x):
@@ -77,6 +78,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _B_phi_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     B_phi = transforms["grid"].meshgrid_reshape(data["B_phi|r,t"], "rtz")
 
     def fitfun(x):
@@ -106,6 +108,7 @@ def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     w_mn = jnp.zeros((transforms["grid"].num_rho, transforms["w"].basis.num_modes))
     Bm = transforms["B"].basis.modes[:, 1]
     Bn = transforms["B"].basis.modes[:, 2]
@@ -154,6 +157,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 )
 def _w(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
+    assert not grid.sym
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     w = vmap_chunked(
         transforms["w"].transform, chunk_size=kwargs.get("surf_batch_size")
@@ -189,6 +193,7 @@ def _w(params, transforms, profiles, data, **kwargs):
 )
 def _w_t(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
+    assert not grid.sym
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     # need to close over dt which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dt=1)
@@ -224,6 +229,7 @@ def _w_t(params, transforms, profiles, data, **kwargs):
 )
 def _w_z(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
+    assert not grid.sym
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     # need to close over dz which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dz=1)
@@ -283,6 +289,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _nu_B_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -392,7 +399,8 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_Boozer_DESC",
-    label="\\frac{\\partial(\\theta_B,\\zeta_B)}{\\theta_{DESC},\\zeta_{DESC}}",
+    label="\\frac{\\partial(\\theta_B,\\zeta_B)}"
+    "{\\partial(\\theta_{DESC},\\zeta_{DESC})}",
     units="~",
     units_long="None",
     description="Jacobian determinant from Boozer coordinates (rho, theta_B, zeta_B)"
@@ -462,6 +470,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -524,6 +533,7 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -585,6 +595,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 
@@ -646,6 +657,7 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     "to reduce memory required for computation.",
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
+    assert not transforms["grid"].sym
     norm = data["Boozer transform modes norm"]
     grid = transforms["grid"]
 

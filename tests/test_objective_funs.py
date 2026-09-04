@@ -2119,11 +2119,11 @@ class TestObjectiveFunction:
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_field_periods = 20
+        field_period_transits = 20
         opts = dict(
             Y_B=13,
-            num_field_periods=num_field_periods,
-            num_well=3 * num_field_periods,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
@@ -2320,7 +2320,8 @@ def test_derivative_modes():
         jac_chunk_size="auto",
         use_jit=False,
     )
-    obj1.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj1.build()
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
@@ -2328,7 +2329,8 @@ def test_derivative_modes():
     assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
-    obj3.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj3.build()
     x = obj1.x(eq, surf)
     v = jnp.ones_like(x)
     g1 = obj1.grad(x)
@@ -3284,8 +3286,8 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_field_periods"] = 10
-        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)

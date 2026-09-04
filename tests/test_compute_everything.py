@@ -327,7 +327,7 @@ def fft_grid_data(p):
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta,
-        num_field_periods=25,
+        field_period_transits=25,
         num_well=100,
     )
     data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)

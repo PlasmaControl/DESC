@@ -233,7 +233,7 @@ class TestPolyUtils:
     """Test polynomial utilities used for local spline interpolation."""
 
     @pytest.mark.unit
-    def test_polyroot_vec(self):
+    def test_polyroot_vec_general(self):
         """Test vectorized computation of cubic polynomial exact roots."""
         c = np.arange(-24, 24).reshape(4, 6, -1).transpose(-1, 1, 0)
         # Ensure broadcasting won't hide error in implementation.
@@ -259,39 +259,84 @@ class TestPolyUtils:
                     err_msg=f"Eigenvalue branch of polyroot_vec failed at {i, *idx}.",
                 )
 
-        # Now test analytic formula branch, Ensure it filters distinct roots,
-        # and ensure zero coefficients don't bust computation due to singularities
-        # in analytic formulae which are not present in iterative eigenvalue scheme.
+    @pytest.mark.unit
+    def test_polyroot_vec_quadratic_zero_linear_term(self):
+        """Test quadratic roots when the linear coefficient is zero."""
+        c = jnp.array([[1.0, 0.0, -1.0], [2.0, 0.0, -8.0]])
+        r = polyroot_vec(c, a_min=-jnp.inf, a_max=jnp.inf, sort=True)
+        np.testing.assert_allclose(r, jnp.array([[-1.0, 1.0], [-2.0, 2.0]]))
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("companion", [True, False])
+    def test_polyroot_vec_distinct(self, companion):
+        """Test vectorized computation of cubic polynomial exact roots."""
+        a_min = -jnp.inf
+        a_max = +jnp.inf
+
+        # coefficient of poly x^3, .... x^0.
         c = np.array(
             [
-                [1, 0, 0, 0],
-                [0, 1, 0, 0],
-                [0, 0, 1, 0],
-                [0, 0, 0, 1],
-                [1, -1, -8, 12],
-                [1, -6, 11, -6],
-                [0, -6, 11, -2],
+                [1, 0, 0, 0],  # triple root (0, 0, 0)
+                [0, 1, 0, 0],  # double root (0, 0)
+                [0, 0, 1, 0],  # single root 0
+                [0, 0, 0, 1],  # no roots
+                [1, -1, -8, 12],  # (-3, 2, 2)
+                [1, -6, 11, -6],  # (1, 2, 3)
+                [0, -6, 11, -2],  # 2 distinct irrational
             ]
         )
-        r = polyroot_vec(c, sort=True, distinct=True)
+        if companion:
+            c = np.concat([np.zeros((c.shape[0], 1)), c], axis=-1)
+            assert c.shape == (7, 5)
+
+        # acceptable outputs for multiple roots are those which are
+        # consistent with continuity invariant. That is if user requests
+        # distinct roots only, then acceptable output is
+        #   1) If sign(derivative) == 0, should return only one of the roots.
+        #   2) If sign(derivative) != 0 and changes across roots, then you can
+        #      return both since even if they were very close and supposed to
+        #      be the same root in infinite precision, they are distinct roots
+        #      in finite precision, so invariants are preserved by returning both.a_max
+        #   3) If sign(derivative) != 0 and same across roots. This is not possible
+        #      for continuous functions and it means that numerical error has split
+        #      single root into multiple. If the true root is a single root,
+        #      we should return just one of the roots. If the true root has multiplicity
+        #      greater than one, we should not discard the pairs with same sign.
+        r = polyroot_vec(c, a_min=a_min, a_max=a_max, sort=True, distinct=True)
         for j in range(c.shape[0]):
             root = r[j][~np.isnan(r[j])]
-            unique_root = np.unique(np.roots(c[j]))
-            assert root.size == unique_root.size
-            np.testing.assert_allclose(
-                root,
-                unique_root,
-                err_msg=f"Analytic branch of polyroot_vec failed at {j}.",
-            )
+            unique_root = np.unique(np.roots(c[j]).real)
+            try:
+                np.testing.assert_allclose(
+                    root,
+                    unique_root,
+                    err_msg=f"Companion={companion} branch failed at {j}.",
+                )
+                assert root.size == unique_root.size
+            except AssertionError as e:
+                if j == 0 or j == 1:
+                    assert root.size == 0 or np.allclose(root, 0)
+                elif j == 4:
+                    if root.size == 3:
+                        # ok to keep both double roots here because they are
+                        # one red and one green since they lie on opposite
+                        # sides of the true double root.
+                        assert np.allclose(root, (-3, 2, 2))
+                    else:
+                        # also okay to remove both
+                        assert root.size == 1 and np.allclose(root, -3)
+                else:
+                    assert False, e
+
         c = np.array([0, 1, -1, -8, 12])
-        r = polyroot_vec(c, sort=True, distinct=True)
+        r = polyroot_vec(c, a_min=a_min, a_max=a_max, sort=True, distinct=True)
         r = r[~np.isnan(r)]
         unique_r = np.unique(np.roots(c))
         assert r.size == unique_r.size
         np.testing.assert_allclose(r, unique_r)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("der", [False, True])
+    @pytest.mark.parametrize("der", [0, 1])
     def test_cubic_val(self, der):
         """Test vectorized computation of polynomial evaluation."""
 

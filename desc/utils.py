@@ -1237,6 +1237,8 @@ def apply(d, fun=identity, subset=None, exclude=None):
         and keys not in ``exclude``.
 
     """
+    if d is None:
+        return {}
     if subset is None:
         subset = d.keys()
     elif isinstance(subset, str):

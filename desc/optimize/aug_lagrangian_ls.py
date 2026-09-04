@@ -2,7 +2,7 @@
 
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
-from desc.backend import jnp, qr
+from desc.backend import jnp, qr, qr_multiply
 from desc.utils import errorif, safediv, setdefault
 
 from .bound_utils import (
@@ -25,6 +25,7 @@ from .utils import (
     inequality_to_bounds,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    scale_columns,
     solve_triangular_regularized,
 )
 
@@ -284,12 +285,10 @@ def lsq_auglag(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # TODO: place this function under JIT to use in-place operation (#1669)
-    # we don't need unscaled J anymore, so we overwrite
-    # it with J_h = J * d to avoid carrying so many J-sized matrices
-    # in memory, which can be large
-    J *= d
-    J_h = J
+    # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
+    # carrying so many J-sized matrices in memory, which can be large. The buffer is
+    # donated so the scaling doesn't allocate a second copy of J.
+    J_h = scale_columns(J, d)
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -320,11 +319,6 @@ def lsq_auglag(  # noqa: C901
     tr_method = options.pop("tr_method", "qr")
 
     errorif(
-        len(options) > 0,
-        ValueError,
-        "Unknown options: {}".format([key for key in options]),
-    )
-    errorif(
         tr_method not in ["cho", "svd", "qr"],
         ValueError,
         "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
@@ -353,6 +347,12 @@ def lsq_auglag(  # noqa: C901
     alpha_eta = options.pop("alpha_eta", 0.1)
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
+
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)
@@ -408,15 +408,15 @@ def lsq_auglag(  # noqa: C901
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
             if tall:
-                Q, R = qr(J_a, mode="economic")
-                p_newton = solve_triangular_regularized(R, -Q.T @ L_a)
+                Qt_La, R = qr_multiply(J_a, L_a, mode="right")
+                p_newton = solve_triangular_regularized(R, -Qt_La)
             else:
-                Q, R = qr(J_a.T, mode="economic")
-                p_newton = Q @ solve_triangular_regularized(R.T, -L_a, lower=True)
-            # We don't need the Q and R matrices anymore
-            # Trust region solver will solve the augmented system
-            # with a new Q and R
-            del Q, R
+                # min-norm Newton step uses the QR of J_a.T
+                Q, Rt = qr(J_a.T, mode="economic")
+                p_newton = Q @ solve_triangular_regularized(Rt.T, -L_a, lower=True)
+                del Q, Rt
+                # the tr subproblem still needs the QR of J_a itself
+                Qt_La, R = qr_multiply(J_a, L_a, mode="right")
 
         actual_reduction = -1
         Lactual_reduction = -1
@@ -439,7 +439,7 @@ def lsq_auglag(  # noqa: C901
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
-                    p_newton, L_a, J_a, trust_radius, alpha
+                    p_newton, Qt_La, R, trust_radius, alpha
                 )
 
             step = d * step_h  # Trust-region solution in the original space.
@@ -523,9 +523,18 @@ def lsq_auglag(  # noqa: C901
             L = L_new
             cost = cost_new
             Lcost = Lcost_new
+            # Delete old arrays before computing new one
+            # otherwise the peak is bigger by J-sized arrays
+            del J_h, J_a
+            if tr_method == "svd":
+                del U, s, Vt
+            elif tr_method == "cho":
+                del B_h
+            elif tr_method == "qr":
+                del R
             J = lagjac(z, y, mu, *args)
             njev += 1
-            g = jnp.dot(J.T, L)
+            g = jnp.dot(L, J)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -548,9 +557,10 @@ def lsq_auglag(  # noqa: C901
                 # if we update lagrangian params, need to recompute L and J
                 L = lagfun(f, c, y, mu)
                 Lcost = 0.5 * jnp.dot(L, L)
+                del J
                 J = lagjac(z, y, mu, *args)
                 njev += 1
-                g = jnp.dot(J.T, L)
+                g = jnp.dot(L, J)
 
                 if jac_scale:
                     scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -567,11 +577,7 @@ def lsq_auglag(  # noqa: C901
             d = v**0.5 * scale
             diag_h = g * dv * scale
             g_h = g * d
-            # we don't need unscaled J anymore, so we overwrite
-            # it with J_h = J * d to avoid carrying so many J-sized matrices
-            # in memory, which can be large
-            J *= d
-            J_h = J
+            J_h = scale_columns(J, d)
             del J
 
             if g_norm < gtol and constr_violation < ctol:
@@ -603,6 +609,9 @@ def lsq_auglag(  # noqa: C901
         success, message = False, STATUS_MESSAGES["maxiter"]
     x, s = z2xs(z)
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
+    # after overwriting J_h with J*d, we have to revert back and store the
+    # unscaled version
+    J_h = scale_columns(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         s=s,
@@ -613,7 +622,7 @@ def lsq_auglag(  # noqa: C901
         fun=f,
         grad=g,
         v=v,
-        jac=J_h * 1 / d,  # after overwriting J_h, we have to revert back,
+        jac=J_h,
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

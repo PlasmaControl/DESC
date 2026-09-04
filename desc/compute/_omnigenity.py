@@ -14,6 +14,7 @@ import functools
 from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
+from desc.batching import vmap_chunked
 
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
@@ -36,6 +37,9 @@ from .data_index import register_compute_fun
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -44,7 +48,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     def fitfun(x):
         return transforms["B"].fit(x.flatten(order="F"))
 
-    B_theta_mn = vmap(fitfun)(B_theta)
+    B_theta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_theta)
     # modes stored as shape(rho, mn) flattened
     data["B_theta_mn"] = B_theta_mn.flatten()
     return data
@@ -69,6 +73,9 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -77,7 +84,7 @@ def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     def fitfun(x):
         return transforms["B"].fit(x.flatten(order="F"))
 
-    B_zeta_mn = vmap(fitfun)(B_phi)
+    B_zeta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_phi)
     # modes stored as shape(rho, mn) flattened
     data["B_phi_mn"] = B_zeta_mn.flatten()
     return data
@@ -144,12 +151,19 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _w(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     assert not grid.sym
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
-    w = vmap(transforms["w"].transform)(w_mn)  # shape(rho, theta*zeta)
+    w = vmap_chunked(
+        transforms["w"].transform, chunk_size=kwargs.get("surf_batch_size")
+    )(
+        w_mn
+    )  # shape(rho, theta*zeta)
     w = w.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w = jnp.moveaxis(w, 0, 1)
     data["w_Boozer"] = w.flatten(order="F")
@@ -173,6 +187,9 @@ def _w(params, transforms, profiles, data, **kwargs):
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _w_t(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
@@ -180,7 +197,9 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     # need to close over dt which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dt=1)
-    w_t = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
+    w_t = vmap_chunked(fun, chunk_size=kwargs.get("surf_batch_size"))(
+        w_mn
+    )  # shape(rho, theta*zeta)
     w_t = w_t.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w_t = jnp.moveaxis(w_t, 0, 1)
     data["w_Boozer_t"] = w_t.flatten(order="F")
@@ -204,6 +223,9 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _w_z(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
@@ -211,7 +233,9 @@ def _w_z(params, transforms, profiles, data, **kwargs):
     w_mn = data["w_Boozer_mn"].reshape((grid.num_rho, -1))
     # need to close over dz which can't be vmapped
     fun = lambda x: transforms["w"].transform(x, dz=1)
-    w_z = vmap(fun)(w_mn)  # shape(rho, theta*zeta)
+    w_z = vmap_chunked(fun, chunk_size=kwargs.get("surf_batch_size"))(
+        w_mn
+    )  # shape(rho, theta*zeta)
     w_z = w_z.reshape((grid.num_rho, grid.num_theta, grid.num_zeta), order="F")
     w_z = jnp.moveaxis(w_z, 0, 1)
     data["w_Boozer_z"] = w_z.flatten(order="F")
@@ -260,6 +284,9 @@ def _nu(params, transforms, profiles, data, **kwargs):
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _nu_B_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -289,7 +316,9 @@ def _nu_B_mn(params, transforms, profiles, data, **kwargs):
             data["nu"],
         ),
     )
-    nu_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, nu)
+    nu_B_mn = vmap_chunked(
+        fun, in_axes=(0, 0, 0, 0, 0), chunk_size=kwargs.get("surf_batch_size")
+    )(rho, theta_B, zeta_B, sqrtg_B_desc, nu)
     data["nu_B_mn"] = nu_B_mn.flatten()
     return data
 
@@ -436,6 +465,9 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     ],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -465,7 +497,9 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
             data["sqrt(g)_Boozer"],
         ),
     )
-    sqrtg_B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, sqrtg_B)
+    sqrtg_B_mn = vmap_chunked(
+        fun, in_axes=(0, 0, 0, 0, 0), chunk_size=kwargs.get("surf_batch_size")
+    )(rho, theta_B, zeta_B, sqrtg_B_desc, sqrtg_B)
     data["sqrt(g)_Boozer_mn"] = sqrtg_B_mn.flatten()
     return data
 
@@ -494,6 +528,9 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     aliases=["|B|_mn"],
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -523,7 +560,9 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
             data["|B|"],
         ),
     )
-    B_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, B)
+    B_mn = vmap_chunked(
+        fun, in_axes=(0, 0, 0, 0, 0), chunk_size=kwargs.get("surf_batch_size")
+    )(rho, theta_B, zeta_B, sqrtg_B_desc, B)
     data["|B|_mn_B"] = B_mn.flatten()
     return data
 
@@ -551,6 +590,9 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     ],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _R_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -580,7 +622,9 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
             data["R"],
         ),
     )
-    R_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, R)
+    R_mn = vmap_chunked(
+        fun, in_axes=(0, 0, 0, 0, 0), chunk_size=kwargs.get("surf_batch_size")
+    )(rho, theta_B, zeta_B, sqrtg_B_desc, R)
     data["R_mn_B"] = R_mn.flatten()
     return data
 
@@ -608,6 +652,9 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
     ],
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _Z_mn(params, transforms, profiles, data, **kwargs):
     assert not transforms["grid"].sym
@@ -637,7 +684,9 @@ def _Z_mn(params, transforms, profiles, data, **kwargs):
             data["Z"],
         ),
     )
-    Z_mn = vmap(fun)(rho, theta_B, zeta_B, sqrtg_B_desc, Z)
+    Z_mn = vmap_chunked(
+        fun, in_axes=(0, 0, 0, 0, 0), chunk_size=kwargs.get("surf_batch_size")
+    )(rho, theta_B, zeta_B, sqrtg_B_desc, Z)
     data["Z_mn_B"] = Z_mn.flatten()
     return data
 
@@ -898,6 +947,9 @@ def _omni_map_zeta_B(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["eta"],
     parameterization="desc.magnetic_fields._core.OmnigenousField",
+    surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
+    " to computing all flux surfaces simultaneously. Decrease "
+    "to reduce memory required for computation.",
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_B, M_B)
@@ -918,7 +970,9 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
         return interp1d(x, eta_input, B, method="monotonic-0")
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
-    B = vmap(_interp)(jnp.abs(eta), B_input.T)  # shape (nr, nt*nz)
+    B = vmap_chunked(_interp, in_axes=(0, 0), chunk_size=kwargs.get("surf_batch_size"))(
+        jnp.abs(eta), B_input.T
+    )  # shape (nr, nt*nz)
     B = B.reshape(
         (
             transforms["grid"].num_rho,

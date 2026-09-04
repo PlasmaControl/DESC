@@ -611,6 +611,38 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
 
     @pytest.mark.unit
+    def test_boundary_error_things_fixed(self):
+        """Test BoundaryError for eq_fixed/field_fixed combos."""
+        eq = Equilibrium(L=3, M=3, N=3, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=eq.M, N_Phi=eq.N
+        )
+        eq.solve()
+
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=100, check_intersection=False)
+        field = [coilset, ToroidalMagneticField(B0=0, R0=1)]
+
+        def test(eq_fixed=False, field_fixed=False):
+            obj = BoundaryError(eq, field, eq_fixed=eq_fixed, field_fixed=field_fixed)
+            obj.build()
+            f = obj.compute_scaled_error(*obj.xs())
+            n = len(f) // 3
+            # first n should be B*n errors
+            np.testing.assert_allclose(f[:n], 0, atol=1e-4)
+            # next n should be B^2 errors
+            np.testing.assert_allclose(f[n : 2 * n], 0, atol=5e-2)
+            # last n should be K errors
+            np.testing.assert_allclose(f[2 * n :], 0, atol=3e-2)
+
+        test(eq_fixed=False, field_fixed=False)
+        test(eq_fixed=True)
+        test(field_fixed=True)
+
+        with pytest.raises(ValueError, match="At least one"):
+            BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
     def test_boundary_error_vacuum(self):
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)
@@ -2087,11 +2119,11 @@ class TestObjectiveFunction:
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_field_periods = 20
+        field_period_transits = 20
         opts = dict(
             Y_B=13,
-            num_field_periods=num_field_periods,
-            num_well=3 * num_field_periods,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
@@ -2288,7 +2320,8 @@ def test_derivative_modes():
         jac_chunk_size="auto",
         use_jit=False,
     )
-    obj1.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj1.build()
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
@@ -2296,7 +2329,8 @@ def test_derivative_modes():
     assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
-    obj3.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj3.build()
     x = obj1.x(eq, surf)
     v = jnp.ones_like(x)
     g1 = obj1.grad(x)
@@ -3252,8 +3286,8 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_field_periods"] = 10
-        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
@@ -4136,17 +4170,18 @@ class TestObjectiveNaNGrad:
             NFP=1,
             sym=True,
         )
+
         eq = Equilibrium(Psi=6e-3, M=4, N=4, surface=surf)
         field = OmnigenousField(
-            L_B=0,
-            M_B=2,
+            L_B=1,
+            M_B=3,
             L_x=1,
             M_x=1,
             N_x=1,
             NFP=eq.NFP,
             helicity=helicity,
-            B_lm=np.array([0.8, 1.2]),
         )
+
         obj = ObjectiveFunction(Omnigenity(eq=eq, field=field))
         obj.build()
         g = obj.grad(obj.x())
@@ -4515,9 +4550,11 @@ def test_deflation_operator_all_Nones():
 @pytest.mark.unit
 def test_coil_objective_input(DummyMixedCoilSet):
     """Tests broadcasting for inputs to _CoilObjectives."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
 
     weight = [1.0, 2.0, 3.0, 4.0]
+    weight_np = np.asarray(weight)
     weight_expanded = [1.0, 2.0, 2.0, 2.0, 3.0, 4.0]
     bounds = ([0.0, 1.0, 2.0, 3.0], [4.0, [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
@@ -4529,6 +4566,11 @@ def test_coil_objective_input(DummyMixedCoilSet):
     np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
     np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
     np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    obj_weight_1 = obj.weight
+    # test list vs. np array input
+    obj = CoilLength(coilset, bounds=bounds, weight=weight_np)
+    obj.build()
+    np.testing.assert_allclose(obj.weight, obj_weight_1, atol=1e-13)
 
     obj = CoilLength(coilset, target=target)
     obj.build()
@@ -4539,14 +4581,17 @@ def test_coil_objective_input(DummyMixedCoilSet):
     assert np.size(obj._bounds[0]) == 1 and np.size(obj._bounds[1]) == 1
     assert np.size(obj._weight) == 1
 
+    weight = [0.0, 2.0, 3.0, 4.0]
     obj = CoilCurvature(coilset, bounds=bounds, weight=weight)
     obj.build()
 
 
 @pytest.mark.unit
 def test_coil_objective_indices(DummyMixedCoilSet):
-    """Tests that setting "weights" to zero correctly masks _CoilObjectives errors."""
+    """Tests that "weights" with zeros correctly masks _CoilObjectives errors."""
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
     coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [single coil, single coil, single coil]
     coilsetB = MixedCoilSet((coilsetA[1][1], coilsetA[2], coilsetA[3]))
 
     weight = [0, [1, 0, 0], 1, 1]
@@ -4557,32 +4602,76 @@ def test_coil_objective_indices(DummyMixedCoilSet):
     compA = objA.compute_scaled_error(None)
     compB = objB.compute_scaled_error(None)
     np.testing.assert_allclose(compA, compB, atol=1e-13)
+    assert objA.dim_f == 3
+
+    objC = CoilCurvature(coilsetA, weight=weight, normalize=False)
+    objD = CoilCurvature(coilsetB, normalize=False)
+    objC.build()
+    objD.build()
+    compC = objC.compute_scaled_error(None)
+    compD = objD.compute_scaled_error(None)
+    np.testing.assert_allclose(compC, compD, atol=1e-13)
+    assert objC.dim_f == objD.dim_f
+
+    objE = CoilTorsion(coilsetA, weight=weight, normalize=False)
+    objF = CoilTorsion(coilsetB, normalize=False)
+    objE.build()
+    objF.build()
+    compE = objE.compute_scaled_error(None)
+    compF = objF.compute_scaled_error(None)
+    np.testing.assert_allclose(compE, compF, atol=1e-13)
+    assert objE.dim_f == objF.dim_f
 
 
 @pytest.mark.unit
 def test_coil_objective_setter(DummyMixedCoilSet):
     """Tests setters for _CoilObjectives."""
-    coilset = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
-    obj = CoilLength(coilset)
+    # Consists of [coilset with 1 coil, coilset with 3 coils, single coil, single coil]
+    coilsetA = load(load_from=str(DummyMixedCoilSet["output_path"]), file_format="hdf5")
+    # Consists of [coilset with 1 coil, coilset with 3 coils]
+    coilsetB = MixedCoilSet((coilsetA[0], coilsetA[1]), check_intersection=False)
 
-    weight = [1.0, 1.0, 0.0, 0.0]
-    weight_expanded = [1.0, 1.0, 1.0, 1.0]
-    obj.weight = weight
-    obj.build()
-    np.testing.assert_allclose(obj.weight, weight_expanded, atol=1e-13)
+    objA = CoilLength(coilsetA)
+    objB = CoilLength(coilsetB)
+
+    weightA = [1.0, 2.0, 0.0, 0.0]
+    weightB = [1.0, 2.0]
+    weightAB_expanded = [1.0, 2.0, 2.0, 2.0]
+    objA.weight = weightA
+    objB.weight = weightB
+    objA.build()
+    objB.build()
+    np.testing.assert_allclose(objA.weight, objB.weight, atol=1e-13)
+    np.testing.assert_allclose(objA.weight, weightAB_expanded, atol=1e-13)
 
     bounds = ([0.0, 1.0, 2.0, 3.0], [[4.0], [5.0, 6.0, 7.0], 8.0, 9.0])
     bounds_expanded = ([0.0, 1.0, 1.0, 1.0], [4.0, 5.0, 6.0, 7.0])
     target = [[4.0], 5.0, 8.0, 9.0]
     target_expanded = [4.0, 5.0, 5.0, 5.0]
 
-    obj.bounds = bounds
-    np.testing.assert_allclose(obj.bounds[0], bounds_expanded[0], atol=1e-13)
-    np.testing.assert_allclose(obj.bounds[1], bounds_expanded[1], atol=1e-13)
+    objA.bounds = bounds
+    np.testing.assert_allclose(objA.bounds[0], bounds_expanded[0], atol=1e-13)
+    np.testing.assert_allclose(objA.bounds[1], bounds_expanded[1], atol=1e-13)
 
-    obj.bounds = None
-    obj.target = target
-    np.testing.assert_allclose(obj.target, target_expanded, atol=1e-13)
+    objA.bounds = None
+    objA.target = target
+    np.testing.assert_allclose(objA.target, target_expanded, atol=1e-13)
+
+    objC = CoilCurvature(coilsetA)
+    objD = CoilCurvature(coilsetB)
+
+    objC.weight = weightA
+    objD.weight = weightB
+    objC.build()
+    objD.build()
+    objC.bounds = bounds
+    objC.target = target
+    num_nodes = len(objD.weight)
+    np.testing.assert_allclose(objC.weight, objD.weight, atol=1e-13)
+
+    assert len(objC.weight) == num_nodes
+    assert len(objC.bounds[0]) == num_nodes
+    assert len(objC.target) == num_nodes
 
 
 @pytest.mark.unit

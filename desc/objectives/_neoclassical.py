@@ -1,8 +1,11 @@
 """Objectives for neoclassical transport."""
 
+import jax
+from packaging import version
+
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
-from desc.integrals.bounce_integral import Options
+from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
@@ -17,6 +20,11 @@ class EffectiveRipple(_Objective):
     The effective ripple (ε) proxy estimates the neoclassical transport
     coefficients in the banana regime. To ensure low neoclassical transport,
     a stellarator is typically optimized so that ε < 10⁻².
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     References
     ----------
@@ -38,7 +46,6 @@ class EffectiveRipple(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
-            jac_chunk_size=False,
         )
     )
 
@@ -58,14 +65,15 @@ class EffectiveRipple(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="rev",
+        deriv_mode="rev",  # TODO: change to deriv_mode="auto" once jax>0.11.0
+        jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
         X=32,
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         num_well=None,
         num_quad=32,
         num_pitch=51,
@@ -76,10 +84,11 @@ class EffectiveRipple(_Objective):
         **kwargs,
     ):
         errorif(
-            deriv_mode == "fwd",
+            deriv_mode == "fwd"
+            and (version.parse(jax.__version__) < version.parse("0.11.0")),
             ValueError,
-            "Reverse mode recommended for the objective: EffectiveRipple.\n"
-            "Make an issue if you need forward mode.",
+            "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
+            "EffectiveRipple.",
         )
         try:
             import jax_finufft  # noqa: F401
@@ -93,9 +102,23 @@ class EffectiveRipple(_Objective):
             nufft_eps = 0.0
         nufft_eps = float(nufft_eps)
 
+        warnif(
+            "use_bounce1d" in kwargs,
+            FutureWarning,
+            "Argument use_bounce1d has been deprecated and is no longer used.",
+        )
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of "
+                "field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP",
+            )
+            field_period_transits = kwargs.pop("num_transit") * eq.NFP
+
         if target is None and bounds is None:
             target = 0.0
-
         self._grid = grid
         if alpha is None:
             alpha = jnp.zeros(1)
@@ -104,7 +127,7 @@ class EffectiveRipple(_Objective):
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -123,8 +146,8 @@ class EffectiveRipple(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
-            jac_chunk_size=None,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -138,7 +161,7 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        Options._build_objective(self, "effective ripple", eta=1)
+        BounceOptions._build_objective(self, "effective ripple", eta=1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):

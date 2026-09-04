@@ -5,7 +5,7 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..utils import cross, dot, parse_argname_change, safediv
 from .data_index import register_compute_fun
 
@@ -114,11 +114,16 @@ def _poloidal_drift_secular(data, B, pitch):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     [1] Poloidal motion of trapped particle orbits in real-space coordinates.
         V. V. Nemov, S. V. Kasilov, W. Kernbichler, G. O. Leitold.
@@ -145,7 +150,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = BounceOptions.guess(-2, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
@@ -179,11 +184,18 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         )
 
     out = Bounce2D.batch(
-        Gamma_c, _gamma_c_data(data), data, angle, grid, opts.surf_batch_size
+        Gamma_c,
+        _gamma_c_data(data),
+        data,
+        angle,
+        grid,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["Gamma_c"] = (
-        grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
+        grid.expand(out)
+        / data["V_psi"]
+        / (opts.field_period_transits / grid.NFP * 2**0.5)
     )
     return data
 
@@ -217,9 +229,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Nemov et al.
 
@@ -234,7 +246,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, loop=True, **kwargs)
+    opts = BounceOptions.guess(-2, grid, loop=True, **kwargs)
 
     def gamma_c0(data):
         pitch_inv, _ = Bounce2D.pitch_quad(
@@ -297,11 +309,16 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Fast ion confinement proxy as defined by Velasco et al.
+
+    Notes
+    -----
+    A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     [1] A model for the fast evaluation of prompt losses of energetic ions in
         stellarators. Equation 16.
@@ -317,7 +334,7 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
     )
     grid = transforms["grid"]
-    opts = Options.guess(-1, grid, **kwargs)
+    opts = BounceOptions.guess(-1, grid, **kwargs)
 
     def Gamma_c(data):
         bounce = Bounce2D(grid, data, data["angle"], **opts)
@@ -351,10 +368,12 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
         data,
         angle,
         grid,
-        opts.surf_batch_size,
+        surf_batch_size=opts.surf_batch_size,
     )
     assert out.ndim == 1
     data["Gamma_c Velasco"] = (
-        grid.expand(out) / data["V_psi"] / (opts.num_field_periods / grid.NFP * 2**0.5)
+        grid.expand(out)
+        / data["V_psi"]
+        / (opts.field_period_transits / grid.NFP * 2**0.5)
     )
     return data

@@ -3,8 +3,10 @@
 import pickle
 import warnings
 
+import jax_finufft
 import numpy as np
 import pytest
+from packaging.version import Version
 
 from desc.coils import (
     FourierPlanarCoil,
@@ -32,6 +34,8 @@ from desc.magnetic_fields import (
     OmnigenousField,
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
+
+OLD_FINUFFT = Version(jax_finufft.__version__) <= Version("1.2.0")
 
 
 def _compare_against_master(
@@ -76,11 +80,13 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
+        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+        atol = 1e-8
         errorif(
             not np.all(
                 (
-                    np.isclose(res, 0, rtol=1e-8, atol=1e-8)
-                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=1e-8, atol=1e-8)[
+                    np.isclose(res, 0, rtol=rtol, atol=atol)
+                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=rtol, atol=atol)[
                         :, np.newaxis
                     ]
                 )
@@ -321,7 +327,7 @@ def fft_grid_data(p):
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta,
-        num_field_periods=25,
+        field_period_transits=25,
         num_well=100,
     )
     data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)

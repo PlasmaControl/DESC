@@ -20,6 +20,8 @@ if sys.argv[2] in ["GPU", "gpu"]:
 
     set_device("gpu")
 
+from benchmark_cpu_small import _test_quadratic_flux
+
 import desc.examples
 from desc.backend import jax
 from desc.grid import LinearGrid
@@ -187,13 +189,13 @@ def _test_proximal_ripple(method):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
-    num_field_periods = 100
+    field_period_transits = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_field_periods=num_field_periods,
-                num_well=2 * num_field_periods,
+                field_period_transits=field_period_transits,
+                num_well=2 * field_period_transits,
                 num_quad=16,
                 Y_B=13,
             )
@@ -216,8 +218,8 @@ def test_eq_solve():
     eq = desc.examples.get("precise_QA")
     eq.change_resolution(L=res, M=res, L_grid=2 * res, M_grid=2 * res)
     # this test is mostly for intermediate operations, so having a chunk size
-    # of 100 will be fine to see their effect
-    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100, deriv_mode="batched")
+    # of 30 will be fine to see their effect
+    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=30, deriv_mode="batched")
     obj.build(verbose=0)
     eq.solve(
         objective=obj,
@@ -228,6 +230,14 @@ def test_eq_solve():
         maxiter=2,
         verbose=0,
     )
+
+
+@pytest.mark.memory
+def test_objective_quadratic_flux_jac():
+    """Benchmark computing jacobian of QuadraticFlux."""
+    run, x = _test_quadratic_flux(20, "jac")
+    for _ in range(2):
+        _ = run(x)
 
 
 if __name__ == "__main__":
@@ -249,5 +259,7 @@ if __name__ == "__main__":
         test_proximal_jac_ripple()
     elif func == "test_eq_solve":
         test_eq_solve()
+    elif func == "test_objective_quadratic_flux_jac":
+        test_objective_quadratic_flux_jac()
     else:
         print(f"Invalid function name {func}.")

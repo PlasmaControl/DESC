@@ -200,7 +200,7 @@ def _Te_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Te_rr",
-    label="\\partial_{\\rho \\rho} T_e",
+    label="\\partial_{\\rho\\rho} T_e",
     units="eV",
     units_long="electron-Volts",
     description="Electron temperature, second radial derivative",
@@ -290,7 +290,7 @@ def _ne_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="ne_rr",
-    label="\\partial_{\\rho \\rho} n_e",
+    label="\\partial_{\\rho\\rho} n_e",
     units="m^{-3}",
     units_long="1 / cubic meters",
     description="Electron density, second radial derivative",
@@ -359,7 +359,7 @@ def _Ti_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="Ti_rr",
-    label="\\partial_{\\rho \\rho} T_i",
+    label="\\partial_{\\rho\\rho} T_i",
     units="eV",
     units_long="electron-Volts",
     description="Ion temperature, second radial derivative",
@@ -429,6 +429,34 @@ def _ni_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="ni_rr",
+    label="\\partial_{\\rho\\rho} n_i",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Ion density, second radial derivative",
+    dim=1,
+    params=["ni_l"],
+    transforms={"grid": []},
+    profiles=["ion_density"],
+    coordinates="r",
+    data=["ne", "ne_r", "ne_rr", "Zeff", "Zeff_r", "Zeff_rr"],
+)
+def _ni_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["ion_density"] is not None:
+        data["ni_rr"] = profiles["ion_density"].compute(
+            transforms["grid"], params["ni_l"], dr=2
+        )
+    else:
+        data["ni_rr"] = (
+            data["ne_rr"] / data["Zeff"]
+            - (data["ne"] * data["Zeff_rr"] + 2 * data["ne_r"] * data["Zeff_r"])
+            / data["Zeff"] ** 2
+            + 2 * data["ne"] * data["Zeff_r"] ** 2 / data["Zeff"] ** 3
+        )
+    return data
+
+
+@register_compute_fun(
     name="Zeff",
     label="Z_{eff}",
     units="~",
@@ -471,6 +499,29 @@ def _Zeff_r(params, transforms, profiles, data, **kwargs):
         )
     else:
         data["Zeff_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Zeff_rr",
+    label="\\partial_{\\rho\\rho} Z_{eff}",
+    units="~",
+    units_long="None",
+    description="Effective atomic number, second radial derivative",
+    dim=1,
+    params=["Zeff_l"],
+    transforms={"grid": []},
+    profiles=["atomic_number"],
+    coordinates="r",
+    data=["0"],
+)
+def _Zeff_rr(params, transforms, profiles, data, **kwargs):
+    if profiles["atomic_number"] is not None:
+        data["Zeff_rr"] = profiles["atomic_number"].compute(
+            transforms["grid"], params["Zeff_l"], dr=2
+        )
+    else:
+        data["Zeff_rr"] = jnp.nan * data["0"]
     return data
 
 

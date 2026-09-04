@@ -15,7 +15,7 @@ from diffrax import (
 )
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jit, jnp, tree_map
+from desc.backend import jax, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -130,7 +130,6 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         """Coordinate frame of the model."""
         return self._frame
 
-    @jit
     def vf(self, t, x, args):
         """RHS of guiding center trajectories without collisions or slowing down.
 
@@ -415,7 +414,8 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
         q=2,
     ):
         rho0, theta0, zeta0, xi0, E, m, q = map(
-            jnp.atleast_1d, (rho0, theta0, zeta0, xi0, E, m, q)
+            lambda x: jnp.atleast_1d(jnp.asarray(x)),
+            (rho0, theta0, zeta0, xi0, E, m, q),
         )
         rho0, theta0, zeta0, xi0, E, m, q = jnp.broadcast_arrays(
             rho0, theta0, zeta0, xi0, E, m, q
@@ -547,7 +547,9 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
         m=4,
         q=2,
     ):
-        R0, phi0, Z0, xi0, E, m, q = map(jnp.atleast_1d, (R0, phi0, Z0, xi0, E, m, q))
+        R0, phi0, Z0, xi0, E, m, q = map(
+            lambda x: jnp.atleast_1d(jnp.asarray(x)), (R0, phi0, Z0, xi0, E, m, q)
+        )
         R0, phi0, Z0, xi0, E, m, q = jnp.broadcast_arrays(R0, phi0, Z0, xi0, E, m, q)
         self.m = m * proton_mass
         self.q = q * elementary_charge
@@ -690,7 +692,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
         is_curve_magnetic_axis=False,
     ):
         self.curve = curve
-        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        E, m, q = map(lambda x: jnp.atleast_1d(jnp.asarray(x)), (E, m, q))
         self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
         self.m = jnp.broadcast_to(m, (N,)) * proton_mass
         self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
@@ -849,7 +851,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         is_surface_from_eq=False,
     ):
         self.surface = surface
-        E, m, q = map(jnp.atleast_1d, (E, m, q))
+        E, m, q = map(lambda x: jnp.atleast_1d(jnp.asarray(x)), (E, m, q))
         self.E = jnp.broadcast_to(E, (N,)) * JOULE_PER_EV
         self.m = jnp.broadcast_to(m, (N,)) * proton_mass
         self.q = jnp.broadcast_to(q, (N,)) * elementary_charge
@@ -977,6 +979,7 @@ def trace_particles(
     bounds=None,
     solver=Tsit5(scan_kind="bounded"),
     adjoint=RecursiveCheckpointAdjoint(),
+    use_precomputed_source=True,
     chunk_size=None,
     options=None,
     throw=True,
@@ -1022,6 +1025,13 @@ def trace_particles(
         How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
         use `diffrax.ForwardMode()`.
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Not used for tracing from Equilibrium field.
+        Default is True.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1094,6 +1104,7 @@ def trace_particles(
         adjoint=adjoint,
         event=Event(default_event),
         options=options,
+        use_precomputed_source=use_precomputed_source,
         chunk_size=chunk_size,
         throw=throw,
         return_aux=return_aux,
@@ -1115,6 +1126,7 @@ def _trace_particles(
     adjoint,
     event,
     options,
+    use_precomputed_source=True,
     chunk_size=None,
     throw=False,
     return_aux=False,
@@ -1151,6 +1163,14 @@ def _trace_particles(
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
         y0 = y0.at[:, 1].set(yp)
+
+    # For supported fields, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing, i.e. the coil geometry (which is independent of the evaluation
+    # points) at every step of every particle.
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
+        grid = options.pop("source_grid", None)
+        field = field._as_precomputed_source(grid, params)
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445

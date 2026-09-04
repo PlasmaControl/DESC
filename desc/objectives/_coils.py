@@ -873,6 +873,7 @@ class CoilIntegratedCurvature(_CoilObjective):
         )
         return out[self._coilset_tree["objective_mask"]]
 
+
 class CoilBounds(_CoilObjective):
     """Target the coil to stay inside a torus.
 
@@ -929,7 +930,6 @@ class CoilBounds(_CoilObjective):
             jac_chunk_size=jac_chunk_size,
         )
 
-        
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -969,17 +969,28 @@ class CoilBounds(_CoilObjective):
         """
         data = super().compute(params, constants=constants)
         data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
-        #out = jnp.array([dat["R"]  for dat in data])
+        # out = jnp.array([dat["R"]  for dat in data])  # noqa: E800
 
-	#rad = np.sqrt((data["R"] - 0.96)**2 + data["Z"] ** 2)
-        ##out = jnp.array([jnp.sum(jnp.maximum(0.7 - dat["R"], 0)**2) + 
-        ##jnp.sum(jnp.maximum(dat["R"] - 1.2, 0)**2) + 
-        ##jnp.sum(jnp.maximum(-0.2 - dat["Z"], 0)**2) + 
-        ##jnp.sum(jnp.maximum(dat["Z"] - 0.2, 0)**2) for dat in data])   
+        # rad = np.sqrt((data["R"] - 0.96)**2 + data["Z"] ** 2)  # noqa: E800
+        ##out = jnp.array([jnp.sum(jnp.maximum(0.7 - dat["R"], 0)**2) +
+        ##jnp.sum(jnp.maximum(dat["R"] - 1.2, 0)**2) +
+        ##jnp.sum(jnp.maximum(-0.2 - dat["Z"], 0)**2) +
+        ##jnp.sum(jnp.maximum(dat["Z"] - 0.2, 0)**2) for dat in data])
 
-        out = jnp.array([jnp.sum(jnp.maximum(jnp.sqrt((dat["R"] - 0.96)**2 + dat["Z"] ** 2)-0.18, 0)**2) for dat in data])   
+        out = jnp.array(
+            [
+                jnp.sum(
+                    jnp.maximum(
+                        jnp.sqrt((dat["R"] - 0.96) ** 2 + dat["Z"] ** 2) - 0.18, 0
+                    )
+                    ** 2
+                )
+                for dat in data
+            ]
+        )
 
         return out[self._coilset_tree["coilset_mask"]]
+
 
 class CoilSetMinDistance(_Objective):
     """Target the minimum distance between coils in a coilset.
@@ -2176,13 +2187,13 @@ class SurfaceMatch(_Objective):
     _scalar = False
     _linear = False
     _print_value_fmt = "Surfaces match: "
-    _units = "(T m^2)"
+    _units = "(m)"
     _coordinates = "rtz"
 
     def __init__(
         self,
         surface,
-	#field, 
+        # field,
         surfacet,
         target=None,
         bounds=None,
@@ -2194,17 +2205,14 @@ class SurfaceMatch(_Objective):
         surfacet_fixed=True,
         *,
         jac_chunk_size=None,
-        #bs_chunk_size=None,
         **kwargs,
     ):
         if target is None and bounds is None:
             target = 0
         self._surface = surface
-        #self._field = field
         self._surfacet = surfacet
         self._surfacet_fixed = surfacet_fixed
         self._surfacet_grid = surfacet_grid
-        #self._bs_chunk_size = bs_chunk_size
 
         things = [surface]
         if not surfacet_fixed:
@@ -2252,13 +2260,19 @@ class SurfaceMatch(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._dim_f = surfacet_grid.num_nodes
+        # residual is the signed (dR, dZ) pair at each node, see compute()
+        self._dim_f = 2 * surfacet_grid.num_nodes
 
         w = surfacet_grid.weights
         w *= jnp.sqrt(surfacet_grid.num_nodes)
+        w = jnp.tile(w, 2)
 
-        surfacet_profiles = get_profiles(self._data_keys, obj=surfacet, grid=surfacet_grid)
-        surfacet_transforms = get_transforms(self._data_keys, obj=surfacet, grid=surfacet_grid)
+        surfacet_profiles = get_profiles(
+            self._data_keys, obj=surfacet, grid=surfacet_grid
+        )
+        surfacet_transforms = get_transforms(
+            self._data_keys, obj=surfacet, grid=surfacet_grid
+        )
 
         # Target surface data is calculate in build
         # because that's not going to change
@@ -2307,13 +2321,11 @@ class SurfaceMatch(_Objective):
         Returns
         -------
         f : ndarray
-            Bnorm on the QFM surface from the external field
+            Signed R and Z displacement from the target surface at each node,
+            concatenated as [dR, dZ], length ``2 * surfacet_grid.num_nodes`` (m).
 
         """
-        if constants is None:
-            constants = self.constants
-        #surft_params = params_2 if not self._surfacet_fixed else None
-        surft_params = None
+        constants = self._get_deprecated_constants(constants)
         surf_params = params_1
 
         # surface data is calculated in compute because that will change
@@ -2327,18 +2339,20 @@ class SurfaceMatch(_Objective):
         xR = surface_data["R"]
         xZ = surface_data["Z"]
 
-        #if surfacet_params is None:
-        #    surfacet_params = constants["surfacet"].params_dict
-
         y = constants["surfacet_data"]
         yR = y["R"]
         yZ = y["Z"]
 
-        f = jnp.sqrt((xR - yR)**2 + (xZ - yZ)**2)
-        #f = xR**2 + xZ**2
-        #f = yR**2 + yZ**2
-        return f.ravel()
-
+        # Signed components, NOT the distance sqrt(dR^2 + dZ^2).  The distance
+        # has an infinite derivative where it vanishes, and it vanishes at every
+        # node whenever the surface starts equal to its target -- which is the
+        # normal way to use this objective, passing a copy of the target surface
+        # as the surface to be optimized.  That makes the whole Jacobian NaN on
+        # the very first iteration.  A least-squares optimizer wants signed
+        # residuals anyway: it squares and sums them itself, recovering the same
+        # cost sum(dR^2 + dZ^2) while keeping the derivative well defined at the
+        # minimum.
+        return jnp.concatenate([(xR - yR).ravel(), (xZ - yZ).ravel()])
 
 
 class ToroidalFlux(_Objective):

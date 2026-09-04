@@ -649,19 +649,32 @@ def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
 
 def _ramanujan(A, P):
     # derived from Ramanujan approximation for the perimeter of an ellipse
+    #
+    # The radicand `u` below is the isoperimetric deficit of the cross-section:
+    # it is EXACTLY zero for a circle (A = pi r^2, P = 2 pi r gives
+    # 24 pi^2 r^2 - 40 pi^2 r^2 + 16 pi^2 r^2 = 0) and positive otherwise.  So
+    # elongation has a genuine square-root branch point at a circular
+    # cross-section -- a/b - 1 grows like sqrt(u) -- and d(a/b)/du is infinite
+    # there.  `jnp.abs` keeps the VALUE finite but not the derivative, so any
+    # optimization that drives a cross-section toward circular (e.g.
+    # `Elongation(..., bounds=(1.0, 1.005))`) gets a NaN Jacobian the moment it
+    # lands on the circle.  Note the bounds do not shield it: `_Objective._shift`
+    # zeroes the in-bounds residual with `jnp.where`, and reverse-mode AD
+    # differentiates both branches, so 0 * NaN = NaN still propagates.
+    #
+    # Replace sqrt(|u|) with the smooth (u^2 + d^2)^(1/4).  It agrees with
+    # sqrt(|u|) to relative order (d/u)^2 wherever |u| >> d, and at u = 0 it is
+    # d^(1/2) with ZERO derivative rather than an infinite one.  `d` is taken
+    # relative to P**2 so it carries u's units (length^2) and the regularization
+    # is scale-invariant.
+    u = (
+        2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
+        - 40 * jnp.pi * A
+        + 4 * P**2
+    )
+    d = 1e-12 * P**2
     a = (  # semi-major radius
-        jnp.sqrt(3)
-        * (
-            jnp.sqrt(8 * jnp.pi * A + P**2)
-            + jnp.sqrt(
-                jnp.abs(
-                    2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
-                    - 40 * jnp.pi * A
-                    + 4 * P**2
-                )
-            )
-        )
-        + 3 * P
+        jnp.sqrt(3) * (jnp.sqrt(8 * jnp.pi * A + P**2) + (u**2 + d**2) ** 0.25) + 3 * P
     ) / (12 * jnp.pi)
     b = A / (jnp.pi * a)  # semi-minor radius
     return a / b

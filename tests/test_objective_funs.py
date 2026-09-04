@@ -89,6 +89,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     SurfaceCurrentRegularization,
+    SurfaceMatch,
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
@@ -3894,6 +3895,7 @@ class TestObjectiveNaNGrad:
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceCurrentRegularization,
+        SurfaceMatch,
         SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
@@ -4155,6 +4157,37 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(eq, ext_field))
         assert not np.any(np.isnan(g)), "toroidal flux B"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_match(self):
+        """SurfaceMatch, including when it starts exactly on its target.
+
+        Zero displacement is the normal way to use this objective
+        (``surf0 = target.copy()``) and is precisely where the old
+        ``sqrt(dR^2 + dZ^2)`` residual had a NaN derivative at every node.
+        """
+        target = FourierRZToroidalSurface()
+        grid = LinearGrid(rho=1.0, M=6, N=3, NFP=target.NFP, sym=False)
+
+        for label, surf in [
+            ("zero displacement", target.copy()),
+            (
+                "displaced",
+                FourierRZToroidalSurface(
+                    R_lmn=[10.5, 1.0],
+                    Z_lmn=[-1.0],
+                    modes_R=[[0, 0], [1, 0]],
+                    modes_Z=[[-1, 0]],
+                ),
+            ),
+        ]:
+            obj = ObjectiveFunction(
+                SurfaceMatch(surf, target, surfacet_fixed=True, surfacet_grid=grid),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            g = obj.grad(obj.x(surf))
+            assert not np.any(np.isnan(g)), f"surface match, {label}"
 
     @pytest.mark.unit
     def test_objective_no_nangrad_surface_current_reg(self):

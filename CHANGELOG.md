@@ -13,6 +13,8 @@ Performance Improvements
 
 Bug Fixes
 
+- Fixes NaN Jacobian in ``SurfaceMatch``, which returned the distance ``sqrt(dR^2 + dZ^2)`` between the surface and its target. That has an infinite derivative where it vanishes, which is every node whenever the surface starts equal to its target -- the normal way to use the objective. It now returns the signed ``[dR, dZ]`` components, so ``dim_f`` is ``2 * grid.num_nodes`` rather than ``grid.num_nodes``. A least-squares optimizer squares and sums them itself, so the cost is unchanged. Also corrects the objective's units from ``(T m^2)`` to ``(m)``.
+- Regularizes the elongation approximation ``a_major/a_minor``, which took ``sqrt(|u|)`` of the isoperimetric deficit ``u``. ``u`` is exactly zero for a circular cross-section, so ``d(elongation)/dA`` diverged there (measured ~2e9 at a circle), making an objective such as ``Elongation(bounds=(1.0, 1.005))`` -- which targets a circle by construction -- ill-conditioned or NaN. The branch point is genuine, so the fix replaces ``sqrt(|u|)`` with the smooth ``(u^2 + d^2)^(1/4)``, ``d = 1e-12 * P^2``. Values away from a circle are unchanged to every printed digit; near a circle they shift by ~1e-6.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero

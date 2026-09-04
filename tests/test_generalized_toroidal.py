@@ -862,3 +862,131 @@ class TestCrossSectionGeometry:
             f"(max over zeta), tol {100 * tol:.3f} %\n"
             f"  DESC   {e_desc}\n  direct {e_mine}"
         )
+
+
+class TestObjectiveDerivatives:
+    """Jacobians, not just values, of the objectives used for QFM fitting.
+
+    A value-only check cannot see either bug below: both are a sqrt evaluated
+    at exactly zero, which is finite in value and NaN (or enormous) in
+    derivative. They surface as "nan optimality" on the first iteration of an
+    optimization, so the cheap test is to evaluate the Jacobian at the starting
+    point -- no optimization required.
+    """
+
+    @pytest.mark.unit
+    def test_surface_match_jacobian_at_zero_displacement(self):
+        """Test SurfaceMatch is differentiable when it starts on its target.
+
+        The natural way to use this objective is
+            surf0 = target.copy(); SurfaceMatch(surf0, target, ...)
+        which makes every residual exactly zero at x0. The old
+        sqrt(dR^2 + dZ^2) form then had a NaN derivative at every node.
+        """
+        from desc.objectives import ObjectiveFunction, SurfaceMatch
+
+        target = FourierRZToroidalSurface(
+            R_lmn=[10.0, 1.0, 0.2],
+            Z_lmn=[-1.0, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=2,
+        )
+        surf = target.copy()
+        grid = LinearGrid(rho=1.0, M=8, N=4, NFP=2, sym=False)
+
+        obj = ObjectiveFunction(
+            SurfaceMatch(surf, target, surfacet_fixed=True, surfacet_grid=grid),
+            use_jit=False,
+        )
+        obj.build(verbose=0)
+        x = obj.x(surf)
+
+        f = obj.compute_scaled_error(x)
+        np.testing.assert_allclose(f, 0.0, atol=1e-12)
+        # signed [dR, dZ] residual, so two entries per node
+        assert f.size == 2 * grid.num_nodes
+
+        J = np.asarray(obj.jac_scaled_error(x))
+        assert np.all(np.isfinite(J)), (
+            f"SurfaceMatch Jacobian has {(~np.isfinite(J)).sum()} non-finite "
+            "entries at zero displacement"
+        )
+        # R and Z are linear in R_lmn/Z_lmn, so the Jacobian is a nonzero
+        # constant -- a Jacobian of all zeros would pass isfinite but be useless
+        assert np.abs(J).max() > 0
+
+    @pytest.mark.unit
+    def test_elongation_jacobian_at_circular_cross_section(self):
+        """Elongation must be differentiable at a circular cross-section.
+
+        The isoperimetric deficit inside the Ramanujan inversion is exactly
+        zero for a circle, so sqrt(|u|) diverges there. `Elongation` is
+        routinely given `bounds=(1.0, ...)`, which drives the shape straight
+        onto that point. Bounds do not shield it: `_shift` zeroes the in-bounds
+        residual with `jnp.where`, and reverse-mode AD walks both branches.
+        """
+        from desc.objectives import Elongation, ObjectiveFunction
+
+        surf = FourierRZToroidalSurface()  # circular cross-section
+        grid = LinearGrid(
+            M=24,
+            zeta=np.array([np.pi / 2]),
+            rho=np.array([1.0]),
+            NFP=surf.NFP,
+            sym=False,
+            axis=False,
+        )
+        e = float(
+            np.asarray(surf.compute("a_major/a_minor", grid=grid)["a_major/a_minor"])[0]
+        )
+        np.testing.assert_allclose(e, 1.0, atol=1e-5)
+
+        obj = ObjectiveFunction(
+            Elongation(eq=surf, bounds=(1.0, 1.005), grid=grid), use_jit=False
+        )
+        obj.build(verbose=0)
+        J = np.asarray(obj.jac_scaled_error(obj.x(surf)))
+        assert np.all(np.isfinite(J)), "Elongation Jacobian is non-finite at a circle"
+
+    @pytest.mark.unit
+    def test_elongation_regularization_is_inert_away_from_a_circle(self):
+        """Test the smoothing does not perturb a shaped cross-section.
+
+        The claim being pinned is that d = 1e-12 * P**2 sits far below the
+        shaping, so the regularized form must reproduce the UNREGULARIZED
+        Ramanujan inversion. Comparing instead against the exact a/b of the
+        ellipse would measure the Ramanujan approximation's own inversion
+        error, which is 1.2e-05 at a/b = 2 and 2.7e-04 at a/b = 4 and has
+        nothing to do with the regularization.
+        """
+        from desc.compute._geometry import _ramanujan
+
+        def _ramanujan_unregularized(A, P):
+            a = (
+                np.sqrt(3)
+                * (
+                    np.sqrt(8 * np.pi * A + P**2)
+                    + np.sqrt(
+                        np.abs(
+                            2 * np.sqrt(3) * P * np.sqrt(8 * np.pi * A + P**2)
+                            - 40 * np.pi * A
+                            + 4 * P**2
+                        )
+                    )
+                )
+                + 3 * P
+            ) / (12 * np.pi)
+            return a / (A / (np.pi * a))
+
+        for a_semi, b_semi in [(0.2, 0.1), (0.2, 0.05), (0.2, 0.19)]:
+            A = np.pi * a_semi * b_semi
+            h = ((a_semi - b_semi) / (a_semi + b_semi)) ** 2
+            P = np.pi * (a_semi + b_semi) * (1 + 3 * h / (10 + np.sqrt(4 - 3 * h)))
+            # measured: exactly equal (0 ulp) at all three aspect ratios
+            np.testing.assert_allclose(
+                float(_ramanujan(A, P)),
+                _ramanujan_unregularized(A, P),
+                rtol=1e-12,
+                err_msg=f"regularization perturbs a/b = {a_semi / b_semi}",
+            )

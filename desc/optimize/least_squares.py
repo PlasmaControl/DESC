@@ -139,7 +139,9 @@ def lsqtr(  # noqa: C901
           Cholesky factorizations (generally 2-3), while ``"svd"`` uses one singular
           value decomposition. ``"cho"`` is generally the fastest for large systems,
           especially on GPU, but may be less accurate for badly scaled systems.
-          ``"svd"`` is the most accurate but significantly slower. Default ``"qr"``.
+          ``"svd"`` is the most accurate but significantly slower. If any of the
+          sub-objective includes bounds, the ``'svd'`` is recommended since the linear
+          system has a chance to be rank-deficient. Default ``"qr"``.
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 

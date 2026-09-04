@@ -189,13 +189,13 @@ def _test_proximal_ripple(method):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         eq.change_resolution(res, res, res, 2 * res, 2 * res, 2 * res)
-    num_field_periods = 100
+    field_period_transits = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_field_periods=num_field_periods,
-                num_well=2 * num_field_periods,
+                field_period_transits=field_period_transits,
+                num_well=2 * field_period_transits,
                 num_quad=16,
                 Y_B=13,
             )
@@ -218,8 +218,8 @@ def test_eq_solve():
     eq = desc.examples.get("precise_QA")
     eq.change_resolution(L=res, M=res, L_grid=2 * res, M_grid=2 * res)
     # this test is mostly for intermediate operations, so having a chunk size
-    # of 100 will be fine to see their effect
-    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100, deriv_mode="batched")
+    # of 30 will be fine to see their effect
+    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=30, deriv_mode="batched")
     obj.build(verbose=0)
     eq.solve(
         objective=obj,

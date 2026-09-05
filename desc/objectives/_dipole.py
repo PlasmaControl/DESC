@@ -128,16 +128,6 @@ class QuadraticFluxPM(_Objective):
         )
 
     def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         from desc.magnetic_fields import SumMagneticField
 
         eq = self._eq
@@ -162,6 +152,8 @@ class QuadraticFluxPM(_Objective):
         timer.start("Precomputing transforms")
 
         self._dim_f = eval_grid.num_nodes
+
+        raw_weights = eval_grid.weights
 
         w = eval_grid.weights
         w *= jnp.sqrt(eval_grid.num_nodes)
@@ -213,7 +205,11 @@ class QuadraticFluxPM(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["R0"] * scales["a"]
+            B0 = scales["B"]
+
+            A0 = jnp.sum(raw_weights * eval_data["|e_theta x e_zeta|"])
+
+            self._normalization = B0 * A0
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -440,24 +436,31 @@ class DipoleDiscreteness(_DipoleObjective):
         super().build(use_jit=use_jit, verbose=verbose)
         self._normalization = 1.0
 
+    # def compute(self, params, constants=None):
+    #     """Compute dipole discreteness.
+
+    #     Parameters
+    #     ----------
+    #     params : dict or list of dict
+    #         Dictionary (or list, one per dipole) of the dipole's degrees of
+    #         freedom.
+    #     constants : dict
+    #         Dictionary of constant data. Defaults to ``self._constants``.
+
+    #     Returns
+    #     -------
+    #     d : ndarray, shape(num_dipoles,)
+
+    #     """
+    #     data = super().compute(params, constants=constants)
+    #     rho_raw = jnp.asarray([jnp.atleast_1d(d["rho"])[0] for d in data])
+    #     rho_tilde = jnp.tanh(rho_raw)
+        # return jnp.abs(rho_tilde) * (1 - jnp.abs(rho_tilde))
     def compute(self, params, constants=None):
-        """Compute dipole discreteness.
-
-        Parameters
-        ----------
-        params : dict or list of dict
-            Dictionary (or list, one per dipole) of the dipole's degrees of
-            freedom.
-        constants : dict
-            Dictionary of constant data. Defaults to ``self._constants``.
-
-        Returns
-        -------
-        d : ndarray, shape(num_dipoles,)
-
-        """
-        data = super().compute(params, constants=constants)
-        rho_raw = jnp.asarray([jnp.atleast_1d(d["rho"])[0] for d in data])
+        if constants is None:
+            constants = self._constants
+        p = params if params is not None else constants["params"]
+        rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
         rho_tilde = jnp.tanh(rho_raw)
         return jnp.abs(rho_tilde) * (1 - jnp.abs(rho_tilde))
 
@@ -535,8 +538,11 @@ class DipoleVolume(_DipoleObjective):
         d : ndarray, shape(num_dipoles,)
 
         """
-        data = super().compute(params, constants=constants)
-        rho_raw = jnp.asarray([jnp.atleast_1d(d["rho"])[0] for d in data])
+        if constants is None:
+            constants = self._constants
+        p = params if params is not None else constants["params"]
+        rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
         rho_tilde = jnp.tanh(rho_raw)
-        return jnp.abs(rho_tilde)
+        eps = 1e-8
+        return jnp.sqrt(jnp.abs(rho_tilde) + eps)   # DipoleVolume specifically
     

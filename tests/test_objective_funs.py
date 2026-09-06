@@ -1758,6 +1758,7 @@ class TestObjectiveFunction:
         # one way and half going the other way
         coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
+
         # add a coil along the axis that links all the other coils
         coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
@@ -1768,6 +1769,17 @@ class TestObjectiveFunction:
         # while the axis links all 10 modular coils
         expected = np.array([1] * 10 + [10])
         np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+        # produce a coilset of non-planar coils with nonzero writhe
+        coil3 = FourierXYZCoil(
+            X_n=[0, 0.5, 5, 1, 0], Y_n=[0, 0, 0, 0, 0.5], Z_n=[0, -1, 0, 0, 1]
+        )
+        coilset3 = CoilSet.from_symmetry(coil3, NFP=5, check_intersection=False)
+        obj = CoilSetLinkingNumber(coilset3)
+        obj.build()
+        out = obj.compute_scaled_error(coilset3.params_dict)
+        expected = np.array([0] * 5)
+        np.testing.assert_allclose(out, expected, atol=1e-12)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):

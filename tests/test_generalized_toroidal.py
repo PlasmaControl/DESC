@@ -4,14 +4,18 @@ The computational toroidal coordinate zeta no longer has to equal the
 cylindrical laboratory angle phi. Instead phi = zeta + omega(rho,theta,zeta)
 with omega a periodic toroidal stream function (spectral coefficients W_lmn).
 
-All tests here are self contained: they build analytic surfaces and small
-equilibria in-process and need no external data files. Data-driven tests
-against sampled PEST/Boozer surface data live outside the repository, in
+Most tests here are self contained: they build analytic surfaces and small
+equilibria in-process. The exception is the solved stellarator-mirror hybrid
+in ``tests/inputs/SLAM0_mirror_hybrid_omega.h5``, used where a real converged
+equilibrium with a nontrivial omega is needed. Data-driven tests against
+sampled PEST/Boozer surface data live outside the repository, in
 ~/generalized_toroidal/tests/test_generalized_toroidal_data.py.
 """
 
 import os
+import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from scipy.constants import mu_0
@@ -25,6 +29,18 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid
 from desc.io import load
+from desc.plotting import plot_boundary, plot_section, plot_surfaces
+
+
+@pytest.fixture(scope="module")
+def eq_omega():
+    """Solved stellarator-mirror hybrid with a nontrivial omega.
+
+    NFP=2, stellarator symmetric, L,M,N = 20,8,16 with Lz,Mz,Nz = 4,4,16, so
+    246 omega modes reaching max|W_lmn| = 0.37 rad. Nested, and converged to
+    max |F|_normalized = 1.4 % over rho in [0.1, 1].
+    """
+    return load("./tests/inputs/SLAM0_mirror_hybrid_omega.h5")
 
 
 def _make_synthetic_surface(NFP=1):
@@ -840,3 +856,87 @@ class TestCrossSectionGeometry:
             f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
             f"  DESC   {desc_val}\n  direct {measured}"
         )
+
+
+class TestPlottingWithOmega:
+    """Constant-phi plots on an equilibrium whose zeta is not phi.
+
+    With omega != 0 a constant-zeta plane is not a constant-phi plane, so the
+    plotters invert phi = zeta + omega before evaluating. That inversion is
+    bracketed and must not fail: a failure is masked with NaN and warned about,
+    leaving holes in the figure, so "no warning and no NaN" is the assertion.
+    """
+
+    @staticmethod
+    def _no_inversion_failure(record):
+        return [w for w in record if "phi -> zeta inversion" in str(w.message)]
+
+    @pytest.mark.unit
+    def test_plot_section_is_constant_phi(self, eq_omega):
+        """plot_section inverts phi, and the result is not the constant-zeta cut."""
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            fig, _, data = plot_section(
+                eq_omega, "|B|", phi=0.4, return_data=True, figsize=(4, 4)
+            )
+        plt.close(fig)
+        assert not self._no_inversion_failure(record)
+        for key in ["R", "Z", "|B|"]:
+            assert np.all(np.isfinite(np.asarray(data[key]))), key
+
+        # the same section with omega zeroed out: zeta IS phi there, so no
+        # inversion happens and the geometry must differ measurably. Without
+        # this the test would pass on a plotter that silently ignored omega.
+        eq0 = eq_omega.copy()
+        eq0.W_lmn = np.zeros(eq0.W_basis.num_modes)
+        fig0, _, data0 = plot_section(
+            eq0, "|B|", phi=0.4, return_data=True, figsize=(4, 4)
+        )
+        plt.close(fig0)
+        assert np.max(np.abs(np.asarray(data["R"]) - np.asarray(data0["R"]))) > 1e-3
+
+    @pytest.mark.unit
+    def test_plot_section_with_explicit_grid(self, eq_omega):
+        """A user supplied grid takes the same inversion path as phi=."""
+        grid = LinearGrid(
+            rho=np.linspace(0.2, 1.0, 5), theta=12, zeta=np.array([0.4]), NFP=1
+        )
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            fig, _, data = plot_section(
+                eq_omega, "|B|", grid=grid, return_data=True, figsize=(4, 4)
+            )
+        plt.close(fig)
+        assert not self._no_inversion_failure(record)
+        for key in ["R", "Z", "|B|"]:
+            assert np.all(np.isfinite(np.asarray(data[key]))), key
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("theta", [0, 6])
+    def test_plot_surfaces_inverts_phi(self, eq_omega, theta):
+        """plot_surfaces inverts phi for rho and (theta != 0) vartheta contours."""
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            fig, _, data = plot_surfaces(
+                eq_omega, rho=4, theta=theta, phi=2, return_data=True, figsize=(4, 4)
+            )
+        plt.close(fig)
+        assert not self._no_inversion_failure(record)
+        keys = ["rho_R_coords", "rho_Z_coords"]
+        if theta:
+            keys += ["vartheta_R_coords", "vartheta_Z_coords"]
+        else:
+            assert "vartheta_R_coords" not in data
+        for key in keys:
+            assert np.all(np.isfinite(np.asarray(data[key]))), key
+
+    @pytest.mark.unit
+    def test_plot_boundary_inverts_phi(self, eq_omega):
+        """plot_boundary inverts phi on the last closed flux surface."""
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            fig, _, data = plot_boundary(eq_omega, phi=3, return_data=True)
+        plt.close(fig)
+        assert not self._no_inversion_failure(record)
+        assert np.all(np.isfinite(np.asarray(data["R"])))
+        assert np.all(np.isfinite(np.asarray(data["Z"])))

@@ -1023,3 +1023,47 @@ class TestOmegaSmallBranches:
         # the boundary moved, and BoundaryWSelfConsistency carried it inward
         np.testing.assert_allclose(np.asarray(eq2.Wb_lmn), np.asarray(s2.W_lmn))
         assert np.max(np.abs(np.asarray(eq2.W_lmn) - np.asarray(eq.W_lmn))) > 1e-3
+
+
+class TestContinuationWithOmega:
+    """Continuation on a boundary carrying a generalized toroidal angle."""
+
+    @pytest.mark.unit
+    def test_boundary_omega_is_not_doubled(self):
+        """Continuation converges to the requested boundary omega.
+
+        The axisymmetric stage has to start omega-free. If it keeps the full
+        boundary omega, _add_shaping ramps omega from zero on top of it and the
+        solve lands on twice the requested value with no error raised.
+        """
+        from desc.continuation import solve_continuation_automatic
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=np.array([10.0, 1.0, 0.1]),
+            Z_lmn=np.array([-1.0, -0.1]),
+            modes_R=np.array([[0, 0], [1, 0], [1, 1]]),
+            modes_Z=np.array([[-1, 0], [-1, 1]]),
+            NFP=3,
+            sym=True,
+            W_lmn=np.array([0.3]),
+            modes_W=np.array([[0, -1]]),
+        )
+        # omega = 0.3 sin(3 zeta) leaves min(1 + omega_zeta) = 0.126, so
+        # doubling it would invert the chart outright rather than merely
+        # overshoot. It also converges without backtracking, unlike small omega.
+        eq = Equilibrium(L=4, M=4, N=1, NFP=3, sym=True, surface=surf, Nz=1)
+        fam = solve_continuation_automatic(
+            eq.copy(), verbose=0, maxiter=10, ftol=1e-3
+        )
+        final = fam[-1]
+        # the boundary is fixed by the constraints, so this is exact
+        np.testing.assert_allclose(
+            np.asarray(final.Wb_lmn), np.asarray(eq.Wb_lmn), rtol=1e-8
+        )
+        np.testing.assert_allclose(
+            np.asarray(final.Rb_lmn)[final.surface.R_basis.get_idx(M=1, N=1)],
+            0.1,
+            rtol=1e-8,
+        )
+        assert final.is_nested()
+        assert final.get_surface_at(rho=1.0).check_toroidal_map() > 0

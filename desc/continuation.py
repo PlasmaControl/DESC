@@ -375,11 +375,13 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
-        # The generalized toroidal angle must be ramped in step with the shape.
         # deltas is recomputed from the same two fixed surfaces every iteration,
-        # so an unscaled Wb_lmn would be applied IN FULL at every step, both
-        # overshooting omega by the number of steps and pairing a fully rotated
-        # angle with a partially shaped boundary.
+        # so an unscaled Wb_lmn would be applied IN FULL at every step and
+        # overshoot omega by the number of steps. The reference surface above
+        # has omega stripped, so the axisymmetric stage must start omega-free
+        # too (see the note there) or the delta is applied twice over.
+        # Measured: intermediates stay nested either way, at omega = 0.05 and
+        # 0.3 alike -- the ramp is about not double counting, not nestedness.
         if "Wb_lmn" in deltas:
             deltas["Wb_lmn"] *= bdry_step
         bdry_ratio += bdry_step

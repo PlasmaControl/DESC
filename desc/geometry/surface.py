@@ -161,9 +161,8 @@ class FourierRZToroidalSurface(Surface):
         self._NFP = NFP
 
         if sym == "auto":
-            # omega has the same (sin) stellarator symmetry parity as Z, since
-            # phi = zeta + omega and both phi and zeta are odd under
-            # (theta, zeta) -> (-theta, -zeta)
+            # omega is odd under (theta, zeta) -> (-theta, -zeta), like Z, so
+            # it takes the same sin parity basis
             if (
                 np.all(R_lmn[np.where(sign(modes_R[:, 0]) != sign(modes_R[:, 1]))] == 0)
                 and np.all(
@@ -183,11 +182,10 @@ class FourierRZToroidalSurface(Surface):
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
-        # No omega modes and no omega resolution asked for means no generalized
-        # toroidal angle, so the basis must be empty. A non-symmetric
-        # DoubleFourierSeries at M=N=0 still carries the (0,0) mode, which would
-        # give every asymmetric surface a spurious omega degree of freedom. The
-        # symmetric case is already empty, since sin(0) vanishes.
+        # No omega modes and none asked for means no generalized angle, so the
+        # basis must be empty: a non-symmetric DoubleFourierSeries at M=N=0
+        # still carries the (0,0) mode, a spurious degree of freedom on every
+        # asymmetric surface. The symmetric case is empty already, sin(0) = 0.
         no_omega = not modes_W.size and self._Mz == 0 and self._Nz == 0
         self._W_basis = DoubleFourierSeries(
             M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if (sym or no_omega) else False
@@ -698,15 +696,10 @@ class FourierRZToroidalSurface(Surface):
         Zb_lmn = _fit(Z, Z_basis)
 
         if fit_omega:
-            # Continuous periodic angular displacement omega = phi - zeta,
-            # computed without branch cut artifacts: arctan2 of the sine and
-            # cosine of the difference maps it into (-pi, pi] pointwise,
-            # independent of which 2*pi branch either input angle is on. This
-            # is exact whenever the true |omega| < pi, which any sensible
-            # toroidal chart satisfies (|omega| >= pi would mean zeta and phi
-            # disagree by half a turn). The unit toroidal winding is carried
-            # entirely by the explicit zeta term in phi = zeta + omega, so the
-            # fitted map has the correct degree-one winding by construction.
+            # omega = phi - zeta without branch cut artifacts: arctan2 of the
+            # sine and cosine maps it into (-pi, pi] whatever 2*pi branch either
+            # input is on, exact while |omega| < pi. The unit toroidal winding
+            # is carried by the explicit zeta term in phi = zeta + omega.
             omega = np.arctan2(np.sin(phi - zeta), np.cos(phi - zeta))
             Mz = int(setdefault(Mz, M))
             Nz = int(setdefault(Nz, N))

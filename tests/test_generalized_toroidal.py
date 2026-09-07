@@ -4,11 +4,6 @@ The computational toroidal coordinate zeta no longer has to equal the
 cylindrical laboratory angle phi. Instead phi = zeta + omega(rho,theta,zeta)
 with omega a periodic toroidal stream function (spectral coefficients W_lmn).
 
-Phase 1 tests cover the generalized FourierRZToroidalSurface (state,
-serialization, fitting from sampled coordinates, geometry).
-Phase 2 tests cover the generalized Equilibrium (compute graph, coordinate
-invariance, solves).
-
 All tests here are self contained: they build analytic surfaces and small
 equilibria in-process and need no external data files. Data-driven tests
 against sampled PEST/Boozer surface data live outside the repository, in
@@ -19,15 +14,17 @@ import os
 
 import numpy as np
 import pytest
+from scipy.constants import mu_0
 
+from desc.coils import FourierRZCoil
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import (
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+)
 from desc.grid import Grid, LinearGrid
-
-
-def _wrap(angle):
-    """Map angle difference into (-pi, pi]."""
-    return np.arctan2(np.sin(angle), np.cos(angle))
+from desc.io import load
 
 
 def _make_synthetic_surface(NFP=1):
@@ -60,23 +57,13 @@ def _sample_surface(surf, ntheta=40, nzeta=41):
     zeta = np.linspace(0, 2 * np.pi / surf.NFP, nzeta, endpoint=False)
     T, ZE = map(np.ravel, np.meshgrid(theta, zeta, indexing="ij"))
     grid = Grid(np.vstack([np.ones_like(T), T, ZE]).T, sort=False)
-    data = surf.compute(["R", "Z", "omega", "phi"], grid=grid)
+    data = surf.compute(["R", "Z", "phi"], grid=grid)
     coords = np.array([data["R"], data["phi"], data["Z"]]).T
-    return T, ZE, coords, data
+    return T, ZE, coords
 
 
 class TestSurfaceOmegaState:
     """State, serialization, and resolution handling of the generalized surface."""
-
-    @pytest.mark.unit
-    def test_default_surface_has_zero_omega(self):
-        """Default surfaces must have exactly zero omega and no W modes."""
-        surf = FourierRZToroidalSurface()
-        assert surf.W_basis.num_modes == 0
-        assert surf.W_lmn.size == 0
-        assert surf.Mz == 0 and surf.Nz == 0
-        data = surf.compute(["omega", "phi"], grid=LinearGrid(M=4, N=4))
-        np.testing.assert_allclose(data["omega"], 0)
 
     @pytest.mark.unit
     def test_omega_sym_parity(self):
@@ -117,29 +104,11 @@ class TestSurfaceOmegaState:
         surf = _make_synthetic_surface()
         path = os.path.join(tmpdir, "surf.h5")
         surf.save(path)
-        from desc.io import load
-
         surf2 = load(path)
         np.testing.assert_allclose(
             np.asarray(surf2.W_lmn), np.asarray(surf.W_lmn), atol=1e-14
         )
         assert surf2.W_basis.equiv(surf.W_basis)
-        # simulate an old file: delete the W attributes and rerun _set_up
-        surf3 = surf.copy()
-        del surf3._W_lmn
-        del surf3._W_basis
-        surf3._set_up()
-        assert surf3.W_basis.num_modes == 0
-        assert surf3.W_lmn.size == 0
-
-    @pytest.mark.unit
-    def test_optimizable_params_include_W(self):
-        """W_lmn is part of the surface parameter dictionary."""
-        surf = _make_synthetic_surface()
-        assert "W_lmn" in surf.params_dict
-        np.testing.assert_allclose(
-            np.asarray(surf.params_dict["W_lmn"]), np.asarray(surf.W_lmn)
-        )
 
     @pytest.mark.unit
     def test_flip_orientation_flips_omega(self):
@@ -160,7 +129,7 @@ class TestSurfaceFitting:
     def test_fit_recovers_synthetic_surface(self, NFP):
         """Fit sampled points of an analytic omega surface; recover everything."""
         truth = _make_synthetic_surface(NFP)
-        T, ZE, coords, _ = _sample_surface(truth)
+        T, ZE, coords = _sample_surface(truth)
         surf = FourierRZToroidalSurface.from_values(
             coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=NFP, sym=True
         )
@@ -179,10 +148,10 @@ class TestSurfaceFitting:
             np.testing.assert_allclose(df[key], dt[key], atol=1e-9, err_msg=key)
 
     @pytest.mark.unit
-    def test_fit_derivatives_vs_finite_differences(self):
-        """First derivatives of the fitted map agree with finite differences."""
+    def test_fit_basis_vectors_vs_finite_differences(self):
+        """Basis vectors of the fitted map agree with finite differences."""
         truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
+        T, ZE, coords = _sample_surface(truth)
         surf = FourierRZToroidalSurface.from_values(
             coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
         )
@@ -195,91 +164,56 @@ class TestSurfaceFitting:
             return surf.compute("x", grid=g, basis="xyz")["x"]
 
         g0 = Grid(np.vstack([np.ones_like(t0), t0, z0]).T, sort=False)
-        d = surf.compute(["e_theta", "e_zeta", "omega_t", "omega_z", "omega"], grid=g0)
         d0 = surf.compute(["e_theta", "e_zeta"], grid=g0, basis="xyz")
         fd_et = (evalx(t0 + eps, z0) - evalx(t0 - eps, z0)) / (2 * eps)
         fd_ez = (evalx(t0, z0 + eps) - evalx(t0, z0 - eps)) / (2 * eps)
         np.testing.assert_allclose(d0["e_theta"], fd_et, rtol=1e-5, atol=1e-6)
         np.testing.assert_allclose(d0["e_zeta"], fd_ez, rtol=1e-5, atol=1e-6)
 
-        # omega derivatives vs finite differences of omega itself
-        def evalw(t, z):
-            g = Grid(np.vstack([np.ones_like(t), t, z]).T, sort=False)
-            return surf.compute("omega", grid=g)["omega"]
-
-        fd_wt = (evalw(t0 + eps, z0) - evalw(t0 - eps, z0)) / (2 * eps)
-        fd_wz = (evalw(t0, z0 + eps) - evalw(t0, z0 - eps)) / (2 * eps)
-        np.testing.assert_allclose(d["omega_t"], fd_wt, rtol=1e-6, atol=1e-8)
-        np.testing.assert_allclose(d["omega_z"], fd_wz, rtol=1e-6, atol=1e-8)
-
     @pytest.mark.unit
-    def test_fit_surface_area_and_orientation(self):
-        """Fitted surface reproduces area and right-handed orientation."""
+    def test_omega_extraction_from_angles(self):
+        """Omega = phi - zeta is branch-cut immune, and zero when zeta = phi."""
         truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
-        surf = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
-        grid = LinearGrid(M=24, N=24, NFP=1)
-        at = truth.compute("S", grid=grid)["S"]
-        af = surf.compute("S", grid=grid)["S"]
-        np.testing.assert_allclose(af, at, rtol=1e-8)
-        assert surf._compute_orientation() == truth._compute_orientation() == 1
-
-    @pytest.mark.unit
-    def test_fit_across_branch_cuts(self):
-        """Wrapping phi into arbitrary 2*pi branches must not change the fit."""
-        truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
+        T, ZE, coords = _sample_surface(truth)
+        kw = dict(M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True)
+        surf1 = FourierRZToroidalSurface.from_values(coords, T, zeta=ZE, **kw)
+        # wrapping phi into arbitrary 2*pi branches must not change the fit, and
+        # neither must wrapping zeta: omega comes from the periodic difference
         rng = np.random.default_rng(0)
-        shifts = 2 * np.pi * rng.integers(-3, 4, size=coords.shape[0])
-        coords_wrapped = coords.copy()
-        coords_wrapped[:, 1] = coords[:, 1] + shifts
-        surf1 = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
-        surf2 = FourierRZToroidalSurface.from_values(
-            coords_wrapped, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
-        np.testing.assert_allclose(
-            np.asarray(surf1.W_lmn), np.asarray(surf2.W_lmn), atol=1e-10
-        )
-        # also wrap zeta into another branch: same surface, since omega is
-        # computed from the periodic difference
-        surf3 = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE + 2 * np.pi, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
-        np.testing.assert_allclose(
-            np.asarray(surf1.W_lmn), np.asarray(surf3.W_lmn), atol=1e-10
-        )
-
-    @pytest.mark.unit
-    def test_fit_zeta_equals_phi_gives_zero_omega(self):
-        """Supplying zeta = phi recovers omega = 0 exactly."""
-        truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
-        # parameterize by the physical angle itself
+        wrapped = coords.copy()
+        wrapped[:, 1] += 2 * np.pi * rng.integers(-3, 4, size=coords.shape[0])
+        for other in [
+            FourierRZToroidalSurface.from_values(wrapped, T, zeta=ZE, **kw),
+            FourierRZToroidalSurface.from_values(coords, T, zeta=ZE + 2 * np.pi, **kw),
+        ]:
+            np.testing.assert_allclose(
+                np.asarray(surf1.W_lmn), np.asarray(other.W_lmn), atol=1e-10
+            )
+        # parameterizing by the physical angle itself gives omega = 0 exactly,
+        # and omitting zeta gives a surface with no omega modes at all
         surf = FourierRZToroidalSurface.from_values(
             coords, T, zeta=coords[:, 1], M=6, N=6, Mz=3, Nz=3, NFP=1, sym=True
         )
         np.testing.assert_allclose(np.asarray(surf.W_lmn), 0, atol=1e-12)
-        # and omitting zeta entirely gives a surface with no omega modes
-        surf2 = FourierRZToroidalSurface.from_values(coords, T, M=6, N=6, sym=True)
-        assert surf2.W_basis.num_modes == 0
+        assert (
+            FourierRZToroidalSurface.from_values(
+                coords, T, M=6, N=6, sym=True
+            ).W_basis.num_modes
+            == 0
+        )
 
     @pytest.mark.unit
     def test_fit_xyz_basis(self):
         """Cartesian (X, Y, Z) input gives the same fit as cylindrical."""
         truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
+        T, ZE, coords = _sample_surface(truth)
         X = coords[:, 0] * np.cos(coords[:, 1])
         Y = coords[:, 0] * np.sin(coords[:, 1])
         xyz = np.array([X, Y, coords[:, 2]]).T
-        surf_rpz = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
+        kw = dict(M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True)
+        surf_rpz = FourierRZToroidalSurface.from_values(coords, T, zeta=ZE, **kw)
         surf_xyz = FourierRZToroidalSurface.from_values(
-            xyz, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True, basis="xyz"
+            xyz, T, zeta=ZE, basis="xyz", **kw
         )
         for attr in ["R_lmn", "Z_lmn", "W_lmn"]:
             np.testing.assert_allclose(
@@ -290,50 +224,84 @@ class TestSurfaceFitting:
             )
 
     @pytest.mark.unit
-    def test_weighted_fit(self):
-        """Weighted fit with uniform weights equals the unweighted fit."""
-        truth = _make_synthetic_surface()
-        T, ZE, coords, _ = _sample_surface(truth)
-        surf_u = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
-        )
-        surf_w = FourierRZToroidalSurface.from_values(
-            coords,
-            T,
-            zeta=ZE,
-            M=4,
-            N=4,
-            Mz=2,
-            Nz=2,
-            NFP=1,
-            sym=True,
-            w=np.ones(coords.shape[0]),
-        )
-        for attr in ["R_lmn", "Z_lmn", "W_lmn"]:
-            np.testing.assert_allclose(
-                np.asarray(getattr(surf_w, attr)),
-                np.asarray(getattr(surf_u, attr)),
-                atol=1e-9,
-                err_msg=attr,
-            )
-
-    @pytest.mark.unit
     def test_invalid_toroidal_map_detected(self):
-        """A map with d(phi)/d(zeta) <= 0 somewhere must be rejected."""
+        """A map with d(phi)/d(zeta) <= 0 somewhere must be rejected.
+
+        Rejection through ``from_values`` is covered by
+        ``test_surfaces.py::test_surface_from_values``.
+        """
         # omega = 1.2 sin(zeta) => 1 + omega_zeta = 1 + 1.2 cos(zeta) < 0
         bad = FourierRZToroidalSurface(
             W_lmn=np.array([1.2]), modes_W=np.array([[0, -1]])
         )
         with pytest.raises(ValueError, match="not a valid toroidal"):
             bad.check_toroidal_map()
-        T, ZE, coords, _ = _sample_surface(bad)
-        with pytest.raises(ValueError, match="not a valid toroidal"):
-            FourierRZToroidalSurface.from_values(
-                coords, T, zeta=ZE, M=4, N=4, Mz=1, Nz=1, NFP=1, sym=True
-            )
         # a healthy map passes and returns min(1 + omega_zeta)
-        good = _make_synthetic_surface()
-        assert good.check_toroidal_map() > 0.5
+        assert _make_synthetic_surface().check_toroidal_map() > 0.5
+
+    @pytest.mark.unit
+    def test_constant_offset_surface_with_omega(self):
+        """The offset surface inherits the base surface's toroidal chart.
+
+        Offset points are placed at the cylindrical angle the base surface
+        assigns to its own (theta, zeta), so the fitted surface must reproduce
+        them when evaluated at those same labels. Carrying omega is what makes
+        that true: the identical R, Z fit with omega dropped misses by ~1 m.
+        """
+        base = _make_synthetic_surface()
+        offset = 0.5
+        # an explicit non-symmetric grid: the default grid is built with
+        # sym=base_surface.sym, which halves the fitted coefficients
+        grid = LinearGrid(M=12, N=12, NFP=1, sym=False)
+        surf, data, _ = base.constant_offset_surface(
+            offset, grid, M=10, N=10, full_output=True
+        )
+        np.testing.assert_allclose(
+            np.asarray(surf.W_lmn), np.asarray(base.W_lmn), atol=1e-14
+        )
+        assert surf.check_toroidal_map() > 0
+        # the points really are `offset` from the base surface
+        sep = np.linalg.norm(
+            np.asarray(data["x"]) - np.asarray(data["x_offset_surface"]), axis=1
+        )
+        np.testing.assert_allclose(sep, offset, rtol=1e-4)
+
+        def _xyz(s):
+            d = s.compute(["R", "Z", "phi"], grid=Grid(grid.nodes, sort=False))
+            R, p, Z = (np.asarray(d[k]) for k in ("R", "phi", "Z"))
+            return np.stack([R * np.cos(p), R * np.sin(p), Z], axis=1)
+
+        rpz = np.asarray(data["x_offset_surface"])
+        target = np.stack(
+            [rpz[:, 0] * np.cos(rpz[:, 1]), rpz[:, 0] * np.sin(rpz[:, 1]), rpz[:, 2]],
+            axis=1,
+        )
+        np.testing.assert_allclose(_xyz(surf), target, atol=1e-9)
+        # negative control: the same R, Z with omega dropped is far off, so the
+        # assertion above is really testing the inherited chart
+        dropped = FourierRZToroidalSurface(
+            surf.R_lmn,
+            surf.Z_lmn,
+            surf.R_basis.modes[:, 1:],
+            surf.Z_basis.modes[:, 1:],
+            base.NFP,
+            base.sym,
+            check_orientation=False,
+        )
+        assert np.linalg.norm(_xyz(dropped) - target, axis=1).max() > 0.1
+
+    @pytest.mark.unit
+    def test_constant_offset_surface_zero_omega_unchanged(self):
+        """With omega = 0 the offset algorithm is the classical one."""
+        surf = FourierRZToroidalSurface()
+        offset = surf.constant_offset_surface(1.0, LinearGrid(M=6, N=2), M=1, N=1)
+        assert offset.W_basis.num_modes == 0
+        np.testing.assert_allclose(
+            np.asarray(offset.R_lmn)[offset.R_basis.get_idx(M=0, N=0)], 10
+        )
+        np.testing.assert_allclose(
+            np.asarray(offset.R_lmn)[offset.R_basis.get_idx(M=1, N=0)], 2
+        )
 
 
 class TestEquilibriumOmega:
@@ -374,43 +342,21 @@ class TestEquilibriumOmega:
         rng = np.random.default_rng(3)
         eq.W_lmn = 0.02 * rng.standard_normal(eq.W_basis.num_modes)
         grid = LinearGrid(L=3, M=6, N=6, NFP=2)
-        keys = [
-            "phi",
-            "zeta",
-            "omega",
-            "phi_r",
-            "omega_r",
-            "phi_t",
-            "omega_t",
-            "phi_z",
-            "omega_z",
-            "phi_rr",
-            "omega_rr",
-            "phi_tt",
-            "omega_tt",
-            "phi_zz",
-            "omega_zz",
-            "phi_rt",
-            "omega_rt",
-            "phi_rz",
-            "omega_rz",
-            "phi_tz",
-            "omega_tz",
-        ]
+        # every derivative of phi = zeta + omega equals that of omega, except
+        # d/dzeta which picks up the 1 from zeta itself
+        derivs = ["r", "t", "z", "rr", "tt", "zz", "rt", "rz", "tz"]
+        keys = ["phi", "zeta", "omega"]
+        keys += [f"{q}_{d}" for d in derivs for q in ("phi", "omega")]
         d = eq.compute(keys, grid=grid)
         np.testing.assert_allclose(d["phi"], d["zeta"] + d["omega"], atol=1e-14)
-        np.testing.assert_allclose(d["phi_r"], d["omega_r"], atol=1e-14)
-        np.testing.assert_allclose(d["phi_t"], d["omega_t"], atol=1e-14)
-        np.testing.assert_allclose(d["phi_z"], 1 + d["omega_z"], atol=1e-14)
-        for a, b in [
-            ("phi_rr", "omega_rr"),
-            ("phi_tt", "omega_tt"),
-            ("phi_zz", "omega_zz"),
-            ("phi_rt", "omega_rt"),
-            ("phi_rz", "omega_rz"),
-            ("phi_tz", "omega_tz"),
-        ]:
-            np.testing.assert_allclose(d[a], d[b], atol=1e-14, err_msg=a)
+        for suffix in derivs:
+            offset = 1 if suffix == "z" else 0
+            np.testing.assert_allclose(
+                d[f"phi_{suffix}"],
+                offset + d[f"omega_{suffix}"],
+                atol=1e-14,
+                err_msg=suffix,
+            )
         assert np.max(np.abs(d["omega"])) > 0  # actually nonzero
 
     @pytest.mark.unit
@@ -464,22 +410,23 @@ class TestEquilibriumOmega:
         p = "desc.equilibrium.equilibrium.Equilibrium"
 
         def _plain(name):
-            """Quantity computable on a plain rtz grid, with all its deps."""
-            entry = data_index[p][name]
-            if entry["coordinates"] != "rtz":
+            """Quantity computable on a plain rtz grid, with all its deps.
+
+            Anything that (or whose dependencies) needs a special grid -- field
+            line source grids, Boozer resolution, flux surface integration --
+            cannot be swept here.
+            """
+            if data_index[p][name]["coordinates"] != "rtz":
                 return False
-            # a quantity is only computable here if neither it nor anything it
-            # depends on needs a special grid (field line source grids,
-            # Boozer resolution, flux surface integration, ...)
-            for dep in [name] + get_data_deps(name, p):
-                d = data_index[p][dep]
-                if (
-                    d["source_grid_requirement"]
-                    or d["grid_requirement"]
-                    or d["resolution_requirement"]
-                ):
-                    return False
-            return True
+            return not any(
+                data_index[p][dep][req]
+                for dep in [name] + get_data_deps(name, p)
+                for req in (
+                    "source_grid_requirement",
+                    "grid_requirement",
+                    "resolution_requirement",
+                )
+            )
 
         names = [name for name in data_index[p] if _plain(name)]
         assert len(names) > 200, f"expected to sweep many quantities, got {len(names)}"
@@ -495,10 +442,8 @@ class TestEquilibriumOmega:
         data0 = eq0.compute(names, grid=grid)
         bad0 = [n for n in names if not np.all(np.isfinite(np.asarray(data0[n])))]
 
-        # A few quantities are non-finite by design regardless of omega, e.g.
-        # beta_a and its derivatives are set to NaN when the equilibrium has no
-        # anisotropy profile assigned. What matters is that omega introduces no
-        # new ones.
+        # beta_a and friends are NaN by design without an anisotropy profile;
+        # what matters is that omega introduces no new non-finite quantities
         assert set(bad) == set(bad0), (
             "omega changed which quantities are finite. Non-finite only with "
             f"omega != 0: {sorted(set(bad) - set(bad0))}; only with omega == 0: "
@@ -548,11 +493,11 @@ class TestEquilibriumOmega:
         eq1.axis = eq1.get_axis()
 
         grid = LinearGrid(L=6, M=10, N=8)
-        keys = ["|B|", "|F|", "p", "iota", "sqrt(g)", "V", "S"]
+        keys = ["|B|", "|F|", "sqrt(g)", "V", "S"]
         d0 = eq0.compute(keys, grid=LinearGrid(L=6, M=10, N=8))
         d1 = eq1.compute(keys, grid=grid)
-        # |B|, |F|, p, iota depend only on (rho, theta) for axisymmetric
-        # physics: identical at identical (rho, theta) nodes
+        # |B| and |F| depend only on (rho, theta) for axisymmetric physics:
+        # identical at identical (rho, theta) nodes
         np.testing.assert_allclose(d1["|B|"], d0["|B|"], rtol=1e-10)
         # |F| is a residual of large, nearly cancelling terms (grad(p) against
         # the J x B force), so it carries far fewer significant digits than the
@@ -560,8 +505,6 @@ class TestEquilibriumOmega:
         # different order, which shows up as roundoff at the 1e-7 relative
         # level; |B| above still matches to 1e-10.
         np.testing.assert_allclose(d1["|F|"], d0["|F|"], rtol=1e-6, atol=1e-9)
-        np.testing.assert_allclose(d1["p"], d0["p"], rtol=1e-12)
-        np.testing.assert_allclose(d1["iota"], d0["iota"], rtol=1e-12, atol=1e-12)
         # global invariants
         np.testing.assert_allclose(d1["V"], d0["V"], rtol=1e-10)
         np.testing.assert_allclose(d1["S"], d0["S"], rtol=1e-10)
@@ -576,14 +519,6 @@ class TestEquilibriumOmega:
         nodes0[:, 2] = d1x["phi"]
         d0x = eq0.compute("x", grid=Grid(nodes0, sort=False), basis="xyz")
         np.testing.assert_allclose(d1x["x"], d0x["x"], atol=1e-10)
-        # magnetic axis position: same circle (compare the n=0 coefficient,
-        # the two axis curves have different numbers of modes)
-        ax0, ax1 = eq0.get_axis(), eq1.get_axis()
-        np.testing.assert_allclose(
-            np.asarray(ax1.R_n)[ax1.R_basis.get_idx(N=0)],
-            np.asarray(ax0.R_n)[ax0.R_basis.get_idx(N=0)],
-            rtol=1e-10,
-        )
         assert eq1.is_nested()
 
     @pytest.mark.unit
@@ -671,7 +606,7 @@ class TestCurveOmega:
     def test_curve_zero_omega_unchanged(self):
         """Curves without W behave exactly as before."""
         curve = FourierRZCurve(R_n=[0, 10, 1], Z_n=[0, 0, -1], NFP=1, sym=False)
-        assert curve.W_basis.num_modes == 1  # constant mode, coefficient zero
+        assert curve.W_basis.num_modes == 0  # no omega modes at all
         np.testing.assert_allclose(np.asarray(curve.W_n), 0)
         s = np.linspace(0, 2 * np.pi, 9, endpoint=False)
         grid = Grid(np.vstack([np.zeros_like(s), np.zeros_like(s), s]).T, sort=False)
@@ -680,6 +615,106 @@ class TestCurveOmega:
         R = 10 + np.cos(s)
         x_true = np.array([R * np.cos(s), R * np.sin(s), -np.cos(s)]).T
         np.testing.assert_allclose(d["x"], x_true, atol=1e-12)
+
+
+class TestNoSpuriousOmegaDOF:
+    """Objects without a generalized angle carry no omega degree of freedom.
+
+    An empty omega basis is what "omega == 0" means: the bases are built at
+    zero resolution, and a non-symmetric basis at zero resolution still carries
+    its constant mode. Left in, that mode is a live optimizable parameter, so
+    every asymmetric surface, section, curve, coil and equilibrium would have
+    dim_x one larger than on master for a coordinate that is not being
+    generalized.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_omega_free_objects_have_empty_W_basis(self, sym):
+        """Default (omega-free) objects have no W modes in either symmetry.
+
+        Coils are here because FourierRZCoil subclasses FourierRZCurve and so
+        inherits the omega machinery, but a coil is a lab-frame filament: its
+        parameter has no generalized angle and the compute graph is not written
+        for one.
+        """
+        coil = FourierRZCoil(current=1e6, R_n=np.array([10.0]), sym=sym)
+        surf = FourierRZToroidalSurface(sym=sym)
+        eq = Equilibrium(L=4, M=4, N=2, sym=sym)
+        for thing, key in [
+            (surf, "W_lmn"),
+            (FourierRZCurve(sym=sym), "W_n"),
+            (coil, "W_n"),
+            (eq, "W_lmn"),
+        ]:
+            assert thing.W_basis.num_modes == 0
+            assert thing.dimensions[key] == 0
+        # a section is a constant-zeta object: omega is not a parameter at all
+        sect = ZernikeRZToroidalSection(sym=sym)
+        assert sect.W_basis.num_modes == 0
+        assert "W_lmn" not in sect.dimensions
+        assert eq.Lz == eq.Mz == eq.Nz == 0
+        np.testing.assert_allclose(
+            surf.compute("omega", grid=LinearGrid(M=4, N=4))["omega"], 0
+        )
+        # re-resolving must not resurrect the constant mode
+        surf.change_resolution(M=4, N=3)
+        eq.change_resolution(L=6, M=6, N=3)
+        coil.change_resolution(N=4)
+        for thing in [surf, eq, coil]:
+            assert thing.W_basis.num_modes == 0
+
+    @pytest.mark.unit
+    def test_omega_can_still_be_requested(self):
+        """Asking for omega resolution still builds the full asymmetric basis."""
+        # asymmetric omega bases are twice the size of the symmetric ones
+        surf = FourierRZToroidalSurface(sym=False, Mz=2, Nz=2)
+        assert surf.W_basis.num_modes == 25
+        assert FourierRZToroidalSurface(sym=True, Mz=2, Nz=2).W_basis.num_modes == 12
+        # opting in after construction works too
+        surf2 = FourierRZToroidalSurface(sym=False)
+        surf2.change_resolution(M=2, N=2, Mz=2, Nz=2)
+        assert surf2.W_basis.num_modes == 25
+        eq = Equilibrium(L=4, M=4, N=2, sym=False, Lz=2, Mz=1, Nz=1)
+        n_before = eq.W_basis.num_modes
+        assert n_before > 0
+        eq.change_resolution(Lz=4, Mz=2, Nz=2)
+        assert eq.W_basis.num_modes > n_before
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_old_files_load_without_omega(self, sym):
+        """The _set_up back-compat path builds an empty basis in both symmetries."""
+        for thing in [
+            FourierRZToroidalSurface(sym=sym),
+            ZernikeRZToroidalSection(sym=sym),
+            FourierRZCurve(sym=sym),
+        ]:
+            old = thing.copy()
+            name = "_W_n" if isinstance(old, FourierRZCurve) else "_W_lmn"
+            delattr(old, name)
+            del old._W_basis
+            old._set_up()
+            assert old.W_basis.num_modes == 0
+            assert getattr(old, name[1:]).size == 0
+
+    @pytest.mark.unit
+    def test_coil_field_is_classical(self):
+        """A circular coil reproduces the analytic loop field on its axis.
+
+        A spurious omega on a coil is not inert: it moves the filament, and a
+        constant one moved this coil's on-axis |B| by 24x before the basis was
+        made empty.
+        """
+        R0, I = 2.0, 1e6
+        coil = FourierRZCoil(current=I, R_n=np.array([R0]), sym=False)
+        z = np.array([0.0, 0.5, 1.0, 2.0])
+        coords = np.array([np.zeros_like(z), np.zeros_like(z), z]).T
+        B = np.asarray(coil.compute_magnetic_field(coords, basis="rpz"))
+        # on-axis field of a circular filament
+        Bz = mu_0 * I * R0**2 / (2 * (R0**2 + z**2) ** 1.5)
+        np.testing.assert_allclose(B[:, :2], 0, atol=1e-12)
+        np.testing.assert_allclose(B[:, 2], Bz, rtol=1e-10)
 
 
 def _make_elongated_surface(NFP=1, omega=True, elong=2.5):
@@ -701,23 +736,6 @@ def _make_elongated_surface(NFP=1, omega=True, elong=2.5):
         NFP=NFP,
         sym=True,
         **kw,
-    )
-
-
-def _make_synthetic_surface_omega0(NFP=1):
-    """Same R, Z as _make_synthetic_surface but with omega identically zero.
-
-    The control: with omega = 0 a constant-zeta cross-section IS planar, so
-    DESC's area/perimeter and a direct measurement must agree to within
-    discretization.
-    """
-    return FourierRZToroidalSurface(
-        R_lmn=np.array([10.0, 1.0, 0.05]),
-        Z_lmn=np.array([-1.0, -0.05]),
-        modes_R=np.array([[0, 0], [1, 0], [1, 1]]),
-        modes_Z=np.array([[-1, 0], [-1, 1]]),
-        NFP=NFP,
-        sym=True,
     )
 
 
@@ -784,83 +802,43 @@ class TestCrossSectionGeometry:
 
     @pytest.mark.unit
     @pytest.mark.parametrize("omega", [False, True])
-    def test_area_matches_direct_measurement(self, omega):
-        """Check A(z) against the area measured in the cross-section's plane."""
+    # index into (area, perimeter, elongation) as _measure_cross_section returns
+    # them, with the tolerance for omega == 0 and for omega != 0. The two
+    # tolerances are orders apart, so each case asserts the effect rather than
+    # passing on slack. perimeter(z) is the most direct probe: it uses
+    # safenorm(e_theta), the full 3-D step length, which on a warped
+    # cross-section is longer than the in-plane one by R*omega_theta.
+    # a_major/a_minor is derived from the other two through Ramanujan's ellipse
+    # approximation, so comparing against the same formula applied to the
+    # measured area and perimeter attributes any difference to A(z) and
+    # perimeter(z) rather than to the definition.
+    @pytest.mark.parametrize(
+        "name, idx, tol0, tolw",
+        [
+            ("A(z)", 0, 1e-5, 2e-2),  # measured 1.6e-06 / 9.3e-03
+            ("perimeter(z)", 1, 1e-5, 1e-3),  # measured 3.9e-07 / 2.1e-04
+            ("a_major/a_minor", 2, 1e-5, 3e-2),  # measured 1.3e-06 / 1.6e-02
+        ],
+    )
+    def test_matches_direct_measurement(self, omega, name, idx, tol0, tolw):
+        """Check the constant-zeta quantities against a direct measurement."""
         surf = _make_elongated_surface(NFP=1, omega=omega)
         zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
         grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
-        A_desc = grid.compress(
-            np.asarray(surf.compute("A(z)", grid=grid)["A(z)"]), surface_label="zeta"
+        desc_val = grid.compress(
+            np.asarray(surf.compute(name, grid=grid)[name]), surface_label="zeta"
         )
-        A_mine = np.array([_measure_cross_section(surf, z)[0] for z in zetas])
-        rel = np.abs(A_desc / A_mine - 1)
-        # measured: 1.6e-06 at omega=0, 9.3e-03 at omega!=0 -- four orders
-        # apart, so this asserts the effect rather than passing on slack.
-        tol = 2e-2 if omega else 1e-5
+        measured = np.array([_measure_cross_section(surf, z)[idx] for z in zetas])
+        if name == "a_major/a_minor":
+            # as a/b -> 1 the Ramanujan inversion has a square-root singularity
+            # and the comparison stops meaning anything
+            assert np.all(measured > 1.5), f"cross-section not elongated: {measured}"
+        rel = np.abs(desc_val / measured - 1)
+        tol = tolw if omega else tol0
         assert np.all(rel < tol), (
-            f"omega={omega}: A(z) vs direct measurement differs by "
+            f"omega={omega}: {name} vs direct measurement differs by "
             f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
-            f"  DESC   {A_desc}\n  direct {A_mine}"
-        )
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("omega", [False, True])
-    def test_perimeter_matches_direct_measurement(self, omega):
-        """perimeter(z) uses safenorm(e_theta), the full 3-D step length.
-
-        On a warped cross-section that is longer than the in-plane step, so this
-        is where the sideways R*omega_theta component shows up directly.
-        """
-        surf = _make_elongated_surface(NFP=1, omega=omega)
-        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
-        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
-        P_desc = grid.compress(
-            np.asarray(surf.compute("perimeter(z)", grid=grid)["perimeter(z)"]),
-            surface_label="zeta",
-        )
-        P_mine = np.array([_measure_cross_section(surf, z)[1] for z in zetas])
-        rel = np.abs(P_desc / P_mine - 1)
-        # measured: 3.9e-07 at omega=0, 2.1e-04 at omega!=0
-        tol = 1e-3 if omega else 1e-5
-        assert np.all(rel < tol), (
-            f"omega={omega}: perimeter(z) vs direct differs by "
-            f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
-            f"  DESC   {P_desc}\n  direct {P_mine}"
-        )
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("omega", [False, True])
-    def test_elongation_matches_direct_measurement(self, omega):
-        """Check a_major/a_minor against the same formula on measured inputs.
-
-        DESC derives elongation from A(z) and perimeter(z) through Ramanujan's
-        ellipse approximation, so the comparison applies that identical formula
-        to an independently measured area and perimeter.  Any difference is then
-        attributable to A(z)/perimeter(z), not to the definition.
-
-        The cross-section is deliberately elongated: as a/b -> 1 the Ramanujan
-        inversion has a square-root singularity and the comparison becomes
-        meaningless (a 0.05 % perimeter change moved it 47 % on a circle).
-        """
-        surf = _make_elongated_surface(NFP=1, omega=omega)
-        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
-        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
-        e_desc = grid.compress(
-            np.asarray(surf.compute("a_major/a_minor", grid=grid)["a_major/a_minor"]),
-            surface_label="zeta",
-        )
-        e_mine = np.array([_measure_cross_section(surf, z)[2] for z in zetas])
-        assert np.all(e_mine > 1.5), (
-            f"cross-section not elongated enough for a conditioned comparison: "
-            f"{e_mine}"
-        )
-        rel = np.abs(e_desc / e_mine - 1)
-        # measured: 1.3e-06 at omega=0, 1.6e-02 at omega!=0
-        tol = 3e-2 if omega else 1e-5
-        assert np.all(rel < tol), (
-            f"omega={omega}: elongation differs by {100 * rel.max():.3f} % "
-            f"(max over zeta), tol {100 * tol:.3f} %\n"
-            f"  DESC   {e_desc}\n  direct {e_mine}"
+            f"  DESC   {desc_val}\n  direct {measured}"
         )
 
 

@@ -377,13 +377,17 @@ class Equilibrium(IOAble, Optimizable):
             sym=self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
-        # omega has the same (sin) stellarator symmetry parity as Z and lambda
+        # omega has the same (sin) stellarator symmetry parity as Z and lambda.
+        # Zero omega resolution means no generalized toroidal angle, so the basis
+        # must be empty: a non-symmetric basis at Lz=Mz=Nz=0 would still carry
+        # the (0,0,0) mode and give every asymmetric equilibrium a spurious
+        # degree of freedom. The symmetric case is already empty, sin(0) being 0.
         self._W_basis = FourierZernikeBasis(
             L=self.Lz,
             M=self.Mz,
             N=self.Nz,
             NFP=self.NFP,
-            sym=self._Z_sym,
+            sym="sin" if (self.Lz == self.Mz == self.Nz == 0) else self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
 
@@ -511,7 +515,8 @@ class Equilibrium(IOAble, Optimizable):
                 M=0,
                 N=0,
                 NFP=self.NFP,
-                sym="sin" if self.sym else False,
+                # saved without omega, so empty regardless of symmetry
+                sym="sin",
                 spectral_indexing=self.spectral_indexing,
             )
         if self._W_lmn is None:
@@ -725,12 +730,17 @@ class Equilibrium(IOAble, Optimizable):
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
         )
+        W_sym = "sin" if self.sym else self.sym
+        if not old_modes_W.size and self.Lz == self.Mz == self.Nz == 0:
+            # no omega before and none asked for: keep the basis empty, see the
+            # note where it is first built
+            W_sym = "sin"
         self.W_basis.change_resolution(
             self.Lz,
             self.Mz,
             self.Nz,
             NFP=self.NFP,
-            sym="sin" if self.sym else self.sym,
+            sym=W_sym,
         )
 
         for profile in [

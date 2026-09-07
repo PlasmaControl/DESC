@@ -183,8 +183,14 @@ class FourierRZToroidalSurface(Surface):
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
+        # No omega modes and no omega resolution asked for means no generalized
+        # toroidal angle, so the basis must be empty. A non-symmetric
+        # DoubleFourierSeries at M=N=0 still carries the (0,0) mode, which would
+        # give every asymmetric surface a spurious omega degree of freedom. The
+        # symmetric case is already empty, since sin(0) vanishes.
+        no_omega = not modes_W.size and self._Mz == 0 and self._Nz == 0
         self._W_basis = DoubleFourierSeries(
-            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if sym else False
+            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if (sym or no_omega) else False
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
@@ -213,9 +219,8 @@ class FourierRZToroidalSurface(Surface):
         """
         super()._set_up()
         if not hasattr(self, "_W_basis") or self._W_basis is None:
-            self._W_basis = DoubleFourierSeries(
-                M=0, N=0, NFP=self.NFP, sym="sin" if self.sym else False
-            )
+            # saved without omega, so the basis is empty regardless of symmetry
+            self._W_basis = DoubleFourierSeries(M=0, N=0, NFP=self.NFP, sym="sin")
         if not hasattr(self, "_W_lmn") or self._W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
         self._Mz = int(self.W_basis.M)
@@ -330,9 +335,12 @@ class FourierRZToroidalSurface(Surface):
             self.Z_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            self.W_basis.change_resolution(
-                M=Mz, N=Nz, NFP=self.NFP, sym="sin" if self.sym else self.sym
-            )
+            W_sym = "sin" if self.sym else self.sym
+            if not W_modes_old.size and Mz == 0 and Nz == 0:
+                # no omega before and none asked for: keep the basis empty, see
+                # the note in __init__
+                W_sym = "sin"
+            self.W_basis.change_resolution(M=Mz, N=Nz, NFP=self.NFP, sym=W_sym)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self.W_lmn = copy_coeffs(self.W_lmn, W_modes_old, self.W_basis.modes)
@@ -884,8 +892,10 @@ class FourierRZToroidalSurface(Surface):
         stellarator coil shapes", Landreman (2017)
         https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
 
-        NOTE: Must have the toroidal angle as the cylindrical toroidal angle
-        in order for this algorithm to work properly
+        NOTE: with a generalized toroidal angle (omega != 0) the offset points
+        are found at the base surface's own toroidal angle phi = zeta + omega,
+        so the returned surface carries the base surface's omega unchanged and
+        only its R, Z are fitted.
 
         NOTE: if one wants to use this inside of an optimization, one should
         use the private method _constant_offset_surface directly, and refer to
@@ -941,12 +951,6 @@ class FourierRZToroidalSurface(Surface):
         """
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
-        errorif(
-            np.any(self.W_lmn),
-            NotImplementedError,
-            "constant_offset_surface requires the surface toroidal angle to be "
-            + "the cylindrical toroidal angle (omega = 0).",
-        )
 
         base_surface = self.copy()
         if grid is None:
@@ -974,6 +978,10 @@ class FourierRZToroidalSurface(Surface):
             data["transforms"]["Z"].basis.modes[:, 1:],
             base_surface.NFP,
             base_surface.sym,
+            # the offset points were found at the base surface's own toroidal
+            # angle, so the offset surface uses the base surface's chart
+            W_lmn=base_surface.W_lmn,
+            modes_W=base_surface.W_basis.modes[:, 1:],
         )
 
         if full_output:
@@ -1199,10 +1207,13 @@ class ZernikeRZToroidalSection(Surface):
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
         # a toroidal cross-section is defined at constant zeta, and does not
         # support a generalized toroidal angle; omega is identically zero.
-        # the (possibly empty) basis exists only so shared compute functions
-        # can evaluate omega and its derivatives uniformly.
+        # the empty basis exists only so shared compute functions can evaluate
+        # omega and its derivatives uniformly. it must be empty for both
+        # symmetries: a non-symmetric ZernikePolynomial at L=M=0 would still
+        # carry the (0,0) mode and hand the section a degree of freedom that
+        # has no meaning here.
         self._W_basis = ZernikePolynomial(
-            L=0, M=0, spectral_indexing=spectral_indexing, sym="sin" if sym else False
+            L=0, M=0, spectral_indexing=spectral_indexing, sym="sin"
         )
         self._W_lmn = np.zeros(self._W_basis.num_modes)
         self._sym = bool(sym)
@@ -1233,7 +1244,7 @@ class ZernikeRZToroidalSection(Surface):
                 L=0,
                 M=0,
                 spectral_indexing=self.spectral_indexing,
-                sym="sin" if self.sym else False,
+                sym="sin",
             )
         if not hasattr(self, "_W_lmn") or self._W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
@@ -1459,8 +1470,10 @@ def _constant_offset_surface(
     stellarator coil shapes", Landreman (2017)
     https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
 
-    NOTE: Must have the toroidal angle as the cylindrical toroidal angle
-    in order for this algorithm to work properly
+    NOTE: each offset point is placed at the cylindrical angle the base surface
+    assigns to its own (theta, zeta) label, phi = zeta + omega, so the offset
+    surface inherits the base surface's toroidal chart and only R, Z are fitted.
+    With omega = 0 this is phi = zeta, the classical algorithm.
 
     NOTE: this function lacks the checks of the constant_offset_surface
     so that it is jittable/differentiable
@@ -1515,26 +1528,30 @@ def _constant_offset_surface(
 
     def n_and_r_jax(nodes):
         data = base_surface.compute(
-            ["X", "Y", "Z", "n_rho"],
+            ["X", "Y", "Z", "n_rho", "phi"],
             grid=Grid(nodes, jitable=True, sort=False),
             method="jitable",
             params=params,
         )
 
-        phi = nodes[:, 2]
+        # n_rho has cylindrical components, so rotating it into the lab frame
+        # takes the cylindrical angle phi = zeta + omega, not the node's zeta
+        phi = data["phi"]
         re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
         n = data["n_rho"]
         n = rpz2xyz_vec(n, phi=phi)
         r_offset = re + offset * n
-        return n, re, r_offset
+        return n, re, r_offset, phi
 
-    def fun_jax(zeta_hat, theta, zeta):
+    def fun_jax(zeta_hat, theta, phi_target):
         nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
-        n, r, r_offset = n_and_r_jax(nodes)
+        _, _, r_offset, _ = n_and_r_jax(nodes)
         # add 2pi to the arctan2<0 so it matches our convention of
         # zeta being btwn 0 and 2pi
         zeta_offset = jnp.arctan2(r_offset[0, 1], r_offset[0, 0])
-        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - zeta
+        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - (
+            phi_target
+        )
 
     vecroot = jit(
         vmap(
@@ -1543,14 +1560,23 @@ def _constant_offset_surface(
             )
         )
     )
-    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+    # Each offset point is required to land at the cylindrical angle that the
+    # base surface assigns to its own (theta, zeta) label, phi = zeta + omega.
+    # The offset surface then inherits the base surface's toroidal chart
+    # exactly, so its omega is the base one and only R, Z need fitting. With
+    # omega = 0 this is phi = zeta and reduces to the classical algorithm.
+    base_nodes = jnp.vstack(
+        (jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], grid.nodes[:, 2])
+    ).T
+    phi_target = jnp.mod(n_and_r_jax(base_nodes)[3], 2 * np.pi)
+    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], phi_target)
 
     zetas = jnp.asarray(zetas)
     nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
-    n, x, x_offsets = n_and_r_jax(nodes)
+    n, x, x_offsets, phi = n_and_r_jax(nodes)
 
     data = {}
-    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 2])
+    data["n"] = xyz2rpz_vec(n, phi=phi)
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 

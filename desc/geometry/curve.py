@@ -153,7 +153,13 @@ class FourierRZCurve(Curve):
         self._NFP = check_posint(NFP, "NFP", False)
         self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
         self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
-        self._W_basis = FourierSeries(NW, int(NFP), sym="sin" if sym else False)
+        # No omega modes means no generalized toroidal angle, so the basis must be
+        # empty. A non-symmetric FourierSeries at N=0 still carries the n=0 mode,
+        # which would give every asymmetric curve -- and the coils that subclass
+        # them -- a spurious omega degree of freedom.
+        self._W_basis = FourierSeries(
+            NW, int(NFP), sym="sin" if (sym or not modes_W.size) else False
+        )
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
@@ -167,9 +173,8 @@ class FourierRZCurve(Curve):
         """
         super()._set_up()
         if not hasattr(self, "_W_basis") or self._W_basis is None:
-            self._W_basis = FourierSeries(
-                0, int(self.NFP), sym="sin" if self.sym else False
-            )
+            # saved without omega, so the basis is empty regardless of symmetry
+            self._W_basis = FourierSeries(0, int(self.NFP), sym="sin")
         if not hasattr(self, "_W_n") or self._W_n is None:
             self._W_n = np.zeros(self.W_basis.num_modes)
 
@@ -232,9 +237,12 @@ class FourierRZCurve(Curve):
             self.Z_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            self.W_basis.change_resolution(
-                N=Nz, NFP=self.NFP, sym="sin" if self.sym else self.sym
-            )
+            W_sym = "sin" if self.sym else self.sym
+            if not W_modes_old.size and Nz == 0:
+                # no omega before and none asked for: keep the basis empty, see
+                # the note in __init__
+                W_sym = "sin"
+            self.W_basis.change_resolution(N=Nz, NFP=self.NFP, sym=W_sym)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
             self.W_n = copy_coeffs(self.W_n, W_modes_old, self.W_basis.modes)

@@ -239,6 +239,70 @@ class TestSurfaceFitting:
         # a healthy map passes and returns min(1 + omega_zeta)
         assert _make_synthetic_surface().check_toroidal_map() > 0.5
 
+    @pytest.mark.unit
+    def test_constant_offset_surface_with_omega(self):
+        """The offset surface inherits the base surface's toroidal chart.
+
+        Offset points are placed at the cylindrical angle the base surface
+        assigns to its own (theta, zeta), so the fitted surface must reproduce
+        them when evaluated at those same labels. Carrying omega is what makes
+        that true: the identical R, Z fit with omega dropped misses by ~1 m.
+        """
+        base = _make_synthetic_surface()
+        offset = 0.5
+        # an explicit non-symmetric grid: the default grid is built with
+        # sym=base_surface.sym, which halves the fitted coefficients
+        grid = LinearGrid(M=12, N=12, NFP=1, sym=False)
+        surf, data, _ = base.constant_offset_surface(
+            offset, grid, M=10, N=10, full_output=True
+        )
+        np.testing.assert_allclose(
+            np.asarray(surf.W_lmn), np.asarray(base.W_lmn), atol=1e-14
+        )
+        assert surf.check_toroidal_map() > 0
+        # the points really are `offset` from the base surface
+        sep = np.linalg.norm(
+            np.asarray(data["x"]) - np.asarray(data["x_offset_surface"]), axis=1
+        )
+        np.testing.assert_allclose(sep, offset, rtol=1e-4)
+
+        def _xyz(s):
+            d = s.compute(["R", "Z", "phi"], grid=Grid(grid.nodes, sort=False))
+            R, p, Z = (np.asarray(d[k]) for k in ("R", "phi", "Z"))
+            return np.stack([R * np.cos(p), R * np.sin(p), Z], axis=1)
+
+        rpz = np.asarray(data["x_offset_surface"])
+        target = np.stack(
+            [rpz[:, 0] * np.cos(rpz[:, 1]), rpz[:, 0] * np.sin(rpz[:, 1]), rpz[:, 2]],
+            axis=1,
+        )
+        np.testing.assert_allclose(_xyz(surf), target, atol=1e-9)
+        # negative control: the same R, Z with omega dropped is far off, so the
+        # assertion above is really testing the inherited chart
+        dropped = FourierRZToroidalSurface(
+            surf.R_lmn,
+            surf.Z_lmn,
+            surf.R_basis.modes[:, 1:],
+            surf.Z_basis.modes[:, 1:],
+            base.NFP,
+            base.sym,
+            check_orientation=False,
+        )
+        assert np.linalg.norm(_xyz(dropped) - target, axis=1).max() > 0.1
+
+    @pytest.mark.unit
+    def test_constant_offset_surface_zero_omega_unchanged(self):
+        """With omega = 0 the offset algorithm is the classical one."""
+        surf = FourierRZToroidalSurface()
+        offset = surf.constant_offset_surface(1.0, LinearGrid(M=6, N=2), M=1, N=1)
+        assert offset.W_basis.num_modes == 0
+        np.testing.assert_allclose(
+            np.asarray(offset.R_lmn)[offset.R_basis.get_idx(M=0, N=0)], 10
+        )
+        np.testing.assert_allclose(
+            np.asarray(offset.R_lmn)[offset.R_basis.get_idx(M=1, N=0)], 2
+        )
+
 
 class TestEquilibriumOmega:
     """Phase 2: generalized equilibrium coordinates."""

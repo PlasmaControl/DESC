@@ -147,5 +147,8 @@ Current limitations
   :math:`\omega = 0` paths.
 * ``ZernikeRZToroidalSection`` is a constant-:math:`\zeta` object and always
   has :math:`\omega \equiv 0`.
-* ``VMECIO.save`` and ``FourierRZToroidalSurface.constant_offset_surface``
-  require :math:`\omega = 0` and raise otherwise.
+* ``VMECIO.save`` requires :math:`\omega = 0` and raises otherwise.
+* ``constant_offset_surface`` returns a surface carrying the base surface's
+  :math:`\omega`, so the offset is measured normal to the base surface but the
+  two share a toroidal chart; it does not re-fit :math:`\omega` for the offset
+  geometry.

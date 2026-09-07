@@ -892,8 +892,10 @@ class FourierRZToroidalSurface(Surface):
         stellarator coil shapes", Landreman (2017)
         https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
 
-        NOTE: Must have the toroidal angle as the cylindrical toroidal angle
-        in order for this algorithm to work properly
+        NOTE: with a generalized toroidal angle (omega != 0) the offset points
+        are found at the base surface's own toroidal angle phi = zeta + omega,
+        so the returned surface carries the base surface's omega unchanged and
+        only its R, Z are fitted.
 
         NOTE: if one wants to use this inside of an optimization, one should
         use the private method _constant_offset_surface directly, and refer to
@@ -949,12 +951,6 @@ class FourierRZToroidalSurface(Surface):
         """
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
-        errorif(
-            np.any(self.W_lmn),
-            NotImplementedError,
-            "constant_offset_surface requires the surface toroidal angle to be "
-            + "the cylindrical toroidal angle (omega = 0).",
-        )
 
         base_surface = self.copy()
         if grid is None:
@@ -982,6 +978,10 @@ class FourierRZToroidalSurface(Surface):
             data["transforms"]["Z"].basis.modes[:, 1:],
             base_surface.NFP,
             base_surface.sym,
+            # the offset points were found at the base surface's own toroidal
+            # angle, so the offset surface uses the base surface's chart
+            W_lmn=base_surface.W_lmn,
+            modes_W=base_surface.W_basis.modes[:, 1:],
         )
 
         if full_output:
@@ -1470,8 +1470,10 @@ def _constant_offset_surface(
     stellarator coil shapes", Landreman (2017)
     https://iopscience.iop.org/article/10.1088/1741-4326/aa57d4
 
-    NOTE: Must have the toroidal angle as the cylindrical toroidal angle
-    in order for this algorithm to work properly
+    NOTE: each offset point is placed at the cylindrical angle the base surface
+    assigns to its own (theta, zeta) label, phi = zeta + omega, so the offset
+    surface inherits the base surface's toroidal chart and only R, Z are fitted.
+    With omega = 0 this is phi = zeta, the classical algorithm.
 
     NOTE: this function lacks the checks of the constant_offset_surface
     so that it is jittable/differentiable
@@ -1526,26 +1528,30 @@ def _constant_offset_surface(
 
     def n_and_r_jax(nodes):
         data = base_surface.compute(
-            ["X", "Y", "Z", "n_rho"],
+            ["X", "Y", "Z", "n_rho", "phi"],
             grid=Grid(nodes, jitable=True, sort=False),
             method="jitable",
             params=params,
         )
 
-        phi = nodes[:, 2]
+        # n_rho has cylindrical components, so rotating it into the lab frame
+        # takes the cylindrical angle phi = zeta + omega, not the node's zeta
+        phi = data["phi"]
         re = jnp.vstack([data["X"], data["Y"], data["Z"]]).T
         n = data["n_rho"]
         n = rpz2xyz_vec(n, phi=phi)
         r_offset = re + offset * n
-        return n, re, r_offset
+        return n, re, r_offset, phi
 
-    def fun_jax(zeta_hat, theta, zeta):
+    def fun_jax(zeta_hat, theta, phi_target):
         nodes = jnp.vstack((jnp.ones_like(theta), theta, zeta_hat)).T
-        n, r, r_offset = n_and_r_jax(nodes)
+        _, _, r_offset, _ = n_and_r_jax(nodes)
         # add 2pi to the arctan2<0 so it matches our convention of
         # zeta being btwn 0 and 2pi
         zeta_offset = jnp.arctan2(r_offset[0, 1], r_offset[0, 0])
-        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - zeta
+        return jnp.where(zeta_offset < 0, zeta_offset + 2 * np.pi, zeta_offset) - (
+            phi_target
+        )
 
     vecroot = jit(
         vmap(
@@ -1554,14 +1560,23 @@ def _constant_offset_surface(
             )
         )
     )
-    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], grid.nodes[:, 2])
+    # Each offset point is required to land at the cylindrical angle that the
+    # base surface assigns to its own (theta, zeta) label, phi = zeta + omega.
+    # The offset surface then inherits the base surface's toroidal chart
+    # exactly, so its omega is the base one and only R, Z need fitting. With
+    # omega = 0 this is phi = zeta and reduces to the classical algorithm.
+    base_nodes = jnp.vstack(
+        (jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], grid.nodes[:, 2])
+    ).T
+    phi_target = jnp.mod(n_and_r_jax(base_nodes)[3], 2 * np.pi)
+    zetas, (res, niter) = vecroot(grid.nodes[:, 2], grid.nodes[:, 1], phi_target)
 
     zetas = jnp.asarray(zetas)
     nodes = jnp.vstack((jnp.ones_like(grid.nodes[:, 1]), grid.nodes[:, 1], zetas)).T
-    n, x, x_offsets = n_and_r_jax(nodes)
+    n, x, x_offsets, phi = n_and_r_jax(nodes)
 
     data = {}
-    data["n"] = xyz2rpz_vec(n, phi=nodes[:, 2])
+    data["n"] = xyz2rpz_vec(n, phi=phi)
     data["x"] = xyz2rpz(x)
     data["x_offset_surface"] = xyz2rpz(x_offsets)
 

@@ -19,10 +19,13 @@ import os
 
 import numpy as np
 import pytest
+from scipy.constants import mu_0
 
+from desc.coils import CoilSet, FourierRZCoil
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
+from desc.io import load
 
 
 def _wrap(angle):
@@ -117,8 +120,6 @@ class TestSurfaceOmegaState:
         surf = _make_synthetic_surface()
         path = os.path.join(tmpdir, "surf.h5")
         surf.save(path)
-        from desc.io import load
-
         surf2 = load(path)
         np.testing.assert_allclose(
             np.asarray(surf2.W_lmn), np.asarray(surf.W_lmn), atol=1e-14
@@ -671,7 +672,7 @@ class TestCurveOmega:
     def test_curve_zero_omega_unchanged(self):
         """Curves without W behave exactly as before."""
         curve = FourierRZCurve(R_n=[0, 10, 1], Z_n=[0, 0, -1], NFP=1, sym=False)
-        assert curve.W_basis.num_modes == 1  # constant mode, coefficient zero
+        assert curve.W_basis.num_modes == 0  # no omega modes at all
         np.testing.assert_allclose(np.asarray(curve.W_n), 0)
         s = np.linspace(0, 2 * np.pi, 9, endpoint=False)
         grid = Grid(np.vstack([np.zeros_like(s), np.zeros_like(s), s]).T, sort=False)
@@ -680,6 +681,74 @@ class TestCurveOmega:
         R = 10 + np.cos(s)
         x_true = np.array([R * np.cos(s), R * np.sin(s), -np.cos(s)]).T
         np.testing.assert_allclose(d["x"], x_true, atol=1e-12)
+
+
+class TestCoilsHaveNoOmega:
+    """Coils never carry a generalized toroidal angle.
+
+    FourierRZCoil subclasses FourierRZCurve, so it inherits the omega
+    machinery, but a coil is a filament in the lab frame: its parameter has no
+    generalized angle and the compute graph is not written for one. The omega
+    basis must therefore be empty, or the coil picks up a degree of freedom
+    that changes dim_x and, if an optimizer ever excites it, silently returns
+    the wrong field.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_coil_has_no_omega_dof(self, sym):
+        """Coils have an empty W basis and no W_n degree of freedom."""
+        coil = FourierRZCoil(
+            current=1e6, R_n=np.array([10.0]), Z_n=np.array([0.0]), sym=sym
+        )
+        assert coil.W_basis.num_modes == 0
+        assert coil.dimensions["W_n"] == 0
+        # the omega-free curve it is built from must agree, and dim_x must be
+        # the sum of the classical degrees of freedom alone
+        assert coil.dim_x == sum(
+            v for k, v in coil.dimensions.items() if k in coil.optimizable_params
+        )
+        # changing resolution must not resurrect the n=0 mode
+        coil.change_resolution(N=4)
+        assert coil.W_basis.num_modes == 0
+        assert coil.dimensions["W_n"] == 0
+
+    @pytest.mark.unit
+    def test_coil_field_is_classical(self):
+        """A circular coil reproduces the analytic loop field on its axis."""
+        R0, I = 2.0, 1e6
+        coil = FourierRZCoil(
+            current=I, R_n=np.array([R0]), Z_n=np.array([0.0]), sym=False
+        )
+        z = np.array([0.0, 0.5, 1.0, 2.0])
+        coords = np.array([np.zeros_like(z), np.zeros_like(z), z]).T
+        B = coil.compute_magnetic_field(coords, basis="rpz")
+        # on-axis field of a circular filament
+        Bz = mu_0 * I * R0**2 / (2 * (R0**2 + z**2) ** 1.5)
+        np.testing.assert_allclose(np.asarray(B)[:, 0], 0, atol=1e-12)
+        np.testing.assert_allclose(np.asarray(B)[:, 1], 0, atol=1e-12)
+        np.testing.assert_allclose(np.asarray(B)[:, 2], Bz, rtol=1e-10)
+
+    @pytest.mark.unit
+    def test_coilset_roundtrip_has_no_omega(self, tmpdir):
+        """Saving and loading a coilset does not introduce omega."""
+        coil = FourierRZCoil(
+            current=1e6, R_n=np.array([10.0]), Z_n=np.array([0.0]), sym=False
+        )
+        coils = CoilSet.linspaced_angular(coil, n=4)
+        path = os.path.join(str(tmpdir), "coilset_omega.h5")
+        coils.save(path)
+        coils2 = load(path)
+        for c in coils2:
+            assert c.W_basis.num_modes == 0
+            assert c.dimensions["W_n"] == 0
+        coords = np.array([[10.0, 0.0, 0.5], [9.0, 0.3, -0.2]])
+        np.testing.assert_allclose(
+            np.asarray(coils2.compute_magnetic_field(coords, basis="rpz")),
+            np.asarray(coils.compute_magnetic_field(coords, basis="rpz")),
+            rtol=1e-12,
+            atol=1e-14,
+        )
 
 
 def _make_elongated_surface(NFP=1, omega=True, elong=2.5):

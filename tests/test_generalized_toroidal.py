@@ -986,3 +986,40 @@ class TestOmegaSmallBranches:
         assert "Omega spectral resolution (Lz,Mz,Nz)=(2,2,2)" in capsys.readouterr().out
         Equilibrium(L=4, M=4, N=2, NFP=2).resolution_summary()
         assert "Omega spectral resolution" not in capsys.readouterr().out
+
+    @pytest.mark.unit
+    def test_get_deltas_picks_up_omega(self):
+        """Perturbation deltas include the boundary and axis omega changes."""
+        from desc.perturbations import get_deltas
+
+        s1 = _make_synthetic_surface()
+        s2 = _make_synthetic_surface()
+        W = np.asarray(s2.W_lmn).copy()
+        W[0] += 0.01
+        s2.W_lmn = W
+        deltas = get_deltas({"surface": s1}, {"surface": s2})
+        np.testing.assert_allclose(deltas["Wb_lmn"], np.asarray(s2.W_lmn) - s1.W_lmn)
+
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lz=2, Mz=2, Nz=2)
+        a1, a2 = eq.axis, eq.axis.copy()
+        assert a2.W_n.size > 0
+        a2.W_n = np.asarray(a2.W_n) + 0.01
+        deltas = get_deltas({"axis": a1}, {"axis": a2})
+        np.testing.assert_allclose(deltas["Wa_n"], np.asarray(a2.W_n) - a1.W_n)
+
+    @pytest.mark.unit
+    def test_perturb_boundary_omega(self):
+        """A boundary omega delta perturbs the interior omega with it."""
+        from desc.perturbations import get_deltas
+
+        eq = Equilibrium(L=3, M=3, N=1, NFP=2, sym=True, Lz=2, Mz=1, Nz=1)
+        s2 = eq.surface.copy()
+        W = np.asarray(s2.W_lmn).copy()
+        W[0] += 0.01
+        s2.W_lmn = W
+        deltas = get_deltas({"surface": eq.surface}, {"surface": s2})
+        assert list(deltas) == ["Wb_lmn"]
+        eq2 = eq.perturb(deltas=deltas, order=1, verbose=0, copy=True)
+        # the boundary moved, and BoundaryWSelfConsistency carried it inward
+        np.testing.assert_allclose(np.asarray(eq2.Wb_lmn), np.asarray(s2.W_lmn))
+        assert np.max(np.abs(np.asarray(eq2.W_lmn) - np.asarray(eq.W_lmn))) > 1e-3

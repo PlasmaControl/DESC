@@ -349,8 +349,15 @@ def _add_shaping(
     # omega-free axisymmetric stage, so without Lz/Mz/Nz it would have no omega
     # modes, get no BoundaryWSelfConsistency, and fail on the Wb_lmn delta below
     eqi.change_resolution(
-        eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid,
-        Lz=eq.Lz, Mz=eq.Mz, Nz=eq.Nz,
+        eq.L,
+        eq.M,
+        eq.N,
+        eq.L_grid,
+        eq.M_grid,
+        eq.N_grid,
+        Lz=eq.Lz,
+        Mz=eq.Mz,
+        Nz=eq.Nz,
     )
 
     bdry_steps = 0 if eq.N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))

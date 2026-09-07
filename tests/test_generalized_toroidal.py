@@ -23,7 +23,11 @@ from scipy.constants import mu_0
 
 from desc.coils import CoilSet, FourierRZCoil
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import (
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+)
 from desc.grid import Grid, LinearGrid
 from desc.io import load
 
@@ -681,6 +685,79 @@ class TestCurveOmega:
         R = 10 + np.cos(s)
         x_true = np.array([R * np.cos(s), R * np.sin(s), -np.cos(s)]).T
         np.testing.assert_allclose(d["x"], x_true, atol=1e-12)
+
+
+class TestNoSpuriousOmegaDOF:
+    """Objects without a generalized angle carry no omega degree of freedom.
+
+    An empty omega basis is what "omega == 0" means: the bases are built at
+    zero resolution, and a non-symmetric basis at zero resolution still carries
+    its constant mode. Left in, that mode is a live optimizable parameter, so
+    every asymmetric surface, section and equilibrium would have dim_x one
+    larger than on master for a coordinate that is not being generalized.
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_omega_free_objects_have_empty_W_basis(self, sym):
+        """Default (omega-free) objects have no W modes in either symmetry."""
+        surf = FourierRZToroidalSurface(sym=sym)
+        sect = ZernikeRZToroidalSection(sym=sym)
+        curve = FourierRZCurve(sym=sym)
+        eq = Equilibrium(L=4, M=4, N=2, sym=sym)
+        for thing, key in [(surf, "W_lmn"), (curve, "W_n"), (eq, "W_lmn")]:
+            assert thing.W_basis.num_modes == 0
+            assert thing.dimensions[key] == 0
+        # a section is a constant-zeta object: omega is not a parameter at all
+        assert sect.W_basis.num_modes == 0
+        assert "W_lmn" not in sect.dimensions
+        assert eq.Lz == eq.Mz == eq.Nz == 0
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_change_resolution_does_not_add_omega(self, sym):
+        """Re-resolving an omega-free object leaves it omega-free."""
+        surf = FourierRZToroidalSurface(sym=sym)
+        surf.change_resolution(M=4, N=3)
+        assert surf.W_basis.num_modes == 0
+        eq = Equilibrium(L=4, M=4, N=2, sym=sym)
+        eq.change_resolution(L=6, M=6, N=3)
+        assert eq.W_basis.num_modes == 0
+        assert eq.W_lmn.size == 0
+
+    @pytest.mark.unit
+    def test_omega_can_still_be_requested(self):
+        """Asking for omega resolution still builds the full asymmetric basis."""
+        # asymmetric omega bases are twice the size of the symmetric ones
+        surf = FourierRZToroidalSurface(sym=False, Mz=2, Nz=2)
+        assert surf.W_basis.num_modes == 25
+        assert FourierRZToroidalSurface(sym=True, Mz=2, Nz=2).W_basis.num_modes == 12
+        # opting in after construction works too
+        surf2 = FourierRZToroidalSurface(sym=False)
+        surf2.change_resolution(M=2, N=2, Mz=2, Nz=2)
+        assert surf2.W_basis.num_modes == 25
+        eq = Equilibrium(L=4, M=4, N=2, sym=False, Lz=2, Mz=1, Nz=1)
+        n_before = eq.W_basis.num_modes
+        assert n_before > 0
+        eq.change_resolution(Lz=4, Mz=2, Nz=2)
+        assert eq.W_basis.num_modes > n_before
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_old_files_load_without_omega(self, sym):
+        """The _set_up back-compat path builds an empty basis in both symmetries."""
+        for thing in [
+            FourierRZToroidalSurface(sym=sym),
+            ZernikeRZToroidalSection(sym=sym),
+            FourierRZCurve(sym=sym),
+        ]:
+            old = thing.copy()
+            name = "_W_n" if isinstance(old, FourierRZCurve) else "_W_lmn"
+            delattr(old, name)
+            del old._W_basis
+            old._set_up()
+            assert old.W_basis.num_modes == 0
+            assert getattr(old, name[1:]).size == 0
 
 
 class TestCoilsHaveNoOmega:

@@ -183,8 +183,14 @@ class FourierRZToroidalSurface(Surface):
         self._Z_basis = DoubleFourierSeries(
             M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
         )
+        # No omega modes and no omega resolution asked for means no generalized
+        # toroidal angle, so the basis must be empty. A non-symmetric
+        # DoubleFourierSeries at M=N=0 still carries the (0,0) mode, which would
+        # give every asymmetric surface a spurious omega degree of freedom. The
+        # symmetric case is already empty, since sin(0) vanishes.
+        no_omega = not modes_W.size and self._Mz == 0 and self._Nz == 0
         self._W_basis = DoubleFourierSeries(
-            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if sym else False
+            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if (sym or no_omega) else False
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
@@ -213,9 +219,8 @@ class FourierRZToroidalSurface(Surface):
         """
         super()._set_up()
         if not hasattr(self, "_W_basis") or self._W_basis is None:
-            self._W_basis = DoubleFourierSeries(
-                M=0, N=0, NFP=self.NFP, sym="sin" if self.sym else False
-            )
+            # saved without omega, so the basis is empty regardless of symmetry
+            self._W_basis = DoubleFourierSeries(M=0, N=0, NFP=self.NFP, sym="sin")
         if not hasattr(self, "_W_lmn") or self._W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
         self._Mz = int(self.W_basis.M)
@@ -330,9 +335,12 @@ class FourierRZToroidalSurface(Surface):
             self.Z_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            self.W_basis.change_resolution(
-                M=Mz, N=Nz, NFP=self.NFP, sym="sin" if self.sym else self.sym
-            )
+            W_sym = "sin" if self.sym else self.sym
+            if not W_modes_old.size and Mz == 0 and Nz == 0:
+                # no omega before and none asked for: keep the basis empty, see
+                # the note in __init__
+                W_sym = "sin"
+            self.W_basis.change_resolution(M=Mz, N=Nz, NFP=self.NFP, sym=W_sym)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self.W_lmn = copy_coeffs(self.W_lmn, W_modes_old, self.W_basis.modes)
@@ -1199,10 +1207,13 @@ class ZernikeRZToroidalSection(Surface):
         self._Z_lmn = copy_coeffs(Z_lmn, modes_Z, self.Z_basis.modes[:, :2])
         # a toroidal cross-section is defined at constant zeta, and does not
         # support a generalized toroidal angle; omega is identically zero.
-        # the (possibly empty) basis exists only so shared compute functions
-        # can evaluate omega and its derivatives uniformly.
+        # the empty basis exists only so shared compute functions can evaluate
+        # omega and its derivatives uniformly. it must be empty for both
+        # symmetries: a non-symmetric ZernikePolynomial at L=M=0 would still
+        # carry the (0,0) mode and hand the section a degree of freedom that
+        # has no meaning here.
         self._W_basis = ZernikePolynomial(
-            L=0, M=0, spectral_indexing=spectral_indexing, sym="sin" if sym else False
+            L=0, M=0, spectral_indexing=spectral_indexing, sym="sin"
         )
         self._W_lmn = np.zeros(self._W_basis.num_modes)
         self._sym = bool(sym)
@@ -1233,7 +1244,7 @@ class ZernikeRZToroidalSection(Surface):
                 L=0,
                 M=0,
                 spectral_indexing=self.spectral_indexing,
-                sym="sin" if self.sym else False,
+                sym="sin",
             )
         if not hasattr(self, "_W_lmn") or self._W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)

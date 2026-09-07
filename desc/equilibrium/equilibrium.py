@@ -350,7 +350,10 @@ class Equilibrium(IOAble, Optimizable):
             )
         else:
             self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
-        self._axis.change_resolution(self.N, sym=self.sym)
+        # Nz must be passed, or an equilibrium built with omega resolution gets
+        # an axis with an empty omega basis: Wa_n would be empty and both
+        # AxisWSelfConsistency and FixAxisW would silently be no-ops.
+        self._axis.change_resolution(self.N, sym=self.sym, Nz=self.Nz)
 
         # bases
         self._R_basis = FourierZernikeBasis(

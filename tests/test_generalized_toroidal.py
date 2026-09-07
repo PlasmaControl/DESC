@@ -29,6 +29,14 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid
 from desc.io import load
+from desc.objectives import (
+    AxisWSelfConsistency,
+    FixAxisW,
+    FixBoundaryW,
+    FixOmegaGauge,
+    FixOmegaInterior,
+    FixZetaSFL,
+)
 from desc.plotting import plot_boundary, plot_section, plot_surfaces
 
 
@@ -940,3 +948,119 @@ class TestPlottingWithOmega:
         assert not self._no_inversion_failure(record)
         assert np.all(np.isfinite(np.asarray(data["R"])))
         assert np.all(np.isfinite(np.asarray(data["Z"])))
+
+
+class TestOmegaConstraints:
+    """Construction of the linear constraints that handle omega.
+
+    The default constraint sets build these with ``modes=True``; the explicit
+    mode-list path and the asymmetric gauge branch are only reached when a user
+    asks for them directly.
+    """
+
+    @staticmethod
+    def _eq(sym=True):
+        return Equilibrium(L=4, M=4, N=2, NFP=2, sym=sym, Lz=2, Mz=2, Nz=2)
+
+    @pytest.mark.unit
+    def test_fix_boundary_and_axis_W_with_explicit_modes(self):
+        """Passing a mode list fixes exactly those coefficients."""
+        eq = self._eq()
+        # modes are full [l, m, n] triples, per the constraint docstrings
+        modes = eq.surface.W_basis.modes[:3]
+        con = FixBoundaryW(eq=eq, modes=modes)
+        con.build()
+        assert con.dim_f == len(modes)
+        np.testing.assert_allclose(
+            con.compute(eq.params_dict), np.asarray(eq.Wb_lmn)[:3], atol=1e-14
+        )
+        # all modes, the default, gives the whole boundary basis
+        con_all = FixBoundaryW(eq=eq)
+        con_all.build()
+        assert con_all.dim_f == eq.surface.W_basis.num_modes
+
+        # the axis omega basis must be sized from the equilibrium's Nz, or
+        # every axis omega constraint below is a silent no-op
+        assert eq.axis.W_basis.num_modes > 0
+        axis_modes = eq.axis.W_basis.modes[:2]
+        con_axis = FixAxisW(eq=eq, modes=axis_modes)
+        con_axis.build()
+        assert con_axis.dim_f == len(axis_modes) == 2
+        con_axis_all = FixAxisW(eq=eq)
+        con_axis_all.build()
+        assert con_axis_all.dim_f == eq.axis.W_basis.num_modes
+
+    @pytest.mark.unit
+    def test_fix_zeta_sfl_targets_zero_omega(self):
+        """Every omega coefficient is driven to zero, recovering zeta = phi."""
+        eq = self._eq()
+        rng = np.random.default_rng(2)
+        eq.W_lmn = 0.02 * rng.standard_normal(eq.W_basis.num_modes)
+        con = FixZetaSFL(eq=eq)
+        con.build()
+        assert con.dim_f == eq.W_basis.num_modes
+        np.testing.assert_allclose(con.target, 0)
+        # the residual is the omega coefficients themselves, so it vanishes
+        # exactly when omega does
+        np.testing.assert_allclose(
+            con.compute(eq.params_dict), np.asarray(eq.W_lmn), atol=1e-14
+        )
+        eq.W_lmn = np.zeros(eq.W_basis.num_modes)
+        np.testing.assert_allclose(con.compute(eq.params_dict), 0, atol=1e-14)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("sym", [True, False])
+    def test_fix_omega_gauge(self, sym):
+        """The gauge constraint removes the (m=0, n=0) omega modes."""
+        eq = self._eq(sym=sym)
+        con = FixOmegaGauge(eq=eq)
+        con.build()
+        if sym:
+            # a sin basis has no (0, 0) modes, so the gauge is already fixed
+            assert con.dim_f == 0
+        else:
+            modes = eq.W_basis.modes
+            expected = np.sum((modes[:, 1] == 0) & (modes[:, 2] == 0))
+            assert expected > 0
+            assert con.dim_f == expected
+
+    @pytest.mark.unit
+    def test_fix_omega_interior_keeps_one_radial_mode_per_mn(self):
+        """The interior constraint fixes all but the lowest radial mode.
+
+        That leaves exactly one free radial degree of freedom per (m, n),
+        which BoundaryWSelfConsistency then determines from the boundary.
+        """
+        eq = self._eq()
+        con = FixOmegaInterior(eq=eq)
+        con.build()
+        modes = eq.W_basis.modes
+        n_mn = len(np.unique(modes[:, 1:], axis=0))
+        assert con.dim_f == eq.W_basis.num_modes - n_mn
+        # an omega-free equilibrium gets an empty constraint, not an error
+        con0 = FixOmegaInterior(eq=Equilibrium(L=4, M=4, N=2, sym=True))
+        con0.build()
+        assert con0.dim_f == 0
+
+    @pytest.mark.unit
+    def test_axis_W_self_consistency_matrix(self):
+        """The axis constraint evaluates the omega basis at rho = 0.
+
+        Every m != 0 mode vanishes there, and a Zernike radial polynomial of
+        degree l with m = 0 evaluates to (-1)^(l/2), so the matrix rows are
+        alternating signs over the m = 0 modes.
+        """
+        eq = self._eq()
+        con = AxisWSelfConsistency(eq=eq)
+        con.build()
+        A = con._A
+        assert A.shape == (eq.axis.W_basis.num_modes, eq.W_basis.num_modes)
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            col = A[:, i]
+            if m != 0:
+                np.testing.assert_allclose(col, 0, err_msg=f"mode {(l, m, n)}")
+            else:
+                j = np.argwhere(n == eq.axis.W_basis.modes[:, 2])
+                np.testing.assert_allclose(col[j], (-1) ** (l // 2))
+        # and it is satisfied by a self consistent equilibrium
+        np.testing.assert_allclose(con.compute(eq.params_dict), 0, atol=1e-14)

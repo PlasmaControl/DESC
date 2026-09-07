@@ -1052,9 +1052,7 @@ class TestContinuationWithOmega:
         # doubling it would invert the chart outright rather than merely
         # overshoot. It also converges without backtracking, unlike small omega.
         eq = Equilibrium(L=4, M=4, N=1, NFP=3, sym=True, surface=surf, Nz=1)
-        fam = solve_continuation_automatic(
-            eq.copy(), verbose=0, maxiter=10, ftol=1e-3
-        )
+        fam = solve_continuation_automatic(eq.copy(), verbose=0, maxiter=10, ftol=1e-3)
         final = fam[-1]
         # the boundary is fixed by the constraints, so this is exact
         np.testing.assert_allclose(

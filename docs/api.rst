@@ -108,6 +108,7 @@ of the external code. Please see the README of the `desc.external` for more deta
     desc.external.paraview.export_surface_to_paraview
     desc.external.paraview.export_volume_to_paraview
     desc.external.terpsichore.TERPSICHORE
+    desc.external.gx.GX
 
 
 Geometry

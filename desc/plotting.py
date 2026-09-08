@@ -24,7 +24,7 @@ from desc.compute.utils import _parse_parameterization
 from desc.equilibrium.coords import map_coordinates
 from desc.grid import Grid, LinearGrid
 from desc.integrals import surface_averages_map
-from desc.magnetic_fields import field_line_integrate
+from desc.magnetic_fields import OmnigenousFieldConstructed, field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
     check_posint,
@@ -3145,14 +3145,17 @@ def plot_boozer_surface(
 
     Parameters
     ----------
-    thing : Equilibrium or OmnigenousField
+    thing : Equilibrium, OmnigenousField, or OmnigenousFieldConstructed
         Object from which to plot.
     grid_compute : Grid, optional
         Grid to use for computing boozer spectrum
     grid_plot : Grid, optional
-        Grid to plot on.
+        Grid to plot on. For a constructed field, nodes are literal Boozer
+        ``(rho, theta_B, zeta_B)`` coordinates on one rectangular surface.
     rho : float, optional
-        Radial coordinate of flux surface. Used only if grids are not specified.
+        Radial coordinate of flux surface. For a constructed field, this must
+        select a stored surface and agree with ``grid_plot`` when supplied.
+        Otherwise used only if grids are not specified.
     fill : bool, optional
         Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
     ncontours : int, optional
@@ -3170,7 +3173,8 @@ def plot_boozer_surface(
 
         Valid keyword arguments are:
 
-        * ``iota``: rotational transform, used when `thing` is an OmnigenousField
+        * ``iota``: rotational transform, used when `thing` is an OmnigenousField.
+          A constructed field uses its stored iota and rejects this override.
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
@@ -3205,12 +3209,55 @@ def plot_boozer_surface(
         fig, ax = plot_boozer_surface(field, iota=0.32)
 
     """
-    eq_switch = True
-    if hasattr(thing, "_x_lmn"):
-        eq_switch = False  # thing is an OmnigenousField, not an Equilibrium
+    constructed = isinstance(thing, OmnigenousFieldConstructed)
+    eq_switch = not constructed and not hasattr(thing, "_x_lmn")
+    zeta0 = float(thing.zeta0) if constructed else 0.0
+
+    if constructed:
+        errorif(
+            "iota" in kwargs, ValueError, "A constructed field uses its stored iota."
+        )
+        errorif(
+            grid_compute is not None,
+            ValueError,
+            "grid_compute is not used by a constructed field snapshot.",
+        )
+        errorif(
+            not np.isscalar(rho) or not np.any(np.asarray(thing.rho) == rho),
+            ValueError,
+            "rho must select one stored constructed-field surface.",
+        )
+        errorif(
+            not isinstance(fieldlines, numbers.Integral) or fieldlines < 0,
+            ValueError,
+            "fieldlines must be a nonnegative integer.",
+        )
+        surface_index = int(np.flatnonzero(np.asarray(thing.rho) == rho)[0])
+        if grid_plot is None:
+            # LinearGrid restricts zeta to its standard period. Preserve the
+            # snapshot's literal Boozer cut, including a nonzero zeta0.
+            grid_plot = Grid.create_meshgrid(
+                [
+                    np.atleast_1d(rho),
+                    np.linspace(0, 2 * np.pi, 91),
+                    np.linspace(zeta0, zeta0 + 2 * np.pi / thing.NFP, 91),
+                ],
+                NFP=thing.NFP,
+                jitable=False,
+            )
+        errorif(
+            grid_plot.coordinates != "rtz"
+            or not grid_plot.is_meshgrid
+            or grid_plot.num_rho != 1
+            or grid_plot.num_theta < 2
+            or grid_plot.num_zeta < 2
+            or not np.all(np.asarray(grid_plot.nodes)[:, 0] == rho),
+            ValueError,
+            "grid_plot must be a rectangular Boozer grid on the selected rho.",
+        )
 
     # default grids
-    if grid_compute is None:
+    if grid_compute is None and not constructed:
         # grid_compute only used for Equilibrium, not OmnigenousField
         grid_kwargs = {
             "rho": rho,
@@ -3231,7 +3278,20 @@ def plot_boozer_surface(
         grid_plot = _get_grid(**grid_kwargs)
 
     # compute
-    if eq_switch:  # Equilibrium
+    if constructed:
+        # The field owns periodic interpolation and validity checks.
+        data = thing.compute("|B| constructed", grid=grid_plot)
+        shape = (grid_plot.num_theta, grid_plot.num_zeta)
+        theta_B, zeta_B, B = (
+            np.asarray(values).reshape(shape, order="F")
+            for values in (
+                grid_plot.nodes[:, 1],
+                grid_plot.nodes[:, 2],
+                data["|B| constructed"],
+            )
+        )
+        iota = float(thing.iota[surface_index])
+    elif eq_switch:  # Equilibrium
         M_booz = kwargs.pop("M_booz", 2 * thing.M)
         N_booz = kwargs.pop("N_booz", 2 * thing.N)
         with warnings.catch_warnings():
@@ -3292,15 +3352,29 @@ def plot_boozer_surface(
     ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
     # plot
-    op = ("" if eq_switch else "tri") + "contour" + ("f" if fill else "")
+    op = ("" if eq_switch or constructed else "tri") + "contour" + ("f" if fill else "")
     im = getattr(ax, op)(zeta_B, theta_B, B, **contourf_kwargs)
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
+    if constructed:
+        cbar.set_label(r"$B_C~(T)$")
 
-    if fieldlines:
+    if fieldlines and constructed:
+        alpha = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(
+            zeta0,
+            zeta0 + 2 * np.pi / thing.NFP,
+            max(100, int(np.ceil(4 * abs(iota) / thing.NFP)) + 1),
+        )
+        theta = np.mod(alpha[None, :] + iota * zeta[:, None], 2 * np.pi)
+        # Break the plotted line when the poloidal angle wraps.
+        jumps = np.abs(np.diff(theta, axis=0)) > np.pi
+        theta[1:] = np.where(jumps, np.nan, theta[1:])
+        ax.plot(zeta, theta, color="k", ls="-", lw=2)
+    elif fieldlines:
         theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
         zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
         alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
@@ -3313,17 +3387,40 @@ def plot_boozer_surface(
         alphas = np.hstack((alpha1, alpha2))
         ax.plot(zeta, alphas, color="k", ls="-", lw=2)
 
-    ax.set_xlim([0, 2 * np.pi / thing.NFP])
+    ax.set_xlim([zeta0, zeta0 + 2 * np.pi / thing.NFP])
     ax.set_ylim([0, 2 * np.pi])
 
     ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
     ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
-    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
+    ax.set_title(
+        r"$B_C~(T)$" if constructed else r"$|\mathbf{B}|~(T)$",
+        fontsize=title_fontsize,
+    )
 
     _set_tight_layout(fig)
 
     if return_data:
         plot_data = {"theta_B": theta_B, "zeta_B": zeta_B, "|B|": B}
+        if constructed:
+            plot_data.update(
+                quantity="B_C",
+                units="T",
+                rho=float(rho),
+                iota=iota,
+                B_min=float(thing.B_min[surface_index]),
+                B_max=float(thing.B_max[surface_index]),
+                validity={
+                    "valid_surface": bool(thing.valid_surface[surface_index]),
+                    "diagnostics": {
+                        key: np.asarray(value)[surface_index]
+                        for key, value in thing.diagnostics.items()
+                    },
+                },
+                settings=thing.settings,
+                fieldline_labels=np.asarray(thing.fieldline_labels),
+                zeta=np.asarray(thing.zeta),
+                B_levels=np.asarray(thing.B_levels),
+            )
         return fig, ax, plot_data
 
     return fig, ax

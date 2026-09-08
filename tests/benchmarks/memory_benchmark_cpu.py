@@ -1,6 +1,7 @@
 """Benchmark memory usage of various functions."""
 
 import gc
+import os
 import pickle
 import subprocess
 import sys
@@ -8,25 +9,20 @@ import threading
 import time
 
 import numpy as np
-import psutil
 
 
 def monitor_ram(proc, interval, ram_usage, timestamps):
-    """Sample system RAM until *proc* finishes."""
-    while proc.poll() is None:  # check if child still running
-        info = psutil.virtual_memory()
-        used_mb = (info.total - info.available) / 1024 / 1024
-        ram_usage.append(used_mb)
-        timestamps.append(time.time())
-        time.sleep(interval)
-
-    # keep watching for an extra second
-    end = time.time() + 1.0
-    while time.time() < end:
-        info = psutil.virtual_memory()
-        ram_usage.append((info.total - info.available) / 1024 / 1024)
-        timestamps.append(time.time())
-        time.sleep(interval)
+    """Sample the child's resident set size until *proc* finishes."""
+    page_mb = os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
+    with open(f"/proc/{proc.pid}/statm", "rb") as statm:
+        while proc.poll() is None:  # check if child still running
+            try:
+                statm.seek(0)
+                ram_usage.append(int(statm.read(64).split()[1]) * page_mb)
+            except OSError:  # child exited between the poll and the read
+                break
+            timestamps.append(time.time())
+            time.sleep(interval)
 
 
 def monitor_vram(proc, interval, vram_usage, timestamps):
@@ -72,7 +68,7 @@ def monitor_vram(proc, interval, vram_usage, timestamps):
 
 if __name__ == "__main__":
     mode = "CPU"  # "CPU" or "GPU"
-    interval = 0.01  # seconds between samples
+    interval = 0.001  # seconds between samples
 
     data = {}
 

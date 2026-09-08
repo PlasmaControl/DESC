@@ -73,6 +73,7 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
+from desc.optimize.utils import chol, gershgorin_bounds
 from desc.utils import get_all_instances
 
 
@@ -101,6 +102,56 @@ SCALAR_FUN_SOLN = np.array(
         (-B1 + np.sqrt(B1**2 - 4 * A1 * C1)) / (2 * A1),
     ]
 )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("matrix", [np.zeros((2, 2)), np.diag([1.0, 0.0])])
+def test_chol_zero_gershgorin_lower_bound(matrix):
+    """A zero lower bound gets a finite, small positive diagonal correction."""
+    lower_bound, _ = gershgorin_bounds(jnp.asarray(matrix))
+    assert float(lower_bound) == 0.0
+
+    factor = np.asarray(chol(jnp.asarray(matrix)))
+    reconstructed = factor @ factor.T
+    scale = max(np.linalg.norm(matrix, ord=2), 1.0)
+
+    assert np.isfinite(factor).all()
+    assert np.linalg.eigvalsh(reconstructed).min() > 0.0
+    assert np.linalg.norm(reconstructed - matrix, ord=2) < (
+        100 * np.finfo(matrix.dtype).eps * scale
+    )
+
+
+@pytest.mark.unit
+def test_chol_extreme_small_zero_gershgorin_lower_bound():
+    """The zero-bound fallback remains positive below eps-scaled normal range."""
+    matrix = np.diag(np.array([1e-300, 0.0], dtype=np.float64))
+
+    factor = np.asarray(chol(jnp.asarray(matrix)))
+    reconstructed = factor @ factor.T
+    correction = reconstructed - matrix
+
+    assert np.isfinite(factor).all()
+    assert np.linalg.eigvalsh(reconstructed).min() > 0.0
+    np.testing.assert_allclose(
+        correction,
+        np.eye(2) * correction[0, 0],
+        rtol=0.0,
+        atol=np.finfo(np.float64).tiny,
+    )
+    assert 0.0 < correction[0, 0] < matrix[0, 0]
+
+
+@pytest.mark.unit
+def test_chol_positive_definite_path_unchanged():
+    """Positive-definite input agrees with the unmodified Cholesky oracle."""
+    matrix = np.array([[2.0, 0.2], [0.2, 1.0]])
+    np.testing.assert_allclose(
+        chol(jnp.asarray(matrix)),
+        np.linalg.cholesky(matrix),
+        rtol=1e-14,
+        atol=1e-14,
+    )
 
 
 @jit

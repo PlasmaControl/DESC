@@ -192,7 +192,7 @@ class Optimizer(IOAble):
             and constraints in the ``Objective values`` key.
 
         """
-        options = {} if options is None else options
+        options = {} if options is None else options.copy()
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
         if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)

@@ -291,7 +291,7 @@ On Most Linux Computing Clusters
             .. code-block:: sh
 
                 pip install -r devtools/dev-requirements.txt
-            
+
             Run a test by replacing path_to_DESC with your path
 
             .. code-block:: sh
@@ -350,7 +350,7 @@ To verify your installation works, try the following.
             from desc.examples import get
             from desc.objectives import ObjectiveFunction, GammaC
 
-            obj = ObjectiveFunction(GammaC(get("W7-X"), num_transit=1, num_pitch=1))
+            obj = ObjectiveFunction(GammaC(get("W7-X"), field_period_transits=1, num_pitch=1))
             obj.build()
             x = obj.x()
             obj.compute_scaled_error(x).block_until_ready()

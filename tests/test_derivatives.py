@@ -163,6 +163,32 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
     @pytest.mark.unit
+    def test_autodiff_linearize(self):
+        """Tests that Derivative.linearize matches compute_jvp.
+
+        linearize should give the same jvp as compute_jvp for a single argnum,
+        a different single argnum, and a tuple of argnums differentiated
+        jointly -- the same three cases test_autodiff_jvp checks.
+        """
+        y0, jvp_fn = AutoDiffDerivative.linearize(self.fun, 0, self.x, self.c1, self.c2)
+        np.testing.assert_allclose(y0, self.fun(self.x, self.c1, self.c2))
+        np.testing.assert_allclose(
+            jvp_fn(self.dx), np.array([1554.0, 4038.0, 6522.0, 9006.0])
+        )
+
+        _, jvp_fn = AutoDiffDerivative.linearize(self.fun, 1, self.x, self.c1, self.c2)
+        np.testing.assert_allclose(
+            jvp_fn(self.dc1), np.array([10296.0, 26658.0, 43020.0, 59382.0])
+        )
+
+        _, jvp_fn = AutoDiffDerivative.linearize(
+            self.fun, (0, 2), self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(
+            jvp_fn(self.dx, self.dc2), np.array([-342.0, -630.0, -918.0, -1206.0])
+        )
+
+    @pytest.mark.unit
     def test_finitediff_jvp(self):
         """Tests using FD for JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp(

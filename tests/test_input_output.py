@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jnp
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -17,6 +18,7 @@ from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
 from desc.magnetic_fields import (
     OmnigenousField,
+    OmnigenousFieldLCForm,
     SplineMagneticField,
     ToroidalMagneticField,
 )
@@ -819,6 +821,57 @@ def test_io_OmnigenousField(tmpdir_factory):
     data2 = field2.compute(["|B|", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("file_format", ["hdf5", "pickle"])
+@pytest.mark.parametrize("helicity", [(0, 1), (2, -3)])
+def test_io_OmnigenousFieldLCForm(tmp_path, file_format, helicity):
+    """Stored parameters recover their mapping after users rebind callbacks."""
+
+    def shape(x, y, parameters):
+        return parameters[0] * x * jnp.sin(y)
+
+    def distance(x, parameters):
+        return parameters[0] * (jnp.pi - x)
+
+    field = OmnigenousFieldLCForm(
+        NFP=3,
+        helicity=helicity,
+        S_list=np.array([0.2]),
+        D_list=np.array([1.0]),
+        S_func=shape,
+        D_func=distance,
+    )
+    grid = LinearGrid(rho=1, theta=10, zeta=7, NFP=field.NFP)
+    names = ["theta_B_LCForm", "zeta_B_LCForm"]
+    expected = field.compute(names, grid=grid, iota=0.6)
+    path = str(tmp_path / "field")
+    # Local functions cannot be pickled; only the field's parameters are stored.
+    field.save(path, file_format=file_format)
+    restored = load(path, file_format=file_format)
+
+    assert (restored.S_len, restored.D_len, restored.NFP) == (1, 1, 3)
+    np.testing.assert_array_equal(restored.helicity, field.helicity)
+    for name, parameters in field.params_dict.items():
+        np.testing.assert_array_equal(restored.params_dict[name], parameters)
+    assert restored.S_func is None
+    assert restored.D_func is None
+    with pytest.raises(ValueError, match="S_func.*D_func.*bind"):
+        restored.compute(names, grid=grid, iota=0.6)
+
+    overridden = restored.compute(
+        names, grid=grid, iota=0.6, S_func=shape, D_func=distance
+    )
+    assert restored.S_func is None
+    assert restored.D_func is None
+    restored.S_func = shape
+    restored.D_func = distance
+    rebound = restored.compute(names, grid=grid, iota=0.6)
+    for name in names:
+        assert np.all(np.isfinite(rebound[name]))
+        np.testing.assert_allclose(overridden[name], expected[name], atol=1e-14)
+        np.testing.assert_allclose(rebound[name], expected[name], atol=1e-14)
 
 
 @pytest.mark.unit

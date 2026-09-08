@@ -4,6 +4,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
+from math import gcd
 
 import numpy as np
 from diffrax import (
@@ -3278,7 +3279,11 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
     NFP: int
         Number of field periods.
     helicity: tuple, optional
-        Type of pseudo-symmetry (M, N). Default = (0, 1).
+        Type of pseudo-symmetry (M, N), a coprime pair of integers with N
+        excluding the factor NFP.
+        In the field-period angle φ = NFP * ζ, (0, 1) is poloidally omnigenous,
+        (1, 1) is positively helical, and (1, -1) is negatively helical.
+        Default = (0, 1).
     S_list: ndarray, optional
         S-parameters describing the shape of contours. These values are a flattened 1D
         array of shape (S_len,). If not supplied, `S_list` defaults to zero for all
@@ -3286,13 +3291,21 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
     D_list: ndarray, optional
         D-parameters describing the distance between contours. These values are a
         flattened 1D array of shape (D_len,). If not supplied, `D_list` defaults to 1
-        for the first mode and zero for the remaining modes.
+        for the first mode and zero for the remaining modes. These parameters
+        give a correction to the baseline distance π - |η|; they are not the
+        complete distance function used by OmnigenousFieldLCForm.
 
     Notes
     -----
     Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
     computational coordinates, not vector B in lab coordinates.
     Only compliments same OmnigenousField Mapping used in Liu et. al. [1]_
+
+    Earlier versions mapped OOPS helicity (1, 1) to negative helicity. Use
+    (1, -1) with old contour parameters to preserve that orientation.
+    For N != 0, the coordinate chart requires NFP * N - M * iota != 0;
+    toroidal omnigenity requires iota != 0. Smoothness and invertibility also
+    depend on the chosen contour parameters.
 
     References
     ----------
@@ -3403,17 +3416,15 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : Grid, optional
-            Grid of coordinates to evaluate at. The grid nodes are given in the usual
-            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
-            Defaults to a linearly space grid on the rho=1 surface.
+            Grid of input coordinates (ρ,θ,ζ), where α = θ and η = NFP * ζ - π.
+            Defaults to a linearly spaced grid on the rho=1 surface.
         params : dict of ndarray
-            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Field parameters, including S_list and D_list for the mapping.
             Defaults to attributes of self.
         transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from grid
+            Transforms for the requested quantities. Defaults to building from grid.
         profiles : dict of Profile
-            Profile objects for pressure, iota, current, etc. Defaults to attributes
-            of self
+            Not used by this representation.
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
         **kwargs : dict, optional
@@ -3446,6 +3457,24 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
             data = {}
         profiles = {}
 
+        helicity = kwargs.pop("helicity", self.helicity)
+        errorif(len(helicity) != 2, ValueError, "helicity must contain two integers.")
+        errorif(
+            any(
+                isinstance(mode, (bool, np.bool_))
+                or not isinstance(mode, (int, np.integer))
+                for mode in helicity
+            ),
+            TypeError,
+            "helicity must contain two integers.",
+        )
+        M, N = map(int, helicity)
+        errorif(
+            gcd(M, N) != 1,
+            ValueError,
+            "helicity must be a coprime pair of integers; (0, 0) is not valid.",
+        )
+
         data = compute_fun(
             self,
             names,
@@ -3453,7 +3482,7 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
             transforms=transforms,
             profiles=profiles,
             data=data,
-            helicity=kwargs.pop("helicity", self.helicity),
+            helicity=(M, N),
             **kwargs,
         )
         return data
@@ -3497,17 +3526,28 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
 
     @property
     def helicity(self):
-        """tuple: Type of omnigenity (M, N)."""
+        """tuple: Coprime omnigenity helicity (M, N), with N excluding NFP."""
         return self._helicity
 
     @helicity.setter
     def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
+        errorif(len(helicity) != 2, ValueError, "helicity must contain two integers.")
+        errorif(
+            any(
+                isinstance(mode, (bool, np.bool_))
+                or not isinstance(mode, (int, np.integer))
+                for mode in helicity
+            ),
+            TypeError,
+            "helicity must contain two integers.",
         )
-        self._helicity = helicity
+        M, N = map(int, helicity)
+        errorif(
+            gcd(M, N) != 1,
+            ValueError,
+            "helicity must be a coprime pair of integers; (0, 0) is not valid.",
+        )
+        self._helicity = (M, N)
 
 
 class OmnigenousFieldLCForm(Optimizable, IOAble):
@@ -3529,8 +3569,11 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
     NFP: int
         Number of field periods.
     helicity: tuple, optional
-        Type of pseudo-symmetry (M, N). Default = (0, 1).
-        Does not need to be multiplied by NFP.
+        Type of pseudo-symmetry (M, N), a coprime pair of integers with N
+        excluding the factor NFP.
+        In the field-period angle φ = NFP * ζ, (0, 1) is poloidally omnigenous,
+        (1, 1) is positively helical, and (1, -1) is negatively helical.
+        Default = (0, 1).
     S_list: ndarray, optional
         S-parameters describing the shape of contours. These values are a flattened 1D
         array of shape (S_len,). If not supplied, `S_list` defaults to zero for all
@@ -3540,27 +3583,43 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         flattened 1D array of shape (D_len,). If not supplied, `D_list` defaults to 1
         for the first mode and zero for the remaining modes.
     S_func: callable
-        Function defined by user, `S(x2d,y2d,S_list)`.
-        The user determines how to use S_list.
+        Pure, pointwise function defined by the user, ``S(x, y, S_list)``.
+        It must support JAX arrays and differentiation without coupling different
+        evaluation points. The user determines how to use S_list.
         Symmetry of s(x, y):
             - s is 2π-periodic in y (its Fourier series contains only sin(n y) terms).
             - s is odd in y: s(x, -y) = -s(x, y).
             - s(0, y) = 0 for all y.
 
     D_func: callable
-        Function defined by user, `D(x2d,D_list)`.
-        The user determines how to use D_list.
+        Pure, pointwise function defined by the user, ``D(x, D_list)``.
+        It must support JAX arrays and differentiation without coupling different
+        evaluation points. The user determines how to use D_list.
         Constraints on D(x):
             - D is defined on the closed interval x ∈ [0, π].
             - Boundary conditions: D(0) = π and D(π) = 0.
-            - The bounce (poloidal) angle between mirror points on the same |B|
-              contour is Δζ(η) = 2 D(η).
+            - The separation between mirror points is 2 D(x) in the intermediate
+              coordinate w, before converting to the physical Boozer angles.
 
     Notes
     -----
     Doesn't conform to MagneticField API, as it only knows about :math:`|B|` in
     computational coordinates, not vector B in lab coordinates.
-    IOAble API can't save the S_func and D_func.
+    Saving stores the parameters, resolution, field periods, and helicity, but
+    does not store the implementation of S_func or D_func. After loading, both
+    callbacks are None. Rebind ``field.S_func`` and ``field.D_func`` before
+    computing the mapping or constructing an OmnigenityHarmonics objective.
+    They can also be supplied as keyword arguments to an individual compute call.
+
+    For N != 0, the coordinate chart requires NFP * N - M * iota != 0;
+    toroidal omnigenity requires iota != 0. The endpoint and symmetry conditions
+    on the callbacks do not guarantee an invertible mapping; this also depends
+    on the selected callbacks and their parameters.
+
+    For toroidal omnigenity (N == 0), the full-torus chart has alpha = ζ_B.
+    To realize NFP > 1, S must be 2π/NFP-periodic in its second argument,
+    for example using sin(k * NFP * y) harmonics. This is the caller's
+    responsibility; the mapping does not rescale the callback automatically.
 
     References
     ----------
@@ -3578,7 +3637,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         "_helicity",
         "_S_list",
         "_D_list",
-    ]  # TODO: add S_func and D_func to IOAble
+    ]
     _static_attrs = Optimizable._static_attrs + [
         "_S_len",
         "_D_len",
@@ -3606,11 +3665,11 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         if S_func is None:
             raise NotImplementedError("S_func must be provided.")
         else:
-            self._S_func = S_func
+            self.S_func = S_func
         if D_func is None:
             raise NotImplementedError("D_func must be provided.")
         else:
-            self._D_func = D_func
+            self.D_func = D_func
         if S_list is None:
             self._S_list = np.zeros(self.S_len)
         else:
@@ -3622,6 +3681,11 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         else:
             assert len(D_list) == self.D_len
             self._D_list = D_list
+
+    def _set_up(self):
+        """Leave callbacks unbound when restoring saved field parameters."""
+        self._S_func = getattr(self, "_S_func", None)
+        self._D_func = getattr(self, "_D_func", None)
 
     def change_resolution(
         self,
@@ -3684,17 +3748,15 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : Grid, optional
-            Grid of coordinates to evaluate at. The grid nodes are given in the usual
-            (ρ,θ,ζ) coordinates, but θ is mapped to η and ζ is mapped to α.
-            Defaults to a linearly space grid on the rho=1 surface.
+            Grid of input coordinates (ρ,θ,ζ), where α = θ and η = NFP * ζ.
+            Defaults to a linearly spaced grid on the rho=1 surface.
         params : dict of ndarray
-            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Field parameters, including S_list and D_list for the mapping.
             Defaults to attributes of self.
         transforms : dict of Transform
-            Transforms for R, Z, lambda, etc. Default is to build from grid
+            Transforms for the requested quantities. Defaults to building from grid.
         profiles : dict of Profile
-            Profile objects for pressure, iota, current, etc. Defaults to attributes
-            of self
+            Not used by this representation.
         data : dict of ndarray
             Data computed so far, generally output from other compute functions
         **kwargs : dict, optional
@@ -3702,6 +3764,8 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
 
             * ``iota``: rotational transform
             * ``helicity``: helicity (defaults to self.helicity)
+            * ``S_func``: pointwise shape callback (defaults to self.S_func)
+            * ``D_func``: pointwise distance callback (defaults to self.D_func)
 
         Returns
         -------
@@ -3726,6 +3790,25 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         if data is None:
             data = {}
         profiles = {}
+
+        helicity = kwargs.pop("helicity", self.helicity)
+        errorif(len(helicity) != 2, ValueError, "helicity must contain two integers.")
+        errorif(
+            any(
+                isinstance(mode, (bool, np.bool_))
+                or not isinstance(mode, (int, np.integer))
+                for mode in helicity
+            ),
+            TypeError,
+            "helicity must contain two integers.",
+        )
+        M, N = map(int, helicity)
+        errorif(
+            gcd(M, N) != 1,
+            ValueError,
+            "helicity must be a coprime pair of integers; (0, 0) is not valid.",
+        )
+
         data = compute_fun(
             self,
             names,
@@ -3733,9 +3816,9 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
             transforms=transforms,
             profiles=profiles,
             data=data,
-            helicity=kwargs.pop("helicity", self.helicity),
-            S_func=kwargs.pop("S_func", self._S_func),
-            D_func=kwargs.pop("D_func", self._D_func),
+            helicity=(M, N),
+            S_func=kwargs.pop("S_func", getattr(self, "_S_func", None)),
+            D_func=kwargs.pop("D_func", getattr(self, "_D_func", None)),
             **kwargs,
         )
         return data
@@ -3757,20 +3840,22 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
 
     @property
     def S_func(self):
-        """function: S-parameters describing the shape of contours."""
+        """Callable or None: Shape callback, unbound after loading saved parameters."""
         return self._S_func
 
     @S_func.setter
     def S_func(self, S_func):
+        errorif(not callable(S_func), TypeError, "S_func must be callable.")
         self._S_func = S_func
 
     @property
     def D_func(self):
-        """function: D-parameters describing the distance between contours."""
+        """Callable or None: Distance callback, unbound after loading parameters."""
         return self._D_func
 
     @D_func.setter
     def D_func(self, D_func):
+        errorif(not callable(D_func), TypeError, "D_func must be callable.")
         self._D_func = D_func
 
     @optimizable_parameter
@@ -3797,14 +3882,25 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
 
     @property
     def helicity(self):
-        """tuple: Type of omnigenity (M, N)."""
+        """tuple: Coprime omnigenity helicity (M, N), with N excluding NFP."""
         return self._helicity
 
     @helicity.setter
     def helicity(self, helicity):
-        assert (
-            (len(helicity) == 2)
-            and (int(helicity[0]) == helicity[0])
-            and (int(helicity[1]) == helicity[1])
+        errorif(len(helicity) != 2, ValueError, "helicity must contain two integers.")
+        errorif(
+            any(
+                isinstance(mode, (bool, np.bool_))
+                or not isinstance(mode, (int, np.integer))
+                for mode in helicity
+            ),
+            TypeError,
+            "helicity must contain two integers.",
         )
-        self._helicity = helicity
+        M, N = map(int, helicity)
+        errorif(
+            gcd(M, N) != 1,
+            ValueError,
+            "helicity must be a coprime pair of integers; (0, 0) is not valid.",
+        )
+        self._helicity = (M, N)

@@ -13,7 +13,7 @@ import functools
 
 from interpax import interp1d
 
-from desc.backend import cond, jnp, sign, switch, vmap
+from desc.backend import jnp, sign, vmap
 from desc.batching import vmap_chunked
 
 from ..utils import cross, dot, safediv
@@ -1148,27 +1148,39 @@ def _map_toroidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
     return theta2d_trans_real, zeta2d_trans_real
 
 
-def _map_poloidal_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
-    """Equation (2-3) in Liu et al. arXiv:2502.09350v1, 2025."""
-    S = _generate_S_shape(S_list, alp2d - iota / nfp * eta2d)
-    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
-    h_o = eta2d - S * D
-    theta2d_trans_real = alp2d
-    zeta2d_trans_real = h_o / nfp + jnp.pi / nfp
-    return theta2d_trans_real, zeta2d_trans_real
+def _periodic_helicity_chart(M, N):
+    """Return an integer angle chart with N*phi - M*theta = h, phi=NFP*zeta.
+
+    For a primitive helicity, the two columns generate one physical field period
+    exactly once. The first follows a constant-B contour; Bezout's identity gives
+    the second. For abs(N)=1 this retains alpha=theta. Helicity is static metadata.
+    """
+    direction = 1 if N > 0 else -1
+    if abs(N) == 1:
+        a, b = 0, direction
+    else:
+        a = (-pow(M, -1, abs(N))) % abs(N)
+        if a > abs(N) // 2:
+            a -= abs(N)
+        b = (1 + M * a) // N
+    return abs(N), M * direction, a, b
 
 
-def _map_helical_OOPS(eta2d, alp2d, iota, nfp, S_list, D_list):
-    """Equation (2-3) in Liu et al. arXiv:2502.09350v1, 2025."""
-    S = _generate_S_shape(S_list, (alp2d + 1 / (1 + nfp / iota) * eta2d))
-    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
-    h_o = eta2d - S * D
-    theta2d_trans_real = alp2d
-    zeta2d_trans_real = -(h_o + alp2d) / nfp  # + jnp.pi/nfp
-    return theta2d_trans_real, zeta2d_trans_real
+def _helicity_field_line_slope(M, N, iota, nfp):
+    """Slope d(alpha)/dh on a physical field line theta-iota*zeta=constant."""
+    if N == 0:
+        return 1 / iota
+    c, d, a, b = _periodic_helicity_chart(M, N)
+    return (iota * b - nfp * a) / (nfp * c - iota * d)
 
 
-OOPS_branches = (_map_poloidal_OOPS, _map_toroidal_OOPS, _map_helical_OOPS)
+def _helicity_to_boozer(M, N, alpha, h, nfp):
+    """Map the periodic contour chart to physical Boozer angles."""
+    if N == 0:
+        # Retain the full-torus TO chart: the alpha period is 2*pi.
+        return h, alpha
+    c, d, a, b = _periodic_helicity_chart(M, N)
+    return c * alpha + a * h, (d * alpha + b * h) / nfp
 
 
 def _omnigenity_mapping_OOPS(M, N, iota, S_list, D_list, grid):
@@ -1184,11 +1196,17 @@ def _omnigenity_mapping_OOPS(M, N, iota, S_list, D_list, grid):
     eta2d = grid.nodes[:, 2].reshape(grid.num_theta, grid.num_zeta).T * NFP - jnp.pi
     alp2d = grid.nodes[:, 1].reshape(grid.num_theta, grid.num_zeta).T
 
-    index = jnp.where(M == 0, 0, jnp.where(N == 0, 1, 2))
+    if N == 0:
+        return _map_toroidal_OOPS(eta2d, alp2d, iota[0], NFP, S_list, D_list)
 
-    operands = (eta2d, alp2d, iota[0], NFP, S_list, D_list)
-    theta_B, zeta_B = switch(index, OOPS_branches, *operands)
-
+    slope = _helicity_field_line_slope(M, N, iota[0], NFP)
+    S = _generate_S_shape(S_list, alp2d - slope * eta2d)
+    D = _generate_D_shape(D_list, eta2d) + jnp.pi - jnp.abs(eta2d)
+    h = eta2d - S * D
+    theta_B, zeta_B = _helicity_to_boozer(M, N, alp2d, h, NFP)
+    if M == 0:
+        # Preserve the established OOPS PO origin, including cropped-grid samples.
+        zeta_B = zeta_B + jnp.pi / NFP
     return theta_B, zeta_B
 
 
@@ -1263,8 +1281,8 @@ def _omnigenity_mapping_LandremanForm(M, N, iota, S_list, D_list, S_func, D_func
 
     Returns
     -------
-    theta2d, zeta2d : (num_zeta, num_theta) arrays
-        Boozer angles on the evaluation surface (theta set to alpha here).
+    theta2d, zeta2d : (num_theta, num_zeta) arrays
+        Physical Boozer angles on the evaluation surface.
     """
     TWOPI = jnp.pi * 2.0
     iota = jnp.atleast_1d(iota)
@@ -1274,21 +1292,7 @@ def _omnigenity_mapping_LandremanForm(M, N, iota, S_list, D_list, S_func, D_func
     iota0 = iota[-1]
     NFP = grid.NFP
 
-    # Guard effective iota to avoid NaNs in the inactive branch.
-    denom1 = jnp.where(iota0 == 0.0, 1.0, iota0)  # for 1/iota
-    val1 = 1.0 / denom1
-    denom2 = jnp.where(
-        (N - iota0 * M) == 0.0, 1.0, (N - iota0 * M)
-    )  # for iota/((N-iota*M)*NFP)
-    val2 = iota0 / (denom2 * NFP)
-    iota_eff = jnp.where(N == 0, val1, val2)
-
-    # Build 2D coordinates (zeta, theta) = (num_zeta, num_theta)
-    # Keep eta in [0, 2pi) to match your split at pi
-    eta2d = grid.nodes[:, 2].reshape(grid.num_theta, grid.num_zeta).T * NFP
-    theta2d = (
-        grid.nodes[:, 1].reshape(grid.num_theta, grid.num_zeta).T
-    )  # use alpha as "theta" input
+    iota_eff = _helicity_field_line_slope(M, N, iota0, NFP)
 
     theta_1d = grid.nodes[grid.unique_theta_idx, 1]
     zeta_1d = grid.nodes[grid.unique_zeta_idx, 2]
@@ -1297,47 +1301,17 @@ def _omnigenity_mapping_LandremanForm(M, N, iota, S_list, D_list, S_func, D_func
 
     theta2d, eta2d = jnp.meshgrid(theta_1d, eta_1d, indexing="ij")
 
-    # Evaluate D on eta and on its "mirror"
-    D_eta = D_func(eta2d, D_list)  # shape (nz, nt)
-    D_mirror = D_func(TWOPI - eta2d, D_list)
-
-    # Evaluate S on the two branches
-    # low-π branch:  zeta = π - S(η, θ + iota_eff * D(η)) - D(η)
-    S_low = S_func(eta2d, theta2d + iota_eff * D_eta, S_list)
-    zeta_low = jnp.pi - S_low - D_eta
-
-    # up-π branch:   zeta = π + S(2π-η, -θ + iota_eff * D(2π-η)) + D(2π-η)
-    S_up = S_func(TWOPI - eta2d, -theta2d + iota_eff * D_mirror, S_list)
-    zeta_up = jnp.pi + S_up + D_mirror
-
-    # Elementwise selection at η < π (no dynamic slicing)
+    # Select the valid argument before evaluating the pointwise callbacks. Evaluating
+    # the unselected branch outside [0, pi] can poison reverse AD even if where later
+    # discards its value (zero cotangents do not suppress NaN local derivatives).
     condition = eta2d < jnp.pi
-    zeta2d = jnp.where(condition, zeta_low, zeta_up)
+    x = jnp.where(condition, eta2d, TWOPI - eta2d)
+    distance = D_func(x, D_list)
+    phase = jnp.where(condition, theta2d, -theta2d) + iota_eff * distance
+    shape = S_func(x, phase, S_list)
+    zeta2d = jnp.where(condition, jnp.pi - shape - distance, jnp.pi + shape + distance)
 
-    # For this mapping, Boozer theta can be taken as alpha
-    # Here in [0,2pi) range
-    thetaB2d = theta2d
-    zetaB2d = zeta2d
-
-    # Here we trans it to real Boozer angles
-    def _branch_N0(_):
-        # N == 0: force M=1 convention; set nfp_eff=1 per your comment
-        theta_real = zetaB2d
-        zeta_real = thetaB2d  # / nfp_eff where nfp_eff = 1
-        return zeta_real, theta_real
-
-    def _branch_else(_):
-        # N != 0:
-        N_change = jnp.where(N * M != 0, NFP, N)
-        NFP_change = jnp.where(N * M != 0, N, NFP)
-
-        theta_real = thetaB2d
-        zeta_real = zetaB2d / (NFP_change * N_change) + (M / N_change) * theta_real
-        return zeta_real, theta_real
-
-    zeta2d, theta2d = cond(N == 0, _branch_N0, _branch_else, operand=None)
-
-    return theta2d, zeta2d
+    return _helicity_to_boozer(M, N, theta2d, zeta2d, NFP)
 
 
 @register_compute_fun(
@@ -1366,9 +1340,10 @@ def _omni_map_zeta_B_LCForm(params, transforms, profiles, data, **kwargs):
     D_list = params["D_list"]
     S_func = kwargs.get("S_func", None)
     D_func = kwargs.get("D_func", None)
-    if S_func is None or D_func is None:
+    if not callable(S_func) or not callable(D_func):
         raise ValueError(
-            "S_func and D_func must be provided in params for LandremanLCForm"
+            "LCForm mapping requires callable S_func and D_func; bind field.S_func "
+            "and field.D_func after loading, or pass both callbacks as compute kwargs."
         )
 
     theta_B, zeta_B = _omnigenity_mapping_LandremanForm(

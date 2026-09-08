@@ -1256,6 +1256,7 @@ def test_omnigenityharmonics_qa():
     (field,), _ = optimizer.optimize(
         field,
         objective,
+        constraints=(FixParameters(field, params={"B_lm": True}),),
         maxiter=100,
         ftol=1e-6,
         xtol=1e-6,
@@ -1514,7 +1515,7 @@ def test_omnigenityharmonics_optimization():
         FixPressure(eq=eq),
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
-        FixOmniBmax(field=field),
+        FixParameters(field, params={"B_lm": True}),
         FixOmniMap(field=field, indices=np.where(field.x_basis.modes[:, 1] == 0)[0]),
         MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
     )
@@ -1525,13 +1526,43 @@ def test_omnigenityharmonics_optimization():
     eq, _ = eq.solve(objective="force", verbose=3)
     # check omnigenity error is low
     f = objective.compute_unscaled(objective.x(*(eq, field)))  # error in Tesla
-    np.testing.assert_allclose(
-        f[2:-1], 0, atol=1.2e-2
-    )  # f[:2] is R0 and R0/a,f[-1] is mirror ratio
+    # The first two entries are R0 and R0/a; mirror ratio is a constraint.
+    np.testing.assert_allclose(f[2:], 0, atol=1.2e-2)
     # check mirror ratio is correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=np.array([1]))
     data = eq.compute("mirror ratio", grid=grid)
     np.testing.assert_allclose(data["mirror ratio"], 0.25, atol=1e-2)
+
+
+def _assert_fixed_field_omnigenity_result(
+    eq, field, objective, initial_error, initial_eq_params, initial_field_params
+):
+    """Check shape improvement and physical constraints after the force solve."""
+    # R0 and aspect ratio precede both complete harmonic residual blocks.
+    f = np.asarray(objective.compute_unscaled(objective.x(eq)))
+    assert np.all(np.isfinite(f))
+    assert initial_error > 0.1
+    assert np.linalg.norm(f[2:]) < min(0.04, 0.2 * initial_error)
+    np.testing.assert_allclose(f[2:], 0, atol=3e-2)
+    np.testing.assert_allclose(f[0], 1, atol=1e-2)
+    assert 0 < f[1] <= 10.05
+
+    grid = LinearGrid(rho=1.0, M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP, sym=False)
+    mirror = eq.compute("mirror ratio", grid=grid)["mirror ratio"]
+    assert np.all(np.isfinite(mirror))
+    assert np.all((mirror >= 0) & (mirror <= 0.26))
+
+    force = ObjectiveFunction(ForceBalance(eq=eq))
+    force.build(verbose=0)
+    force_error = np.asarray(force.compute_scaled_error(force.x(eq)))
+    assert np.all(np.isfinite(force_error))
+    assert np.sqrt(np.mean(force_error**2)) < 1e-4
+    assert np.max(np.abs(force_error)) < 5e-4
+
+    for name, initial in initial_eq_params.items():
+        np.testing.assert_array_equal(eq.params_dict[name], initial)
+    for name, initial in initial_field_params.items():
+        np.testing.assert_array_equal(field.params_dict[name], initial)
 
 
 @pytest.mark.regression
@@ -1608,8 +1639,19 @@ def test_omnigenityharmonicsOOPS_fix_field_optimization():
         MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
     )
     optimizer = Optimizer("lsq-auglag")
+    objective.build(verbose=0)
+    initial_error = np.linalg.norm(objective.compute_unscaled(objective.x(eq))[2:])
+    initial_eq_params = {
+        name: np.asarray(eq.params_dict[name]).copy() for name in ["p_l", "c_l", "Psi"]
+    }
+    initial_field_params = {
+        name: np.asarray(value).copy() for name, value in field.params_dict.items()
+    }
     eq.optimize(objective, constraints, optimizer, maxiter=150, verbose=3)
     eq, _ = eq.solve(objective="force", verbose=3)
+    _assert_fixed_field_omnigenity_result(
+        eq, field, objective, initial_error, initial_eq_params, initial_field_params
+    )
 
 
 @pytest.mark.regression
@@ -1695,8 +1737,19 @@ def test_omnigenityharmonicsLCForm_fix_field_optimization():
         MirrorRatio(eq=eq, grid=field_lcfs_grid, bounds=(0, 0.25)),
     )
     optimizer = Optimizer("lsq-auglag")
+    objective.build(verbose=0)
+    initial_error = np.linalg.norm(objective.compute_unscaled(objective.x(eq))[2:])
+    initial_eq_params = {
+        name: np.asarray(eq.params_dict[name]).copy() for name in ["p_l", "c_l", "Psi"]
+    }
+    initial_field_params = {
+        name: np.asarray(value).copy() for name, value in field.params_dict.items()
+    }
     eq.optimize(objective, constraints, optimizer, maxiter=150, verbose=3)
     eq, _ = eq.solve(objective="force", verbose=3)
+    _assert_fixed_field_omnigenity_result(
+        eq, field, objective, initial_error, initial_eq_params, initial_field_params
+    )
 
 
 @pytest.mark.unit
@@ -1761,6 +1814,7 @@ def test_omnigenityharmonics_proximal():
         FixPressure(eq=eq),
         FixCurrent(eq=eq),
         FixPsi(eq=eq),
+        FixParameters(field, params={"B_lm": True}),
     )
     optimizer = Optimizer("proximal-lsq-exact")
     (eq, field), _ = optimizer.optimize(

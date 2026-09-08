@@ -1027,17 +1027,22 @@ class OmnigenityHarmonics(_Objective):
         Must be without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
-        The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
-        ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
-        linearly space grid on the rho=1 surface. Must be without stellarator symmetry.
+        The input nodes are given in (ρ,θ,ζ) coordinates. For ``field_type="desc"``,
+        θ is mapped to η and ζ to α. For ``"oops"`` and ``"lcform"``, θ is α and
+        ``NFP * ζ`` is η, with an additional ``-π`` shift for ``"oops"``.
+        Defaults to a linearly spaced grid on the rho=1 surface without stellarator
+        symmetry. The sampled values are fitted by index on a separate uniform
+        periodic grid in (α,η), preserving the input samples and their ordering.
+        A cropped input grid therefore defines a spectrum of those samples, rather
+        than a Fourier spectrum over the full physical angular domain.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     M_harmonics : int, optional
-        Poloidal resolution of Spectral width. Default = field.M.
+        Maximum alpha harmonic. Defaults to the input grid's alpha resolution.
     N_harmonics : int, optional
-        Toroidal resolution of Spectral width. Default = field.N.
+        Maximum eta harmonic. Defaults to the input grid's eta resolution.
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
@@ -1051,6 +1056,21 @@ class OmnigenityHarmonics(_Objective):
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
 
+    Notes
+    -----
+    With ``normalize=True``, the reference field is fixed when the objective is built.
+    The DESC representation uses the mean on-axis ``field.B_lm``; OOPS and LCForm use
+    the equilibrium reference field from ``compute_scaling_factors(eq)``. Updating the
+    optimization parameters does not update this reference. Use ``normalize=False``
+    to retain the dimensional harmonic residuals, including earlier OOPS objectives
+    that did not apply a reference-field normalization.
+
+    For toroidally closed LCForm contours (``helicity[1] == 0``), the mapping uses
+    a full-torus alpha chart. With ``NFP > 1``, periodicity over one field period
+    is not guaranteed; building the objective emits a warning in this case. The
+    second argument of the S callback must have period ``2*pi/NFP``, satisfying
+    ``S(x, y + 2*pi/NFP) = S(x, y)``; for example, use ``sin(k*NFP*y)`` for integer k.
+
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -1062,7 +1082,7 @@ class OmnigenityHarmonics(_Objective):
         "_eq_fixed",
         "_field_data_keys",
         "_field_fixed",
-        "_helicity",
+        "helicity",
         "M_booz",
         "N_booz",
         "M_harmonics",
@@ -1112,7 +1132,9 @@ class OmnigenityHarmonics(_Objective):
 
         self._eq_grid = eq_grid
         self._field_grid = field_grid
-        self.helicity = field.helicity
+        # HDF5 may restore helicity elements as zero-dimensional numpy arrays.
+        # Keep topology as Python integers for the static mapping branches under JIT.
+        self.helicity = tuple(map(int, field.helicity))
         self.M_booz = M_booz
         self.N_booz = N_booz
         self.M_harmonics = M_harmonics
@@ -1130,12 +1152,16 @@ class OmnigenityHarmonics(_Objective):
                 raise ValueError(
                     "field_type 'lcform' requires field to define attributes: "
                     + ", ".join(missing)
+                    + "; bind field.S_func / field.D_func before constructing "
+                    "the objective."
                 )
             self.S_function = getattr(self._field, "_S_func")
             self.D_function = getattr(self._field, "_D_func")
             if not callable(self.S_function) or not callable(self.D_function):
                 raise ValueError(
-                    "field_type 'lcform' requires _S_func and _D_func to be callable"
+                    "field_type 'lcform' requires _S_func and _D_func to be callable; "
+                    "bind field.S_func / field.D_func before constructing "
+                    "the objective."
                 )
 
         self._eq_fixed = eq_fixed
@@ -1205,8 +1231,16 @@ class OmnigenityHarmonics(_Objective):
         else:
             field_grid = self._field_grid
 
-        M_harmonics = self.M_harmonics or field_grid.M
-        N_harmonics = self.N_harmonics or field_grid.N
+        if self._field_type == "desc":
+            # DESC's input grid is (eta, alpha), while the harmonic basis is
+            # (alpha, eta). Keep its dimensions consistent with the transpose below.
+            num_alpha, num_eta = field_grid.num_zeta, field_grid.num_theta
+            M_alpha, N_eta = field_grid.N, field_grid.M
+        else:
+            num_alpha, num_eta = field_grid.num_theta, field_grid.num_zeta
+            M_alpha, N_eta = field_grid.M, field_grid.N
+        M_harmonics = M_alpha if self.M_harmonics is None else self.M_harmonics
+        N_harmonics = N_eta if self.N_harmonics is None else self.N_harmonics
 
         self._eq_data_keys = ["|B|_mn_B"]
 
@@ -1216,7 +1250,7 @@ class OmnigenityHarmonics(_Objective):
             self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
             errorif(
                 jnp.any(field.B_lm[: field.M_B] < 0),
-                "|B| on axis must be positive! Check B_lm input.",
+                msg="|B| on axis must be positive! Check B_lm input.",
             )
             if self._normalize:
                 # average |B| on axis
@@ -1225,7 +1259,17 @@ class OmnigenityHarmonics(_Objective):
             self._is_imag = False
             self._dim_f = 1 * M_harmonics * (2 * N_harmonics + 1)
             self._field_data_keys = ["theta_B_OOPS", "zeta_B_OOPS", "S_list", "D_list"]
+            if self._normalize:
+                self._normalization = compute_scaling_factors(eq)["B"]
         elif self._field_type == "lcform":
+            warnif(
+                self.helicity[1] == 0 and field.NFP > 1,
+                UserWarning,
+                "LCForm toroidally closed contours with NFP > 1 use a full-torus "
+                "chart; periodicity over one field period requires the S callback's "
+                "second argument to have period 2*pi/NFP: "
+                "S(x, y + 2*pi/NFP) = S(x, y), e.g. sin(k*NFP*y) for integer k.",
+            )
             if eq.sym:
                 self._is_imag = False
                 self._dim_f = 1 * M_harmonics * (2 * N_harmonics + 1)
@@ -1248,14 +1292,16 @@ class OmnigenityHarmonics(_Objective):
         )
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
+        errorif(
+            eq_grid.num_rho != 1 or field_grid.num_rho != 1,
+            msg="eq_grid and field_grid must each contain exactly one surface",
+        )
         field_rho = field_grid.nodes[field_grid.unique_rho_idx, 0]
         eq_rho = eq_grid.nodes[eq_grid.unique_rho_idx, 0]
         errorif(
-            any(eq_rho != field_rho),
-            msg="eq_grid and field_grid must be the same surface(s),Now only "
-            "single surface "
-            + f"eq_grid has surfaces {eq_rho}, "
-            + f"field_grid has surfaces {field_rho}",
+            eq_rho[0] != field_rho[0],
+            msg="eq_grid and field_grid must be the same surface, "
+            f"got rho={eq_rho[0]} and rho={field_rho[0]}",
         )
 
         timer = Timer()
@@ -1280,9 +1326,7 @@ class OmnigenityHarmonics(_Objective):
         from desc.basis import DoubleFourierSeries
         from desc.transform import Transform
 
-        grid_B = LinearGrid(
-            theta=field_grid.num_theta, zeta=field_grid.num_zeta, NFP=1, sym=False
-        )
+        grid_B = LinearGrid(theta=num_alpha, zeta=num_eta, NFP=1, sym=False)
         field_transforms["|B|_eta_alpha"] = Transform(
             grid_B,
             DoubleFourierSeries(

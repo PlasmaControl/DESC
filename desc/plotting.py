@@ -3075,6 +3075,7 @@ def plot_boozer_modes(  # noqa: C901
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     plot_op = ax.semilogy if log else ax.plot
+
     B_mn = np.abs(B_mn) if log else B_mn
 
     if max_only:

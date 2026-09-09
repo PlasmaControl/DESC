@@ -612,6 +612,13 @@ class ProximalProjection(ObjectiveFunction):
         self._solve_during_proximal_build = solve_options.pop(
             "solve_during_proximal_build", True
         )  # If user does not want the solve during build, mainly for debug purposes
+        # RG: this method will give a correct gradient only if the equilibrium
+        # is already in force balance. Default True re-solves `eq` here as a
+        # safety net for that assumption. Setting it False is safe ONLY when
+        # the caller already guarantees `eq` is converged AND nothing needs
+        # this resolve for another reason -- skipping it when `eq` is not
+        # actually converged silently invalidates every sensitivity computed
+        # afterward (they assume force balance holds at the start point).
         perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
@@ -778,6 +785,12 @@ class ProximalProjection(ObjectiveFunction):
         # first, ensure equilibrium is solved to the
         # specified tolerances, necessary as we assume
         # eq is solved when taking the derivatives later
+        # RG: this method will give a correct gradient only if the
+        # equilibrium is already in force balance -- this is exactly that
+        # assumption being enforced. If it's skipped (see
+        # `_solve_during_proximal_build` above) the caller must guarantee it
+        # independently, or every sensitivity computed after this point is
+        # invalid.
         if self._solve_during_proximal_build:
             self._eq.solve(
                 objective=self._eq_solve_objective,
@@ -903,6 +916,14 @@ class ProximalProjection(ObjectiveFunction):
         -----
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
+
+        RG: this method will give a correct gradient only if the equilibrium
+        is already in force balance -- the perturb+solve below computes
+        `deltas` relative to `self._x_old`'s eq state and assumes THAT state
+        is a valid force-balance solution to perturb away from. If it isn't
+        (e.g. `_solve_during_proximal_build=False` was set without the
+        caller actually guaranteeing convergence beforehand), the resulting
+        `xeq`/`xopt` -- and anything computed from them -- is invalid.
 
         """
         # xopt is the full state vector of all the things

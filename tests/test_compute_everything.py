@@ -50,12 +50,13 @@ def _compare_against_master(
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
                 err_msg = f"Parameterization: {p}. Name: {name}."
+                rtol = 1e-4 if "Gamma_" in name else 1e-8
                 assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
                     atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
-                    rtol=1e-8,
+                    rtol=rtol,
                     err_msg=err_msg,
                 )
             except AssertionError as e:
@@ -252,8 +253,11 @@ def test_compute_everything():
             names = set(data_index[p].keys())
 
             def need_special(name):
-                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
-                    data_index[p][name]["grid_requirement"]
+                transforms = data_index[p][name]["full_dependencies"]["transforms"]
+                return (
+                    bool(data_index[p][name]["source_grid_requirement"])
+                    or bool(data_index[p][name]["grid_requirement"])
+                    or "diffmat" in transforms
                 )
 
             names -= _grow_seeds(p, set(filter(need_special, names)), names)

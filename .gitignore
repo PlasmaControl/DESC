@@ -14,6 +14,10 @@ tests/benchmarks/.benchmarks/
 *.egg-info
 *.gif
 *.h5
+# ...except test fixtures, which MUST ship with the repo. Without this the AGNI
+# equilibrium is absent on CI, tests/test_AGNI.py skips every test silently, and
+# the coverage of the finite-n solver collapses.
+!tests/inputs/*.h5
 *.ini
 *.mat
 *.out

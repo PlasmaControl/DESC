@@ -14,6 +14,7 @@ import pytest
 from packaging.version import Version
 from qsc import Qsc
 from scipy.constants import elementary_charge, mu_0
+from scipy.integrate import trapezoid
 
 import desc.examples
 from desc.backend import jax, jnp
@@ -26,6 +27,8 @@ from desc.coils import (
     initialize_modular_coils,
 )
 from desc.compute import get_transforms
+from desc.compute._omnigenity import _sample_boozer_data
+from desc.compute.utils import _compute
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
@@ -36,6 +39,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    OmnigenousFieldConstructed,
     PoloidalMagneticField,
     SplineMagneticField,
     ToroidalMagneticField,
@@ -82,6 +86,7 @@ from desc.objectives import (
     Pressure,
     PrincipalCurvature,
     QuadraticFlux,
+    QuasiIsodynamicityConstructed,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -111,6 +116,9 @@ from desc.profiles import (
 )
 from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
+
+from .test_magnetic_fields import make_constructed_qi_equilibrium
+from .utils import FiniteDiffDerivative
 
 
 class TestObjectiveFunction:
@@ -2257,6 +2265,276 @@ class TestObjectiveFunction:
             obj.build()
 
 
+def _constructed_source(params, constants):
+    """Sample native equilibrium data on a built objective's construction nodes."""
+    data = _compute(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        ["|B|_mn_B", "iota"],
+        params=params,
+        transforms=constants["transforms"],
+        profiles=constants["profiles"],
+        surf_batch_size=constants["surf_batch_size"],
+    )
+    return _sample_boozer_data(
+        constants["transforms"],
+        data,
+        constants["fieldline_labels"],
+        constants["zeta"],
+        fieldline_batch_size=constants["fieldline_batch_size"],
+        surf_batch_size=constants["surf_batch_size"],
+    )
+
+
+class TestQuasiIsodynamicityConstructed:
+    """Constructed QI residuals, scaling, and derivatives on a mirrored geometry."""
+
+    settings = dict(num_alpha=4, num_zeta=33, num_B_levels=9, M_booz=4, N_booz=4)
+
+    @pytest.fixture(scope="class")
+    def qi_problem(self):
+        """Build one objective on the shared equilibrium without solving it."""
+        eq = make_constructed_qi_equilibrium()
+        objective = QuasiIsodynamicityConstructed(eq, **self.settings)
+        objective.build(verbose=0)
+        return eq, objective
+
+    @pytest.fixture(scope="class")
+    def qi_wrapper(self, qi_problem):
+        """Use the DESC optimization-vector and derivative interfaces."""
+        _, objective = qi_problem
+        wrapper = ObjectiveFunction(objective)
+        wrapper.build(verbose=0)
+        return wrapper
+
+    @pytest.fixture(scope="class")
+    def qi_two_surface_problem(self):
+        """Share two surfaces with sequential and all-at-once Boozer evaluation."""
+        eq = make_constructed_qi_equilibrium()
+        grid = LinearGrid(rho=[0.5, 1], M=8, N=8, NFP=eq.NFP, sym=False)
+        objectives = []
+        for batch_size in (1, None):
+            obj = QuasiIsodynamicityConstructed(
+                eq, grid=grid, surf_batch_size=batch_size, **self.settings
+            )
+            obj.build(verbose=0)
+            objectives.append(obj)
+        return eq, grid, objectives
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "method,error",
+        [("J", NotImplementedError), ("j", ValueError), (None, TypeError)],
+    )
+    def test_method(self, method, error):
+        """The objective rejects unsupported target definitions at initialization."""
+        eq = make_constructed_qi_equilibrium()
+        with pytest.raises(error):
+            QuasiIsodynamicityConstructed(eq, method=method)
+
+    @pytest.mark.unit
+    def test_residual(self, qi_problem):
+        """The raw residual is the physical difference from the constructed field."""
+        eq, obj = qi_problem
+        B, _ = _constructed_source(eq.params_dict, obj._constants)
+        field = OmnigenousFieldConstructed.from_equilibrium(eq, **self.settings)
+        expected = B.ravel() - field.compute()["|B| constructed"]
+        np.testing.assert_allclose(
+            obj.compute(eq.params_dict), expected, atol=2e-14, rtol=2e-12
+        )
+
+    @pytest.mark.unit
+    def test_normalization(self, qi_problem, qi_wrapper):
+        """Native scaling changes units and retains the build-time magnetic scale."""
+        eq, obj = qi_problem
+        raw = np.asarray(obj.compute(eq.params_dict))
+        reference_B = compute_scaling_factors(eq)["B"]
+        np.testing.assert_allclose(obj.normalization, reference_B)
+        unnormalized = QuasiIsodynamicityConstructed(
+            eq, normalize=False, **self.settings
+        )
+        unnormalized.build(use_jit=False, verbose=0)
+        np.testing.assert_allclose(
+            unnormalized.compute(eq.params_dict), raw, atol=2e-14
+        )
+        scaled = obj.compute_scaled_error(eq.params_dict)
+        np.testing.assert_allclose(
+            unnormalized.compute_scaled_error(eq.params_dict),
+            reference_B * scaled,
+            atol=2e-14,
+        )
+        np.testing.assert_allclose(
+            qi_wrapper.compute_scaled_error(qi_wrapper.x(eq)), scaled, atol=2e-14
+        )
+
+        # Rescaling flux rescales both physical fields. A normalization recomputed
+        # from the trial field would incorrectly cancel this change.
+        trial = dict(eq.params_dict)
+        trial["Psi"] = 1.1 * trial["Psi"]
+        np.testing.assert_allclose(obj.compute(trial), 1.1 * raw, atol=2e-13)
+        np.testing.assert_allclose(
+            obj.compute_scaled_error(trial), 1.1 * scaled, atol=2e-13
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("normalize_target", [True, False])
+    def test_sample_weight(self, qi_two_surface_problem, normalize_target):
+        """Integrate each surface with nonuniform targets and weights in C order."""
+        eq, grid, (original, _) = qi_two_surface_problem
+        rho = np.array([0.5, 1])[:, None, None]
+        alpha = np.arange(self.settings["num_alpha"])[None, :, None]
+        zeta = np.linspace(0, 1, self.settings["num_zeta"])[None, None, :]
+        density = 1 + 0.4 * rho + 0.2 * alpha + 0.3 * zeta + 0.1 * rho * alpha * zeta
+        target = 0.01 + 0.003 * rho + 0.005 * alpha - 0.02 * zeta
+        obj = QuasiIsodynamicityConstructed(
+            eq,
+            grid=grid,
+            target=target.ravel(order="C"),
+            normalize_target=normalize_target,
+            weight=np.sqrt(density).ravel(order="C"),
+            **self.settings,
+        )
+        obj.build(verbose=0)
+        raw = np.asarray(original.compute(eq.params_dict)).reshape(density.shape)
+        reference_B = compute_scaling_factors(eq)["B"]
+        physical_target = target if normalize_target else target * reference_B
+        error = (raw - physical_target) / reference_B
+        zeta = np.asarray(obj._constants["zeta"])
+        period = zeta[-1] - zeta[0]
+        # Integrate cardinal samples independently of the objective's quadrature:
+        # endpoint basis functions have half the integral of interior functions.
+        quadrature = trapezoid(np.eye(zeta.size), x=zeta, axis=-1)
+        quadrature /= period * self.settings["num_alpha"]
+        expected = (error * np.sqrt(density * quadrature)).ravel(order="C")
+        np.testing.assert_allclose(
+            obj.compute_scaled_error(eq.params_dict), expected, atol=2e-14
+        )
+        surface_integrals = trapezoid(density * error**2, x=zeta, axis=-1)
+        surface_means = np.mean(surface_integrals, axis=-1) / period
+        np.testing.assert_allclose(
+            obj.compute_scalar(eq.params_dict), np.sum(surface_means) / 2
+        )
+
+    @pytest.mark.unit
+    def test_surfaces(self, qi_problem, qi_two_surface_problem):
+        """Separate surfaces and both batching choices give the same residuals."""
+        _, outer_surface = qi_problem
+        eq, _, (sequential, together) = qi_two_surface_problem
+        params = eq.params_dict
+        np.testing.assert_allclose(
+            together.compute_scaled_error(params),
+            sequential.compute_scaled_error(params),
+            atol=2e-13,
+        )
+        inner_surface = QuasiIsodynamicityConstructed(
+            eq,
+            grid=LinearGrid(rho=0.5, M=8, N=8, NFP=eq.NFP, sym=False),
+            **self.settings,
+        )
+        inner_surface.build(use_jit=False, verbose=0)
+        combined = sequential.compute_scaled_error(params).reshape(2, -1)
+        for index, one in enumerate((inner_surface, outer_surface)):
+            np.testing.assert_allclose(
+                combined[index], one.compute_scaled_error(params), atol=2e-13
+            )
+
+    @pytest.mark.regression
+    @pytest.mark.parametrize(
+        "resolutions,rtol",
+        [
+            pytest.param(
+                [(10, 8, 65, 33), (12, 8, 65, 33), (16, 8, 65, 33)],
+                5e-2,
+                id="boozer",
+            ),
+            pytest.param(
+                [(8, 20, 161, 81), (8, 24, 193, 97), (8, 32, 257, 129)],
+                4e-2,
+                id="construction",
+            ),
+        ],
+    )
+    def test_scalar_resolution(self, resolutions, rtol):
+        """Boozer and construction refinement independently preserve scalar scale."""
+        eq = make_constructed_qi_equilibrium()
+        values = []
+        # Keep the equilibrium coefficients, surface, normalization, and weight
+        # fixed. Refining only eq.L/M/N would merely embed the same coefficients.
+        for booz, num_alpha, num_zeta, num_B_levels in resolutions:
+            grid = LinearGrid(rho=1.0, M=2 * booz, N=2 * booz, NFP=eq.NFP, sym=False)
+            obj = QuasiIsodynamicityConstructed(
+                eq,
+                grid=grid,
+                M_booz=booz,
+                N_booz=booz,
+                num_alpha=num_alpha,
+                num_zeta=num_zeta,
+                num_B_levels=num_B_levels,
+            )
+            obj.build(use_jit=False, verbose=0)
+            values.append(float(obj.compute_scalar(eq.params_dict)))
+        values = np.asarray(values)
+        assert np.isfinite(values).all()
+        assert np.all(values > 1e-6)  # This unsolved geometry has a nonzero QI error.
+        # The active minima and inverse branches can change with refinement, so
+        # compare the resolved values without requiring monotone convergence.
+        np.testing.assert_allclose(values, values[-1], rtol=rtol, atol=0)
+
+    @pytest.mark.unit
+    def test_current_parameters_ad(self, qi_problem, qi_wrapper):
+        """Geometry and iota update the reference and differentiate through it."""
+        eq, obj = qi_problem
+        params = eq.params_dict
+        direction = {key: jnp.zeros_like(value) for key, value in params.items()}
+        direction["i_l"] = jnp.ones_like(params["i_l"]) * 0.023
+        direction["R_lmn"] = jnp.arange(params["R_lmn"].size) * 2e-5
+        x, dx = qi_wrapper.x(eq), eq.pack_params(direction)
+        tangent = qi_wrapper.jvp_scaled_error(dx, x)
+
+        # A scalar path keeps the parameter-space step unchanged by the finite
+        # difference helper's normalization of multi-parameter directions.
+        path = lambda t: qi_wrapper.compute_scaled_error(x + t * dx)
+        for step in (2e-4, 1e-4):
+            difference = FiniteDiffDerivative.compute_jvp(
+                path, 0, 1.0, 0.0, rel_step=step
+            )
+            np.testing.assert_allclose(tangent, difference, atol=2e-8, rtol=5e-4)
+        assert np.isfinite(tangent).all()
+        assert np.linalg.norm(tangent) > 1e-9
+        cotangent = jnp.sin(jnp.arange(obj.dim_f))
+        gradient = qi_wrapper.vjp_scaled_error(cotangent, x)
+        assert np.isfinite(gradient).all()
+        np.testing.assert_allclose(
+            jnp.vdot(cotangent, tangent), jnp.vdot(gradient, dx), atol=2e-11, rtol=2e-8
+        )
+
+        source, _ = _constructed_source(params, obj._constants)
+        indices = np.argmin(source, axis=-1)
+        initial = OmnigenousFieldConstructed.from_equilibrium(eq, **self.settings)
+        initial_B = initial.compute()["|B| constructed"]
+        for step in (-2e-4, 2e-4):
+            trial = eq.unpack_params(x + step * dx)
+            snapshot = OmnigenousFieldConstructed.from_equilibrium(
+                eq, params=trial, **self.settings
+            )
+            sampled, _ = _constructed_source(trial, obj._constants)
+            np.testing.assert_array_equal(np.argmin(sampled, axis=-1), indices)
+            expected = sampled.ravel() - snapshot.compute()["|B| constructed"]
+            np.testing.assert_allclose(obj.compute(trial), expected, atol=2e-13)
+            assert not np.array_equal(snapshot.iota, initial.iota)
+            assert not np.array_equal(snapshot.compute()["|B| constructed"], initial_B)
+
+    @pytest.mark.unit
+    def test_invalid_trial(self, qi_problem):
+        """Invalid initial fields raise and invalid trial fields give NaN residuals."""
+        eq, obj = qi_problem
+        params = dict(eq.params_dict)
+        params["Psi"] = jnp.zeros_like(params["Psi"])
+        assert np.isnan(obj.compute_scaled_error(params)).all()
+        wrong_cut = QuasiIsodynamicityConstructed(eq, zeta0=np.pi, **self.settings)
+        with pytest.raises(ValueError, match="Invalid constructed field"):
+            wrong_cut.build(verbose=0)
+
+
 @pytest.mark.regression
 def test_derivative_modes():
     """Test equality of derivatives using batched, looped methods."""
@@ -3326,6 +3604,8 @@ class TestComputeScalarResolution:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        # Valid QI wells are tested by TestQuasiIsodynamicityConstructed.
+        QuasiIsodynamicityConstructed,
         QuadraticFlux,
         SurfaceQuadraticFlux,
         ToroidalFlux,
@@ -3848,6 +4128,8 @@ class TestObjectiveNaNGrad:
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
         PlasmaVesselDistance,
+        # Valid QI wells are tested by TestQuasiIsodynamicityConstructed.
+        QuasiIsodynamicityConstructed,
         QuadraticFlux,
         SurfaceCurrentRegularization,
         SurfaceQuadraticFlux,

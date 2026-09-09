@@ -84,7 +84,16 @@ Omnigenity
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.Omnigenity
+    desc.objectives.QuasiIsodynamicityConstructed
     desc.objectives.Isodynamicity
+
+``QuasiIsodynamicityConstructed`` compares the equilibrium field strength with
+a QI reference reconstructed from its current parameters. The equilibrium is
+the only optimizable object. The implemented construction uses
+``need_boozer=True``, ``enforce_equal_bounce_distance=True``, and ``method="B"``.
+The raw residual is in tesla; ``normalize=True`` applies DESC's fixed field scale
+set during ``build``.
+Use ``OmnigenousFieldConstructed.from_equilibrium`` to inspect a reference snapshot.
 
 
 Stability

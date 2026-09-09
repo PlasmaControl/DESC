@@ -4,6 +4,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
+from functools import partial
 
 import numpy as np
 from diffrax import (
@@ -20,7 +21,7 @@ from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
 from desc import config as desc_config
-from desc.backend import jnp, sign
+from desc.backend import jax, jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -28,15 +29,22 @@ from desc.basis import (
 )
 from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
-from desc.compute.utils import get_params, get_transforms
+from desc.compute import data_index
+from desc.compute._omnigenity import (
+    _construct_field,
+    _evaluate_bounce,
+    _sample_boozer_data,
+)
+from desc.compute.utils import _compute, get_params, get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.integrals import compute_B_plasma
 from desc.io import IOAble
 from desc.optimizable import Optimizable, OptimizableCollection, optimizable_parameter
 from desc.transform import Transform
 from desc.utils import (
+    check_posint,
     copy_coeffs,
     dot,
     errorif,
@@ -3259,3 +3267,725 @@ class OmnigenousField(Optimizable, IOAble):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
+
+
+class OmnigenousFieldConstructed(IOAble):
+    """QI scalar reference field constructed from Boozer field-line samples.
+
+    Create snapshots with :meth:`from_samples` or :meth:`from_equilibrium`.
+    The SQuID-like method makes a common minimum, stretches each single well,
+    and imposes a common bounce distance. Paired centers are projected while
+    preserving that distance, the chosen minimum location, and period boundaries.
+    Centers are interpolated periodically between midpoint field-line labels.
+
+    This object has no independent optimization parameters, vector field, or
+    equilibrium geometry. It stores the constructed scalar field, not a live
+    reference to an equilibrium. Only poloidally closed QI fields are supported.
+    ``need_boozer=False`` and ``enforce_equal_bounce_distance=False`` are reserved.
+
+    Notes
+    -----
+    The representation uses piecewise linear inverse branches. For input minima
+    tied within ``field_tol``, the constructed field attains the common surface
+    minimum ``B_min`` at the coordinate midpoint of the leftmost and rightmost
+    tied samples, even if the input field is higher there. This midpoint is not
+    rounded to a sample node; unique minima retain their position. All tied minima
+    must be strictly internal.
+    The constructed field has zero bottom bounce distance and therefore replaces
+    a minimum plateau by a single bottom point. It need not have continuous
+    derivatives at the period boundary. Invalid snapshots can be produced for
+    tracing with ``check=False``. Checked queries and plotting reject them;
+    unchecked native-grid queries return NaN on invalid surfaces.
+
+    References
+    ----------
+    A. G. Goodman et al., Journal of Plasma Physics 89, 905890504 (2023),
+    doi:10.1017/S002237782300065X, section 2.1.
+    """
+
+    _static_attrs = [
+        "_NFP",
+        "_helicity",
+        "_sym",
+        "_need_boozer",
+        "_enforce_equal_bounce_distance",
+        "_settings",
+    ]
+    _io_attrs_ = _static_attrs + [
+        "_rho",
+        "_fieldline_labels",
+        "_zeta",
+        "_iota",
+        "_B_min",
+        "_B_max",
+        "_B_levels",
+        "_bounce_centers",
+        "_bounce_distances",
+        "_valid_surface",
+        "_diagnostics",
+    ]
+
+    def __init__(self):
+        raise TypeError("Use from_samples or from_equilibrium to construct a snapshot.")
+
+    @classmethod
+    def from_samples(
+        cls,
+        B,
+        *,
+        rho,
+        fieldline_labels,
+        zeta,
+        iota,
+        NFP,
+        need_boozer=True,
+        enforce_equal_bounce_distance=True,
+        helicity=None,
+        sym=False,
+        num_B_levels=81,
+        span_rtol=1e-12,
+        field_tol=1e-12,
+        weight_regularization=1e-12,
+        knot_margin=1e-12,
+        fieldline_batch_size=None,
+        surf_batch_size=1,
+        check=True,
+    ):
+        """Construct a snapshot from samples already in Boozer coordinates.
+
+        Parameters
+        ----------
+        B : array-like, shape (num_rho, num_alpha, num_zeta)
+            Positive physical magnetic field strength in tesla. Input minima
+            tied within field_tol use the midpoint between the first and last
+            tied minimum; the base squash retains the intervening plateau.
+        rho : array-like, shape (num_rho,)
+            Strictly increasing, unique surfaces in ``(0, 1]``.
+        fieldline_labels : array-like, shape (num_alpha,)
+            Uniform cyclic midpoint labels chi in ``[0, 2*pi)``. Along a line,
+            ``theta_B = chi + iota * (zeta - zeta_ref)``.
+        zeta : array-like, shape (num_zeta,)
+            Increasing uniform Boozer angles spanning exactly ``2*pi/NFP``,
+            including both endpoints. At least three samples are required.
+        iota : array-like, shape (num_rho,)
+            Rotational transform of the sampled equilibrium.
+        NFP : int
+            Number of field periods.
+        need_boozer, enforce_equal_bounce_distance : bool
+            Static construction choices. Currently both must be True. Samples
+            are already transformed; ``need_boozer`` does not transform arrays.
+        helicity : tuple of int or None
+            Only ``(0, NFP)`` is implemented; None selects this value.
+        sym : bool
+            Require input stellarator symmetry about the period midpoint.
+        num_B_levels : int
+            Number of normalized inverse-branch levels, including 0 and 1.
+        span_rtol, field_tol : float
+            Relative span threshold and dimensionless field tolerance.
+        weight_regularization : float
+            Positive regularization of the mean squared stretch change.
+        knot_margin : float
+            Minimum same-branch knot spacing divided by the field period.
+        fieldline_batch_size, surf_batch_size : int or None
+            DESC batch sizes; None processes all entries together.
+        check : bool
+            Raise on invalid data. False retains dynamic validity masks and
+            permits JAX tracing; shapes and static choices are always checked.
+
+        Returns
+        -------
+        field : OmnigenousFieldConstructed
+            Snapshot with a common physical minimum, maximum and bounce distance.
+        """
+        for name, value in (
+            ("need_boozer", need_boozer),
+            ("enforce_equal_bounce_distance", enforce_equal_bounce_distance),
+            ("sym", sym),
+            ("check", check),
+        ):
+            errorif(
+                not isinstance(value, (bool, np.bool_)),
+                TypeError,
+                f"{name} must be a static boolean.",
+            )
+        for name, value in (
+            # TODO: Construct QI fields without Boozer using estimated maxima.
+            ("need_boozer", need_boozer),
+            # TODO: Construct pseudosymmetric fields without equal bounce distances.
+            ("enforce_equal_bounce_distance", enforce_equal_bounce_distance),
+        ):
+            errorif(
+                not value,
+                NotImplementedError,
+                f"{name}=False is reserved and not implemented.",
+            )
+        NFP = int(check_posint(NFP, "NFP", allow_none=False))
+        helicity = (0, NFP) if helicity is None else tuple(helicity)
+        # TODO: Generalize the construction to helicity=(M, N).
+        errorif(
+            helicity != (0, NFP),
+            NotImplementedError,
+            "Only poloidal helicity=(0, NFP) is implemented.",
+        )
+        num_B_levels = int(check_posint(num_B_levels, "num_B_levels", allow_none=False))
+        errorif(num_B_levels < 3, ValueError, "num_B_levels must be at least 3.")
+        fieldline_batch_size = check_posint(
+            fieldline_batch_size, "fieldline_batch_size"
+        )
+        surf_batch_size = check_posint(surf_batch_size, "surf_batch_size")
+        tolerances = dict(
+            span_rtol=span_rtol,
+            field_tol=field_tol,
+            weight_regularization=weight_regularization,
+            knot_margin=knot_margin,
+        )
+        for name, value in tolerances.items():
+            errorif(
+                not np.isfinite(value) or value <= 0,
+                ValueError,
+                f"{name} must be finite and positive.",
+            )
+        settings = dict(
+            need_boozer=bool(need_boozer),
+            enforce_equal_bounce_distance=bool(enforce_equal_bounce_distance),
+            helicity=helicity,
+            minimum_policy="midpoint",
+            num_B_levels=num_B_levels,
+            **{key: float(value) for key, value in tolerances.items()},
+            fieldline_batch_size=fieldline_batch_size,
+            surf_batch_size=surf_batch_size,
+        )
+        # DESC's HDF5 dictionary writer does not support None values. An omitted
+        # batch entry records all-at-once processing; public settings restores None.
+        settings = {key: value for key, value in settings.items() if value is not None}
+        B, rho, labels, zeta, iota = (
+            jnp.asarray(value, dtype=float)
+            for value in (B, rho, fieldline_labels, zeta, iota)
+        )
+        if any(x.ndim != 1 for x in (rho, labels, zeta, iota)):
+            raise ValueError("rho, fieldline_labels, zeta and iota must be 1D arrays.")
+        if not rho.size or not labels.size or zeta.size < 3:
+            raise ValueError(
+                "Require at least one surface/line and three zeta samples."
+            )
+        if B.shape != (rho.size, labels.size, zeta.size) or iota.shape != rho.shape:
+            raise ValueError("B must have shape (nr, na, nz) and iota shape (nr,).")
+        with jax.ensure_compile_time_eval():
+            levels = jnp.linspace(0.0, 1.0, num_B_levels)
+        data = _construct_field(
+            B,
+            zeta,
+            levels,
+            rho=rho,
+            fieldline_labels=labels,
+            iota=iota,
+            NFP=NFP,
+            sym=sym,
+            span_rtol=settings["span_rtol"],
+            field_tol=settings["field_tol"],
+            weight_regularization=settings["weight_regularization"],
+            knot_margin=settings["knot_margin"],
+            fieldline_batch_size=fieldline_batch_size,
+            surf_batch_size=surf_batch_size,
+        )
+        if check:
+            errorif(
+                not np.all(data["valid_surface"]),
+                ValueError,
+                "Invalid constructed field.",
+            )
+        return cls._from_data(
+            data,
+            rho=rho,
+            fieldline_labels=labels,
+            zeta=zeta,
+            iota=iota,
+            NFP=NFP,
+            sym=sym,
+            settings=settings,
+        )
+
+    @classmethod
+    def from_equilibrium(
+        cls,
+        eq,
+        *,
+        params=None,
+        rho=None,
+        grid=None,
+        need_boozer=True,
+        enforce_equal_bounce_distance=True,
+        num_alpha=16,
+        num_zeta=201,
+        num_B_levels=81,
+        M_booz=None,
+        N_booz=None,
+        zeta0=0.0,
+        helicity=None,
+        span_rtol=1e-12,
+        field_tol=1e-12,
+        weight_regularization=1e-12,
+        knot_margin=1e-12,
+        fieldline_batch_size=None,
+        surf_batch_size=1,
+        check=True,
+    ):
+        """Transform the current equilibrium and construct a scalar snapshot.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Source of Boozer harmonics, rotational transform and field periods.
+        params : dict or None
+            Current equilibrium parameters; None reads ``eq.params_dict`` once.
+        rho : array-like or None
+            Surfaces to construct, default ``[1]`` without a grid. If both are
+            specified, rho must agree exactly with the grid surfaces.
+        grid : Grid or None
+            Actual full, uniform, nonsymmetric angular mesh for the Boozer
+            transform. The default has ``M=2*M_booz, N=2*N_booz``.
+        num_alpha, num_zeta, num_B_levels : int
+            Midpoint labels, endpoint-inclusive toroidal samples, and field levels.
+        M_booz, N_booz : int or None
+            Boozer harmonic resolutions. Each None defaults independently to
+            twice the corresponding equilibrium resolution; zero is preserved.
+        zeta0 : float
+            Boozer period origin in radians. Symmetric equilibria require an
+            integer value of ``zeta0*NFP/pi``.
+        need_boozer, enforce_equal_bounce_distance : bool
+            Currently both must be True, independently of harmonic resolution.
+        helicity : tuple or None
+            Poloidal closure, default ``(0, eq.NFP)``.
+        span_rtol, field_tol, weight_regularization, knot_margin : float
+            Numerical tolerances, as in :meth:`from_samples`.
+        fieldline_batch_size, surf_batch_size : int or None
+            DESC batch sizes.
+        check : bool
+            Eager validity check of the constructed snapshot. Static sampling
+            options and the transform grid are always checked.
+
+        Returns
+        -------
+        field : OmnigenousFieldConstructed
+            Independent snapshot, with no reference to eq or params.
+        """
+        # Check options needed for sampling here; from_samples owns the shared
+        # construction-option checks.
+        for name, value, lower in (
+            ("num_alpha", num_alpha, 1),
+            ("num_zeta", num_zeta, 3),
+        ):
+            if isinstance(value, (bool, np.bool_)) or not isinstance(
+                value, (int, np.integer)
+            ):
+                raise TypeError(f"{name} must be an integer.")
+            if value < lower:
+                raise ValueError(f"{name} must be at least {lower}.")
+        M_booz = 2 * eq.M if M_booz is None else M_booz
+        N_booz = 2 * eq.N if N_booz is None else N_booz
+        for name, value in (("M_booz", M_booz), ("N_booz", N_booz)):
+            if isinstance(value, (bool, np.bool_)) or not isinstance(
+                value, (int, np.integer)
+            ):
+                raise TypeError(f"{name} must be a nonnegative integer.")
+            if value < 0:
+                raise ValueError(f"{name} must be nonnegative.")
+        errorif(not np.isfinite(zeta0), ValueError, "zeta0 must be finite.")
+        if eq.sym and not np.isclose(
+            2 * zeta0 / (2 * np.pi / eq.NFP),
+            np.rint(2 * zeta0 / (2 * np.pi / eq.NFP)),
+            rtol=0,
+            atol=1e-12,
+        ):
+            raise NotImplementedError(
+                "Stellarator symmetry requires 2*zeta0/P to be an integer."
+            )
+        if grid is None:
+            rho = np.atleast_1d(1.0 if rho is None else rho)
+            grid = LinearGrid(
+                rho=rho, M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False
+            )
+        else:
+            errorif(not isinstance(grid, _Grid), TypeError, "grid must be a Grid.")
+            if (
+                grid.NFP != eq.NFP
+                or grid.sym
+                or not grid.is_meshgrid
+                or grid.coordinates != "rtz"
+            ):
+                raise ValueError(
+                    "Boozer construction requires a nonsymmetric rtz meshgrid "
+                    "with the equilibrium NFP."
+                )
+            for values, period in (
+                (grid.nodes[grid.unique_theta_idx, 1], 2 * np.pi),
+                (grid.nodes[grid.unique_zeta_idx, 2], 2 * np.pi / eq.NFP),
+            ):
+                values = np.asarray(values)
+                gaps = np.diff(np.append(values, values[0] + period))
+                if not np.allclose(gaps, period / values.size, rtol=1e-12, atol=1e-12):
+                    raise ValueError(
+                        "Boozer construction requires uniform, complete angular "
+                        "periods without duplicate endpoints."
+                    )
+            actual_rho = np.asarray(grid.nodes[grid.unique_rho_idx, 0])
+            if rho is not None and not np.array_equal(np.atleast_1d(rho), actual_rho):
+                raise ValueError("rho must match the magnetic surfaces of grid.")
+            rho = actual_rho
+        if (
+            not np.all(np.isfinite(rho))
+            or np.any(np.asarray(rho) <= 0)
+            or np.any(np.asarray(rho) > 1)
+            or np.any(np.diff(rho) <= 0)
+        ):
+            raise ValueError("rho must be finite, unique, increasing, and in (0, 1].")
+        fieldline_batch_size = check_posint(
+            fieldline_batch_size, "fieldline_batch_size"
+        )
+        surf_batch_size = check_posint(surf_batch_size, "surf_batch_size")
+        fieldline_labels = 2 * jnp.pi * jnp.arange(num_alpha) / num_alpha
+        zeta = jnp.linspace(zeta0, zeta0 + 2 * jnp.pi / eq.NFP, num_zeta)
+        keys = ["|B|_mn_B", "iota"]
+        profiles = get_profiles(keys, obj=eq, grid=grid)
+        transforms = get_transforms(
+            keys, obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        )
+        data = _compute(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            keys,
+            params=eq.params_dict if params is None else params,
+            transforms=transforms,
+            profiles=profiles,
+            surf_batch_size=surf_batch_size,
+        )
+        B, iota = _sample_boozer_data(
+            transforms,
+            data,
+            fieldline_labels,
+            zeta,
+            fieldline_batch_size=fieldline_batch_size,
+            surf_batch_size=surf_batch_size,
+        )
+        field = cls.from_samples(
+            B,
+            rho=rho,
+            fieldline_labels=fieldline_labels,
+            zeta=zeta,
+            iota=iota,
+            NFP=eq.NFP,
+            sym=eq.sym,
+            need_boozer=need_boozer,
+            enforce_equal_bounce_distance=enforce_equal_bounce_distance,
+            helicity=helicity,
+            num_B_levels=num_B_levels,
+            span_rtol=span_rtol,
+            field_tol=field_tol,
+            weight_regularization=weight_regularization,
+            knot_margin=knot_margin,
+            fieldline_batch_size=fieldline_batch_size,
+            surf_batch_size=surf_batch_size,
+            check=check,
+        )
+        field._settings.update(M_booz=M_booz, N_booz=N_booz)
+        return field
+
+    @classmethod
+    def _from_data(
+        cls,
+        data,
+        *,
+        rho,
+        fieldline_labels,
+        zeta,
+        iota,
+        NFP,
+        sym,
+        settings,
+    ):
+        """Wrap the shared kernel result without rerunning construction."""
+        obj = cls.__new__(cls)
+        for key, value in dict(
+            rho=rho,
+            fieldline_labels=fieldline_labels,
+            zeta=zeta,
+            iota=iota,
+            **{
+                key: data[key]
+                for key in (
+                    "B_min",
+                    "B_max",
+                    "B_levels",
+                    "bounce_centers",
+                    "bounce_distances",
+                    "valid_surface",
+                )
+            },
+        ).items():
+            setattr(obj, "_" + key, jnp.asarray(value))
+        obj._diagnostics = {k: v for k, v in data.items() if k.startswith("valid_")}
+        obj._NFP, obj._sym = int(NFP), bool(sym)
+        obj._helicity = settings["helicity"]
+        obj._need_boozer = settings["need_boozer"]
+        obj._enforce_equal_bounce_distance = settings["enforce_equal_bounce_distance"]
+        obj._settings = dict(settings)
+        return obj
+
+    @staticmethod
+    @partial(jit, static_argnames="NFP")
+    def _native_grid(rho, fieldline_labels, zeta, iota, *, NFP):
+        """Fuse native query preparation while retaining current dynamic coordinates."""
+        midpoint = (zeta[0] + zeta[-1]) / 2
+        rho, theta, zeta = jnp.broadcast_arrays(
+            rho[:, None, None],
+            fieldline_labels[None, :, None]
+            + iota[:, None, None] * (zeta[None, None, :] - midpoint),
+            zeta[None, None, :],
+        )
+        return Grid(
+            jnp.stack((rho, theta, zeta), axis=-1).reshape((-1, 3)),
+            NFP=NFP,
+            sort=False,
+            jitable=True,
+        )
+
+    def compute(self, names="|B| constructed", grid=None, *, basis="rpz", check=True):
+        """Evaluate constructed field strength at literal Boozer grid nodes.
+
+        Parameters
+        ----------
+        names : str or list of str
+            ``|B| constructed`` (tesla) or ``Bc normalized`` (dimensionless).
+            Normalization uses the snapshot's stored surface minimum and maximum.
+        grid : Grid or None
+            Nodes are literal ``(rho, theta_B, zeta_B)``. Only stored rho values
+            are supported; angular coordinates are periodic. Without a grid,
+            use construction samples flattened in C order (rho, fieldline,
+            zeta), which differs from LinearGrid node ordering.
+        basis : {"rpz", "xyz"}
+            Output component basis. Both choices give the same scalar field
+            strengths; query grid nodes remain literal Boozer coordinates.
+        check : bool
+            Raise on invalid selected surfaces. False permits JAX tracing on
+            the native construction grid and returns NaN on invalid surfaces.
+            An explicit grid requires True.
+
+        Returns
+        -------
+        data : dict of ndarray
+            Requested field strengths in query node order. Coordinates are
+            supplied by the query grid; stored surfaces and rotational transforms
+            are available as ``rho`` and ``iota`` properties.
+        """
+        errorif(
+            basis.lower() not in ("rpz", "xyz"),
+            NotImplementedError,
+            "basis must be 'rpz' or 'xyz'.",
+        )
+        errorif(
+            not isinstance(check, (bool, np.bool_)),
+            TypeError,
+            "check must be a static boolean.",
+        )
+        names = [names] if isinstance(names, str) else list(names)
+        parameterization = "desc.magnetic_fields._core.OmnigenousFieldConstructed"
+        unknown = set(names) - data_index[parameterization].keys()
+        errorif(unknown, ValueError, f"Unknown constructed-field quantities: {unknown}")
+        native = grid is None
+        if native:
+            valid = self.valid_surface
+            grid = self._native_grid(
+                self.rho,
+                self.fieldline_labels,
+                self.zeta,
+                self.iota,
+                NFP=self.NFP,
+            )
+        else:
+            errorif(
+                not check,
+                NotImplementedError,
+                "Unchecked constructed-field evaluation requires grid=None.",
+            )
+            errorif(not isinstance(grid, _Grid), TypeError, "grid must be a Grid.")
+            if grid.coordinates != "rtz":
+                raise ValueError(
+                    "Grid coordinates must be literal Boozer (rho, theta_B, zeta_B)."
+                )
+            if grid.NFP != self.NFP:
+                raise ValueError("Grid NFP does not match the constructed field.")
+            nodes = np.asarray(grid.nodes)
+            if not np.isfinite(nodes).all():
+                raise ValueError(
+                    "Boozer grid nodes must be finite (rho, theta_B, zeta_B)."
+                )
+            match = nodes[:, 0, None] == np.asarray(self.rho)[None, :]
+            if not np.all(match.any(axis=1)):
+                raise ValueError(
+                    "Grid rho must belong to the stored surfaces; "
+                    "no radial interpolation."
+                )
+            valid = np.asarray(self.valid_surface)[match.argmax(axis=1)]
+        if check:
+            errorif(
+                not np.all(valid),
+                ValueError,
+                "Invalid constructed field on requested surfaces.",
+            )
+        params = get_params(names, obj=self)
+        data = (compute_fun if check else _compute)(
+            parameterization,
+            names,
+            params=params,
+            transforms={"grid": grid},
+            profiles={},
+            native_grid=native,
+        )
+        return {name: data[name] for name in names}
+
+    def bounce_points(self, B_values, *, normalized=False):
+        """Return inverse branches at physical or normalized field levels.
+
+        This diagnostic query interpolates the stored centers and distances.
+        Construction, field evaluation, and the B objective do not call it.
+
+        Parameters
+        ----------
+        B_values : array-like, shape (num_rho, num_query)
+            Physical levels in tesla, or beta in [0, 1] if normalized=True.
+        normalized : bool
+            Interpret B_values as beta instead of tesla.
+
+        Returns
+        -------
+        left, right : ndarray, shape (num_rho, num_alpha, num_query, 1)
+            Boozer angles in radians. The bottom pair coincides at the selected
+            minimum (the interval midpoint when input minima are tied);
+            the top pair is the two period boundaries by construction convention.
+        """
+        errorif(
+            not np.all(self.valid_surface), ValueError, "Invalid constructed field."
+        )
+        values = jnp.asarray(B_values)
+        if values.ndim != 2 or values.shape[0] != self.rho.size:
+            raise ValueError("B_values must have shape (num_rho, num_query).")
+        beta = (
+            values
+            if normalized
+            else (values - self.B_min[:, None]) / (self.B_max - self.B_min)[:, None]
+        )
+        if (
+            not np.all(np.isfinite(beta))
+            or np.any(np.asarray(beta) < 0)
+            or np.any(np.asarray(beta) > 1)
+        ):
+            raise ValueError(
+                "Requested field levels must be within the constructed range."
+            )
+        left, right = _evaluate_bounce(
+            {
+                "zeta": self.zeta,
+                "B_levels": self.B_levels,
+                "bounce_centers": self.bounce_centers,
+                "bounce_distances": self.bounce_distances,
+            },
+            beta,
+        )
+        return left[..., None], right[..., None]
+
+    @property
+    def rho(self):
+        """ndarray: Stored radial coordinates."""
+        return self._rho
+
+    @property
+    def fieldline_labels(self):
+        """ndarray: Midpoint labels chi in radians."""
+        return self._fieldline_labels
+
+    @property
+    def zeta(self):
+        """ndarray: Endpoint-inclusive Boozer construction angles in radians."""
+        return self._zeta
+
+    @property
+    def zeta0(self):
+        """float: Origin of the Boozer field period in radians."""
+        return self.zeta[0]
+
+    @property
+    def iota(self):
+        """ndarray: Input rotational transform on each stored surface."""
+        return self._iota
+
+    @property
+    def B_min(self):
+        """ndarray: Common minimum field strength in tesla."""
+        return self._B_min
+
+    @property
+    def B_max(self):
+        """ndarray: Common maximum field strength in tesla."""
+        return self._B_max
+
+    @property
+    def B_levels(self):
+        """ndarray: Normalized inverse-branch levels beta."""
+        return self._B_levels
+
+    @property
+    def bounce_centers(self):
+        """ndarray: Paired root centers (rho, fieldline, level), in radians."""
+        return self._bounce_centers
+
+    @property
+    def bounce_distances(self):
+        """ndarray: Common bounce distances (rho, level), in radians."""
+        return self._bounce_distances
+
+    @property
+    def valid_surface(self):
+        """ndarray: Whether each surface satisfies the QI construction conditions."""
+        return self._valid_surface
+
+    @property
+    def diagnostics(self):
+        """dict: Dynamic validity masks for individual construction conditions."""
+        return dict(self._diagnostics)
+
+    @property
+    def settings(self):
+        """dict: Resolved construction choices; modifications do not alter the field."""
+        return {
+            "fieldline_batch_size": None,
+            "surf_batch_size": None,
+            **self._settings,
+            "helicity": self.helicity,
+            "num_alpha": self.fieldline_labels.size,
+            "num_zeta": self.zeta.size,
+            "zeta0": self.zeta0,
+        }
+
+    @property
+    def NFP(self):
+        """int: Number of field periods."""
+        return int(self._NFP)
+
+    @property
+    def helicity(self):
+        """tuple: Poloidal closure (0, NFP)."""
+        return tuple(int(value) for value in self._helicity)
+
+    @property
+    def sym(self):
+        """bool: Whether stellarator reflection symmetry was required."""
+        return self._sym
+
+    @property
+    def need_boozer(self):
+        """bool: Whether the construction uses Boozer coordinates."""
+        return self._need_boozer
+
+    @property
+    def enforce_equal_bounce_distance(self):
+        """bool: Whether the construction enforces the full QI conditions."""
+        return self._enforce_equal_bounce_distance

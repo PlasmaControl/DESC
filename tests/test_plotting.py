@@ -24,6 +24,7 @@ from desc.integrals import surface_averages
 from desc.io import load
 from desc.magnetic_fields import (
     OmnigenousField,
+    OmnigenousFieldConstructed,
     PoloidalMagneticField,
     SumMagneticField,
     ToroidalMagneticField,
@@ -57,6 +58,8 @@ from desc.plotting import (
     poincare_plot,
 )
 from desc.utils import isalmostequal, xyz2rpz
+
+from .test_magnetic_fields import make_constructed_qi_samples
 
 tol_1d = 4.5
 tol_2d = 10
@@ -943,6 +946,56 @@ class TestPlotBoozerSurface:
         )
         fig, ax = plot_boozer_surface(field, iota=0.6, fieldlines=4)
         return fig
+
+    @pytest.fixture(scope="class")
+    def constructed_field(self):
+        """Two surfaces with different field strengths and a shifted Boozer cut."""
+        B, options = make_constructed_qi_samples()
+        well = B[0] - 2
+        options = dict(
+            options,
+            rho=np.array([0.5, 1.0]),
+            zeta=options["zeta"] - 2.7,
+            iota=np.array([-1.7, 3.7]),
+            num_B_levels=5,
+        )
+        return OmnigenousFieldConstructed.from_samples(
+            np.stack([2 + well, 3 + 2 * well]), **options
+        )
+
+    @staticmethod
+    def _constructed_display_grid(field, rho=1, ntheta=11, nzeta=13):
+        """Literal Boozer mesh retaining the snapshot's shifted period boundaries."""
+        return Grid.create_meshgrid(
+            [
+                np.atleast_1d(rho),
+                np.linspace(0, 2 * np.pi, ntheta),
+                np.linspace(field.zeta0, field.zeta0 + 2 * np.pi / field.NFP, nzeta),
+            ],
+            NFP=field.NFP,
+            jitable=False,
+        )
+
+    @pytest.mark.unit
+    def test_plot_constructed_data(self, constructed_field):
+        """Plot constructed strengths on a literal Boozer mesh in tesla."""
+        field = constructed_field
+        grid = self._constructed_display_grid(field)
+        fig, ax, data = plot_boozer_surface(
+            field, grid_plot=grid, fill=True, fieldlines=4, return_data=True
+        )
+        try:
+            np.testing.assert_allclose(
+                data["|B|"].ravel(order="F"),
+                field.compute(grid=grid)["|B| constructed"],
+            )
+            for column, name in enumerate(("theta_B", "zeta_B"), start=1):
+                np.testing.assert_array_equal(
+                    data[name].ravel(order="F"), grid.nodes[:, column]
+                )
+            assert ax.lines
+        finally:
+            plt.close(fig)
 
 
 @pytest.mark.unit

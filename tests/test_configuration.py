@@ -1,5 +1,6 @@
 """Tests for _Configuration base class."""
 
+import sys
 import warnings
 
 import numpy as np
@@ -14,8 +15,53 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
+
+
+def _surface_where_heuristic_guess_is_unnested():
+    """Axisymmetric strongly shaped boundary whose scaled-down guess is not nested."""
+    ms = np.array([0, 1, 2, 3, 4, 5, -1, -2, -3, -4, -5], dtype=int)
+    R_fourier_coefficients = np.array(
+        [
+            1.3632016735662402,
+            -0.17920904751089126,
+            -0.09184049109234207,
+            -0.015015971365554322,
+            0.01785460188882407,
+            0.01127538964941767,
+            0.04685176357481472,
+            -0.03932003193401997,
+            0.008780113148483934,
+            -0.016567421786232828,
+            0.0005675447567040712,
+        ],
+        dtype=float,
+    )
+    Z_fourier_coefficients = np.array(
+        [
+            0.15014033588991132,
+            0.49764502850673253,
+            -0.25485561513463484,
+            -0.07126968315533386,
+            -0.05498667593364822,
+            0.009600095984420543,
+            0.19738445681518377,
+            0.01663894489889671,
+            0.07177657694273143,
+            0.01037613387581884,
+            0.029505162423974128,
+        ],
+        dtype=float,
+    )
+    modes_R = np.array([[m, 0] for m in ms])
+    modes_Z = np.array([[m, 0] for m in ms])
+    return FourierRZToroidalSurface(
+        R_lmn=R_fourier_coefficients.squeeze(),
+        modes_R=modes_R,
+        Z_lmn=Z_fourier_coefficients.squeeze(),
+        modes_Z=modes_Z,
+    )
 
 
 class TestConstructor:
@@ -533,6 +579,54 @@ class TestInitialGuess:
             )
 
         assert eq_difficult_bdry.is_nested(), "Non-axisymmetric Case"
+
+    @pytest.mark.unit
+    def test_opt_method_refines_unnested_heuristic_guess(self):
+        """Refine an unnested heuristic guess using the opt method."""
+        surf = _surface_where_heuristic_guess_is_unnested()
+        eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq_raw.is_nested()
+
+        with pytest.warns(UserWarning, match="not nested"):
+            eq_opt = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="opt")
+
+        assert not np.allclose(eq_opt.R_lmn, eq_raw.R_lmn) or not np.allclose(
+            eq_opt.Z_lmn, eq_raw.Z_lmn
+        )
+
+    @pytest.mark.unit
+    def test_map2disc_method_raises_if_map2disc_jax_missing(self, monkeypatch):
+        """Raise ImportError when map2disc is requested without map2disc_jax."""
+        monkeypatch.setitem(sys.modules, "map2disc_jax", None)
+        surf = _surface_where_heuristic_guess_is_unnested()
+        with pytest.warns(UserWarning, match="not nested"):
+            with pytest.raises(ImportError, match="map2disc_jax"):
+                Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+    @pytest.mark.unit
+    def test_map2disc_preserves_boundary_and_right_handed_jacobian(self):
+        """Preserve the boundary and a positive Jacobian after map2disc init."""
+        pytest.importorskip("map2disc_jax")
+        surf = _surface_where_heuristic_guess_is_unnested()
+        bdry_grid = LinearGrid(rho=np.array([1.0]), M=12, N=0, NFP=surf.NFP)
+        R_bdry = np.array(surf.compute(["R"], grid=bdry_grid)["R"])
+        Z_bdry = np.array(surf.compute(["Z"], grid=bdry_grid)["Z"])
+
+        with pytest.warns(UserWarning, match="not nested"):
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+        assert eq.is_nested()
+        data = eq.compute(["R", "Z"], grid=bdry_grid)
+        np.testing.assert_allclose(data["R"], R_bdry, atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(data["Z"], Z_bdry, atol=1e-6, rtol=1e-6)
+
+        g_lcfs = eq.compute("sqrt(g)", grid=Grid(np.array([[1.0, 0.0, 0.0]])))[
+            "sqrt(g)"
+        ]
+        assert np.sign(np.asarray(g_lcfs).item()) == 1
+        vol_grid = LinearGrid(rho=np.linspace(0.1, 1.0, 6), M=eq.M, N=eq.N, NFP=eq.NFP)
+        g = np.asarray(eq.compute("sqrt(g)", grid=vol_grid)["sqrt(g)"])
+        assert np.all(g > 0)
 
 
 class TestGetSurfaces:

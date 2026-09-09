@@ -5,7 +5,7 @@ import numpy as np
 from desc.backend import jnp, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
@@ -13,6 +13,7 @@ from desc.utils import (
     parse_argname_change,
     rpz2xyz,
     safenorm,
+    setdefault,
     warnif,
 )
 
@@ -1504,3 +1505,239 @@ class MirrorRatio(_Objective):
             profiles=constants["profiles"],
         )
         return constants["transforms"]["grid"].compress(data["mirror ratio"])
+
+
+class UmbilicHighCurvature(_Objective):
+    """Takes in a FourierRZSurfaceCurve, which is tied to a surface or equilibrium.
+
+    Objective returns the minimum principal curvature k2 along that curve,
+    which is used to ensure a large negative curvature and umbilic-ness.
+
+    Note: The parameterization (theta(s), zeta(s)) of FourierRZSurfaceCurves
+    has a gauge freedom (reparameterizing s). This objective evaluates k2 pointwise,
+    so the optimizer can exploit this. Recommended to build the curve with
+    one of theta_n or zeta_n fixed to None to reduce the DOF.
+
+    References
+    ----------
+    [1] https://arxiv.org/abs/2505.04211.
+    Omnigenous Umbilic Stellarators.
+    R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis,
+    Y. Elmacioglu. D. Dudt, R. Conlin, E. Kolemen.
+
+
+    Parameters
+    ----------
+    curve: FourierRZSurfaceCurve or FourierRZSurfaceCoil
+        Curve which corresponds to the desired sharp boundary.
+        The curve carries a copy of the underlying surface, and this
+        objective is evaluated on that copy. By default, the surface params
+        are optimizable. Two ways of modifying/properly enforcing this:
+
+            - If the surface is meant to stay fixed, add an objective
+              FixParameters(curve, {"R_lmn": True, "Z_lmn": True})
+            - If the surface is optimizable, but is shared among objects
+              or objectives (e.g. curve lies on a equilibrium flux surface
+              and equilibrium is being optimized, or optimizing both winding
+              surface and coil lying on it), tie the parameters together
+              using the objective SurfaceCurveConsistency(curve, *other surface*).
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to Objective.dim_f. Defaults to ``target=-1``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to Objective.dim_f.
+        Defaults to ``target=-1``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to Objective.dim_f
+    curve_grid : Grid, optional
+        Collocation grid containing parameter values along the curve at
+        which to calculate the objective. Defaults to a uniform grid in s with
+        ``2*curve.N_effective + 5`` nodes.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    loss_function : {None, 'mean', 'min', 'max'}, optional
+        Loss function to apply to the objective values once computed. This loss function
+        is called on the raw compute value, before any shifting, scaling, or
+        normalization.
+    deriv_mode : {"auto", "fwd", "rev"}
+        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
+        "auto" selects forward or reverse mode based on the size of the input and output
+        of the objective. Has no effect on self.grad or self.hess which always use
+        reverse mode and forward over reverse mode respectively.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _coordinates = "rtz"
+    _units = "(m^-1)"
+    _print_value_fmt = "Umbilic high curvature: "
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=-1``.",
+        bounds_default="``target=-1``.",
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_curve_data_keys",
+        "_surface_data_keys",
+    ]
+
+    def __init__(
+        self,
+        curve,
+        target=None,
+        bounds=None,
+        weight=1,
+        curve_grid=None,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name="Umbilic high curvature",
+        jac_chunk_size=None,
+    ):
+
+        if target is None and bounds is None:
+            target = -1
+
+        self._curve_grid = curve_grid
+
+        things = [curve]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        curve = self.things[0]
+        surface = curve.surface
+
+        if self._curve_grid is None:
+            n_grid = 2 * curve.N_effective + 5
+            s_arr = jnp.linspace(0, 2 * jnp.pi, n_grid, endpoint=False)
+            nodes = jnp.stack(
+                [jnp.zeros_like(s_arr), jnp.zeros_like(s_arr), s_arr], axis=1
+            )
+            # uniform spacing
+            spacing = jnp.tile(jnp.array([0.0, 0.0, 2 * jnp.pi / n_grid]), (n_grid, 1))
+            curve_grid = Grid(nodes=nodes, spacing=spacing, weights=None)
+        else:
+            curve_grid = self._curve_grid
+
+        self._dim_f = int(curve_grid.num_nodes)
+
+        self._curve_data_keys = ["theta", "zeta"]
+        self._surface_data_keys = ["curvature_k2_rho"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        curve_transforms = get_transforms(
+            self._curve_data_keys,
+            obj=curve,
+            grid=curve_grid,
+            has_axis=curve_grid.axis.size,
+        )
+
+        # Once squared, gives w**2 ~ 1/N, implying the sum of residuals
+        # over grid points has the proper weight.
+        w = curve_grid.spacing[:, 2] * jnp.sqrt(curve_grid.num_nodes)
+
+        self._constants = {
+            "curve_transforms": curve_transforms,
+            "curve_grid": curve_grid,
+            "quad_weights": w,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(surface)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params=None, constants=None):
+        """Compute minimum principal curvature.
+
+        Parameters
+        ----------
+        params: dict
+            Dictionary of curve degrees of freedom, e.g. curve.params_dict.
+        constants : dict
+            Dictionary of constant data, e.g. transforms, profiles etc.
+            Defaults to self.constants. (Deprecated)
+
+        Returns
+        -------
+        k : ndarray
+            Minimum principal curvature at each point (m^-1).
+
+        """
+        curve = self.things[0]
+        surface = curve.surface
+        constants = self._get_deprecated_constants(constants)
+        params = setdefault(params, self.things[0].params_dict)
+
+        curve_data = compute_fun(
+            curve,
+            self._curve_data_keys,
+            params=params,
+            transforms=constants["curve_transforms"],
+            profiles={},
+            secular_theta=curve.secular_theta,
+            secular_zeta=curve.secular_zeta,
+        )
+        curve_theta = curve_data["theta"]
+        curve_zeta = curve_data["zeta"]
+
+        umbilic_edge_grid = Grid(
+            jnp.array([jnp.ones_like(curve_theta), curve_theta, curve_zeta]).T,
+            jitable=True,
+        )
+
+        surface_transforms = get_transforms(
+            self._surface_data_keys,
+            obj=surface,
+            grid=umbilic_edge_grid,
+            has_axis=umbilic_edge_grid.axis.size,
+            jitable=True,
+        )
+
+        data = compute_fun(
+            surface,
+            self._surface_data_keys,
+            params=params,
+            transforms=surface_transforms,
+            profiles={},
+        )
+        return data["curvature_k2_rho"]

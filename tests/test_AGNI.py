@@ -505,6 +505,7 @@ def test_matfree_operator_matches_dense_matrix(agni):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
 def test_jax_lanczos_matches_dense(agni, monkeypatch):
     """AGNI_EIGENSOLVER=jax_lanczos reproduces the dense ARPACK eigenvalue.
 

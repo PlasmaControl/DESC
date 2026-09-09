@@ -11,11 +11,12 @@ from desc.__main__ import main
 from desc.backend import sign
 from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import _map_clebsch_coordinates
+from desc.equilibrium.coords import _map_poloidal_coordinates
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
 from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_objective
+from desc.objectives.normalization import compute_scaling_factors
 from desc.profiles import PowerSeriesProfile
 
 from .utils import area_difference, compute_coords
@@ -107,7 +108,7 @@ def test_map_clebsch_coordinates():
         lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
     )
     np.testing.assert_allclose(
-        _map_clebsch_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
+        _map_poloidal_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
         grid.meshgrid_reshape(out[:, 1], "raz"),
     )
 
@@ -183,14 +184,12 @@ def test_map_coordinates_derivative():
 def test_to_sfl():
     """Test converting an equilibrium to straight field line coordinates."""
     eq = get("DSHAPE_CURRENT")
-    with pytest.warns(UserWarning, match="Reducing radial"):
-        eq.change_resolution(6, 6, 0, 12, 12, 0)
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=2e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
 
 
 @pytest.mark.slow
@@ -462,6 +461,24 @@ def test_assigning_profile_iota_current():
     with pytest.warns(UserWarning, match="existing toroidal"):
         eq.iota = PowerSeriesProfile()
     assert eq.current is None
+
+
+@pytest.mark.unit
+def test_assigning_profile_pressure_kinetic():
+    """Test assigning pressure to kinetic-constrained eq and vice-versa."""
+    eq = get("HELIOTRON")  # pressure-constrained
+    with pytest.warns(UserWarning, match="existing pressure"):
+        eq.electron_density = PowerSeriesProfile()
+
+    eq = get("reactor_QA")  # kinetic-constrained
+    with pytest.warns(UserWarning, match="at least one kinetic"):
+        eq.pressure = PowerSeriesProfile()
+    # also tests that the normalization scales include "n","T" when pressure
+    # is also present
+    with pytest.warns(UserWarning, match="kinetic and pressure"):
+        scales = compute_scaling_factors(eq)
+    for key in ["p", "n", "T"]:
+        assert key in scales.keys()
 
 
 @pytest.mark.unit

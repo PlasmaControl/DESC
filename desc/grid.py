@@ -584,7 +584,10 @@ class _Grid(IOAble, ABC):
 
         """
         surface_label = self.get_label(surface_label)
-        errorif(len(x) != getattr(self, f"num_{surface_label}"))
+        errorif(
+            len(x) != getattr(self, f"num_{surface_label}"),
+            msg=f"Got unexpected len(x) of {len(x)}.",
+        )
         return x[getattr(self, f"inverse_{surface_label}_idx")]
 
     def copy_data_from_other(self, x, other_grid, surface_label="rho", tol=1e-14):
@@ -710,11 +713,11 @@ class _Grid(IOAble, ABC):
             shape += (-1,)
         x = x.reshape(shape, order="F")
         # swap to change shape from trz/arz to rtz/raz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
         newax = tuple(self.coordinates.index(c) for c in order)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         return x
 
     def meshgrid_flatten(self, x, order):
@@ -761,9 +764,9 @@ class _Grid(IOAble, ABC):
         newax = tuple(order.index(c) for c in self.coordinates)
         if vec:
             newax += (3,)
-        x = jnp.transpose(x, newax)
+        x = x.transpose(newax)
         # swap to change shape from rtz/raz to trz/arz etc.
-        x = jnp.swapaxes(x, 1, 0)
+        x = x.swapaxes(1, 0)
 
         shape = (self.num_poloidal * self.num_rho * self.num_zeta,)
         if vec:

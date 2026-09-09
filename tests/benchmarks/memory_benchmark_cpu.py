@@ -1,6 +1,7 @@
 """Benchmark memory usage of various functions."""
 
 import gc
+import os
 import pickle
 import subprocess
 import sys
@@ -8,25 +9,20 @@ import threading
 import time
 
 import numpy as np
-import psutil
 
 
 def monitor_ram(proc, interval, ram_usage, timestamps):
-    """Sample system RAM until *proc* finishes."""
-    while proc.poll() is None:  # check if child still running
-        info = psutil.virtual_memory()
-        used_mb = (info.total - info.available) / 1024 / 1024
-        ram_usage.append(used_mb)
-        timestamps.append(time.time())
-        time.sleep(interval)
-
-    # keep watching for an extra second
-    end = time.time() + 1.0
-    while time.time() < end:
-        info = psutil.virtual_memory()
-        ram_usage.append((info.total - info.available) / 1024 / 1024)
-        timestamps.append(time.time())
-        time.sleep(interval)
+    """Sample the child's resident set size until *proc* finishes."""
+    page_mb = os.sysconf("SC_PAGE_SIZE") / 1024 / 1024
+    with open(f"/proc/{proc.pid}/statm", "rb") as statm:
+        while proc.poll() is None:  # check if child still running
+            try:
+                statm.seek(0)
+                ram_usage.append(int(statm.read(64).split()[1]) * page_mb)
+            except OSError:  # child exited between the poll and the read
+                break
+            timestamps.append(time.time())
+            time.sleep(interval)
 
 
 def monitor_vram(proc, interval, vram_usage, timestamps):
@@ -72,7 +68,7 @@ def monitor_vram(proc, interval, vram_usage, timestamps):
 
 if __name__ == "__main__":
     mode = "CPU"  # "CPU" or "GPU"
-    interval = 0.1  # seconds between samples
+    interval = 0.001  # seconds between samples
 
     data = {}
 
@@ -85,8 +81,9 @@ if __name__ == "__main__":
         "test_proximal_freeb_jac_blocked",
         "test_proximal_freeb_jac_batched",
         "test_proximal_jac_ripple",
-        "test_proximal_jac_ripple_spline",
+        "test_proximal_jac_ripple_bounce1d",
         "test_eq_solve",
+        "test_objective_quadratic_flux_jac",
     ]
 
     for i in range(len(funs)):
@@ -107,6 +104,18 @@ if __name__ == "__main__":
         # wait until the child exits, then join the sampler
         child.wait()
         sampler.join()
+
+        # check if one of the processes failed
+        if child.returncode != 0:
+            print(
+                f"ERROR: Subprocess for function {funs[i]} failed with "
+                f"exit code {child.returncode}"
+            )
+            # Raising an exception will cause the main script to fail,
+            # making the overall GitHub Actions job fail.
+            raise subprocess.CalledProcessError(
+                returncode=child.returncode, cmd=funs[i], output=None
+            )
         # save the data
         # make sure memory usage is 0 somewhere and t starts at 0
         data[funs[i]] = {}

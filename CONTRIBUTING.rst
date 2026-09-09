@@ -169,9 +169,6 @@ If the 2nd case is the reason, then you must update the ``master_compute_data_rp
 
 -  First, run the test with ``pytest tests -k test_compute_everything`` and inspect the compute quantities whose values are in error, to ensure that only the quantities you expect to be different are shown (and that the new values are indeed the correct ones, you should have a test elsewhere for that though).
 -  If the values are as expected and only the expected compute quantities are different, then replace the block
--  Then, if you have re-defined a variable, consider adding a ``DeprecationWarning`` to it to allow a grace period so old code
-   does not break, but is informed of the change. Add the old name an alias in the ``aliases`` part of the ``register_compute_function`` decorator,
-   and add to the ``deprecated_names`` dictionary in ``desc/compute/data_index.py`` the deprecated name as a key and the corresponding value as the new name for that variable.
 
 .. code-block:: python
 
@@ -189,6 +186,9 @@ with
 -  rerun the test ``pytest tests -k test_compute_everything``, now any compute quantity that is different between the PR and master will be updated with the PR value
 -  ``git restore tests/test_compute_everything.py`` to remove the change you made to the test
 -  ``git add tests/inputs/master_compute_data_rpz.pkl`` and commit to commit the new data file
+-  Then, if you have re-defined an existing variable name, consider adding a ``DeprecationWarning`` to it to allow a grace period so old code
+   does not break, but is informed of the change. Add the old name an alias in the ``aliases`` part of the ``register_compute_function`` decorator,
+   and add to the ``deprecated_names`` dictionary in ``desc/compute/data_index.py`` the deprecated name as a key and the corresponding value as the new name for that variable.
 
 If the 3rd case is the reason, then you must simply add the new parametrization to the ``test_compute_everything`` [test](https://github.com/PlasmaControl/DESC/blob/master/tests/test_compute_everything.py)
 

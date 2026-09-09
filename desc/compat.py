@@ -179,7 +179,11 @@ def rescale(
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but rescaled to the desired size and magnetic field strength.
+        Equilibrium input rescaled to the desired size and magnetic field strength.
+        The current profile (but not iota) will become a ``ScaledProfile``, which may
+        change the number of optimizable parameters of the profile by adding `scale`
+        to the first index. If scale_pressure is True, then the pressure or kinetic
+        profiles will also be converted to ``ScaledProfile`` types.
 
     """
     # maybe it's iterable:
@@ -217,7 +221,7 @@ def rescale(
     L_new = L_new or L_old
     cL = L_new / L_old
     cL = cL ** (1 / 3) if L_key == "V" else cL  # V = 2 π^2 R0 a^2
-
+    cL = float(cL.squeeze())
     # field scaling
     if B_key == "B0":
         grid_B = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
@@ -233,6 +237,7 @@ def rescale(
         B_old = np.max(data_B["|B|"])
     B_new = B_new or B_old
     cB = B_new / B_old
+    cB = float(cB.squeeze())
 
     # scaling factor = desired / actual
     if verbose:
@@ -247,15 +252,17 @@ def rescale(
     # scale pressure profile
     if scale_pressure:
         if eq.pressure is not None:
-            eq.p_l *= cB**2
+            eq.pressure *= cB**2
         else:
-            eq.ne_l *= cB
-            eq.Te_l *= cB
-            eq.Ti_l *= cB
+            eq.electron_temperature *= cB
+            eq.electron_density *= cB
+            eq.ion_temperature *= cB
+            if eq.ion_density is not None:
+                eq.ion_density *= cB
 
     # scale current profile
     if eq.current is not None:
-        eq.c_l *= cL * cB
+        eq.current *= cL * cB
 
     # boundary & axis
     eq.axis = eq.get_axis()
@@ -415,6 +422,7 @@ def contract_equilibrium(
     current = scale_profile(eq.current, inner_rho)
     electron_density = scale_profile(eq.electron_density, inner_rho)
     electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    ion_density = scale_profile(eq.ion_density, inner_rho)
     ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
     atomic_number = scale_profile(eq.atomic_number, inner_rho)
     anisotropy = scale_profile(eq.anisotropy, inner_rho)
@@ -430,6 +438,7 @@ def contract_equilibrium(
         current=current,
         electron_density=electron_density,
         electron_temperature=electron_temperature,
+        ion_density=ion_density,
         ion_temperature=ion_temperature,
         atomic_number=atomic_number,
         anisotropy=anisotropy,

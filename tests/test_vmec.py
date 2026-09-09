@@ -1027,6 +1027,25 @@ def test_vmec_save_asym(VMEC_save_asym):
     np.testing.assert_allclose(
         vmec.variables["jcurv"][20:100], desc.variables["jcurv"][20:100], rtol=2
     )
+    assert desc.variables["jcuru"].long_name == (
+        "flux surface average of sqrt(g)*J^theta, on full mesh"
+    )
+    assert desc.variables["jcurv"].long_name == (
+        "flux surface average of sqrt(g)*J^zeta, on full mesh"
+    )
+    s_full = np.linspace(0, 1, desc.dimensions["radius"].size)
+    expected_currumns_axis = desc.variables["currumns"][1, :] - (
+        (desc.variables["currumns"][2, :] - desc.variables["currumns"][1, :])
+        / (s_full[2] - s_full[1])
+        * s_full[1]
+    )
+    expected_currvmns_axis = desc.variables["currvmns"][1, :] - (
+        (desc.variables["currvmns"][2, :] - desc.variables["currvmns"][1, :])
+        / (s_full[2] - s_full[1])
+        * s_full[1]
+    )
+    np.testing.assert_allclose(desc.variables["currumns"][0, :], expected_currumns_axis)
+    np.testing.assert_allclose(desc.variables["currvmns"][0, :], expected_currvmns_axis)
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=6e-2
     )
@@ -1523,7 +1542,7 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
 def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     """Test that booz_xform-style outputs compare well against C++ implementation."""
     # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
-    # commit 881907058ece03
+    # pypi version 0.0.9
     # load in precise_QA equilibrium
     eq = get("precise_QA")
     output_path = str(TmpDir.join("boozmn_out.nc"))
@@ -1533,8 +1552,8 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
 
     # compare against a 128 surface Mboz=Nboz=25 run of precise QA
     # with the hidden symmetries C++ booz_xform implementation
-    # (ran on a wout created with VMECIO.save of precise QA example with 100 surfs
-    # and Mnyq = Nnyq = 30)
+    # (ran on a wout created with VMECIO.save of precise QA example with 128 surfs
+    # and Mnyq = Nnyq = 30 and M_grid=N_grid=60 on 10/20/25)
     surfs = 128
     Cpp_booz_output_path = (
         f"./tests/inputs/boozmn_{surfs}_surfs_precise_QA"

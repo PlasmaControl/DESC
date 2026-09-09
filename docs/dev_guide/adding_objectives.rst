@@ -253,16 +253,11 @@ so that the ``self.constants`` are used.
         def compute(self, params, constants=None):
             """Signature should take params (or possibly multiple params, one for each thing in self.things),
                which is the params_dict of the expected thing(s) to be optimized.
-               It also takes in constants, which is a dictionary of any other constant data needed to compute
-               the objective, and is usually none by default so the self.constants are used.
 
             Parameters
             ----------
             params : dict
                 Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
-            constants : dict
-                Dictionary of constant data, eg transforms, profiles etc. Defaults to
-                self.constants
 
             Returns
             -------
@@ -270,8 +265,8 @@ so that the ``self.constants`` are used.
                 Quasi-symmetry flux function error at each node (T^4/m^2).
 
             """
-            if constants is None:
-                constants = self.constants
+            # these are defined in the build method
+            constants = self._constants
 
             # here we get the physics quantities from ``desc.compute.utils._compute``
             data = compute_fun(
@@ -513,8 +508,6 @@ from above are not repeated here)
             return mirror_ratio # return the value of the objective
 
 
-
-
 Converting to Cartesian coordinates
 -----------------------------------
 
@@ -540,7 +533,7 @@ is the sum of squared pointwise error between the current rotational transform p
 and the target passed into the objective. If the desired objective instead is to
 optimize to target an average rotational transform of `iota_target`, we can adapt the
 ``RotationalTransform`` object by passing in ``loss_function="mean"``. The options
-available for the ``loss_function`` kwarg are ``[None,"mean","min","max"]``, with
+available for the ``loss_function`` kwarg are ``[None,"mean","min","max","sum"]``, with
 ``None`` meaning using the usual default objective cost, while ``"mean"`` takes the
 average of the raw objective values (before subtracting the target/bounds or
-normalization), ``"min"`` takes the minimum, and ``"max"`` takes the maximum.
+normalization), ``"min"`` takes the minimum, ``"max"`` takes the maximum, and ``"sum"`` takes the sum.

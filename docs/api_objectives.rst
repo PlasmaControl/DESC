@@ -188,6 +188,7 @@ Fixing degrees of freedom
     desc.objectives.FixCoilCurrent
     desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
+    desc.objectives.ShareParameters
 
 
 User defined objectives
@@ -201,6 +202,7 @@ User defined objectives
     desc.objectives.GenericObjective
     desc.objectives.ObjectiveFromUser
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.DeflationOperator
 
 
 Utilities for getting common groups of constraints

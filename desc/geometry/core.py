@@ -324,7 +324,7 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve  # noqa 811
 
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]

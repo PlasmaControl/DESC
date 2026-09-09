@@ -28,6 +28,11 @@ from desc.magnetic_fields import (
     SumMagneticField,
     ToroidalMagneticField,
 )
+from desc.particles import (
+    ManualParticleInitializerFlux,
+    ManualParticleInitializerLab,
+    VacuumGuidingCenterTrajectory,
+)
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -45,6 +50,7 @@ from desc.plotting import (
     plot_gammac,
     plot_grid,
     plot_logo,
+    plot_particle_trajectories,
     plot_qs_error,
     plot_section,
     plot_surfaces,
@@ -147,6 +153,15 @@ class TestPlot1D:
         """Test plot_1d function for Surface objects."""
         surf = FourierRZToroidalSurface()
         fig, ax = plot_1d(surf, "curvature_H_rho", grid=LinearGrid(M=50))
+        return fig
+
+    @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+    def test_plot_1d_normalized(self):
+        """Test plotting normalized flux surface average <|B|> on log scale."""
+        eq = get("DSHAPE_CURRENT")
+        fig, ax = plot_1d(eq, "<|B|>", log=True, normalize="<|B|>_vol")
+        ax.set_ylim([9e-1, 1.1e0])
         return fig
 
 
@@ -280,6 +295,26 @@ class TestPlot3D:
         assert "Z" in data.keys()
 
         assert "|F|" in data.keys()
+
+    @pytest.mark.unit
+    def test_3d_tz_normalized(self):
+        """Test 3d plot of normalized force on interior surface."""
+        eq = get("DSHAPE_CURRENT")
+        grid = LinearGrid(rho=0.5, theta=100, zeta=100)
+        fig, data = plot_3d(
+            eq,
+            "|F|",
+            log=True,
+            grid=grid,
+            return_data=True,
+            normalize="<|grad(p)|>_vol",
+        )
+        assert "X" in data.keys()
+        assert "Y" in data.keys()
+        assert "Z" in data.keys()
+
+        assert "|F|" in data.keys()
+        assert "normalization" in data.keys()
 
     @pytest.mark.unit
     def test_3d_rz(self):
@@ -1089,7 +1124,7 @@ def test_plot_field_lines():
         nphi_per_transit=100,
         ntransit=2,
         endpoint=True,
-        chunk_size=10,
+        bs_chunk_size=10,
     )
 
 
@@ -1121,6 +1156,8 @@ def test_plot_field_lines_reversed():
         fig=fig,
         color="red",
         lw=10,
+        # test that passing options as dict works
+        options={"throw": True, "made_jump": None},
     )
     x1 = data1["X"][0]
     y1 = data1["Y"][0]
@@ -1132,3 +1169,35 @@ def test_plot_field_lines_reversed():
     assert np.allclose(x1, np.flip(x2), atol=1e-7)
     assert np.allclose(y1, np.flip(y2), atol=1e-7)
     assert np.allclose(z1, np.flip(z2), atol=1e-7)
+
+
+@pytest.mark.unit
+def test_plot_particle_trajectories():
+    """Test plotting particle trajectories."""
+    R0 = 1.0
+    field = ToroidalMagneticField(1.0, 3.0)
+    particles = ManualParticleInitializerLab(R0=R0, phi0=0, Z0=0, xi0=0.9, E=1e6)
+    model = VacuumGuidingCenterTrajectory(frame="lab")
+    ts = np.linspace(0, 1e-6, 100)
+    _, data = plot_particle_trajectories(field, model, particles, ts, return_data=True)
+
+    assert all(data["R"][0] == R0)
+
+
+@pytest.mark.unit
+def test_plot_particle_trajectories_vacuum_eq():
+    """Test plotting particle trajectories using vacuum eq."""
+    # eq doesn't have iota profile
+    # plotting function will automatically compute iota and pass to
+    # the trace_particles function
+    eq = get("precise_QA")
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    particles = ManualParticleInitializerFlux(
+        rho0=0.5, theta0=0, zeta0=0, xi0=0.7, E=1e1
+    )
+    _, data = plot_particle_trajectories(
+        eq, model, particles, ts=np.linspace(0, 1e-8, 10), return_data=True
+    )
+
+    assert "rho" in data
+    assert "theta" in data

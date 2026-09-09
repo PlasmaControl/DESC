@@ -516,11 +516,11 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
 
         # Check that the gradients of D_zeta are not calculated
         D_zeta = diffmat.D_zeta
-        W_zeta = diffmat.W_zeta
-
-        # W_zeta is purely diagonal for all the quadratures used
-        # This will give wrong answers for a non-diagonal W_zeta
-        w = jnp.diag(W_zeta)
+        # `w_zeta` is the 1D weight vector regardless of whether the caller
+        # passed a diagonal matrix (every `*_diffmat` builder) or a vector
+        # (`zernike_nodes_weights`). Any off-diagonal content is dropped, which
+        # is exact for every quadrature used here.
+        w = diffmat.w_zeta
 
         wg = -1 * w * g
         A = D_zeta.T @ (wg[..., :, None] * D_zeta)
@@ -775,9 +775,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     D_rho0 = transforms["diffmat"].D_rho
     D_theta0 = transforms["diffmat"].D_theta
 
-    W_rho = transforms["diffmat"].W_rho
-    W_theta = transforms["diffmat"].W_theta
-    W_zeta = transforms["diffmat"].W_zeta
+    W_rho = transforms["diffmat"].w_rho
+    W_theta = transforms["diffmat"].w_theta
+    W_zeta = transforms["diffmat"].w_zeta
 
     # Square matrix.
     # When `coupled_rt` is set, D_rho0/D_theta0 are the full, non-separable 2D
@@ -1918,9 +1918,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
     D_rho0 = transforms["diffmat"].D_rho
     D_theta0 = transforms["diffmat"].D_theta
-    w_rho = transforms["diffmat"].W_rho
-    w_theta = transforms["diffmat"].W_theta
-    w_zeta = transforms["diffmat"].W_zeta
+    w_rho = transforms["diffmat"].w_rho
+    w_theta = transforms["diffmat"].w_theta
+    w_zeta = transforms["diffmat"].w_zeta
 
     # When `coupled_rt` is set, D_rho0/D_theta0 are the full, non-separable 2D
     # (rho, theta) Zernike-Fourier operators of shape (n_rho*n_theta,)*2, so the
@@ -2023,10 +2023,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     # RG: need to make this consistent with the dense case. `_agni3_assemble`
     # auto-detects the mirror from the equilibrium (`ismirror = jnp.all(jnp.abs(iota)
     # < 1e-12)`, traced, jit-safe), while this path takes a manual `mirror` kwarg
-    # that defaults to False and is declared on no register_compute_fun, so it
-    # cannot be set through `eq.compute` at all. On a real mirror equilibrium the
-    # dense assembler switches on the extra B_blocks couplings below and the
-    # matrix-free operator does not, so the two disagree.
+    # TODO: test mirror geometry
     ismirror = bool(kwargs.get("mirror", False))
     if ismirror:
         B_blocks = B_blocks.at[:, 2, 2].set((n0 * W * sqrtg * g_pp).flatten())
@@ -2196,7 +2193,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         )
         Ar += psi_r2 * d_dr(_cT(D_rho0), (psi_r_over_sqrtg * W * g_vp / psi_r) * xr1_r)
 
-        # J cross Q terms, by the same route as dense `_agni3_assemble`: g^rv and
+        # RG: J cross Q terms, by the same route as dense `_agni3_assemble`: g^rv and
         # g^rz come from the PEST LOWER metric via g12 = (g13 g23 - g12 g33)/(sqrt(g))^2
         # rather than from data["g^rv"]/data["g^rz"]. The `_term` factors already
         # carry psi_r*sqrtg, hence psi_r2 here.
@@ -2209,7 +2206,12 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Ar += +(jq * (iota * xr_v + xr_z))
         Ar += -(psi_r * sqrtg * W * j_sup_zeta) * xr1_r
         Ar += +(psi_r * sqrtg * W * j_sup_theta) * xr2_r
-        Ar += +(iota * d_dv(_cT(D_theta0), jq * xr) + d_dz(_cT(D_zeta0), jq * xr))
+        # RG: `iota` must sit INSIDE the transposed theta derivative.
+        # With separable D_theta the term and its Hermitian agree because iota = iota(rho)
+        # commutes with a pure-theta operator. But with coupled_rt D_theta is the
+        # full (rho, theta) Zernike-Fourier operator and they do not, which made
+        # this operator non-Hermitian and disagree with `_agni3_assemble`.
+        Ar += d_dv(_cT(D_theta0), iota * jq * xr) + d_dz(_cT(D_zeta0), jq * xr)
         Ar += -iota_psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_zeta * xr)
         Ar += psi_r2 * d_dr(_cT(D_rho0), psi_r * sqrtg * W * j_sup_theta * xr)
 
@@ -2315,6 +2317,107 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         "d_dv": d_dv,
         "d_dz": d_dz,
     }
+
+
+def _agni3_store_rayleigh_mode_data(data, v, op):
+    """Store full eigenfunction, xi, deltaB, and deltaV from a Rayleigh vector."""
+    n_total = op["n_total"]
+    n_rho = op["n_rho"]
+    n_theta = op["n_theta"]
+    n_zeta = op["n_zeta"]
+    shape = (n_rho, n_theta, n_zeta)
+
+    keep = op["keep"]
+    v = jnp.asarray(v).reshape(-1)
+    v_full = jnp.zeros(3 * n_total, dtype=v.dtype)
+    v_full = v_full.at[keep].set(v, unique_indices=True)
+
+    x = jnp.transpose(v_full.reshape(3, n_total), axes=(1, 0))
+    x = op["diagBsqinv"] * jnp.einsum("lij,lj->li", op["Linv_DT"], x)
+    xi_full = jnp.transpose(x, axes=(1, 0)).reshape(-1)
+
+    xr = x[:, 0].reshape(shape)
+    xv = x[:, 1].reshape(shape)
+    xz = x[:, 2].reshape(shape)
+
+    if jnp.iscomplexobj(xi_full):
+        xi_ref = xi_full[:n_total]
+        rot = jnp.exp(1j * jnp.arctan2(jnp.mean(xi_ref.real), jnp.mean(xi_ref.imag)))
+        xr = (xr * rot).imag
+        xv = (xv * rot).imag
+        xz = (xz * rot).imag
+
+    D_rho0 = op["D_rho0"]
+    D_theta0 = op["D_theta0"]
+    D_zeta0 = op["D_zeta0"]
+    d_dr = op["d_dr"]
+    d_dv = op["d_dv"]
+    d_dz = op["d_dz"]
+
+    psi_r_over_sqrtg = op["psi_r_over_sqrtg"]
+    psi_r = op["psi_r"]
+    iota = op["iota"]
+    g_rr = op["g_rr"]
+    g_vv = op["g_vv"]
+    g_pp = op["g_pp"]
+    g_rv = op["g_rv"]
+    g_rp = op["g_rp"]
+    g_vp = op["g_vp"]
+
+    xr_v = d_dv(D_theta0, xr)
+    xr_z = d_dz(D_zeta0, xr)
+
+    test_v = d_dv(D_theta0, xv)
+    test_z = d_dz(D_zeta0, xv)
+
+    xr_r = d_dr(D_rho0, xr)
+    psi_rr = d_dr(D_rho0, psi_r)
+    iota_r = d_dr(D_rho0, iota)
+
+    deltaB_r = psi_r_over_sqrtg * psi_r * (iota * xr_v + xr_z)
+    deltaB_v = psi_r_over_sqrtg * (
+        test_z - (xr_r * iota * psi_r + (2 * iota * psi_rr + iota_r * psi_r) * xr)
+    )
+    deltaB_z = -psi_r_over_sqrtg * (test_v + xr_r * psi_r + 2 * psi_rr * xr)
+
+    deltaV_r = psi_r * xr
+    deltaV_v = xv + xz
+    deltaV_z = xz / iota
+
+    deltaB2 = (
+        g_rr * deltaB_r**2
+        + g_vv * deltaB_v**2
+        + g_pp * deltaB_z**2
+        + 2.0
+        * (
+            g_rv * deltaB_r * deltaB_v
+            + g_rp * deltaB_r * deltaB_z
+            + g_vp * deltaB_v * deltaB_z
+        )
+    )
+    deltaV2 = (
+        g_rr * deltaV_r**2
+        + g_vv * deltaV_v**2
+        + g_pp * deltaV_z**2
+        + 2.0
+        * (
+            g_rv * deltaV_r * deltaV_v
+            + g_rp * deltaV_r * deltaV_z
+            + g_vp * deltaV_v * deltaV_z
+        )
+    )
+
+    data["finite-n eigenfunction3 rayleigh"] = v_full
+    data["finite-n xi rayleigh"] = xi_full
+    data["finite-n deltaB rayleigh"] = jnp.sqrt(deltaB2)
+    data["finite-n deltaV rayleigh"] = jnp.sqrt(deltaV2)
+    data["finite-n deltaB_r rayleigh"] = deltaB_r
+    data["finite-n deltaB_v rayleigh"] = deltaB_v
+    data["finite-n deltaB_z rayleigh"] = deltaB_z
+    data["finite-n deltaV_r rayleigh"] = deltaV_r
+    data["finite-n deltaV_v rayleigh"] = deltaV_v
+    data["finite-n deltaV_z rayleigh"] = deltaV_z
+    return data
 
 
 @register_compute_fun(
@@ -3616,4 +3719,125 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
     # So a caller can take v from a value call and pass it back as `v_fixed`.
     data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
+    data = _agni3_store_rayleigh_mode_data(data, v, _op)
+    return data
+
+
+@register_compute_fun(
+    name="finite-n eigenfunction3 rayleigh",
+    label="\\xi_R",
+    units="~",
+    units_long="None",
+    description="Finite-n Rayleigh eigenfunction, full component-major vector",
+    dim=5,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda3 rayleigh"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    density="ndarray: the radial density profile",
+    sigma="float: shift for the eigensolver",
+    eigsh_tol="float: tolerance for the ARPACK eigsh",
+    eigensolver="str: 'eigsh_callback', 'jax_lanczos' or 'pcg_deflated'",
+    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier operators",
+    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
+    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
+)
+def _AGNI_rayleigh_eigenfunction3(params, transforms, profiles, data, **kwargs):
+    """Eigenfunction from the finite-n Rayleigh solve."""
+    _ = params["Psi"]
+    return data
+
+
+@register_compute_fun(
+    name="finite-n xi rayleigh",
+    label="\\xi_R",
+    units="~",
+    units_long="None",
+    description="Physical displacement from the finite-n Rayleigh solve",
+    dim=5,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda3 rayleigh"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    density="ndarray: the radial density profile",
+    sigma="float: shift for the eigensolver",
+    eigsh_tol="float: tolerance for the ARPACK eigsh",
+    eigensolver="str: 'eigsh_callback', 'jax_lanczos' or 'pcg_deflated'",
+    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier operators",
+    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
+    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
+)
+def _AGNI_rayleigh_xi(params, transforms, profiles, data, **kwargs):
+    """Physical displacement from the finite-n Rayleigh solve."""
+    _ = params["Psi"]
+    return data
+
+
+@register_compute_fun(
+    name="finite-n deltaB rayleigh",
+    label="|\\delta B_R|",
+    units="~",
+    units_long="None",
+    description="Magnetic perturbation magnitude from the finite-n Rayleigh solve",
+    dim=3,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda3 rayleigh"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    density="ndarray: the radial density profile",
+    sigma="float: shift for the eigensolver",
+    eigsh_tol="float: tolerance for the ARPACK eigsh",
+    eigensolver="str: 'eigsh_callback', 'jax_lanczos' or 'pcg_deflated'",
+    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier operators",
+    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
+    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
+)
+def _AGNI_rayleigh_deltaB(params, transforms, profiles, data, **kwargs):
+    """Magnetic perturbation magnitude from the finite-n Rayleigh solve."""
+    _ = params["Psi"]
+    return data
+
+
+@register_compute_fun(
+    name="finite-n deltaV rayleigh",
+    label="|\\delta V_R|",
+    units="~",
+    units_long="None",
+    description="Volume displacement magnitude from the finite-n Rayleigh solve",
+    dim=3,
+    params=["Psi"],
+    transforms={"grid": [], "diffmat": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["finite-n lambda3 rayleigh"],
+    axisym="bool: if the equilibrium is axisymmetric",
+    n_mode_axisym="int: toroidal mode number to study",
+    incompressible="bool: imposes incompressibility",
+    gamma="float: adiabatic constant",
+    density="ndarray: the radial density profile",
+    sigma="float: shift for the eigensolver",
+    eigsh_tol="float: tolerance for the ARPACK eigsh",
+    eigensolver="str: 'eigsh_callback', 'jax_lanczos' or 'pcg_deflated'",
+    coupled_rt="bool: D_rho/D_theta are full 2D Zernike-Fourier operators",
+    n_rho_coupled="int: number of rho nodes when coupled_rt is set",
+    n_theta_coupled="int: number of theta nodes when coupled_rt is set",
+)
+def _AGNI_rayleigh_deltaV(params, transforms, profiles, data, **kwargs):
+    """Volume displacement magnitude from the finite-n Rayleigh solve."""
+    _ = params["Psi"]
     return data

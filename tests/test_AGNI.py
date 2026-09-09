@@ -33,6 +33,7 @@ needs; do not lower it to save time.
 Set AGNI_EQ_PATH to override the equilibrium file.
 """
 
+import gc
 import os
 import re
 import warnings
@@ -171,6 +172,34 @@ _AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {_EQ_PATH}"
 # delete this file to force a fresh solve after changing the resolution or the
 # AGNI assembly.
 _GOLDEN = Path(__file__).parent / "inputs" / "AGNI_QH_lowres_lam3.npz"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _release_memory_after_module():
+    """Give back the memory this module's compiled code is holding.
+
+    Measured after the 11 tests here: 6.26 GB resident, and `gc.collect()`
+    alone returns NONE of it. Two different things are holding it. JAX caches
+    every compiled variant of the operator and never evicts them (2.53 GB), and
+    glibc keeps memory it has already freed rather than returning it to the OS
+    (a further 2.65 GB) -- the second is invisible from outside the process, so
+    it looks permanent when it is not. Releasing both drops the module to
+    1.08 GB against a 0.38 GB baseline.
+
+    This matters because `tests/test_AGNI.py` sorts first alphabetically, so it
+    runs before everything else in whatever pytest-split group it lands in. The
+    memory left behind was still gone for every later test in that group, on a
+    runner with 16 GB and coverage tracing on top -- they passed, then crawled.
+    """
+    yield
+    import ctypes
+
+    jax.clear_caches()
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass  # not glibc; the jax.clear_caches() above is the portable half
 
 
 @pytest.fixture(scope="module")
@@ -384,8 +413,27 @@ def test_matfree_operator_matches_dense_matrix(agni):
     )
     Ax, n_keep = op["Ax"], int(op["n_keep"])
 
-    eye = jnp.eye(n_keep, dtype=Ax(jnp.ones(n_keep)).dtype)
-    A_mf = np.asarray(jax.vmap(Ax)(eye)).T  # column j = A e_j
+    # Materialize in COLUMN BLOCKS, not one `jax.vmap(Ax)(jnp.eye(n_keep))`.
+    # That one-liner cost 5.6 GB peak RSS at the default 24,12,8 fixture and is
+    # what made this test unrunnable on a GitHub runner: `jnp.eye(n_keep)` is
+    # 0.67 GB on its own, and vmapping over all n_keep columns promotes EVERY
+    # intermediate inside `Ax_full` -- and there are dozens -- from (n_rho,
+    # n_theta, n_zeta) to (n_keep, n_rho, n_theta, n_zeta), 0.23 GB apiece. The
+    # runner swapped instead of OOM-ing, so CI hung for hours rather than
+    # failing. Blocking caps the batch axis at `block` and leaves the assertion
+    # identical.
+    dtype = Ax(jnp.ones(n_keep)).dtype
+    block = 64
+    A_mf = np.empty((n_keep, n_keep), dtype=dtype)
+    _Ax_block = jax.jit(jax.vmap(Ax))
+    for j0 in range(0, n_keep, block):
+        w = min(block, n_keep - j0)
+        cols = (
+            jnp.zeros((w, n_keep), dtype)
+            .at[jnp.arange(w), jnp.arange(j0, j0 + w)]
+            .set(1.0)
+        )
+        A_mf[:, j0 : j0 + w] = np.asarray(_Ax_block(cols)).T  # column j = A e_j
 
     dense = stability._agni3_assemble(
         agni["eq"].params_dict, transforms, {}, data, **kw
@@ -421,18 +469,88 @@ def test_jax_lanczos_matches_dense(agni, monkeypatch):
     kw = {k: v for k, v in agni["kw"].items() if k != "v_guess"}
     eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
     name = "finite-n lambda3 rayleigh"
+    # Request the mode-data keys BY NAME, not just off the side-effect dict that
+    # `finite-n lambda3 rayleigh` fills in. Only this exercises their
+    # `register_compute_fun` entries; a broken registration (wrong `data=`
+    # dependency, missing kwarg declaration) raises here and nowhere else.
+    names = [
+        name,
+        "finite-n eigenfunction3 rayleigh",
+        "finite-n xi rayleigh",
+        "finite-n deltaB rayleigh",
+        "finite-n deltaV rayleigh",
+    ]
     data = compute_fun(
         eq,
-        [name],
+        names,
         params=eq.params_dict,
-        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
-        profiles=get_profiles([name], eq, grid),
+        transforms=get_transforms(names, obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles(names, eq, grid),
         data=finiten_prefill(eq, grid),
         **kw,
         sigma=1.3 * lam_dense,
     )
     lam_R = float(np.asarray(data["finite-n lambda3 rayleigh"]).reshape(-1)[0])
     resid = float(np.asarray(data["finite-n lambda3 rayleigh residual"]).reshape(-1)[0])
+    nr, nt, nz = agni["res"]
+    n_total = nr * nt * nz
+    v = np.asarray(data[name + " v"]).reshape(-1)
+    ef = np.asarray(data["finite-n eigenfunction3 rayleigh"])
+    xi = np.asarray(data["finite-n xi rayleigh"])
+    dB = np.asarray(data["finite-n deltaB rayleigh"])
+    dV = np.asarray(data["finite-n deltaV rayleigh"])
+
+    assert ef.shape == (3 * n_total,)
+    assert xi.shape == (3 * n_total,)
+    assert dB.shape == (nr, nt, nz)
+    assert dV.shape == (nr, nt, nz)
+
+    # The scatter back to full length is the one step in
+    # `_agni3_store_rayleigh_mode_data` with no redundancy to catch it: an
+    # off-by-one in `keep` silently shifts the whole mode by a rho shell and
+    # every downstream field still looks plausible. Pin it exactly.
+    keep = agni["keep"]
+    np.testing.assert_allclose(ef[keep], v, rtol=0, atol=0)
+    dropped = np.setdiff1d(np.arange(3 * n_total), keep)
+    assert not np.any(ef[dropped]), "xi^rho Dirichlet slots must stay exactly zero"
+
+    # xi is the whitened eigenvector mapped back to the physical displacement,
+    # so it must be supported on the same DOF and be a genuinely nonzero mode --
+    # a silently all-zero field would pass every shape and finiteness check.
+    assert np.all(np.isfinite(xi)) and np.any(xi)
+    assert np.all(np.isfinite(dB)) and np.any(dB)
+    assert np.all(np.isfinite(dV)) and np.any(dV)
+    # deltaB and deltaV are magnitudes (sqrt of a metric contraction), so they
+    # are real and nonnegative by construction. A negative entry means the
+    # contraction lost a metric term or a sign.
+    assert dB.dtype.kind == "f" and dV.dtype.kind == "f"
+    assert np.all(dB >= 0.0) and np.all(dV >= 0.0)
+
+    # Same mode, computed by the dense `finite-n lambda3` path. This is the only
+    # check on the whitening transform and the derivative reconstruction inside
+    # `_agni3_store_rayleigh_mode_data`: get the Linv/diagBsqinv congruence or
+    # the d_dr/d_dv/d_dz plumbing wrong and xi is still finite, still the right
+    # shape, still supported on `keep` -- but it is no longer the mode, and the
+    # overlap collapses from 1 to O(0.1).
+    #
+    # Compared as an overlap, not elementwise: an eigenvector is defined up to a
+    # complex phase, and the two solvers fix it independently. The tolerance is
+    # deliberately loose for the same reason the eigenvalue tolerance is -- the
+    # two solvers can land on different vectors inside a near-degenerate cluster
+    # -- so this is a "same mode or not" check, not a precision check.
+    def _overlap(a, b):
+        a, b = np.asarray(a).reshape(-1), np.asarray(b).reshape(-1)
+        return abs(np.vdot(a / np.linalg.norm(a), b / np.linalg.norm(b)))
+
+    ov_xi = _overlap(xi, agni["lam3"]["finite-n xi"])
+    ov_dV = _overlap(dV, agni["lam3"]["finite-n deltaV"])
+    ov_dB = _overlap(dB, agni["lam3"]["finite-n deltaB"])
+    print(f"  |<xi_R, xi_dense>|     = {ov_xi:.6f}")
+    print(f"  |<dV_R, dV_dense>|     = {ov_dV:.6f}")
+    print(f"  |<dB_R, dB_dense>|     = {ov_dB:.6f}")
+    assert ov_xi > 0.99, f"Rayleigh xi is not the dense mode: overlap {ov_xi:.4f}"
+    assert ov_dV > 0.99, f"Rayleigh deltaV is not the dense field: {ov_dV:.4f}"
+    assert ov_dB > 0.99, f"Rayleigh deltaB is not the dense field: {ov_dB:.4f}"
 
     reldiff = abs(lam_R - lam_dense) / (abs(lam_dense) + 1e-300)
     print(f"\n  lambda3 (dense ARPACK) = {lam_dense:.9e}")

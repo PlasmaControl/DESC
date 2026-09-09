@@ -274,13 +274,19 @@ def agni(request):
     # its resolution matches; otherwise solved fresh and cached back to it.
     _name = "finite-n lambda3"
     _cached = np.load(_GOLDEN) if _GOLDEN.is_file() else None
-    _stale = _cached is None or (
-        int(_cached["n_rho"]),
-        int(_cached["n_theta"]),
-        int(_cached["n_zeta"]),
-    ) != (_N_RHO, _N_THETA, _N_ZETA)
-    # `finite-n xi`/`deltaB`/`deltaV` are side effects of this same call (no
-    # extra solve), and other tests compare against them, so they ride along.
+    _stale = (
+        _cached is None
+        or "eigenfunction3" not in _cached.files
+        or (
+            int(_cached["n_rho"]),
+            int(_cached["n_theta"]),
+            int(_cached["n_zeta"]),
+        )
+        != (_N_RHO, _N_THETA, _N_ZETA)
+    )
+    # `finite-n xi`/`deltaB`/`deltaV`/`eigenfunction3` are side effects of this
+    # same call (no extra solve); other tests reuse them, `eigenfunction3` as
+    # `v_fixed` to skip an eigensolve of their own.
     if _stale:
         _LAM3 = compute_fun(
             _EQ,
@@ -297,6 +303,7 @@ def agni(request):
             xi=np.asarray(_LAM3["finite-n xi"]),
             deltaB=np.asarray(_LAM3["finite-n deltaB"]),
             deltaV=np.asarray(_LAM3["finite-n deltaV"]),
+            eigenfunction3=np.asarray(_LAM3["finite-n eigenfunction3"]),
             n_rho=_N_RHO,
             n_theta=_N_THETA,
             n_zeta=_N_ZETA,
@@ -307,6 +314,7 @@ def agni(request):
             "finite-n xi": jnp.asarray(_cached["xi"]),
             "finite-n deltaB": jnp.asarray(_cached["deltaB"]),
             "finite-n deltaV": jnp.asarray(_cached["deltaV"]),
+            "finite-n eigenfunction3": jnp.asarray(_cached["eigenfunction3"]),
         }
 
     return dict(
@@ -792,7 +800,7 @@ def _finiten_objective(agni, build=True, **kw):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_finiten_objective_matches_direct_compute(agni, monkeypatch):
+def test_finiten_objective_matches_direct_compute(agni):
     """The objective returns the same lambda as a direct eq.compute.
 
     Covers ``FinitenStability.build`` and ``compute_data`` -- the flux-key
@@ -801,14 +809,16 @@ def test_finiten_objective_matches_direct_compute(agni, monkeypatch):
     grid or a dropped option shows up as a plausible-looking wrong number rather
     than an exception.
 
-    ``build``/``compute_data`` never set ``v_fixed``, so this still runs a real
-    eigensolve; forced onto ``jax_lanczos`` so it stays CPU-affordable in CI.
+    Without ``v_fixed`` this would run a real eigensolve on every call -- even
+    ``jax_lanczos`` is too slow on a CI runner at this size -- so it reuses the
+    dense eigenvector already cached by the fixture instead.
     """
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
 
-    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
-    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
-    obj = _finiten_objective(agni, lambda_guess=lam_direct)
+    v_fixed = np.asarray(agni["lam3"]["finite-n eigenfunction3"]).reshape(-1)[
+        agni["keep"]
+    ]
+    obj = _finiten_objective(agni, lambda_guess=lam_direct, v_fixed=v_fixed)
     lam_obj = float(np.real(np.asarray(obj.compute(obj.things[0].params_dict))[0]))
 
     reldiff = abs(lam_obj - lam_direct) / abs(lam_direct)
@@ -823,7 +833,7 @@ def test_finiten_objective_matches_direct_compute(agni, monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_finiten_objective_gradient_is_hellmann_feynman(agni, monkeypatch):
+def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     """The gradient exists, is finite, and is not identically zero.
 
     ``finite-n lambda3 rayleigh`` freezes the eigenvector for AD, so the
@@ -835,18 +845,20 @@ def test_finiten_objective_gradient_is_hellmann_feynman(agni, monkeypatch):
     This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``;
     the recorded end-to-end check is the opt-in T2 optimizer gate.
 
-    Build never sets ``v_fixed``, so ``objective.build`` runs a real eigensolve;
-    forced onto ``jax_lanczos`` so it stays CPU-affordable in CI.
+    ``v_fixed`` (the cached dense eigenvector) makes this exercise the fixed-v
+    Hellmann-Feynman path itself, not a fresh eigensolve, and skips the
+    eigensolve that timed out CI at this grid size.
     """
     from desc.objectives import ObjectiveFunction
 
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
-    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
-    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
+    v_fixed = np.asarray(agni["lam3"]["finite-n eigenfunction3"]).reshape(-1)[
+        agni["keep"]
+    ]
     # `x()` and `grad()` belong to ObjectiveFunction, not to a single objective;
     # this is how the drivers wrap it too.
     objective = ObjectiveFunction(
-        _finiten_objective(agni, lambda_guess=lam_direct, build=False),
+        _finiten_objective(agni, lambda_guess=lam_direct, v_fixed=v_fixed, build=False),
         deriv_mode="blocked",
     )
     objective.build(verbose=0)

@@ -844,6 +844,7 @@ def test_finiten_objective_matches_direct_compute(agni):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
 def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     """The gradient exists, is finite, and is not identically zero.
 
@@ -854,22 +855,18 @@ def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     NaN, still "works" and just stops the optimizer moving.
 
     This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``;
-    the recorded end-to-end check is the opt-in T2 optimizer gate.
-
-    ``v_fixed`` (the cached dense eigenvector) makes this exercise the fixed-v
-    Hellmann-Feynman path itself, not a fresh eigensolve, and skips the
-    eigensolve that timed out CI at this grid size.
+    the recorded end-to-end check is the opt-in T2 optimizer gate. ``v_fixed``
+    would skip exactly that custom_vjp, so unlike the other objective tests
+    this one cannot be de-solved onto the cache without losing its own point --
+    it needs a real eigensolve and is skipped on GHA instead (see _ON_GHA).
     """
     from desc.objectives import ObjectiveFunction
 
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
-    v_fixed = np.asarray(agni["lam3"]["finite-n eigenfunction3"]).reshape(-1)[
-        agni["keep"]
-    ]
     # `x()` and `grad()` belong to ObjectiveFunction, not to a single objective;
     # this is how the drivers wrap it too.
     objective = ObjectiveFunction(
-        _finiten_objective(agni, lambda_guess=lam_direct, v_fixed=v_fixed, build=False),
+        _finiten_objective(agni, lambda_guess=lam_direct, build=False),
         deriv_mode="blocked",
     )
     objective.build(verbose=0)
@@ -1144,8 +1141,13 @@ def test_v_fixed_reuses_the_eigenvector(agni, monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
 def test_v_fixed_objective_jits_and_matches_gradient(agni):
     """`v_fixed` through the JITTED objective: same lambda, same gradient.
+
+    Needs a real, live eigensolve for `obj` (no v_fixed) -- the whole point is
+    comparing IT against the v_fixed bypass, so faking `v` from the cache would
+    make the comparison tautological. Skipped on GHA instead (see _ON_GHA).
 
     ``_v_fixed`` must stay a dynamic pytree leaf. Marking it static bakes v into
     aux_data as an HLO constant and recompiles per value.

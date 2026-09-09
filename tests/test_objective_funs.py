@@ -28,7 +28,12 @@ from desc.coils import (
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierPlanarCurve, FourierRZToroidalSurface, FourierXYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZSurfaceCurve,
+    FourierRZToroidalSurface,
+    FourierXYZCurve,
+)
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import Bounce2D
 from desc.io import load
@@ -88,6 +93,7 @@ from desc.objectives import (
     RotationalTransform,
     Shear,
     SurfaceCurrentRegularization,
+    SurfaceCurveConsistency,
     SurfaceQuadraticFlux,
     ToroidalCurrent,
     ToroidalFlux,
@@ -3357,6 +3363,7 @@ class TestComputeScalarResolution:
         ToroidalFlux,
         SurfaceCurrentRegularization,
         VacuumBoundaryError,
+        SurfaceCurveConsistency,
         # no grid dependence for DeflationOperator
         DeflationOperator,
         # need to avoid blowup near the axis
@@ -3876,6 +3883,7 @@ class TestObjectiveNaNGrad:
         PlasmaVesselDistance,
         QuadraticFlux,
         SurfaceCurrentRegularization,
+        SurfaceCurveConsistency,
         SurfaceQuadraticFlux,
         ToroidalFlux,
         VacuumBoundaryError,
@@ -4147,6 +4155,16 @@ class TestObjectiveNaNGrad:
         obj.build()
         g = obj.grad(obj.x(field))
         assert not np.any(np.isnan(g)), "surface current regularization"
+
+    @pytest.mark.unit
+    def test_objective_no_nangrad_surface_curve_consistency(self):
+        """SurfaceCurveConsistency."""
+        surf = FourierRZToroidalSurface()
+        curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+        obj = ObjectiveFunction(SurfaceCurveConsistency(surf, curve), use_jit=False)
+        obj.build()
+        g = obj.grad(obj.x(surf, curve))
+        assert not np.any(np.isnan(g)), "surface curve consistency"
 
     @pytest.mark.unit
     @pytest.mark.parametrize(

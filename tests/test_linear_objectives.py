@@ -6,9 +6,9 @@ from qsc import Qsc
 
 import desc.examples
 from desc.backend import jnp, put
-from desc.coils import CoilSet, FourierXYZCoil
+from desc.coils import CoilSet, FourierRZSurfaceCoil, FourierXYZCoil, MixedCoilSet
 from desc.equilibrium import Equilibrium
-from desc.geometry import FourierRZToroidalSurface
+from desc.geometry import FourierRZSurfaceCurve, FourierRZToroidalSurface
 from desc.io import load
 from desc.magnetic_fields import OmnigenousField
 from desc.objectives import (
@@ -51,6 +51,7 @@ from desc.objectives import (
     LinearObjectiveFromUser,
     ObjectiveFunction,
     ShareParameters,
+    SurfaceCurveConsistency,
     get_equilibrium_objective,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
@@ -1235,3 +1236,62 @@ def test_NAE_asym_with_sym_axis():
     conZ.build()
     assert conR._A.shape[0] == conR.dim_f
     assert conZ._A.shape[0] == conZ.dim_f
+
+
+@pytest.mark.unit
+def test_surface_curve_consistency():
+    """Test SurfaceCurveConsistency on curves."""
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        Z_lmn=[-1, -0.2],
+        modes_Z=[[-1, 0], [0, -1]],
+        NFP=2,
+    )
+    curve = FourierRZSurfaceCurve(surface=surf, secular_theta=1, secular_zeta=2)
+    obj = SurfaceCurveConsistency(surf, curve)
+    obj.build()
+
+    nR = surf.R_basis.num_modes
+    nZ = surf.Z_basis.num_modes
+    assert obj.dim_f == nR + nZ
+    np.testing.assert_allclose(obj.compute(surf.params_dict, curve.params_dict), 0)
+
+    # move the surface, checking it computes the new residual
+    surf_params = dict(surf.params_dict)
+    surf_params["R_lmn"] = surf_params["R_lmn"] + 0.1
+    obj_value = obj.compute(surf_params, curve.params_dict)
+    np.testing.assert_allclose(obj_value[:nR], 0.1)
+    np.testing.assert_allclose(obj_value[nR:], 0)
+
+
+@pytest.mark.unit
+def test_surface_curve_consistency_coilset():
+    """Test SurfaceCurveConsistency with coilsets."""
+    surf = FourierRZToroidalSurface(
+        R_lmn=[10, 1, 0.2],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        Z_lmn=[-1, -0.2],
+        modes_Z=[[-1, 0], [0, -1]],
+        NFP=2,
+    )
+
+    coil1 = FourierRZSurfaceCoil(1e5, surface=surf, secular_theta=1, secular_zeta=2)
+    coil2 = FourierRZSurfaceCoil(2e5, surface=surf, secular_theta=1, secular_zeta=3)
+    coil3 = FourierRZSurfaceCoil(3e5, surface=surf, secular_theta=1, secular_zeta=4)
+    coilset = MixedCoilSet((coil1, coil2, coil3), check_intersection=False)
+
+    obj = SurfaceCurveConsistency(surf, coilset)
+    obj.build()
+
+    nR = surf.R_basis.num_modes
+    nZ = surf.Z_basis.num_modes
+    assert obj.dim_f == 3 * (nR + nZ)
+    np.testing.assert_allclose(obj.compute(surf.params_dict, coilset.params_dict), 0)
+
+    # move the surface, checking it computes the new residual for each coil
+    surf_params = dict(surf.params_dict)
+    surf_params["R_lmn"] = surf_params["R_lmn"] + 0.1
+    obj_value = obj.compute(surf_params, coilset.params_dict).reshape(3, nR + nZ)
+    np.testing.assert_allclose(obj_value[:, :nR], 0.1)
+    np.testing.assert_allclose(obj_value[:, nR:], 0)

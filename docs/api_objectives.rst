@@ -189,6 +189,7 @@ Fixing degrees of freedom
     desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters
     desc.objectives.ShareParameters
+    desc.objectives.SurfaceCurveConsistency
 
 
 User defined objectives

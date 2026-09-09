@@ -3750,7 +3750,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 def _AGNI_rayleigh_eigenfunction3(params, transforms, profiles, data, **kwargs):
     """Eigenfunction from the finite-n Rayleigh solve."""
     _ = params["Psi"]
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -3780,7 +3780,7 @@ def _AGNI_rayleigh_eigenfunction3(params, transforms, profiles, data, **kwargs):
 def _AGNI_rayleigh_xi(params, transforms, profiles, data, **kwargs):
     """Physical displacement from the finite-n Rayleigh solve."""
     _ = params["Psi"]
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -3810,7 +3810,7 @@ def _AGNI_rayleigh_xi(params, transforms, profiles, data, **kwargs):
 def _AGNI_rayleigh_deltaB(params, transforms, profiles, data, **kwargs):
     """Magnetic perturbation magnitude from the finite-n Rayleigh solve."""
     _ = params["Psi"]
-    return data
+    return data  # noqa: unused dependency
 
 
 @register_compute_fun(
@@ -3840,4 +3840,4 @@ def _AGNI_rayleigh_deltaB(params, transforms, profiles, data, **kwargs):
 def _AGNI_rayleigh_deltaV(params, transforms, profiles, data, **kwargs):
     """Volume displacement magnitude from the finite-n Rayleigh solve."""
     _ = params["Psi"]
-    return data
+    return data  # noqa: unused dependency

@@ -792,7 +792,7 @@ def _finiten_objective(agni, build=True, **kw):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_finiten_objective_matches_direct_compute(agni):
+def test_finiten_objective_matches_direct_compute(agni, monkeypatch):
     """The objective returns the same lambda as a direct eq.compute.
 
     Covers ``FinitenStability.build`` and ``compute_data`` -- the flux-key
@@ -800,9 +800,14 @@ def test_finiten_objective_matches_direct_compute(agni):
     bare ``eq.compute`` tests touch. Those are the wrapper layers where a wrong
     grid or a dropped option shows up as a plausible-looking wrong number rather
     than an exception.
+
+    ``build``/``compute_data`` never set ``v_fixed``, so this still runs a real
+    eigensolve; forced onto ``jax_lanczos`` so it stays CPU-affordable in CI.
     """
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
 
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
     obj = _finiten_objective(agni, lambda_guess=lam_direct)
     lam_obj = float(np.real(np.asarray(obj.compute(obj.things[0].params_dict))[0]))
 
@@ -818,7 +823,7 @@ def test_finiten_objective_matches_direct_compute(agni):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_finiten_objective_gradient_is_hellmann_feynman(agni):
+def test_finiten_objective_gradient_is_hellmann_feynman(agni, monkeypatch):
     """The gradient exists, is finite, and is not identically zero.
 
     ``finite-n lambda3 rayleigh`` freezes the eigenvector for AD, so the
@@ -829,10 +834,15 @@ def test_finiten_objective_gradient_is_hellmann_feynman(agni):
 
     This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``;
     the recorded end-to-end check is the opt-in T2 optimizer gate.
+
+    Build never sets ``v_fixed``, so ``objective.build`` runs a real eigensolve;
+    forced onto ``jax_lanczos`` so it stays CPU-affordable in CI.
     """
     from desc.objectives import ObjectiveFunction
 
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    monkeypatch.setenv("AGNI_EIGENSOLVER", "jax_lanczos")
+    monkeypatch.setenv("AGNI_NUM_MATVECS", "100")
     # `x()` and `grad()` belong to ObjectiveFunction, not to a single objective;
     # this is how the drivers wrap it too.
     objective = ObjectiveFunction(

@@ -4,6 +4,7 @@ import numbers
 import os
 from abc import ABC
 from collections.abc import MutableSequence
+from typing import TypeVar, Generic, Self
 from functools import partial
 
 import numpy as np
@@ -1627,8 +1628,10 @@ def _check_type(coil0, coil):
             ),
         )
 
+T = TypeVar("T")
 
-class CoilSet(OptimizableCollection, _Coil, MutableSequence):
+
+class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
     """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters
@@ -2150,7 +2153,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @classmethod
     def linspaced_angular(
         cls,
-        coil,
+        coil: T,
         current=None,
         axis=[0, 0, 1],
         angle=2 * np.pi,
@@ -2195,7 +2198,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     @classmethod
     def linspaced_linear(
         cls,
-        coil,
+        coil: T,
         current=None,
         displacement=[2, 0, 0],
         n=4,
@@ -2237,7 +2240,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=False):
+    def from_symmetry(cls, coils: "T|CoilSet[T]", NFP=1, sym=False, check_intersection=False)->"CoilSet[T]":
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -2308,9 +2311,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coilset, check_intersection=check_intersection)
 
     @classmethod
-    def from_makegrid_coilfile(
-        cls, coil_file, method="cubic", check_intersection=False
-    ):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=False)->"CoilSet[SplineXYZCoil]":
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -2562,7 +2563,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def to_FourierPlanar(
         self, N=10, grid=None, basis="xyz", name="", check_intersection=False
-    ):
+    ) -> "CoilSet[FourierPlanarCoil]":
         """Convert all coils to FourierPlanarCoil.
 
         Note that some types of coils may not be representable in this basis.
@@ -2602,7 +2603,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def to_FourierXY(
         self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
-    ):
+    ) -> "CoilSet[FourierXYCoil]":
         """Convert all coils to FourierXYCoil.
 
         Note that some types of coils may not be representable in this basis.
@@ -2647,7 +2648,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def to_FourierRZ(
         self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
-    ):
+    ) -> "CoilSet[FourierRZCoil]":
         """Convert all coils to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -2685,7 +2686,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False) -> "CoilSet[FourierXYZCoil]":
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -2722,7 +2723,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def to_SplineXYZ(
         self, knots=None, grid=None, method="cubic", name="", check_intersection=False
-    ):
+    ) -> "CoilSet[SplineXYZCoil]":
         """Convert all coils to SplineXYZCoil representation.
 
         Parameters
@@ -2859,7 +2860,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             )
             return is_nearly_intersecting
 
-    def __add__(self, other):
+    def __add__(self, other) -> "CoilSet[T]":
         if isinstance(other, (CoilSet)):
             try:
                 return CoilSet(*self.coils, *other.coils)
@@ -2879,7 +2880,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             return NotImplemented
 
     # dunder methods required by MutableSequence
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> T:
         return self.coils[i]
 
     def __setitem__(self, i, new_item):

@@ -34,6 +34,7 @@ from desc.utils import (
 )
 
 from .core import Surface
+from .curve import FourierRZCurve
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -765,7 +766,7 @@ class FourierRZToroidalSurface(Surface):
         else:
             return offset_surface
 
-    def get_axis(self):
+    def get_axis(self) -> FourierRZCurve:
         """Get the axis of the surface.
 
         This method calculates the axis of the surface by finding the mid point of the
@@ -1129,7 +1130,7 @@ class ZernikeRZToroidalSection(Surface):
                 idxZ = self.Z_basis.get_idx(ll, mm, 0)
                 self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
 
-    def get_axis(self):
+    def get_axis(self) -> FourierRZCurve:
         """Get the axis of the surface.
 
         Computes the R and Z value at rho=0 and creates N=0 FourierRZCurve

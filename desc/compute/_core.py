@@ -1530,6 +1530,49 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="delta",
+    label="\\delta = \\theta - \\alpha = \\iota \\phi - \\lambda",
+    units="~",
+    units_long="None",
+    description=(
+        "Stream map to θ from α such that δ is (2π, ∞) periodic in Clebsch coordinates "
+        "(α, ζ). Also (δ - ιζ) is (2π, 2π/NFP) periodic in coordinates "
+        "(θ, ζ), (ϑ, ζ), (ϑ, ϕ), and (θ, ϕ)."
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta", "alpha"],
+    public=False,  # figure out better name
+)
+def _delta(params, transforms, profiles, data, **kwargs):
+    data["delta"] = data["theta"] - data["alpha"]
+    return data
+
+
+@register_compute_fun(
+    name="varepsilon",
+    label="\\varepsilon = \\alpha + \\iota \\zeta",
+    units="~",
+    units_long="None",
+    description="Angle which is continuous along field lines, "
+    "and hence continuous across branch cuts of (α, ζ) ∈ [0, 2π)².",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["alpha", "iota", "zeta"],
+    public=False,  # figure out better name
+)
+def _varepsilon(params, transforms, profiles, data, **kwargs):
+    data["varepsilon"] = data["alpha"] + data["iota"] * data["zeta"]
+    return data
+
+
+@register_compute_fun(
     name="alpha",
     label="\\alpha",
     units="~",

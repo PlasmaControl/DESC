@@ -2,7 +2,8 @@
 
 import warnings
 
-from desc.backend import jnp, vmap
+from desc.backend import jnp
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
@@ -31,6 +32,10 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
@@ -40,7 +45,7 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
-    _static_attrs = _Objective._static_attrs + ["_helicity"]
+    _static_attrs = _Objective._static_attrs + ["_helicity", "_surf_batch_size"]
 
     def __init__(
         self,
@@ -58,6 +63,7 @@ class QuasisymmetryBoozer(_Objective):
         N_booz=None,
         name="QS Boozer",
         jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -65,6 +71,7 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
+        self._surf_batch_size = surf_batch_size
         super().__init__(
             things=eq,
             target=target,
@@ -165,7 +172,7 @@ class QuasisymmetryBoozer(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -173,14 +180,14 @@ class QuasisymmetryBoozer(_Objective):
             Symmetry breaking harmonics of B (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            surf_batch_size=self._surf_batch_size,
         )
         B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
         B_mn = constants["matrix"] @ B_mn.T
@@ -334,7 +341,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -342,8 +349,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -477,7 +483,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -485,8 +491,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -541,6 +546,10 @@ class Omnigenity(_Objective):
         computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
@@ -554,6 +563,7 @@ class Omnigenity(_Objective):
         "_field_data_keys",
         "_field_fixed",
         "_helicity",
+        "_surf_batch_size",
     ]
 
     _coordinates = "rtz"
@@ -580,6 +590,7 @@ class Omnigenity(_Objective):
         field_fixed=False,
         name="omnigenity",
         jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -593,6 +604,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._surf_batch_size = surf_batch_size
         if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
@@ -711,7 +723,6 @@ class Omnigenity(_Objective):
             "eq_transforms": eq_transforms,
             "field_transforms": field_transforms,
             "quad_weights": w,
-            "helicity": self.helicity,
         }
 
         if self._eq_fixed:
@@ -722,6 +733,7 @@ class Omnigenity(_Objective):
                 params=self._eq.params_dict,
                 transforms=self._constants["eq_transforms"],
                 profiles=self._constants["eq_profiles"],
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["eq_data"] = eq_data
         if self._field_fixed:
@@ -732,7 +744,8 @@ class Omnigenity(_Objective):
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
                 profiles={},
-                helicity=self._constants["helicity"],
+                helicity=self.helicity,
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["field_data"] = field_data
 
@@ -760,7 +773,7 @@ class Omnigenity(_Objective):
             freedom, eg OmnigenousField.params_dict. Otherwise None.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -768,8 +781,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # sort parameters
         if self._eq_fixed:
@@ -793,13 +805,14 @@ class Omnigenity(_Objective):
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
+                surf_batch_size=self._surf_batch_size,
             )
 
         # compute field data
         if self._field_fixed:
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
-            M, N = constants["helicity"]
+            M, N = self.helicity
             iota = eq_data["iota"][eq_grid.unique_rho_idx]
             theta_B, zeta_B = _omnigenity_mapping(
                 M,
@@ -816,8 +829,9 @@ class Omnigenity(_Objective):
                 params=field_params,
                 transforms=constants["field_transforms"],
                 profiles={},
-                helicity=constants["helicity"],
+                helicity=self.helicity,
                 iota=eq_data["iota"][eq_grid.unique_rho_idx],
+                surf_batch_size=self._surf_batch_size,
             )
             theta_B = field_data["theta_B"]
             zeta_B = field_data["zeta_B"]
@@ -844,7 +858,11 @@ class Omnigenity(_Objective):
             (field_grid.num_rho, -1)
         )
         B_mn = eq_data["|B|_mn_B"].reshape((eq_grid.num_rho, -1))
-        B_eta_alpha = vmap(_compute_B_eta_alpha)(theta_B, zeta_B, B_mn)
+        B_eta_alpha = vmap_chunked(
+            _compute_B_eta_alpha,
+            in_axes=(0, 0, 0),
+            chunk_size=self._surf_batch_size,
+        )(theta_B, zeta_B, B_mn)
         B_eta_alpha = B_eta_alpha.reshape(
             (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
         )
@@ -958,7 +976,7 @@ class Isodynamicity(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -966,8 +984,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

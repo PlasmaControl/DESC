@@ -2860,7 +2860,7 @@ def plot_coils(coils, grid=None, fig=None, return_data=False, **kwargs):
         else:
             return [coilset]
 
-    coils_list = flatten_coils(coils)
+    coils_list = flatten_coils(coils, check_intersection=check_intersection)
     plot_data = {}
     plot_data["X"] = []
     plot_data["Y"] = []
@@ -4698,7 +4698,7 @@ def plot_gammac(
           matplotlib)
         * ``cmap``: str, matplotlib colormap scheme to use, passed to ax.contourf
         * ``X``, ``Y``, ``Y_B``, ``num_quad``, ``num_well``: int
-        * ``num_transit``, ``pitch_batch_size``: int
+        * ``field_period_transits``: int
 
         hyperparameters for bounce integration. See ``Bounce2D``
 
@@ -4731,13 +4731,10 @@ def plot_gammac(
     num_pitch = setdefault(num_pitch, 28)
 
     # TODO(#1352)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     X = kwargs.pop("X", 32)
-    Y = kwargs.pop("Y", 64)
-    Y_B = kwargs.pop("Y_B", Y * 2)
-    num_quad = kwargs.pop("num_quad", 32)
-    pitch_batch_size = kwargs.pop("pitch_batch_size", None)
-    num_transit = kwargs.pop("num_transit", 2)
-    num_well = kwargs.pop("num_well", Y_B // 2 * num_transit)
+    Y = kwargs.pop("Y", 32)
+    field_period_transits = kwargs.pop("field_period_transits", 5)
 
     figsize = kwargs.pop("figsize", (6, 5))
     cmap = kwargs.pop("cmap", "plasma")
@@ -4748,24 +4745,20 @@ def plot_gammac(
 
     from desc.integrals.bounce_integral import Bounce2D
 
-    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
     data0 = eq.compute(
         "gamma_c",
         grid=grid,
-        theta=Bounce2D.compute_theta(eq, X, Y, rho),
-        Y_B=Y_B,
-        num_transit=num_transit,
-        num_quad=num_quad,
+        angle=Bounce2D.angle(eq, X, Y, rho),
+        field_period_transits=field_period_transits,
         num_pitch=num_pitch,
-        num_well=num_well,
-        pitch_batch_size=pitch_batch_size,
         alpha=alphas,
+        **kwargs,
     )
 
     # Extract pitch angle range
     minB = data0["min_tz |B|"][0]
     maxB = data0["max_tz |B|"][0]
-    inv_pitch, _ = Bounce2D.get_pitch_inv_quad(minB, maxB, num_pitch)
+    inv_pitch, _ = Bounce2D.pitch_quad(minB, maxB, num_pitch)
 
     # Create figure and prepare colormap
     fig, ax = _format_ax(ax, figsize=figsize)

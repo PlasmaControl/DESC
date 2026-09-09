@@ -179,9 +179,11 @@ def rescale(
     Returns
     -------
     eq : Equilibrium or iterable of Equilibrium
-        Same as input, but rescaled to the desired size and magnetic field strength.
-        The profiles will now be ``ScaledProfile` classes, with the ``scale`` being
-        the rescaling parameter computed in this function.
+        Equilibrium input rescaled to the desired size and magnetic field strength.
+        The current profile (but not iota) will become a ``ScaledProfile``, which may
+        change the number of optimizable parameters of the profile by adding `scale`
+        to the first index. If scale_pressure is True, then the pressure or kinetic
+        profiles will also be converted to ``ScaledProfile`` types.
 
     """
     # maybe it's iterable:
@@ -252,9 +254,11 @@ def rescale(
         if eq.pressure is not None:
             eq.pressure *= cB**2
         else:
-            eq.electron_density *= cB
             eq.electron_temperature *= cB
+            eq.electron_density *= cB
             eq.ion_temperature *= cB
+            if eq.ion_density is not None:
+                eq.ion_density *= cB
 
     # scale current profile
     if eq.current is not None:
@@ -418,6 +422,7 @@ def contract_equilibrium(
     current = scale_profile(eq.current, inner_rho)
     electron_density = scale_profile(eq.electron_density, inner_rho)
     electron_temperature = scale_profile(eq.electron_temperature, inner_rho)
+    ion_density = scale_profile(eq.ion_density, inner_rho)
     ion_temperature = scale_profile(eq.ion_temperature, inner_rho)
     atomic_number = scale_profile(eq.atomic_number, inner_rho)
     anisotropy = scale_profile(eq.anisotropy, inner_rho)
@@ -433,6 +438,7 @@ def contract_equilibrium(
         current=current,
         electron_density=electron_density,
         electron_temperature=electron_temperature,
+        ion_density=ion_density,
         ion_temperature=ion_temperature,
         atomic_number=atomic_number,
         anisotropy=anisotropy,

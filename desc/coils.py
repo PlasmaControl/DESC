@@ -30,7 +30,7 @@ from desc.geometry import (
     FourierXYZCurve,
     SplineXYZCurve,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.magnetic_fields import _MagneticField
 from desc.magnetic_fields._core import (
     biot_savart_general,
@@ -252,6 +252,125 @@ def biot_savart_vector_potential_quad(
     )
 
 
+class _PrecomputedBiotSavartField(_MagneticField):
+    """Wrapper for fast evaluation of Biot-Savart by precomputing source data.
+
+    For magnetic field class that needs to compute source data first (i.e. filamentary
+    coils or FourierCurrentPotentialField), this helper class gives the option to
+    precompute the source data, store it, and then evaluate the Biot-Savart kernel
+    without needing loop over coils or recompute the source data. This is useful for
+    repeated evaluations of the magnetic field, such as in field line integration.
+    This also improves the speed of Biot-Savart evaluation on GPU, since it can use
+    the GPU more efficiently by eliminating for-loops and using vectorized operations.
+    Sources are stored in one of two forms: ``src_pts``/``src_J`` for coils whose field
+    is integrated with quadrature, evaluated by ``biot_savart_general``, and
+    ``seg_start``/``seg_end``/``seg_current`` for coils whose field is summed over
+    straight segments, evaluated by ``biot_savart_hh`` (currently only
+    ``SplineXYZCoil``). Either or both can be given, so a ``MixedCoilSet`` containing
+    ``SplineXYZCoil`` along with other coil types is still reduced to a single instance.
+    The intended usage is through the ``_as_precomputed_source`` method of the source
+    field, which should fill in whichever of the two forms it needs.
+
+    Parameters
+    ----------
+    src_pts : ndarray, shape(m,3) or None
+        Quadrature source points, in cartesian coordinates.
+    src_J : ndarray, shape(m,3) or None
+        ``current * x_s * ds`` at the source points, in cartesian coordinates.
+    seg_start, seg_end : ndarray, shape(k,3) or None
+        Start and end points of straight segments, in cartesian coordinates.
+    seg_current : ndarray, shape(k,) or None
+        Current through each segment, in Amperes.
+    """
+
+    _io_attrs_ = _MagneticField._io_attrs_ + [
+        "_src_pts",
+        "_src_J",
+        "_seg_start",
+        "_seg_end",
+        "_seg_current",
+    ]
+
+    def __init__(
+        self, src_pts=None, src_J=None, seg_start=None, seg_end=None, seg_current=None
+    ):
+        self._src_pts = src_pts
+        self._src_J = src_J
+        self._seg_start = seg_start
+        self._seg_end = seg_end
+        self._seg_current = seg_current
+
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute field from the precomputed sources. See _MagneticField.
+
+        ``params``, ``source_grid`` and ``transforms`` are ignored, the sources
+        are fixed at creation.
+        """
+        quad_op, seg_op = {
+            "B": (biot_savart_general, biot_savart_hh),
+            "A": (
+                biot_savart_general_vector_potential,
+                biot_savart_vector_potential_hh,
+            ),
+        }[compute_A_or_B]
+        assert basis.lower() in ["rpz", "xyz"]
+        coords = jnp.atleast_2d(jnp.asarray(coords))
+        if basis.lower() == "rpz":
+            phi = coords[:, 1]
+            coords = rpz2xyz(coords)
+        AB = jnp.zeros_like(coords)
+        if self._src_pts is not None:
+            AB += quad_op(coords, self._src_pts, self._src_J, chunk_size=chunk_size)
+        if self._seg_start is not None:
+            AB += seg_op(
+                coords,
+                self._seg_start,
+                self._seg_end,
+                self._seg_current[:, jnp.newaxis],
+                chunk_size=chunk_size,
+            )
+        if basis.lower() == "rpz":
+            AB = xyz2rpz_vec(AB, phi=phi)
+        return AB
+
+    def compute_magnetic_field(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic field at a set of points. See _MagneticField."""
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "B", chunk_size=chunk_size
+        )
+
+    def compute_magnetic_vector_potential(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        chunk_size=None,
+    ):
+        """Compute magnetic vector potential at a set of points. See _MagneticField."""
+        return self._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, "A", chunk_size=chunk_size
+        )
+
+
 class _Coil(_MagneticField, Optimizable, ABC):
     """Base class representing a magnetic field coil.
 
@@ -445,6 +564,41 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if basis.lower() == "rpz":
             AB = xyz2rpz_vec(AB, phi=phi)
         return AB
+
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Convert the coil into a _PrecomputedBiotSavartField.
+
+        Computes the coil geometry once so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+        """
+        NFP = getattr(self, "NFP", 1)
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        else:
+            errorif(
+                getattr(source_grid, "NFP", 1) not in [1, NFP],
+                ValueError,
+                f"source_grid for coils must have NFP=1 or NFP={NFP}",
+            )
+        assert isinstance(source_grid, _Grid)
+        if params is None:
+            current = self.current
+        else:
+            params = params.copy()
+            current = params.pop("current", self.current)
+        if isinstance(self, SplineXYZCoil):
+            x = self._compute_position(params, source_grid, basis="xyz")[0]
+            return _PrecomputedBiotSavartField(
+                seg_start=x,
+                seg_end=jnp.roll(x, -1, axis=0),
+                seg_current=current * jnp.ones(x.shape[0]),
+            )
+        x, x_s = self._compute_position(params, source_grid, dx1=True, basis="xyz")
+        ds = source_grid.spacing[:, 2]
+        return _PrecomputedBiotSavartField(
+            src_pts=x[0],
+            src_J=current * x_s[0] * ds[:, None],
+        )
 
     def compute_magnetic_field(
         self,
@@ -654,7 +808,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
             New representation of the coil parameterized by Fourier series for R,Z.
 
         """
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]
@@ -1494,6 +1648,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     """
 
@@ -1505,7 +1660,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         + ["_NFP", "_sym", "_name"]
     )
 
-    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=True):
+    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=False):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         [_check_type(coil, coils[0]) for coil in coils]
@@ -1555,7 +1710,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
     def current(self, new):
         # new must be a 1D iterable regardless of the tree structure of the CoilSet
         old, tree = tree_flatten(self.current)
-        new = jnp.atleast_1d(new).flatten()
+        new = jnp.atleast_1d(jnp.asarray(new)).flatten()
         new = jnp.broadcast_to(new, (len(old),))
         new = tree_unflatten(tree, new)
         for coil, cur in zip(self.coils, new):
@@ -1565,7 +1720,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """Return an array of all the currents (including those in virtual coils)."""
         if currents is None:
             currents = self.current
-        currents = jnp.asarray(currents)
+        # coil currents from params_dict have shape (1,), flatten to make sure
+        # the result is 1D with one entry per coil
+        currents = jnp.asarray(currents).flatten()
         if self.sym:
             currents = jnp.concatenate([currents, -1 * currents[::-1]])
         return jnp.tile(currents, self.NFP)
@@ -1695,10 +1852,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         if dx1:
             rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
 
-        # if field period symmetry, add rotated coils from other field periods
-        rpz0 = rpz
-        for k in range(1, self.NFP):
-            rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
+        # if field period symmetry, add rotated coils from other field periods.
+        phi_offset = 2 * jnp.pi * jnp.arange(self.NFP) / self.NFP
+        rpz = rpz[None] + phi_offset[:, None, None, None] * jnp.array([0, 1, 0])
+        rpz = rpz.reshape(self.NFP * rpz.shape[1], *rpz.shape[2:])
         if dx1:
             rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
 
@@ -1858,6 +2015,59 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             AB = rpz2xyz_vec(AB, x=coords[:, 0], y=coords[:, 1])
         return AB
 
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Convert the coils into a _PrecomputedBiotSavartField.
+
+        Computes the geometry of the all coils once, so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None, optional
+            Grid used to discretize coils. The same grid is used for every coil,
+            since all coils in a CoilSet have the same parametrization and
+            resolution. Use a MixedCoilSet for per-coil grids.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
+        """
+        errorif(
+            isinstance(source_grid, (list, tuple)),
+            ValueError,
+            "CoilSet uses a single source_grid for all coils, since they all have "
+            + "the same parametrization and resolution. Use a MixedCoilSet for "
+            + "per-coil grids.",
+        )
+        errorif(
+            getattr(source_grid, "NFP", 1) != 1,
+            ValueError,
+            "source_grid for CoilSet must have NFP=1",
+        )
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
+        assert isinstance(source_grid, _Grid)
+        if params is None:
+            current = self._all_currents()
+        else:
+            params = [par.copy() for par in self._make_arraylike(params)]
+            current = self._all_currents(
+                [par.pop("current", coil.current) for par, coil in zip(params, self)]
+            )
+        if isinstance(self[0], SplineXYZCoil):
+            x = self._compute_position(params, source_grid, basis="xyz")
+            return _PrecomputedBiotSavartField(
+                seg_start=x.reshape(-1, 3),
+                seg_end=jnp.roll(x, -1, axis=1).reshape(-1, 3),
+                seg_current=jnp.repeat(current, x.shape[1]),
+            )
+        x, x_s = self._compute_position(params, source_grid, dx1=True, basis="xyz")
+        ds = source_grid.spacing[:, 2]
+        src_J = current[:, None, None] * x_s * ds[None, :, None]
+        return _PrecomputedBiotSavartField(
+            src_pts=x.reshape(-1, 3),
+            src_J=src_J.reshape(-1, 3),
+        )
+
     def compute_magnetic_field(
         self,
         coords,
@@ -1946,7 +2156,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         angle=2 * np.pi,
         n=10,
         endpoint=False,
-        check_intersection=True,
+        check_intersection=False,
     ):
         """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
@@ -1966,6 +2176,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Whether to include a coil at final rotation angle. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -1989,7 +2200,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         displacement=[2, 0, 0],
         n=4,
         endpoint=False,
-        check_intersection=True,
+        check_intersection=False,
     ):
         """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
@@ -2008,6 +2219,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Whether to include a coil at final displacement location. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         assert isinstance(coil, _Coil) and not isinstance(coil, CoilSet)
@@ -2025,7 +2237,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=True):
+    def from_symmetry(cls, coils, NFP=1, sym=False, check_intersection=False):
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -2046,6 +2258,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             If True, the coils will be duplicated 2*NFP times. Default = False.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         Returns
         -------
@@ -2058,16 +2271,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         """
         if not isinstance(coils, CoilSet):
             try:
-                coils = CoilSet(coils)
+                coils = CoilSet(coils, check_intersection=check_intersection)
             except (TypeError, ValueError):
                 # likely there are multiple coil types,
                 # so make a MixedCoilSet
-                coils = MixedCoilSet(coils)
+                coils = MixedCoilSet(coils, check_intersection=check_intersection)
         if not isinstance(coils, MixedCoilSet):
             # only need to check this for a CoilSet, not MixedCoilSet
             [_check_type(coil, coils[0]) for coil in coils]
 
-        coilset = []
+        # add operator trigger CoilSet creation that we cannot pass check_intersection
+        # to. Instead collect coils in a list
+        base_coils = [coil for coil in coils]
         if sym:
             # first reflect/flip original coilset
             # ie, given coils [1, 2, 3] at angles [pi/6, pi/2, 5pi/6]
@@ -2081,17 +2296,21 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
                 fcoil.flip([0, 0, 1])
                 fcoil.current = -1 * coil.current
                 flipped_coils.append(fcoil)
-            coils = coils + flipped_coils
+            base_coils = base_coils + flipped_coils
         # next rotate the coilset for each field period
+        coilset = []
         for k in range(0, NFP):
-            rotated_coils = coils.copy()
-            rotated_coils.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
-            coilset += rotated_coils
+            for coil in base_coils:
+                rcoil = coil.copy()
+                rcoil.rotate(axis=[0, 0, 1], angle=2 * jnp.pi * k / NFP)
+                coilset.append(rcoil)
 
         return cls(*coilset, check_intersection=check_intersection)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=True):
+    def from_makegrid_coilfile(
+        cls, coil_file, method="cubic", check_intersection=False
+    ):
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -2118,6 +2337,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
               both endpoints
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
         """
         coils = []  # list of SplineXYZCoils, ignoring coil groups
@@ -2341,7 +2561,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             f.writelines(lines)
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierPlanarCoil.
 
@@ -2362,6 +2582,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2380,7 +2601,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierXY(
-        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -2406,6 +2627,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2424,7 +2646,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -2446,6 +2668,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2462,7 +2685,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -2479,6 +2702,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for the new CoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2497,7 +2721,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=False
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -2524,6 +2748,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Name for the new CoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2636,7 +2861,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):
-            return CoilSet(*self.coils, *other.coils)
+            try:
+                return CoilSet(*self.coils, *other.coils)
+            except ValueError:
+                warnif(
+                    True,
+                    UserWarning,
+                    "Could not make a CoilSet from the two"
+                    "given coilsets, likely due to parametrizations or"
+                    "resolution being different for the two."
+                    "Creating a MixedCoilSet instead from the two coilsets.",
+                )
+                return MixedCoilSet(self, other)
         if isinstance(other, (list, tuple)):
             return CoilSet(*self.coils, *other)
         else:
@@ -2686,12 +2922,13 @@ class MixedCoilSet(CoilSet):
         Name of this CoilSet.
     check_intersection: bool
         Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     """
 
     _io_attrs_ = CoilSet._io_attrs_
 
-    def __init__(self, *coils, name="", check_intersection=True):
+    def __init__(self, *coils, name="", check_intersection=False):
         coils = flatten_list(coils, flatten_tuple=True)
         assert all([isinstance(coil, (_Coil)) for coil in coils])
         self._coils = list(coils)
@@ -2877,6 +3114,42 @@ class MixedCoilSet(CoilSet):
                 )
         return AB
 
+    def _as_precomputed_source(self, source_grid=None, params=None):
+        """Discretize the coils into a _PrecomputedBiotSavartField. Private.
+
+        Computes the coil geometry once so that repeated field evaluations
+        (e.g. field line integration) only evaluate the Biot-Savart kernel.
+
+        Parameters
+        ----------
+        source_grid : Grid or None or array-like, optional
+            Grid used to discretize coils. If array-like, should be 1 value per
+            coil. If None, defaults to the default grid of each coil.
+        params : dict or array-like of dict, optional
+            Parameters to pass to coils, either the same for all coils or one for
+            each.
+        """
+        params = self._make_arraylike(params)
+        source_grid = self._make_arraylike(source_grid)
+        sources = [
+            coil._as_precomputed_source(grd, par)
+            for coil, grd, par in zip(self.coils, source_grid, params)
+        ]
+
+        def cat(arrs):
+            arrs = [a for a in arrs if a is not None]
+            return jnp.concatenate(arrs) if arrs else None
+
+        # combine the sources of each member. we can have a mix of coils including
+        # SplineXYZCoil and others that have different methods for Biot-Savart
+        return _PrecomputedBiotSavartField(
+            src_pts=cat([s._src_pts for s in sources]),
+            src_J=cat([s._src_J for s in sources]),
+            seg_start=cat([s._seg_start for s in sources]),
+            seg_end=cat([s._seg_end for s in sources]),
+            seg_current=cat([s._seg_current for s in sources]),
+        )
+
     def compute_magnetic_field(
         self,
         coords,
@@ -2961,7 +3234,7 @@ class MixedCoilSet(CoilSet):
         )
 
     def to_FourierPlanar(
-        self, N=10, grid=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierPlanarCoil representation.
 
@@ -2982,6 +3255,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -2999,7 +3273,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierXY(
-        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=True
+        self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
     ):
         """Convert all coils to FourierXYCoil.
 
@@ -3025,6 +3299,7 @@ class MixedCoilSet(CoilSet):
             Name for this coilset.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3042,7 +3317,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_FourierRZ(
-        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=True
+        self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
     ):
         """Convert all coils to FourierRZCoil representation.
 
@@ -3064,6 +3339,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3079,7 +3355,7 @@ class MixedCoilSet(CoilSet):
         ]
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=True):
+    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False):
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -3096,6 +3372,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3111,7 +3388,7 @@ class MixedCoilSet(CoilSet):
         return self.__class__(*coils, name=name, check_intersection=check_intersection)
 
     def to_SplineXYZ(
-        self, knots=None, grid=None, method="cubic", name="", check_intersection=True
+        self, knots=None, grid=None, method="cubic", name="", check_intersection=False
     ):
         """Convert all coils to SplineXYZCoil representation.
 
@@ -3138,6 +3415,7 @@ class MixedCoilSet(CoilSet):
             Name for the new MixedCoilSet.
         check_intersection: bool
             Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
 
         Returns
         -------
@@ -3174,7 +3452,7 @@ class MixedCoilSet(CoilSet):
 
     @classmethod
     def from_makegrid_coilfile(  # noqa: C901
-        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=True
+        cls, coil_file, method="cubic", ignore_groups=False, check_intersection=False
     ):
         """Create a MixedCoilSet of SplineXYZCoils from a MAKEGRID coil txtfile.
 
@@ -3211,6 +3489,7 @@ class MixedCoilSet(CoilSet):
             return the coils as just a single MixedCoilSet.
         check_intersection : bool
             whether to check the resulting coilsets for intersecting coils.
+            Defaults to False.
 
 
         """
@@ -3356,7 +3635,7 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     return ratio.sum()
 
 
-def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
+def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=False):
     """Initialize a CoilSet of modular coils for stage 2 optimization.
 
     The coils will be planar, circular coils centered on the equilibrium magnetic axis,
@@ -3377,6 +3656,9 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
         Minor radius of the coils, in units of equilibrium minor radius. Note that for
         strongly shaped equilibria this may need to be large to avoid having the coils
         intersect the plasma.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------
@@ -3404,11 +3686,15 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0):
             basis="rpz",
         )
         unique_coils.append(coil)
-    coilset = CoilSet(unique_coils, NFP=eq.NFP, sym=eq.sym)
+    coilset = CoilSet(
+        unique_coils, NFP=eq.NFP, sym=eq.sym, check_intersection=check_intersection
+    )
     return coilset
 
 
-def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="outer"):
+def initialize_saddle_coils(
+    eq, num_coils, r_over_a=0.5, offset=2.0, position="outer", check_intersection=False
+):
     """Initialize a CoilSet of saddle coils for stage 2 optimization.
 
     The coils will be planar, circular coils positioned around the plasma without
@@ -3435,6 +3721,9 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
         Placement of coils relative to plasma. "outer" will place coils on the outboard
         side, "inner" on the inboard side, "top" will place coils above the plasma,
         "bottom" will place them below.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------
@@ -3480,11 +3769,18 @@ def initialize_saddle_coils(eq, num_coils, r_over_a=0.5, offset=2.0, position="o
         )
         windowpane_coils.append(coil)
 
-    windowpane_coilset = CoilSet(windowpane_coils, NFP=int(eq.NFP), sym=eq.sym)
+    windowpane_coilset = CoilSet(
+        windowpane_coils,
+        NFP=int(eq.NFP),
+        sym=eq.sym,
+        check_intersection=check_intersection,
+    )
     return windowpane_coilset
 
 
-def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100):
+def initialize_helical_coils(
+    eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100, check_intersection=False
+):
     """Initialize a CoilSet of helical coils for stage 2 optimization.
 
     The coils will be roughly a constant distance from the plasma surface as they wind
@@ -3512,6 +3808,9 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
     npts : int
         How many points to use when creating the coils. Equilibria with very high NFP
         may need more points.
+    check_intersection : bool
+        Whether or not to check the coils in the coilset for intersections.
+        Defaults to False.
 
     Returns
     -------
@@ -3563,4 +3862,4 @@ def initialize_helical_coils(eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=
             2 * np.pi * G / mu_0 / num_coils / M, x[:, 0], x[:, 1], x[:, 2]
         )
         coils.append(coil)
-    return CoilSet(*coils)
+    return CoilSet(*coils, check_intersection=check_intersection)

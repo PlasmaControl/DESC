@@ -32,3 +32,4 @@ uv.lock
 .venv
 
 .vscode/
+.idea/

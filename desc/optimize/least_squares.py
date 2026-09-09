@@ -24,7 +24,7 @@ from .utils import (
     compute_jac_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    scale_columns,
+    scale_matrix,
     solve_triangular_regularized,
 )
 
@@ -209,7 +209,7 @@ def lsqtr(  # noqa: C901
     # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
     # carrying so many J-sized matrices in memory, which can be large. The buffer is
     # donated so the scaling doesn't allocate a second copy of J.
-    J_h = scale_columns(J, d)
+    J_h = scale_matrix(J, d)
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -427,7 +427,7 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J_h = scale_columns(J, d)
+            J_h = scale_matrix(J, d)
             del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -458,7 +458,7 @@ def lsqtr(  # noqa: C901
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     # after overwriting J_h with J*d, we have to revert back and store the
     # unscaled version
-    J_h = scale_columns(J_h, 1 / d)
+    J_h = scale_matrix(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         success=success,

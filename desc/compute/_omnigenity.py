@@ -1552,8 +1552,10 @@ def _constructed_surface_index(rho, query_rho):
 )
 def _Bc_normalized(params, transforms, profiles, data, **kwargs):
     representation = {
-        key: params[key]
-        for key in ("zeta", "B_levels", "bounce_centers", "bounce_distances")
+        "zeta": params["zeta"],
+        "B_levels": params["B_levels"],
+        "bounce_centers": params["bounce_centers"],
+        "bounce_distances": params["bounce_distances"],
     }
     representation["valid_knots"] = params["diagnostics"]["valid_knots"]
     if kwargs.get("native_grid", False):

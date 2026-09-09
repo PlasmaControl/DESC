@@ -687,7 +687,7 @@ class ProximalProjection(ObjectiveFunction):
                 + f"{self.dim_x} got {x.size}."
             )
 
-        xs = jnp.split(x, np.cumsum(self._dimc_per_thing)[:-1])
+        xs = jnp.split(x, np.cumsum(self._dimc_per_thing))
         params = []
         for t, xi in zip(self.things, xs):
             if t is self._state.eq:
@@ -1195,11 +1195,12 @@ class ProximalState:
         Dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
     cache_tangents : bool
-        Whether to compute and store the full Equilibrium tangents by default.
-        If True, this applies even to callers asking for fewer than dim(xeq)
-        directions. This is useful when the state is shared by multiple
-        ProximalProjection wrappers, which happens in augmented Lagrangian solvers.
-        Default is False.
+        Whether to compute and store the equilibrium tangents by default.
+        If True, this will store an array of size (dim(xeq), dim(ceq)),
+        used for computing jac of the wrapped objective. This is useful when the
+        state is shared by multiple ProximalProjection wrappers, which happens
+        in augmented Lagrangian solvers. Note that the full set of tangents is
+        computed even if a single jvp is requested. Default is False.
     """
 
     def __init__(
@@ -1414,13 +1415,10 @@ class ProximalState:
         v = jnp.eye(sum(dimc_per_thing)) if v is None else jnp.asarray(v)
         vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
 
-        # If caller is already asking for at least as many directions
-        # as dimc of the equilibrium, then might as well compute and
-        # store tangents.
-        full_tangents = (
-            self._cache_tangents or vs[eq_idx].shape[0] >= dimc_per_thing[eq_idx]
-        )
-        v_eq = jnp.eye(dimc_per_thing[eq_idx]) if full_tangents else vs[eq_idx]
+        cache_tangents = self._cache_tangents
+        # If you are going through the cache, you want all directions in the (reduced)
+        # equilibrium variables.
+        v_eq = jnp.eye(dimc_per_thing[eq_idx]) if cache_tangents else vs[eq_idx]
         if key in self._tangents:
             eq_tangents = vs[eq_idx] @ self._tangents[key]
         else:
@@ -1433,7 +1431,7 @@ class ProximalState:
                 self.dxdc,
                 op,
             )
-            if full_tangents:
+            if cache_tangents:
                 self._tangents[key] = eq_tangents
                 eq_tangents = vs[eq_idx] @ eq_tangents
 

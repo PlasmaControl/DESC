@@ -279,6 +279,8 @@ def agni(request):
         int(_cached["n_theta"]),
         int(_cached["n_zeta"]),
     ) != (_N_RHO, _N_THETA, _N_ZETA)
+    # `finite-n xi`/`deltaB`/`deltaV` are side effects of this same call (no
+    # extra solve), and other tests compare against them, so they ride along.
     if _stale:
         _LAM3 = compute_fun(
             _EQ,
@@ -292,12 +294,20 @@ def agni(request):
         np.savez(
             _GOLDEN,
             lam3=float(np.asarray(_LAM3[_name])[0]),
+            xi=np.asarray(_LAM3["finite-n xi"]),
+            deltaB=np.asarray(_LAM3["finite-n deltaB"]),
+            deltaV=np.asarray(_LAM3["finite-n deltaV"]),
             n_rho=_N_RHO,
             n_theta=_N_THETA,
             n_zeta=_N_ZETA,
         )
     else:
-        _LAM3 = {_name: jnp.asarray([float(_cached["lam3"])])}
+        _LAM3 = {
+            _name: jnp.asarray([float(_cached["lam3"])]),
+            "finite-n xi": jnp.asarray(_cached["xi"]),
+            "finite-n deltaB": jnp.asarray(_cached["deltaB"]),
+            "finite-n deltaV": jnp.asarray(_cached["deltaV"]),
+        }
 
     return dict(
         eq=_EQ,

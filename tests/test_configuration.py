@@ -451,6 +451,7 @@ class TestInitialGuess:
     @pytest.mark.unit
     def test_guess_when_heuristic_coordinate_mapping_fails(self):
         """Test that we can still get nested initial mapping heuristics fail."""
+        pytest.importorskip("map2disc_jax")
         # using an extremely shaped bounday where the heuristics fail,
         # forcing a fallback to the map2disc method
         # also is stellarator-asymmetric
@@ -504,7 +505,9 @@ class TestInitialGuess:
         with pytest.warns(
             UserWarning, match="Surfaces from initial guess are not nested"
         ):
-            eq_difficult_bdry = Equilibrium(surface=surf, L=6, M=6)
+            eq_difficult_bdry = Equilibrium(
+                surface=surf, L=6, M=6, ensure_nested_method="map2disc"
+            )
 
         assert eq_difficult_bdry.is_nested(), "Axisymmetric Case"
         # then add an N=1 torsion to it
@@ -525,7 +528,9 @@ class TestInitialGuess:
         with pytest.warns(
             UserWarning, match="Surfaces from initial guess are not nested"
         ):
-            eq_difficult_bdry = Equilibrium(surface=surf, L=6, M=6, N=1, N_grid=6)
+            eq_difficult_bdry = Equilibrium(
+                surface=surf, L=6, M=6, N=1, N_grid=6, ensure_nested_method="map2disc"
+            )
 
         assert eq_difficult_bdry.is_nested(), "Non-axisymmetric Case"
 

@@ -148,12 +148,15 @@ class Curve(IOAble, Optimizable, ABC):
             if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
         ]
         calc0d = bool(len(dep0d))
+        # some curves (e.g. SurfaceCurve) have a resolution
+        # requirement which can exceed self.N
+        N = getattr(self, "N_effective", self.N)
         # see if the grid we're already using will work for desired qtys
-        if calc0d and (grid.N >= 2 * self.N + 5) and isinstance(grid, LinearGrid):
+        if calc0d and (grid.N >= 2 * N + 5) and isinstance(grid, LinearGrid):
             calc0d = False
 
         if calc0d and override_grid:
-            grid0d = LinearGrid(N=2 * self.N * getattr(self, "NFP", 1) + 5)
+            grid0d = LinearGrid(N=2 * N * getattr(self, "NFP", 1) + 5)
             data0d = compute_fun(
                 self,
                 dep0d,
@@ -621,3 +624,85 @@ class Surface(IOAble, Optimizable, ABC):
             + str(hex(id(self)))
             + " (name={})".format(self.name)
         )
+
+
+class SurfaceCurve(Curve):
+    r"""Curve which lies in a toroidal surface.
+
+    Parameterized in terms of poloidal/toroidal
+    angles:
+    (theta,zeta)= (theta(s), zeta(s)), s in [0,2pi).
+    Translated to lab coordinates via the surface:
+    (R,Z)=(R(theta(s),zeta(s)), Z(theta(s),zeta(s))).
+
+    Note: objects carry a read-only copy of
+    the surface and its underlying parameters.
+    The surface's params are optimizable, so
+    optimization with fixed surface should include
+    a FixParameters call. If this surface
+    appears across multiple objectives, should use
+    the objective SurfaceCurveConsistency.
+
+    Note: Optimizing a
+    SurfaceCurve should generally include a
+    FixParameters(curve, {"rotmat": True, "shift": True}).
+
+    Parameters
+    ----------
+    surface: FourierRZToroidalSurface
+        Underlying surface which the curve lies on.
+    name: str, optional
+        Name for this curve.
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + ["_surface"]
+    _static_attrs = Curve._static_attrs
+
+    def __init__(
+        self,
+        surface,
+        name="",
+    ):
+        assert surface is not None, "Surface cannot be None"
+        super().__init__(name=name)
+        self._surface = surface.copy()
+
+    @property
+    def surface(self):
+        """The curve's own copy of the surface it lies on."""
+        return self._surface
+
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        """Spectral coefficients for R of the underlying surface."""
+        return self._surface.R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        self._surface.R_lmn = new
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """Spectral coefficients for Z of the underlying surface."""
+        return self._surface.Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        self._surface.Z_lmn = new
+
+    @property
+    def R_basis(self):
+        """Spectral basis for R of the underlying surface."""
+        return self._surface.R_basis
+
+    @property
+    def Z_basis(self):
+        """Spectral basis for Z of the underlying surface."""
+        return self._surface.Z_basis
+
+    @property
+    def NFP_surface(self):
+        """Number of field periods of the underlying surface."""
+        return self._surface.NFP

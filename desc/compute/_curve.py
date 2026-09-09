@@ -2,6 +2,7 @@ from interpax import interp1d
 
 from desc.backend import jnp, sign
 
+from ..grid import Grid
 from ..utils import (
     cross,
     dot,
@@ -1236,4 +1237,533 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # this is equivalent to jnp.trapz(T, s) for a closed curve
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
+    return data
+
+
+@register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["x", "x_s", "ds"],
+    parameterization="desc.geometry.core.SurfaceCurve",
+)
+def _center_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    # weight by arclength
+    xyz = rpz2xyz(data["x"])
+    w = jnp.linalg.norm(data["x_s"], axis=-1) * data["ds"]
+    center = jnp.sum(xyz * w[:, jnp.newaxis], axis=0) / jnp.sum(w)
+    data["center"] = xyz2rpz(center) * jnp.ones_like(data["x"])
+    return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
+    dim=3,
+    params=["R_lmn", "Z_lmn", "rotmat", "shift"],
+    transforms={"surface": []},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "zeta"],
+    parameterization="desc.geometry.core.SurfaceCurve",
+)
+def _x_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+
+    data_surf = transforms["surface"].compute(
+        ["R", "Z"],
+        grid=grid,
+        method="jitable",
+        params=params_temp,
+    )
+
+    # Assuming zeta=phi
+    coords = jnp.stack([data_surf["R"], data["zeta"], data_surf["Z"]], axis=1)
+    # convert to xyz for displacement and rotation
+    coords = rpz2xyz(coords)
+    coords = (
+        coords @ params["rotmat"].reshape((3, 3)).T + params["shift"][jnp.newaxis, :]
+    )
+    # convert back to rpz
+    coords = xyz2rpz(coords)
+    data["x"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\partial_{s} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["R_lmn", "Z_lmn", "rotmat"],
+    transforms={"surface": []},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "zeta", "theta_s", "zeta_s", "phi"],
+    parameterization="desc.geometry.core.SurfaceCurve",
+)
+def _x_s_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+    names = ["R", "R_t", "R_z", "Z_t", "Z_z"]
+    data_surf = transforms["surface"].compute(
+        names,
+        grid=grid,
+        method="jitable",
+        params=params_temp,
+    )
+
+    xs_R = data_surf["R_t"] * data["theta_s"] + data_surf["R_z"] * data["zeta_s"]
+    xs_p = data_surf["R"] * data["zeta_s"]
+    xs_Z = data_surf["Z_t"] * data["theta_s"] + data_surf["Z_z"] * data["zeta_s"]
+
+    coords = jnp.stack([xs_R, xs_p, xs_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_s"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_ss",
+    label="\\partial_{ss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, second derivative",
+    dim=3,
+    params=["R_lmn", "Z_lmn", "rotmat"],
+    transforms={"surface": []},
+    profiles=[],
+    coordinates="s",
+    data=["theta", "zeta", "theta_s", "zeta_s", "theta_ss", "zeta_ss", "phi"],
+    parameterization="desc.geometry.core.SurfaceCurve",
+)
+def _x_ss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+    names = [
+        "R",
+        "R_t",
+        "R_z",
+        "Z_t",
+        "Z_z",
+        "R_tt",
+        "R_tz",
+        "R_zz",
+        "Z_tt",
+        "Z_tz",
+        "Z_zz",
+    ]
+    data_surf = transforms["surface"].compute(
+        names,
+        grid=grid,
+        method="jitable",
+        params=params_temp,
+    )
+    R = data_surf["R"]
+    R_t = data_surf["R_t"]
+    R_z = data_surf["R_z"]
+    R_tt = data_surf["R_tt"]
+    R_tz = data_surf["R_tz"]
+    R_zz = data_surf["R_zz"]
+
+    Z_t = data_surf["Z_t"]
+    Z_z = data_surf["Z_z"]
+    Z_tt = data_surf["Z_tt"]
+    Z_tz = data_surf["Z_tz"]
+    Z_zz = data_surf["Z_zz"]
+
+    t_s = data["theta_s"]
+    t_ss = data["theta_ss"]
+    z_s = data["zeta_s"]
+    z_ss = data["zeta_ss"]
+
+    # Notation: xs_R is the R hat component of x'(s),
+    # and dz_xs_R its partial zeta derivative, etc.
+    xs_R = R_t * t_s + R_z * z_s
+    xs_p = R * z_s
+    dt_xs_R = R_tt * t_s + R_tz * z_s
+    dz_xs_R = R_tz * t_s + R_zz * z_s
+    ds_xs_R = R_t * t_ss + R_z * z_ss
+    dt_xs_p = R_t * z_s
+    dz_xs_p = R_z * z_s
+    ds_xs_p = R * z_ss
+    dt_xs_Z = Z_tt * t_s + Z_tz * z_s
+    dz_xs_Z = Z_tz * t_s + Z_zz * z_s
+    ds_xs_Z = Z_t * t_ss + Z_z * z_ss
+
+    # As vectors, x_s = xs_R(theta(s),zeta(s)) R_hat(zeta(s))
+    #                   + xs_p(theta(s),zeta(s)) p_hat(zeta(s))
+    #                   + xs_Z(theta(s),zeta(s)) Z_hat
+    # We now apply the chain rule with the derivatives computed above
+    xss_R = dt_xs_R * t_s + dz_xs_R * z_s + ds_xs_R - xs_p * z_s
+    xss_p = dt_xs_p * t_s + dz_xs_p * z_s + ds_xs_p + xs_R * z_s
+    xss_Z = dt_xs_Z * t_s + dz_xs_Z * z_s + ds_xs_Z
+
+    coords = jnp.stack([xss_R, xss_p, xss_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_ss"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="x_sss",
+    label="\\partial_{sss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, third derivative",
+    dim=3,
+    params=["R_lmn", "Z_lmn", "rotmat"],
+    transforms={"surface": []},
+    profiles=[],
+    coordinates="s",
+    data=[
+        "theta",
+        "zeta",
+        "theta_s",
+        "zeta_s",
+        "theta_ss",
+        "zeta_ss",
+        "theta_sss",
+        "zeta_sss",
+        "phi",
+    ],
+    parameterization="desc.geometry.core.SurfaceCurve",
+)
+def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.vstack([jnp.ones_like(data["theta"]), data["theta"], data["zeta"]]).T
+    grid = Grid(nodes, sort=False, jitable=True)
+    params_temp = transforms["surface"].params_dict.copy()
+    params_temp["R_lmn"] = params["R_lmn"]
+    params_temp["Z_lmn"] = params["Z_lmn"]
+    names = [
+        "R",
+        "R_t",
+        "R_z",
+        "Z_t",
+        "Z_z",
+        "R_tt",
+        "R_tz",
+        "R_zz",
+        "Z_tt",
+        "Z_tz",
+        "Z_zz",
+        "R_ttt",
+        "R_ttz",
+        "R_tzz",
+        "R_zzz",
+        "Z_ttt",
+        "Z_ttz",
+        "Z_tzz",
+        "Z_zzz",
+    ]
+    data_surf = transforms["surface"].compute(
+        names,
+        grid=grid,
+        method="jitable",
+        params=params_temp,
+    )
+    R = data_surf["R"]
+    R_t = data_surf["R_t"]
+    R_z = data_surf["R_z"]
+    R_tt = data_surf["R_tt"]
+    R_tz = data_surf["R_tz"]
+    R_zz = data_surf["R_zz"]
+    R_ttt = data_surf["R_ttt"]
+    R_ttz = data_surf["R_ttz"]
+    R_tzz = data_surf["R_tzz"]
+    R_zzz = data_surf["R_zzz"]
+
+    Z_t = data_surf["Z_t"]
+    Z_z = data_surf["Z_z"]
+    Z_tt = data_surf["Z_tt"]
+    Z_tz = data_surf["Z_tz"]
+    Z_zz = data_surf["Z_zz"]
+    Z_ttt = data_surf["Z_ttt"]
+    Z_ttz = data_surf["Z_ttz"]
+    Z_tzz = data_surf["Z_tzz"]
+    Z_zzz = data_surf["Z_zzz"]
+
+    t_s = data["theta_s"]
+    t_ss = data["theta_ss"]
+    t_sss = data["theta_sss"]
+    z_s = data["zeta_s"]
+    z_ss = data["zeta_ss"]
+    z_sss = data["zeta_sss"]
+
+    # rebuilt here rather than read from data["x_ss"], which carries the rigid
+    # transform and is expressed in the basis at phi, not at zeta
+    xss_R = (
+        R_tt * (t_s**2)
+        + 2 * R_tz * t_s * z_s
+        + R_zz * (z_s**2)
+        + R_t * t_ss
+        + R_z * z_ss
+        - R * (z_s**2)
+    )
+    xss_p = 2 * R_t * t_s * z_s + 2 * R_z * (z_s**2) + R * z_ss
+
+    dt_xss_R = (
+        R_ttt * (t_s**2)
+        + 2 * R_ttz * t_s * z_s
+        + R_tzz * (z_s**2)
+        + R_tt * t_ss
+        + R_tz * z_ss
+        - R_t * (z_s**2)
+    )
+    dz_xss_R = (
+        R_ttz * (t_s**2)
+        + 2 * R_tzz * t_s * z_s
+        + R_zzz * (z_s**2)
+        + R_tz * t_ss
+        + R_zz * z_ss
+        - R_z * (z_s**2)
+    )
+    ds_xss_R = (
+        2 * R_tt * t_s * t_ss
+        + 2 * R_tz * (t_ss * z_s + t_s * z_ss)
+        + 2 * R_zz * z_s * z_ss
+        + R_t * t_sss
+        + R_z * z_sss
+        - 2 * R * z_s * z_ss
+    )
+
+    dt_xss_p = 2 * R_tt * t_s * z_s + 2 * R_tz * (z_s**2) + R_t * z_ss
+    dz_xss_p = 2 * R_tz * t_s * z_s + 2 * R_zz * (z_s**2) + R_z * z_ss
+    ds_xss_p = 2 * R_t * (t_ss * z_s + t_s * z_ss) + 4 * R_z * z_s * z_ss + R * z_sss
+
+    dt_xss_Z = (
+        Z_ttt * (t_s**2)
+        + 2 * Z_ttz * t_s * z_s
+        + Z_tzz * (z_s**2)
+        + Z_tt * t_ss
+        + Z_tz * z_ss
+    )
+    dz_xss_Z = (
+        Z_ttz * (t_s**2)
+        + 2 * Z_tzz * t_s * z_s
+        + Z_zzz * (z_s**2)
+        + Z_tz * t_ss
+        + Z_zz * z_ss
+    )
+    ds_xss_Z = (
+        2 * Z_tt * t_s * t_ss
+        + 2 * Z_tz * (t_ss * z_s + t_s * z_ss)
+        + 2 * Z_zz * z_s * z_ss
+        + Z_t * t_sss
+        + Z_z * z_sss
+    )
+
+    xsss_R = dt_xss_R * t_s + dz_xss_R * z_s + ds_xss_R - xss_p * z_s
+    xsss_p = dt_xss_p * t_s + dz_xss_p * z_s + ds_xss_p + xss_R * z_s
+    xsss_Z = dt_xss_Z * t_s + dz_xss_Z * z_s + ds_xss_Z
+
+    coords = jnp.stack([xsss_R, xsss_p, xsss_Z], axis=1)
+    coords = rpz2xyz_vec(coords, phi=data["zeta"])
+    coords = coords @ params["rotmat"].reshape((3, 3)).T
+    coords = xyz2rpz_vec(coords, phi=data["phi"])
+    data["x_sss"] = coords
+    return data
+
+
+@register_compute_fun(
+    name="theta",
+    label="\\mathbf{\\theta}",
+    units="rad",
+    units_long="radian",
+    description="Poloidal angle along curve",
+    dim=1,
+    params=["theta_n"],
+    transforms={
+        "theta": [[0, 0, 0]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_theta="Net poloidal winding number of the curve.",
+)
+def _theta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    secular_theta = kwargs["secular_theta"]
+    theta_0 = secular_theta * data["s"]
+    theta_1 = transforms["theta"].transform(params["theta_n"], dz=0)
+    data["theta"] = theta_0 + theta_1
+    return data
+
+
+@register_compute_fun(
+    name="zeta",
+    label="\\mathbf{\\zeta}",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle along curve",
+    dim=1,
+    params=["zeta_n"],
+    transforms={"zeta": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="s",
+    data=["s"],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_zeta="Net toroidal winding number of the curve.",
+)
+def _zeta_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    secular_zeta = kwargs["secular_zeta"]
+    zeta_0 = secular_zeta * data["s"]
+    zeta_1 = transforms["zeta"].transform(params["zeta_n"], dz=0)
+    data["zeta"] = zeta_0 + zeta_1
+    return data
+
+
+@register_compute_fun(
+    name="theta_s",
+    label="\\partial_{s} \\mathbf{\\theta}",
+    units="rad",
+    units_long="radians",
+    description="Poloidal angle along curve, first derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={
+        "theta": [[0, 0, 1]],
+    },
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_theta="Net poloidal winding number of the curve.",
+)
+def _theta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    secular_theta = kwargs["secular_theta"]
+    theta_0 = secular_theta
+    theta_1 = transforms["theta"].transform(params["theta_n"], dz=1)
+    data["theta_s"] = theta_0 + theta_1
+    return data
+
+
+@register_compute_fun(
+    name="theta_ss",
+    label="\\partial_{ss} \\mathbf{\\theta}",
+    units="rad",
+    units_long="radians",
+    description="Poloidal angle along curve, second derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta": [[0, 0, 2]]},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_ss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    theta = transforms["theta"].transform(params["theta_n"], dz=2)
+    data["theta_ss"] = theta
+    return data
+
+
+@register_compute_fun(
+    name="theta_sss",
+    label="\\partial_{sss} \\mathbf{\\theta}",
+    units="rad",
+    units_long="radians",
+    description="Poloidal angle along curve, third derivative",
+    dim=1,
+    params=["theta_n"],
+    transforms={"theta": [[0, 0, 3]]},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _theta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    theta = transforms["theta"].transform(params["theta_n"], dz=3)
+    data["theta_sss"] = theta
+    return data
+
+
+@register_compute_fun(
+    name="zeta_s",
+    label="\\partial_{s} \\mathbf{\\zeta}",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle along curve, first derivative",
+    dim=1,
+    params=["zeta_n"],
+    transforms={"zeta": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+    secular_zeta="Net toroidal winding number of the curve.",
+)
+def _zeta_s_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    secular_zeta = kwargs["secular_zeta"]
+    zeta_0 = secular_zeta
+    zeta_1 = transforms["zeta"].transform(params["zeta_n"], dz=1)
+    data["zeta_s"] = zeta_0 + zeta_1
+    return data
+
+
+@register_compute_fun(
+    name="zeta_ss",
+    label="\\partial_{ss} \\mathbf{\\zeta}",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle along curve, second derivative",
+    dim=1,
+    params=["zeta_n"],
+    transforms={"zeta": [[0, 0, 2]]},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_ss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    zeta = transforms["zeta"].transform(params["zeta_n"], dz=2)
+    data["zeta_ss"] = zeta
+    return data
+
+
+@register_compute_fun(
+    name="zeta_sss",
+    label="\\partial_{sss} \\mathbf{\\zeta}",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle along curve, third derivative",
+    dim=1,
+    params=["zeta_n"],
+    transforms={"zeta": [[0, 0, 3]]},
+    profiles=[],
+    coordinates="s",
+    data=[],
+    parameterization="desc.geometry.curve.FourierRZSurfaceCurve",
+)
+def _zeta_sss_FourierRZSurfaceCurve(params, transforms, profiles, data, **kwargs):
+    zeta = transforms["zeta"].transform(params["zeta_n"], dz=3)
+    data["zeta_sss"] = zeta
     return data

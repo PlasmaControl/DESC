@@ -23,9 +23,11 @@ from desc.backend import (
 )
 from desc.compute import get_params
 from desc.compute.utils import _compute as compute_fun
+from desc.equilibrium.coords import map_coordinates
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZSurfaceCurve,
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
@@ -889,6 +891,132 @@ class _Coil(_MagneticField, Optimizable, ABC):
             self.current, coords, N=N, s=s, basis=basis, name=name
         )
 
+    def to_FourierRZSurface(
+        self,
+        surface=None,
+        equilibrium=None,
+        NFP=1,
+        N_theta=10,
+        N_zeta=10,
+        secular_theta=None,
+        secular_zeta=None,
+        sym_theta=None,
+        sym_zeta=None,
+        grid=None,
+        s=None,
+        basis="xyz",
+        name="",
+        **kwargs,
+    ):
+        """Convert Coil to FourierRZSurface representation.
+
+        Coils of this type are constraint to lie on a FourierRZToroidalSurface.
+        This method therefore requires either a surface or equilibrium. Moreover,
+        the secular terms in the representations theta(s) = secular_theta*...,
+        zeta(s) = secular_zeta*..., are required.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface
+            Surface on which curve lies. Only one of "surface" and "equilibrium"
+            can be provided.
+        equilibrium: Equilibrium
+            Provided in place of "surface" when the desired surface is the rho=1
+            flux surface of an equilibrium. Only one of "surface" and "equilibrium"
+            can be provided.
+        NFP: int, optional
+            Field period symmetry. Defaults to 1.
+        N_theta: int or None, optional
+            Max Fourier mode number for theta(s). Set to None to indicate no basis
+            for theta should be included. Default is 10.
+        N_zeta: int or None, optional
+            Max Fourier mode number for zeta(s). Set to None to indicate no basis
+            for zeta should be included. Default is 10.
+        secular_theta: int or None, optional
+            Coefficient of secular term in theta. Required for this method.
+        secular_zeta: int or None, optional
+            Coefficient of secular term in zeta. Required for this method.
+        sym_theta: str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for theta(s). Default is None.
+        sym_zeta: str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for zeta(s). Default is None.
+        grid: Grid, int or None, optional
+            Grid used to evaluate curve coordinates on for fitting.
+            If an integer, uses that many equally spaced points.
+        s: ndarray
+            Arbitrary curve parameter to use for the fitting.
+            Should be monotonic, 1D array of same length as
+            coords. if None, defaults linearly spaced in [0,2pi)
+        basis : {'xyz', 'rpz'}
+            Coordinate system in which the curve is evaluated before being mapped
+            onto the surface. Default = 'xyz'.
+        name: str, optional
+            Name for this coil.
+
+        Returns
+        -------
+        FourierRZSurfaceCoil
+            FourierRZSurfaceCoil object fit to the given coords.
+        """
+        errorif(
+            surface is not None and equilibrium is not None,
+            ValueError,
+            "Either surface or equilibrium is required",
+        )
+        errorif(
+            secular_theta is None or secular_zeta is None,
+            ValueError,
+            "Must provide both secular_theta and secular_zeta",
+        )
+        source_R_basis = (
+            surface.R_basis if surface is not None else equilibrium.surface.R_basis
+        )
+        source_Z_basis = (
+            surface.Z_basis if surface is not None else equilibrium.surface.Z_basis
+        )
+        M_source = max(source_R_basis.M, source_Z_basis.M)
+        N_source = max(source_R_basis.N, source_Z_basis.N)
+        if equilibrium is None:
+            from .equilibrium import Equilibrium
+
+            equilibrium = Equilibrium(surface=surface, L=1, M=M_source, N=N_source)
+
+        # Compute rpz values along curve
+        if grid is None and s is not None:
+            grid = LinearGrid(zeta=s)
+        elif grid is None:
+            N = max(N_theta, N_zeta)
+            N_eff = N * NFP + M_source * secular_theta + N_source * secular_zeta
+            grid = LinearGrid(N=2 * N_eff + 5)
+
+        coords_RpZ = self.compute("x", grid=grid, basis=basis)["x"]
+        if basis.lower() == "xyz":
+            coords_RpZ = xyz2rpz(coords_RpZ)
+        coords_rtz = map_coordinates(equilibrium, coords_RpZ, inbasis=("R", "phi", "Z"))
+        coords_rtz = coords_rtz.at[:, 1:].set(np.unwrap(coords_rtz[:, 1:], axis=0))
+
+        if s is None:
+            s = np.linspace(0, 2 * np.pi, coords_rtz.shape[0], endpoint=False)
+
+        coords = np.hstack([s[:, np.newaxis], coords_rtz[:, 1:]])
+
+        return FourierRZSurfaceCoil.from_values(
+            self.current,
+            coords=coords,
+            surface=surface,
+            equilibrium=equilibrium if surface is None else None,
+            NFP=NFP,
+            N_theta=N_theta,
+            N_zeta=N_zeta,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            sym_theta=sym_theta,
+            sym_zeta=sym_zeta,
+            name=name,
+        )
+
 
 class FourierRZCoil(_Coil, FourierRZCurve):
     """Coil parameterized by fourier series for R,Z in terms of toroidal angle phi.
@@ -1589,6 +1717,210 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         )
 
 
+class FourierRZSurfaceCoil(_Coil, FourierRZSurfaceCurve):
+    r"""Coil that is contained in a FourierRZToroidalSurface.
+
+    Parameterized by a pair of integers (secular terms for toroidal
+    and poloidal winding) and Fourier series for theta(s), zeta(s).
+
+    Parameters
+    ----------
+    current : float
+        Current through the coil, in Amperes.
+    surface: FourierRZToroidalSurface, optional
+        Underlying surface which the coil lies on.
+        If None, must pass a value for "equilibrium."
+    equilibrium: Equilibrium, optional
+        Used in place of "surface" when the coil is intended
+        to live on the rho=1 surface of an equilibrium which
+        may be optimized alongside the coil.
+        Must pass exactly one of "surface" or "equilibrium."
+    secular_theta: non-negative int, optional
+        Net winding of theta(s), equivalent to
+        1/2pi \int_{0}^{2pi} theta'(s) ds. Default
+        value is 0. Nonzero values result in coils
+        linking the torus poloidally.
+        Note: gcd(secular_theta, secular_zeta) should equal 1.
+    secular_zeta: non-negative int, optional
+        Net winding of zeta(s), equivalent to
+        1/2pi \int_{0}^{2pi} zeta'(s) ds. Default
+        value is 1. Nonzero values result in coils
+        linking the torus toroidally.
+        Note: gcd(secular_theta, secular_zeta) should equal 1.
+    theta_n: array-like, optional
+        Coefficients of Fourier modes defining
+        theta(s).
+    zeta_n: array-like, optional
+        Coefficients of Fourier modes defining
+        zeta(s).
+    modes_theta: array-like, optional
+        Mode numbers associated with theta. If
+        not given, defaults to [-N_theta:N_theta],
+        where N_theta = len(theta_n)//2.
+    modes_zeta: array-like, optional
+        Mode numbers associated with zeta. If
+        not given, defaults to [-N_theta:N_theta],
+        where N_theta = len(theta_n)//2.
+    sym_theta: str, optional
+        If "sin"/"cos", retains only the corresponding
+        modes in the series for theta(s). Defaults
+        to None, i.e. all modes are kept.
+    sym_zeta: bool, optional
+        If "sin"/"cos", retains only the corresponding
+        modes in the series for zeta(s). Defaults
+        to None, i.e. all modes are kept.
+    NFP: positive int, optional
+        Field period symmetry of the coil. Defaults to 1.
+        The curve's image is invariant
+        under zeta -> zeta + 2pi/NFP, and Fourier modes
+        are multiples of NFP in s.
+        Note: If changed, must satisfy (a) NFP | surface.NFP,
+        (b) NFP | secular_theta, (c) secular_zeta \neq 0.
+    name: str, optional
+        Name for this coil.
+    """
+
+    _io_attrs_ = _Coil._io_attrs_ + FourierRZSurfaceCurve._io_attrs_
+    _static_attrs = _Coil._static_attrs + FourierRZSurfaceCurve._static_attrs
+
+    def __init__(
+        self,
+        current=1,
+        surface=None,
+        equilibrium=None,
+        secular_theta=0,
+        secular_zeta=1,
+        theta_n=[0.0],
+        zeta_n=[0.0],
+        modes_theta=None,
+        modes_zeta=None,
+        sym_theta=False,
+        sym_zeta=False,
+        NFP=1,
+        name="",
+    ):
+        super().__init__(
+            current=current,
+            surface=surface,
+            equilibrium=equilibrium,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            theta_n=theta_n,
+            zeta_n=zeta_n,
+            modes_theta=modes_theta,
+            modes_zeta=modes_zeta,
+            sym_theta=sym_theta,
+            sym_zeta=sym_zeta,
+            NFP=NFP,
+            name=name,
+        )
+
+    def _compute_A_or_B(
+        self,
+        coords,
+        params=None,
+        basis="rpz",
+        source_grid=None,
+        transforms=None,
+        compute_A_or_B="B",
+        chunk_size=None,
+    ):
+        """Compute magnetic field or vector potential at a set of points."""
+        if source_grid is None:
+            source_grid = LinearGrid(N=2 * self.N_effective + 5)
+        return super()._compute_A_or_B(
+            coords, params, basis, source_grid, transforms, compute_A_or_B, chunk_size
+        )
+
+    @classmethod
+    def from_values(
+        cls,
+        current,
+        coords,
+        surface=None,
+        equilibrium=None,
+        NFP=1,
+        N_theta=10,
+        N_zeta=10,
+        secular_theta=None,
+        secular_zeta=None,
+        sym_theta=None,
+        sym_zeta=None,
+        name="",
+    ):
+        """Fit coordinates to FourierRZSurfaceCoil object.
+
+        Parameters
+        ----------
+        current : float
+            Current through the coil, in Amperes.
+        coords: array-like, shape (N,3)
+            Default shape (N,3) corresponds to coordinates (s,theta(s),zeta(s)) at N
+            points along curve. Assumed to be ordered by increasing curve parameter.
+        surface: FourierRZToroidalSurface
+            Surface on which curve lies. Only one of "surface" and "equilibrium"
+            can be provided.
+        equilibrium: Equilibrium
+            Provided in place of "surface" when the desired surface is the rho=1
+            flux surface of an equilibrium. Only one of "surface" and "equilibrium"
+            can be provided.
+        NFP: int, optional
+            Field period symmetry. Defaults to 1.
+        N_theta: int or None, optional
+            Max Fourier mode number for theta(s). Set to None to indicate no basis
+            for theta should be included. Default is 10.
+        N_zeta: int or None, optional
+            Max Fourier mode number for zeta(s). Set to None to indicate no basis
+            for zeta should be included. Default is 10.
+        secular_theta: int or None, optional
+            Coefficient of secular term in theta. If None, estimated automatically.
+        secular_zeta: int or None, optional
+            Coefficient of secular term in zeta. If None, estimated automatically.
+        sym_theta: str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for theta(s). Default is None.
+        sym_zeta: str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for zeta(s). Default is None.
+        name: str, optional
+            Name for this curve.
+
+        Returns
+        -------
+        curve : FourierRZSurfaceCoil
+            New representation of the coil parameterized by a Fourier series
+            for theta(s), zeta(s).
+        """
+        curve = super().from_values(
+            coords,
+            surface=surface,
+            equilibrium=equilibrium,
+            NFP=NFP,
+            N_theta=N_theta,
+            N_zeta=N_zeta,
+            secular_theta=secular_theta,
+            secular_zeta=secular_zeta,
+            sym_theta=sym_theta,
+            sym_zeta=sym_zeta,
+            name="",
+        )
+        return cls(
+            current=current,
+            surface=surface,
+            equilibrium=equilibrium,
+            secular_theta=curve.secular_theta,
+            secular_zeta=curve.secular_zeta,
+            theta_n=curve.theta_n,
+            zeta_n=curve.zeta_n,
+            modes_theta=curve.theta_basis.modes[:, 2],
+            modes_zeta=curve.zeta_basis.modes[:, 2],
+            sym_theta=sym_theta,
+            sym_zeta=sym_zeta,
+            NFP=NFP,
+            name=name,
+        )
+
+
 def _check_type(coil0, coil):
     errorif(
         not isinstance(coil, coil0.__class__),
@@ -1612,6 +1944,15 @@ def _check_type(coil0, coil):
         FourierXYCoil: ["X_basis", "Y_basis"],
         FourierXYZCoil: ["X_basis", "Y_basis", "Z_basis"],
         SplineXYZCoil: ["method", "N", "knots"],
+        FourierRZSurfaceCoil: [
+            "theta_basis",
+            "zeta_basis",
+            "R_basis",
+            "Z_basis",
+            "NFP",
+            "secular_theta",
+            "secular_zeta",
+        ],
     }
 
     for attr in attrs[coil0.__class__]:
@@ -2765,6 +3106,101 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             check_intersection=check_intersection,
         )
 
+    def to_FourierRZSurface(
+        self,
+        surface=None,
+        equilibrium=None,
+        NFP=1,
+        N_theta=10,
+        N_zeta=10,
+        secular_theta=None,
+        secular_zeta=None,
+        sym_theta=None,
+        sym_zeta=None,
+        grid=None,
+        s=None,
+        basis="xyz",
+        name="",
+        check_intersection=False,
+    ):
+        """Convert all coils to FourierRZSurfaceCoil representation.
+
+        Note that every coil in the set must lie on the given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface
+            Surface on which the coils lie. Only one of "surface" and "equilibrium"
+            can be provided.
+        equilibrium: Equilibrium
+            Provided in place of "surface" when the desired surface is the rho=1
+            flux surface of an equilibrium. Only one of "surface" and "equilibrium"
+            can be provided.
+        NFP : int, optional
+            Field period symmetry of the new coils. Defaults to 1.
+        N_theta : int or None, optional
+            Max Fourier mode number for theta(s). Set to None to indicate no basis
+            for theta should be included. Default is 10.
+        N_zeta : int or None, optional
+            Max Fourier mode number for zeta(s). Set to None to indicate no basis
+            for zeta should be included. Default is 10.
+        secular_theta : int
+            Net poloidal winding of the coils. Required.
+        secular_zeta : int
+            Net toroidal winding of the coils. Required.
+        sym_theta : str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for theta(s). Default is None.
+        sym_zeta : str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for zeta(s). Default is None.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with
+            FourierRZSurfaceCoil. If an integer, uses that many equally spaced points.
+        s : ndarray
+            Arbitrary curve parameter to use for the fitting. Should be monotonic,
+            1D array of same length as coords. If None, defaults to linearly spaced
+            in [0, 2pi).
+        basis : {'xyz', 'rpz'}
+            Coordinate system for the curve coordinates. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
+
+        Returns
+        -------
+        coilset : CoilSet
+            New representation of the coilset parameterized by Fourier series for
+            theta(s), zeta(s) on the given surface.
+
+        """
+        coils = [
+            coil.to_FourierRZSurface(
+                surface=surface,
+                equilibrium=equilibrium,
+                NFP=NFP,
+                N_theta=N_theta,
+                N_zeta=N_zeta,
+                secular_theta=secular_theta,
+                secular_zeta=secular_zeta,
+                sym_theta=sym_theta,
+                sym_zeta=sym_zeta,
+                grid=grid,
+                s=s,
+                basis=basis,
+            )
+            for coil in self
+        ]
+        return self.__class__(
+            *coils,
+            NFP=self.NFP,
+            sym=self.sym,
+            name=name,
+            check_intersection=check_intersection,
+        )
+
     def is_self_intersecting(self, grid=None, tol=None):
         """Check if any coils in the CoilSet intersect.
 
@@ -3426,6 +3862,96 @@ class MixedCoilSet(CoilSet):
         coils = [
             coil.to_SplineXYZ(
                 knots, grid, method, check_intersection=check_intersection
+            )
+            for coil in self
+        ]
+        return self.__class__(*coils, name=name, check_intersection=check_intersection)
+
+    def to_FourierRZSurface(
+        self,
+        surface=None,
+        equilibrium=None,
+        NFP=1,
+        N_theta=10,
+        N_zeta=10,
+        secular_theta=None,
+        secular_zeta=None,
+        sym_theta=None,
+        sym_zeta=None,
+        grid=None,
+        s=None,
+        basis="xyz",
+        name="",
+        check_intersection=False,
+    ):
+        """Convert all coils to FourierRZSurfaceCoil representation.
+
+        Note that every coil in the set must lie on the given surface.
+
+        Parameters
+        ----------
+        surface: FourierRZToroidalSurface
+            Surface on which the coils lie. Only one of "surface" and "equilibrium"
+            can be provided.
+        equilibrium: Equilibrium
+            Provided in place of "surface" when the desired surface is the rho=1
+            flux surface of an equilibrium. Only one of "surface" and "equilibrium"
+            can be provided.
+        NFP : int, optional
+            Field period symmetry of the new coils. Defaults to 1.
+        N_theta : int or None, optional
+            Max Fourier mode number for theta(s). Set to None to indicate no basis
+            for theta should be included. Default is 10.
+        N_zeta : int or None, optional
+            Max Fourier mode number for zeta(s). Set to None to indicate no basis
+            for zeta should be included. Default is 10.
+        secular_theta : int
+            Net poloidal winding of the coils. Required.
+        secular_zeta : int
+            Net toroidal winding of the coils. Required.
+        sym_theta : str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for theta(s). Default is None.
+        sym_zeta : str or None, optional
+            Whether to use "cos", "sin", or no (None) symmetry in the series
+            for zeta(s). Default is None.
+        grid : Grid, int or None
+            Grid used to evaluate curve coordinates on to fit with
+            FourierRZSurfaceCoil. If an integer, uses that many equally spaced points.
+        s : ndarray
+            Arbitrary curve parameter to use for the fitting. Should be monotonic,
+            1D array of same length as coords. If None, defaults to linearly spaced
+            in [0, 2pi).
+        basis : {'xyz', 'rpz'}
+            Coordinate system for the curve coordinates. Default = 'xyz'.
+        name : str
+            Name for this coilset.
+        check_intersection: bool
+            Whether or not to check the coils in the new coilset for intersections.
+            Defaults to False.
+
+        Returns
+        -------
+        coilset : MixedCoilSet
+            New representation of the coilset parameterized by Fourier series for
+            theta(s), zeta(s) on the given surface.
+
+        """
+        coils = [
+            coil.to_FourierRZSurface(
+                surface=surface,
+                equilibrium=equilibrium,
+                NFP=NFP,
+                N_theta=N_theta,
+                N_zeta=N_zeta,
+                secular_theta=secular_theta,
+                secular_zeta=secular_zeta,
+                sym_theta=sym_theta,
+                sym_zeta=sym_zeta,
+                grid=grid,
+                s=s,
+                basis=basis,
+                check_intersection=check_intersection,
             )
             for coil in self
         ]

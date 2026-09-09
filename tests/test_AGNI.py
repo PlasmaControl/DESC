@@ -166,6 +166,12 @@ _DEFAULT_EQ = Path(__file__).parent / "inputs" / "AGNI_QH_lowres.h5"
 _EQ_PATH = Path(os.environ.get("AGNI_EQ_PATH", _DEFAULT_EQ))
 _AGNI_SKIP_REASON = f"AGNI equilibrium fixture not found: {_EQ_PATH}"
 
+# Cached dense eigsh ground truth, keyed on resolution. The eigsh alone timed
+# out CI's 15 min budget, so it is computed once (here, offline) and reused;
+# delete this file to force a fresh solve after changing the resolution or the
+# AGNI assembly.
+_GOLDEN = Path(__file__).parent / "inputs" / "AGNI_QH_lowres_lam3.npz"
+
 
 @pytest.fixture(scope="module")
 def agni(request):
@@ -235,17 +241,34 @@ def agni(request):
         v_guess=np.ones(_N_KEEP),
     )
 
-    # Dense ground truth, computed once and shared by every solver test.
+    # Dense ground truth, shared by every solver test. Reused from _GOLDEN when
+    # its resolution matches; otherwise solved fresh and cached back to it.
     _name = "finite-n lambda3"
-    _LAM3 = compute_fun(
-        _EQ,
-        [_name],
-        params=_EQ.params_dict,
-        transforms=get_transforms([_name], obj=_EQ, grid=_GRID, diffmat=_DIFFMAT),
-        profiles=get_profiles([_name], _EQ, _GRID),
-        data=finiten_prefill(_EQ, _GRID),
-        **_KW,
-    )
+    _cached = np.load(_GOLDEN) if _GOLDEN.is_file() else None
+    _stale = _cached is None or (
+        int(_cached["n_rho"]),
+        int(_cached["n_theta"]),
+        int(_cached["n_zeta"]),
+    ) != (_N_RHO, _N_THETA, _N_ZETA)
+    if _stale:
+        _LAM3 = compute_fun(
+            _EQ,
+            [_name],
+            params=_EQ.params_dict,
+            transforms=get_transforms([_name], obj=_EQ, grid=_GRID, diffmat=_DIFFMAT),
+            profiles=get_profiles([_name], _EQ, _GRID),
+            data=finiten_prefill(_EQ, _GRID),
+            **_KW,
+        )
+        np.savez(
+            _GOLDEN,
+            lam3=float(np.asarray(_LAM3[_name])[0]),
+            n_rho=_N_RHO,
+            n_theta=_N_THETA,
+            n_zeta=_N_ZETA,
+        )
+    else:
+        _LAM3 = {_name: jnp.asarray([float(_cached["lam3"])])}
 
     return dict(
         eq=_EQ,

@@ -91,7 +91,6 @@ def compute(  # noqa: C901
                     "instead.",
                     DeprecationWarning,
                 )
-
     # RG: normalize transforms so diffmat is passed via transforms, not as a kwarg ---
     # We only absorb 'diffmat'. We intentionally DO NOT move 'grid' from kwargs into
     # transforms here, because Equilibrium.compute's existing plumbing correctly
@@ -109,7 +108,7 @@ def compute(  # noqa: C901
     if "diffmat" not in transforms and dm_kw is not None:
         transforms["diffmat"] = dm_kw
 
-    bad_kwargs = kwargs.keys() - allowed_kwargs
+    bad_kwargs = kwargs.keys() - allowed_kwargs - {"num_transit"}
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 

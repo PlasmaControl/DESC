@@ -617,9 +617,9 @@ class ProximalProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Proximal projection build")
 
-        # # we don't always build here because in ~all cases the user doesn't interact
-        # # with this directly, so if the user wants to manually rebuild they should
-        # # do it before this wrapper is created for them.
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(use_jit=use_jit, verbose=verbose)
 

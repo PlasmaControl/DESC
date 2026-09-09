@@ -1010,6 +1010,21 @@ class OmnigenityHarmonics(_Objective):
 
     Note: Only handles single magnetic surface.
 
+    Notes
+    -----
+    With ``normalize=True``, the reference field is fixed when the objective is built.
+    The DESC representation uses the mean on-axis ``field.B_lm``; OOPS and LCForm use
+    the equilibrium reference field from ``compute_scaling_factors(eq)``. Updating the
+    optimization parameters does not update this reference. Use ``normalize=False``
+    to retain the dimensional harmonic residuals, including earlier OOPS objectives
+    that did not apply a reference-field normalization.
+
+    For toroidally closed LCForm contours (``helicity[1] == 0``), the mapping uses
+    a full-torus alpha chart. With ``NFP > 1``, periodicity over one field period
+    is not guaranteed; building the objective emits a warning in this case. The
+    second argument of the S callback must have period ``2*pi/NFP``, satisfying
+    ``S(x, y + 2*pi/NFP) = S(x, y)``; for example, use ``sin(k*NFP*y)`` for integer k.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1055,21 +1070,6 @@ class OmnigenityHarmonics(_Objective):
         computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
-
-    Notes
-    -----
-    With ``normalize=True``, the reference field is fixed when the objective is built.
-    The DESC representation uses the mean on-axis ``field.B_lm``; OOPS and LCForm use
-    the equilibrium reference field from ``compute_scaling_factors(eq)``. Updating the
-    optimization parameters does not update this reference. Use ``normalize=False``
-    to retain the dimensional harmonic residuals, including earlier OOPS objectives
-    that did not apply a reference-field normalization.
-
-    For toroidally closed LCForm contours (``helicity[1] == 0``), the mapping uses
-    a full-torus alpha chart. With ``NFP > 1``, periodicity over one field period
-    is not guaranteed; building the objective emits a warning in this case. The
-    second argument of the S callback must have period ``2*pi/NFP``, satisfying
-    ``S(x, y + 2*pi/NFP) = S(x, y)``; for example, use ``sin(k*NFP*y)`` for integer k.
 
     """
 

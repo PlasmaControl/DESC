@@ -3265,7 +3265,7 @@ class OmnigenousField(Optimizable, IOAble):
 class OmnigenousFieldOOPS(Optimizable, IOAble):
     """A perfectly omnigenous magnetic field contour (not necessarily analytic).
 
-    This field only stands for contours of constant |B|.
+    This field only stands for contours of constant :math:`|B|`.
     Focused on single surface evaluation, not full field evaluation.
 
     Uses parameterization from Liu et. al. [1]_
@@ -3292,7 +3292,7 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
         D-parameters describing the distance between contours. These values are a
         flattened 1D array of shape (D_len,). If not supplied, `D_list` defaults to 1
         for the first mode and zero for the remaining modes. These parameters
-        give a correction to the baseline distance π - |η|; they are not the
+        give a correction to the baseline distance ``π - |η|``; they are not the
         complete distance function used by OmnigenousFieldLCForm.
 
     Notes
@@ -3553,11 +3553,11 @@ class OmnigenousFieldOOPS(Optimizable, IOAble):
 class OmnigenousFieldLCForm(Optimizable, IOAble):
     """A perfectly omnigenous magnetic field contour (not necessarily analytic).
 
-    This field only stands for contours of constant |B|.
+    This field only stands for contours of constant :math:`|B|`.
     Focused on single surface evaluation, not full field evaluation.
 
     Uses Mapping method from Landreman et. al. [1]_, parameterization defined by
-    user. Suitable for OmnigenityHarmonics method, just like in OOPS[2]_
+    user. Suitable for OmnigenityHarmonics method, just like in OOPS [2]_
 
     Parameters
     ----------
@@ -3587,6 +3587,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         It must support JAX arrays and differentiation without coupling different
         evaluation points. The user determines how to use S_list.
         Symmetry of s(x, y):
+
             - s is 2π-periodic in y (its Fourier series contains only sin(n y) terms).
             - s is odd in y: s(x, -y) = -s(x, y).
             - s(0, y) = 0 for all y.
@@ -3596,6 +3597,7 @@ class OmnigenousFieldLCForm(Optimizable, IOAble):
         It must support JAX arrays and differentiation without coupling different
         evaluation points. The user determines how to use D_list.
         Constraints on D(x):
+
             - D is defined on the closed interval x ∈ [0, π].
             - Boundary conditions: D(0) = π and D(π) = 0.
             - The separation between mirror points is 2 D(x) in the intermediate

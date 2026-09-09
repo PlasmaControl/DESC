@@ -30,6 +30,7 @@ from desc.compute._stability_solvers import (
     adjoint_defect,
     barycentric_matrix,
     factor_ring_blocks,
+    factor_ring_blocks_traced,
     fourier_interp_matrix,
     from_phys,
     group_index_matrix,
@@ -166,6 +167,19 @@ def test_theta_line_and_shell_block_shapes():
 
     g_shell = group_index_matrix(keep, res, "shell")
     assert g_shell.shape == (n_rho, 3 * n_theta * n_zeta)
+
+
+@pytest.mark.unit
+def test_group_index_matrix_rejects_bad_input():
+    """An unknown partition name, or a keep mask with nothing left, both raise."""
+    n_rho, n_theta, n_zeta = 4, 6, 4
+    keep = np.asarray(_meta(n_rho, n_theta, n_zeta)["keep"])
+    res = (n_rho, n_theta, n_zeta)
+
+    with pytest.raises(ValueError):
+        group_index_matrix(keep, res, "not_a_partition")
+    with pytest.raises(ValueError):
+        group_index_matrix(np.array([], dtype=int), res, "theta_line")
 
 
 @pytest.mark.unit
@@ -311,6 +325,14 @@ def test_pcg_deflated_without_Z_matches_pcg():
     np.testing.assert_array_equal(np.asarray(x1), np.asarray(x2))
     assert int(k1) == int(k2)
 
+    # Z=None with a warm start x0 shifts to a zero-initial-guess correction.
+    x0 = jnp.asarray(rng.standard_normal(n))
+    x3, _, r3 = pcg_deflated(
+        lambda v: A @ v, b, lambda r: r, tol=1e-12, maxiter=500, Z=None, x0=x0
+    )
+    np.testing.assert_allclose(np.asarray(x3), np.asarray(x1), atol=1e-8)
+    assert float(r3) < 1e-11
+
 
 @pytest.mark.unit
 def test_block_cholesky_factorization_residual():
@@ -341,6 +363,16 @@ def test_block_cholesky_factorization_residual():
     print(f"\n  ||M - L L^T||_F / ||M||_F = {rel:.3e}")
     assert rel < 1e-13, f"factorization residual {rel:.3e} is too large"
 
+    # The traced variant: same result at ridge 0, and NaN (not an escalation)
+    # is how a bad shift shows up under jit.
+    Lt, ok_t, ridge_t = factor_ring_blocks_traced(blocks, ridge=0.0)
+    np.testing.assert_allclose(np.asarray(Lt), np.asarray(L), atol=1e-13)
+    assert bool(ok_t) and ridge_t == 0.0
+
+    bad = blocks.at[0, 0, 0].set(jnp.nan)
+    _, ok_bad, _ = factor_ring_blocks_traced(bad)
+    assert not bool(ok_bad)
+
 
 @pytest.mark.unit
 def test_indefinite_blocks_are_reported_not_hidden():
@@ -358,11 +390,16 @@ def test_indefinite_blocks_are_reported_not_hidden():
         b
     )  # force indefinite
 
-    L, ok, ridge = factor_ring_blocks(jnp.asarray(blocks))
+    L, ok, ridge = factor_ring_blocks(jnp.asarray(blocks), verbose=True)
     assert ok, "ridge escalation failed to find any workable ridge"
     assert (
         ridge > 0.0
     ), "an indefinite block factored at ridge 0 -- escalation is broken"
+
+    # No ridge can fix a block that is already non-finite.
+    bad = jnp.asarray(blocks).at[0, 0, 0].set(jnp.nan)
+    L, ok, ridge = factor_ring_blocks(bad)
+    assert L is None and not ok and ridge is None
 
 
 # ---------------------------------------------------------------------------

@@ -405,6 +405,35 @@ def test_stability_kwargs_are_registered():
 
 
 @pytest.mark.unit
+def test_agni_sigma_shift(monkeypatch):
+    """AGNI_SIGMA_MODE selects a fixed shift or one tracked off lambda_guess.
+
+    A bare object with just the two attrs `_agni_sigma_shift` reads is enough --
+    no equilibrium needed to exercise this dispatch.
+    """
+    from types import SimpleNamespace
+
+    from desc.objectives._stability import _agni_sigma_shift
+
+    obj = SimpleNamespace(_sigma_factor=2.0, _lambda_guess=-0.5)
+
+    # default ('fixed'): sigma_factor * lambda_guess, constants ignored
+    monkeypatch.delenv("AGNI_SIGMA_MODE", raising=False)
+    assert _agni_sigma_shift(obj, None) == -1.0
+    assert _agni_sigma_shift(obj, {"lambda_guess": -0.4}) == -1.0
+
+    # 'track' before any refresh has populated lambda_guess: same fixed fallback
+    monkeypatch.setenv("AGNI_SIGMA_MODE", "track")
+    assert _agni_sigma_shift(obj, None) == -1.0
+    assert _agni_sigma_shift(obj, {}) == -1.0
+
+    # 'track' with a tracked lambda_guess: AGNI_SIGMA_FACTOR * lambda_guess
+    monkeypatch.setenv("AGNI_SIGMA_FACTOR", "3.0")
+    got = float(_agni_sigma_shift(obj, {"lambda_guess": -0.4}))
+    assert got == pytest.approx(-1.2)
+
+
+@pytest.mark.unit
 @pytest.mark.slow
 def test_matfree_operator_matches_dense_matrix(agni):
     """The matrix-free operator equals the dense assembled matrix, exactly.

@@ -8,19 +8,24 @@ import numpy as np
 from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid, _Grid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.io import load
 from desc.objectives import (
     FixThetaSFL,
     GoodCoordinates,
     ObjectiveFunction,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
+from desc.objectives.utils import factorize_linear_constraints
 from desc.transform import Transform
 from desc.utils import copy_coeffs, warnif
 
 
-def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
+def set_initial_guess(  # noqa: C901
+    eq, *args, ensure_nested=True, ensure_nested_method="opt"
+):
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -43,8 +48,17 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             of a grid. If lambda is not passed, it will be set to zero.
     ensure_nested : bool
         If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
+        run a small optimization problem or solve a harmonic BVP to attempt
+        to refine initial guess to improve coordinate mapping, with the method used
+        determined by ``ensure_nested_method``.
+    ensure_nested_method : {"opt","map2disc"}
+        The method to use for refining the initial guess if not nested.
+        "opt" will attempt to refine the guess by running
+        a small optimization problem using the GoodCoordinates objective.
+        "map2disc" will use the ``map2disc_jax`` package to solve a harmonic BVP to
+        find a nested initial mapping, using the equilibrium surface or the
+        passed-in surface as the boundary. Note that the `map2disc_jax` package must
+        be installed to use this method.
 
     Examples
     --------
@@ -228,21 +242,71 @@ def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
 
     if ensure_nested and not eq.is_nested():
+        fallback_to_goodcoordinates = False
         warnings.warn(
             "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
         )
-        obj = ObjectiveFunction(GoodCoordinates(eq))
-        constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
-        eq.solve(
-            objective=obj,
-            constraints=constraints,
-            ftol=0,
-            xtol=0,
-            gtol=1e-8,
-            verbose=0,
-            optimizer="fmintr-bfgs",
-        )
+        if ensure_nested_method not in ("opt", "map2disc"):
+            raise ValueError(
+                "ensure_nested_method should be one of 'opt', 'map2disc', got "
+                + f"{ensure_nested_method}."
+            )
+        if ensure_nested_method == "map2disc":
+            try:
+                import map2disc_jax  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "The map2disc_jax package is not installed. Please install it "
+                    + "to use the 'map2disc' method for refining the initial guess."
+                )
+            try:
+                Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
+
+                eq.R_lmn = Rlmn
+                eq.Z_lmn = Zlmn
+                eq.axis = eq.get_axis()
+                # enforce the R_lmn Z_lmn to match the original surface, as
+                # right now there may be a mismatch, through applying
+                # the linear constraints
+                constraints = get_fixed_axis_constraints(
+                    profiles=False, eq=eq
+                ) + get_fixed_boundary_constraints(eq=eq)
+                constraints = maybe_add_self_consistency(eq, constraints)
+                objective = ObjectiveFunction(constraints)
+                objective.build(verbose=0)
+                _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
+                    objective, objective
+                )
+                args = objective.unpack_state(recover(project(objective.x(eq))), False)[
+                    0
+                ]
+                eq.params_dict = args
+            except (
+                Exception
+            ) as e:  # if Babin init fails, just try to refine the existing guess
+                print(
+                    "Unable to use map2disc method to obtain nested initial guess, got "
+                    "error: ",
+                    e,
+                )
+                print(
+                    "Falling back to performing optimization using GoodCoordinates"
+                    " objective (following work of Tecchiolli et al.)"
+                )
+                fallback_to_goodcoordinates = True
+        if ensure_nested_method == "opt" or fallback_to_goodcoordinates:
+            obj = ObjectiveFunction(GoodCoordinates(eq))
+            constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
+            eq.solve(
+                objective=obj,
+                constraints=constraints,
+                ftol=0,
+                xtol=0,
+                gtol=1e-8,
+                verbose=0,
+                optimizer="fmintr-bfgs",
+            )
         warnif(
             not eq.is_nested(),
             UserWarning,
@@ -373,3 +437,115 @@ def _initial_guess_points(nodes, x, x_basis):
     transform = Transform(nodes, x_basis, build=False, build_pinv=True)
     x_lmn = transform.fit(x)
     return x_lmn
+
+
+def _boundary_cut(surface, zeta):
+    """Given surface and zeta, return function curve(theta) which yields R(t),Z(t)."""
+
+    def curve(theta):
+        theta = np.asarray(theta)
+        nodes = np.vstack([np.ones_like(theta), theta, zeta * np.ones_like(theta)]).T
+        grid = Grid(nodes=nodes, NFP=surface.NFP, jitable=True)
+        # Must use Grid, as cannot let LinearGrid re-sort the nodes
+        # in case map2disc_jax needs to use a different curve orientation
+        # (which it does, as it needs left-handed coordinate system
+        # with theta increasing CCW)
+        data = surface.compute(["R", "Z"], grid=grid)
+        return np.array(data["R"]), np.array(data["Z"])
+
+    return curve
+
+
+def _babin_init_Zernike_only(eq, nrho):
+    """Use Babin's map2disc_jax package to get initially nested mapping.
+
+    Assumes equilibrium is right-handed (positive jacobian),
+    and returns R_lmn Z_lmn in the same right-handed convention.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to initialize
+    nrho : int
+        Number of radial grid points to evaluate mapping at. These
+        will then be fit to form the output Fourier-Zernike coefficients
+
+    Returns
+    -------
+    R_lmn : ndarray
+        Nested R_lmn coefficients
+    Z_lmn : ndarray
+        Nested Z_lmn coefficients
+
+    """
+    from map2disc_jax import BCM
+
+    surface = eq.surface
+    M = eq.M
+    N = eq.N
+    rho1d_out = np.linspace(0, 1, nrho * 2)
+    N_out = N
+    zeta_cut = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N_out + 1, endpoint=False)
+
+    # solve BCM
+    MZernike = M
+
+    all_bcm = {}
+    for z, zeta in enumerate(zeta_cut):
+        curve = _boundary_cut(surface, zeta)
+        bcm = BCM(curve, MZernike)
+        bcm.solve("interpolate")
+        all_bcm[z] = bcm
+
+    grid = LinearGrid(zeta=zeta_cut, NFP=eq.NFP)
+    all_cx = np.zeros((all_bcm[0].cx.shape[0], zeta_cut.size))
+    all_cy = np.zeros((all_bcm[0].cy.shape[0], zeta_cut.size))
+    for z, zeta in enumerate(zeta_cut):
+        all_cx[:, z] = np.asarray(all_bcm[z].cx)
+        all_cy[:, z] = np.asarray(all_bcm[z].cy)
+
+    # simplest way to obtain the 3D Fourier-Zernike coeffs: just evaluate in real space
+    # and re-fit, that way no need to worry about mode orderings
+    grid = LinearGrid(rho=rho1d_out, M=M, zeta=zeta_cut, NFP=eq.NFP)
+    Rtransform_3d = Transform(grid=grid, basis=eq.R_basis, build_pinv=True)
+    Ztransform_3d = Transform(grid=grid, basis=eq.Z_basis, build_pinv=True)
+
+    Rout = np.zeros(grid.nodes.shape[0])
+    Zout = np.zeros(grid.nodes.shape[0])
+    Rout = grid.meshgrid_reshape(Rout, "rtz")
+    Zout = grid.meshgrid_reshape(Zout, "rtz")
+    rhos_grid = grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
+    thetas_grid = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")
+
+    curve = _boundary_cut(surface, 0.0)  # not used in evaluation of cx,cy
+    bcm = BCM(curve, MZernike)
+    for z, zeta in enumerate(zeta_cut):
+        bcm.cx = all_cx[:, z]
+        bcm.cy = all_cy[:, z]
+        r_rt, z_rt = bcm.eval_rt(
+            rhos_grid[:, :, z].squeeze(), thetas_grid[:, :, z].squeeze()
+        )
+        Rout[:, :, z] = np.asarray(r_rt)
+        Zout[:, :, z] = np.asarray(z_rt)
+    R_lmn = np.array(Rtransform_3d.fit(grid.meshgrid_flatten(Rout, "rtz")), copy=True)
+    Z_lmn = np.array(Ztransform_3d.fit(grid.meshgrid_flatten(Zout, "rtz")), copy=True)
+
+    # TODO: smarter way would be to take the existing Zernike coeffs as fxn of phi and
+    # fit those coefficients to immediately get the 3D FourierZernike coefficients.
+    # Need to know what the mode orderings are though for cx and cy to use this
+    # approach, which I've not dug into yet as the other method works fine.
+
+    # map2disc_jax outputs in left-handed coordinates, so we need to flip
+    # the sign of theta to get back to right-handed coords
+    rone = np.ones(R_lmn.shape)
+    rone[eq.R_basis.modes[:, 1] < 0] = -1
+    R_lmn = R_lmn * rone
+
+    zone = np.ones(Z_lmn.shape)
+    zone[eq.Z_basis.modes[:, 1] < 0] = -1
+    Z_lmn = Z_lmn * zone
+
+    return (
+        R_lmn,
+        Z_lmn,
+    )

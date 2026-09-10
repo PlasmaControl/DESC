@@ -344,6 +344,8 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
+        # ZernikeRZToroidalSection (poincare bdry_mode) has no omega support
+        # yet, unlike FourierRZToroidalSurface -- hence the hasattr guard.
         if hasattr(self._surface, "Mw"):
             self._surface.change_resolution(
                 self.L, self.M, self.N, sym=self.sym, Mw=self.Mw, Nw=self.Nw
@@ -761,6 +763,7 @@ class Equilibrium(IOAble, Optimizable):
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
 
+        # see the note on the same guard in __init__
         if hasattr(self.surface, "Mw"):
             self.surface.change_resolution(
                 self.L,
@@ -1716,17 +1719,18 @@ class Equilibrium(IOAble, Optimizable):
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
-        if hasattr(new, "Mw") and ((new.Mw > self.Mw) or (new.Nw > self.Nw)):
-            # grow the equilibrium omega basis rather than silently truncating
-            # the omega modes of the new (generalized) boundary
-            Mw = max(new.Mw, self.Mw)
-            Nw = max(new.Nw, self.Nw)
-            Lw = max(self.Lw, Mw if (self.spectral_indexing == "ansi") else 2 * Mw)
-            self.change_resolution(Lw=Lw, Mw=Mw, Nw=Nw)
-        if hasattr(new, "Mw"):
-            new.change_resolution(self.L, self.M, self.N, Mw=self.Mw, Nw=self.Nw)
-        else:
-            new.change_resolution(self.L, self.M, self.N)
+        # grow the equilibrium's resolution rather than silently truncating the
+        # modes of the new boundary, for R/Z and omega alike. Every
+        # FourierRZToroidalSurface has Mw/Nw, so no hasattr guard is needed.
+        M = max(new.M, self.M)
+        N = max(new.N, self.N)
+        L = max(self.L, M if (self.spectral_indexing == "ansi") else 2 * M)
+        Mw = max(new.Mw, self.Mw)
+        Nw = max(new.Nw, self.Nw)
+        Lw = max(self.Lw, Mw if (self.spectral_indexing == "ansi") else 2 * Mw)
+        if (L, M, N, Lw, Mw, Nw) != (self.L, self.M, self.N, self.Lw, self.Mw, self.Nw):
+            self.change_resolution(L=L, M=M, N=N, Lw=Lw, Mw=Mw, Nw=Nw)
+        new.change_resolution(self.M, self.N, sym=self.sym, Mw=self.Mw, Nw=self.Nw)
         self._surface = new
 
     @property

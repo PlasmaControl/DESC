@@ -1343,12 +1343,14 @@ class FixOmegaGauge(FixParameters):
     """Fixes gauge freedom of the generalized toroidal angle.
 
     For a fixed physical field, the computational toroidal angle may be shifted
-    per flux surface, zeta -> zeta + c(rho), with omega -> omega - c(rho),
-    leaving phi = zeta + omega (and all physics) unchanged. Equivalently, the
-    (m=0, n=0) Fourier-Zernike content of omega is pure gauge. This constraint
-    removes that freedom by fixing all (m=0, n=0) modes of W_lmn to zero.
-    For stellarator-symmetric equilibria the sin-parity basis contains no
-    (0,0) modes and the gauge is fixed automatically by symmetry.
+    per flux surface, zeta -> zeta + c(rho, theta), with omega -> omega -
+    c(rho, theta), leaving phi = zeta + omega (and all physics) unchanged.
+    Equivalently, the n=0 Fourier-Zernike content of omega, at any (l, m), is
+    pure gauge. This constraint removes that freedom by fixing all n=0 modes
+    of W_lmn to zero. Stellarator symmetry (sin-parity) only excludes the
+    single (m=0, n=0) mode by itself -- other n=0 modes with m != 0 remain in
+    the basis and are not fixed by symmetry alone, so this constraint applies
+    the same way regardless of eq.sym.
 
     Note: this constraint is automatically applied when needed, and does not need to be
     included by the user.
@@ -1376,12 +1378,7 @@ class FixOmegaGauge(FixParameters):
         normalize_target=True,
         name="omega gauge",
     ):
-        if eq.sym:
-            indices = False
-        else:
-            indices = np.where(
-                np.logical_and(eq.W_basis.modes[:, 1] == 0, eq.W_basis.modes[:, 2] == 0)
-            )[0]
+        indices = np.where(eq.W_basis.modes[:, 2] == 0)[0]
         super().__init__(
             thing=eq,
             params={"W_lmn": indices},

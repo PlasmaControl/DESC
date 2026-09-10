@@ -125,7 +125,9 @@ generalized-toroidal equilibrium; unacceptable). The correct generalization:
 4. **[cleanup] `plotting.py:2105` comment** (#24) — delete or clarify.
 5. **[cleanup] `resolution_summary` always prints omega line** (#10).
 6. **[reply, no code] `plotting.py:1656` branch-jump question** (#23) —
-   post concrete failing examples on the thread.
+   answered: not aliasing, `_find_failed_phi_inversion` already reduces
+   mod 2pi; racetrack numbers in the comment above `_phi_to_zeta_bisect`
+   (4.21% of nodes, up to 3.80 m) confirm a genuinely different root.
 7. **[rename] `Lz/Mz/Nz` → `Lw/Mw/Nw`** (#4) across `surface.py`, `curve.py`,
    `equilibrium.py`, `continuation.py`, `perturbations.py`,
    `initial_guess.py`, `test_generalized_toroidal.py`. (Verified other `Nz`

@@ -375,18 +375,16 @@ def maybe_add_self_consistency(thing, constraints):
     if {"Z_lmn", "Zb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryZSelfConsistency)
 
-    # omega constraints are only needed when the equilibrium actually has
-    # omega degrees of freedom; the default omega=0 (empty basis) case adds
-    # nothing to the optimization
-    has_omega = getattr(thing, "W_basis", None) is not None and thing.W_basis.num_modes
-
-    if {"W_lmn", "Wb_lmn"} <= params and has_omega:
+    # every equilibrium has a W_basis (empty by default, ie omega = 0), so no
+    # extra has_omega gate is needed here: these constraints are no-ops when
+    # W_basis.num_modes == 0, same as the R/Z and lambda constraints above
+    if {"W_lmn", "Wb_lmn"} <= params:
         constraints = add_if_multiple(constraints, BoundaryWSelfConsistency)
 
     if {"L_lmn"} <= params:
         constraints = add_if_multiple(constraints, FixLambdaGauge)
 
-    if {"W_lmn"} <= params and has_omega:
+    if {"W_lmn"} <= params:
         constraints = add_if_multiple(constraints, FixOmegaGauge)
 
     if {"R_lmn", "Ra_n"} <= params:
@@ -395,7 +393,7 @@ def maybe_add_self_consistency(thing, constraints):
     if {"Z_lmn", "Za_n"} <= params:
         constraints = add_if_multiple(constraints, AxisZSelfConsistency)
 
-    if {"W_lmn", "Wa_n"} <= params and has_omega:
+    if {"W_lmn", "Wa_n"} <= params:
         constraints = add_if_multiple(constraints, AxisWSelfConsistency)
 
     # Curve

@@ -751,7 +751,6 @@ class ProximalProjection(ObjectiveFunction):
         # we will need to set this static attribute, only possible if tuple
         self._dimc_per_thing = tuple(self._dimc_per_thing)
 
-
         ## history and caching
         # first, ensure equilibrium is solved to the
         # specified tolerances, necessary as we assume

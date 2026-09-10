@@ -2102,12 +2102,12 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         t_grid_phi_target = t_grid.nodes[:, 2].copy()
-        # Resolves TODO(#568) for this caller.  The requested toroidal values
-        # are phi, the same ones the rho contours use -- passing them as zeta
-        # drew the theta* curves on a DIFFERENT plane than the rho curves in
-        # the same panel: measured on a racetrack, up to 35.7 deg away (mean
-        # 15.6 deg), an out-of-plane offset of up to 1.16 m.  Identical to the
-        # old call when omega = 0, where zeta == phi.
+        # The requested toroidal values are phi, the same ones the rho contours
+        # use -- passing them as zeta drew the theta* curves on a DIFFERENT
+        # plane than the rho curves in the same panel: measured on a
+        # racetrack, up to 35.7 deg away (mean 15.6 deg), an out-of-plane
+        # offset of up to 1.16 m.  Identical to the old call when omega = 0,
+        # where zeta == phi.
         v_grid = Grid(_pest_phi_to_zeta(eq, t_grid.nodes), sort=False)
         v_phi_bad = _find_failed_phi_inversion(eq, v_grid, t_grid_phi_target)
     rows = np.floor(np.sqrt(nphi)).astype(int)

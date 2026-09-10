@@ -3440,16 +3440,18 @@ def plot_qs_error(  # noqa: 16 fxn too complex
 
     grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
+    booz = {}
     if fB:
-        names += ["|B|_mn_B"]
+        names += ["f_B_normalized"]
         transforms = get_transforms(
-            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "f_B_normalized", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
-        matrix, modes, idx = ptolemy_linear_transform(
+        matrix, _, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
             helicity=helicity,
             NFP=transforms["B"].basis.NFP,
         )
+        booz = {"matrix": matrix, "idx": idx}
     if fC or fT:
         names += ["sqrt(g)"]
     if fC:
@@ -3460,15 +3462,12 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(
-            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity
+            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity, **booz
         )
 
     if fB:
-        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
-        B_mn = (matrix @ B_mn.T).T
-        f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
-            np.sum(B_mn**2, axis=-1)
-        )
+        # norm of the symmetry breaking modes relative to all the modes
+        f_B = np.linalg.norm(data["f_B_normalized"], axis=-1)
         plot_data["f_B"] = f_B
     if fC:
         sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")

@@ -18,6 +18,17 @@ from .objective_funs import _Objective, collect_docs
 class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error.
 
+    Quasi-symmetry of helicity (M, N) requires the field strength in Boozer
+    coordinates to depend on the angles only through Mϑ_B - Nζ_B, so the residuals
+    are the symmetry breaking harmonics on each surface:
+
+    f_B = {B_mn(ρ) | m/n ≠ M/N}  (T)
+
+    With ``scale_invariant`` these are divided by the norm of all the harmonics on
+    that surface, so that ||f̂_B(ρ)|| ∈ [0, 1]:
+
+    f̂_B = f_B / (Σ_mn B_mn(ρ)²)^½
+
     Parameters
     ----------
     eq : Equilibrium
@@ -32,6 +43,12 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    scale_invariant : bool, optional
+        The scale_invariant version divides each surface's harmonics by the
+        norm of all the harmonics on that surface, making the output
+        dimensionless and invariant to the magnetic field strength. Then
+        the norm of the residuals on a single surface lies in [0, 1]. Default
+        is False, no normalization. See Basic Optimization tutorial for details.
     surf_batch_size: int
         Number of flux surfaces to compute simultaneously. Defaults to
         computing all flux surfaces simultaneously. Decrease to reduce
@@ -45,7 +62,11 @@ class QuasisymmetryBoozer(_Objective):
 
     _units = "(T)"
     _print_value_fmt = "Quasi-symmetry Boozer error: "
-    _static_attrs = _Objective._static_attrs + ["_helicity", "_surf_batch_size"]
+    _static_attrs = _Objective._static_attrs + [
+        "_helicity",
+        "_surf_batch_size",
+        "_scale_invariant",
+    ]
 
     def __init__(
         self,
@@ -61,6 +82,7 @@ class QuasisymmetryBoozer(_Objective):
         helicity=(1, 0),
         M_booz=None,
         N_booz=None,
+        scale_invariant=False,
         name="QS Boozer",
         jac_chunk_size=None,
         surf_batch_size=None,
@@ -72,6 +94,10 @@ class QuasisymmetryBoozer(_Objective):
         self.M_booz = M_booz
         self.N_booz = N_booz
         self._surf_batch_size = surf_batch_size
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -123,7 +149,7 @@ class QuasisymmetryBoozer(_Objective):
             "resolution for surface averages",
         )
 
-        self._data_keys = ["|B|_mn_B"]
+        self._data_keys = ["f_B_normalized"] if self._scale_invariant else ["f_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -177,7 +203,7 @@ class QuasisymmetryBoozer(_Objective):
         Returns
         -------
         f : ndarray
-            Symmetry breaking harmonics of B (T).
+            Symmetry breaking harmonics of B (T), dimensionless for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -187,13 +213,13 @@ class QuasisymmetryBoozer(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            matrix=constants["matrix"],
+            idx=constants["idx"],
             surf_batch_size=self._surf_batch_size,
         )
-        B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
-        B_mn = constants["matrix"] @ B_mn.T
         # output order = (rho, mn).flatten(), ie all the surfaces concatenated
         # one after the other
-        return B_mn[constants["idx"]].T.flatten()
+        return data[self._data_keys[0]].flatten()
 
     @property
     def helicity(self):
@@ -220,6 +246,14 @@ class QuasisymmetryBoozer(_Objective):
 class QuasisymmetryTwoTerm(_Objective):
     """Quasi-symmetry two-term error.
 
+    With B = ||𝐁||, ι the rotational transform, and G, I the Boozer currents:
+
+    f_C = [(M ι - N) (𝐁 × ∇ψ) - (M G + N I) 𝐁] ⋅ ∇B  (T³)
+
+    With ``scale_invariant`` this is divided by the local field strength cubed:
+
+    f̂_C = f_C / B³
+
     Parameters
     ----------
     eq : Equilibrium
@@ -229,6 +263,11 @@ class QuasisymmetryTwoTerm(_Objective):
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
+    scale_invariant : bool, optional
+        The scale_invariant version divides by the cube of the local field
+        strength, making the output dimensionless and invariant to the magnetic
+        field strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 
@@ -239,6 +278,7 @@ class QuasisymmetryTwoTerm(_Objective):
     _coordinates = "rtz"
     _units = "(T^3)"
     _print_value_fmt = "Quasi-symmetry two-term error: "
+    _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
     def __init__(
         self,
@@ -252,6 +292,7 @@ class QuasisymmetryTwoTerm(_Objective):
         deriv_mode="auto",
         grid=None,
         helicity=(1, 0),
+        scale_invariant=False,
         name="QS two-term",
         jac_chunk_size=None,
     ):
@@ -259,6 +300,10 @@ class QuasisymmetryTwoTerm(_Objective):
             target = 0
         self._grid = grid
         self.helicity = helicity
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -307,7 +352,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_C"]
+        self._data_keys = ["f_C_normalized"] if self._scale_invariant else ["f_C"]
 
         timer = Timer()
         if verbose > 0:
@@ -346,7 +391,8 @@ class QuasisymmetryTwoTerm(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Quasi-symmetry flux function error at each node (T^3), dimensionless
+            for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -358,7 +404,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-        return data["f_C"]
+        return data[self._data_keys[0]]
 
     @property
     def helicity(self):
@@ -384,6 +430,15 @@ class QuasisymmetryTwoTerm(_Objective):
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error.
 
+    With B = ||𝐁||:
+
+    f_T = ∇ψ × ∇B ⋅ ∇(𝐁 ⋅ ∇B)  (T⁴/m²)
+
+    With ``scale_invariant`` this is made dimensionless with the major radius and
+    the local field strength:
+
+    f̂_T = R² f_T / B⁴
+
     Parameters
     ----------
     eq : Equilibrium
@@ -391,6 +446,11 @@ class QuasisymmetryTripleProduct(_Objective):
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
+    scale_invariant : bool, optional
+        The scale_invariant version multiplies by R² and divides by the local B⁴,
+        making the output dimensionless and invariant to the magnetic field
+        strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 
@@ -401,6 +461,7 @@ class QuasisymmetryTripleProduct(_Objective):
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
     _print_value_fmt = "Quasi-symmetry error: "
+    _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
     def __init__(
         self,
@@ -413,12 +474,17 @@ class QuasisymmetryTripleProduct(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        scale_invariant=False,
         name="QS triple product",
         jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -450,7 +516,7 @@ class QuasisymmetryTripleProduct(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_T"]
+        self._data_keys = ["f_T_normalized"] if self._scale_invariant else ["f_T"]
 
         timer = Timer()
         if verbose > 0:
@@ -488,7 +554,8 @@ class QuasisymmetryTripleProduct(_Objective):
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^4/m^2).
+            Quasi-symmetry flux function error at each node (T^4/m^2),
+            dimensionless for `scale_invariant`.
 
         """
         constants = self._get_deprecated_constants(constants)
@@ -499,7 +566,7 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["f_T"]
+        return data[self._data_keys[0]]
 
 
 class Omnigenity(_Objective):

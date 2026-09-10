@@ -90,17 +90,17 @@ class TestSurfaceOmegaState:
 
     @pytest.mark.unit
     def test_change_resolution_preserves_omega(self):
-        """Changing (M, N, Mz, Nz) up or down must preserve the coefficients."""
+        """Changing (M, N, Mw, Nw) up or down must preserve the coefficients."""
         surf = _make_synthetic_surface()
         g = LinearGrid(M=4, N=4)
         w_old = surf.compute("omega", grid=g)["omega"]
-        for M, N, Mz, Nz in [(5, 5, 4, 4), (5, 5, 1, 1)]:
-            surf.change_resolution(M=M, N=N, Mz=Mz, Nz=Nz)
-            assert (surf.Mz, surf.Nz) == (Mz, Nz)
+        for M, N, Mw, Nw in [(5, 5, 4, 4), (5, 5, 1, 1)]:
+            surf.change_resolution(M=M, N=N, Mw=Mw, Nw=Nw)
+            assert (surf.Mw, surf.Nw) == (Mw, Nw)
             np.testing.assert_allclose(surf.compute("omega", grid=g)["omega"], w_old)
         # changing only M, N must not touch omega
         surf.change_resolution(M=8, N=8)
-        assert (surf.Mz, surf.Nz) == (1, 1)
+        assert (surf.Mw, surf.Nw) == (1, 1)
         np.testing.assert_allclose(surf.compute("omega", grid=g)["omega"], w_old)
 
     @pytest.mark.unit
@@ -135,7 +135,7 @@ class TestSurfaceFitting:
         truth = _make_synthetic_surface(NFP)
         T, ZE, coords = _sample_surface(truth)
         surf = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=NFP, sym=True
+            coords, T, zeta=ZE, M=4, N=4, Mw=2, Nw=2, NFP=NFP, sym=True
         )
         # evaluate both surfaces on a *different* grid
         tt = np.linspace(0.1, 2 * np.pi, 27, endpoint=False)
@@ -153,7 +153,7 @@ class TestSurfaceFitting:
         """Basis vectors of the fitted map agree with finite differences."""
         T, ZE, coords = _sample_surface(_make_synthetic_surface())
         surf = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=ZE, M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True
+            coords, T, zeta=ZE, M=4, N=4, Mw=2, Nw=2, NFP=1, sym=True
         )
         t0, z0 = np.array([0.7, 1.9, 4.1]), np.array([0.3, 2.2, 5.0])
         eps = 1e-6
@@ -171,7 +171,7 @@ class TestSurfaceFitting:
     def test_omega_extraction_from_angles(self):
         """Omega = phi - zeta is branch-cut immune, and zero when zeta = phi."""
         T, ZE, coords = _sample_surface(_make_synthetic_surface())
-        kw = dict(M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True)
+        kw = dict(M=4, N=4, Mw=2, Nw=2, NFP=1, sym=True)
         surf1 = FourierRZToroidalSurface.from_values(coords, T, zeta=ZE, **kw)
         # wrapping either angle into arbitrary 2*pi branches cannot change the
         # fit: omega comes from the periodic difference
@@ -188,7 +188,7 @@ class TestSurfaceFitting:
         # parameterizing by the physical angle gives omega = 0 exactly, and
         # omitting zeta gives no omega modes at all
         surf = FourierRZToroidalSurface.from_values(
-            coords, T, zeta=coords[:, 1], M=6, N=6, Mz=3, Nz=3, NFP=1, sym=True
+            coords, T, zeta=coords[:, 1], M=6, N=6, Mw=3, Nw=3, NFP=1, sym=True
         )
         np.testing.assert_allclose(np.asarray(surf.W_lmn), 0, atol=1e-12)
         no_zeta = FourierRZToroidalSurface.from_values(coords, T, M=6, N=6, sym=True)
@@ -200,7 +200,7 @@ class TestSurfaceFitting:
         T, ZE, coords = _sample_surface(_make_synthetic_surface())
         R, phi = coords[:, 0], coords[:, 1]
         xyz = np.array([R * np.cos(phi), R * np.sin(phi), coords[:, 2]]).T
-        kw = dict(M=4, N=4, Mz=2, Nz=2, NFP=1, sym=True)
+        kw = dict(M=4, N=4, Mw=2, Nw=2, NFP=1, sym=True)
         surf_rpz = FourierRZToroidalSurface.from_values(coords, T, zeta=ZE, **kw)
         surf_xyz = FourierRZToroidalSurface.from_values(
             xyz, T, zeta=ZE, basis="xyz", **kw
@@ -292,7 +292,7 @@ class TestEquilibriumOmega:
     def test_zero_omega_regression(self):
         """An eq with zero-valued omega modes matches one with no modes."""
         eq0 = Equilibrium(L=4, M=4, N=2, NFP=3, sym=True)
-        eq1 = Equilibrium(L=4, M=4, N=2, NFP=3, sym=True, Lz=2, Mz=2, Nz=2)
+        eq1 = Equilibrium(L=4, M=4, N=2, NFP=3, sym=True, Lw=2, Mw=2, Nw=2)
         assert eq0.W_basis.num_modes == 0 and eq1.W_basis.num_modes > 0
         np.testing.assert_allclose(np.asarray(eq1.W_lmn), 0)
         grid = LinearGrid(L=4, M=8, N=8, NFP=3)
@@ -308,7 +308,7 @@ class TestEquilibriumOmega:
 
         eq = desc.examples.get("DSHAPE")
         assert eq.W_basis.num_modes == 0 and eq.W_lmn.size == 0
-        assert eq.Lz == eq.Mz == eq.Nz == 0
+        assert eq.Lw == eq.Mw == eq.Nw == 0
         data = eq.compute(["omega", "phi", "|B|"], grid=LinearGrid(L=2, M=4, N=0))
         np.testing.assert_allclose(data["omega"], 0)
         assert np.all(np.isfinite(data["|B|"]))
@@ -316,7 +316,7 @@ class TestEquilibriumOmega:
     @pytest.mark.unit
     def test_phi_derivative_identities(self):
         """Derivatives of phi match those of omega, up to the 1 from zeta."""
-        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lz=2, Mz=2, Nz=2)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lw=2, Mw=2, Nw=2)
         rng = np.random.default_rng(3)
         eq.W_lmn = 0.02 * rng.standard_normal(eq.W_basis.num_modes)
         derivs = ["r", "t", "z", "rr", "tt", "zz", "rt", "rz", "tz"]
@@ -336,7 +336,7 @@ class TestEquilibriumOmega:
     @pytest.mark.unit
     def test_omega_derivatives_vs_finite_differences(self):
         """Transform-based omega derivatives agree with finite differences."""
-        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lz=2, Mz=2, Nz=2)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lw=2, Mw=2, Nw=2)
         rng = np.random.default_rng(5)
         eq.W_lmn = 0.02 * rng.standard_normal(eq.W_basis.num_modes)
         r = np.array([0.5, 0.7, 0.9])
@@ -361,7 +361,7 @@ class TestEquilibriumOmega:
         """All standard rtz quantities stay finite with nonzero omega."""
         from desc.compute import data_index, get_data_deps
 
-        eq = Equilibrium(L=4, M=4, N=2, NFP=3, sym=True, Lz=2, Mz=2, Nz=2)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=3, sym=True, Lw=2, Mw=2, Nw=2)
         rng = np.random.default_rng(7)
         eq.W_lmn = 0.01 * rng.standard_normal(eq.W_basis.num_modes)
         assert eq.is_nested()
@@ -418,7 +418,7 @@ class TestEquilibriumOmega:
         eq0 = Equilibrium(L=4, M=4, N=0, sym=True)
         eq0.solve(verbose=0, maxiter=25, ftol=1e-6)
 
-        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, Lz=0, Mz=0, Nz=2)
+        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, Lw=0, Mw=0, Nw=2)
         for attr, basis in [("R_lmn", "R_basis"), ("Z_lmn", "Z_basis")]:
             setattr(
                 eq1,
@@ -477,7 +477,7 @@ class TestEquilibriumOmega:
             W_lmn=np.array([0.1]),
             modes_W=np.array([[0, -1]]),
         )
-        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, surface=surf, Lz=0, Mz=0, Nz=1)
+        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, surface=surf, Lw=0, Mw=0, Nw=1)
         assert np.max(np.abs(np.asarray(eq1.W_lmn))) > 0  # initial guess has omega
         eq1.solve(verbose=0, maxiter=30, ftol=1e-6)
 
@@ -566,7 +566,7 @@ class TestNoSpuriousOmegaDOF:
         # a section is a constant-zeta object: omega is not a parameter at all
         sect = ZernikeRZToroidalSection(sym=sym)
         assert sect.W_basis.num_modes == 0 and "W_lmn" not in sect.dimensions
-        assert eq.Lz == eq.Mz == eq.Nz == 0
+        assert eq.Lw == eq.Mw == eq.Nw == 0
         np.testing.assert_allclose(
             surf.compute("omega", grid=LinearGrid(M=4, N=4))["omega"], 0
         )
@@ -581,16 +581,16 @@ class TestNoSpuriousOmegaDOF:
     def test_omega_can_still_be_requested(self):
         """Asking for omega resolution still builds the full asymmetric basis."""
         # asymmetric omega bases are twice the size of the symmetric ones
-        assert FourierRZToroidalSurface(sym=False, Mz=2, Nz=2).W_basis.num_modes == 25
-        assert FourierRZToroidalSurface(sym=True, Mz=2, Nz=2).W_basis.num_modes == 12
+        assert FourierRZToroidalSurface(sym=False, Mw=2, Nw=2).W_basis.num_modes == 25
+        assert FourierRZToroidalSurface(sym=True, Mw=2, Nw=2).W_basis.num_modes == 12
         # opting in after construction works too
         surf2 = FourierRZToroidalSurface(sym=False)
-        surf2.change_resolution(M=2, N=2, Mz=2, Nz=2)
+        surf2.change_resolution(M=2, N=2, Mw=2, Nw=2)
         assert surf2.W_basis.num_modes == 25
-        eq = Equilibrium(L=4, M=4, N=2, sym=False, Lz=2, Mz=1, Nz=1)
+        eq = Equilibrium(L=4, M=4, N=2, sym=False, Lw=2, Mw=1, Nw=1)
         n_before = eq.W_basis.num_modes
         assert n_before > 0
-        eq.change_resolution(Lz=4, Mz=2, Nz=2)
+        eq.change_resolution(Lw=4, Mw=2, Nw=2)
         assert eq.W_basis.num_modes > n_before
 
     @pytest.mark.unit
@@ -803,7 +803,7 @@ class TestOmegaConstraints:
 
     @staticmethod
     def _eq(sym=True):
-        return Equilibrium(L=4, M=4, N=2, NFP=2, sym=sym, Lz=2, Mz=2, Nz=2)
+        return Equilibrium(L=4, M=4, N=2, NFP=2, sym=sym, Lw=2, Mw=2, Nw=2)
 
     @pytest.mark.unit
     def test_fix_boundary_and_axis_W_with_explicit_modes(self):
@@ -821,7 +821,7 @@ class TestOmegaConstraints:
         con_all.build()
         assert con_all.dim_f == eq.surface.W_basis.num_modes
 
-        # the axis omega basis must be sized from the equilibrium's Nz, or every
+        # the axis omega basis must be sized from the equilibrium's Nw, or every
         # axis omega constraint below is a silent no-op
         assert eq.axis.W_basis.num_modes > 0
         con_axis = FixAxisW(eq=eq, modes=eq.axis.W_basis.modes[:2])
@@ -946,7 +946,7 @@ class TestOmegaSmallBranches:
         """Interior omega is held fixed only when the equilibrium has omega."""
         from desc.objectives import get_fixed_axis_constraints
 
-        eq = Equilibrium(L=4, M=4, N=2, NFP=2, Lz=2, Mz=2, Nz=2)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, Lw=2, Mw=2, Nw=2)
         names = [type(con).__name__ for con in get_fixed_axis_constraints(eq)]
         assert "FixOmegaInterior" in names and "FixAxisW" in names
         eq0 = Equilibrium(L=4, M=4, N=2, NFP=2)
@@ -956,7 +956,7 @@ class TestOmegaSmallBranches:
     @pytest.mark.unit
     def test_surface_setter_grows_omega_resolution(self):
         """A richer boundary grows the equilibrium basis instead of truncating."""
-        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lz=2, Mz=1, Nz=1)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lw=2, Mw=1, Nw=1)
         surf = FourierRZToroidalSurface(
             R_lmn=np.array([10.0, 1.0]),
             Z_lmn=np.array([-1.0]),
@@ -964,8 +964,8 @@ class TestOmegaSmallBranches:
             modes_Z=np.array([[-1, 0]]),
             NFP=2,
             sym=True,
-            Mz=3,
-            Nz=2,
+            Mw=3,
+            Nw=2,
         )
         # mark the highest mode of the richer basis so the resize can be traced
         mode = surf.W_basis.modes[-1]
@@ -974,16 +974,16 @@ class TestOmegaSmallBranches:
         surf.W_lmn = W
 
         eq.surface = surf
-        assert (eq.Mz, eq.Nz) == (3, 2)
-        assert eq.Lz == 3  # ansi indexing ties radial degree to poloidal
+        assert (eq.Mw, eq.Nw) == (3, 2)
+        assert eq.Lw == 3  # ansi indexing ties radial degree to poloidal
         idx = eq.surface.W_basis.get_idx(*mode)
         np.testing.assert_allclose(np.asarray(eq.surface.W_lmn)[idx], 0.05)
 
     @pytest.mark.unit
     def test_resolution_summary_reports_omega(self, capsys):
         """The omega resolution line appears only when omega modes exist."""
-        Equilibrium(L=4, M=4, N=2, NFP=2, Lz=2, Mz=2, Nz=2).resolution_summary()
-        assert "Omega spectral resolution (Lz,Mz,Nz)=(2,2,2)" in capsys.readouterr().out
+        Equilibrium(L=4, M=4, N=2, NFP=2, Lw=2, Mw=2, Nw=2).resolution_summary()
+        assert "Omega spectral resolution (Lw,Mw,Nw)=(2,2,2)" in capsys.readouterr().out
         Equilibrium(L=4, M=4, N=2, NFP=2).resolution_summary()
         assert "Omega spectral resolution" not in capsys.readouterr().out
 
@@ -1000,7 +1000,7 @@ class TestOmegaSmallBranches:
         deltas = get_deltas({"surface": s1}, {"surface": s2})
         np.testing.assert_allclose(deltas["Wb_lmn"], np.asarray(s2.W_lmn) - s1.W_lmn)
 
-        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lz=2, Mz=2, Nz=2)
+        eq = Equilibrium(L=4, M=4, N=2, NFP=2, sym=True, Lw=2, Mw=2, Nw=2)
         a1, a2 = eq.axis, eq.axis.copy()
         assert a2.W_n.size > 0
         a2.W_n = np.asarray(a2.W_n) + 0.01
@@ -1012,7 +1012,7 @@ class TestOmegaSmallBranches:
         """A boundary omega delta perturbs the interior omega with it."""
         from desc.perturbations import get_deltas
 
-        eq = Equilibrium(L=3, M=3, N=1, NFP=2, sym=True, Lz=2, Mz=1, Nz=1)
+        eq = Equilibrium(L=3, M=3, N=1, NFP=2, sym=True, Lw=2, Mw=1, Nw=1)
         s2 = eq.surface.copy()
         W = np.asarray(s2.W_lmn).copy()
         W[0] += 0.01
@@ -1051,7 +1051,7 @@ class TestContinuationWithOmega:
         # omega = 0.3 sin(3 zeta) leaves min(1 + omega_zeta) = 0.126, so
         # doubling it would invert the chart outright rather than merely
         # overshoot. It also converges without backtracking, unlike small omega.
-        eq = Equilibrium(L=4, M=4, N=1, NFP=3, sym=True, surface=surf, Nz=1)
+        eq = Equilibrium(L=4, M=4, N=1, NFP=3, sym=True, surface=surf, Nw=1)
         fam = solve_continuation_automatic(eq.copy(), verbose=0, maxiter=10, ftol=1e-3)
         final = fam[-1]
         # the boundary is fixed by the constraints, so this is exact

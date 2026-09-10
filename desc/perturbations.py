@@ -57,8 +57,8 @@ def get_deltas(things1, things2):  # noqa: C901
             s1 = s1.copy()
             s2 = s2.copy()
             warnif(s1.M > s2.M or s1.N > s2.N, msg="The target surface" + msg)
-            if hasattr(s1, "Mz") and hasattr(s2, "Mz"):
-                s1.change_resolution(s2.L, s2.M, s2.N, Mz=s2.Mz, Nz=s2.Nz)
+            if hasattr(s1, "Mw") and hasattr(s2, "Mw"):
+                s1.change_resolution(s2.L, s2.M, s2.N, Mw=s2.Mw, Nw=s2.Nw)
             else:
                 s1.change_resolution(s2.L, s2.M, s2.N)
             if not jnp.allclose(s2.R_lmn, s1.R_lmn):

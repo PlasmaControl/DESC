@@ -63,7 +63,7 @@ class FourierRZToroidalSurface(Surface):
         by phi = zeta + omega. Keyword only. Default is zero, ie phi = zeta.
     modes_W : array-like, shape(k,2)
         poloidal and toroidal mode numbers [m,n] for W_lmn. Keyword only.
-    Mz, Nz : int or None
+    Mw, Nw : int or None
         Maximum poloidal and toroidal mode numbers of the omega basis. Keyword
         only. Default to the maximum from modes_W, ie zero if omega is not
         given.
@@ -85,8 +85,8 @@ class FourierRZToroidalSurface(Surface):
         "_R_basis",
         "_Z_basis",
         "_W_basis",
-        "_Mz",
-        "_Nz",
+        "_Mw",
+        "_Nw",
     ]
     # surfaces saved before the generalized toroidal angle existed have no
     # omega state; _set_up defaults it to zero (zeta = phi)
@@ -109,8 +109,8 @@ class FourierRZToroidalSurface(Surface):
         *,
         W_lmn=None,
         modes_W=None,
-        Mz=None,
-        Nz=None,
+        Mw=None,
+        Nw=None,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -151,13 +151,13 @@ class FourierRZToroidalSurface(Surface):
         self._L = 0
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
-        Mz = check_nonnegint(Mz, "Mz")
-        Nz = check_nonnegint(Nz, "Nz")
+        Mw = check_nonnegint(Mw, "Mw")
+        Nw = check_nonnegint(Nw, "Nw")
         NFP = check_posint(NFP, "NFP", False)
         self._M = setdefault(M, max(MR, MZ))
         self._N = setdefault(N, max(NR, NZ))
-        self._Mz = int(setdefault(Mz, MW))
-        self._Nz = int(setdefault(Nz, NW))
+        self._Mw = int(setdefault(Mw, MW))
+        self._Nw = int(setdefault(Nw, NW))
         self._NFP = NFP
 
         if sym == "auto":
@@ -186,9 +186,9 @@ class FourierRZToroidalSurface(Surface):
         # basis must be empty: a non-symmetric DoubleFourierSeries at M=N=0
         # still carries the (0,0) mode, a spurious degree of freedom on every
         # asymmetric surface. The symmetric case is empty already, sin(0) = 0.
-        no_omega = not modes_W.size and self._Mz == 0 and self._Nz == 0
+        no_omega = not modes_W.size and self._Mw == 0 and self._Nw == 0
         self._W_basis = DoubleFourierSeries(
-            M=self._Mz, N=self._Nz, NFP=NFP, sym="sin" if (sym or no_omega) else False
+            M=self._Mw, N=self._Nw, NFP=NFP, sym="sin" if (sym or no_omega) else False
         )
 
         self._R_lmn = copy_coeffs(R_lmn, modes_R, self.R_basis.modes[:, 1:])
@@ -221,8 +221,8 @@ class FourierRZToroidalSurface(Surface):
             self._W_basis = DoubleFourierSeries(M=0, N=0, NFP=self.NFP, sym="sin")
         if not hasattr(self, "_W_lmn") or self._W_lmn is None:
             self._W_lmn = np.zeros(self.W_basis.num_modes)
-        self._Mz = int(self.W_basis.M)
-        self._Nz = int(self.W_basis.N)
+        self._Mw = int(self.W_basis.M)
+        self._Nw = int(self.W_basis.N)
 
     def _flip_orientation(self):
         """Flip the orientation of theta."""
@@ -252,14 +252,14 @@ class FourierRZToroidalSurface(Surface):
         return self._W_basis
 
     @property
-    def Mz(self):
+    def Mw(self):
         """int: Maximum poloidal mode number of the omega basis."""
-        return self._Mz
+        return self._Mw
 
     @property
-    def Nz(self):
+    def Nw(self):
         """int: Maximum toroidal mode number of the omega basis."""
-        return self._Nz
+        return self._Nw
 
     @property
     def rho(self):
@@ -276,7 +276,7 @@ class FourierRZToroidalSurface(Surface):
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution.
 
-        Resolutions ``Mz``, ``Nz`` of the omega basis may be passed as keyword
+        Resolutions ``Mw``, ``Nw`` of the omega basis may be passed as keyword
         arguments; if not given they are preserved.
         """
         assert (
@@ -292,8 +292,8 @@ class FourierRZToroidalSurface(Surface):
         N = kwargs.pop("N", None)
         NFP = kwargs.pop("NFP", None)
         sym = kwargs.pop("sym", None)
-        Mz = kwargs.pop("Mz", None)
-        Nz = kwargs.pop("Nz", None)
+        Mw = kwargs.pop("Mw", None)
+        Nw = kwargs.pop("Nw", None)
         assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
         if L is not None:
             warnings.warn(
@@ -306,24 +306,24 @@ class FourierRZToroidalSurface(Surface):
 
         M = check_nonnegint(M, "M")
         N = check_nonnegint(N, "N")
-        Mz = check_nonnegint(Mz, "Mz")
-        Nz = check_nonnegint(Nz, "Nz")
+        Mw = check_nonnegint(Mw, "Mw")
+        Nw = check_nonnegint(Nw, "Nw")
         NFP = check_posint(NFP, "NFP")
         self._NFP = int(NFP if NFP is not None else self.NFP)
 
         if (
             ((N is not None) and (N != self.N))
             or ((M is not None) and (M != self.M))
-            or ((Mz is not None) and (Mz != self.Mz))
-            or ((Nz is not None) and (Nz != self.Nz))
+            or ((Mw is not None) and (Mw != self.Mw))
+            or ((Nw is not None) and (Nw != self.Nw))
             or (NFP is not None)
             or ((sym is not None) and (sym != self.sym))
         ):
             self._sym = sym if sym is not None else self.sym
             M = int(M if M is not None else self.M)
             N = int(N if N is not None else self.N)
-            Mz = int(Mz if Mz is not None else self.Mz)
-            Nz = int(Nz if Nz is not None else self.Nz)
+            Mw = int(Mw if Mw is not None else self.Mw)
+            Nw = int(Nw if Nw is not None else self.Nw)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             W_modes_old = self.W_basis.modes
@@ -334,18 +334,18 @@ class FourierRZToroidalSurface(Surface):
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             W_sym = "sin" if self.sym else self.sym
-            if not W_modes_old.size and Mz == 0 and Nz == 0:
+            if not W_modes_old.size and Mw == 0 and Nw == 0:
                 # no omega before and none asked for: keep the basis empty, see
                 # the note in __init__
                 W_sym = "sin"
-            self.W_basis.change_resolution(M=Mz, N=Nz, NFP=self.NFP, sym=W_sym)
+            self.W_basis.change_resolution(M=Mw, N=Nw, NFP=self.NFP, sym=W_sym)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
             self.W_lmn = copy_coeffs(self.W_lmn, W_modes_old, self.W_basis.modes)
             self._M = M
             self._N = N
-            self._Mz = Mz
-            self._Nz = Nz
+            self._Mw = Mw
+            self._Nw = Nw
 
     @optimizable_parameter
     @property
@@ -572,8 +572,8 @@ class FourierRZToroidalSurface(Surface):
         rcond=None,
         w=None,
         *,
-        Mz=None,
-        Nz=None,
+        Mw=None,
+        Nw=None,
         basis="rpz",
     ):
         """Create a surface from given real space coordinates.
@@ -631,7 +631,7 @@ class FourierRZToroidalSurface(Surface):
         w : array-like, shape(num_points,)
             Weights to apply to the sample coordinates. For gaussian
             uncertainties, use 1/sigma (not 1/sigma**2).
-        Mz, Nz : int
+        Mw, Nw : int
             poloidal and toroidal resolution of the basis used to fit omega.
             Ignored when ``zeta`` is None. Default to M and N respectively.
         basis : {"rpz", "xyz"}
@@ -646,8 +646,8 @@ class FourierRZToroidalSurface(Surface):
         """
         M = check_nonnegint(M, "M", False)
         N = check_nonnegint(N, "N", False)
-        Mz = check_nonnegint(Mz, "Mz")
-        Nz = check_nonnegint(Nz, "Nz")
+        Mw = check_nonnegint(Mw, "Mw")
+        Nw = check_nonnegint(Nw, "Nw")
         NFP = check_posint(NFP, "NFP", False)
         errorif(
             basis not in ["rpz", "xyz"],
@@ -701,10 +701,10 @@ class FourierRZToroidalSurface(Surface):
             # input is on, exact while |omega| < pi. The unit toroidal winding
             # is carried by the explicit zeta term in phi = zeta + omega.
             omega = np.arctan2(np.sin(phi - zeta), np.cos(phi - zeta))
-            Mz = int(setdefault(Mz, M))
-            Nz = int(setdefault(Nz, N))
+            Mw = int(setdefault(Mw, M))
+            Nw = int(setdefault(Nw, N))
             W_basis = DoubleFourierSeries(
-                M=Mz, N=Nz, NFP=NFP, sym="sin" if sym else False
+                M=Mw, N=Nw, NFP=NFP, sym="sin" if sym else False
             )
             Wb_lmn = _fit(omega, W_basis)
             modes_W = W_basis.modes[:, 1:]
@@ -749,8 +749,8 @@ class FourierRZToroidalSurface(Surface):
         if not self.W_basis.num_modes:
             return 1.0
         grid = LinearGrid(
-            M=2 * max(self.M, self.Mz) + 4,
-            N=2 * max(self.N, self.Nz) + 4,
+            M=2 * max(self.M, self.Mw) + 4,
+            N=2 * max(self.N, self.Nw) + 4,
             NFP=self.NFP,
         )
         transform = Transform(grid, self.W_basis, derivs=[[0, 0, 1]])

@@ -751,9 +751,6 @@ class ProximalProjection(ObjectiveFunction):
         # we will need to set this static attribute, only possible if tuple
         self._dimc_per_thing = tuple(self._dimc_per_thing)
 
-        # Note: the full state vector version of the feasible tangents used to be
-        # built here, but its eq block is just _eq_solve_objective._feasible_tangents
-        # and the other blocks are identity, so _proximal_get_tangents uses that.
 
         ## history and caching
         # first, ensure equilibrium is solved to the

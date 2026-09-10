@@ -740,7 +740,7 @@ class BoundaryWSelfConsistency(_Objective):
                 Js.append(j.flatten())
             else:
                 raise NotImplementedError(
-                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                    "bdry_mode is not lcfs, yell at Yigit to finish poincare stuff"
                 )
         if eq.W_basis.num_modes:
             Js = np.array(Js)

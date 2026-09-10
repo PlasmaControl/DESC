@@ -851,14 +851,15 @@ class TestOmegaConstraints:
     @pytest.mark.unit
     @pytest.mark.parametrize("sym", [True, False])
     def test_fix_omega_gauge(self, sym):
-        """The gauge constraint removes the (m=0, n=0) omega modes."""
+        """The gauge constraint removes all n=0 omega modes, any (l, m)."""
         eq = self._eq(sym=sym)
         con = FixOmegaGauge(eq=eq)
         con.build()
         modes = eq.W_basis.modes
-        expected = np.sum((modes[:, 1] == 0) & (modes[:, 2] == 0))
-        # a sin basis has no (0, 0) modes, so the gauge is already fixed
-        assert expected == 0 if sym else expected > 0
+        expected = np.sum(modes[:, 2] == 0)
+        # a sin basis still has no (m=0, n=0) mode, but can have other n=0
+        # modes at m != 0, which symmetry alone does not remove
+        assert expected > 0
         assert con.dim_f == expected
 
     @pytest.mark.unit

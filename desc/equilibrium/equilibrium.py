@@ -1722,12 +1722,20 @@ class Equilibrium(IOAble, Optimizable):
         # grow the equilibrium's resolution rather than silently truncating the
         # modes of the new boundary, for R/Z and omega alike. Every
         # FourierRZToroidalSurface has Mw/Nw, so no hasattr guard is needed.
+        # L/Lw are only recomputed from the ansi/fringe M-formula when M/N (or
+        # Mw/Nw) actually grow -- otherwise a fringe-indexed equilibrium whose
+        # L was deliberately set below 2*M gets silently bumped up for no
+        # reason, even when nothing about the surface changed.
         M = max(new.M, self.M)
         N = max(new.N, self.N)
-        L = max(self.L, M if (self.spectral_indexing == "ansi") else 2 * M)
+        L = self.L
+        if M > self.M or N > self.N:
+            L = max(self.L, M if (self.spectral_indexing == "ansi") else 2 * M)
         Mw = max(new.Mw, self.Mw)
         Nw = max(new.Nw, self.Nw)
-        Lw = max(self.Lw, Mw if (self.spectral_indexing == "ansi") else 2 * Mw)
+        Lw = self.Lw
+        if Mw > self.Mw or Nw > self.Nw:
+            Lw = max(self.Lw, Mw if (self.spectral_indexing == "ansi") else 2 * Mw)
         if (L, M, N, Lw, Mw, Nw) != (self.L, self.M, self.N, self.Lw, self.Mw, self.Nw):
             self.change_resolution(L=L, M=M, N=N, Lw=Lw, Mw=Mw, Nw=Nw)
         new.change_resolution(self.M, self.N, sym=self.sym, Mw=self.Mw, Nw=self.Nw)

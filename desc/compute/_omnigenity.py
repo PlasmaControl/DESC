@@ -755,6 +755,26 @@ def _f_C(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="f_C_normalized",
+    label="\\frac{[(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi)"
+    + " - (M G + N I) \\mathbf{B}] \\cdot \\nabla B}{B^3}",
+    units="~",
+    units_long="None",
+    description="Two-term quasisymmetry metric, normalized by the cube of the "
+    "local field strength",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["f_C", "|B|"],
+)
+def _f_C_normalized(params, transforms, profiles, data, **kwargs):
+    data["f_C_normalized"] = data["f_C"] / data["|B|"] ** 3
+    return data
+
+
+@register_compute_fun(
     name="f_T",
     label="\\nabla \\psi \\times \\nabla B \\cdot \\nabla "
     + "(\\mathbf{B} \\cdot \\nabla B)",
@@ -773,6 +793,84 @@ def _f_T(params, transforms, profiles, data, **kwargs):
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="f_T_normalized",
+    label="\\frac{R^2 \\nabla \\psi \\times \\nabla B \\cdot \\nabla "
+    + "(\\mathbf{B} \\cdot \\nabla B)}{B^4}",
+    units="~",
+    units_long="None",
+    description="Triple product quasisymmetry metric, normalized by the major "
+    "radius and the local field strength",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["f_T", "|B|", "R"],
+)
+def _f_T_normalized(params, transforms, profiles, data, **kwargs):
+    data["f_T_normalized"] = data["R"] ** 2 * data["f_T"] / data["|B|"] ** 4
+    return data
+
+
+@register_compute_fun(
+    name="f_B",
+    label="\\{B_{mn}^{\\mathrm{Boozer}}(\\rho) \\vert m/n \\neq M/N\\}",
+    units="T",
+    units_long="Tesla",
+    description="Symmetry breaking Boozer harmonics of magnetic field, "
+    "shape (num rho, num modes)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn_B"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True, "sym": False},
+    matrix="ndarray: Transform matrix from the double-Fourier coefficients to the "
+    "double-angle coefficients, as returned by ``ptolemy_linear_transform``.",
+    idx="ndarray: Indices of the symmetry breaking modes, as returned by "
+    "``ptolemy_linear_transform``.",
+)
+def _f_B(params, transforms, profiles, data, **kwargs):
+    B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1))
+    # B_mn has shape (num modes, num rho)
+    B_mn = kwargs["matrix"] @ B_mn.T
+    data["f_B"] = B_mn[kwargs["idx"]].T
+    return data
+
+
+@register_compute_fun(
+    name="f_B_normalized",
+    label="\\{B_{mn}^{\\mathrm{Boozer}}(\\rho) \\vert m/n \\neq M/N\\} / "
+    "(\\sum_{mn} B_{mn}^{\\mathrm{Boozer}}(\\rho)^2)^{1/2}",
+    units="~",
+    units_long="None",
+    description="Symmetry breaking Boozer harmonics of magnetic field, normalized "
+    "by the norm of all the harmonics on that surface, shape (num rho, num modes)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn_B"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True, "sym": False},
+    matrix="ndarray: Transform matrix from the double-Fourier coefficients to the "
+    "double-angle coefficients, as returned by ``ptolemy_linear_transform``.",
+    idx="ndarray: Indices of the symmetry breaking modes, as returned by "
+    "``ptolemy_linear_transform``.",
+)
+def _f_B_normalized(params, transforms, profiles, data, **kwargs):
+    B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1))
+    # B_mn has shape (num modes, num rho), normalize each surface
+    B_mn = kwargs["matrix"] @ B_mn.T
+    norm = jnp.linalg.norm(B_mn, axis=0)
+    data["f_B_normalized"] = (B_mn[kwargs["idx"]] / norm).T
     return data
 
 

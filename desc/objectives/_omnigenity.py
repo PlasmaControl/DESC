@@ -149,7 +149,7 @@ class QuasisymmetryBoozer(_Objective):
             "resolution for surface averages",
         )
 
-        self._data_keys = ["|B|_mn_B"]
+        self._data_keys = ["f_B_normalized"] if self._scale_invariant else ["f_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -213,18 +213,13 @@ class QuasisymmetryBoozer(_Objective):
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            matrix=constants["matrix"],
+            idx=constants["idx"],
             surf_batch_size=self._surf_batch_size,
         )
-        B_mn = data["|B|_mn_B"].reshape((constants["transforms"]["grid"].num_rho, -1))
-        B_mn = constants["matrix"] @ B_mn.T
         # output order = (rho, mn).flatten(), ie all the surfaces concatenated
         # one after the other
-        if not self._scale_invariant:
-            return B_mn[constants["idx"]].T.flatten()
-        else:
-            # B_mn has shape (num modes, num rho), normalize each surface
-            f = B_mn[constants["idx"]] / jnp.linalg.norm(B_mn, axis=0)
-            return f.T.flatten()
+        return data[self._data_keys[0]].flatten()
 
     @property
     def helicity(self):
@@ -357,9 +352,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_C"]
-        if self._scale_invariant:
-            self._data_keys += ["|B|"]
+        self._data_keys = ["f_C_normalized"] if self._scale_invariant else ["f_C"]
 
         timer = Timer()
         if verbose > 0:
@@ -411,10 +404,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-        if not self._scale_invariant:
-            return data["f_C"]
-        else:
-            return data["f_C"] / data["|B|"] ** 3
+        return data[self._data_keys[0]]
 
     @property
     def helicity(self):
@@ -526,9 +516,7 @@ class QuasisymmetryTripleProduct(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_T"]
-        if self._scale_invariant:
-            self._data_keys += ["R", "|B|"]
+        self._data_keys = ["f_T_normalized"] if self._scale_invariant else ["f_T"]
 
         timer = Timer()
         if verbose > 0:
@@ -578,10 +566,7 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        if not self._scale_invariant:
-            return data["f_T"]
-        else:
-            return data["R"] ** 2 * data["f_T"] / data["|B|"] ** 4
+        return data[self._data_keys[0]]
 
 
 class Omnigenity(_Objective):

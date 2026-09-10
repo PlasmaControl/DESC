@@ -123,17 +123,14 @@ class FourierRZCurve(Curve):
             modes_Z = np.array([0])
 
         modes_R, modes_Z, modes_W = (
-            np.asarray(modes_R),
-            np.asarray(modes_Z),
+            np.asarray(modes_R, dtype=int),
+            np.asarray(modes_Z, dtype=int),
             np.asarray(modes_W, dtype=int),
         )
 
         assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
         assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
         assert W_n.size == modes_W.size, "W_n size and modes_W must be the same size"
-
-        assert issubclass(modes_R.dtype.type, np.integer)
-        assert issubclass(modes_Z.dtype.type, np.integer)
 
         if sym == "auto":
             # omega is odd under stellarator symmetry, like Z

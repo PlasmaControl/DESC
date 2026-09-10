@@ -1563,15 +1563,20 @@ def plot_fsa(  # noqa: C901
     return fig, ax
 
 
-def _phi_to_zeta_bisect(eq, nodes, niter=48):
-    """Invert phi = zeta + omega(rho, theta, zeta) for zeta, without Newton.
+def _phi_to_zeta_bisect(eq, nodes, niter=24):
+    """Invert phi = zeta + omega(rho, theta, zeta) for zeta, safeguarded Newton.
 
     Only zeta changes, so this is one dimensional per node. A valid chart has
     ``dphi/dzeta > 0`` and ``|omega| < pi``, so ``phi(zeta)`` is increasing and
-    ``[phi - pi, phi + pi]`` brackets the unique root; bisection on that bracket
-    cannot land on the wrong branch, unlike the Newton solve in
+    ``[phi - pi, phi + pi]`` brackets the unique root; maintaining that bracket
+    cannot land on the wrong branch, unlike the plain Newton solve in
     ``map_coordinates`` started from ``zeta = phi`` (see
-    ``_find_failed_phi_inversion``). Returns ``nodes`` unchanged with no omega.
+    ``_find_failed_phi_inversion``). Bisection alone converges only
+    logarithmically; a Newton step is taken every iteration using ``phi_z``
+    (dphi/dzeta), falling back to a bisection step only when Newton would leave
+    the bracket -- same safeguarding pattern as the trust region subproblem
+    solve in ``desc/optimize/tr_subproblems.py``. Returns ``nodes`` unchanged
+    with no omega.
     """
     W_basis = getattr(eq, "W_basis", None)
     if W_basis is None or W_basis.num_modes == 0:
@@ -1581,17 +1586,27 @@ def _phi_to_zeta_bisect(eq, nodes, niter=48):
     lo = phi_target - np.pi
     hi = phi_target + np.pi
 
-    def phi_at(zeta):
+    def phi_and_dphi(zeta):
         n = nodes.copy()
         n[:, 2] = zeta
-        return np.asarray(eq.compute("phi", grid=Grid(n, sort=False))["phi"])
+        data = eq.compute(["phi", "phi_z"], grid=Grid(n, sort=False))
+        return np.asarray(data["phi"]), np.asarray(data["phi_z"])
 
+    zeta = 0.5 * (lo + hi)
     for _ in range(niter):
-        mid = 0.5 * (lo + hi)
-        too_big = phi_at(mid) > phi_target
-        hi = np.where(too_big, mid, hi)
-        lo = np.where(too_big, lo, mid)
-    nodes[:, 2] = 0.5 * (lo + hi)
+        phi, dphi_dzeta = phi_and_dphi(zeta)
+        resid = phi - phi_target
+        too_big = resid > 0
+        hi = np.where(too_big, zeta, hi)
+        lo = np.where(too_big, lo, zeta)
+        newton = zeta - resid / dphi_dzeta
+        # non-strict: once converged, newton == zeta == lo (or hi) exactly,
+        # and that must still count as in-bracket or the next iteration
+        # falls back to bisection on a bracket collapsed to one side,
+        # discarding the converged root.
+        in_bracket = (newton >= lo) & (newton <= hi)
+        zeta = np.where(in_bracket, newton, 0.5 * (lo + hi))
+    nodes[:, 2] = zeta
     return nodes
 
 

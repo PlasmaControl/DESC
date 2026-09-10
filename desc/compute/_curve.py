@@ -1518,8 +1518,6 @@ def _x_sss_SurfaceCurve(params, transforms, profiles, data, **kwargs):
     z_ss = data["zeta_ss"]
     z_sss = data["zeta_sss"]
 
-    # rebuilt here rather than read from data["x_ss"], which carries the rigid
-    # transform and is expressed in the basis at phi, not at zeta
     xss_R = (
         R_tt * (t_s**2)
         + 2 * R_tz * t_s * z_s

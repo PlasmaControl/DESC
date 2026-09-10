@@ -639,13 +639,12 @@ class SurfaceCurve(Curve):
     the surface and its underlying parameters.
     The surface's params are optimizable, so
     optimization with fixed surface should include
-    a FixParameters call. If this surface
-    appears across multiple objectives, should use
-    the objective SurfaceCurveConsistency.
-
-    Note: Optimizing a
-    SurfaceCurve should generally include a
-    FixParameters(curve, {"rotmat": True, "shift": True}).
+    a FixParameters call. If the surface changes
+    during optimization and is optimized by more
+    than one objective (e.g. both the SurfaceCurve
+    and another object depend on the surface), then
+    the objective SurfaceCurveConsistency should be
+    used as a constraint.
 
     Parameters
     ----------

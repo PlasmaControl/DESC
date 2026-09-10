@@ -37,12 +37,12 @@ __all__ = [
 
 
 class FourierRZCurve(Curve):
-    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle phi.
+    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle s.
 
     When a nonzero ``W_n`` is given, the curve parameter ``s`` is a generalized
     toroidal angle and the physical cylindrical angle is
     ``phi = s + W(s)``, with W a periodic Fourier series. The default W = 0
-    recovers the standard parameterization by the cylindrical angle.
+    recovers the standard parameterization by the cylindrical angle, ie s = phi.
 
     Parameters
     ----------

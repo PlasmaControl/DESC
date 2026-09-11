@@ -419,9 +419,9 @@ class TestEquilibriumOmega:
 
         w7x = desc.examples.get("W7-X")
         kw = dict(
-            L=4,
-            M=4,
-            N=4,
+            L=6,
+            M=6,
+            N=6,
             NFP=w7x.NFP,
             sym=True,
             surface=w7x.surface,
@@ -429,33 +429,39 @@ class TestEquilibriumOmega:
             iota=w7x.iota,
             Psi=w7x.Psi,
         )
-        eq0 = Equilibrium(**kw)
-        eq0.solve(verbose=0, maxiter=40, ftol=1e-6)
-
-        eq1 = Equilibrium(**kw, Lw=2, Mw=2, Nw=2)
+        # at this resolution the boundary's own initial guess isn't nested;
+        # DESC auto-refines it (see initial_guess.py), which is the intended
+        # behavior and not something this test is checking.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Surfaces from initial guess")
+            eq0 = Equilibrium(**kw)
+            eq1 = Equilibrium(**kw, Lw=2, Mw=2, Nw=2)
+        eq0.solve(verbose=0, maxiter=50, ftol=1e-6)
         constraints = get_fixed_boundary_constraints(eq=eq1)
         constraints = tuple(
             c for c in constraints if not isinstance(c, FixOmegaInterior)
         )
-        eq1.solve(constraints=constraints, verbose=0, maxiter=40, ftol=1e-6)
+        eq1.solve(constraints=constraints, verbose=0, maxiter=50, ftol=1e-6)
         assert np.max(np.abs(np.asarray(eq1.W_lmn))) > 1e-4  # interior omega moved
 
         # boundary omega = 0 in both, so A, V, S, a_major/a_minor (defined on
         # or derived from the boundary/whole-volume shape) don't depend on
-        # the interior chart and must match to solver precision.
-        grid = LinearGrid(L=8, M=10, N=10, NFP=w7x.NFP)
+        # the interior chart at all: they match to machine precision, not
+        # just solver precision.
+        grid = LinearGrid(L=12, M=14, N=14, NFP=w7x.NFP)
         gkw = dict(grid=grid, override_grid=False)
         for key in ["V", "S", "A", "a_major/a_minor"]:
             v0 = np.asarray(eq0.compute(key, **gkw)[key])
             v1 = np.asarray(eq1.compute(key, **gkw)[key])
-            np.testing.assert_allclose(v1, v0, rtol=1e-6, err_msg=key)
+            np.testing.assert_allclose(v1, v0, rtol=1e-10, err_msg=key)
 
         # |B| on the boundary itself (omega = 0 there for both) should also
-        # match, up to the two independent solves' finite ftol.
-        bgrid = LinearGrid(rho=1.0, M=10, N=10, NFP=w7x.NFP)
+        # match, up to the two independent solves' finite ftol -- this part
+        # is resolution-limited like |F|_normalized, so it tightens with L/M/N.
+        bgrid = LinearGrid(rho=1.0, M=14, N=14, NFP=w7x.NFP)
         b0 = np.asarray(eq0.compute("|B|", grid=bgrid)["|B|"])
         b1 = np.asarray(eq1.compute("|B|", grid=bgrid)["|B|"])
-        np.testing.assert_allclose(b1, b0, rtol=1e-2)
+        np.testing.assert_allclose(b1, b0, rtol=2e-3)
         assert eq1.is_nested()
 
     @pytest.mark.unit

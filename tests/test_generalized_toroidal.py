@@ -358,6 +358,40 @@ class TestEquilibriumOmega:
             np.testing.assert_allclose(d[key], fd, rtol=1e-5, atol=1e-8, err_msg=key)
 
     @pytest.mark.unit
+    def test_basis_vectors_vs_finite_differences(self, eq_omega):
+        """Covariant basis vectors and their first derivs match FD, real omega eq.
+
+        Extends test_omega_derivatives_vs_finite_differences (which only checks
+        omega's own r/t/z derivatives) to check they propagate correctly into
+        e_rho/e_theta/e_zeta and their r/t/z derivatives. Every check finite-
+        differences an exact analytic quantity, so truncation error is O(eps**2)
+        throughout; measured max relative error at eps=1e-5 is ~7e-9.
+        """
+        rho, theta, zeta, eps = 0.6, 1.3, 0.4, 1e-5
+
+        def coord(wrt, sign):
+            r, t, z = rho, theta, zeta
+            r += sign * eps if wrt == "r" else 0
+            t += sign * eps if wrt == "t" else 0
+            z += sign * eps if wrt == "z" else 0
+            return r, t, z
+
+        def val(key, r, t, z):
+            g = _grid(r, t, z)
+            return np.asarray(eq_omega.compute(key, grid=g, basis="xyz")[key][0])
+
+        checks = [("e_rho", "x", "r"), ("e_theta", "x", "t"), ("e_zeta", "x", "z")]
+        checks += [
+            (f"{base}_{wrt}", base, wrt)
+            for base in ("e_rho", "e_theta", "e_zeta")
+            for wrt in ("r", "t", "z")
+        ]
+        for key, base, wrt in checks:
+            fd = (val(base, *coord(wrt, 1)) - val(base, *coord(wrt, -1))) / (2 * eps)
+            analytic = val(key, rho, theta, zeta)
+            np.testing.assert_allclose(analytic, fd, rtol=1e-6, atol=1e-9, err_msg=key)
+
+    @pytest.mark.unit
     def test_compute_everything_nonzero_omega(self):
         """All standard rtz quantities stay finite with nonzero omega."""
         from desc.compute import data_index, get_data_deps

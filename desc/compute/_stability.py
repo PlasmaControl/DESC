@@ -1315,26 +1315,29 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
         # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
         # pad phi_matrix to full size and add to the rho-rho block of A
-        phi_matrix_full = np.zeros((n_total, n_total))
+        phi_matrix_full = jnp.zeros((n_total, n_total))
         phi_matrix_full = phi_matrix_full.at[b_idx, b_idx].set(phi_matrix)
         A = A.at[rho_idx, rho_idx].add(
             _fit(
                 -_cT(
-                    W[b_idx, :]
+                    W
                     * psi_r**3  # this is just for consistency; psi' = 1 here
                     * (iota * D_theta + D_zeta)
                 )
-                @ (phi_matrix @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta)))
+                @ (
+                    phi_matrix_full
+                    @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta))
+                )
             )
         )
         # for testing
         new_term = _fit(
             -_cT(
-                W[b_idx, :]
+                W
                 * psi_r**3  # this is just for consistency; psi' = 1 here
                 * (iota * D_theta + D_zeta)
             )
-            @ (phi_matrix @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta)))
+            @ (phi_matrix_full @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta)))
         )
         new_term = new_term.at[b_idx, b_idx].set(0)
         np.testing.assert_allclose(new_term, 0)

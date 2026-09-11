@@ -392,6 +392,52 @@ class TestEquilibriumOmega:
             np.testing.assert_allclose(analytic, fd, rtol=1e-6, atol=1e-9, err_msg=key)
 
     @pytest.mark.unit
+    def test_map_poloidal_coordinates_with_omega(self, eq_omega):
+        """The (λ-ιω) closed-form root-find matches the general Newton solve.
+
+        _map_poloidal_coordinates (used by Gamma_c and effective ripple) used to
+        silently treat omega as 0 for every equilibrium, since the errorif that
+        should have blocked it could never fire (gated on a constant always True).
+        This checks the now-fixed fast path against ground truth: map_coordinates'
+        general per-point Newton solve, which already handled omega correctly via
+        the alpha = theta_PEST - iota*phi and phi = zeta + omega compute formulas.
+        """
+        from desc.compute.utils import get_transforms
+
+        rho = np.array([0.5, 0.8])
+        alpha = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / eq_omega.NFP, 5, endpoint=False)
+
+        grid = LinearGrid(rho=rho, M=eq_omega.L_basis.M, zeta=zeta, NFP=eq_omega.NFP)
+        iota = grid.compress(eq_omega.compute("iota", grid=grid)["iota"])
+        theta_fast = eq_omega._map_poloidal_coordinates(
+            iota,
+            alpha,
+            zeta,
+            eq_omega.L_lmn,
+            get_transforms("lambda", eq_omega, grid)["L"],
+            inbasis="alpha",
+            outbasis="theta",
+            omega=get_transforms("omega", eq_omega, grid)["W"],
+            W_lmn=eq_omega.W_lmn,
+            tol=1e-10,
+            maxiter=50,
+        )
+
+        r, a, z = np.meshgrid(rho, alpha, zeta, indexing="ij")
+        coords_in = np.column_stack([r.ravel(), a.ravel(), z.ravel()])
+        theta_ground_truth = eq_omega.map_coordinates(
+            coords_in,
+            inbasis=("rho", "alpha", "zeta"),
+            outbasis=("rho", "theta", "zeta"),
+            period=(np.inf, np.inf, np.inf),
+            tol=1e-10,
+            maxiter=50,
+        )[:, 1].reshape(r.shape)
+
+        np.testing.assert_allclose(theta_fast, theta_ground_truth, rtol=1e-5, atol=1e-7)
+
+    @pytest.mark.unit
     def test_compute_everything_nonzero_omega(self):
         """All standard rtz quantities stay finite with nonzero omega."""
         from desc.compute import data_index, get_data_deps

@@ -17,7 +17,7 @@ orthax < 0.3
 plotly >= 5.16, <= 7.0.0
 psutil <= 7.2.2
 pylatexenc >= 2.0, <= 2.11
-quadax >= 0.2.2, < 0.2.13
+quadax >= 0.2.2, <= 0.2.13
 scikit-image <= 0.26.0
 scipy >= 1.7.0, <= 1.18.1
 sympy

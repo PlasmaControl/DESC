@@ -220,9 +220,11 @@ class _CoilObjective(_Objective):
         )
 
         _build_coilset_tree()
-        quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])[
-            self._coilset_tree["objective_mask"]
-        ]
+        quad_weights = np.sqrt(
+            np.concatenate([g.spacing[:, 2] for g in grid])[
+                self._coilset_tree["objective_mask"]
+            ]
+        )
 
         if self._broadcast_input.lower() == "node":
             grid_nodes_unmasked = [

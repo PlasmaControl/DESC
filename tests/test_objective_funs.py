@@ -3783,11 +3783,15 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res)), target=1),
                 use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
+
+        # verify obj.compute_scalar is not zero, so the resolution test is meaningful
+        assert not np.isclose(f[-1], 0, atol=1e-8)
+
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
     @pytest.mark.unit

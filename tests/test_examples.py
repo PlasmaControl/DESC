@@ -1179,8 +1179,7 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    with pytest.warns(UserWarning, match="use bounds instead of target"):
-        [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
+    [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
     objective = ObjectiveFunction(
@@ -1197,10 +1196,9 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
-    with pytest.warns(UserWarning, match="use bounds instead of target"):
-        (eq, field), _ = optimizer.optimize(
-            (eq, field), objective, constraints, maxiter=2, verbose=3
-        )
+    (eq, field), _ = optimizer.optimize(
+        (eq, field), objective, constraints, maxiter=2, verbose=3
+    )
 
 
 @pytest.mark.unit

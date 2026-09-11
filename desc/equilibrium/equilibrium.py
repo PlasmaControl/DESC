@@ -77,6 +77,20 @@ _kinetic_profile_names = [
     "_atomic_number",
 ]
 
+# A, a, R0, R0/a on a QuadratureGrid integrate |e_rho x e_theta| over the
+# constant-zeta surface -- the warped sheet's own area when omega != 0, not
+# the enclosed area. Measured up to 32% wrong on a real omega != 0
+# equilibrium.
+_OMEGA_AREA_QUANTITIES = {"A", "a", "R0", "R0/a"}
+_OMEGA_AREA_WARNING = (
+    "Computing A, a, R0, or R0/a on a QuadratureGrid for an equilibrium with"
+    " a generalized toroidal angle (omega != 0) integrates the area of the"
+    " non-planar constant-zeta surface, not the enclosed cross-sectional"
+    " area, and can be off by tens of percent. Pass"
+    " grid=LinearGrid(L=eq.L_grid, M=2*eq.M, N=2*eq.N, NFP=eq.NFP,"
+    " sym=False) and override_grid=False for the correct value."
+)
+
 
 class Equilibrium(IOAble, Optimizable):
     """Equilibrium is an object that represents a plasma equilibrium.
@@ -156,6 +170,12 @@ class Equilibrium(IOAble, Optimizable):
         If True, and the default initial guess does not produce nested surfaces,
         run a small optimization problem to attempt to refine initial guess to improve
         coordinate mapping.
+    Lw, Mw, Nw : int (optional)
+        Maximum radial, poloidal and toroidal mode numbers of the basis for the
+        toroidal stream function omega, which relates the computational toroidal
+        coordinate zeta to the cylindrical toroidal angle by phi = zeta + omega.
+        Default is the resolution of the boundary surface's omega basis, which is
+        zero for an ordinary surface, in which case omega = 0 and zeta = phi.
 
     """
 
@@ -171,9 +191,11 @@ class Equilibrium(IOAble, Optimizable):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
+        "_W_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -207,7 +229,15 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
+        "_Lw",
+        "_Mw",
+        "_Nw",
     ]
+    # equilibria saved before the generalized toroidal angle existed have no
+    # omega state; _set_up gives them an empty basis and zero coefficients,
+    # which reproduces the old behavior (zeta = phi) exactly
+    _io_attrs_optional_ = ["_W_lmn", "_W_basis"]
 
     @execute_on_cpu
     def __init__(
@@ -235,6 +265,9 @@ class Equilibrium(IOAble, Optimizable):
         spectral_indexing=None,
         check_orientation=True,
         ensure_nested=True,
+        Lw=None,
+        Mw=None,
+        Nw=None,
         **kwargs,
     ):
         errorif(
@@ -310,8 +343,33 @@ class Equilibrium(IOAble, Optimizable):
         self._M_grid = setdefault(M_grid, 2 * self.M)
         self._N_grid = setdefault(N_grid, 2 * self.N)
 
-        self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
-        self._axis.change_resolution(self.N, sym=self.sym)
+        # omega (generalized toroidal angle) resolution. Defaults to the
+        # resolution of the surface's omega basis (zero for standard surfaces,
+        # in which case zeta is the cylindrical toroidal angle phi).
+        Lw = check_nonnegint(Lw, "Lw")
+        Mw = check_nonnegint(Mw, "Mw")
+        Nw = check_nonnegint(Nw, "Nw")
+        self._Mw = int(setdefault(Mw, getattr(self.surface, "Mw", 0)))
+        self._Nw = int(setdefault(Nw, getattr(self.surface, "Nw", 0)))
+        self._Lw = int(
+            setdefault(
+                Lw,
+                self.Mw if (self.spectral_indexing == "ansi") else 2 * self.Mw,
+            )
+        )
+
+        # ZernikeRZToroidalSection (poincare bdry_mode) has no omega support
+        # yet, unlike FourierRZToroidalSurface -- hence the hasattr guard.
+        if hasattr(self._surface, "Mw"):
+            self._surface.change_resolution(
+                self.L, self.M, self.N, sym=self.sym, Mw=self.Mw, Nw=self.Nw
+            )
+        else:
+            self._surface.change_resolution(self.L, self.M, self.N, sym=self.sym)
+        # Nw must be passed, or an equilibrium built with omega resolution gets
+        # an axis with an empty omega basis: Wa_n would be empty and both
+        # AxisWSelfConsistency and FixAxisW would silently be no-ops.
+        self._axis.change_resolution(self.N, sym=self.sym, Nw=self.Nw)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -336,6 +394,19 @@ class Equilibrium(IOAble, Optimizable):
             N=self.N,
             NFP=self.NFP,
             sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
+        # omega has the same (sin) stellarator symmetry parity as Z and lambda.
+        # Zero omega resolution means no generalized toroidal angle, so the basis
+        # must be empty: a non-symmetric basis at Lw=Mw=Nw=0 would still carry
+        # the (0,0,0) mode and give every asymmetric equilibrium a spurious
+        # degree of freedom. The symmetric case is already empty, sin(0) being 0.
+        self._W_basis = FourierZernikeBasis(
+            L=self.Lw,
+            M=self.Mw,
+            N=self.Nw,
+            NFP=self.NFP,
+            sym="sin" if (self.Lw == self.Mw == self.Nw == 0) else self._Z_sym,
             spectral_indexing=self.spectral_indexing,
         )
 
@@ -425,12 +496,14 @@ class Equilibrium(IOAble, Optimizable):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
+        self._W_lmn = np.zeros(self.W_basis.num_modes)
 
         if ("R_lmn" in kwargs) or ("Z_lmn" in kwargs):
             assert ("R_lmn" in kwargs) and ("Z_lmn" in kwargs), "Must give both R and Z"
             self.R_lmn = kwargs.pop("R_lmn")
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
+            self.W_lmn = kwargs.pop("W_lmn", jnp.zeros(self.W_basis.num_modes))
         else:
             self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
@@ -452,6 +525,24 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+
+        # equilibria saved before the generalized toroidal angle was added
+        # load with exactly zero omega (zeta = cylindrical angle phi)
+        if self._W_basis is None:
+            self._W_basis = FourierZernikeBasis(
+                L=0,
+                M=0,
+                N=0,
+                NFP=self.NFP,
+                # saved without omega, so empty regardless of symmetry
+                sym="sin",
+                spectral_indexing=self.spectral_indexing,
+            )
+        if self._W_lmn is None:
+            self._W_lmn = np.zeros(self.W_basis.num_modes)
+        self._Lw = int(self.W_basis.L)
+        self._Mw = int(self.W_basis.M)
+        self._Nw = int(self.W_basis.N)
 
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
@@ -477,6 +568,7 @@ class Equilibrium(IOAble, Optimizable):
             "R_lmn",
             "Z_lmn",
             "L_lmn",
+            "W_lmn",
             "p_l",
             "i_l",
             "c_l",
@@ -489,8 +581,10 @@ class Equilibrium(IOAble, Optimizable):
             "a_lmn",
             "Ra_n",
             "Za_n",
+            "Wa_n",
             "Rb_lmn",
             "Zb_lmn",
+            "Wb_lmn",
             "I",
             "G",
             "Phi_mn",
@@ -591,6 +685,9 @@ class Equilibrium(IOAble, Optimizable):
         N_grid=None,
         NFP=None,
         sym=None,
+        Lw=None,
+        Mw=None,
+        Nw=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 
@@ -612,6 +709,12 @@ class Equilibrium(IOAble, Optimizable):
             Number of field periods.
         sym : bool
             Whether to enforce stellarator symmetry.
+        Lw : int
+            Maximum radial mode number of the omega basis.
+        Mw : int
+            Maximum poloidal mode number of the omega basis.
+        Nw : int
+            Maximum toroidal mode number of the omega basis.
 
         """
         warnif(
@@ -623,6 +726,9 @@ class Equilibrium(IOAble, Optimizable):
         self._L = int(setdefault(L, self.L))
         self._M = int(setdefault(M, self.M))
         self._N = int(setdefault(N, self.N))
+        self._Lw = int(setdefault(Lw, self.Lw))
+        self._Mw = int(setdefault(Mw, self.Mw))
+        self._Nw = int(setdefault(Nw, self.Nw))
         self._L_grid = int(setdefault(L_grid, self.L_grid))
         self._M_grid = int(setdefault(M_grid, self.M_grid))
         self._N_grid = int(setdefault(N_grid, self.N_grid))
@@ -632,6 +738,7 @@ class Equilibrium(IOAble, Optimizable):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
+        old_modes_W = self.W_basis.modes
 
         self.R_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
@@ -641,6 +748,18 @@ class Equilibrium(IOAble, Optimizable):
         )
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        W_sym = "sin" if self.sym else self.sym
+        if not old_modes_W.size and self.Lw == self.Mw == self.Nw == 0:
+            # no omega before and none asked for: keep the basis empty, see the
+            # note where it is first built
+            W_sym = "sin"
+        self.W_basis.change_resolution(
+            self.Lw,
+            self.Mw,
+            self.Nw,
+            NFP=self.NFP,
+            sym=W_sym,
         )
 
         for profile in [
@@ -658,14 +777,27 @@ class Equilibrium(IOAble, Optimizable):
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
 
-        self.surface.change_resolution(
-            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
-        )
-        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
+        # see the note on the same guard in __init__
+        if hasattr(self.surface, "Mw"):
+            self.surface.change_resolution(
+                self.L,
+                self.M,
+                self.N,
+                NFP=self.NFP,
+                sym=self.sym,
+                Mw=self.Mw,
+                Nw=self.Nw,
+            )
+        else:
+            self.surface.change_resolution(
+                self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+            )
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nw=self.Nw)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._W_lmn = copy_coeffs(self.W_lmn, old_modes_W, self.W_basis.modes)
 
     @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):
@@ -698,7 +830,7 @@ class Equilibrium(IOAble, Optimizable):
         if rho is not None:
             assert (rho >= 0) and (rho <= 1)
             surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
-            surface.change_resolution(self.M, self.N)
+            surface.change_resolution(self.M, self.N, Mw=self.Mw, Nw=self.Nw)
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
@@ -737,6 +869,24 @@ class Equilibrium(IOAble, Optimizable):
             # setting the value to the whole row.
             AZ[Js[:, 0], np.arange(self.Z_basis.num_modes)] = zernikeZ
 
+            if self.W_basis.num_modes:
+                AW = np.zeros((surface.W_basis.num_modes, self.W_basis.num_modes))
+                Js = []
+                zernikeW = zernike_radial(
+                    rho, self.W_basis.modes[:, 0], self.W_basis.modes[:, 1]
+                )
+                for i, (l, m, n) in enumerate(self.W_basis.modes):
+                    j = np.argwhere(
+                        np.logical_and(
+                            surface.W_basis.modes[:, 1] == m,
+                            surface.W_basis.modes[:, 2] == n,
+                        )
+                    )
+                    Js.append(j.flatten())
+                Js = np.array(Js)
+                AW[Js[:, 0], np.arange(self.W_basis.num_modes)] = zernikeW
+                surface.W_lmn = AW @ self.W_lmn
+
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
             surface.R_lmn = Rb
@@ -745,6 +895,14 @@ class Equilibrium(IOAble, Optimizable):
 
         if zeta is not None:
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
+            warnif(
+                bool(np.any(self.W_lmn)),
+                UserWarning,
+                "get_surface_at(zeta=...) returns the constant-zeta cross "
+                "section in computational coordinates. This equilibrium has "
+                "nonzero omega, so constant zeta is NOT a constant cylindrical "
+                "angle phi plane.",
+            )
             surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
 
@@ -843,7 +1001,30 @@ class Equilibrium(IOAble, Optimizable):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        # omega on axis: only m=0 Zernike modes are nonzero at rho=0, so
+        # omega(rho=0) is automatically a function of zeta alone
+        sign_lz = np.atleast_2d(((np.arange(0, self.Lw + 1, 2) / 2) % 2) * -2 + 1).T
+        idx0_W = np.where(self.W_basis.modes[:, 1] == 0)[0]
+        idx00_W = np.where((self.W_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        if len(idx00_W):
+            W_n = np.sum(
+                sign_lz * np.reshape(self.W_lmn[idx0_W], (-1, idx00_W.size), order="F"),
+                axis=0,
+            )
+            modes_W = self.W_basis.modes[idx00_W, 2]
+        else:  # catch cases such as a symmetric or empty omega basis
+            W_n = None
+            modes_W = None
+        axis = FourierRZCurve(
+            R_n,
+            Z_n,
+            modes_R,
+            modes_Z,
+            NFP=self.NFP,
+            sym=self.sym,
+            W_n=W_n,
+            modes_W=modes_W,
+        )
         return axis
 
     def compute(  # noqa: C901
@@ -897,6 +1078,19 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        # grid=None (the common case) lands here directly, before the
+        # override_grid machinery below ever runs -- so this check has to be
+        # up here too, not only in the "calc0d and override_grid" block.
+        warnif(
+            bool(
+                isinstance(grid, QuadratureGrid)
+                and getattr(self, "W_basis", None) is not None
+                and self.W_basis.num_modes
+                and (set(names) & _OMEGA_AREA_QUANTITIES)
+            ),
+            UserWarning,
+            _OMEGA_AREA_WARNING,
+        )
         errorif(
             not isinstance(grid, _Grid),
             TypeError,
@@ -1115,6 +1309,17 @@ class Equilibrium(IOAble, Optimizable):
         # with a resolution requirement or the user precomputes it.
 
         if calc0d and override_grid:
+            # catches the case skipped above: user passed a LinearGrid but
+            # left override_grid=True, so it gets silently reverted here.
+            warnif(
+                bool(
+                    getattr(self, "W_basis", None) is not None
+                    and self.W_basis.num_modes
+                    and dep0d & _OMEGA_AREA_QUANTITIES
+                ),
+                UserWarning,
+                _OMEGA_AREA_WARNING,
+            )
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(
@@ -1444,7 +1649,9 @@ class Equilibrium(IOAble, Optimizable):
         return iota_profile.compute(Grid(rho, jitable=True))
 
     @execute_on_cpu
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
+    def is_nested(
+        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None, W_lmn=None
+    ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordinate Jacobian (sqrt(g)) sign.
@@ -1460,8 +1667,9 @@ class Equilibrium(IOAble, Optimizable):
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn, L_lmn : ndarray, optional
-            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+            spectral coefficients for R, Z, lambda, omega. Defaults to eq.R_lmn,
+            eq.Z_lmn, etc.
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1471,7 +1679,7 @@ class Equilibrium(IOAble, Optimizable):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg, W_lmn=W_lmn)
 
     def to_sfl(
         self,
@@ -1549,7 +1757,26 @@ class Equilibrium(IOAble, Optimizable):
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Surface and Equilibrium must have the same NFP"
-        new.change_resolution(self.L, self.M, self.N)
+        # grow the equilibrium's resolution rather than silently truncating the
+        # modes of the new boundary, for R/Z and omega alike. Every
+        # FourierRZToroidalSurface has Mw/Nw, so no hasattr guard is needed.
+        # L/Lw are only recomputed from the ansi/fringe M-formula when M/N (or
+        # Mw/Nw) actually grow -- otherwise a fringe-indexed equilibrium whose
+        # L was deliberately set below 2*M gets silently bumped up for no
+        # reason, even when nothing about the surface changed.
+        M = max(new.M, self.M)
+        N = max(new.N, self.N)
+        L = self.L
+        if M > self.M or N > self.N:
+            L = max(self.L, M if (self.spectral_indexing == "ansi") else 2 * M)
+        Mw = max(new.Mw, self.Mw)
+        Nw = max(new.Nw, self.Nw)
+        Lw = self.Lw
+        if Mw > self.Mw or Nw > self.Nw:
+            Lw = max(self.Lw, Mw if (self.spectral_indexing == "ansi") else 2 * Mw)
+        if (L, M, N, Lw, Mw, Nw) != (self.L, self.M, self.N, self.Lw, self.Mw, self.Nw):
+            self.change_resolution(L=L, M=M, N=N, Lw=Lw, Mw=Mw, Nw=Nw)
+        new.change_resolution(self.M, self.N, sym=self.sym, Mw=self.Mw, Nw=self.Nw)
         self._surface = new
 
     @property
@@ -1564,7 +1791,7 @@ class Equilibrium(IOAble, Optimizable):
         ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
         assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
         assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
-        new.change_resolution(self.N)
+        new.change_resolution(self.N, Nw=self.Nw)
         self._axis = new
 
     @property
@@ -1611,6 +1838,21 @@ class Equilibrium(IOAble, Optimizable):
     def N(self):
         """int: Maximum toroidal fourier mode number."""
         return self._N
+
+    @property
+    def Lw(self):
+        """int: Maximum radial mode number of the omega basis."""
+        return self._Lw
+
+    @property
+    def Mw(self):
+        """int: Maximum poloidal fourier mode number of the omega basis."""
+        return self._Mw
+
+    @property
+    def Nw(self):
+        """int: Maximum toroidal fourier mode number of the omega basis."""
+        return self._Nw
 
     @optimizable_parameter
     @property
@@ -1665,6 +1907,23 @@ class Equilibrium(IOAble, Optimizable):
 
     @optimizable_parameter
     @property
+    def W_lmn(self):
+        """ndarray: Spectral coefficients of omega (phi = zeta + omega)."""
+        return self._W_lmn
+
+    @W_lmn.setter
+    def W_lmn(self, W_lmn):
+        W_lmn = jnp.atleast_1d(jnp.asarray(W_lmn))
+        errorif(
+            W_lmn.size != self._W_lmn.size,
+            ValueError,
+            "W_lmn should have the same size as W_basis, "
+            + f"got {len(W_lmn)} for basis with {self.W_basis.num_modes} modes",
+        )
+        self._W_lmn = W_lmn
+
+    @optimizable_parameter
+    @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
         return self.surface.R_lmn
@@ -1682,6 +1941,16 @@ class Equilibrium(IOAble, Optimizable):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
+
+    @optimizable_parameter
+    @property
+    def Wb_lmn(self):
+        """ndarray: Spectral coefficients of omega at the boundary."""
+        return self.surface.W_lmn if hasattr(self.surface, "W_lmn") else np.empty(0)
+
+    @Wb_lmn.setter
+    def Wb_lmn(self, Wb_lmn):
+        self.surface.W_lmn = Wb_lmn
 
     @optimizable_parameter
     @property
@@ -1747,6 +2016,16 @@ class Equilibrium(IOAble, Optimizable):
     @Za_n.setter
     def Za_n(self, Za_n):
         self.axis.Z_n = Za_n
+
+    @optimizable_parameter
+    @property
+    def Wa_n(self):
+        """ndarray: W coefficients for axis Fourier series (phi = zeta + omega)."""
+        return self.axis.W_n
+
+    @Wa_n.setter
+    def Wa_n(self, Wa_n):
+        self.axis.W_n = Wa_n
 
     @property
     def pressure(self):
@@ -2109,6 +2388,11 @@ class Equilibrium(IOAble, Optimizable):
         return self._L_basis
 
     @property
+    def W_basis(self):
+        """FourierZernikeBasis: Spectral basis for omega."""
+        return self._W_basis
+
+    @property
     def L_grid(self):
         """int: Radial resolution of grid in real space."""
         return self._L_grid
@@ -2145,6 +2429,9 @@ class Equilibrium(IOAble, Optimizable):
             "L": self.L,
             "M": self.M,
             "N": self.N,
+            "Lw": self.Lw,
+            "Mw": self.Mw,
+            "Nw": self.Nw,
             "L_grid": self.L_grid,
             "M_grid": self.M_grid,
             "N_grid": self.N_grid,
@@ -2154,6 +2441,12 @@ class Equilibrium(IOAble, Optimizable):
         """Print a summary of the spectral and real space resolution."""
         print("Spectral indexing: {}".format(self.spectral_indexing))
         print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        if self.W_basis.num_modes:
+            print(
+                "Omega spectral resolution (Lw,Mw,Nw)=({},{},{})".format(
+                    self.Lw, self.Mw, self.Nw
+                )
+            )
         print(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
@@ -2673,6 +2966,12 @@ class Equilibrium(IOAble, Optimizable):
             "R_lmn": self.R_basis.modes,
             "Z_lmn": self.Z_basis.modes,
             "L_lmn": self.L_basis.modes,
+            # omega is a Fourier-Zernike series like R, Z and lambda, so it
+            # takes the same spectral scaling.  Without this entry it would
+            # silently fall through to the all-ones scale from the base class
+            # while R, Z, lambda were scaled, which is not what "ess" means.
+            # Empty basis when omega == 0, contributing nothing.
+            "W_lmn": self.W_basis.modes,
         }
         # note there is no ESS for profiles, since they may not be polynomials, and
         # even if they are, they're usually low order and not in an orthogonal basis
@@ -2681,8 +2980,10 @@ class Equilibrium(IOAble, Optimizable):
 
         scales["Ra_n"] = axis_scale["R_n"]
         scales["Za_n"] = axis_scale["Z_n"]
+        scales["Wa_n"] = axis_scale["W_n"]
         scales["Rb_lmn"] = bdry_scale["R_lmn"]
         scales["Zb_lmn"] = bdry_scale["Z_lmn"]
+        scales["Wb_lmn"] = bdry_scale["W_lmn"]
         if hasattr(self.surface, "Phi_mn"):
             scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales

@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -122,7 +122,15 @@ def map_coordinates(  # noqa: C901
     )
 
     # TODO (#1382): make this work for permutations of in/out basis
-    if outbasis == ("rho", "theta", "zeta"):
+    # The closed form inversions below assume the toroidal angle appearing in
+    # the field line label and the PEST mapping is the computational
+    # coordinate zeta, ie that omega = 0 so phi = zeta. With a generalized
+    # toroidal angle, omega depends on theta, which is the very unknown being
+    # solved for, so those inversions no longer decouple; in that case we fall
+    # through to the general Newton solve, which handles theta_PEST and alpha
+    # (both defined via phi) correctly.
+    omega_is_0 = getattr(eq, "W_basis", None) is None or eq.W_basis.num_modes == 0
+    if outbasis == ("rho", "theta", "zeta") and omega_is_0:
         if inbasis == ("rho", "alpha", "zeta"):
             errorif(
                 np.isfinite(period[1]),
@@ -135,8 +143,8 @@ def map_coordinates(  # noqa: C901
             else:
                 iota = eq._compute_iota_under_jit(coords, params, profiles, **kwargs)
             rho, alpha, zeta = coords.T
-            omega = 0  # TODO(#568)
-            coords = jnp.column_stack([rho, alpha + iota * (zeta + omega), zeta])
+            # alpha = theta_PEST - iota * phi and phi = zeta since omega = 0
+            coords = jnp.column_stack([rho, alpha + iota * zeta, zeta])
             inbasis = ("rho", "theta_PEST", "zeta")
         if inbasis == ("rho", "theta_PEST", "zeta"):
             return _map_PEST_coordinates(
@@ -439,6 +447,17 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
         msg="High frequency lambda modes will be truncated in coordinate mapping.",
     )
     lmbda_minus_iota_omega = lmbda.transform(L_lmn)
+    if omega is not None:
+        warnif(
+            grid.M < omega.basis.M,
+            ResolutionWarning,
+            msg="High frequency omega modes will be truncated in coordinate mapping.",
+        )
+        # iota is one value per unique rho; broadcast it to the (rho, theta, zeta)
+        # node ordering that lmbda_minus_iota_omega is already in.
+        lmbda_minus_iota_omega = lmbda_minus_iota_omega - iota[
+            grid.inverse_rho_idx
+        ] * omega.transform(W_lmn)
     lmbda_minus_iota_omega = (
         rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
         .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
@@ -462,6 +481,8 @@ def _map_poloidal_coordinates(
     *,
     tol=1e-6,
     maxiter=30,
+    omega=None,
+    W_lmn=None,
     **kwargs,
 ):
     """Map poloidal coordinate in the input basis to the output basis.
@@ -504,6 +525,11 @@ def _map_poloidal_coordinates(
         Stopping tolerance.
     maxiter : int
         Maximum number of Newton iterations.
+    omega : Transform, optional
+        Transform for ω built on the same grid as ``lmbda``. If not given, ω is
+        assumed to be 0 (as for an equilibrium with no generalized toroidal angle).
+    W_lmn : jnp.ndarray, optional
+        Spectral coefficients for ω. Required if ``omega`` is given.
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
         ``alpha``.
@@ -546,11 +572,19 @@ def _map_poloidal_coordinates(
             **kwargs,
         )
 
-    q_m, modes = _partial_sum(lmbda, L_lmn, None, None, None)
+    q_m, modes = _partial_sum(lmbda, L_lmn, omega, W_lmn, iota)
     q_m = q_m[:, None]
 
-    errorif(not OMEGA_IS_0, msg="TODO: 568")
-    omega = 0
+    # inbasis="vartheta" and outbasis="lambda" need ω evaluated at the θ being
+    # solved for (a genuinely coupled problem), which isn't implemented; every
+    # other combination only needs the (λ−ιω) series above, already handled.
+    errorif(
+        (inbasis == "vartheta" or outbasis == "lambda")
+        and W_lmn is not None
+        and W_lmn.size,
+        msg="TODO: 568",
+    )
+    omega_scalar = 0
 
     if varepsilon is None:
         iota = iota[:, None, None]
@@ -558,21 +592,21 @@ def _map_poloidal_coordinates(
         if inbasis == "alpha":
             varepsilon = poloidal + iota * zeta
         elif inbasis == "vartheta":
-            varepsilon = poloidal - iota * omega
+            varepsilon = poloidal - iota * omega_scalar
 
     t = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
 
     if outbasis == "theta":
         return t
     if outbasis == "lambda":
-        vartheta = varepsilon + iota * omega
+        vartheta = varepsilon + iota * omega_scalar
         return vartheta - t
     if outbasis == "delta":
         alpha = varepsilon - iota * zeta
         return t - alpha
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None, W_lmn=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordinate Jacobian (sqrt(g)) sign.
@@ -590,8 +624,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     grid  :  Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn, L_lmn : ndarray, optional
-        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+        spectral coefficients for R, Z, lambda, omega. Defaults to eq.R_lmn,
+        eq.Z_lmn, etc.
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -607,6 +642,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         Z_lmn = eq.Z_lmn
     if L_lmn is None:
         L_lmn = eq.L_lmn
+    if W_lmn is None:
+        W_lmn = eq.W_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
@@ -614,7 +651,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     data = compute_fun(
         "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
-        params={"R_lmn": R_lmn, "Z_lmn": Z_lmn, "L_lmn": L_lmn},
+        params={"R_lmn": R_lmn, "Z_lmn": Z_lmn, "L_lmn": L_lmn, "W_lmn": W_lmn},
         transforms=transforms,
         profiles={},  # no profiles needed
     )

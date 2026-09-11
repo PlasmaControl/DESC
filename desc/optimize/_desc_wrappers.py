@@ -1,6 +1,7 @@
 from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
+from desc.utils import warnif
 
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
@@ -43,6 +44,41 @@ _all_optax_optimizers = [
     "sm3",
     "yogi",
 ]
+
+
+def _warn_if_bounds(objective, constraint, x0, options):
+    """Warn if bounds on sub-objectives can make the Jacobian rank-deficient.
+
+    A sub-objective with bounds contributes zero residuals, and hence zero Jacobian
+    rows, whenever it is inside its bounds. The full rank of the (m, n) Jacobian is
+    min(m, n), so those rows can only cost rank if the ones that always remain are
+    fewer than that. Only ``"svd"`` handles the deficient case reliably, so warn if
+    the user picked a different method and use ``"svd"`` if they didn't specify one.
+    """
+    sub = objective
+    while hasattr(sub, "_objective"):  # unwrap Proximal/LinearConstraintProjection
+        sub = sub._objective
+    bounded = [obj for obj in sub.objectives if obj.bounds is not None]
+    dim_f_bounded = sum(obj.dim_f for obj in bounded)
+    # constraint rows never vanish, bounds there become slack variables instead
+    m = objective.dim_f + (0 if constraint is None else constraint.dim_f)
+    n = x0.size
+    if m - dim_f_bounded < min(m, n):
+        supplied = hasattr(options, "tr_method")
+        tr_method = options.get("tr_method", "qr")
+        warnif(
+            supplied and tr_method != "svd",
+            UserWarning,
+            f"Objectives {[obj.name for obj in bounded]} use bounds instead of target, "
+            + f"so they can zero out {dim_f_bounded} of the {m} rows of the ({m}, {n}) "
+            + f"Jacobian and drop its rank below {min(m, n)}. The trust region method "
+            + f"{tr_method} may then fail to solve the subproblem, in that case pass "
+            + "options={'tr_method': 'svd'}.",
+        )
+        # if not set by user, use SVD to avoid rank-deficiency issues
+        if not supplied:
+            options["tr_method"] = "svd"
+    return options
 
 
 @register_optimizer(
@@ -206,6 +242,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 
     if constraint is not None:
@@ -300,6 +337,7 @@ def _optimize_desc_least_squares(
         options.setdefault("max_trust_radius", 1.0)
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
+    options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 
     result = lsqtr(

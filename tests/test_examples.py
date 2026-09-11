@@ -1179,6 +1179,7 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+    # this will internally switch to tr_method="svd"
     [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
@@ -1196,6 +1197,7 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+    # this will internally switch to tr_method="svd"
     (eq, field), _ = optimizer.optimize(
         (eq, field), objective, constraints, maxiter=2, verbose=3
     )

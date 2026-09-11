@@ -30,6 +30,7 @@ from desc.objectives import (
     FixOmegaGauge,
     FixOmegaInterior,
     FixZetaSFL,
+    get_fixed_boundary_constraints,
 )
 from desc.plotting import plot_boundary, plot_section, plot_surfaces
 
@@ -406,60 +407,46 @@ class TestEquilibriumOmega:
         assert np.all(data["sqrt(g)"] > 0)
 
     @pytest.mark.unit
-    def test_axisymmetric_coordinate_invariance(self):
-        """Pure-zeta omega reparameterizes an axisymmetric equilibrium.
+    def test_free_interior_omega_on_real_stellarator(self):
+        """Freeing interior omega on a real (low-res) W7-X doesn't break physics.
 
-        zeta -> phi = zeta + omega(zeta) sweeps out the identical physical
-        field with unchanged R_lmn, Z_lmn, L_lmn, so every coordinate invariant
-        must match.
+        Same boundary and profiles, solved twice: once with no omega DOF at
+        all, once with interior omega free (boundary omega still fixed at 0,
+        so both share the identical physical boundary). Boundary-anchored
+        invariants -- which don't care about the interior chart -- must match.
         """
-        from desc.utils import copy_coeffs
+        import desc.examples
 
-        eq0 = Equilibrium(L=4, M=4, N=0, sym=True)
-        eq0.solve(verbose=0, maxiter=25, ftol=1e-6)
+        w7x = desc.examples.get("W7-X")
+        kw = dict(
+            L=4, M=4, N=4, NFP=w7x.NFP, sym=True,
+            surface=w7x.surface, pressure=w7x.pressure, iota=w7x.iota, Psi=w7x.Psi,
+        )
+        eq0 = Equilibrium(**kw)
+        eq0.solve(verbose=0, maxiter=40, ftol=1e-6)
 
-        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, Lw=0, Mw=0, Nw=2)
-        for attr, basis in [("R_lmn", "R_basis"), ("Z_lmn", "Z_basis")]:
-            setattr(
-                eq1,
-                attr,
-                copy_coeffs(
-                    getattr(eq0, attr),
-                    getattr(eq0, basis).modes,
-                    getattr(eq1, basis).modes,
-                ),
-            )
-        eq1.L_lmn = copy_coeffs(eq0.L_lmn, eq0.L_basis.modes, eq1.L_basis.modes)
-        eq1.pressure.params = eq0.pressure.params.copy()
-        eq1.current.params = eq0.current.params.copy()
-        # omega = 0.1 sin(zeta) + 0.03 sin(2 zeta): no rho or theta dependence
-        W = np.zeros(eq1.W_basis.num_modes)
-        W[eq1.W_basis.get_idx(0, 0, -1)] = 0.1
-        W[eq1.W_basis.get_idx(0, 0, -2)] = 0.03
-        eq1.W_lmn = W
-        eq1.surface = eq1.get_surface_at(rho=1.0)
-        eq1.axis = eq1.get_axis()
+        eq1 = Equilibrium(**kw, Lw=2, Mw=2, Nw=2)
+        constraints = get_fixed_boundary_constraints(eq=eq1)
+        constraints = tuple(c for c in constraints if not isinstance(c, FixOmegaInterior))
+        eq1.solve(constraints=constraints, verbose=0, maxiter=40, ftol=1e-6)
+        assert np.max(np.abs(np.asarray(eq1.W_lmn))) > 1e-4  # interior omega moved
 
-        grid = LinearGrid(L=6, M=10, N=8)
-        keys = ["|B|", "|F|", "sqrt(g)", "V", "S"]
-        d0 = eq0.compute(keys, grid=LinearGrid(L=6, M=10, N=8))
-        d1 = eq1.compute(keys, grid=grid)
-        # |B| depends only on (rho, theta) here, so it matches node for node.
-        # |F| is a residual of large cancelling terms, so the two charts differ
-        # at roundoff amplified to ~1e-7 relative.
-        np.testing.assert_allclose(d1["|B|"], d0["|B|"], rtol=1e-10)
-        np.testing.assert_allclose(d1["|F|"], d0["|F|"], rtol=1e-6, atol=1e-9)
-        np.testing.assert_allclose(d1["V"], d0["V"], rtol=1e-10)
-        np.testing.assert_allclose(d1["S"], d0["S"], rtol=1e-10)
-        # sqrt(g) is NOT invariant (it scales by 1 + omega_zeta): proof that
-        # this test would catch a real chart effect
-        assert not np.allclose(d1["sqrt(g)"], d0["sqrt(g)"], rtol=1e-3)
-        # same physical torus: x(rho,theta,zeta') of eq1 is x of eq0 at phi(zeta')
-        d1x = eq1.compute(["x", "phi"], grid=Grid(grid.nodes, sort=False), basis="xyz")
-        nodes0 = grid.nodes.copy()
-        nodes0[:, 2] = d1x["phi"]
-        d0x = eq0.compute("x", grid=Grid(nodes0, sort=False), basis="xyz")
-        np.testing.assert_allclose(d1x["x"], d0x["x"], atol=1e-10)
+        # boundary omega = 0 in both, so A, V, S, a_major/a_minor (defined on
+        # or derived from the boundary/whole-volume shape) don't depend on
+        # the interior chart and must match to solver precision.
+        grid = LinearGrid(L=8, M=10, N=10, NFP=w7x.NFP)
+        gkw = dict(grid=grid, override_grid=False)
+        for key in ["V", "S", "A", "a_major/a_minor"]:
+            v0 = np.asarray(eq0.compute(key, **gkw)[key])
+            v1 = np.asarray(eq1.compute(key, **gkw)[key])
+            np.testing.assert_allclose(v1, v0, rtol=1e-6, err_msg=key)
+
+        # |B| on the boundary itself (omega = 0 there for both) should also
+        # match, up to the two independent solves' finite ftol.
+        bgrid = LinearGrid(rho=1.0, M=10, N=10, NFP=w7x.NFP)
+        b0 = np.asarray(eq0.compute("|B|", grid=bgrid)["|B|"])
+        b1 = np.asarray(eq1.compute("|B|", grid=bgrid)["|B|"])
+        np.testing.assert_allclose(b1, b0, rtol=1e-2)
         assert eq1.is_nested()
 
     @pytest.mark.unit

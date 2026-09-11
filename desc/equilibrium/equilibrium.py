@@ -77,6 +77,20 @@ _kinetic_profile_names = [
     "_atomic_number",
 ]
 
+# A, a, R0, R0/a on a QuadratureGrid integrate |e_rho x e_theta| over the
+# constant-zeta surface -- the warped sheet's own area when omega != 0, not
+# the enclosed area. Measured up to 32% wrong on a real omega != 0
+# equilibrium.
+_OMEGA_AREA_QUANTITIES = {"A", "a", "R0", "R0/a"}
+_OMEGA_AREA_WARNING = (
+    "Computing A, a, R0, or R0/a on a QuadratureGrid for an equilibrium with"
+    " a generalized toroidal angle (omega != 0) integrates the area of the"
+    " non-planar constant-zeta surface, not the enclosed cross-sectional"
+    " area, and can be off by tens of percent. Pass"
+    " grid=LinearGrid(L=eq.L_grid, M=2*eq.M, N=2*eq.N, NFP=eq.NFP,"
+    " sym=False) and override_grid=False for the correct value."
+)
+
 
 class Equilibrium(IOAble, Optimizable):
     """Equilibrium is an object that represents a plasma equilibrium.
@@ -1064,6 +1078,19 @@ class Equilibrium(IOAble, Optimizable):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        # grid=None (the common case) lands here directly, before the
+        # override_grid machinery below ever runs -- so this check has to be
+        # up here too, not only in the "calc0d and override_grid" block.
+        warnif(
+            bool(
+                isinstance(grid, QuadratureGrid)
+                and getattr(self, "W_basis", None) is not None
+                and self.W_basis.num_modes
+                and (set(names) & _OMEGA_AREA_QUANTITIES)
+            ),
+            UserWarning,
+            _OMEGA_AREA_WARNING,
+        )
         errorif(
             not isinstance(grid, _Grid),
             TypeError,
@@ -1282,6 +1309,17 @@ class Equilibrium(IOAble, Optimizable):
         # with a resolution requirement or the user precomputes it.
 
         if calc0d and override_grid:
+            # catches the case skipped above: user passed a LinearGrid but
+            # left override_grid=True, so it gets silently reverted here.
+            warnif(
+                bool(
+                    getattr(self, "W_basis", None) is not None
+                    and self.W_basis.num_modes
+                    and dep0d & _OMEGA_AREA_QUANTITIES
+                ),
+                UserWarning,
+                _OMEGA_AREA_WARNING,
+            )
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
             data0d = compute_fun(

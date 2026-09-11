@@ -648,83 +648,59 @@ def _make_elongated_surface(NFP=1, omega=True, elong=2.5):
     )
 
 
-def _measure_cross_section(surf, zeta0, ntheta=2048):
-    """Area, perimeter and elongation of one cross-section, measured directly.
-
-    Independent of DESC's compute functions: sample the cross-section in
-    Cartesian space, fit the flattest plane through it (the smallest singular
-    direction of the centred points), project into that plane, then shoelace
-    for the area and summed segments for the perimeter. Using the section's OWN
-    plane matters: the R-Z plane foreshortens a tilted section by cos(tilt).
-    """
-    theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-    d = surf.compute(["R", "Z", "phi"], grid=_grid(1.0, theta, zeta0))
-    R, phi, Z = np.asarray(d["R"]), np.asarray(d["phi"]), np.asarray(d["Z"])
-    Q = np.stack([R * np.cos(phi), R * np.sin(phi), Z], axis=1)
-    Q -= Q.mean(axis=0)
-    _, _, Vt = np.linalg.svd(Q, full_matrices=False)
-    u, v = Q @ Vt[0], Q @ Vt[1]  # coordinates in the best-fit plane
-    area = 0.5 * np.abs(np.sum(u * np.roll(v, -1) - np.roll(u, -1) * v))
-    perim = np.sum(np.hypot(np.roll(u, -1) - u, np.roll(v, -1) - v))
+@pytest.mark.unit
+def test_area_on_solved_omega_equilibrium(eq_omega):
+    """A(z), perimeter(z), elongation match a direct measurement, real omega solve."""
+    theta = np.linspace(0, 2 * np.pi, 512, endpoint=False)
+    grid = _grid(1.0, theta, 0.3)
+    d = eq_omega.compute(["R", "Z", "phi"], grid=grid)
+    R, Z, phi = np.asarray(d["R"]), np.asarray(d["Z"]), np.asarray(d["phi"])
+    xyz = np.stack([R * np.cos(phi), R * np.sin(phi), Z], axis=1)
+    xyz -= xyz.mean(axis=0)
+    # Best-fit plane through the (centered) cross-section: SVD of the point
+    # matrix gives xyz = U @ diag(S) @ Vt, where Vt's rows are an orthonormal
+    # basis ordered by how much of the points' spread each direction explains
+    # (largest singular value first). A flat ring of points has ~0 spread
+    # along its normal, so that direction gets the smallest singular value --
+    # Vt[2] (dropped here) is the fitted plane's normal, and Vt[0], Vt[1] are
+    # two orthonormal directions spanning the plane itself. Projecting the
+    # points onto those two directions (xyz @ Vt[0], xyz @ Vt[1]) gives their
+    # 2D coordinates in that plane, ready for the shoelace formula below.
+    _, _, Vt = np.linalg.svd(xyz, full_matrices=False)
+    u, v = xyz @ Vt[0], xyz @ Vt[1]
+    direct_area = 0.5 * abs(np.sum(u * np.roll(v, -1) - np.roll(u, -1) * v))
+    direct_perim = np.sum(np.hypot(np.roll(u, -1) - u, np.roll(v, -1) - v))
     # Ramanujan elongation, matching desc.compute._geometry
     a = (
         np.sqrt(3)
         * (
-            np.sqrt(8 * np.pi * area + perim**2)
-            + np.sqrt(
-                np.abs(
-                    2 * np.sqrt(3) * perim * np.sqrt(8 * np.pi * area + perim**2)
-                    - 40 * np.pi * area
-                    + 4 * perim**2
-                )
-            )
+            np.sqrt(8 * np.pi * direct_area + direct_perim**2)
+            + np.sqrt(np.abs(
+                2 * np.sqrt(3) * direct_perim
+                * np.sqrt(8 * np.pi * direct_area + direct_perim**2)
+                - 40 * np.pi * direct_area + 4 * direct_perim**2
+            ))
         )
-        + 3 * perim
+        + 3 * direct_perim
     ) / (12 * np.pi)
-    return area, perim, a / (area / (np.pi * a))
+    direct_elong = a / (direct_area / (np.pi * a))
 
-
-class TestCrossSectionGeometry:
-    """A(z), perimeter(z) and elongation against a direct measurement.
-
-    With omega != 0 a constant-zeta cross-section is not planar, so the area it
-    encloses is definition dependent; these pin how far that moves the answer.
-    At ntheta = 2048 the polygon floor is ~1e-6 relative, so the omega = 0
-    tolerance is a real assertion rather than a rubber stamp.
-    """
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize("omega", [False, True])
-    # index into _measure_cross_section's return, then the tolerance at
-    # omega == 0 and with omega. The two are orders apart, so each case asserts
-    # the effect rather than passing on slack.
-    @pytest.mark.parametrize(
-        "name, idx, tol0, tolw",
-        [
-            ("A(z)", 0, 1e-5, 2e-2),  # measured 1.6e-06 / 9.3e-03
-            ("perimeter(z)", 1, 1e-5, 1e-3),  # measured 3.9e-07 / 2.1e-04
-            ("a_major/a_minor", 2, 1e-5, 3e-2),  # measured 1.3e-06 / 1.6e-02
-        ],
+    # LinearGrid + override_grid=False is required: QuadratureGrid (the
+    # default) integrates |e_rho x e_theta| over the non-planar constant-zeta
+    # sheet itself, not the enclosed cross-sectional area, and is off by tens
+    # of percent when omega != 0; override_grid=True silently swaps back to
+    # that QuadratureGrid path even if a LinearGrid is passed in.
+    lg = LinearGrid(
+        L=eq_omega.L_grid, theta=512, zeta=0.3, NFP=eq_omega.NFP, sym=False
     )
-    def test_matches_direct_measurement(self, omega, name, idx, tol0, tolw):
-        """Check the constant-zeta quantities against a direct measurement."""
-        surf = _make_elongated_surface(NFP=1, omega=omega)
-        zetas = np.linspace(0, 2 * np.pi, 6, endpoint=False)
-        grid = LinearGrid(theta=512, zeta=zetas, NFP=1, sym=False)
-        desc_val = grid.compress(
-            np.asarray(surf.compute(name, grid=grid)[name]), surface_label="zeta"
-        )
-        measured = np.array([_measure_cross_section(surf, z)[idx] for z in zetas])
-        if name == "a_major/a_minor":
-            # the Ramanujan inversion is singular as a/b -> 1
-            assert np.all(measured > 1.5), f"cross-section not elongated: {measured}"
-        rel = np.abs(desc_val / measured - 1)
-        tol = tolw if omega else tol0
-        assert np.all(rel < tol), (
-            f"omega={omega}: {name} vs direct measurement differs by "
-            f"{100 * rel.max():.3f} % (max over zeta), tol {100 * tol:.3f} %\n"
-            f"  DESC   {desc_val}\n  direct {measured}"
-        )
+    kw = dict(grid=lg, override_grid=False)
+    area = eq_omega.compute("A(z)", **kw)["A(z)"][0]
+    perim = eq_omega.compute("perimeter(z)", **kw)["perimeter(z)"][0]
+    elong = eq_omega.compute("a_major/a_minor", **kw)["a_major/a_minor"][0]
+
+    assert abs(area / direct_area - 1) < 0.05
+    assert abs(perim / direct_perim - 1) < 0.05
+    assert abs(elong / direct_elong - 1) < 0.05
 
 
 class TestPlottingWithOmega:

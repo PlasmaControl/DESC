@@ -701,6 +701,25 @@ def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^theta*rho",
+    label="\\mathbf{e}^{\\theta} \\rho",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant poloidal basis vector weighted by radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^theta"],
+    parameterization=["desc.equilibrium.equilibrium.Equilibrium"],
+)
+def _e_sup_theta_times_rho(params, transforms, profiles, data, **kwargs):
+    data["e^theta*rho"] = data["e^theta"] * transforms["grid"].nodes[:, 0][:, None]
+    return data
+
+
+@register_compute_fun(
     name="e^theta_r",
     label="\\partial_{\\rho} \\mathbf{e}^{\\theta}",
     units="m^{-1}",

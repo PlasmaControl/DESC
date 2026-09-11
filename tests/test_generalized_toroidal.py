@@ -419,15 +419,24 @@ class TestEquilibriumOmega:
 
         w7x = desc.examples.get("W7-X")
         kw = dict(
-            L=4, M=4, N=4, NFP=w7x.NFP, sym=True,
-            surface=w7x.surface, pressure=w7x.pressure, iota=w7x.iota, Psi=w7x.Psi,
+            L=4,
+            M=4,
+            N=4,
+            NFP=w7x.NFP,
+            sym=True,
+            surface=w7x.surface,
+            pressure=w7x.pressure,
+            iota=w7x.iota,
+            Psi=w7x.Psi,
         )
         eq0 = Equilibrium(**kw)
         eq0.solve(verbose=0, maxiter=40, ftol=1e-6)
 
         eq1 = Equilibrium(**kw, Lw=2, Mw=2, Nw=2)
         constraints = get_fixed_boundary_constraints(eq=eq1)
-        constraints = tuple(c for c in constraints if not isinstance(c, FixOmegaInterior))
+        constraints = tuple(
+            c for c in constraints if not isinstance(c, FixOmegaInterior)
+        )
         eq1.solve(constraints=constraints, verbose=0, maxiter=40, ftol=1e-6)
         assert np.max(np.abs(np.asarray(eq1.W_lmn))) > 1e-4  # interior omega moved
 
@@ -662,11 +671,16 @@ def test_area_on_solved_omega_equilibrium(eq_omega):
         np.sqrt(3)
         * (
             np.sqrt(8 * np.pi * direct_area + direct_perim**2)
-            + np.sqrt(np.abs(
-                2 * np.sqrt(3) * direct_perim
-                * np.sqrt(8 * np.pi * direct_area + direct_perim**2)
-                - 40 * np.pi * direct_area + 4 * direct_perim**2
-            ))
+            + np.sqrt(
+                np.abs(
+                    2
+                    * np.sqrt(3)
+                    * direct_perim
+                    * np.sqrt(8 * np.pi * direct_area + direct_perim**2)
+                    - 40 * np.pi * direct_area
+                    + 4 * direct_perim**2
+                )
+            )
         )
         + 3 * direct_perim
     ) / (12 * np.pi)
@@ -677,9 +691,7 @@ def test_area_on_solved_omega_equilibrium(eq_omega):
     # sheet itself, not the enclosed cross-sectional area, and is off by tens
     # of percent when omega != 0; override_grid=True silently swaps back to
     # that QuadratureGrid path even if a LinearGrid is passed in.
-    lg = LinearGrid(
-        L=eq_omega.L_grid, theta=512, zeta=0.3, NFP=eq_omega.NFP, sym=False
-    )
+    lg = LinearGrid(L=eq_omega.L_grid, theta=512, zeta=0.3, NFP=eq_omega.NFP, sym=False)
     kw = dict(grid=lg, override_grid=False)
     area = eq_omega.compute("A(z)", **kw)["A(z)"][0]
     perim = eq_omega.compute("perimeter(z)", **kw)["perimeter(z)"][0]

@@ -10,8 +10,8 @@ from desc.backend import execute_on_cpu, jnp
 from desc.grid import Grid
 
 from ..diffmat_utils import DiffMat
-from ..utils import errorif, rpz2xyz, rpz2xyz_vec, setdefault, warnif
-from .data_index import allowed_kwargs, data_index, deprecated_names
+from ..utils import errorif, rpz2xyz, rpz2xyz_vec, warnif
+from .data_index import _topological_order, allowed_kwargs, data_index, deprecated_names
 
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -21,6 +21,7 @@ profile_names = {
     "electron_temperature": "Te_l",
     "electron_density": "ne_l",
     "ion_temperature": "Ti_l",
+    "ion_density": "ni_l",
     "atomic_number": "Zeff_l",
 }
 
@@ -107,7 +108,6 @@ def compute(  # noqa: C901
                 f"Variable name {name} is deprecated and will be removed in a future "
                 f"DESC version, use name {deprecated_names.get(name, None)} instead.",
             )
-
     # RG: normalize transforms so diffmat is passed via transforms, not as a kwarg ---
     # We only absorb 'diffmat'. We intentionally DO NOT move 'grid' from kwargs into
     # transforms here, because Equilibrium.compute's existing plumbing correctly
@@ -121,20 +121,17 @@ def compute(  # noqa: C901
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
     pm_kw = kwargs.pop("phi_matrix", None)
-    xi = kwargs.pop("xi", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
         transforms["diffmat"] = dm_kw
-    
+
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
 
-    if "xi" not in transforms and xi is not None:
-        transforms["xi"] = xi
-    
-    bad_kwargs = kwargs.keys() - allowed_kwargs
-    errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
+    bad_kwargs = kwargs.keys() - allowed_kwargs - {"num_transit"}
+    if len(bad_kwargs) > 0:
+        raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:
         assert _has_params(name, params, p), f"Don't have params to compute {name}"
@@ -172,9 +169,8 @@ def compute(  # noqa: C901
                     f"Expected grid with '{req}:{reqs[req]}' to compute {name}.",
                 )
 
-        _ = _get_deps(
-            p, names, set(), data, transforms["grid"].axis.size, check_fun=check_fun
-        )
+        # this call is purely for validation of the grid/deps consistency
+        _ = _get_deps(p, names, data, transforms["grid"].axis.size, check_fun=check_fun)
 
     if data is None:
         data = {}
@@ -221,7 +217,6 @@ def compute(  # noqa: C901
 def _convert_basis(p, data, basis):
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
-
         for name in data.keys():
             if name == "potential data":
                 continue
@@ -261,51 +256,24 @@ def _compute(
 
     """
     assert kwargs.get("basis", "rpz") == "rpz", "_compute only works in rpz coordinates"
-    parameterization = _parse_parameterization(parameterization)
+    p = _parse_parameterization(parameterization)
     if isinstance(names, str):
         names = [names]
     if data is None:
         data = {}
 
-    for name in names:
-        if name in data:
-            # don't compute something that's already been computed
-            continue
+    has_axis = bool(transforms["grid"].axis.size)
+    needed = _get_deps(p, names, data=data, has_axis=has_axis)
+    needed = sorted(needed, key=_topological_order[p].__getitem__)
 
-        if not has_data_dependencies(
-            parameterization, name, data, transforms["grid"].axis.size
-        ):
-            # then compute the missing dependencies
-            data = _compute(
-                parameterization,
-                data_index[parameterization][name]["dependencies"]["data"],
-                params=params,
-                transforms=transforms,
-                profiles=profiles,
-                data=data,
-                **kwargs,
-            )
-            if transforms["grid"].axis.size:
-                data = _compute(
-                    parameterization,
-                    data_index[parameterization][name]["dependencies"][
-                        "axis_limit_data"
-                    ],
-                    params=params,
-                    transforms=transforms,
-                    profiles=profiles,
-                    data=data,
-                    **kwargs,
-                )
-        # now compute the quantity
-        if data_index[parameterization][name]["coordinates"] != "RpZ":
-            data = data_index[parameterization][name]["fun"](
-                params=params,
-                transforms=transforms,
-                profiles=profiles,
-                data=data,
-                **kwargs,
-            )
+    for name in needed:
+        if name in data:
+            # a previously-called fun may have populated this already
+            continue
+        data = data_index[p][name]["fun"](
+            params=params, transforms=transforms, profiles=profiles, data=data, **kwargs
+        )
+
     return data
 
 
@@ -399,60 +367,21 @@ def get_data_deps(keys, obj, has_axis=False, basis="rpz", data=None):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     if not data:
         out = []
         for key in keys:
-            out += _get_deps_1_key(p, key, has_axis)
+            out += data_index[p][key][deps_type]["data"]
         out = set(out)
     else:
-        out = _get_deps(p, keys, deps=set(), data=data, has_axis=has_axis)
+        out = _get_deps(p, keys, data=data, has_axis=has_axis)
         out.difference_update(keys)
     if basis.lower() == "xyz":
         out.add("phi")
     return sorted(out)
 
 
-def _get_deps_1_key(p, key, has_axis):
-    """Gather all quantities required to compute ``key``.
-
-    Parameters
-    ----------
-    p : str
-        Type of object to compute for, eg Equilibrium, Curve, etc.
-    key : str
-        Name of the quantity to compute.
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
-
-    Returns
-    -------
-    deps_1_key : list of str
-        Dependencies required to compute ``key``.
-
-
-    """
-    if has_axis:
-        if "full_with_axis_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_with_axis_dependencies"]["data"]
-    elif "full_dependencies" in data_index[p][key]:
-        return data_index[p][key]["full_dependencies"]["data"]
-
-    deps = data_index[p][key]["dependencies"]["data"]
-    if len(deps) == 0:
-        return deps
-    out = deps.copy()  # to avoid modifying the data_index
-    for dep in deps:
-        out += _get_deps_1_key(p, dep, has_axis)
-    if has_axis:
-        axis_limit_deps = data_index[p][key]["dependencies"]["axis_limit_data"]
-        out += axis_limit_deps.copy()  # to be safe
-        for dep in axis_limit_deps:
-            out += _get_deps_1_key(p, dep, has_axis)
-
-    return sorted(set(out))
-
-
-def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fun=None):
+def _get_deps(parameterization, names, data=None, has_axis=False, check_fun=None):
     """Gather all quantities required to compute ``names`` given already computed data.
 
     Parameters
@@ -461,8 +390,6 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
         Type of object to compute for, eg Equilibrium, Curve, etc.
     names : str or array-like of str
         Name(s) of the quantity(s) to compute.
-    deps : set[str]
-        Dependencies gathered so far.
     data : dict[str, jnp.ndarray] or set[str]
         Data computed so far, generally output from other compute functions.
     has_axis : bool
@@ -477,28 +404,31 @@ def _get_deps(parameterization, names, deps, data=None, has_axis=False, check_fu
 
     """
     p = _parse_parameterization(parameterization)
-    for name in names:
-        if name not in deps and (data is None or name not in data):
-            if check_fun is not None:
-                check_fun(name)
-            deps.add(name)
-            deps = _get_deps(
-                p,
-                data_index[p][name]["dependencies"]["data"],
-                deps,
-                data,
-                has_axis,
-                check_fun,
-            )
-            if has_axis:
-                deps = _get_deps(
-                    p,
-                    data_index[p][name]["dependencies"]["axis_limit_data"],
-                    deps,
-                    data,
-                    has_axis,
-                    check_fun,
-                )
+    deps = set()
+    # below while loop expands each direct dependency if they are not
+    # in data or they are already added to the set before
+    stack = [n for n in names if data is None or n not in data]
+    while stack:
+        name = stack.pop()
+        if name in deps:
+            continue
+        if check_fun is not None:
+            check_fun(name)
+        deps.add(name)
+        direct = data_index[p][name]["dependencies"]
+        for dep in direct["data"]:
+            if dep in deps:
+                continue
+            if data is not None and dep in data:
+                continue
+            stack.append(dep)
+        if has_axis:
+            for dep in direct["axis_limit_data"]:
+                if dep in deps:
+                    continue
+                if data is not None and dep in data:
+                    continue
+                stack.append(dep)
     return deps
 
 
@@ -525,10 +455,9 @@ def _grow_seeds(parameterization, seeds, search_space, has_axis=False):
     """
     p = _parse_parameterization(parameterization)
     out = seeds.copy()
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     for key in search_space:
-        deps = data_index[p][key][
-            "full_with_axis_dependencies" if has_axis else "full_dependencies"
-        ]["data"]
+        deps = data_index[p][key][deps_type]["data"]
         if not seeds.isdisjoint(deps):
             out.add(key)
     return out
@@ -558,25 +487,11 @@ def get_derivs(keys, obj, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-
-    def _get_derivs_1_key(key):
-        if has_axis:
-            if "full_with_axis_dependencies" in data_index[p][key]:
-                return data_index[p][key]["full_with_axis_dependencies"]["transforms"]
-        elif "full_dependencies" in data_index[p][key]:
-            return data_index[p][key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, p, has_axis=has_axis, basis=basis)
-        derivs = {}
-        for dep in deps:
-            for key, val in data_index[p][dep]["dependencies"]["transforms"].items():
-                if key not in derivs:
-                    derivs[key] = []
-                derivs[key] += val
-        return derivs
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
 
     derivs = {}
     for key in keys:
-        derivs1 = _get_derivs_1_key(key)
+        derivs1 = data_index[p][key][deps_type]["transforms"]
         for key1, val in derivs1.items():
             if key1 not in derivs:
                 derivs[key1] = []
@@ -612,11 +527,14 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    profs = []
-    for key in deps:
-        profs += data_index[p][key]["dependencies"]["profiles"]
-    profs = sorted(set(profs))
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    profs = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any profiles, no problem
+    # this way we skip calling get_data_deps again
+    for key in keys:
+        profs.update(data_index[p][key][deps_type]["profiles"])
+    profs = sorted(profs)
     if isinstance(obj, str) or inspect.isclass(obj):
         return profs
     # need to use copy here because profile may be None
@@ -625,7 +543,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
 
 
 @execute_on_cpu
-def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
+def get_params(keys, obj, has_axis=False, basis="rpz"):
     """Get parameters needed to compute a given quantity.
 
     Parameters
@@ -638,8 +556,6 @@ def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
         Whether the grid to compute on has a node on the magnetic axis.
     basis : {"rpz", "xyz"}
         Basis of computed quantities.
-    params : dict[str, jnp.ndarray]
-        Params computed so far.
 
     Returns
     -------
@@ -651,23 +567,26 @@ def get_params(keys, obj, has_axis=False, basis="rpz", params=None):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, p, has_axis=has_axis, basis=basis)
-    params_list = []
-    for key in deps:
-        params_list += data_index[p][key]["dependencies"]["params"]
-    if isinstance(obj, str) or inspect.isclass(obj):
-        return params_list
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    params = set()
+    # below loop doesn't consider extra "phi" in basis="xyz" case
+    # but since "phi" doesn't have any params, no problem
+    # this way we skip calling get_data_deps again
+    # TODO (#568): This will probably need w_lmn
+    for key in keys:
+        params.update(data_index[p][key][deps_type]["params"])
+    params = sorted(params)
 
-    params = setdefault(params, {})
-    for name in params_list:
-        if name not in params:
-            p = getattr(obj, name)
-            params[name] = (
-                p.copy()
-                if isinstance(p, dict)
-                else (None if (p is None) else jnp.atleast_1d(p))
-            )
-    return params
+    if isinstance(obj, str) or inspect.isclass(obj):
+        return list(params)
+    temp_params = {}
+    for name in params:
+        p = getattr(obj, name)
+        if isinstance(p, dict):
+            temp_params[name] = p.copy()
+        else:
+            temp_params[name] = jnp.atleast_1d(p)
+    return temp_params
 
 
 @execute_on_cpu
@@ -710,7 +629,7 @@ def get_transforms(  # noqa: C901
     from desc.basis import DoubleFourierSeries
     from desc.grid import LinearGrid
     from desc.transform import Transform
-    
+
     keys = [keys] if isinstance(keys, str) else keys
     if jitable or kwargs.get("method") == "jitable":
         method = "jitable"
@@ -720,11 +639,19 @@ def get_transforms(  # noqa: C901
         method = "auto"
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
-
-    transforms = setdefault(transforms, {})
-    transforms.setdefault("grid", grid)
+    transforms = {"grid": grid}
     p = _parse_parameterization(obj)
-
+    deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
+    optional_diffmat_keys = {
+        "ideal ballooning lambda",
+        "ideal ballooning eigenfunction",
+    }
+    diffmat_users = [
+        key for key in keys if "diffmat" in data_index[p][key][deps_type]["transforms"]
+    ]
+    optional_diffmat = diffmat_users and all(
+        key in optional_diffmat_keys for key in diffmat_users
+    )
 
     # We do not build a Transform, just ensure the dict is present.
     # If not in transforms, Look in kwargs here.
@@ -733,23 +660,29 @@ def get_transforms(  # noqa: C901
         transforms["diffmat"] = dm if isinstance(dm, DiffMat) else DiffMat(**dm)
     if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
         pm = kwargs["phi_matrix"]
-        transforms["phi_matrix"] = pm    
-    if "xi" in kwargs and kwargs["xi"] is not None:
-        transforms["xi"] = kwargs["xi"]
-        
+        transforms["phi_matrix"] = pm
+
     for c in derivs.keys():
         if c in transforms:
             continue
-        if hasattr(obj, c + "_basis") or (c == "Phi_PEST" and hasattr(obj, "Phi_basis")):  # regular stuff like R, Z, lambda etc.
+        if hasattr(obj, c + "_basis") or (
+            c == "Phi_PEST" and hasattr(obj, "Phi_basis")
+        ):  # regular stuff like R, Z, lambda etc.
             if c == "Phi_PEST" and "pest_grid" in kwargs:
                 grid_temp = kwargs.get("pest_grid")
             else:
                 grid_temp = grid
-            basis = getattr(obj, c + "_basis") if c != "Phi_PEST" else getattr(obj, "Phi_basis")
+            basis = (
+                getattr(obj, c + "_basis")
+                if c != "Phi_PEST"
+                else getattr(obj, "Phi_basis")
+            )
             # first check if we already have a transform with a compatible basis
             if not jitable:
                 for transform in transforms.values():
-                    if basis.equiv(getattr(transform, "basis", None)) and grid_temp.equiv(getattr(transform, "grid", None)):
+                    if basis.equiv(
+                        getattr(transform, "basis", None)
+                    ) and grid_temp.equiv(getattr(transform, "grid", None)):
                         ders = np.unique(
                             np.vstack([derivs[c], transform.derivatives]), axis=0
                         ).astype(int)
@@ -774,8 +707,7 @@ def get_transforms(  # noqa: C901
                             p == "desc.magnetic_fields._laplace.SourceFreeField"
                             or p
                             == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
-                            or p
-                            == "desc.equilibrium.equilibrium.Equilibrium"
+                            or p == "desc.equilibrium.equilibrium.Equilibrium"
                         ),
                         method=method,
                     )
@@ -789,8 +721,7 @@ def get_transforms(  # noqa: C901
                     and (
                         p == "desc.magnetic_fields._laplace.SourceFreeField"
                         or p == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
-                        or p
-                        == "desc.equilibrium.equilibrium.Equilibrium"
+                        or p == "desc.equilibrium.equilibrium.Equilibrium"
                     ),
                     method=method,
                 )
@@ -854,6 +785,8 @@ def get_transforms(  # noqa: C901
                 method=method,
             )
         elif c == "diffmat":
+            if "diffmat" not in transforms and optional_diffmat:
+                transforms["diffmat"] = None
             errorif(
                 "diffmat" not in transforms,
                 ValueError,
@@ -862,8 +795,6 @@ def get_transforms(  # noqa: C901
             )
         elif c == "phi_matrix":
             transforms["phi_matrix"] = None
-        elif c == "xi":
-            transforms["xi"] = None
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

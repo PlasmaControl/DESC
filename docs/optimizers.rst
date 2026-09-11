@@ -4,7 +4,7 @@ Optimizers Supported
 The table below contains a list of different optimzers that DESC is interfaced to.
 New optimizers can be added easily, see :ref:`adding-optimizers`.
 
-  * **Name** : Name of the optimizer method. Pass this string to `desc.optimze.Optimizer` to use the method.
+  * **Name** : Name of the optimizer method. Pass this string to ``desc.optimize.Optimizer`` to use the method.
   * **Scalar** : Whether the method assumes a scalar residual, or a vector of residuals for least squares.
   * **Equality constraints** : Whether the method handles equality constraints.
   * **Inequality constraints** : Whether the method handles inequality constraints.

@@ -7,6 +7,7 @@ Using tensor product approach in 3D:
 - Fourier methods in y dimension
 - Fourier methods in z dimension
 """
+
 import os
 
 import matplotlib.pyplot as plt
@@ -15,12 +16,24 @@ import pytest
 
 from desc.backend import jax, jnp, vmap
 from desc.diffmat_utils import (  # cheb_D1,; cheb_D2,; chebpts_lobatto,
+    DiffMat,
+    bspline_diffmat,
     finite_difference_diffmat,
     fourier_diffmat,
+    fourier_diffmat_truncated,
     fourier_pts,
+    jacobi_diffmat,
     legendre_diffmat,
+    zernike_fourier_diffmat,
+    zernike_penalty_projector_from_diffmat,
 )
-from desc.integrals.quad_utils import automorphism_staircase1, leggauss_lob
+from desc.grid import LinearGrid
+from desc.integrals.quad_utils import (
+    automorphism_staircase1,
+    bspline_nodes_weights,
+    gauss_radau_jacobi,
+    leggauss_lob,
+)
 
 NFP = 5
 
@@ -298,9 +311,7 @@ def test_tensor_mixed_derivative(
     # record it (pytest will still assert below)
     collected_errors.append((dx_order, dy_order, dz_order, n, error))
 
-    assert (
-        error < tol
-    ), f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
+    assert error < tol, f"dx={dx_order}, dy={dy_order}, dz={dz_order}: \
         error {error:.2e} exceeds tol {tol}"
 
 
@@ -369,6 +380,183 @@ def test_summation_by_parts():
 
     np.testing.assert_allclose(W0 @ D0 + (W0 @ D0).T, B, atol=1e-15)
     np.testing.assert_allclose(W1 @ D1 + (W1 @ D1).T, B, atol=5e-13)
+
+
+# === Basis coverage: same exactness check, looped over the polynomial-exact
+# === bases via parametrize -- each reproduces polynomials up to its own
+# === construction degree exactly.
+_BASIS = {
+    "jacobi": (
+        lambda N: gauss_radau_jacobi(N, 0.0, 1.0)[0],
+        lambda N: jacobi_diffmat(N, 0.0, 1.0)[0],
+    ),
+    "bspline": (
+        lambda N: bspline_nodes_weights(N, degree=4)[0],
+        lambda N: bspline_diffmat(N, degree=4)[0],
+    ),
+}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("basis", _BASIS)
+def test_diffmat_basis_reproduces_cubic_derivative(basis):
+    """Each basis differentiates a cubic on its native [-1, 1] nodes exactly."""
+    nodes_fn, diffmat_fn = _BASIS[basis]
+    nodes = np.asarray(nodes_fn(12))
+    D = np.asarray(diffmat_fn(12))
+    np.testing.assert_allclose(D @ (nodes**3 - 2 * nodes), 3 * nodes**2 - 2, atol=1e-8)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("n", [6, 7])  # even (tan) / odd (sin) branches
+def test_fourier_diffmat_even_and_odd_n(n):
+    """Both the even (tan) and odd (sin) formula branches are exact."""
+    x = np.asarray(fourier_pts(n))
+    D = np.asarray(fourier_diffmat(n)[0])
+    np.testing.assert_allclose(D @ np.sin(2 * x), 2 * np.cos(2 * x), atol=1e-8)
+
+
+@pytest.mark.unit
+def test_fourier_diffmat_truncated():
+    """Exact at/below the cutoff, killed above it; matches full at max M."""
+    n, M = 16, 3
+    x = np.asarray(fourier_pts(n))
+    D = np.asarray(fourier_diffmat_truncated(n, M)[0])
+    np.testing.assert_allclose(D @ np.sin(M * x), M * np.cos(M * x), atol=1e-8)
+    assert np.max(np.abs(D @ np.sin((M + 1) * x))) < 1e-8
+
+    D_full, W_full = fourier_diffmat(15)
+    D_trunc, W_trunc = fourier_diffmat_truncated(15)
+    np.testing.assert_allclose(np.asarray(D_trunc), np.asarray(D_full), atol=1e-10)
+    np.testing.assert_allclose(np.asarray(W_trunc), np.asarray(W_full), atol=1e-10)
+
+    with pytest.raises(ValueError):
+        fourier_diffmat_truncated(9, M=10)  # M above (n - 1) // 2
+    with pytest.raises(ValueError):
+        fourier_diffmat_truncated(2)  # n too small to resolve any mode
+
+
+_D4, _W4 = legendre_diffmat(4)
+_Dr, _ = legendre_diffmat(4)
+_Dt, _ = fourier_diffmat(5)
+_D_RHO, _D_THETA = jnp.kron(_Dr, jnp.eye(5)), jnp.kron(jnp.eye(4), _Dt)
+
+
+@pytest.mark.unit
+def test_zernike_penalty_projector():
+    """The penalty projector is Hermitian, idempotent, and correctly shaped."""
+    Q, rank = zernike_penalty_projector_from_diffmat(_D_RHO, _D_THETA)
+    Q = np.asarray(Q)
+    assert Q.shape == (20, 20)
+    np.testing.assert_allclose(Q, Q.conj().T, atol=1e-10)
+    np.testing.assert_allclose(Q @ Q, Q, atol=1e-8)
+    assert 0 < rank <= 20
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "args",
+    [
+        (None, _D4),  # missing D_rho
+        (np.ones((3, 4)), np.ones((3, 4))),  # not square
+        (np.ones((4, 4)), np.ones((3, 3))),  # shape mismatch
+    ],
+)
+def test_zernike_penalty_projector_rejects_bad_input(args):
+    """Missing, non-square, or mismatched-shape D_rho/D_theta all raise."""
+    with pytest.raises(ValueError):
+        zernike_penalty_projector_from_diffmat(*args)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},  # no matrix pair at all
+        {"D_rho": _D4},  # D without matching W
+        {"D_rho": np.ones((3, 4)), "W_rho": np.ones(3)},  # non-square D
+        {"D_rho": _D4, "W_rho": np.ones((3, 3))},  # 2D W mismatched with D
+        {"D_rho": _D4, "W_rho": np.ones((4, 4, 4))},  # W wrong ndim
+        {"D_rho": _D4, "W_rho": _W4, "zernike_penalty_projector": np.ones((3, 4))},
+        {"D_rho": _D4, "W_rho": _W4, "zernike_penalty_projector": np.eye(3)},
+    ],
+)
+def test_diffmat_rejects_bad_input(kwargs):
+    """Every DiffMat construction-time validation error, looped in one test."""
+    with pytest.raises(ValueError):
+        DiffMat(**kwargs)
+
+
+@pytest.mark.unit
+def test_diffmat_zernike_penalty_alpha_builds_projector():
+    """A positive alpha with no projector supplied builds one automatically."""
+    dm = DiffMat(
+        D_rho=_D_RHO,
+        W_rho=jnp.eye(20),
+        D_theta=_D_THETA,
+        W_theta=jnp.eye(20),
+        zernike_penalty_alpha=1.0,
+    )
+    assert dm.zernike_penalty_projector is not None
+    assert dm.zernike_penalty_rank is not None
+
+
+@pytest.mark.unit
+def test_diffmat_w_vector_hash_eq_and_from_zeta_grid():
+    """`w_*`, `__hash__`/`__eq__`, and `from_zeta_grid` all in one loop."""
+    dm1 = DiffMat(D_rho=_D4, W_rho=_W4)
+    dm2 = DiffMat(D_rho=_D4, W_rho=jnp.diagonal(_W4))  # W as a 1D vector
+    np.testing.assert_allclose(dm2.w_rho, dm1.w_rho)
+    assert dm1 == DiffMat(D_rho=_D4, W_rho=_W4)
+    assert hash(dm1) == hash(DiffMat(D_rho=_D4, W_rho=_W4))
+    assert dm1 != "not a diffmat"
+    assert dm1.w_theta is None and dm1.w_zeta is None
+
+    zeta = jnp.linspace(0.0, 2 * jnp.pi, 16, endpoint=False)
+    dm = DiffMat.from_zeta_grid(zeta)
+    assert dm.D_zeta.shape == dm.W_zeta.shape == (16, 16)
+    for bad in (
+        jnp.ones((2, 2)),  # not 1D
+        jnp.linspace(0, 1, 4),  # too few nodes
+        jnp.array([0.0, 1.0, 2.0, 4.0, 5.0, 6.0, 7.0, 8.0]),  # non-uniform
+    ):
+        with pytest.raises(ValueError):
+            DiffMat.from_zeta_grid(bad)
+
+
+@pytest.mark.unit
+def test_diffmat_set_up_fills_legacy_defaults():
+    """`_set_up` fills penalty attrs missing on a pre-penalty instance."""
+    dm = DiffMat.__new__(DiffMat)
+    dm.D_rho, dm.W_rho = _D4, _W4
+    dm.D_theta = dm.D_zeta = dm.W_theta = dm.W_zeta = None
+    dm._set_up()
+    assert dm.zernike_penalty_alpha == 0.0
+    assert dm.zernike_penalty_projector is None
+
+
+@pytest.mark.unit
+def test_zernike_fourier_diffmat():
+    """D_rho/D_theta reproduce an exactly-representable mode's derivatives."""
+    rho = jnp.linspace(0.2, 1.0, 6)
+    theta = jnp.linspace(0, 2 * jnp.pi, 8, endpoint=False)
+    D_rho, D_theta = zernike_fourier_diffmat(rho, theta)
+
+    # Node order matches the LinearGrid the function builds internally.
+    grid = LinearGrid(rho=rho, theta=theta, NFP=1, sym=False)
+    r, t = grid.nodes[:, 0], grid.nodes[:, 1]
+    # Zernike radial/azimuthal degree share parity, so rho*cos(theta) (n=m=1)
+    # is exactly representable; rho**2*cos(theta) is not.
+    f = r * jnp.cos(t)
+    np.testing.assert_allclose(np.asarray(D_rho @ f), np.asarray(jnp.cos(t)), atol=1e-5)
+    np.testing.assert_allclose(
+        np.asarray(D_theta @ f), np.asarray(-r * jnp.sin(t)), atol=1e-5
+    )
+
+    with pytest.raises(ValueError):
+        zernike_fourier_diffmat(jnp.ones((2, 2)), theta)  # rho not 1D
+    with pytest.raises(ValueError):
+        zernike_fourier_diffmat(jnp.array([]), theta)  # rho empty
 
 
 # To view the plots, run pytest -s

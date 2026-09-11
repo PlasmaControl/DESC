@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 from jax import grad
 from matplotlib import pyplot as plt
-from numpy.polynomial.chebyshev import chebinterpolate, chebroots
 from numpy.polynomial.legendre import leggauss
 from scipy import integrate
 from scipy.interpolate import CubicHermiteSpline
@@ -20,7 +19,6 @@ from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
     Bounce1D,
@@ -37,13 +35,7 @@ from desc.integrals import (
     surface_variance,
     virtual_casing_biot_savart,
 )
-from desc.integrals._bounce_utils import (
-    _check_bounce_points,
-    bounce_points,
-    get_extrema,
-)
-from desc.integrals._interp_utils import fourier_pts
-from desc.integrals.basis import FourierChebyshevSeries, PiecewiseChebyshevSeries
+from desc.integrals._bounce_utils import _bounce_points, check_bounce_points, get_mins
 from desc.integrals.quad_utils import (
     _best_params,
     _best_ratio,
@@ -59,20 +51,10 @@ from desc.integrals.quad_utils import (
     leggauss_lob,
     tanh_sinh,
 )
-from desc.integrals.singularities import (
-    _G,
-    _grad_G,
-    _kernel_BS_plus_grad_S,
-    _kernel_nr_over_r3,
-)
+from desc.integrals.singularities import _kernel_nr_over_r3
 from desc.integrals.surface_integral import _get_grid_surface
-from desc.magnetic_fields import (
-    FreeSurfaceOuterField,
-    SourceFreeField,
-    ToroidalMagneticField,
-)
 from desc.transform import Transform
-from desc.utils import dot, errorif, rpz2xyz, safediv
+from desc.utils import dot, errorif, safediv
 
 
 class TestSurfaceIntegral:
@@ -735,530 +717,8 @@ class TestSingularities:
         return self.test_singular_integral_vac_estell(FFTInterpolator, vanilla=True)
 
 
-class TestLaplace:
-    """Test multiply connected Laplace solvers."""
-
-    class _Z_hat_field:
-        """Field to test the Dirichlet solver."""
-
-        def __init__(self, Y=0):
-            pass
-
-        def compute_magnetic_field(self, coords, source_grid, chunk_size):
-            """Returns ∇Z."""
-            num_coords = coords.shape[0]
-            zeros = jnp.zeros(num_coords)
-            B = jnp.column_stack([zeros, zeros, jnp.ones(num_coords)])
-            return B
-
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "surface, M, N, maxiter, chunk_size, just_err",
-        [(None, 16, 16, -1, 500, False), (None, 16, 16, 40, 500, False)],
-    )
-    def test_interior_Dirichlet(self, surface, M, N, maxiter, chunk_size, just_err):
-        """Test multiply connected interior Dirichlet Laplace solver."""
-        if surface is None:
-            surface = FourierRZToroidalSurface(
-                R_lmn=[10, 1, 0.2],
-                Z_lmn=[-2, -0.2],
-                modes_R=[[0, 0], [1, 0], [0, 1]],
-                modes_Z=[[-1, 0], [0, -1]],
-            )
-        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
-        field = FreeSurfaceOuterField(
-            surface,
-            grid.M - 1,
-            grid.N - 1,
-            M_coil=surface.M,
-            N_coil=surface.N,
-            B_coil=TestLaplace._Z_hat_field(),
-        )
-        assert field.M != grid.M and field.N != grid.N
-        data, _ = field.compute(
-            ["Phi error", "num iter"] if just_err else "γ potential",
-            grid,
-            maxiter=maxiter,
-            full_output=True,
-            chunk_size=chunk_size,
-        )
-        if maxiter > 0:
-            print()
-            print(data["num iter"])
-            print(data["Phi error"])
-            if just_err:
-                return data["num iter"], data["Phi error"]
-        np.testing.assert_allclose(data["Y_coil"], 0, atol=1e-12)
-        np.testing.assert_allclose(data["Phi_coil (periodic)"], data["Z"])
-        np.testing.assert_allclose(data["γ potential"], data["Z"], atol=1e-6)
-
-    @pytest.mark.skip
-    def test_convergence_run_fixed_point(
-        self,
-        surface=get("W7-X").surface,
-        M=30,
-        N=30,
-        maxiter=np.array([5, 10, 20, 30, 40]),
-        chunk_size=1000,
-        name="convergence-fp_W7-X",
-    ):
-        """Stores errors for potential in name.pkl for plotting analysis."""
-        import pickle
-
-        num_iter = []
-        Phi_err = []
-        print()
-        for i in maxiter:
-            n, e = self.test_interior_Dirichlet(
-                surface, M, N, i, chunk_size, just_err=True
-            )
-            num_iter.append(n)
-            Phi_err.append(e)
-            print(f"Resolution num iter={n} is done with error={e}.")
-        data = {"num iter": np.asarray(num_iter), "Phi error": np.asarray(Phi_err)}
-
-        with open(f"{name}.pkl", "wb") as file:
-            pickle.dump(data, file)
-
-    @pytest.mark.skip
-    def test_convergence_plot_fixed_point(self, name="convergence-fp_W7-X"):
-        """Imports name.pkl and saves plot in name.pdf.
-
-        The remainder of name after first underscore will be
-        appendend to plot title.
-        """
-        import pickle
-
-        with open(f"{name}.pkl", "rb") as file:
-            data = pickle.load(file)
-
-        plt.rcParams.update(
-            {
-                "axes.labelsize": 10,
-                "axes.titlesize": 12,
-                "xtick.labelsize": 10,
-                "ytick.labelsize": 10,
-                "legend.fontsize": 10,
-                "lines.linewidth": 1,
-                "lines.markersize": 4,
-                "figure.figsize": (6, 4),
-                "figure.dpi": 300,
-                "axes.grid": True,
-                "grid.linestyle": "--",
-                "grid.alpha": 0.6,
-            }
-        )
-        fig, ax = plt.subplots()
-        ax.semilogy(data["num iter"], data["Phi error"], marker="o", label=r"$\xi=2/3$")
-        ax.axhline(1e-7, color="black", label="Stop tolerance")
-        ax.set_xlabel(r"Number of fixed point iterations in inversion for $\Phi$")
-        ax.set_ylabel("Absolute error")
-        ax.set_title(
-            r"$\Phi$ error vs. fixed point iterations " + name.split("_", 1)[1]
-        )
-        ax.legend(loc="upper right", frameon=True)
-        fig.tight_layout()
-        plt.savefig(f"{name}.pdf")
-
-    @pytest.mark.unit
-    def test_interior_Neumann(
-        self,
-        surface=None,
-        M=50,
-        N=50,
-        chunk_size=1000,
-        just_err=False,
-        _midpoint_quad=False,
-        _D_quad=False,
-    ):
-        """Test Laplacian solver in interior."""
-        if surface is None:
-            surface = FourierRZToroidalSurface(
-                R_lmn=[10, 1, 0.2],
-                Z_lmn=[-2, -0.2],
-                modes_R=[[0, 0], [1, 0], [0, 1]],
-                modes_Z=[[-1, 0], [0, -1]],
-            )
-        grid = LinearGrid(M=M, N=N, NFP=surface.NFP)
-        data = surface.compute("n_rho", grid=grid)
-        data["B0*n"] = -data["n_rho"][:, 2]
-
-        RpZ_grid = LinearGrid(M=M // 2, N=N // 2, NFP=surface.NFP)
-        RpZ_data = surface.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
-        RpZ_data["B0*n"] = -RpZ_data["n_rho"][:, 2]
-
-        # Φ = Z so these resolutions must give exact reconstruction.
-        field = SourceFreeField(
-            surface, surface.M, surface.N, surface.NFP, "sin" if surface.sym else False
-        )
-        data, RpZ_data = field.compute(
-            ["Phi", "Z"] if just_err else ["∇φ", "Phi", "Z"],
-            grid,
-            data=data,
-            RpZ_data=RpZ_data,
-            RpZ_grid=RpZ_grid,
-            problem="interior Neumann",
-            on_boundary=True,
-            chunk_size=chunk_size,
-            _midpoint_quad=_midpoint_quad,
-            _D_quad=_D_quad,
-        )
-        err = np.ptp(data["Z"] - data["Phi"])
-        if just_err:
-            return err
-        np.testing.assert_allclose(err, 0, atol=2e-5)
-        np.testing.assert_allclose(
-            dot(RpZ_data["∇φ"], RpZ_data["n_rho"]),
-            -RpZ_data["B0*n"],
-            atol=5e-6,
-        )
-
-    @pytest.mark.skip
-    def test_convergence_run(
-        self,
-        surface=get("W7-X").surface,
-        rs=np.array([12, 20, 30, 40]),
-        name="convergence_W7-X",
-        chunk_size=500,
-    ):
-        """Stores errors for potential in name.pkl for plotting analysis.
-
-        Parameters
-        ----------
-        rs : ndarray
-            Grid resolutions (rs=M=N) to compute potential.
-
-        """
-        import pickle
-
-        bools = np.array([True, False])
-        settings = np.array(np.meshgrid(bools, bools)).T.reshape(-1, 2)
-
-        data = {"resolution": rs, "Phi error": {}}
-
-        for mid_quad, D_quad in settings:
-            err = []
-            print()
-            for r in rs:
-                err.append(
-                    self.test_interior_Neumann(
-                        surface, r, r, chunk_size, True, mid_quad, D_quad
-                    )
-                )
-                print(f"Resolution {r} is done.")
-            data["Phi error"][(mid_quad, D_quad)] = np.array(err)
-
-        with open(f"{name}.pkl", "wb") as file:
-            pickle.dump(data, file)
-
-    @pytest.mark.skip
-    def test_convergence_plot(self, name="convergence_W7-X"):
-        """Imports name.pkl and saves plot in name.pdf.
-
-        The remainder of name after first underscore will be
-        appendend to plot title.
-        """
-        import pickle
-
-        with open(f"{name}.pkl", "rb") as file:
-            data = pickle.load(file)
-
-        plt.rcParams.update(
-            {
-                "axes.labelsize": 9,
-                "axes.titlesize": 12,
-                "xtick.labelsize": 10,
-                "ytick.labelsize": 10,
-                "legend.fontsize": 7,
-                "lines.linewidth": 1,
-                "lines.markersize": 4,
-                "figure.figsize": (6, 4),
-                "figure.dpi": 300,
-                "axes.grid": True,
-                "grid.linestyle": "--",
-                "grid.alpha": 0.6,
-            }
-        )
-        fig, ax = plt.subplots()
-
-        errs = data["Phi error"]
-        for key, val in errs.items():
-            ax.semilogy(
-                2 * data["resolution"] + 1,
-                val,
-                marker="o",
-                linestyle="-",
-                label=f"midpoint rule={key[0]}, has singularity={key[1]}",
-            )
-
-        ax.set_xlabel(
-            r"Resolution $n$ per field period ($n=2M+1$, $M=N$). "
-            r"Quadrature cost is $O(n^4 \log(n))$"
-        )
-        ax.set_ylabel(r"Absolute error")
-        ax.set_title(
-            r"Error in $\Phi$ vs. grid resolution for " + name.split("_", 1)[1]
-        )
-        ax.legend(loc="upper right", frameon=True)
-        fig.tight_layout()
-        plt.savefig(f"{name}.pdf")
-
-    @pytest.mark.unit
-    def test_exterior_Neumann(self, maxiter=30, chunk_size=1000):
-        """Test Laplacian solver in exterior."""
-        # Fourier spectrum of G(x) becomes very wide at large R0 (e.g. 10 is large).
-        R0 = 2
-        surface = FourierRZToroidalSurface(
-            R_lmn=[R0, 1, 0.2],
-            Z_lmn=[-2, -0.2],
-            modes_R=[[0, 0], [1, 0], [0, 1]],
-            modes_Z=[[-1, 0], [0, -1]],
-        )
-        x0 = rpz2xyz(np.array([R0, 0, 0]))
-
-        assert surface.NFP == 1
-        grid = LinearGrid(M=30, N=30)
-        data = surface.compute(["x", "n_rho"], grid=grid, basis="xyz")
-        data = {"B0*n": -dot(_grad_G(data["x"] - x0), data["n_rho"])}
-
-        field = SourceFreeField(surface, grid.M, grid.N)
-        data, RpZ_data = field.compute(
-            ["∇φ", "Phi", "x", "n_rho"],
-            grid,
-            data=data,
-            problem="exterior Neumann",
-            on_boundary=True,
-            maxiter=maxiter,
-            full_output=True,
-            chunk_size=chunk_size,
-            basis="xyz",
-        )
-        assert data is RpZ_data
-        print("num iterations:", data["num iter"])
-        print("Phi error     :", data["Phi error"])
-
-        np.testing.assert_allclose(
-            np.ptp(_G(data["x"] - x0) - data["Phi"]),
-            0,
-            atol=1e-6,
-        )
-
-        np.testing.assert_allclose(
-            dot(data["∇φ"] - _grad_G(data["x"] - x0), data["n_rho"]),
-            0,
-            atol=1e-6,
-        )
-
-    @pytest.mark.unit
-    @pytest.mark.slow
-    def test_dommaschk_vacuum(self, chunk_size=50):
-        """Test vacuum field for Dommaschk potential."""
-        C_r = {
-            (0, -2): 0.000056,
-            (0, -1): -0.000921,
-            (0, 0): 0.997922,
-            (0, 1): -0.000921,
-            (0, 2): 0.000056,
-            (1, -2): -0.000067,
-            (1, -1): -0.034645,
-            (1, 0): 0.093260,
-            (1, 1): 0.000880,
-            (1, 2): 0.000178,
-            (2, -2): 0.000373,
-            (2, -1): 0.000575,
-            (2, 0): 0.002916,
-            (2, 1): -0.000231,
-            (2, 2): 0.000082,
-            (3, -2): 0.000462,
-            (3, -1): -0.001509,
-            (3, 0): 0.001748,
-            (3, 1): -0.000239,
-            (3, 2): 0.000052,
-        }
-        C_z = {
-            (0, -2): 0.000076,
-            (0, -1): 0.000923,
-            (0, 0): 0.000000,
-            (0, 1): -0.000923,
-            (0, 2): -0.000076,
-            (1, -2): 0.000069,
-            (1, -1): 0.035178,
-            (1, 0): 0.099830,
-            (1, 1): 0.000860,
-            (1, 2): -0.000179,
-            (2, -2): -0.000374,
-            (2, -1): 0.000257,
-            (2, 0): 0.003096,
-            (2, 1): 0.003021,
-            (2, 2): 0.000007,
-            (3, -2): -0.000518,
-            (3, -1): 0.002233,
-            (3, 0): 0.001828,
-            (3, 1): 0.000257,
-            (3, 2): 0.000035,
-        }
-        eq = Equilibrium(surface=self._merkel_surf(C_r, C_z))
-
-        grid = LinearGrid(M=50, N=50, NFP=eq.NFP)
-        data = eq.compute(["G"], grid=grid)
-        Y_sheet_plus_coil = grid.compress(data["G"])[-1]
-        B0 = ToroidalMagneticField(Y_sheet_plus_coil, 1)
-        field = SourceFreeField(eq.surface, M=8, N=8, B0=B0)
-
-        RpZ_grid = LinearGrid(M=20, N=20, NFP=eq.NFP)
-        RpZ_data = eq.compute(["R", "phi", "Z", "n_rho"], grid=RpZ_grid)
-
-        data, RpZ_data = field.compute(
-            "B",
-            grid,
-            data=data,
-            RpZ_data=RpZ_data,
-            RpZ_grid=RpZ_grid,
-            problem="interior Neumann",
-            on_boundary=True,
-            maxiter=0,
-            chunk_size=chunk_size,
-            warn_fft=False,
-        )
-        np.testing.assert_allclose(dot(RpZ_data["B"], RpZ_data["n_rho"]), 0, atol=5e-4)
-
-        # test off surface evaluation
-        data = {
-            key: val
-            for key, val in data.items()
-            # dependencies of ∇φ
-            if key in _kernel_BS_plus_grad_S.keys
-        }
-        data, RpZ_data = field.compute(
-            "B",
-            grid,
-            data=data,
-            RpZ_grid=LinearGrid(rho=0.5, M=10, N=10, NFP=eq.NFP),
-            on_boundary=False,
-            chunk_size=chunk_size,
-        )
-        assert np.isfinite(RpZ_data["B"]).all()
-
-    @staticmethod
-    def _merkel_surf(C_r, C_z):
-        """Convert merkel coefficients to DESC coefficients."""
-        m_b = max(
-            max(abs(mn[0]) for mn in C_r.keys()), max(abs(mn[0]) for mn in C_z.keys())
-        )
-        n_b = max(
-            max(abs(mn[1]) for mn in C_r.keys()), max(abs(mn[1]) for mn in C_z.keys())
-        )
-        R_lmn = {
-            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
-        }
-        Z_lmn = {
-            (m, n): 0.0 for m in range(-m_b, m_b + 1) for n in range(-n_b, n_b + 1)
-        }
-        for m in range(0, m_b + 1):
-            for n in range(-n_b, n_b + 1):
-                if (m, n) in C_r:
-                    R_lmn[(m, abs(n))] += C_r[(m, n)]
-                    if n < 0:
-                        R_lmn[(-m, n)] += C_r[(m, n)]
-                    elif n > 0:
-                        R_lmn[(-m, -n)] -= C_r[(m, n)]
-                if (m, n) in C_z:
-                    Z_lmn[(-m, abs(n))] += C_z[(m, n)]
-                    if n < 0:
-                        Z_lmn[(m, n)] -= C_z[(m, n)]
-                    elif n > 0:
-                        Z_lmn[(m, -n)] += C_z[(m, n)]
-
-        grid = LinearGrid(rho=1, M=5, N=5)
-        R_bench = TestLaplace._manual_transform(
-            np.array(list(R_lmn.values())),
-            np.array([mn[0] for mn in R_lmn.keys()]),
-            np.array([mn[1] for mn in R_lmn.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        R_merk = TestLaplace._merkel_transform(
-            np.array(list(C_r.values())),
-            np.array([mn[0] for mn in C_r.keys()]),
-            np.array([mn[1] for mn in C_r.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        Z_bench = TestLaplace._manual_transform(
-            np.array(list(Z_lmn.values())),
-            np.array([mn[0] for mn in Z_lmn.keys()]),
-            np.array([mn[1] for mn in Z_lmn.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-        )
-        Z_merk = TestLaplace._merkel_transform(
-            np.array(list(C_z.values())),
-            np.array([mn[0] for mn in C_z.keys()]),
-            np.array([mn[1] for mn in C_z.keys()]),
-            -grid.nodes[:, 1],  # theta is flipped
-            grid.nodes[:, 2],
-            fun=np.sin,
-        )
-        np.testing.assert_allclose(R_bench, R_merk)
-        np.testing.assert_allclose(Z_bench, Z_merk)
-        with pytest.warns(UserWarning, match="Left handed"):
-            surf = FourierRZToroidalSurface(
-                R_lmn=list(R_lmn.values()),
-                Z_lmn=list(Z_lmn.values()),
-                modes_R=list(R_lmn.keys()),
-                modes_Z=list(Z_lmn.keys()),
-            )
-        surf_data = surf.compute(["R", "Z"], grid=grid)
-        np.testing.assert_allclose(surf_data["R"], R_merk)
-        np.testing.assert_allclose(surf_data["Z"], Z_merk)
-        return surf
-
-    @staticmethod
-    def _manual_transform(coef, m, n, theta, zeta):
-        """Evaluates Double Fourier Series of form G_n^m at theta and zeta pts."""
-        op_four = np.where(
-            ((m < 0) & (n < 0))[:, np.newaxis],
-            np.sin(np.abs(m)[:, np.newaxis] * theta)
-            * np.sin(np.abs(n)[:, np.newaxis] * zeta),
-            n[:, np.newaxis] * zeta * np.nan,
-        )
-        op_three = np.where(
-            ((m < 0) & (n >= 0))[:, np.newaxis],
-            np.sin(np.abs(m)[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
-            op_four,
-        )
-        op_two = np.where(
-            ((m >= 0) & (n < 0))[:, np.newaxis],
-            np.cos(m[:, np.newaxis] * theta) * np.sin(np.abs(n)[:, np.newaxis] * zeta),
-            op_three,
-        )
-        op_one = np.where(
-            ((m >= 0) & (n >= 0))[:, np.newaxis],
-            np.cos(m[:, np.newaxis] * theta) * np.cos(n[:, np.newaxis] * zeta),
-            op_two,
-        )
-        return np.sum(coef[:, np.newaxis] * op_one, axis=0)
-
-    @staticmethod
-    def _merkel_transform(coef, m, n, theta, zeta, fun=np.cos):
-        """Evaluates double Fourier series of form cos(m theta + n zeta)."""
-        return np.sum(
-            coef[:, np.newaxis]
-            * fun(m[:, np.newaxis] * theta + n[:, np.newaxis] * zeta),
-            axis=0,
-        )
-
-
 class TestBouncePoints:
     """Test that bounce points are computed correctly."""
-
-    @staticmethod
-    def _cheb_intersect(cheb, k):
-        cheb = cheb.copy()
-        cheb[0] = cheb[0] - k
-        roots = chebroots(cheb)
-        intersect = roots[np.logical_and(np.isreal(roots), np.abs(roots.real) < 1)].real
-        return intersect
 
     @staticmethod
     def filter(z1, z2):
@@ -1275,8 +735,8 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[0::2])
@@ -1291,8 +751,8 @@ class TestBouncePoints:
         B = CubicHermiteSpline(k, np.cos(k), -np.sin(k))
         pitch_inv = 0.5
         intersect = B.solve(pitch_inv, extrapolate=False)
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, B.derivative().c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         np.testing.assert_allclose(z1, intersect[1:-1:2])
@@ -1309,10 +769,9 @@ class TestBouncePoints:
         B = CubicHermiteSpline(
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
-        dB_dz = B.derivative()
-        pitch_inv = B(dB_dz.roots(extrapolate=False))[3] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        pitch_inv = B(B.derivative().roots(extrapolate=False))[3] - 1e-13
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -1335,10 +794,13 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 4,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 4,
         )
-        dB_dz = B.derivative()
-        pitch_inv = B(dB_dz.roots(extrapolate=False))[2]
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        pitch_inv = B(B.derivative().roots(extrapolate=False))[2]
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        z = np.stack((z1, z2))
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        assert not np.any(
+            (z > 0) & (z < 2)
+        ), "This triple root intersect should be removed."
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
@@ -1357,10 +819,9 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 20,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 20,
         )
-        dB_dz = B.derivative()
-        pitch_inv = B(dB_dz.roots(extrapolate=False))[2] + 1e-13
-        z1, z2 = bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, dB_dz.c[:, 2:].T)
-        _check_bounce_points(
+        pitch_inv = B(B.derivative().roots(extrapolate=False))[2] + 1e-13
+        z1, z2 = _bounce_points(pitch_inv, k[2:], B.c[:, 2:].T, sentinel=start)
+        check_bounce_points(
             z1,
             z2,
             pitch_inv,
@@ -1390,10 +851,9 @@ class TestBouncePoints:
             np.cos(k) + 2 * np.sin(-2 * k) + k / 10,
             -np.sin(k) - 4 * np.cos(-2 * k) + 1 / 10,
         )
-        dB_dz = B.derivative()
-        pitch_inv = B(dB_dz.roots(extrapolate=False))[1] - 1e-13
-        z1, z2 = bounce_points(pitch_inv, k, B.c.T, dB_dz.c.T)
-        _check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
+        pitch_inv = B(B.derivative().roots(extrapolate=False))[1] - 1e-13
+        z1, z2 = _bounce_points(pitch_inv, k, B.c.T, sentinel=start)
+        check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
@@ -1405,50 +865,25 @@ class TestBouncePoints:
         np.testing.assert_allclose(z2, intersect[[2, 4, 6]], rtol=1e-5)
 
     @pytest.mark.unit
-    def test_get_extrema(self):
-        """Test computation of extrema of |B|."""
+    def test_get_mins(self):
+        """Test computation of minima of |B|."""
         start = -np.pi
         end = -2 * start
         k = np.linspace(start, end, 5)
         B = CubicHermiteSpline(
             k, np.cos(k) + 2 * np.sin(-2 * k), -np.sin(k) - 4 * np.cos(-2 * k)
         )
-        dB_dz = B.derivative()
-        ext, B_ext = get_extrema(k, B.c.T, dB_dz.c.T)
-        mask = ~np.isnan(ext)
-        ext, B_ext = ext[mask], B_ext[mask]
-        idx = np.argsort(ext)
+        mins, B_mins = get_mins(k, B.c.T, fill_value=np.nan)
+        mask = ~np.isnan(mins)
+        mins, B_mins = mins[mask], B_mins[mask]
+        idx = np.argsort(mins)
 
-        ext_scipy = np.sort(dB_dz.roots(extrapolate=False))
+        ext_scipy = np.sort(B.derivative().roots(extrapolate=False))
+        ext_scipy = ext_scipy[B.derivative(2)(ext_scipy) >= 0]
         B_ext_scipy = B(ext_scipy)
-        assert ext.size == ext_scipy.size
-        np.testing.assert_allclose(ext[idx], ext_scipy)
-        np.testing.assert_allclose(B_ext[idx], B_ext_scipy)
-
-    @pytest.mark.unit
-    def test_z1_first_chebyshev(self):
-        """Test that bounce points are computed correctly."""
-
-        def f(z):
-            return -2 * np.cos(1 / (0.1 + z**2)) + 2
-
-        X, Y = 1, 10
-        alpha, zeta = FourierChebyshevSeries.nodes(X, Y).T
-        cheb = FourierChebyshevSeries(f(zeta).reshape(X, Y)).compute_cheb(
-            fourier_pts(X)
-        )
-        cheb = PiecewiseChebyshevSeries(cheb)
-        pitch_inv = 3
-        z1, z2 = cheb.intersect1d(pitch_inv)
-        cheb.check_intersect1d(z1, z2, pitch_inv)
-        z1, z2 = TestBouncePoints.filter(z1, z2)
-
-        r = self._cheb_intersect(chebinterpolate(f, Y - 1), pitch_inv)
-        np.testing.assert_allclose(z1, r[np.isclose(r, -0.24, atol=1e-1)])
-        np.testing.assert_allclose(z2, r[np.isclose(r, 0.24, atol=1e-1)])
-
-
-auto_sin = (automorphism_sin, grad_automorphism_sin)
+        assert mins.size == ext_scipy.size
+        np.testing.assert_allclose(mins[idx], ext_scipy)
+        np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
 
 
 class TestBounceQuadrature:
@@ -1459,11 +894,12 @@ class TestBounceQuadrature:
         "is_strong, quad, automorphism",
         [
             (True, tanh_sinh(30), None),
-            (False, tanh_sinh(20), None),
-            (True, leggauss(25), auto_sin),
-            # chebgauss1 without c.o.v. is sensitive to approximation error
-            (True, chebgauss1(25), auto_sin),
-            (False, leggauss_lob(8, interior_only=True), auto_sin),
+            (True, leggauss(25), (automorphism_sin, grad_automorphism_sin)),
+            (
+                False,
+                leggauss_lob(8, interior_only=True),
+                (automorphism_sin, grad_automorphism_sin),
+            ),
             (False, chebgauss2(21), None),
         ],
     )
@@ -1489,10 +925,14 @@ class TestBounceQuadrature:
         pitch_inv = 2 - 1e-12
         k = pitch_inv * m  # m = k * pitch
         if is_strong:
-            integrand = lambda data, B, pitch: 1 / jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: 1 / jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipkm1(1 - m)
         else:
-            integrand = lambda data, B, pitch: jnp.sqrt(1 - k * pitch * (B - 1))
+            integrand = lambda data, B, pitch: jnp.sqrt(
+                jnp.abs(1 - k * pitch * (B - 1))
+            )
             truth = v * 2 * ellipe(m)
         np.testing.assert_allclose(
             bounce.integrate(integrand, pitch_inv, check=True, plot=True).sum(),
@@ -1541,7 +981,7 @@ class TestBounceQuadrature:
             K, TestBounceQuadrature._fixed_elliptic(K_integrand, k, 12)
         )
         np.testing.assert_allclose(
-            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 10)
+            E, TestBounceQuadrature._fixed_elliptic(E_integrand, k, 12)
         )
 
         E0 = ellipe(k2)
@@ -1664,7 +1104,7 @@ class TestBounce:
             Bounce1D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
         bounce = Bounce1D(grid, data, check=True)
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -1704,20 +1144,7 @@ class TestBounce:
 
         fig, ax = bounce.plot(l, m, pitch_inv[l], include_legend=False, show=False)
 
-        self._not_part_of_tutorial_test(bounce, pitch_inv, points, den)
-
         return fig
-
-    @staticmethod
-    def _not_part_of_tutorial_test(bounce, pitch_inv, points, den):
-        den_no_batch = bounce.integrate(
-            TestBounce._example_denominator,
-            pitch_inv,
-            points=points,
-            check=True,
-            batch=False,
-        )
-        np.testing.assert_allclose(den_no_batch, den)
 
     @pytest.mark.unit
     def test_interp_to_argmin(self):
@@ -1749,7 +1176,7 @@ class TestBounce:
         )
 
     @staticmethod
-    def get_drift_analytic_data():
+    def get_drift_analytical_data():
         """Get data to compute bounce averaged binormal drift analytically."""
         eq = Equilibrium.load(".//tests//inputs//low-beta-shifted-circle.h5")
         psi_boundary = eq.Psi / (2 * np.pi)
@@ -1794,13 +1221,13 @@ class TestBounce:
         return data, things
 
     @staticmethod
-    def drift_analytic(data):
+    def drift_analytical(data):
         """Compute analytic approximation for bounce-averaged binormal drift.
 
         Returns
         -------
-        drift_analytic : jnp.ndarray
-            Analytic approximation for the true result that the numerical computation
+        drift_analytical : jnp.ndarray
+            Analytical approximation for the true result that the numerical computation
             should attempt to match.
         cvdrift, gbdrift : jnp.ndarray
             Numerically computed ``data["cvdrift"]` and ``data["gbdrift"]`` normalized
@@ -1853,29 +1280,29 @@ class TestBounce:
         np.testing.assert_allclose(gds21, gds21_analytic_low_order, atol=2.7e-2)
 
         fudge_1 = 0.19
-        gbdrift_analytic = fudge_1 * (
+        gbdrift_analytical = fudge_1 * (
             -data["shear"]
             + np.cos(data["theta_PEST"])
             - gds21_analytic / data["shear"] * np.sin(data["theta_PEST"])
         )
-        gbdrift_analytic_low_order = fudge_1 * (
+        gbdrift_analytical_low_order = fudge_1 * (
             -data["shear"]
             + np.cos(data["theta_PEST"])
             - gds21_analytic_low_order / data["shear"] * np.sin(data["theta_PEST"])
         )
         fudge_2 = 0.07
-        cvdrift_analytic = gbdrift_analytic + fudge_2 * alpha_MHD / B**2
-        cvdrift_analytic_low_order = (
-            gbdrift_analytic_low_order + fudge_2 * alpha_MHD / B0**2
+        cvdrift_analytical = gbdrift_analytical + fudge_2 * alpha_MHD / B**2
+        cvdrift_analytical_low_order = (
+            gbdrift_analytical_low_order + fudge_2 * alpha_MHD / B0**2
         )
-        np.testing.assert_allclose(gbdrift, gbdrift_analytic, atol=1e-2)
-        np.testing.assert_allclose(cvdrift, cvdrift_analytic, atol=2e-2)
-        np.testing.assert_allclose(gbdrift, gbdrift_analytic_low_order, atol=1e-2)
-        np.testing.assert_allclose(cvdrift, cvdrift_analytic_low_order, atol=2e-2)
+        np.testing.assert_allclose(gbdrift, gbdrift_analytical, atol=1e-2)
+        np.testing.assert_allclose(cvdrift, cvdrift_analytical, atol=2e-2)
+        np.testing.assert_allclose(gbdrift, gbdrift_analytical_low_order, atol=1e-2)
+        np.testing.assert_allclose(cvdrift, cvdrift_analytical_low_order, atol=2e-2)
 
         # Exclude singularity not captured by analytic approximation for pitch near
         # the maximum |B|. (This is captured by the numerical integration).
-        pitch_inv = Bounce1D.get_pitch_inv_quad(np.min(B), np.max(B), 100)[0][:-1]
+        pitch_inv = Bounce1D.pitch_quad(np.min(B), np.max(B), 100, simp=False)[0][:-1]
         k2 = 0.5 * ((1 - B0 / pitch_inv) / (epsilon * B0 / pitch_inv) + 1)
         I_0, I_1, I_2, I_3, I_4, I_5, I_6, I_7 = (
             TestBounceQuadrature.elliptic_incomplete(k2)
@@ -1884,7 +1311,7 @@ class TestBounce:
         I_0, I_2, I_4, I_6 = map(lambda I: I / y, (I_0, I_2, I_4, I_6))
         I_1, I_3, I_5, I_7 = map(lambda I: I * y, (I_1, I_3, I_5, I_7))
 
-        drift_analytic_num = (
+        drift_analytical_num = (
             fudge_2 * alpha_MHD / B0**2 * I_1
             - 0.5
             * fudge_1
@@ -1894,9 +1321,9 @@ class TestBounce:
                 - (I_6 + I_7)
             )
         ) / G0
-        drift_analytic_den = I_0 / G0
-        drift_analytic = drift_analytic_num / drift_analytic_den
-        return drift_analytic, cvdrift, gbdrift, pitch_inv
+        drift_analytical_den = I_0 / G0
+        drift_analytical = drift_analytical_num / drift_analytical_den
+        return drift_analytical, cvdrift, gbdrift, pitch_inv
 
     @staticmethod
     def drift_num_integrand(data, B, pitch):
@@ -1917,14 +1344,19 @@ class TestBounce:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     def test_binormal_drift_bounce1d(self):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytical, cvdrift, gbdrift, pitch_inv = TestBounce.drift_analytical(
+            data
+        )
+
+        data["|B|"] /= data["Bref"]
+        data["|B|_z|r,a"] /= data["Bref"]
+        data["B^zeta"] *= data["a"] / data["Bref"]
+        data["B^zeta_z|r,a"] *= data["a"] / data["Bref"]
 
         bounce = Bounce1D(
             things["grid"].source_grid,
             data,
-            Bref=data["Bref"],
-            Lref=data["a"],
             check=True,
         )
         points = bounce.points(pitch_inv, num_well=1)
@@ -1943,16 +1375,16 @@ class TestBounce:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
+        assert drift_numerical.size == drift_analytical.size, msg
 
         np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+            drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(bounce, TestBounce.drift_num_integrand, data)
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_analytical)
         ax.plot(pitch_inv, drift_numerical)
         return fig
 
@@ -1984,8 +1416,8 @@ class TestBounce:
              + f(λ,ζ₂) (∂ζ₂/∂λ)(λ)
              - f(λ,ζ₁) (∂ζ₁/∂λ)(λ)
         ]
-        where (∂ζ₁/∂λ)(λ) = -λ² / (∂|B|/∂ζ|ρ,α)(ζ₁)
-              (∂ζ₂/∂λ)(λ) = -λ² / (∂|B|/∂ζ|ρ,α)(ζ₂)
+        where (∂ζ₁/∂λ)(λ) = -λ⁻² / (∂|B|/∂ζ|ρ,α)(ζ₁)
+              (∂ζ₂/∂λ)(λ) = -λ⁻² / (∂|B|/∂ζ|ρ,α)(ζ₂)
 
         All terms in these expressions are known analytically.
         If we wanted, it's simple to check explicitly that AD takes each derivative
@@ -2023,7 +1455,7 @@ class TestBounce:
             ).sum()
 
         pitch = 1.0
-        analytic_approximation_of_gradient = 651.8
+        analytic_approximation_of_gradient = 650
         np.testing.assert_allclose(
             grad(fun1)(pitch), analytic_approximation_of_gradient, rtol=2.5e-3
         )
@@ -2052,9 +1484,9 @@ class TestBounce2D:
             grid,
             dict.fromkeys(Bounce2D.required_names, g(grid.nodes[:, 2])),
             # dummy value; h depends on ζ alone, so doesn't matter what θ(α, ζ) is
-            theta=Bounce2D.reshape(grid, grid.nodes[:, 1]),
+            angle=Bounce2D.reshape(grid, grid.nodes[:, 1]),
             Y_B=2 * nyquist,
-            num_transit=1,
+            field_period_transits=1,
             nufft_eps=nufft_eps,
         )
         points = np.array(0, ndmin=2), np.array(2 * np.pi, ndmin=2)
@@ -2084,17 +1516,18 @@ class TestBounce2D:
         data = eq.compute(
             Bounce2D.required_names + ["min_tz |B|", "max_tz |B|", "g_zz"], grid=grid
         )
-        theta = Bounce2D.compute_theta(eq, X=16, Y=64, rho=rho)
+        angle = Bounce2D.angle(eq, X=16, Y=16, rho=rho)
         bounce = Bounce2D(
             grid,
             data,
-            theta,
+            angle,
             alpha=alpha,
-            num_transit=2,
+            field_period_transits=38,
             check=True,
             spline=False,
+            quad=chebgauss1(16),  # this is our own custom chebgauss1
         )
-        pitch_inv, _ = bounce.get_pitch_inv_quad(
+        pitch_inv, _ = bounce.pitch_quad(
             min_B=grid.compress(data["min_tz |B|"]),
             max_B=grid.compress(data["max_tz |B|"]),
             num_pitch=10,
@@ -2136,17 +1569,20 @@ class TestBounce2D:
         _, _ = bounce.plot_theta(l, m, show=False)
 
         self._not_part_of_tutorial_test(
-            bounce, pitch_inv, points, num, data, grid, theta, alpha
+            bounce, pitch_inv, points, num, data, grid, angle, alpha
         )
 
         return fig
 
     @staticmethod
     def _not_part_of_tutorial_test(
-        bounce, pitch_inv, points, num, data, grid, theta, alpha
+        bounce, pitch_inv, points, num, data, grid, angle, alpha
     ):
+        with pytest.warns(DeprecationWarning):
+            length = bounce.compute_fieldline_length()
+
         np.testing.assert_allclose(
-            bounce.compute_fieldline_length(),
+            length,
             # Crossref w/ "fieldline length" in data index with 1000 points.
             [
                 385.20520905,
@@ -2156,7 +1592,7 @@ class TestBounce2D:
                 352.15451128,
                 440.10036239,
             ],
-            rtol=1e-2,
+            rtol=2e-4,
         )
 
         # check for consistency with different options
@@ -2165,24 +1601,24 @@ class TestBounce2D:
             pitch_inv,
             {"g_zz": Bounce2D.reshape(grid, data["g_zz"])},
             points=points,
-            # ~1% of the integrals differ significantly at lower epsilon.
-            nufft_eps=1e-12,
+            nufft_eps=1e-7,
             check=True,
+            loop=True,
         )
         near_zero_nufft = np.isclose(num_nufft, 0, rtol=0, atol=1e-6)
         near_zero = np.isclose(num, 0, rtol=0, atol=1e-6)
         np.testing.assert_array_equal(near_zero_nufft, near_zero)
+        np.testing.assert_allclose(num_nufft[near_zero_nufft], num[near_zero])
         np.testing.assert_allclose(
-            num_nufft[near_zero_nufft], num[near_zero], rtol=0, atol=2e-6
-        )
-        np.testing.assert_allclose(
-            num_nufft[~near_zero_nufft], num[~near_zero], rtol=2.5e-4
+            num_nufft[~near_zero_nufft], num[~near_zero], rtol=3e-2
         )
 
         bounce = Bounce2D(
-            grid, data, theta, alpha=alpha, num_transit=2, check=True, spline=True
+            grid, data, angle, alpha=alpha, field_period_transits=38, check=True
         )
-        bounce.check_points(bounce.points(pitch_inv), pitch_inv, plot=False)
+        points = bounce.points(pitch_inv)
+
+        bounce.check_points(points, pitch_inv, plot=False)
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
 
@@ -2202,31 +1638,31 @@ class TestBounce2D:
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
         "nufft_eps, spline, Y_B",
-        [(0, False, 16), (0, True, 64), (1e-6, False, 16), (1e-8, True, 64)],
+        [(0, False, 16), (0, True, 64), (1e-7, False, 16), (1e-8, True, 64)],
     )
     def test_binormal_drift_bounce2d(self, nufft_eps, spline, Y_B):
         """Test bounce-averaged drift with analytical expressions."""
-        data, things = TestBounce.get_drift_analytic_data()
-        drift_analytic, _, _, pitch_inv = TestBounce.drift_analytic(data)
+        data, things = TestBounce.get_drift_analytical_data()
+        drift_analytical, _, _, pitch_inv = TestBounce.drift_analytical(data)
 
         eq = things["eq"]
         grid = LinearGrid(
-            rho=data["rho"], M=eq.M_grid, N=max(1, eq.N_grid), NFP=eq.NFP, sym=False
+            rho=data["rho"], M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
         )
         names = ["cvdrift (periodic)", "gbdrift (periodic)", "gbdrift (secular)/phi"]
         grid_data = eq.compute(names=Bounce2D.required_names + names, grid=grid)
         for name in names:
             grid_data[name] = grid_data[name] * data["normalization"]
+        grid_data["|B|"] /= data["Bref"]
+        grid_data["B^zeta"] *= data["a"] / data["Bref"]
 
         bounce = Bounce2D(
             grid,
             grid_data,
-            Bounce2D.compute_theta(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
+            Bounce2D.angle(eq, X=8, Y=8, rho=data["rho"], iota=data["iota"]),
             Y_B,
             data["alpha"] - 2.5 * np.pi * data["iota"],
-            num_transit=3,
-            Bref=data["Bref"],
-            Lref=data["a"],
+            field_period_transits=3,
             nufft_eps=nufft_eps,
             spline=spline,
             check=True,
@@ -2246,10 +1682,10 @@ class TestBounce2D:
         drift_numerical = np.squeeze(drift_numerical_num / drift_numerical_den)
         assert np.isfinite(drift_numerical).all()
         msg = "There should be one bounce integral per pitch in this example."
-        assert drift_numerical.size == drift_analytic.size, msg
+        assert drift_numerical.size == drift_analytical.size, msg
 
         np.testing.assert_allclose(
-            drift_numerical, drift_analytic, atol=5e-3, rtol=5e-2
+            drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
         TestBounce._test_bounce_autodiff(
@@ -2257,6 +1693,6 @@ class TestBounce2D:
         )
 
         fig, ax = plt.subplots()
-        ax.plot(pitch_inv, drift_analytic)
+        ax.plot(pitch_inv, drift_analytical)
         ax.plot(pitch_inv, drift_numerical)
         return fig

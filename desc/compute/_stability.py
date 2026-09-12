@@ -1978,6 +1978,12 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     n_mode_axisym = kwargs.get("n_mode_axisym", 1)
     incompressible = kwargs.get("incompressible", False)
 
+    # free-boundary mode: activated when phi_matrix is passed through as a
+    # transform (see `_agni3_assemble`/"finite-n lambda3" for the dense path).
+    phi_matrix = transforms.get("phi_matrix", None)
+    if phi_matrix is not None:
+        phi_matrix = phi_matrix / a_N
+
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
 
@@ -2042,6 +2048,11 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     g_vp = _reshape(data["g_vp|PEST"]) / a_N**2
 
     g_sup_rr = _reshape(data["g^rr"]) * a_N**2
+
+    if phi_matrix is not None:
+        # matches `_agni3_assemble`'s sqrtg_grad_rho, used by the vacuum-energy
+        # (free-boundary) term added to Ar in `Ax_full` below.
+        sqrtg_grad_rho = sqrtg * jnp.sqrt(g_sup_rr)
 
     # Match _agni3_assemble's route to g^rv/g^rz exactly: build them from the PEST
     # lower metric via g¹² = (g₁₃g₂₃ - g₁₂g₃₃)/(√g)², rather than reading data["g^rv"].
@@ -2131,7 +2142,12 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     boundary_idx = jnp.concatenate(
         [jnp.arange(n_per_shell), jnp.arange(n_total - n_per_shell, n_total)]
     )
-    keep_rho = jnp.arange(n_per_shell, n_total - n_per_shell)
+    if phi_matrix is not None:
+        # free boundary: only remove rho=0 (the axis); keep the outer shell
+        keep_rho = jnp.arange(n_per_shell, n_total)
+    else:
+        # fixed boundary: remove rho=0 and rho=1 (Dirichlet xi^rho=0)
+        keep_rho = jnp.arange(n_per_shell, n_total - n_per_shell)
     keep_tangent = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_rho, keep_tangent])
     n_keep = keep.size
@@ -2298,6 +2314,20 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # |J|^2 and instability drive
         Ar += (psi_r2 * W * sqrtg * J2) / g_sup_rr * xr
         Aur = (W * psi_r2 * sqrtg * F) * xr
+
+        if phi_matrix is not None:
+            print("adding vacuum energy")
+            # Vacuum energy contribution (free boundary): matrix-free form of
+            # the rho-rho block `_agni3_assemble` adds from `phi_matrix`
+            # (b_idx x b_idx), acting only on the outermost (boundary) rho
+            # shell. `bp_grad_xr` is (iota*D_theta + D_zeta) @ xr, i.e. the
+            # dense path's inner `(iota * D_theta + D_zeta)` applied to xi^rho.
+            bp_grad_xr = iota * xr_v + xr_z
+            u = (psi_r / sqrtg_grad_rho) * bp_grad_xr
+            pu_bnd = phi_matrix @ u[-1].reshape(-1)
+            pu = jnp.zeros_like(u).at[-1].set(pu_bnd.reshape(n_theta, n_zeta))
+            y = W * psi_r3 * pu
+            Ar += -(d_dv(_cT(D_theta0), iota * y) + d_dz(_cT(D_zeta0), y))
 
         # Compressibility terms
         gp = gamma * sqrtg * W * p0
@@ -3080,10 +3110,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # HOST copy, derived from the resolution rather than read back from the
         # operator dict. `keep` is grid structure -- it is
         #     arange(n_shell, n_total - n_shell) U arange(n_total, 3*n_total)
-        # with n_shell = n_theta_max*n_zeta_max -- so it is fixed once the
-        # resolution is fixed and carries no dependence on params. Reading it out
-        # of the dict made it a TRACER inside the custom_vjp primal and jit died
-        # on it.
+        # for fixed boundary, or
+        #     arange(n_shell, n_total) U arange(n_total, 3*n_total)
+        # for free boundary (phi_matrix passed as a transform), with
+        # n_shell = n_theta_max*n_zeta_max -- so it is fixed once the
+        # resolution (and the fixed/free choice) is fixed and carries no
+        # dependence on params. Reading it out of the dict made it a TRACER
+        # inside the custom_vjp primal and jit died on it.
         #
         # It has to be host-concrete, not merely jnp: the consumers build `sel`
         # and `pad` of shape (m, b) where b is the largest surviving ring, and b
@@ -3096,12 +3129,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # 56806648 died on KeyError('n_theta_max') from assuming they matched.
         _ntot_op = int(_opm["n_total"])
         _nshell = _ntot_op // int(_opm["n_rho"])
-        _keep = _np.concatenate(
-            [
-                _np.arange(_nshell, _ntot_op - _nshell),
-                _np.arange(_ntot_op, 3 * _ntot_op),
-            ]
-        )
+        if transforms.get("phi_matrix", None) is not None:
+            _keep_rho = _np.arange(_nshell, _ntot_op)
+        else:
+            _keep_rho = _np.arange(_nshell, _ntot_op - _nshell)
+        _keep = _np.concatenate([_keep_rho, _np.arange(_ntot_op, 3 * _ntot_op)])
         # Re-deriving an index array by hand is exactly the kind of thing that
         # silently drifts from its source, so check it whenever the real one is
         # concrete (eager runs, which is every run before jit is switched on).
@@ -3788,7 +3820,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     )
 
     data["finite-n lambda3 rayleigh"] = jnp.atleast_1d(lam_R)
-    data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
+    data["f residual"] = jnp.atleast_1d(resid)
     # So a caller can take v from a value call and pass it back as `v_fixed`.
     data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
     data = _agni3_store_rayleigh_mode_data(data, v, _op)

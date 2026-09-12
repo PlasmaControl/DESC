@@ -665,36 +665,32 @@ def get_transforms(  # noqa: C901
     for c in derivs.keys():
         if c in transforms:
             continue
+        # regular stuff like R, Z, lambda etc.
         if hasattr(obj, c + "_basis") or (
             c == "Phi_PEST" and hasattr(obj, "Phi_basis")
-        ):  # regular stuff like R, Z, lambda etc.
-            print(c)
-            if c == "Phi_PEST" and "pest_grid" in kwargs:
-                grid_temp = kwargs.get("pest_grid")
+        ):
+            # Phi_PEST uses the same basis as Phi, but a different grid
+            if c == "Phi_PEST":
+                if "pest_grid" in kwargs:
+                    grid_temp = kwargs.get("pest_grid")
+                else:
+                    grid_temp = grid
+                basis = getattr(obj, "Phi_basis")
             else:
                 grid_temp = grid
-            basis = (
-                getattr(obj, c + "_basis")
-                if c != "Phi_PEST"
-                else getattr(obj, "Phi_basis")
-            )
+                basis = getattr(obj, c + "_basis")
+
             # first check if we already have a transform with a compatible basis
-            if not jitable:
-                for transform in transforms.values():
-                    if basis.equiv(
-                        getattr(transform, "basis", None)
-                    ) and grid_temp.equiv(getattr(transform, "grid", None)):
+            if not (jitable or c in ("Phi", "Phi_PEST")):
+                for key, transform in transforms.items():
+                    if basis.equiv(getattr(transform, "basis", None)) and (
+                        key != "Phi_PEST"  # Phi_PEST transform has a different grid
+                    ):
                         ders = np.unique(
                             np.vstack([derivs[c], transform.derivatives]), axis=0
                         ).astype(int)
                         # don't build until we know all the derivs we need
                         transform.change_derivatives(ders, build=False)
-                        if (
-                            c in ("Phi", "Phi_PEST")
-                            and p
-                            == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
-                        ):
-                            transform.build_pinv()
                         c_transform = transform
                         break
                 else:  # if we didn't exit the loop early
@@ -703,27 +699,24 @@ def get_transforms(  # noqa: C901
                         basis,
                         derivs=derivs[c],
                         build=False,
-                        build_pinv=(c in ("Phi", "Phi_PEST"))
-                        and (
-                            p == "desc.magnetic_fields._laplace.SourceFreeField"
-                            or p
-                            == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
-                            or p == "desc.equilibrium.equilibrium.Equilibrium"
-                        ),
                         method=method,
                     )
             else:  # don't perform checks if jitable=True as they are not jit-safe
+                # Laplace transforms require pseudoinverse
+                build_pinv = c in ("Phi", "Phi_PEST") and (
+                    p
+                    in (
+                        "desc.magnetic_fields._laplace.SourceFreeField",
+                        "desc.magnetic_fields._laplace.FreeSurfaceOuterField",
+                        "desc.equilibrium.equilibrium.Equilibrium",
+                    )
+                )
                 c_transform = Transform(
                     grid_temp,
                     basis,
                     derivs=derivs[c],
                     build=False,
-                    build_pinv=c == "Phi"
-                    and (
-                        p == "desc.magnetic_fields._laplace.SourceFreeField"
-                        or p == "desc.magnetic_fields._laplace.FreeSurfaceOuterField"
-                        or p == "desc.equilibrium.equilibrium.Equilibrium"
-                    ),
+                    build_pinv=build_pinv,
                     method=method,
                 )
             transforms[c] = c_transform

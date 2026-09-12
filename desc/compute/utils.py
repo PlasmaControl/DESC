@@ -668,6 +668,7 @@ def get_transforms(  # noqa: C901
         if hasattr(obj, c + "_basis") or (
             c == "Phi_PEST" and hasattr(obj, "Phi_basis")
         ):  # regular stuff like R, Z, lambda etc.
+            print(c)
             if c == "Phi_PEST" and "pest_grid" in kwargs:
                 grid_temp = kwargs.get("pest_grid")
             else:

@@ -702,6 +702,21 @@ class FinitenStability(_Objective):
         Objective metric. ``"raw"`` returns lambda directly.
     name : str, optional
         Name of the objective function.
+    free_boundary : bool, optional
+        Compute the vacuum-response operator ``phi_matrix`` from the current
+        boundary geometry (differentiably) and forward it to ``"finite-n
+        lambda3 rayleigh"``/``"finite-n lambda3"``, activating their
+        free-boundary term. Default False (fixed boundary, ``xi^rho=0`` at
+        the plasma edge). When True and a ``coarse_grid`` is also given, the
+        coarse-space deflation basis is built free-boundary too -- a
+        fixed-boundary coarse basis can fail to represent an
+        external-kink-type fine eigenmode.
+    phi_problem : str, optional
+        Vacuum problem type forwarded to the ``"phi_matrix_pest"`` compute
+        key. Default ``"exterior Neumann"``.
+    phi_chunk_size : int, optional
+        Chunk size for the singular-integral computation behind
+        ``phi_matrix``. Default None (no chunking).
 
     """
 
@@ -791,6 +806,23 @@ class FinitenStability(_Objective):
         "_coarse_grid",
         "_coarse_diffmat",
         "_coarse_density",
+        # Free-boundary (phi_matrix) option. `_free_boundary` gates whether
+        # `compute_data`/`update_state` build/forward phi_matrix at all.
+        # `_phi_problem`/`_phi_chunk_size` are plain solver knobs, same
+        # treatment as `_eigsh_tol` etc. above. `_phi_st`/`_phi_sz`/`_phi_q`
+        # (and their coarse_ counterparts) are the singular-integral
+        # quadrature-support ints frozen in `build()` -- see `_phi_matrix`'s
+        # docstring for why these must stay fixed rather than be recomputed
+        # from traced geometry on every call.
+        "_free_boundary",
+        "_phi_problem",
+        "_phi_chunk_size",
+        "_phi_st",
+        "_phi_sz",
+        "_phi_q",
+        "_coarse_phi_st",
+        "_coarse_phi_sz",
+        "_coarse_phi_q",
     ]
 
     _coordinates = "r"
@@ -838,6 +870,9 @@ class FinitenStability(_Objective):
         name="finite-n lambda3 rayleigh",
         jac_chunk_size=None,
         v_fixed=None,
+        free_boundary=False,
+        phi_problem="exterior Neumann",
+        phi_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -860,6 +895,13 @@ class FinitenStability(_Objective):
         self._coarse_grid = coarse_grid
         self._coarse_diffmat = coarse_diffmat
         self._coarse_density = coarse_density
+        # Free boundary: compute phi_matrix (the vacuum-response operator) and
+        # forward it to "finite-n lambda3 rayleigh"/"finite-n lambda3". See
+        # `_build_phi_scaffolding`/`_phi_matrix`. `_phi_st`/`_phi_sz`/`_phi_q`
+        # (and the coarse_ counterparts) are set in `build()`.
+        self._free_boundary = free_boundary
+        self._phi_problem = phi_problem
+        self._phi_chunk_size = phi_chunk_size
         self._state_solver = state_solver
         self._matfree_solver = matfree_solver
         self._sigma_factor = sigma_factor
@@ -1043,6 +1085,8 @@ class FinitenStability(_Objective):
                 ),
                 "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
             }
+            if self._free_boundary:
+                self._build_phi_scaffolding(cg, "coarse_", coarse_constants)
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -1059,7 +1103,149 @@ class FinitenStability(_Objective):
             "lambda_guess": jnp.asarray(lambda_guess),
             **coarse_constants,
         }
+        if self._free_boundary:
+            self._build_phi_scaffolding(grid_PEST, "", self._constants)
         super().build(use_jit=use_jit, verbose=verbose)
+
+    def _build_phi_scaffolding(self, level_grid, pre, constants):
+        """Static, resolution-only free-boundary scaffolding for one level.
+
+        ``pre`` is ``""`` for fine, ``"coarse_"`` for coarse, matching the
+        existing fine/coarse naming convention (``_mapped_grid``,
+        ``_flux_data``). Builds the PEST-space grid `phi_matrix` is evaluated
+        on, its spacing/weights (reordered to the BIEST convention), and
+        freezes the singular-integral quadrature support (``st``, ``sz``,
+        ``q``) from the equilibrium's construction-time boundary geometry.
+
+        ``st``/``sz``/``q`` must be frozen rather than recomputed on every
+        traced call: left unset, ``get_interpolator`` picks them from a
+        heuristic (``_best_params``/``_best_ratio``) that concretizes
+        (``int(...)``) a value derived from the boundary geometry, which
+        raises ``ConcretizationTypeError`` under ``jit``/``grad``. This is
+        the one deliberate approximation in an otherwise fully
+        differentiable ``phi_matrix`` -- the quadrature *topology* doesn't
+        get its own gradient, only the boundary data being integrated does,
+        exactly the tradeoff ``BoundaryError``/``FreeSurfaceError``
+        (``desc/objectives/_free_boundary.py``) already make for their own
+        frozen interpolators.
+        """
+        eq = self.things[0]
+        n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
+        n_surf = n_theta * n_zeta
+        phi_pest_grid = LinearGrid(
+            rho=1.0,
+            theta=level_grid.unique_theta,
+            zeta=level_grid.unique_zeta,
+            NFP=level_grid.NFP,
+            sym=False,
+        )
+        constants[pre + "phi_pest_grid"] = phi_pest_grid
+        # AGNI (theta outer, zeta fastest) -> BIEST (zeta outer, theta
+        # fastest). Reuses LinearGrid's own already-correct spacing/weights
+        # instead of re-deriving them for the traced surf_grid built by
+        # `_phi_matrix` on every call.
+        constants[pre + "phi_surf_spacing"] = (
+            jnp.asarray(phi_pest_grid.spacing)
+            .reshape(n_theta, n_zeta, 3)
+            .transpose(1, 0, 2)
+            .reshape(n_surf, 3)
+        )
+        constants[pre + "phi_surf_weights"] = (
+            jnp.asarray(phi_pest_grid.weights)
+            .reshape(n_theta, n_zeta)
+            .transpose(1, 0)
+            .reshape(n_surf)
+        )
+
+        # One-time, EAGER, concrete calibration of (st, sz, q). Cheap: just
+        # "interpolator_pest", not the full LSMR solve "phi_matrix_pest" does.
+        nodes0 = np.reshape(
+            np.asarray(phi_pest_grid.meshgrid_reshape(phi_pest_grid.nodes, "rtz")),
+            (n_surf, 3),
+        )
+        rtz0 = np.asarray(
+            eq.map_coordinates(
+                nodes0,
+                inbasis=("rho", "theta_PEST", "zeta"),
+                outbasis=("rho", "theta", "zeta"),
+                period=(np.inf, 2 * np.pi, np.inf),
+                tol=1e-12,
+                maxiter=50,
+                params=eq.params_dict,
+            )
+        )
+        surf_nodes0 = rtz0.reshape(n_theta, n_zeta, 3).transpose(1, 0, 2)
+        surf_grid0 = Grid(surf_nodes0.reshape(n_surf, 3), NFP=eq.NFP)
+        interp0 = eq.compute(
+            ["interpolator_pest"],
+            grid=surf_grid0,
+            pest_grid=phi_pest_grid,
+            problem=self._phi_problem,
+            chunk_size=self._phi_chunk_size,
+            params=eq.params_dict,
+        )["interpolator_pest"]
+        setattr(self, f"_{pre}phi_st", int(interp0.st))
+        setattr(self, f"_{pre}phi_sz", int(interp0.sz))
+        setattr(self, f"_{pre}phi_q", int(interp0.q))
+
+    def _phi_matrix(self, params, constants, grid, level="fine"):
+        """Free-boundary vacuum-response operator, differentiable in params.
+
+        Rebuilt fresh from the CURRENT boundary geometry on every call
+        (unlike the phi_pest_grid/spacing/weights/st/sz/q scaffolding from
+        ``_build_phi_scaffolding``), by slicing the boundary (rho=1) shell
+        out of the already-mapped ``grid`` rather than a second
+        ``map_coordinates`` call. ``level`` selects fine vs. coarse
+        scaffolding/resolution.
+        """
+        eq = self.things[0]
+        pre = "" if level == "fine" else "coarse_"
+        level_grid = self._grid if level == "fine" else self._coarse_grid
+        n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
+        n_surf = n_theta * n_zeta
+        phi_pest_grid = constants[pre + "phi_pest_grid"]
+
+        bnd_nodes = grid.nodes[-n_surf:]  # AGNI order, rho=1 shell
+        surf_nodes = jnp.transpose(
+            bnd_nodes.reshape(n_theta, n_zeta, 3), (1, 0, 2)
+        ).reshape(
+            n_surf, 3
+        )  # -> BIEST order (zeta outer, theta fastest)
+
+        surf_grid = Grid(
+            nodes=surf_nodes,
+            jitable=True,
+            is_meshgrid=True,
+            spacing=constants[pre + "phi_surf_spacing"],
+            weights=constants[pre + "phi_surf_weights"],
+            NFP=eq.NFP,
+            _unique_rho_idx=jnp.array([0]),
+            _unique_poloidal_idx=jnp.arange(n_theta),
+            _unique_zeta_idx=jnp.arange(n_zeta) * n_theta,
+            _inverse_rho_idx=jnp.zeros(n_surf, dtype=int),
+            _inverse_poloidal_idx=jnp.tile(jnp.arange(n_theta), n_zeta),
+            _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta), n_theta),
+        )
+
+        data_phi = eq.compute(
+            ["phi_matrix_pest"],
+            grid=surf_grid,
+            pest_grid=phi_pest_grid,
+            problem=self._phi_problem,
+            chunk_size=self._phi_chunk_size,
+            st=getattr(self, f"_{pre}phi_st"),
+            sz=getattr(self, f"_{pre}phi_sz"),
+            q=getattr(self, f"_{pre}phi_q"),
+            params=params,
+        )
+        phi_matrix = data_phi["phi_matrix_pest"]
+        # BIEST -> AGNI ordering, on BOTH axes, to match that level's own
+        # boundary-shell node order (what _agni3_assemble/
+        # _agni3_matfree_operator expect for the (n_per_shell, n_per_shell)
+        # phi_matrix block).
+        return jnp.transpose(
+            phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta), (1, 0, 3, 2)
+        ).reshape(n_surf, n_surf)
 
     def _mapped_grid(self, params, constants, level="fine"):
         """Map the PEST nodes to DESC coordinates at THESE parameters.
@@ -1241,6 +1427,16 @@ class FinitenStability(_Objective):
             }
             if self._coarse_density is not None:
                 coarse_opts["coarse_density"] = self._coarse_density
+            if self._free_boundary:
+                # A fixed-boundary coarse deflation basis can fail to
+                # represent an external-kink-type free-boundary fine
+                # eigenmode at all, so the coarse level needs its own
+                # phi_matrix too. Built at the stop_gradient'd _pc, like the
+                # rest of this branch: the coarse level is a solver aid and
+                # carries no derivative.
+                coarse_opts["coarse_phi_matrix"] = self._phi_matrix(
+                    _pc, constants, _grid_c, level="coarse"
+                )
 
         options = {
             "axisym": self._axisym,
@@ -1294,6 +1490,8 @@ class FinitenStability(_Objective):
             options["v_fixed"] = self._v_fixed
         if self._density is not None:
             options["density"] = self._density
+        if self._free_boundary:
+            options["phi_matrix"] = self._phi_matrix(params, constants, grid)
         options.update(coarse_opts)
 
         return eq.compute(
@@ -1388,6 +1586,13 @@ class FinitenStability(_Objective):
             }
             if self._density is not None:
                 options["density"] = self._density
+            if self._free_boundary:
+                # Required for correctness, not just consistency: `v` below
+                # must come from the same (free- or fixed-boundary) operator
+                # "finite-n lambda3 rayleigh" assembles in `compute_data`, or
+                # the cached eigenvector no longer matches the matrix being
+                # differentiated.
+                options["phi_matrix"] = self._phi_matrix(params, constants, grid)
             data = eq.compute(
                 "finite-n lambda3",
                 grid=grid,

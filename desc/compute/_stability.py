@@ -2606,6 +2606,11 @@ def _agni3_store_rayleigh_mode_data(data, v, op):
     coarse_params="dict: parameters for the coarse assembly, already "
     "stop_gradient'd -- the coarse solve is a solver aid and carries no derivative",
     coarse_density="ndarray: normalized density on coarse_grid",
+    coarse_phi_matrix="ndarray, optional: free-boundary vacuum operator for "
+    "the COARSE level, same convention as phi_matrix. Needed whenever the "
+    "fine level is free-boundary (phi_matrix set): a fixed-boundary coarse "
+    "deflation basis can fail to represent an external-kink-type fine "
+    "eigenmode at all.",
     coarse_res="tuple: (n_rho, n_theta, n_zeta) of coarse_grid -- the coupled "
     "Zernike operator reshapes by these, so the fine values must not be inherited",
     coarse_rho="ndarray: the coarse level's 1D rho nodes, from the PEST grid. "
@@ -3602,7 +3607,21 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             if _ckw.get("coupled_rt", False):
                 _ckw["n_rho_coupled"] = _cres[0]
                 _ckw["n_theta_coupled"] = _cres[1]
-            _ctr = {"grid": _cg, "diffmat": _cdm}
+            # `coarse_phi_matrix`: free boundary on the fine level, matched to a
+            # fixed-boundary coarse deflation basis, would deflate with modes
+            # that can look nothing like the actual (external-kink-type) fine
+            # eigenmode. Read from the outer `transforms` (closed over), not
+            # `kwargs`: like `phi_matrix`, `coarse_phi_matrix` is popped out of
+            # kwargs and into `transforms` by `desc.compute.utils._compute`, so
+            # it stays part of the traced/differentiable pytree rather than an
+            # opaque kwarg. `transforms.get("phi_matrix", None)` downstream
+            # treats an explicit None the same as an absent key, so this is
+            # safe to always set.
+            _ctr = {
+                "grid": _cg,
+                "diffmat": _cdm,
+                "phi_matrix": transforms.get("coarse_phi_matrix"),
+            }
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
@@ -3617,12 +3636,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # feeds array shapes, so it cannot be a tracer.
             _cntot = int(_cop["n_total"])
             _cnshell = _cntot // int(_cop["n_rho"])
-            _ckeep = _np.concatenate(
-                [
-                    _np.arange(_cnshell, _cntot - _cnshell),
-                    _np.arange(_cntot, 3 * _cntot),
-                ]
-            )
+            if transforms.get("coarse_phi_matrix", None) is not None:
+                _ckeep_rho = _np.arange(_cnshell, _cntot)
+            else:
+                _ckeep_rho = _np.arange(_cnshell, _cntot - _cnshell)
+            _ckeep = _np.concatenate([_ckeep_rho, _np.arange(_cntot, 3 * _cntot)])
             if not isinstance(_cop["keep"], jax.core.Tracer):
                 _ckeep_ref = _np.asarray(jax.device_get(_cop["keep"]))
                 if not _np.array_equal(_ckeep, _ckeep_ref):

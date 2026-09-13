@@ -121,6 +121,7 @@ def compute(  # noqa: C901
     # regardless of whether get_transforms already set transforms["diffmat"].
     dm_kw = kwargs.pop("diffmat", None)
     pm_kw = kwargs.pop("phi_matrix", None)
+    cpm_kw = kwargs.pop("coarse_phi_matrix", None)
 
     # If get_transforms didn't already provide transforms["diffmat"], wire it now:
     if "diffmat" not in transforms and dm_kw is not None:
@@ -128,6 +129,12 @@ def compute(  # noqa: C901
 
     if "phi_matrix" not in transforms and pm_kw is not None:
         transforms["phi_matrix"] = pm_kw
+
+    # coarse_phi_matrix: same treatment as phi_matrix, for the same reason --
+    # it is a real array that must flow through the traced/differentiable
+    # transforms dict, not sit as an opaque kwarg.
+    if "coarse_phi_matrix" not in transforms and cpm_kw is not None:
+        transforms["coarse_phi_matrix"] = cpm_kw
 
     bad_kwargs = kwargs.keys() - allowed_kwargs - {"num_transit"}
     if len(bad_kwargs) > 0:
@@ -661,6 +668,8 @@ def get_transforms(  # noqa: C901
     if "phi_matrix" in kwargs and kwargs["phi_matrix"] is not None:
         pm = kwargs["phi_matrix"]
         transforms["phi_matrix"] = pm
+    if "coarse_phi_matrix" in kwargs and kwargs["coarse_phi_matrix"] is not None:
+        transforms["coarse_phi_matrix"] = kwargs["coarse_phi_matrix"]
 
     for c in derivs.keys():
         if c in transforms:
@@ -789,6 +798,8 @@ def get_transforms(  # noqa: C901
             )
         elif c == "phi_matrix":
             transforms["phi_matrix"] = None
+        elif c == "coarse_phi_matrix":
+            transforms["coarse_phi_matrix"] = None
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

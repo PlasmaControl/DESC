@@ -809,20 +809,41 @@ class FinitenStability(_Objective):
         # Free-boundary (phi_matrix) option. `_free_boundary` gates whether
         # `compute_data`/`update_state` build/forward phi_matrix at all.
         # `_phi_problem`/`_phi_chunk_size` are plain solver knobs, same
-        # treatment as `_eigsh_tol` etc. above. `_phi_st`/`_phi_sz`/`_phi_q`
-        # (and their coarse_ counterparts) are the singular-integral
-        # quadrature-support ints frozen in `build()` -- see `_phi_matrix`'s
-        # docstring for why these must stay fixed rather than be recomputed
-        # from traced geometry on every call.
+        # treatment as `_eigsh_tol` etc. above. Everything else here
+        # (`_phi_pest_grid`, `_phi_surf_spacing`/`_phi_surf_weights`,
+        # `_phi_st`/`_phi_sz`/`_phi_q`, `_phi_interpolator`, and their
+        # coarse_ counterparts) is BUILD-TIME-CONSTANT scaffolding from
+        # `_build_phi_scaffolding` -- same category as `_diffmat`/
+        # `_coarse_grid` above, and for the same reason: a Grid (or anything
+        # holding one) stored as an ordinary, non-static attribute becomes a
+        # DYNAMIC pytree leaf, so accessing it under jit yields a TRACER
+        # rather than the concrete object, and `_BIESTInterpolator`'s own
+        # `assert source_grid.nodes[0, 0] == eval_grid.nodes[0, 0]` (a
+        # Python-level bool) then raises `TracerBoolConversionError` even
+        # though the grid's VALUE never changes. Marking these static makes
+        # them compile-time constants instead -- exactly why `_phi_matrix`
+        # also reuses `_phi_interpolator` outright (via a prefilled
+        # "interpolator_pest" in `data=`) rather than ever re-invoking
+        # `get_interpolator`/`_BIESTInterpolator.__init__` under trace at
+        # all: the interpolator depends only on this fixed scaffolding, not
+        # on the moving boundary, so there is nothing to recompute.
         "_free_boundary",
         "_phi_problem",
         "_phi_chunk_size",
+        "_phi_pest_grid",
+        "_phi_surf_spacing",
+        "_phi_surf_weights",
         "_phi_st",
         "_phi_sz",
         "_phi_q",
+        "_phi_interpolator",
+        "_coarse_phi_pest_grid",
+        "_coarse_phi_surf_spacing",
+        "_coarse_phi_surf_weights",
         "_coarse_phi_st",
         "_coarse_phi_sz",
         "_coarse_phi_q",
+        "_coarse_phi_interpolator",
     ]
 
     _coordinates = "r"
@@ -1086,7 +1107,7 @@ class FinitenStability(_Objective):
                 "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
             }
             if self._free_boundary:
-                self._build_phi_scaffolding(cg, "coarse_", coarse_constants)
+                self._build_phi_scaffolding(cg, "coarse_")
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -1104,28 +1125,43 @@ class FinitenStability(_Objective):
             **coarse_constants,
         }
         if self._free_boundary:
-            self._build_phi_scaffolding(grid_PEST, "", self._constants)
+            self._build_phi_scaffolding(grid_PEST, "")
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def _build_phi_scaffolding(self, level_grid, pre, constants):
+    def _build_phi_scaffolding(self, level_grid, pre):
         """Static, resolution-only free-boundary scaffolding for one level.
 
         ``pre`` is ``""`` for fine, ``"coarse_"`` for coarse, matching the
         existing fine/coarse naming convention (``_mapped_grid``,
         ``_flux_data``). Builds the PEST-space grid `phi_matrix` is evaluated
-        on, its spacing/weights (reordered to the BIEST convention), and
-        freezes the singular-integral quadrature support (``st``, ``sz``,
-        ``q``) from the equilibrium's construction-time boundary geometry.
+        on, its spacing/weights (reordered to the BIEST convention), and the
+        singular-integral INTERPOLATOR itself (frozen -- see below).
 
-        ``st``/``sz``/``q`` must be frozen rather than recomputed on every
-        traced call: left unset, ``get_interpolator`` picks them from a
-        heuristic (``_best_params``/``_best_ratio``) that concretizes
-        (``int(...)``) a value derived from the boundary geometry, which
-        raises ``ConcretizationTypeError`` under ``jit``/``grad``. This is
-        the one deliberate approximation in an otherwise fully
-        differentiable ``phi_matrix`` -- the quadrature *topology* doesn't
-        get its own gradient, only the boundary data being integrated does,
-        exactly the tradeoff ``BoundaryError``/``FreeSurfaceError``
+        Stores everything as plain, STATIC attributes on ``self`` (added to
+        ``_static_attrs``), not in ``self._constants``: `_constants` values
+        are DYNAMIC pytree leaves, so accessing e.g. a `Grid` stored there
+        from inside a jitted `compute_data` yields a TRACER standing in for
+        it, not the concrete object -- even though its value never changes.
+        `_BIESTInterpolator.__init__` does a Python-level
+        ``assert source_grid.nodes[0, 0] == eval_grid.nodes[0, 0]``, which
+        raises ``TracerBoolConversionError`` on such a tracer. Static attrs
+        are compile-time constants instead, so this never happens.
+
+        This also means the interpolator can, and must, be reused outright
+        rather than rebuilt under trace: `get_interpolator`/
+        `_BIESTInterpolator.__init__` depend only on the grids and (st, sz,
+        q) -- never on the moving boundary geometry (`source_data` is read
+        only by the `_best_params`/`_best_ratio` heuristic that picks
+        (st, sz, q) when they are not given, which we bypass here by fixing
+        them once). So `_phi_matrix` never calls `get_interpolator` again --
+        it prefills the already-built interpolator into `data=` and DESC's
+        dependency resolution skips recomputing "interpolator_pest"
+        entirely, sidestepping both the tracer-unsafe comparison above and
+        the wasted recomputation. This is the one deliberate approximation
+        in an otherwise fully differentiable ``phi_matrix``: the quadrature
+        *topology* doesn't get its own gradient, only the boundary data
+        being integrated does -- exactly the tradeoff
+        ``BoundaryError``/``FreeSurfaceError``
         (``desc/objectives/_free_boundary.py``) already make for their own
         frozen interpolators.
         """
@@ -1139,26 +1175,36 @@ class FinitenStability(_Objective):
             NFP=level_grid.NFP,
             sym=False,
         )
-        constants[pre + "phi_pest_grid"] = phi_pest_grid
+        setattr(self, f"_{pre}phi_pest_grid", phi_pest_grid)
         # AGNI (theta outer, zeta fastest) -> BIEST (zeta outer, theta
         # fastest). Reuses LinearGrid's own already-correct spacing/weights
         # instead of re-deriving them for the traced surf_grid built by
-        # `_phi_matrix` on every call.
-        constants[pre + "phi_surf_spacing"] = (
-            jnp.asarray(phi_pest_grid.spacing)
+        # `_phi_matrix` on every call. Kept as plain NumPy (not jnp): these
+        # are static attrs, and a `jax.Array` stored there gets silently
+        # converted (with a warning) by the pytree machinery anyway.
+        setattr(
+            self,
+            f"_{pre}phi_surf_spacing",
+            np.asarray(phi_pest_grid.spacing)
             .reshape(n_theta, n_zeta, 3)
             .transpose(1, 0, 2)
-            .reshape(n_surf, 3)
+            .reshape(n_surf, 3),
         )
-        constants[pre + "phi_surf_weights"] = (
-            jnp.asarray(phi_pest_grid.weights)
+        setattr(
+            self,
+            f"_{pre}phi_surf_weights",
+            np.asarray(phi_pest_grid.weights)
             .reshape(n_theta, n_zeta)
             .transpose(1, 0)
-            .reshape(n_surf)
+            .reshape(n_surf),
         )
 
-        # One-time, EAGER, concrete calibration of (st, sz, q). Cheap: just
-        # "interpolator_pest", not the full LSMR solve "phi_matrix_pest" does.
+        # One-time, EAGER, concrete build of the interpolator (picks (st, sz,
+        # q) itself via the default heuristic, since we have real geometry
+        # data to base it on here -- unlike inside a traced `_phi_matrix`
+        # call). Reused as-is by every later `_phi_matrix` call, at any
+        # params: see the docstring above for why that is exact, not an
+        # approximation of convenience.
         nodes0 = np.reshape(
             np.asarray(phi_pest_grid.meshgrid_reshape(phi_pest_grid.nodes, "rtz")),
             (n_surf, 3),
@@ -1187,23 +1233,23 @@ class FinitenStability(_Objective):
         setattr(self, f"_{pre}phi_st", int(interp0.st))
         setattr(self, f"_{pre}phi_sz", int(interp0.sz))
         setattr(self, f"_{pre}phi_q", int(interp0.q))
+        setattr(self, f"_{pre}phi_interpolator", interp0)
 
-    def _phi_matrix(self, params, constants, grid, level="fine"):
+    def _phi_matrix(self, params, grid, level="fine"):
         """Free-boundary vacuum-response operator, differentiable in params.
 
         Rebuilt fresh from the CURRENT boundary geometry on every call
-        (unlike the phi_pest_grid/spacing/weights/st/sz/q scaffolding from
-        ``_build_phi_scaffolding``), by slicing the boundary (rho=1) shell
-        out of the already-mapped ``grid`` rather than a second
-        ``map_coordinates`` call. ``level`` selects fine vs. coarse
-        scaffolding/resolution.
+        (unlike the scaffolding from ``_build_phi_scaffolding``, all of
+        which is fixed), by slicing the boundary (rho=1) shell out of the
+        already-mapped ``grid`` rather than a second ``map_coordinates``
+        call. ``level`` selects fine vs. coarse scaffolding/resolution.
         """
         eq = self.things[0]
         pre = "" if level == "fine" else "coarse_"
         level_grid = self._grid if level == "fine" else self._coarse_grid
         n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
         n_surf = n_theta * n_zeta
-        phi_pest_grid = constants[pre + "phi_pest_grid"]
+        phi_pest_grid = getattr(self, f"_{pre}phi_pest_grid")
 
         bnd_nodes = grid.nodes[-n_surf:]  # AGNI order, rho=1 shell
         surf_nodes = jnp.transpose(
@@ -1216,8 +1262,8 @@ class FinitenStability(_Objective):
             nodes=surf_nodes,
             jitable=True,
             is_meshgrid=True,
-            spacing=constants[pre + "phi_surf_spacing"],
-            weights=constants[pre + "phi_surf_weights"],
+            spacing=jnp.asarray(getattr(self, f"_{pre}phi_surf_spacing")),
+            weights=jnp.asarray(getattr(self, f"_{pre}phi_surf_weights")),
             NFP=eq.NFP,
             _unique_rho_idx=jnp.array([0]),
             _unique_poloidal_idx=jnp.arange(n_theta),
@@ -1227,15 +1273,17 @@ class FinitenStability(_Objective):
             _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta), n_theta),
         )
 
+        # Prefill the frozen interpolator so DESC's dependency resolution
+        # skips recomputing "interpolator_pest" entirely -- see
+        # `_build_phi_scaffolding`'s docstring for why that is exact, not an
+        # approximation, and why rebuilding it here would be tracer-unsafe.
         data_phi = eq.compute(
             ["phi_matrix_pest"],
             grid=surf_grid,
             pest_grid=phi_pest_grid,
             problem=self._phi_problem,
             chunk_size=self._phi_chunk_size,
-            st=getattr(self, f"_{pre}phi_st"),
-            sz=getattr(self, f"_{pre}phi_sz"),
-            q=getattr(self, f"_{pre}phi_q"),
+            data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
             params=params,
         )
         phi_matrix = data_phi["phi_matrix_pest"]
@@ -1435,7 +1483,7 @@ class FinitenStability(_Objective):
                 # rest of this branch: the coarse level is a solver aid and
                 # carries no derivative.
                 coarse_opts["coarse_phi_matrix"] = self._phi_matrix(
-                    _pc, constants, _grid_c, level="coarse"
+                    _pc, _grid_c, level="coarse"
                 )
 
         options = {
@@ -1491,7 +1539,7 @@ class FinitenStability(_Objective):
         if self._density is not None:
             options["density"] = self._density
         if self._free_boundary:
-            options["phi_matrix"] = self._phi_matrix(params, constants, grid)
+            options["phi_matrix"] = self._phi_matrix(params, grid)
         options.update(coarse_opts)
 
         return eq.compute(
@@ -1592,7 +1640,7 @@ class FinitenStability(_Objective):
                 # "finite-n lambda3 rayleigh" assembles in `compute_data`, or
                 # the cached eigenvector no longer matches the matrix being
                 # differentiated.
-                options["phi_matrix"] = self._phi_matrix(params, constants, grid)
+                options["phi_matrix"] = self._phi_matrix(params, grid)
             data = eq.compute(
                 "finite-n lambda3",
                 grid=grid,

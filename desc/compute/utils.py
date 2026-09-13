@@ -678,13 +678,20 @@ def get_transforms(  # noqa: C901
         if hasattr(obj, c + "_basis") or (
             c == "Phi_PEST" and hasattr(obj, "Phi_basis")
         ):
-            # Phi_PEST uses the same basis as Phi, but a different grid
+            # Phi_PEST uses the same basis as Phi, but a different grid.
+            # `Phi_basis` kwarg: override the equilibrium's own (fixed,
+            # file-level) Phi_basis, same pattern as B_basis/w_basis below --
+            # needed when the grid being evaluated on cannot resolve it (see
+            # FinitenStability._phi_matrix for a caller that does this).
             if c == "Phi_PEST":
                 if "pest_grid" in kwargs:
                     grid_temp = kwargs.get("pest_grid")
                 else:
                     grid_temp = grid
-                basis = getattr(obj, "Phi_basis")
+                basis = kwargs.get("Phi_basis", getattr(obj, "Phi_basis"))
+            elif c == "Phi":
+                grid_temp = grid
+                basis = kwargs.get("Phi_basis", getattr(obj, "Phi_basis"))
             else:
                 grid_temp = grid
                 basis = getattr(obj, c + "_basis")

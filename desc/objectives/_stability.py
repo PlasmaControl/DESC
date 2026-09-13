@@ -5,6 +5,7 @@ import os
 import numpy as np
 
 from desc.backend import jax, jnp
+from desc.basis import DoubleFourierSeries
 from desc.compute import get_profiles, get_transforms
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
@@ -837,6 +838,16 @@ class FinitenStability(_Objective):
         "_phi_sz",
         "_phi_q",
         "_phi_interpolator",
+        # Equilibrium's own Phi_basis, capped to what phi_pest_grid can
+        # resolve (min(eq.Phi_basis.M, phi_pest_grid.M), same for N) and
+        # passed to "phi_matrix_pest" as an explicit `Phi_basis=` override.
+        # A no-op cap whenever the grid already resolves eq.Phi_basis; only
+        # engages for a grid coarser than the equilibrium's own (fixed,
+        # file-level) Phi_basis resolution -- otherwise
+        # `_lsmr_compute_phi_matrix`'s `assert basis.M <= potential_grid.M`
+        # fails, since eq.Phi_basis has nothing to do with this grid's
+        # resolution.
+        "_phi_basis",
         "_coarse_phi_pest_grid",
         "_coarse_phi_surf_spacing",
         "_coarse_phi_surf_weights",
@@ -844,6 +855,7 @@ class FinitenStability(_Objective):
         "_coarse_phi_sz",
         "_coarse_phi_q",
         "_coarse_phi_interpolator",
+        "_coarse_phi_basis",
     ]
 
     _coordinates = "r"
@@ -1176,6 +1188,27 @@ class FinitenStability(_Objective):
             sym=False,
         )
         setattr(self, f"_{pre}phi_pest_grid", phi_pest_grid)
+        # Cap the equilibrium's own (fixed, file-level) Phi_basis to what
+        # this level's grid can actually resolve. `eq.Phi_basis` (set when
+        # the equilibrium's boundary was wrapped in a SourceFreeField, e.g.
+        # `SourceFreeField(surface, M=..., N=...)`) has nothing to do with
+        # `grid_PEST`'s own resolution, and if it needs more theta/zeta
+        # samples than this (possibly deliberately coarse) AGNI grid
+        # provides, `_lsmr_compute_phi_matrix`'s
+        # `assert basis.M <= potential_grid.M` fails. `min(...)` only ever
+        # REDUCES resolution relative to what was asked for, so this is a
+        # no-op whenever the grid already resolves eq.Phi_basis fine.
+        eq_phi_basis = eq.Phi_basis
+        setattr(
+            self,
+            f"_{pre}phi_basis",
+            DoubleFourierSeries(
+                M=min(eq_phi_basis.M, phi_pest_grid.M),
+                N=min(eq_phi_basis.N, phi_pest_grid.N),
+                NFP=eq_phi_basis.NFP,
+                sym=eq_phi_basis.sym,
+            ),
+        )
         # AGNI (theta outer, zeta fastest) -> BIEST (zeta outer, theta
         # fastest). Reuses LinearGrid's own already-correct spacing/weights
         # instead of re-deriving them for the traced surf_grid built by
@@ -1283,6 +1316,7 @@ class FinitenStability(_Objective):
             pest_grid=phi_pest_grid,
             problem=self._phi_problem,
             chunk_size=self._phi_chunk_size,
+            Phi_basis=getattr(self, f"_{pre}phi_basis"),
             data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
             params=params,
         )

@@ -479,6 +479,10 @@ def _potential_grid_position(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     public=False,
     problem='str : Problem to solve in {"interior Neumann", "exterior Neumann"}.',
+    Phi_basis="DoubleFourierSeries, optional: override the equilibrium's own "
+    "Phi_basis (eq.surface.Phi_basis) for this compute. Useful when the grid "
+    "being evaluated on cannot resolve the equilibrium's own (fixed, "
+    "file-level) Phi_basis resolution -- see FinitenStability._phi_matrix.",
     chunk_size=_doc["chunk_size"],
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],
@@ -529,6 +533,10 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         Grid in PEST (rvp) coordinates with ``can_fft2=True``.
         Passed through to ``interpolator_pest``.
         """,
+    Phi_basis="DoubleFourierSeries, optional: override the equilibrium's own "
+    "Phi_basis (eq.surface.Phi_basis) for this compute. Useful when the grid "
+    "being evaluated on cannot resolve the equilibrium's own (fixed, "
+    "file-level) Phi_basis resolution -- see FinitenStability._phi_matrix.",
     chunk_size=_doc["chunk_size"],
     _midpoint_quad=_doc["_midpoint_quad"],
     _D_quad=_doc["_D_quad"],

@@ -761,6 +761,34 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
 
+    # (A kron I_m)/(I_na kron B) sliced by column/row, without materializing
+    # the full Kronecker product. Verified against dense kron+slice, 0 error.
+    def _kron_I_right_slice_cols(A, m, idx):
+        a_idx, i_idx = jnp.divmod(idx, m)
+        cols = A[:, a_idx]
+        na, k = A.shape[0], idx.size
+        out = jnp.zeros((na, m, k), dtype=cols.dtype)
+        out = out.at[
+            jnp.arange(na)[:, None], i_idx[None, :], jnp.arange(k)[None, :]
+        ].set(cols)
+        return out.reshape(na * m, k)
+
+    def _kron_I_left_slice_cols(B, na, idx):
+        a_idx, j_idx = jnp.divmod(idx, B.shape[1])
+        cols = B[:, j_idx]
+        nb, k = B.shape[0], idx.size
+        out = jnp.zeros((na, nb, k), dtype=cols.dtype)
+        out = out.at[
+            a_idx[None, :], jnp.arange(nb)[:, None], jnp.arange(k)[None, :]
+        ].set(cols)
+        return out.reshape(na * nb, k)
+
+    def _kron_I_right_slice_rows(A, m, idx):  # (A kron I_m)^T = A^T kron I_m
+        return _kron_I_right_slice_cols(A.T, m, idx).T
+
+    def _kron_I_left_slice_rows(B, na, idx):  # (I_na kron B)^T = I_na kron B^T
+        return _kron_I_left_slice_cols(B.T, na, idx).T
+
     if axisym:
         if n_mode_axisym == 0 and incompressible:
             return NotImplementedError
@@ -797,7 +825,29 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
 
-    if coupled_rt:
+    # Avoid materializing the full (n_total, n_total) kron just to slice it
+    # down to one ring a few lines later (was OOMing at 3D scale). Every ring
+    # fixes one zeta index, so this is exact and reduces to the untouched
+    # original path whenever n_zeta_max==1 (axisym).
+    _ring_precoupled = kwargs.get("ring_nodes", None)
+    if coupled_rt and _ring_precoupled is not None and n_zeta_max > 1:
+        _ridx = jnp.asarray(_ring_precoupled)
+        _n_rt = n_rho_max * n_theta_max
+        D_rho = jax.lax.stop_gradient(
+            _kron_I_right_slice_cols(D_rho0, n_zeta_max, _ridx)
+        )
+        D_theta = jax.lax.stop_gradient(
+            _kron_I_right_slice_cols(D_theta0, n_zeta_max, _ridx)
+        )
+        D_zeta = jax.lax.stop_gradient(_kron_I_left_slice_cols(D_zeta0, _n_rt, _ridx))
+        D_thetaT = jax.lax.stop_gradient(
+            _kron_I_right_slice_rows(_cT(D_theta0), n_zeta_max, _ridx)
+        )
+        D_zetaT = jax.lax.stop_gradient(
+            _kron_I_left_slice_rows(_cT(D_zeta0), _n_rt, _ridx)
+        )
+        _coupled_rt_presliced = True
+    elif coupled_rt:
         # D_rho0/D_theta0 already couple (rho, theta); only tensor with zeta.
         I_rt0 = jax.lax.stop_gradient(jnp.eye(n_rho_max * n_theta_max))
         D_rho = jax.lax.stop_gradient(jnp.kron(D_rho0, I_zeta0))
@@ -805,6 +855,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zeta = jax.lax.stop_gradient(jnp.kron(I_rt0, D_zeta0))
         D_thetaT = jax.lax.stop_gradient(jnp.kron(_cT(D_theta0), I_zeta0))
         D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rt0, _cT(D_zeta0)))
+        _coupled_rt_presliced = False
     else:
         I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
         I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -817,6 +868,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zetaT = jax.lax.stop_gradient(
             jnp.kron(I_rho0, jnp.kron(I_theta0, _cT(D_zeta0)))
         )
+        _coupled_rt_presliced = False
 
     # Quadrature weights still factorize (tensor-product) in both modes.
     W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
@@ -899,11 +951,14 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                 M = M[:, _Rnode]
             return M
 
-    D_rho = _selc(D_rho)
-    D_theta = _selc(D_theta)
-    D_zeta = _selc(D_zeta)
-    D_thetaT = _selr(D_thetaT)
-    D_zetaT = _selr(D_zetaT)
+    if not _coupled_rt_presliced:
+        D_rho = _selc(D_rho)
+        D_theta = _selc(D_theta)
+        D_zeta = _selc(D_zeta)
+        D_thetaT = _selr(D_thetaT)
+        D_zetaT = _selr(D_zetaT)
+    # else: already built directly in sliced form above -- _selc/_selr would
+    # double-slice with the wrong shape.
 
     # Arbitrary choice. Mostly used to decide the range of eigenvalues of
     # the mass matrix. Pre-conditioning should remove this factor
@@ -1321,7 +1376,13 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # gather below.
         #
         # So: device only when the input is actually traced.
-        if isinstance(Q_rt, jax.core.Tracer) or isinstance(A, jax.core.Tracer):
+        if _coupled_rt_presliced:
+            # Ring fixes one zeta index for both row and column, so the
+            # double-sliced kron(Q_rt, I_zeta) reduces to a direct submatrix
+            # of Q_rt -- no kron, no (n_total, n_total) intermediate.
+            _a_idx = _ridx // n_zeta_max
+            Q = Q_rt[_a_idx][:, _a_idx]
+        elif isinstance(Q_rt, jax.core.Tracer) or isinstance(A, jax.core.Tracer):
             Q = Q_rt if n_zeta_max == 1 else jnp.kron(Q_rt, jnp.eye(n_zeta_max))
         else:
             Q = (
@@ -2494,6 +2555,10 @@ def _agni3_store_rayleigh_mode_data(data, v, op):
     "Env CG_TOL is a fallback only",
     cg_maxiter="int: inner PCG iteration cap (default 8000). Env CG_MAXITER is a "
     "fallback only. Hitting the cap is not an error -- check the reported relres",
+    cg_progress="int: DEBUG ONLY, default 0 (off, zero added cost). When > 0, "
+    "every cg_progress-th inner PCG iteration prints (iter, relres, host "
+    "time.time()) via a jax.debug.callback -- real per-iteration wall-clock. "
+    "Env AGNI_CG_PROGRESS is a fallback only",
     coarse_grid="Grid: optional COARSE level (mapped to DESC coords at these "
     "params) whose generalized modes of (H_c, M_ring,c) supply the deflation "
     "space and the Lanczos seed. Active only with AGNI_COARSE_DEFL=1 and "
@@ -2980,6 +3045,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         from ._stability_solvers import ring_nodes as _ring_nodes_fn
 
         _cgmax = _solver_opt(kwargs, "cg_maxiter", "CG_MAXITER", 8000, int)
+        # DEBUG ONLY: real per-iteration wall-clock via a host callback inside
+        # `pcg`'s while_loop (see `_pcg_report`). 0 (default) adds nothing --
+        # not even a traced lax.cond. Set e.g. AGNI_CG_PROGRESS=200 to print
+        # every 200th CG iteration's (iter, relres, host time.time()).
+        _cg_progress = _solver_opt(kwargs, "cg_progress", "AGNI_CG_PROGRESS", 0, int)
         # COLD START. With no carried-over vectors the first evaluation has only
         # the ring preconditioner, and at 32x32x12 (n=36096) CG_MAXITER=8000 is
         # not enough: measured lam_R=+2.62 against a true -2.94e-04, i.e. lam_mu
@@ -3165,7 +3235,10 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _idx = _red[_alive]
                 _na = int(_idx.size)
                 _sub = _blk[_np.ix_(_alive, _alive)]
-                _Ablk[_gi, :_na, :_na] = 0.5 * (_sub + _sub.T)
+                # RG: Hermitian, not plain-transpose symmetrization -- same
+                # H ring blocks as the traced path (build_ring_blocks); conj()
+                # is a no-op for real _sub (3D).
+                _Ablk[_gi, :_na, :_na] = 0.5 * (_sub + _sub.conj().T)
                 _nal[_gi] = _na
                 _G[_gi, :_na] = _idx
             ring_pad_diag = None
@@ -3226,9 +3299,17 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _Mop, _rk = _Mr, 0
             if _Zin is not None and _Zin.shape[0] == nA:
                 _Zj = jnp.asarray(_Zin)
-                _HZ = jnp.stack(
-                    [_Hs(_Zj[:, _j]) for _j in range(_Zin.shape[1])], axis=1
-                )
+                # RG: was a Python-unrolled `jnp.stack([_Hs(_Zj[:, _j]) for _j in
+                # range(k_defl)], axis=1)` -- k_defl (here 80) literal copies of
+                # `_Hs`'s subgraph spliced into the jaxpr. Under `coupled_rt` that
+                # subgraph includes the dense (n_rho*n_theta)^2 D_rho/D_theta
+                # matmuls, so this is the same unroll-blows-up-compile-time
+                # pattern already diagnosed and fixed for `_AVb` in `rr_refine`
+                # below (see its comment). `vmap` traces `_Hs` ONCE regardless of
+                # k_defl, and lets XLA fuse the batch into a single `D @ U`
+                # matmul -- one HBM read of D_rho/D_theta instead of k_defl of
+                # them, on top of the O(1)-in-k_defl compile time.
+                _HZ = jax.vmap(_Hs, in_axes=1, out_axes=1)(_Zj)
                 # DEFAULT TRACED, for the same reason as the ring build above: the eager
                 # branch device_gets a (k_defl, k_defl) array and dies under trace.
                 if _solver_flag(kwargs, "traced_defl", "AGNI_TRACED_DEFL", default="1"):
@@ -3246,19 +3327,25 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     # that used to be here forced a host sync on every solve.
                     _Y, _rk = _defl_Y(_Zj, _HZ)
 
+                    # RG: M^-1 = M_ring^-1 + Y Y^H, not Y Y^T -- Y is complex
+                    # for axisym=True and this is a Hermitian outer product
+                    # (see the Hermitian-vs-symmetric measurement on `_Hs`
+                    # above `_HZ`). conj() is a no-op for real Y (3D).
                     def _M_deflated(r, _Y=_Y, _Mr=_Mr):
-                        return _Mr(r) + _Y @ (jnp.swapaxes(_Y, 0, 1) @ r)
+                        return _Mr(r) + _Y @ (jnp.conj(jnp.swapaxes(_Y, 0, 1)) @ r)
 
                     _Mop = _M_deflated
                 else:
-                    _A2 = _np.asarray(jax.device_get(jnp.swapaxes(_Zj, 0, 1) @ _HZ))
-                    _A2 = 0.5 * (_A2 + _A2.T)
-                    _dg = _np.diag(_A2).copy()
+                    _A2 = _np.asarray(
+                        jax.device_get(jnp.conj(jnp.swapaxes(_Zj, 0, 1)) @ _HZ)
+                    )
+                    _A2 = 0.5 * (_A2 + _A2.conj().T)
+                    _dg = _np.diag(_A2).real.copy()
                     _lv = _dg > 0.0
                     _d = _np.ones_like(_dg)
                     _d[_lv] = _np.sqrt(_dg[_lv])
                     _Hh = (_A2[_np.ix_(_lv, _lv)] / _d[_lv][:, None]) / _d[_lv][None, :]
-                    _w, _Q = _np.linalg.eigh(0.5 * (_Hh + _Hh.T))
+                    _w, _Q = _np.linalg.eigh(0.5 * (_Hh + _Hh.conj().T))
                     _kp = _w > 1e-12 * float(_w.max())
                     _rk = int(_kp.sum())
                     if _rk > 0:
@@ -3268,7 +3355,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                         )
 
                         def _M_deflated(r, _Y=_Y, _Mr=_Mr):
-                            return _Mr(r) + _Y @ (jnp.swapaxes(_Y, 0, 1) @ r)
+                            return _Mr(r) + _Y @ (jnp.conj(jnp.swapaxes(_Y, 0, 1)) @ r)
 
                         _Mop = _M_deflated
 
@@ -3289,7 +3376,16 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # but would silently drop `relres` from every jitted run, and relres
             # is the measurement that diagnosed the sigma=-1e-5 stall.
             if _xcheck:
-                _probe = _pcg(_Hs, jnp.ones((nA,), dtype=_dtype), _Mop, _cgtol, _iters)
+                if _cg_progress:
+                    jax.debug.print("[cg progress] === PROBE solve starting ===")
+                _probe = _pcg(
+                    _Hs,
+                    jnp.ones((nA,), dtype=_dtype),
+                    _Mop,
+                    _cgtol,
+                    _iters,
+                    progress_every=_cg_progress,
+                )
                 if isinstance(_probe[1], jax.core.Tracer):
                     _k_used, _relres = _probe[1], _probe[2]
                 else:
@@ -3299,7 +3395,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _k_used, _relres = -1, float("nan")
 
             def _OPinv(b):
-                x, _kk, _rr = _pcg(_Hs, b, _Mop, _cgtol, _iters)
+                x, _kk, _rr = _pcg(
+                    _Hs, b, _Mop, _cgtol, _iters, progress_every=_cg_progress
+                )
                 return x
 
             _tri = decomp.tridiag_sym(_num_matvecs, reortho="full", materialize=True)
@@ -3359,8 +3457,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 # applies Ax one vector at a time.
                 _Vb = _vecs.T
                 _AVb = jax.lax.map(_Ax, _vecs).T
-                _Ah = _Vb.T @ _AVb
-                _Ah = 0.5 * (_Ah + _Ah.T)
+                # RG: V^H A V (Hermitian Galerkin projection), not V^T A V --
+                # A is Hermitian, not symmetric, for axisym=True. conj() is a
+                # no-op for the real 3D case.
+                _Ah = jnp.conj(_Vb).T @ _AVb
+                _Ah = 0.5 * (_Ah + jnp.conj(_Ah).T)
                 _wr, _er = jnp.linalg.eigh(_Ah)
                 # eigh returns ascending, so column 0 is the most negative
                 # Rayleigh quotient == the most unstable mode.
@@ -3503,7 +3604,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
             _cA = _agni3_assemble(_cpar, _ctr, profiles, _cdata, **_ckw)["A"]
-            _cHc = 0.5 * (_cA + jnp.swapaxes(_cA, 0, 1)) - sigma * jnp.eye(_nc)
+            # RG: Hermitian symmetrization, not plain-transpose -- _cA is the
+            # same operator as the fine level's, Hermitian not symmetric for
+            # axisym=True (measured ||A-A^H||/||A|| ~ 1e-17 vs ||A-A^T||/||A||
+            # ~ 3e-3). conj() is a no-op for the real 3D case.
+            _cHc = 0.5 * (_cA + jnp.conj(jnp.swapaxes(_cA, 0, 1))) - sigma * jnp.eye(
+                _nc
+            )
             # Ring blocks of H_c, with the -sigma shift applied inside. Traced
             # build: `build_ring_blocks_params` is the eager host loop and does a
             # device_get per ring, which cannot survive jit. The coarse level

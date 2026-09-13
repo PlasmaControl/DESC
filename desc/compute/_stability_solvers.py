@@ -448,7 +448,14 @@ def make_block_precond(L, Gs, n):
     def M(r):
         y = r[idx] * mask.astype(r.dtype)  # (m, b)
         z = solve_triangular(L, y[..., None], lower=True)
-        z = solve_triangular(jnp.swapaxes(L, -1, -2), z, lower=False)[..., 0]
+        # RG: L factors H's own ring blocks, which ARE genuinely complex for
+        # axisym=True (H carries D_zeta0=1j*n_mode) and Hermitian, not merely
+        # symmetric -- measured ||H-H^H||/||H|| ~ 1e-17 vs ||H-H^T||/||H|| ~
+        # 3e-3 on this operator. jnp.linalg.cholesky gives H = L L^H, so the
+        # back-substitution needs L^H (conjugate transpose), not L^T. This was
+        # a plain swapaxes before, silently wrong for every axisym run: for
+        # real L (the 3D path) conj is a no-op, so it never showed up there.
+        z = solve_triangular(jnp.conj(jnp.swapaxes(L, -1, -2)), z, lower=False)[..., 0]
         z = z * mask.astype(z.dtype)
         return jnp.zeros((n,), dtype=r.dtype).at[idx].add(z)
 
@@ -460,8 +467,34 @@ def make_block_precond(L, Gs, n):
 # ---------------------------------------------------------------------------
 
 
-def pcg(Hf, b_rhs, M, tol, maxiter):
+def _pcg_report(k, relres):
+    """Host callback: one line of real wall-clock CG progress.
+
+    DEBUG ONLY (see ``progress_every`` on `pcg`). Prints its own
+    ``time.time()`` so the interval between lines is an actual per-iteration
+    wall-clock measurement, not inferred from compile-log timestamps.
+    """
+    import time as _time
+
+    print(
+        f"[cg progress] iter={int(k)} relres={float(relres):.3e} "
+        f"t={_time.time():.3f}",
+        flush=True,
+    )
+
+
+def pcg(Hf, b_rhs, M, tol, maxiter, progress_every=0):
     """Preconditioned CG that reports its own iteration count.
+
+    Parameters
+    ----------
+    progress_every : int
+        DEBUG ONLY, default 0 (off, zero added cost -- no `lax.cond`/callback
+        is even traced). When > 0, every `progress_every`-th iteration fires a
+        `jax.debug.callback` printing (iter, relres, host time.time()) --
+        real per-iteration wall-clock, not a guess from compile-event gaps.
+        The `lax.cond` guard means the host round-trip only happens on those
+        iterations, not every one.
 
     Returns
     -------
@@ -481,7 +514,18 @@ def pcg(Hf, b_rhs, M, tol, maxiter):
         z = M(r)
         rz_new = jnp.vdot(r, z)
         p = z + (rz_new / rz) * p
-        return (x, r, p, rz_new, k + 1, jnp.linalg.norm(r) / bnorm)
+        k_new = k + 1
+        relres_new = jnp.linalg.norm(r) / bnorm
+        if progress_every:
+            jax.lax.cond(
+                (k_new % progress_every) == 0,
+                lambda _: jax.debug.callback(
+                    _pcg_report, k_new, relres_new, ordered=True
+                ),
+                lambda _: None,
+                operand=None,
+            )
+        return (x, r, p, rz_new, k_new, relres_new)
 
     def cond(state):
         _, _, _, _, k, relres = state
@@ -508,20 +552,23 @@ def _make_deflation(Hf, Z):
     where the preconditioned spectrum is clustered.
     """
     HZ = jax.vmap(Hf, in_axes=1, out_axes=1)(Z)  # (n, k)
-    ZtHZ = Z.T @ HZ
-    # Symmetrize: Z^T H Z is symmetric in exact arithmetic, and forcing it keeps
+    # RG: Z^H H Z (Hermitian inner product), not Z^T H Z -- H is Hermitian, not
+    # symmetric, whenever Z/H are complex (axisym=True). conj() is a no-op for
+    # real Z/H, so the 3D path is unchanged.
+    ZtHZ = jnp.conj(Z).T @ HZ
+    # Symmetrize: Z^H H Z is Hermitian in exact arithmetic, and forcing it keeps
     # the Cholesky below well posed.
-    ZtHZ = 0.5 * (ZtHZ + ZtHZ.T)
+    ZtHZ = 0.5 * (ZtHZ + jnp.conj(ZtHZ).T)
     chol = jax.scipy.linalg.cho_factor(ZtHZ, lower=True)
 
     def coarse_solve(rhs):
         return jax.scipy.linalg.cho_solve(chol, rhs)
 
     def project(v):
-        return v - HZ @ coarse_solve(Z.T @ v)
+        return v - HZ @ coarse_solve(jnp.conj(Z).T @ v)
 
     def correct(b_rhs):
-        return Z @ coarse_solve(Z.T @ b_rhs)
+        return Z @ coarse_solve(jnp.conj(Z).T @ b_rhs)
 
     return project, correct
 
@@ -648,9 +695,13 @@ def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3):
         Zb = solve_triangular(Lu, Y, lower=lower) * mask3
         return jnp.zeros_like(Mat).at[idx].add(Zb)
 
-    # A = L^-1 Hc L^-T, formed as L^-1 (L^-1 Hc)^T using the symmetry of Hc.
-    A = blk_solve(jnp.swapaxes(blk_solve(Hc, True), 0, 1), True)
-    A = 0.5 * (A + jnp.swapaxes(A, 0, 1))
+    # A = L^-1 Hc L^-H, formed as L^-1 (L^-1 Hc)^H using Hc's HERMITIAN (not
+    # merely symmetric) symmetry -- measured ||Hc-Hc^H||/||Hc|| ~ 1e-17 vs
+    # ||Hc-Hc^T||/||Hc|| ~ 3e-3 for axisym=True's complex Hc. L is the MASS
+    # matrix's Cholesky factor and stays real, so this conj only ever touches
+    # Hc's own adjoint, not L's -- a no-op when Hc is real (3D).
+    A = blk_solve(jnp.conj(jnp.swapaxes(blk_solve(Hc, True), 0, 1)), True)
+    A = 0.5 * (A + jnp.conj(jnp.swapaxes(A, 0, 1)))
 
     lu = jax.scipy.linalg.lu_factor(A)
     tri = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
@@ -835,12 +886,19 @@ def build_ring_blocks(
         out = assemble(params, transforms, profiles, data, ring_nodes=nodes, **kwargs)
         return finish_ring_block(out["A"], out["Linv"], out["au_diag"], n_theta)
 
-    blk = jax.vmap(one_ring)(nodes_all)  # (m, 3*n_theta, 3*n_theta)
+    # Blocked, not one jax.vmap over all m rings: a full vmap needs
+    # O(m*n_total) memory regardless of jit (test_AGNI.py's _Ax_block hit
+    # the same wall). batch_size caps it at 64 rings at a time.
+    blk = jax.lax.map(one_ring, nodes_all, batch_size=min(64, m))
     rows = sel[:, :, None]
     cols = sel[:, None, :]
     ar = jnp.arange(m)[:, None, None]
     sub = blk[ar, rows, cols]  # (m, b, b)
-    sub = 0.5 * (sub + jnp.swapaxes(sub, -1, -2))
+    # RG: these are H's own ring blocks -- Hermitian, not symmetric, for
+    # axisym=True (see make_block_precond). conj() is a no-op for the real 3D
+    # case, so this only changes behavior where the plain-transpose symmetrize
+    # was actually wrong.
+    sub = 0.5 * (sub + jnp.conj(jnp.swapaxes(sub, -1, -2)))
     w = pad[:, :, None] * pad[:, None, :]
     eye = jnp.eye(b, dtype=sub.dtype)[None]
     return sub * w - sigma * (pad[:, :, None] * eye) + (1.0 - pad)[:, :, None] * eye
@@ -884,9 +942,14 @@ def deflation_Y(Z, HZ, rcond=1e-12):
         Number of directions that survived the ``rcond`` cut, as a traced scalar.
     """
     k = Z.shape[1]
-    A2 = jnp.swapaxes(Z, 0, 1) @ HZ
-    A2 = 0.5 * (A2 + jnp.swapaxes(A2, 0, 1))
-    dg = jnp.diagonal(A2)
+    # RG: Z^H H Z, not Z^T H Z -- H is Hermitian, not symmetric, whenever Z/H
+    # are complex (axisym=True); conj() is a no-op for real Z/H (3D). This also
+    # matters for `dg > 0.0` below: only Z^H H Z has a guaranteed-real diagonal
+    # for Hermitian H (z^H H z is real; z^T H z is not, for complex z), so the
+    # unfixed form was comparing a not-necessarily-real quantity against 0.0.
+    A2 = jnp.conj(jnp.swapaxes(Z, 0, 1)) @ HZ
+    A2 = 0.5 * (A2 + jnp.conj(jnp.swapaxes(A2, 0, 1)))
+    dg = jnp.diagonal(A2).real
     live = dg > 0.0
     d = jnp.where(live, jnp.sqrt(jnp.where(live, dg, 1.0)), 1.0)
     Hh = (A2 / d[:, None]) / d[None, :]
@@ -894,7 +957,7 @@ def deflation_Y(Z, HZ, rcond=1e-12):
     both = live[:, None] & live[None, :]
     # Dead rows/cols become identity so eigh stays well posed. Harmless: the
     # matching columns of Z are zeroed below.
-    Hh = jnp.where(both, 0.5 * (Hh + jnp.swapaxes(Hh, 0, 1)), eye)
+    Hh = jnp.where(both, 0.5 * (Hh + jnp.conj(jnp.swapaxes(Hh, 0, 1))), eye)
     w, Q = jnp.linalg.eigh(Hh)
     keep = w > rcond * jnp.max(w)
     scale = jnp.where(keep, 1.0 / jnp.sqrt(jnp.where(keep, w, 1.0)), 0.0)

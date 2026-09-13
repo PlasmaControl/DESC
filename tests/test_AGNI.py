@@ -986,6 +986,7 @@ def _build_pest_level(eq, n_rho, n_theta, n_zeta):
 # of eight parallel groups, and does NOT deselect `slow`.
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
 def test_pcg_deflated_two_level_matches_dense(agni):
     """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
 

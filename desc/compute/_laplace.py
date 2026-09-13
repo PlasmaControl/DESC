@@ -324,6 +324,10 @@ def _lsmr_compute_phi_matrix(
         "desc.equilibrium.equilibrium.Equilibrium",
     ],
     q="int : Order of quadrature in polar domain.",
+    st="int : Support size of the local singular grid in theta. If not given "
+    "(along with sz and q), a heuristic based on the source geometry chooses "
+    "all three.",
+    sz="int : Support size of the local singular grid in zeta. See st.",
     potential_grid="""LinearGrid :
         Grid to evaluate potential on boundary.
         If not given, default is to interpolate to source grid.
@@ -376,6 +380,10 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     data=["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
     q="int : Order of quadrature in polar domain.",
+    st="int : Support size of the local singular grid in theta. If not given "
+    "(along with sz and q), a heuristic based on the source geometry chooses "
+    "all three.",
+    sz="int : Support size of the local singular grid in zeta. See st.",
     pest_grid="""Grid :
         Grid in PEST (rvp) coordinates with ``can_fft2=True`` to use as the
         source grid for the singular integral interpolator.

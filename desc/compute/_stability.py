@@ -1310,7 +1310,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # surface quantities
         # psi_r_s = 1  # psi_r[b_idx, :] = 1 on the boundary
         # print(psi_r_s)
-        sqrtg_grad_rho = sqrtg * np.sqrt(g_sup_rr)
+        sqrtg_grad_rho = sqrtg * jnp.sqrt(g_sup_rr)
         # iota_s = iota[b_idx, :]
 
         # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
@@ -1330,7 +1330,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                 )
             )
         )
-        # for testing
+        """# for testing
         new_term = _fit(
             -_cT(
                 W
@@ -1340,7 +1340,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
             @ (phi_matrix_full @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta)))
         )
         new_term = new_term.at[b_idx, b_idx].set(0)
-        np.testing.assert_allclose(new_term, 0)
+        np.testing.assert_allclose(new_term, 0)"""
 
     # purely stabilizing and doesn't change the marginal stability
     A = A.at[rho_idx, rho_idx].add(

@@ -175,7 +175,7 @@ def lsq_auglag(  # noqa: C901
           especially on GPU, but may be less accurate for badly scaled systems.
           ``"svd"`` is the most accurate but significantly slower. If the Jacobian
           can become rank-deficient due to the bounds, ``"svd"`` is recommended and
-          the default, otherwise the deafult is ``"qr"``.
+          the default, otherwise the default is ``"qr"``.
         - ``"scaled_termination"`` : Whether to evaluate termination criteria for
           ``xtol`` and ``gtol`` in scaled / normalized units (default) or base units.
 

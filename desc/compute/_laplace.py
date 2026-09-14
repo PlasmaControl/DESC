@@ -263,8 +263,6 @@ def _lsmr_compute_phi_matrix(
 
     source_data["B0*n"] = Phi  # use same basis for B0*n as for phi
 
-    print("source data computed")
-
     D = _D_plus_half(
         potential_data_d,
         source_data_d,
@@ -275,7 +273,6 @@ def _lsmr_compute_phi_matrix(
         _midpoint_quad=_midpoint_quad,
         _D_quad=_D_quad,
     )
-    print("D + half computed")
     assert D.shape == (potential_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
         D -= Phi
@@ -285,24 +282,15 @@ def _lsmr_compute_phi_matrix(
     M_S = _compute_single_layer_matrix(
         potential_data, source_data, interpolator, chunk_size, ndim=basis.num_modes
     )
-    print("single layer matrix computed")
     # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
     # A_mn has shape (N_modes, N_source).
     if potential_grid.num_nodes == basis.num_modes:
         A_mn = jnp.linalg.solve(D, M_S)
-        print(A_mn.shape)
-        print(pinv.shape)
-        print(D.shape)
-        print(M_S.shape)
         A_mn = A_mn @ pinv
     else:
         A_mn = jnp.linalg.lstsq(D, M_S)[0]
-        print(A_mn.shape)
-        print(pinv.shape)
-        print(D.shape)
-        print(M_S.shape)
         A_mn = A_mn @ pinv
-    print("linear system solved")
+
     # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
     return A_mn, -Phi @ A_mn  # sign convention that makes B dot n the outward normal
 
@@ -552,9 +540,6 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     # passed here is consistent with what the interpolator was built with.
     data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
-    print(transforms["Phi"].basis.modes)
-    print(transforms["Phi_PEST"].basis.modes)
-
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
         data.get("potential data", data),
         data,

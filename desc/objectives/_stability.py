@@ -1254,7 +1254,8 @@ class FinitenStability(_Objective):
             )
         )
         surf_nodes0 = rtz0.reshape(n_theta, n_zeta, 3).transpose(1, 0, 2)
-        surf_grid0 = Grid(surf_nodes0.reshape(n_surf, 3), NFP=eq.NFP)
+        surf_grid_NFP = 128 if self._axisym else eq.NFP
+        surf_grid0 = Grid(surf_nodes0.reshape(n_surf, 3), NFP=surf_grid_NFP)
         interp0 = eq.compute(
             ["interpolator_pest"],
             grid=surf_grid0,

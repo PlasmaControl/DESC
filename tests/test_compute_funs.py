@@ -3,13 +3,31 @@
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
+from tests.test_magnetic_fields import make_constructed_qi_samples
+from tests.utils import FiniteDiffDerivative
 
+from desc.backend import jax, jit, jnp
+from desc.basis import DoubleFourierSeries
+from desc.compute import compute, data_index, get_params, get_transforms
+from desc.compute._omnigenity import (
+    _construct_field,
+    _construct_single_well,
+    _evaluate_bounce,
+    _evaluate_field,
+    _evaluate_field_native,
+    _project_centers,
+    _sample_boozer_data,
+    _single_well_bounce_points,
+)
+from desc.compute.utils import _compute
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousFieldConstructed
+from desc.transform import Transform
 from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
@@ -1154,6 +1172,717 @@ def test_boozer_transform_multiple_surfaces():
     np.testing.assert_allclose(
         data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
+
+
+def _asymmetric_samples():
+    """Avoid extrema ties and root/clip switches for derivative comparisons."""
+    return jnp.array(
+        [
+            [
+                [2.2, 2.6, 1.9, 1.45, 1.0, 1.3, 1.8, 2.4, 3.2],
+                [3.0, 2.5, 1.8, 1.1, 1.4, 1.9, 2.1, 2.7, 3.6],
+                [2.9, 2.3, 1.9, 1.7, 1.4, 1.15, 1.8, 2.5, 3.3],
+            ]
+        ]
+    )
+
+
+def _tied_symmetric_samples():
+    """Separated minima and off-grid midpoints, including reflection partners."""
+    period = 2 * np.pi / 3
+    first = [3.0, 2.4, 1.6, 1.0, 1.7, 1.7, 1.0, 1.6, 2.4, 3.0]
+    second = [3.2, 2.5, 1.8, 1.1, 1.6, 1.1, 1.9, 2.3, 2.8, 3.6]
+    third = [3.4, 2.6, 1.0, 1.5, 1.8, 1.8, 1.5, 1.0, 2.6, 3.4]
+    B = np.asarray([[first, second, third, second[::-1]]])
+    # Roundoff-scale splitting must not select one of a reflected pair of minima.
+    B[0, 0, 3] = np.nextafter(B[0, 0, 3], np.inf)
+    return B, dict(
+        rho=[0.7],
+        fieldline_labels=np.arange(4) * np.pi / 2,
+        zeta=-2 * period + period * np.linspace(0, 1, B.shape[-1]),
+        iota=[0.73],
+        NFP=3,
+        sym=True,
+        num_B_levels=7,
+    )
+
+
+class TestConstructedQI:
+    """Test the array construction and continuous representation of QI fields."""
+
+    @pytest.mark.unit
+    def test_constructed_registry(self):
+        """Dispatch both strengths with surface ordering and dynamic iota intact."""
+        parameterization = "desc.magnetic_fields._core.OmnigenousFieldConstructed"
+        entries = data_index[parameterization]
+        assert set(entries) == {"|B| constructed", "Bc normalized"}
+        B, options = make_constructed_qi_samples()
+        samples = np.concatenate((B, 1.3 * B + 0.4))
+        field = OmnigenousFieldConstructed.from_samples(
+            samples, **dict(options, rho=[0.4, 0.7], iota=[0.6, 0.73])
+        )
+        # Interleaved stored surfaces and shifted angles preserve input node order.
+        grid = Grid(
+            [[0.7, 0.1, -0.2], [0.4, 2.3, 0.4], [0.7, 3.4, 2.5]],
+            NFP=field.NFP,
+            sort=False,
+        )
+        names = list(entries)
+        params = get_params(names, field)
+        transforms = get_transforms(names, field, grid=grid)
+        actual = compute(field, names, params, transforms, {})
+        expected = field.compute(names, grid=grid)
+        assert set(actual) == set(expected) == set(names)
+        for name in names:
+            np.testing.assert_allclose(actual[name], expected[name], atol=2e-14)
+        indices = np.array([1, 0, 1])
+        np.testing.assert_allclose(
+            actual["|B| constructed"],
+            field.B_min[indices]
+            + (field.B_max - field.B_min)[indices] * actual["Bc normalized"],
+            atol=2e-14,
+        )
+
+        # Literal query angles stay fixed while iota changes their stored label.
+        def evaluate(iota):
+            return _compute(
+                field, "Bc normalized", dict(params, iota=iota), transforms, {}
+            )["Bc normalized"]
+
+        direction = jnp.array([0.17, -0.21])
+        _, tangent = jit(lambda iota, diota: jax.jvp(evaluate, (iota,), (diota,)))(
+            field.iota, direction
+        )
+        step = 1e-6
+        expected_tangent = (
+            evaluate(field.iota + step * direction)
+            - evaluate(field.iota - step * direction)
+        ) / (2 * step)
+        assert np.linalg.norm(tangent) > 0
+        np.testing.assert_allclose(tangent, expected_tangent, rtol=2e-7, atol=2e-9)
+
+    @pytest.mark.unit
+    def test_constructed_registry_invalid_surface_derivatives(self):
+        """Invalid normalized values and ranges cannot poison valid-surface AD."""
+        parameterization = "desc.magnetic_fields._core.OmnigenousFieldConstructed"
+        grid = Grid([[0.7, 0.2, 0.3], [0.4, 0.4, 0.6]], sort=False)
+        b = jnp.array([jnp.nan, 0.4])
+        bmin, bmax = jnp.array([2.0, jnp.nan]), jnp.array([3.0, jnp.nan])
+
+        def evaluate(normalized, minimum, maximum):
+            params = dict(
+                rho=jnp.array([0.4, 0.7]),
+                zeta=jnp.array([0.0, 2 * jnp.pi]),
+                B_min=minimum,
+                B_max=maximum,
+                valid_surface=jnp.array([True, False]),
+            )
+            return _compute(
+                parameterization,
+                "|B| constructed",
+                params,
+                {"grid": grid},
+                {},
+                data={"Bc normalized": normalized},
+            )["|B| constructed"]
+
+        value, tangent = jit(
+            lambda x, lo, hi: jax.jvp(
+                evaluate, (x, lo, hi), (jnp.ones(2), jnp.ones(2), jnp.ones(2))
+            )
+        )(b, bmin, bmax)
+        assert np.isnan(value[0])
+        np.testing.assert_allclose(value[1], 2.4)
+        np.testing.assert_allclose(tangent[1], 2.0)
+        gradients = jit(
+            lambda x, lo, hi: jax.vjp(evaluate, x, lo, hi)[1](jnp.array([0.0, 1.0]))
+        )(b, bmin, bmax)
+        for actual, expected in zip(gradients, ([0, 1], [0.6, 0], [0.4, 0])):
+            assert np.isfinite(actual).all()
+            np.testing.assert_allclose(actual, expected, atol=2e-14)
+
+    @pytest.mark.unit
+    def test_native_field_triangular_oracle(self):
+        """Stored inverse branches recover triangular wells and their derivatives."""
+        zeta = jnp.linspace(-0.37, -0.37 + 2 * np.pi / 3, 13)
+        period = zeta[-1] - zeta[0]
+        levels = jnp.array([0.0, 0.2, 0.65, 1.0])
+        minima = zeta[0] + period * jnp.array([[0.31, 0.47, 0.61], [0.39, 0.57, 0.73]])
+        direction = jnp.array([[0.13, -0.07, 0.03], [-0.11, 0.09, 0.05]])
+
+        def evaluate(bottom):
+            data = dict(
+                zeta=zeta,
+                B_levels=levels,
+                bounce_centers=bottom[..., None] * (1 - levels)
+                + (zeta[0] + zeta[-1]) / 2 * levels,
+                bounce_distances=jnp.broadcast_to(period * levels, (2, levels.size)),
+                valid_knots=jnp.ones(bottom.shape, dtype=bool),
+            )
+            return _evaluate_field_native(data)
+
+        actual, tangent = jax.jvp(evaluate, (minima,), (direction,))
+        bottom = minima[..., None]
+        expected = jnp.where(
+            zeta < bottom,
+            (bottom - zeta) / (bottom - zeta[0]),
+            (zeta - bottom) / (zeta[-1] - bottom),
+        )
+        derivative = (
+            jnp.where(
+                zeta < bottom,
+                (zeta - zeta[0]) / (bottom - zeta[0]) ** 2,
+                (zeta - zeta[-1]) / (zeta[-1] - bottom) ** 2,
+            )
+            * direction[..., None]
+        )
+        np.testing.assert_allclose(actual, expected, atol=3e-14, rtol=3e-14)
+        np.testing.assert_allclose(tangent, derivative, atol=3e-13, rtol=3e-13)
+        np.testing.assert_array_equal(actual[..., [0, -1]], 1.0)
+        # Interpolation's quotient JVP can leave roundoff when endpoint terms cancel.
+        np.testing.assert_allclose(tangent[..., [0, -1]], 0.0, atol=1e-15, rtol=0)
+
+    @pytest.mark.unit
+    def test_shared_knot_derivatives(self):
+        """A smooth change of a QI well has zero residual derivative at shared knots."""
+        zeta = jnp.linspace(0, 1, 9)
+        u = jnp.abs(2 * zeta - 1)
+        B = (2 + u)[None, None, :]
+        direction = (u * (1 - u))[None, None, :]
+
+        def residual(t):
+            data = _construct_field(B + t * direction, zeta, jnp.linspace(0, 1, 5))
+            return (data["B_normalized"] - data["B_target"]).ravel()
+
+        value, tangent = jax.jvp(residual, (0.0,), (1.0,))
+        np.testing.assert_allclose(value, 0, atol=1e-14)
+        np.testing.assert_allclose(tangent, 0, atol=1e-13)
+        # The inverse interpolant agrees to first order; its remaining error is O(t²).
+        for step in (2e-6, 1e-6):
+            finite_difference = (residual(step) - residual(-step)) / (2 * step)
+            np.testing.assert_allclose(tangent, finite_difference, atol=3e-7)
+
+    @pytest.mark.unit
+    def test_single_well(self):
+        """The base operation aligns minima without imposing QI top constraints."""
+        B = np.asarray(_asymmetric_samples())
+        result = _construct_single_well(B)
+        expected = np.empty_like(B)
+        indices = np.argmin(B, axis=-1)
+        for a, index in enumerate(indices[0]):
+            left = np.minimum.accumulate(B[0, a, : index + 1])
+            right = np.minimum.accumulate(B[0, a, index:][::-1])[::-1]
+            expected[0, a] = np.r_[left[:-1], right] - B[0, a, index] + B.min()
+        np.testing.assert_allclose(result["B_single"], expected, atol=2e-15)
+        np.testing.assert_allclose(np.min(result["B_single"], axis=-1), B.min())
+        np.testing.assert_allclose(result["endpoint_B"], expected[..., [0, -1]])
+        assert np.all(result["valid_single_well"])
+        assert np.unique(np.asarray(result["endpoint_B"])).size > 2
+        # A later interior maximum must not replace the left endpoint.
+        assert result["B_single"][0, 0, 0] == B[0, 0, 0]
+        for a, index in enumerate(indices[0]):
+            assert np.all(np.diff(expected[0, a, : index + 1]) <= 0)
+            assert np.all(np.diff(expected[0, a, index:]) >= 0)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "values,interval",
+        [
+            ([3, 2.2, 1.2, 1, 1, 1.4, 2.4, 3.4], (3, 4)),
+            ([3, 2.4, 1, 1.8, 1.9, 1.6, 1, 2.7, 3.4], (2, 6)),
+            ([3, 2.4, 1, 1, 1.8, 1.7, 1, 2.2, 2.8, 3.4], (2, 6)),
+            ([3, 2.4, np.nextafter(1.0, np.inf), 1.7, 1.8, 1, 2.2, 2.8, 3.4], (2, 5)),
+        ],
+    )
+    def test_minimum_midpoint(self, values, interval):
+        """Adjacent or separated minima define a continuous, unrounded anchor."""
+        B = np.asarray(values)[None, None]
+        zeta = np.linspace(-2 * np.pi, 0, B.shape[-1])
+        data = _construct_field(B, zeta, jnp.linspace(0, 1, 7))
+        lo, hi = interval
+        np.testing.assert_array_equal(data["minimum_indices"], [[interval]])
+        np.testing.assert_array_equal(data["B_single"][0, 0, lo : hi + 1], B.min())
+        np.testing.assert_array_equal(data["endpoint_B"], B[..., [0, -1]])
+        midpoint = (zeta[lo] + zeta[hi]) / 2
+        np.testing.assert_allclose(data["minimum_zeta"], midpoint, atol=1e-15)
+        np.testing.assert_allclose(data["bounce_centers"][..., 0], midpoint, atol=1e-15)
+        np.testing.assert_array_equal(data["bounce_distances"][..., 0], 0)
+        assert np.all(data["valid_surface"])
+        # The base layer retains the plateau; the QI enhancement contracts level zero.
+        assert hi > lo
+        at_minimum = _evaluate_field(data, jnp.array([0.0]), 0.0, midpoint, 0)
+        np.testing.assert_allclose(at_minimum, 0, atol=2e-14)
+        left, right = _evaluate_bounce(data, jnp.array([[0.0]]))
+        np.testing.assert_allclose(left, midpoint, atol=1e-15)
+        np.testing.assert_array_equal(right, left)
+
+    @pytest.mark.unit
+    def test_tied_minimum_symmetry(self):
+        """Keep reflection symmetry and common widths between construction levels."""
+        B, options = _tied_symmetric_samples()
+        levels = jnp.linspace(0, 1, options.pop("num_B_levels"))
+        data = _construct_field(B, levels=levels, **options)
+        assert np.all(data["valid_surface"])
+        actual = data["B_target"]
+        reflected = actual[:, (-np.arange(B.shape[1])) % B.shape[1], ::-1]
+        np.testing.assert_allclose(actual, reflected, atol=3e-14)
+        beta = jnp.array([[0, 0.0003, 0.045, 0.327, 0.913, 1]])
+        left, right = _evaluate_bounce(data, beta)
+        np.testing.assert_allclose(
+            right - left,
+            np.broadcast_to((right - left)[:, :1], left.shape),
+            atol=3e-14,
+        )
+        labels = jnp.asarray(options["fieldline_labels"])
+        for roots in (left[0], right[0]):
+            at_roots = _evaluate_field(data, labels, labels[:, None], roots, 0)
+            np.testing.assert_allclose(
+                at_roots, np.broadcast_to(beta, roots.shape), atol=3e-14
+            )
+        anchors = data["bounce_centers"][0, :, 0]
+        np.testing.assert_allclose(
+            _evaluate_field(data, labels, labels, anchors, 0), 0, atol=3e-14
+        )
+
+    @pytest.mark.unit
+    def test_affine_stretch(self):
+        """Minimum translation cancels from direct per-branch affine stretch."""
+        B = _asymmetric_samples()
+        indices = np.argmin(np.asarray(B[0]), axis=-1)
+        zeta, levels = jnp.linspace(-2.0, -1.0, 9), jnp.linspace(0, 1, 7)
+
+        def direct_stretch(B):
+            rows = []
+            for a, index in enumerate(indices):
+                row = B[0, a]
+                squashed = jnp.stack(
+                    [
+                        jnp.min(row[: k + 1]) if k <= index else jnp.min(row[k:])
+                        for k in range(row.size)
+                    ]
+                )
+                minimum = squashed[index]
+                endpoint = jnp.where(jnp.arange(row.size) <= index, row[0], row[-1])
+                rows.append((squashed - minimum) / (endpoint - minimum))
+            return jnp.stack(rows)[None]
+
+        def separated(B):
+            return _construct_field(B, zeta, levels)["B_stretched"]
+
+        direction = jnp.sin(jnp.arange(B.size).reshape(B.shape) + 0.2)
+        expected, dexp = jax.jvp(direct_stretch, (B,), (direction,))
+        actual, dactual = jax.jvp(separated, (B,), (direction,))
+        np.testing.assert_allclose(actual, expected, atol=3e-15)
+        np.testing.assert_allclose(dactual, dexp, atol=3e-14)
+        data = _construct_field(B, zeta, levels)
+        error = np.mean((np.asarray(data["B_normalized"]) - expected) ** 2, axis=-1)
+        inverse = 1 / (error + 1e-12)
+        np.testing.assert_allclose(
+            data["weights"], inverse / inverse.sum(axis=-1)[:, None]
+        )
+
+    @pytest.mark.unit
+    def test_center_projection_preserves_width(self):
+        """Keep a feasible shared width of 0.31 for asymmetric inverse branches."""
+        left = np.array([[0.5, 0.49, 0.1, 0.05, 0], [0.5, 0.45, 0.445, 0.44, 0]])
+        right = np.array([[0.5, 0.6, 0.61, 0.65, 1], [0.5, 0.55, 0.555, 0.56, 1]])
+        raw = (left + right)[None] / 2
+        width = np.mean(right - left, axis=0)[None]
+        centers, valid = _project_centers(raw, width, jnp.array([0.0, 1.0]), 1e-12)
+        assert np.all(valid)
+        lc, rc = centers - width[:, None] / 2, centers + width[:, None] / 2
+        np.testing.assert_allclose(rc - lc, np.broadcast_to(width[:, None], raw.shape))
+        np.testing.assert_allclose((rc - lc)[0, :, 2], 0.31)
+        np.testing.assert_allclose(lc[..., -1], 0, atol=1e-15)
+        np.testing.assert_allclose(rc[..., -1], 1)
+        np.testing.assert_array_equal(centers[..., 0], raw[..., 0])
+        assert np.all(np.diff(lc, axis=-1) < 0)
+        assert np.all(np.diff(rc, axis=-1) > 0)
+        reflected, reflection_valid = _project_centers(
+            1 - raw, width, jnp.array([0.0, 1.0]), 1e-12
+        )
+        assert np.all(reflection_valid)
+        np.testing.assert_allclose(centers + reflected, 1, atol=1e-15)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "raw,width",
+        [([[1e-12, 0.5, 0.5]], [0, 0.5, 1]), ([[0.5, 0.5, 0.5]], [0, 1e-12, 1])],
+    )
+    def test_infeasible_center_projection(self, raw, width):
+        """Neither a boundary minimum nor insufficient width growth is repaired."""
+        _, valid = _project_centers(
+            jnp.asarray(raw)[None],
+            jnp.asarray(width)[None],
+            jnp.array([0.0, 1.0]),
+            1e-12,
+        )
+        assert not np.all(valid)
+
+    @pytest.mark.unit
+    def test_triangular_fixed_point(self):
+        """Preserve triangular wells with analytic roots at new labels and levels."""
+        B, options = make_constructed_qi_samples()
+        levels = jnp.linspace(0, 1, options["num_B_levels"])
+        data = _construct_field(B, options["zeta"], levels)
+        assert np.all(data["valid_surface"])
+        span = data["B_max"] - data["B_min"]
+        np.testing.assert_allclose(data["B_min"], 2)
+        np.testing.assert_allclose(data["B_max"], 3)
+        np.testing.assert_allclose(
+            data["B_min"][:, None, None] + span[:, None, None] * data["B_target"],
+            B,
+            atol=3e-14,
+        )
+        beta = jnp.array([[0, 0.037, 0.29, 0.523, 0.918, 1]])
+        left, right = _evaluate_bounce(data, beta)
+        period = 2 * np.pi / options["NFP"]
+        centers = 0.5 + 0.125 * np.sin(options["fieldline_labels"])
+        np.testing.assert_allclose(
+            left[0], period * centers[:, None] * (1 - beta), atol=3e-14
+        )
+        np.testing.assert_allclose(
+            right[0],
+            period * (centers[:, None] + (1 - centers[:, None]) * beta),
+            atol=3e-14,
+        )
+        np.testing.assert_allclose(
+            right - left, np.broadcast_to(period * beta, left.shape), atol=3e-14
+        )
+
+        # A new label interpolates the analytic centers between two sampled lines.
+        chi = np.pi / 4
+        center0 = 0.5 + 0.125 / 2
+        center = period * (center0 + (0.5 - center0) * beta[0])
+        physical = 2 + beta[0]
+        for roots in (center - period * beta[0] / 2, center + period * beta[0] / 2):
+            actual = _evaluate_field(
+                data, jnp.asarray(options["fieldline_labels"]), chi, roots, 0
+            )
+            np.testing.assert_allclose(actual, beta[0], atol=3e-14)
+            np.testing.assert_allclose(data["B_min"][0] + span[0] * actual, physical)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("scale", [1e-8, 1e8])
+    def test_field_scale(self, scale):
+        """Keep tied-minimum classification and normalized fields across unit scales."""
+        B, options = _tied_symmetric_samples()
+        levels = jnp.linspace(0, 1, options.pop("num_B_levels"))
+        data = _construct_field(B, levels=levels, **options)
+        scaled = _construct_field(scale * B, levels=levels, **options)
+        assert np.all(data["valid_surface"])
+        assert np.all(scaled["valid_surface"])
+        np.testing.assert_array_equal(
+            scaled["minimum_indices"], data["minimum_indices"]
+        )
+        for name in ("B_target", "bounce_centers", "bounce_distances"):
+            np.testing.assert_allclose(scaled[name], data[name], atol=1e-13)
+        for name in ("B_min", "B_max"):
+            np.testing.assert_allclose(scaled[name], scale * data[name])
+
+    @staticmethod
+    def _check_derivatives(B, direction):
+        """Compare AD and finite differences while retaining the active segments."""
+        zeta, levels = jnp.linspace(-2.0, -1.0, B.shape[-1]), jnp.linspace(0, 1, 7)
+
+        def residual(values):
+            data = _construct_field(values, zeta, levels)
+            return (data["B_normalized"] - data["B_target"]).ravel()
+
+        def active_segments(data):
+            # Interior level signs identify the source piecewise-linear root segments.
+            source = data["B_stretched"][..., None] < levels[1:-1]
+            left = data["bounce_centers"] - data["bounce_distances"][:, None] / 2
+            right = data["bounce_centers"] + data["bounce_distances"][:, None] / 2
+            knots = jnp.concatenate((left[..., ::-1], right[..., 1:]), axis=-1)
+            target = jnp.sum(zeta[:, None] >= knots[..., None, :], axis=-1)
+            return source, target
+
+        baseline = _construct_field(B, zeta, levels)
+        assert np.all(baseline["valid_surface"])
+        segments = active_segments(baseline)
+        actual, tangent = jax.jvp(jit(residual), (B,), (direction,))
+        assert np.linalg.norm(actual) > 0
+        assert np.linalg.norm(tangent) > 0
+        # Differentiate a scalar path so rel_step means exactly B +/- step * direction.
+        # Both steps are small relative to the O(1) physical field samples.
+        for step in (2e-6, 1e-6):
+            for sign in (-1, 1):
+                trial = _construct_field(B + sign * step * direction, zeta, levels)
+                assert np.all(trial["valid_surface"])
+                np.testing.assert_array_equal(
+                    trial["minimum_indices"], baseline["minimum_indices"]
+                )
+                for trial_segments, expected in zip(active_segments(trial), segments):
+                    np.testing.assert_array_equal(trial_segments, expected)
+            finite_difference = FiniteDiffDerivative.compute_jvp(
+                lambda t: residual(B + t * direction), 0, 1.0, 0.0, rel_step=step
+            )
+            np.testing.assert_allclose(tangent, finite_difference, rtol=2e-5, atol=2e-7)
+        cotangent = jnp.sin(jnp.arange(actual.size) + 0.19)
+        _, pullback = jax.vjp(residual, B)
+        gradient = pullback(cotangent)[0]
+        assert np.isfinite(gradient).all()
+        np.testing.assert_allclose(
+            jnp.vdot(cotangent, tangent),
+            jnp.vdot(gradient, direction),
+            rtol=2e-12,
+            atol=2e-12,
+        )
+        np.testing.assert_allclose(actual, residual(B), atol=3e-14)
+
+    @pytest.mark.unit
+    def test_derivatives(self):
+        """Differentiate extrema, stretch, roots, weights and reconstructed values."""
+        B = _asymmetric_samples()
+        direction = jnp.cos(jnp.arange(B.size).reshape(B.shape) + 0.37)
+        self._check_derivatives(B, direction)
+
+    @pytest.mark.unit
+    def test_tied_minimum_derivatives(self):
+        """Differentiate along tied minimum sets without splitting or merging them."""
+        B = _asymmetric_samples()
+        tied_indices = ((2, 4), (3, 5), (3, 5))
+        for line, indices in enumerate(tied_indices):
+            B = B.at[0, line, jnp.asarray(indices)].set(jnp.min(B[0, line]))
+        direction = jnp.cos(jnp.arange(B.size).reshape(B.shape) + 0.37)
+        for line, indices in enumerate(tied_indices):
+            direction = direction.at[0, line, jnp.asarray(indices)].set(
+                0.17 + 0.23 * line
+            )
+        data = _construct_field(
+            B, jnp.linspace(-2, -1, B.shape[-1]), jnp.linspace(0, 1, 7)
+        )
+        np.testing.assert_array_equal(data["minimum_indices"], [tied_indices])
+        # The direction changes the physical minimum while staying tangent to each tie.
+        _, minimum_derivative = jax.jvp(jnp.min, (B,), (direction,))
+        np.testing.assert_allclose(minimum_derivative, 0.17)
+        self._check_derivatives(B, direction)
+
+    @pytest.mark.unit
+    def test_batching(self):
+        """Independent surfaces and DESC batch chunk sizes define the same field."""
+        B = _asymmetric_samples()
+        zeta, levels = jnp.linspace(-2.0, -1.0, 9), jnp.linspace(0, 1, 7)
+        together = jnp.concatenate([B, 2.3 * B + 0.4], axis=0)
+        unchunked = _construct_field(together, zeta, levels, surf_batch_size=None)
+        chunked = _construct_field(
+            together, zeta, levels, fieldline_batch_size=2, surf_batch_size=1
+        )
+        surfaces = [_construct_field(row[None], zeta, levels) for row in together]
+        for name in (
+            "B_target",
+            "bounce_centers",
+            "bounce_distances",
+            "weights",
+            "valid_surface",
+        ):
+            separate = jnp.concatenate([surface[name] for surface in surfaces])
+            np.testing.assert_allclose(unchunked[name], separate, atol=3e-14)
+            np.testing.assert_allclose(chunked[name], separate, atol=3e-14)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("scale", [1e-8, 1.0, 1e8])
+    def test_linear_shared_knots(self, scale):
+        """Analytic single-well roots survive field normalization at shared knots."""
+        knots = jnp.linspace(0, 1, 9)
+        centers = jnp.array([0.5, 0.625, 0.375])
+        normalized = jnp.where(
+            knots < centers[:, None],
+            1 - knots / centers[:, None],
+            (knots - centers[:, None]) / (1 - centers[:, None]),
+        )
+        physical = scale * (2 + normalized)
+        normalized = (physical - physical.min()) / (physical.max() - physical.min())
+        levels = jnp.array([0.25, 0.5, 0.75 - 1e-12, 0.75, 0.75 + 1e-12])
+        left, right, valid = _single_well_bounce_points(levels, knots, normalized)
+        assert np.all(valid)
+        np.testing.assert_allclose(
+            left, centers[:, None] * (1 - levels), rtol=2e-14, atol=2e-15
+        )
+        np.testing.assert_allclose(
+            right,
+            centers[:, None] + (1 - centers[:, None]) * levels,
+            rtol=2e-14,
+            atol=2e-15,
+        )
+
+    @pytest.mark.unit
+    def test_linear_plateau(self):
+        """Plateaus use the inner edges; the minimum has no positive-width sublevel."""
+        shift = -3.0
+        knots = jnp.arange(8.0) + shift
+        B = jnp.array([3.0, 2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 3.0])
+        left, right, valid = _single_well_bounce_points(
+            jnp.array([1.0, 2.0, 3.0]), knots, B
+        )
+        np.testing.assert_array_equal(valid, [False, True, True])
+        np.testing.assert_array_equal(left[1:], jnp.array([2.0, 0.0]) + shift)
+        np.testing.assert_array_equal(right[1:], jnp.array([5.0, 7.0]) + shift)
+        np.testing.assert_array_equal(left[~valid], 0.0)
+        np.testing.assert_array_equal(right[~valid], 0.0)
+
+    @pytest.mark.unit
+    def test_linear_derivatives(self):
+        """Simple roots retain analytic derivatives beside inactive flat segments."""
+        knots = jnp.arange(5.0)
+        B = jnp.array([3.0, 1.0, 1.0, 1.0, 4.0])
+        direction = jnp.array([0.4, -0.2, 0.1, 0.3, -0.5])
+        level = jnp.array([2.1])
+
+        def roots(values):
+            left, right, _ = _single_well_bounce_points(level, knots, values)
+            return jnp.concatenate((left, right))
+
+        expected = np.array([(3 - 2.1) / 2, 3 + (2.1 - 1) / 3])
+        jacobian = np.zeros((2, 5))
+        jacobian[0, :2] = [(2.1 - 1) / 2**2, (3 - 2.1) / 2**2]
+        jacobian[1, 3:] = [(2.1 - 4) / 3**2, -(2.1 - 1) / 3**2]
+        value, tangent = jax.jvp(roots, (B,), (direction,))
+        np.testing.assert_allclose(value, expected, atol=1e-14)
+        np.testing.assert_allclose(tangent, jacobian @ direction, atol=1e-14)
+        cotangent = jnp.array([0.7, -0.2])
+        _, pullback = jax.vjp(roots, B)
+        gradient = pullback(cotangent)[0]
+        assert np.isfinite(gradient).all()
+        np.testing.assert_allclose(gradient, cotangent @ jacobian, atol=1e-14)
+        for step in (1e-5, 5e-6):
+            for sign in (-1, 1):
+                np.testing.assert_array_equal(
+                    jnp.floor(roots(B + sign * step * direction)), [0, 3]
+                )
+            finite_difference = (
+                roots(B + step * direction) - roots(B - step * direction)
+            ) / (2 * step)
+            np.testing.assert_allclose(
+                tangent, finite_difference, rtol=1e-8, atol=1e-10
+            )
+
+    @pytest.mark.unit
+    def test_linear_shared_knot_parameter_derivatives(self):
+        """Root AD includes samples, levels and moving knots at smooth shared nodes."""
+        knots = jnp.linspace(0, 1, 5)
+        values = jnp.array([3.0, 2.0, 1.0, 2.0, 3.0])
+        levels = jnp.array([2.0])
+
+        @jit
+        def roots(B, level, zeta):
+            left, right, _ = _single_well_bounce_points(level, zeta, B)
+            return jnp.concatenate((left, right))
+
+        directions = (
+            (jnp.array([0.1, -0.3, 0.2, 0.4, -0.2]), jnp.zeros(1), jnp.zeros(5)),
+            (jnp.zeros(5), jnp.array([0.2]), jnp.zeros(5)),
+            (jnp.zeros(5), jnp.zeros(1), jnp.array([0.02, -0.03, 0.01, 0.04, -0.02])),
+        )
+        for dB, dlevel, dzeta in directions:
+            expected = jnp.array(
+                [
+                    dzeta[1] + (dB[1] - dlevel[0]) / 4,
+                    dzeta[3] + (dlevel[0] - dB[3]) / 4,
+                ]
+            )
+            _, tangent = jax.jvp(roots, (values, levels, knots), (dB, dlevel, dzeta))
+            np.testing.assert_allclose(tangent, expected, atol=1e-13)
+            for step in (5e-6, 2e-6):
+                plus = roots(
+                    values + step * dB, levels + step * dlevel, knots + step * dzeta
+                )
+                minus = roots(
+                    values - step * dB, levels - step * dlevel, knots - step * dzeta
+                )
+                np.testing.assert_allclose(
+                    tangent, (plus - minus) / (2 * step), atol=3e-7
+                )
+        cotangent = jnp.array([0.7, -0.2])
+        _, pullback = jax.vjp(roots, values, levels, knots)
+        dB, dlevel, dzeta = pullback(cotangent)
+        np.testing.assert_allclose(dB, [0, 0.7 / 4, 0, 0.2 / 4, 0], atol=1e-13)
+        np.testing.assert_allclose(dlevel, [-0.9 / 4], atol=1e-13)
+        np.testing.assert_allclose(dzeta, [0, 0.7, 0, -0.2, 0], atol=1e-13)
+
+    @pytest.mark.unit
+    def test_linear_invalid_and_broadcast(self):
+        """Invalid wells and levels retain finite empty pairs beside valid surfaces."""
+        knots = jnp.linspace(-2, 1, 5)
+        values = jnp.array([[3.0, 2.0, 1.0, 2.0, 3.0], [3.0, 1.0, 2.0, 1.0, 3.0]])[
+            :, None, :
+        ]
+        values = jnp.broadcast_to(values, (2, 3, 5))
+        levels = jnp.array([[2.0, 1.0, 4.0], [2.0, 2.5, 3.0]])[:, None, :]
+        left, right, valid = jit(_single_well_bounce_points)(levels, knots, values)
+        np.testing.assert_array_equal(
+            valid[0], jnp.broadcast_to(jnp.array([True, False, False]), (3, 3))
+        )
+        assert not np.any(valid[1])
+        np.testing.assert_allclose(left[0, :, 0], -1.25)
+        np.testing.assert_allclose(right[0, :, 0], 0.25)
+        np.testing.assert_array_equal(left[~valid], 0)
+        np.testing.assert_array_equal(right[~valid], 0)
+
+    @pytest.mark.unit
+    def test_smooth_qi_field_level_convergence(self):
+        """A smooth scalar QI well converges as its inverse field levels are refined."""
+        zeta = jnp.linspace(0, 2 * jnp.pi, 65)
+        B = (2.5 + 0.5 * jnp.cos(zeta))[None, None, :]
+        errors = []
+        for number in (9, 17, 33):
+            data = _construct_field(B, zeta, jnp.linspace(0, 1, number))
+            assert np.all(data["valid_surface"])
+            errors.append(
+                float(
+                    jnp.sqrt(jnp.mean((data["B_normalized"] - data["B_target"]) ** 2))
+                )
+            )
+        # This nonlinear well is not the exact triangular fixed point. Uniform
+        # field levels resolve the inverse branches increasingly accurately.
+        assert 0 < errors[2] < errors[1] < errors[0]
+        assert errors[2] < errors[0] / 3
+
+    @pytest.mark.unit
+    def test_boozer_sampler_harmonic_oracle(self):
+        """Sample known harmonics at fixed chi with the full iota derivative."""
+        nfp = 3
+        grid = LinearGrid(rho=[0.4, 0.8], M=3, N=2, NFP=nfp, sym=False)
+        basis = DoubleFourierSeries(M=2, N=1, NFP=nfp, sym=False)
+        transforms = {"grid": grid, "B": Transform(grid, basis, build=False)}
+        labels = jnp.array([0.21, 1.0, 3.7])
+        zeta = jnp.linspace(-0.37, -0.37 + 2 * jnp.pi / nfp, 11)
+        iota = jnp.array([0.31, -0.42])
+        direction = jnp.array([0.17, -0.23])
+        a, b = jnp.array([0.4, -0.2]), jnp.array([0.15, 0.3])
+        coefficients = jnp.zeros((2, basis.num_modes))
+        # cos(2 theta - NFP zeta) and sin(theta + NFP zeta), expanded in
+        # DESC's tensor-product sine/cosine basis. The oracle below is analytic.
+        for m, n, amplitude in (
+            (0, 0, jnp.array([2.0, 2.0])),
+            (2, 1, a),
+            (-2, -1, a),
+            (-1, 1, b),
+            (1, -1, b),
+        ):
+            index = np.flatnonzero(np.all(basis.modes == [0, m, n], axis=1)).item()
+            coefficients = coefficients.at[:, index].set(amplitude)
+
+        def samples(current_iota):
+            data = {"|B|_mn_B": coefficients.ravel(), "iota": grid.expand(current_iota)}
+            return _sample_boozer_data(transforms, data, labels, zeta)[0]
+
+        actual, tangent = jax.jvp(jit(samples), (iota,), (direction,))
+        offset = zeta - (zeta[0] + zeta[-1]) / 2
+        theta = labels[None, :, None] + iota[:, None, None] * offset
+        phase_cos, phase_sin = 2 * theta - nfp * zeta, theta + nfp * zeta
+        expected = (
+            2
+            + a[:, None, None] * jnp.cos(phase_cos)
+            + b[:, None, None] * jnp.sin(phase_sin)
+        )
+        derivative = -2 * a[:, None, None] * jnp.sin(phase_cos) + b[
+            :, None, None
+        ] * jnp.cos(phase_sin)
+        derivative *= offset * direction[:, None, None]
+        np.testing.assert_allclose(actual, expected, atol=2e-14)
+        np.testing.assert_allclose(tangent, derivative, atol=2e-14)
 
 
 @pytest.mark.unit

@@ -17,9 +17,10 @@ from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
 from desc.coils import CoilSet, FourierPlanarCoil
 from desc.compute.utils import get_params, get_transforms
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.magnetic_fields import (
     CurrentPotentialField,
@@ -27,6 +28,7 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     MagneticFieldFromUser,
     OmnigenousField,
+    OmnigenousFieldConstructed,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -1596,6 +1598,449 @@ class TestMagneticFields:
                         verbose=0,
                         vacuum=True,
                     )
+
+
+def make_constructed_qi_samples():
+    """Return exact triangular wells with a field-line-dependent minimum position."""
+    labels = np.arange(4) * np.pi / 2
+    x = np.linspace(0, 1, 9)
+    center = 0.5 + 0.125 * np.sin(labels)
+    b = np.where(
+        x[None, :] < center[:, None],
+        1 - x[None, :] / center[:, None],
+        (x[None, :] - center[:, None]) / (1 - center[:, None]),
+    )
+    return 2 + b[None, :, :], dict(
+        rho=np.array([0.7]),
+        fieldline_labels=labels,
+        zeta=2 * np.pi / 3 * x,
+        iota=np.array([0.73]),
+        NFP=3,
+        sym=False,
+        num_B_levels=9,
+    )
+
+
+def make_constructed_qi_equilibrium():
+    """Return an unsolved small mirror geometry for QI interface integration tests."""
+    surface = FourierRZToroidalSurface.from_qp_model(
+        major_radius=1,
+        aspect_ratio=20,
+        elongation=1,
+        mirror_ratio=0.3,
+        torsion=0,
+        NFP=1,
+        sym=True,
+    )
+    return Equilibrium(
+        Psi=6e-3, M=2, N=2, surface=surface, iota=np.array([[0, 0.4], [2, 0.05]])
+    )
+
+
+class TestOmnigenousFieldConstructed:
+    """Public queries and dynamic snapshots of constructed QI scalar fields."""
+
+    @pytest.fixture(scope="class")
+    def constructed_field(self):
+        """Construct one valid snapshot for the public query tests."""
+        B, options = make_constructed_qi_samples()
+        return OmnigenousFieldConstructed.from_samples(B, **options)
+
+    @staticmethod
+    def _grid(rho, theta, zeta, NFP):
+        """Create literal Boozer query nodes with native Grid ordering."""
+        rho, theta, zeta = np.broadcast_arrays(rho, theta, zeta)
+        return Grid(np.stack([rho, theta, zeta], axis=-1).reshape(-1, 3), NFP=NFP)
+
+    @pytest.mark.unit
+    def test_coordinates(self):
+        """Preserve reflection, angular periods and the shifted field-line seam."""
+        B, options = make_constructed_qi_samples()
+        period = 2 * np.pi / options["NFP"]
+        options = dict(options, zeta=options["zeta"] - 2 * period, sym=True)
+        field = OmnigenousFieldConstructed.from_samples(B, **options)
+        a, b = options["zeta"][[0, -1]]
+        zeta = a + period * np.array([0.13, 0.37, 0.61, 0.85])
+        theta = np.array([0.23, 1.37, 3.17, 5.21])
+
+        def evaluate(theta, zeta):
+            return field.compute(
+                "|B| constructed", self._grid(0.7, theta, zeta, field.NFP)
+            )["|B| constructed"]
+
+        expected = evaluate(theta, zeta)
+        np.testing.assert_allclose(
+            evaluate(theta + 2 * np.pi, zeta), expected, atol=2e-14
+        )
+        np.testing.assert_allclose(
+            evaluate(theta, zeta + 3 * period), expected, atol=2e-14
+        )
+        np.testing.assert_allclose(evaluate(-theta, a + b - zeta), expected, atol=2e-14)
+        iota = options["iota"][0]
+        alpha = theta - iota * zeta
+        np.testing.assert_allclose(
+            evaluate(alpha + iota * (zeta + period), zeta + period),
+            evaluate(alpha + iota * period + iota * zeta, zeta),
+            atol=2e-14,
+        )
+
+        # Symmetry requires a reflection-closed label set and compatible cut.
+        for replacement in (
+            {"fieldline_labels": options["fieldline_labels"] + 0.1},
+            {"zeta": options["zeta"] + 0.1},
+        ):
+            with pytest.raises((ValueError, NotImplementedError)):
+                OmnigenousFieldConstructed.from_samples(
+                    B, **dict(options, **replacement)
+                )
+
+    @pytest.mark.unit
+    def test_invalid_snapshot(self):
+        """Invalid snapshots fail checked queries and expose only NaNs unchecked."""
+        options = dict(
+            rho=[1],
+            fieldline_labels=[0],
+            zeta=np.linspace(0, 2 * np.pi, 5),
+            iota=[0.4],
+            NFP=1,
+            num_B_levels=3,
+        )
+
+        @jit
+        def construct(values):
+            return OmnigenousFieldConstructed.from_samples(
+                values, check=False, **options
+            )
+
+        names = ["|B| constructed", "Bc normalized"]
+        evaluate = jit(lambda field: field.compute(names, check=False))
+        for bad in (
+            [1, 2, 3, 4, 5],  # Boundary minimum.
+            [2, 2, 2, 2, 2],  # No field-strength span.
+            [2, 1.5, 0, 1.5, 2],  # Nonpositive field strength.
+            [2, 1.5, np.nan, 1.5, 2],
+            [2, 2 - 1e-14, 2 - 2e-14, 2 - 1e-14, 2],
+        ):
+            B = np.asarray(bad, dtype=float)[None, None]
+            with pytest.raises(ValueError):
+                OmnigenousFieldConstructed.from_samples(B, **options)
+            field = OmnigenousFieldConstructed.from_samples(B, check=False, **options)
+            assert not np.all(field.valid_surface)
+            traced = construct(jnp.asarray(B))
+            np.testing.assert_array_equal(traced.valid_surface, field.valid_surface)
+            for query in (
+                field.compute,
+                lambda: field.bounce_points([[0.5]], normalized=True),
+                traced.compute,
+            ):
+                with pytest.raises(ValueError):
+                    query()
+            for output in evaluate(traced).values():
+                assert np.isnan(output).all()
+
+    @pytest.mark.unit
+    def test_native_queries(self, constructed_field):
+        """Native C order and literal Boozer queries recover analytic sample values."""
+        field = constructed_field
+        B, options = make_constructed_qi_samples()
+        names = ["|B| constructed", "Bc normalized"]
+        native = field.compute(names)
+        shape = B.shape
+        rho = np.broadcast_to(field.rho[:, None, None], shape).ravel()
+        zeta = np.broadcast_to(field.zeta[None, None, :], shape).ravel()
+        iota = np.broadcast_to(field.iota[:, None, None], shape).ravel()
+        chi = np.broadcast_to(field.fieldline_labels[None, :, None], shape).ravel()
+        theta = chi + iota * (zeta - (field.zeta[0] + field.zeta[-1]) / 2)
+        grid = self._grid(rho, theta, zeta, field.NFP)
+        explicit = field.compute(names, grid)
+        traced = jit(
+            lambda values: OmnigenousFieldConstructed.from_samples(
+                values, check=False, **options
+            ).compute(names, check=False)
+        )(jnp.asarray(B))
+        for name in names:
+            np.testing.assert_allclose(native[name], explicit[name], atol=2e-14)
+            np.testing.assert_allclose(traced[name], native[name], atol=2e-14)
+            assert native[name].shape == (B.size,)
+        np.testing.assert_allclose(native["|B| constructed"], B.ravel(), atol=2e-14)
+        np.testing.assert_allclose(native["Bc normalized"], (B - 2).ravel(), atol=2e-14)
+        for basis in ("rpz", "xyz", "XYZ"):
+            for query_grid in (None, grid):
+                actual = field.compute(names, grid=query_grid, basis=basis)
+                for name in names:
+                    np.testing.assert_allclose(actual[name], native[name], atol=2e-14)
+        permutation = np.random.default_rng(12).permutation(B.size)
+        permuted = Grid(np.asarray(grid.nodes)[permutation], NFP=field.NFP, sort=False)
+        np.testing.assert_allclose(
+            field.compute(grid=permuted)["|B| constructed"],
+            B.ravel()[permutation],
+            atol=2e-14,
+        )
+
+    @pytest.mark.unit
+    def test_equal_bounce_width_from_public_field(self):
+        """Recover common extrema and equal bounce widths from public field queries."""
+        nfp = 3
+        period = 2 * np.pi / nfp
+        zeta = -0.37 + period * np.linspace(0, 1, 33)
+        labels = np.arange(6) * 2 * np.pi / 6
+        rho, iota = np.array([0.4, 0.8]), np.array([0.63, -0.41])
+        phase = labels[None, :] + np.array([0.0, 0.37])[:, None]
+        center = 0.5 + 0.12 * np.sin(phase)
+        x = np.linspace(0, 1, zeta.size)
+        left = np.maximum(center[..., None] - x, 0) / center[..., None]
+        right = np.maximum(x - center[..., None], 0) / (1 - center[..., None])
+        B = (
+            np.array([1.8, 2.4])[:, None, None]
+            + 0.18 * np.cos(phase[..., None] + 0.5)
+            + (0.7 + 0.2 * np.cos(phase[..., None]))
+            * left ** (1.3 + 0.25 * np.cos(phase[..., None]))
+            + (1.05 + 0.15 * np.sin(phase[..., None]))
+            * right ** (1.7 - 0.15 * np.sin(phase[..., None]))
+        )
+        # Different minima alone preclude QI; both branch shapes and tops vary too.
+        assert np.all(np.ptp(B.min(axis=-1), axis=1) > 0.2)
+        field = OmnigenousFieldConstructed.from_samples(
+            B,
+            rho=rho,
+            fieldline_labels=labels,
+            zeta=zeta,
+            iota=iota,
+            NFP=nfp,
+            sym=False,
+            num_B_levels=11,
+        )
+        # Include every input label and the midpoint of every cyclic label interval.
+        chi = np.arange(12) * 2 * np.pi / 12
+
+        def evaluate(query):
+            r, label, query = np.broadcast_arrays(
+                rho[:, None, None], chi[None, :, None], query
+            )
+            theta = label + iota[:, None, None] * (query - (zeta[0] + zeta[-1]) / 2)
+            grid = self._grid(r, theta, query, nfp)
+            return np.asarray(field.compute(grid=grid)["|B| constructed"]).reshape(
+                query.shape
+            )
+
+        coarse = np.linspace(zeta[0], zeta[-1], 65)
+        values = evaluate(coarse)
+        indices = np.argmin(values, axis=-1)
+        assert np.all((indices > 0) & (indices < coarse.size - 1))
+        descending = np.arange(coarse.size - 1) < indices[..., None]
+        slopes = np.diff(values, axis=-1)
+        assert np.all(np.where(descending, slopes <= 1e-13, slopes >= -1e-13))
+        Bmin, Bmax = B.min(axis=(1, 2)), B.max(axis=(1, 2))
+        np.testing.assert_allclose(
+            values[..., [0, -1]],
+            np.broadcast_to(Bmax[:, None, None], values[..., [0, -1]].shape),
+            atol=2e-13,
+            rtol=0,
+        )
+        # Locate each minimum using only public evaluations, not inverse-branch data.
+        lo, hi = coarse[indices - 1], coarse[indices + 1]
+        for _ in range(64):
+            third = (hi - lo) / 3
+            probes = evaluate(np.stack((lo + third, hi - third), axis=-1))
+            lower_left = probes[..., 0] < probes[..., 1]
+            lo, hi = np.where(lower_left, lo, lo + third), np.where(
+                lower_left, hi - third, hi
+            )
+        minimum = (lo + hi) / 2
+        np.testing.assert_allclose(
+            evaluate(minimum[..., None])[..., 0],
+            np.broadcast_to(Bmin[:, None], minimum.shape),
+            atol=1e-10,
+            rtol=0,
+        )
+
+        # These levels lie between the construction levels, including shallow wells.
+        beta = np.array([0.073, 0.31, 0.67, 0.923])
+        levels = Bmin[:, None, None] + (Bmax - Bmin)[:, None, None] * beta
+        bottom = np.broadcast_to(minimum[..., None], (*minimum.shape, beta.size))
+        lo = np.concatenate((np.full_like(bottom, zeta[0]), bottom), axis=-1)
+        hi = np.concatenate((bottom, np.full_like(bottom, zeta[-1])), axis=-1)
+        levels = np.tile(levels, 2)
+        descending = np.arange(2 * beta.size) < beta.size
+        for _ in range(40):
+            midpoint = (lo + hi) / 2
+            above = evaluate(midpoint) > levels
+            move_left = np.where(descending, above, ~above)
+            lo, hi = np.where(move_left, midpoint, lo), np.where(
+                move_left, hi, midpoint
+            )
+        roots = (lo + hi) / 2
+        np.testing.assert_allclose(
+            evaluate(roots), np.broadcast_to(levels, roots.shape), atol=1e-10, rtol=0
+        )
+        left, right = np.split(roots, 2, axis=-1)
+        widths = right - left
+        # Each root bracket is < period / 2**40 = 2e-12 rad wide; allow roundoff.
+        np.testing.assert_allclose(
+            widths, np.broadcast_to(widths[:, :1], widths.shape), atol=1e-10, rtol=0
+        )
+
+    @pytest.mark.unit
+    def test_native_scale_derivatives(self, constructed_field):
+        """Factory and native evaluation differentiate the physical scaling law."""
+        B, options = make_constructed_qi_samples()
+
+        def evaluate(scale):
+            field = OmnigenousFieldConstructed.from_samples(
+                scale * B, check=False, **options
+            )
+            return field.compute(["|B| constructed", "Bc normalized"], check=False)
+
+        values, tangent = jit(
+            lambda scale, direction: jax.jvp(evaluate, (scale,), (direction,))
+        )(1.0, 1.0)
+        expected = constructed_field.compute("|B| constructed")["|B| constructed"]
+        np.testing.assert_allclose(values["|B| constructed"], expected, atol=2e-14)
+        np.testing.assert_allclose(tangent["|B| constructed"], expected, atol=2e-12)
+        np.testing.assert_allclose(tangent["Bc normalized"], 0, atol=2e-12)
+        cotangent = jnp.cos(jnp.arange(B.size) + 0.23)
+        gradient = jit(
+            lambda scale, dy: jax.vjp(lambda x: evaluate(x)["|B| constructed"], scale)[
+                1
+            ](dy)[0]
+        )(1.0, cotangent)
+        np.testing.assert_allclose(gradient, jnp.vdot(cotangent, expected), atol=2e-12)
+
+    @pytest.mark.unit
+    def test_query_domain(self, constructed_field):
+        """Enforce coordinate domains while keeping valid selected surfaces usable."""
+        field = constructed_field
+        B, options = make_constructed_qi_samples()
+        for name in ("unrecognized", "|B|"):
+            with pytest.raises(ValueError):
+                field.compute(name)
+            with pytest.raises(ValueError):
+                field.compute(name, check=False)
+        with pytest.raises(TypeError, match="static boolean"):
+            field.compute(check=1)
+        with pytest.raises(NotImplementedError):
+            field.compute(basis="cylindrical")
+        with pytest.raises(NotImplementedError, match="grid=None"):
+            field.compute(grid=self._grid(0.7, 0, 0, field.NFP), check=False)
+        for grid in (
+            self._grid(0.8, 0, 0, field.NFP),
+            self._grid(0.7, 0, 0, field.NFP + 1),
+        ):
+            with pytest.raises(ValueError):
+                field.compute(grid=grid)
+        for values in ([[-0.01, 1.01]], [[np.nan]], [0.5]):
+            with pytest.raises(ValueError):
+                field.bounce_points(values, normalized=True)
+        with pytest.raises(ValueError):
+            OmnigenousFieldConstructed.from_samples(B[..., :-1], **options)
+
+        @jit
+        def construct(rho, iota, labels, zeta):
+            return OmnigenousFieldConstructed.from_samples(
+                B,
+                **dict(
+                    options,
+                    rho=rho,
+                    iota=iota,
+                    fieldline_labels=labels,
+                    zeta=zeta,
+                ),
+                check=False,
+            )
+
+        for replacement in (
+            {"rho": [0]},
+            {"iota": [np.nan]},
+            {"fieldline_labels": [0, 0, np.pi, 3 * np.pi / 2]},
+            {"zeta": options["zeta"] * 1.01},
+        ):
+            kwargs = dict(options, **replacement)
+            with pytest.raises(ValueError):
+                OmnigenousFieldConstructed.from_samples(B, **kwargs)
+            invalid = construct(
+                *(
+                    jnp.asarray(kwargs[key], dtype=float)
+                    for key in ("rho", "iota", "fieldline_labels", "zeta")
+                )
+            )
+            assert not np.all(invalid.valid_surface)
+
+        mixed = np.concatenate((B, np.full_like(B, 2)), axis=0)
+        field = OmnigenousFieldConstructed.from_samples(
+            mixed,
+            **dict(options, rho=[0.7, 1.0], iota=[0.73, 0.61]),
+            check=False,
+        )
+        np.testing.assert_array_equal(field.valid_surface, [True, False])
+        names = ["|B| constructed", "Bc normalized"]
+        unchecked = jit(lambda obj: obj.compute(names, check=False))(field)
+        for values in unchecked.values():
+            values = np.asarray(values).reshape(mixed.shape)
+            assert np.isfinite(values[0]).all()
+            assert np.isnan(values[1]).all()
+        selected = self._grid(0.7, [0.4, 1.3], [0.3, 0.8], field.NFP)
+        assert np.isfinite(field.compute(grid=selected)["|B| constructed"]).all()
+        with pytest.raises(ValueError):
+            field.compute(grid=self._grid(1.0, 0.4, 0.3, field.NFP))
+
+    @pytest.mark.unit
+    def test_options(self, constructed_field):
+        """Reserved switches remain static and the snapshot has no independent DOFs."""
+        B, options = make_constructed_qi_samples()
+        for key in ("need_boozer", "enforce_equal_bounce_distance"):
+            with pytest.raises(NotImplementedError):
+                OmnigenousFieldConstructed.from_samples(
+                    B, **options, check=False, **{key: False}
+                )
+            with pytest.raises(TypeError):
+                OmnigenousFieldConstructed.from_samples(B, **options, **{key: 1})
+            assert getattr(constructed_field, key) is True
+            with pytest.raises(AttributeError):
+                setattr(constructed_field, key, False)
+        with pytest.raises(NotImplementedError):
+            OmnigenousFieldConstructed.from_samples(B, helicity=(1, 0), **options)
+        assert not hasattr(constructed_field, "params_dict")
+        assert not hasattr(constructed_field, "dim_x")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "options,error",
+        [
+            ({"num_alpha": 0}, ValueError),
+            ({"num_alpha": 1.5}, TypeError),
+            ({"num_zeta": 2}, ValueError),
+            ({"M_booz": True}, TypeError),
+            ({"N_booz": -1}, ValueError),
+            ({"zeta0": np.nan}, ValueError),
+            ({"zeta0": 0.1}, NotImplementedError),
+            ({"rho": [0]}, ValueError),
+        ],
+    )
+    def test_equilibrium_factory_options(self, options, error):
+        """The field factory owns the sampling and constructed-field domains."""
+        eq = make_constructed_qi_equilibrium()
+        with pytest.raises(error):
+            OmnigenousFieldConstructed.from_equilibrium(eq, **options)
+
+    @pytest.mark.unit
+    def test_plateau_query(self):
+        """The public inverse query selects the inside edges of a root plateau."""
+        field = OmnigenousFieldConstructed.from_samples(
+            1 + np.array([1, 0.5, 0.5, 0, 0.5, 0.5, 1])[None, None],
+            rho=[1],
+            fieldline_labels=[0],
+            zeta=np.linspace(0, 2 * np.pi, 7),
+            iota=[0.4],
+            NFP=1,
+            num_B_levels=3,
+        )
+        left, right = field.bounce_points([[0.5]], normalized=True)
+        assert left.shape == right.shape == (1, 1, 1, 1)
+        np.testing.assert_allclose(left, 2 * np.pi / 3)
+        np.testing.assert_allclose(right, 4 * np.pi / 3)
+        physical_left, physical_right = field.bounce_points([[1.5]])
+        np.testing.assert_allclose(physical_left, left)
+        np.testing.assert_allclose(physical_right, right)
 
 
 @pytest.mark.unit

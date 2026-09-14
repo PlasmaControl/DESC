@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jax
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -17,6 +18,7 @@ from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
 from desc.magnetic_fields import (
     OmnigenousField,
+    OmnigenousFieldConstructed,
     SplineMagneticField,
     ToroidalMagneticField,
 )
@@ -30,6 +32,8 @@ from desc.profiles import (
 )
 from desc.transform import Transform
 from desc.utils import equals
+
+from .test_magnetic_fields import make_constructed_qi_samples
 
 
 @pytest.mark.unit
@@ -819,6 +823,59 @@ def test_io_OmnigenousField(tmpdir_factory):
     data2 = field2.compute(["|B|", "theta_B", "zeta_B"])
     for key in data1.keys():
         np.testing.assert_allclose(data1[key], data2[key])
+
+
+class TestConstructedFieldIO:
+    """Current constructed-field snapshots retain their stored representation."""
+
+    @pytest.fixture(scope="class")
+    def constructed_field(self):
+        """Share a snapshot between serialization formats."""
+        B, options = make_constructed_qi_samples()
+        return OmnigenousFieldConstructed.from_samples(B, **options)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("suffix", [".h5", ".pkl"])
+    def test_round_trip(self, constructed_field, tmp_path, suffix):
+        """A loaded snapshot supports native, explicit, JIT and inverse queries."""
+        field = constructed_field
+        path = tmp_path / ("constructed" + suffix)
+        field.save(path)
+        restored = load(path)
+        assert isinstance(restored, OmnigenousFieldConstructed)
+        assert restored.settings == field.settings
+        np.testing.assert_array_equal(
+            restored.compute()["|B| constructed"], field.compute()["|B| constructed"]
+        )
+        normalized = jax.jit(
+            lambda snapshot: snapshot.compute("Bc normalized", check=False)[
+                "Bc normalized"
+            ]
+        )(restored)
+        # Loaded NumPy arrays must also work outside a dynamic PyTree argument.
+        captured = jax.jit(
+            lambda: restored.compute("Bc normalized", check=False)["Bc normalized"]
+        )()
+        grid = LinearGrid(
+            rho=field.rho, theta=[0.23, 1.17], zeta=[0.11, 0.57], NFP=field.NFP
+        )
+        np.testing.assert_allclose(
+            normalized,
+            field.compute("Bc normalized")["Bc normalized"],
+            atol=2e-14,
+            rtol=2e-13,
+        )
+        np.testing.assert_allclose(captured, normalized, atol=2e-14, rtol=2e-13)
+        np.testing.assert_allclose(
+            restored.compute(grid=grid)["|B| constructed"],
+            field.compute(grid=grid)["|B| constructed"],
+            atol=2e-14,
+        )
+        levels = np.array([[2.0, 2.3, 2.8, 3.0]])
+        left, right = restored.bounce_points(levels)
+        expected_left, expected_right = field.bounce_points(levels)
+        np.testing.assert_allclose(left, expected_left, atol=2e-14)
+        np.testing.assert_allclose(right, expected_right, atol=2e-14)
 
 
 @pytest.mark.unit

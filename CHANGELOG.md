@@ -3,6 +3,8 @@ Changelog
 
 New Features
 
+- Adds ``OmnigenousFieldConstructed`` and ``QuasiIsodynamicityConstructed`` for SQuID-like quasi-isodynamicity optimization with a reference field reconstructed from the current equilibrium. Includes standard DESC normalization, snapshot serialization, and ``plot_boozer_surface`` support.
+
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 
 Performance Improvements

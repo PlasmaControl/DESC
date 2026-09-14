@@ -770,9 +770,21 @@ class TestCoilSet:
         coils1 = MixedCoilSet.from_symmetry(coil1, NFP=4)
         coil2 = FourierPlanarCoil(center=[100, 0, 0])
         coils2 = coils1 + [coil2]
+        coil3 = coil1.copy()
+        coil3.change_resolution(N=4)
+        coil4 = coil1.copy()
+        coils3 = CoilSet(coil3, coil3)
+        coils4 = CoilSet(coil4, coil4)
+        with pytest.warns(UserWarning, match="Could not make"):
+            coils34 = coils3 + coils4
         assert coils2[-1] is coil2
         coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
         assert coils2[-1] is coil2
+
+        assert coils34[0] is coils3
+        assert coils34[1] is coils4
+
+        assert isinstance(coils34, MixedCoilSet)
 
         with pytest.raises(TypeError):
             _ = coils1 + FourierRZCurve()

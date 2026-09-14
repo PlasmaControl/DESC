@@ -95,7 +95,9 @@ jobs:
         if: env.has_changes == 'true'
         run: |
           source .venv-${{ env.version }}/bin/activate
-          python -m pytest -v -m regression\
+          # -u: unbuffered, so per-test lines and any faulthandler traceback
+          # reach the log instead of dying in the pipe buffer when a test stalls.
+          python -u -m pytest -v -m regression\
             --durations=0 \
             --cov-report xml:cov.xml \
             --cov-config=setup.cfg \

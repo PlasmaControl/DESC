@@ -72,7 +72,7 @@ def _warn_if_bounds(objective, constraint, x0, options):
             f"Objectives {[obj.name for obj in bounded]} use bounds instead of target, "
             + f"so they can zero out {dim_f_bounded} of the {m} rows of the ({m}, {n}) "
             + f"Jacobian and drop its rank below {min(m, n)}. The trust region method "
-            + f"{tr_method} may then fail to solve the subproblem, in that case pass "
+            + f"{tr_method} may then fail to solve the subproblem, it is safer to use "
             + "options={'tr_method': 'svd'}.",
         )
         # if not set by user, use SVD to avoid rank-deficiency issues

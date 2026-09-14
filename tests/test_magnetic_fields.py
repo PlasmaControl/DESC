@@ -27,6 +27,8 @@ from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     MagneticFieldFromUser,
     OmnigenousField,
+    OmnigenousFieldLCForm,
+    OmnigenousFieldOOPS,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -1558,6 +1560,145 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
         field.change_resolution(L_B=L_B_new, M_B=M_B_new)  # Issue #2189
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field_class", [OmnigenousFieldOOPS, OmnigenousFieldLCForm]
+    )
+    @pytest.mark.parametrize(
+        "helicity, exception, message",
+        [
+            ((0, 0), ValueError, "coprime"),
+            ((2, 2), ValueError, "coprime"),
+            ((0, 2), ValueError, "coprime"),
+            ((True, 1), TypeError, "two integers"),
+            ((1.0, 1), TypeError, "two integers"),
+            ((1,), ValueError, "two integers"),
+        ],
+    )
+    def test_omnigenous_field_helicity(self, field_class, helicity, exception, message):
+        """Contour fields accept signed coprime integer helicities only."""
+        callbacks = (
+            {
+                "S_func": lambda x, y, p: p[0] * x * jnp.sin(y),
+                "D_func": lambda x, p: p[0] * (jnp.pi - x),
+            }
+            if field_class is OmnigenousFieldLCForm
+            else {}
+        )
+        with pytest.raises(exception, match=message):
+            field_class(helicity=helicity, **callbacks)
+
+        field = field_class(helicity=(2, -3), **callbacks)
+        field.helicity = (-1, 2)
+        with pytest.raises(exception, match=message):
+            field.helicity = helicity
+        assert field.helicity == (-1, 2)
+        name = (
+            "theta_B_LCForm" if field_class is OmnigenousFieldLCForm else "theta_B_OOPS"
+        )
+        grid = LinearGrid(rho=1, theta=5, zeta=7, NFP=field.NFP)
+        with pytest.raises(exception, match=message):
+            field.compute(name, grid=grid, helicity=helicity, iota=0.6)
+        assert field.helicity == (-1, 2)
+
+    @pytest.mark.unit
+    def test_omnigenous_field_OOPS_change_resolution_grid(self):
+        """Zero extension preserves the mapping, and reducing resolution truncates."""
+        field = OmnigenousFieldOOPS(
+            S_len=1,
+            D_len=1,
+            NFP=3,
+            helicity=(0, 1),
+            S_list=np.array([0.35]),
+            D_list=np.array([1.0]),
+        )
+        grid = LinearGrid(rho=1, theta=10, zeta=7, NFP=field.NFP)
+        names = ["theta_B_OOPS", "zeta_B_OOPS"]
+        original = field.compute(names, grid=grid, iota=0.6)
+        field.change_resolution(S_len=3, D_len=2)
+        assert (field.S_len, field.D_len, field.NFP) == (3, 2, 3)
+        np.testing.assert_array_equal(field.S_list, [0.35, 0.0, 0.0])
+        np.testing.assert_array_equal(field.D_list, [1.0, 0.0])
+        extended = field.compute(names, grid=grid, iota=0.6)
+
+        field.S_list = np.array([0.35, 0.1, -0.2])
+        field.D_list = np.array([1.0, 0.1])
+        field.change_resolution(S_len=1, D_len=1)
+        np.testing.assert_array_equal(field.S_list, [0.35])
+        np.testing.assert_array_equal(field.D_list, [1.0])
+        truncated = field.compute(names, grid=grid, iota=0.6)
+        for name in names:
+            assert np.all(np.isfinite(original[name]))
+            np.testing.assert_allclose(extended[name], original[name], atol=1e-14)
+            np.testing.assert_allclose(truncated[name], original[name], atol=1e-14)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("callback", ["S_func", "D_func"])
+    def test_omnigenous_field_LCForm_callbacks(self, callback):
+        """Invalid callbacks cannot replace a mapping during construction or binding."""
+        callbacks = {
+            "S_func": lambda x, y, p: p[0] * x * jnp.sin(y),
+            "D_func": lambda x, p: p[0] * (jnp.pi - x),
+        }
+        invalid = dict(callbacks, **{callback: "not a function"})
+        with pytest.raises(TypeError, match=f"{callback} must be callable"):
+            OmnigenousFieldLCForm(**invalid)
+
+        field = OmnigenousFieldLCForm(**callbacks)
+        with pytest.raises(TypeError, match=f"{callback} must be callable"):
+            setattr(field, callback, "not a function")
+        assert getattr(field, callback) is callbacks[callback]
+
+    @pytest.mark.unit
+    def test_omnigenous_field_LCForm_change_resolution_grid(self):
+        """Resize callbacks whose additional zero coefficients preserve the mapping."""
+
+        def _S_func(x, y, S_list):
+            return sum(
+                coefficient * x * jnp.sin((mode + 1) * y)
+                for mode, coefficient in enumerate(S_list)
+            )
+
+        def _D_func(x, D_list):
+            return (
+                jnp.pi
+                - x
+                + sum(
+                    coefficient * jnp.sin((mode + 1) * x)
+                    for mode, coefficient in enumerate(D_list)
+                )
+            )
+
+        field = OmnigenousFieldLCForm(
+            S_len=1,
+            D_len=1,
+            NFP=3,
+            helicity=(0, 1),
+            S_list=np.array([0.35]),
+            D_list=np.array([0.1]),
+            S_func=_S_func,
+            D_func=_D_func,
+        )
+        grid = LinearGrid(rho=1, theta=10, zeta=7, NFP=field.NFP)
+        names = ["theta_B_LCForm", "zeta_B_LCForm"]
+        original = field.compute(names, grid=grid, iota=0.6)
+        field.change_resolution(S_len=3, D_len=2)
+        assert (field.S_len, field.D_len, field.NFP) == (3, 2, 3)
+        np.testing.assert_array_equal(field.S_list, [0.35, 0.0, 0.0])
+        np.testing.assert_array_equal(field.D_list, [0.1, 0.0])
+        extended = field.compute(names, grid=grid, iota=0.6)
+
+        field.S_list = np.array([0.35, 0.1, -0.2])
+        field.D_list = np.array([0.1, 0.2])
+        field.change_resolution(S_len=1, D_len=1)
+        np.testing.assert_array_equal(field.S_list, [0.35])
+        np.testing.assert_array_equal(field.D_list, [0.1])
+        truncated = field.compute(names, grid=grid, iota=0.6)
+        for name in names:
+            assert np.all(np.isfinite(original[name]))
+            np.testing.assert_allclose(extended[name], original[name], atol=1e-14)
+            np.testing.assert_allclose(truncated[name], original[name], atol=1e-14)
 
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):

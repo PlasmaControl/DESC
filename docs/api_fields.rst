@@ -53,7 +53,7 @@ be used in a similar way as the REGCOIL code:
 
     desc.magnetic_fields.solve_regularized_surface_current
 
-There is also a class for representing omnigenous magnetic fields:
+There are also classes for representing omnigenous magnetic fields:
 
 .. autosummary::
     :toctree: _api/magnetic_fields
@@ -61,6 +61,8 @@ There is also a class for representing omnigenous magnetic fields:
     :template: class.rst
 
     desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.OmnigenousFieldLCForm
+    desc.magnetic_fields.OmnigenousFieldOOPS
 
 For analyzing the structure of magnetic fields, it is often useful to find the trajectories
 of magnetic field lines, which can be done via ``desc.magnetic_fields.field_line_integrate``.

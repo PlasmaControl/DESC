@@ -2,14 +2,17 @@
 
 import numpy as np
 import pytest
+from scipy.optimize import brentq
 from scipy.signal import convolve2d
 
+from desc.backend import jax, jnp
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import Grid, LinearGrid
 from desc.io import load
+from desc.magnetic_fields import OmnigenousFieldLCForm, OmnigenousFieldOOPS
 from desc.utils import cross, dot, rpz2xyz_vec
 
 # convolve kernel is reverse of FD coeffs
@@ -1154,6 +1157,257 @@ def test_boozer_transform_multiple_surfaces():
     np.testing.assert_allclose(
         data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
     )
+
+
+def _omnigenous_field_shape(x, y, coefficients):
+    """A smooth, odd contour deformation with the required x=0 endpoint."""
+    return coefficients[0] * x * jnp.sin(y)
+
+
+def _omnigenous_field_distance(x, coefficients):
+    """A valid LC distance profile independent of extra parameters."""
+    return jnp.pi - x
+
+
+def _make_omnigenous_field(method, nfp, helicity, shape=0.0):
+    """Construct the public contour representation used by a test."""
+    kwargs = dict(NFP=nfp, helicity=helicity, S_list=np.array([shape]))
+    if method == "OOPS":
+        return OmnigenousFieldOOPS(D_list=np.zeros(1), **kwargs)
+    return OmnigenousFieldLCForm(
+        D_list=np.ones(1),
+        S_func=_omnigenous_field_shape,
+        D_func=_omnigenous_field_distance,
+        **kwargs,
+    )
+
+
+def _omnigenous_field_mapped_point(field, method, eta, alpha, iota):
+    """Return physical Boozer angles through the public compute interface."""
+    grid = LinearGrid(rho=1.0, theta=[alpha], zeta=[eta / field.NFP], NFP=field.NFP)
+    data = field.compute(
+        [f"theta_B_{method}", f"zeta_B_{method}"], grid=grid, iota=iota
+    )
+    return np.array(
+        [
+            np.asarray(data[f"theta_B_{method}"]).item(),
+            np.asarray(data[f"zeta_B_{method}"]).item(),
+        ]
+    )
+
+
+@pytest.mark.unit
+def test_omnigenous_field_callback_derivatives():
+    """Unselected mirror branches must not poison derivatives of valid samples."""
+
+    def shape(x, y, coefficients):
+        return coefficients[0] * x * jnp.sin(y)
+
+    def distance(x, coefficients):
+        return jnp.pi * ((jnp.pi - x) / jnp.pi) ** coefficients[0]
+
+    field = OmnigenousFieldLCForm(
+        NFP=3,
+        helicity=(0, 1),
+        S_list=np.array([0.1]),
+        D_list=np.array([0.5]),
+        S_func=shape,
+        D_func=distance,
+    )
+    # Both selected arguments are strictly inside the documented [0, pi] domain.
+    grid = LinearGrid(rho=1.0, theta=[0.23, 1.12], zeta=[0.35 / 3, 4.0 / 3], NFP=3)
+
+    def mapped(parameters):
+        data = field.compute(
+            "zeta_B_LCForm",
+            grid=grid,
+            params={"S_list": parameters[:1], "D_list": parameters[1:]},
+            iota=jnp.array([0.7]),
+        )
+        return data["zeta_B_LCForm"].ravel()
+
+    parameters = jnp.array([0.1, 0.5])
+    value = mapped(parameters)
+    forward = jax.jacfwd(mapped)(parameters)
+    reverse = jax.jacrev(mapped)(parameters)
+    assert np.isfinite(value).all()
+    assert np.isfinite(forward).all()
+    assert np.isfinite(reverse).all()
+    np.testing.assert_allclose(reverse, forward, rtol=1e-10, atol=1e-11)
+
+    step = 1e-5
+    finite_difference = np.column_stack(
+        [
+            (
+                mapped(parameters + step * direction)
+                - mapped(parameters - step * direction)
+            )
+            / (2 * step)
+            for direction in np.eye(parameters.size)
+        ]
+    )
+    np.testing.assert_allclose(reverse, finite_difference, rtol=2e-7, atol=1e-9)
+    gradient = jax.grad(lambda p: jnp.sum(mapped(p) ** 2) / 2)(parameters)
+    np.testing.assert_allclose(gradient, forward.T @ value, rtol=1e-10, atol=1e-11)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("method", ["OOPS", "LCForm"])
+@pytest.mark.parametrize(
+    "nfp,helicity",
+    [
+        (1, (1, 1)),
+        (3, (1, 1)),
+        (4, (1, 1)),
+        (3, (1, -1)),
+        (3, (2, 1)),
+        (3, (1, 2)),
+        (3, (-1, 2)),
+    ],
+)
+def test_omnigenous_field_mapping_helicity(method, nfp, helicity):
+    """N is measured per field period and its sign and ratio determine the contour."""
+    field = _make_omnigenous_field(method, nfp, helicity)
+    points = np.array(
+        [
+            _omnigenous_field_mapped_point(field, method, 1.1, alpha, 0.7)
+            for alpha in (0.2, 0.9, 1.6)
+        ]
+    )
+    m, n = helicity
+    # This is the independently specified physical definition of helicity.
+    phase = m * points[:, 0] - n * nfp * points[:, 1]
+    np.testing.assert_allclose(phase, phase[0], rtol=1e-12, atol=1e-12)
+    assert np.linalg.norm(points[-1] - points[0]) > 0.1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("method", ["OOPS", "LCForm"])
+@pytest.mark.parametrize("helicity", [(1, 2), (-1, 2), (2, -3)])
+def test_omnigenous_field_mapping_area(method, helicity):
+    """The undeformed angle chart preserves local area in (theta_B, NFP*zeta_B)."""
+    field = _make_omnigenous_field(method, 3, helicity)
+    eta, alpha, step = 1.1, 0.4, 0.2
+    origin = _omnigenous_field_mapped_point(field, method, eta, alpha, 0.7)
+    first = (
+        _omnigenous_field_mapped_point(field, method, eta, alpha + step, 0.7) - origin
+    )
+    second = (
+        _omnigenous_field_mapped_point(field, method, eta + step, alpha, 0.7) - origin
+    )
+    first[1] *= field.NFP
+    second[1] *= field.NFP
+    area = abs(np.linalg.det(np.column_stack([first, second]))) / step**2
+    np.testing.assert_allclose(area, 1.0, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "method,helicity,eta,shape,alphas,bracket",
+    [
+        (method, helicity, np.pi - 0.2, 0.07, (2.0, 3.0, 4.0), (-1.5, 1.5))
+        for method in ("OOPS", "LCForm")
+        for helicity in ((0, 1), (1, 0), (1, 1), (1, -1), (1, 2), (-1, 2), (2, -3))
+    ]
+    + [("LCForm", (1, 1), 1.1, 0.1, (0.2, 1.0, 1.8), (0.01, 2.5))],
+)
+def test_omnigenous_field_mapping_distance(
+    method, helicity, eta, shape, alphas, bracket
+):
+    """Check the physical field-line invariant independently of the angle chart."""
+    field = _make_omnigenous_field(method, 3, helicity, shape=shape)
+    iota = 0.7
+    distances = []
+    for alpha in alphas:
+        minus = _omnigenous_field_mapped_point(field, method, eta, alpha, iota)
+        label = minus[0] - iota * minus[1]
+
+        def field_line_error(alpha_plus):
+            plus = _omnigenous_field_mapped_point(
+                field, method, 2 * np.pi - eta, alpha_plus, iota
+            )
+            return plus[0] - iota * plus[1] - label
+
+        alpha_plus = brentq(
+            field_line_error, alpha + bracket[0], alpha + bracket[1], xtol=1e-13
+        )
+        plus = _omnigenous_field_mapped_point(
+            field, method, 2 * np.pi - eta, alpha_plus, iota
+        )
+        np.testing.assert_allclose(plus[0] - iota * plus[1], label, atol=1e-12)
+        distances.append(plus[1] - minus[1])
+
+    # Along theta_B - iota*zeta_B = constant, the signed separation in
+    # NFP*N*zeta_B - M*theta_B is (NFP*N - M*iota) times that in zeta_B.
+    m, n = helicity
+    denominator = iota if n == 0 else field.NFP * n - m * iota
+    expected = 2 * (np.pi - eta) / denominator
+    np.testing.assert_allclose(distances, expected, rtol=1e-10, atol=1e-11)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("method", ["OOPS", "LCForm"])
+@pytest.mark.parametrize("helicity", [(0, 1), (1, 0), (1, 1), (1, -1), (2, -3)])
+def test_omnigenous_field_mapping_derivatives(method, helicity):
+    """Nonzero shapes differentiate consistently through the field-line slope."""
+    field = _make_omnigenous_field(method, 3, helicity, shape=0.07)
+    grid = LinearGrid(rho=1, theta=[0.2, 1.1], zeta=[0.35 / 3, 4 / 3], NFP=3)
+
+    def mapped(parameters):
+        data = field.compute(
+            [f"theta_B_{method}", f"zeta_B_{method}"],
+            grid=grid,
+            params={"S_list": parameters[:1], "D_list": parameters[1:2]},
+            iota=parameters[2],
+        )
+        return jnp.concatenate(
+            [data[f"theta_B_{method}"].ravel(), data[f"zeta_B_{method}"].ravel()]
+        )
+
+    parameters = jnp.array([0.07, 0.02, 0.7])
+    value = jax.jit(mapped)(parameters)
+    forward = jax.jit(jax.jacfwd(mapped))(parameters)
+    reverse = jax.jit(jax.jacrev(mapped))(parameters)
+    assert np.isfinite(value).all()
+    assert np.isfinite(forward).all()
+    assert np.isfinite(reverse).all()
+    np.testing.assert_allclose(reverse, forward, rtol=1e-10, atol=1e-11)
+    step = 1e-5
+    finite_difference = np.column_stack(
+        [
+            (
+                mapped(parameters + step * direction)
+                - mapped(parameters - step * direction)
+            )
+            / (2 * step)
+            for direction in np.eye(parameters.size)
+        ]
+    )
+    np.testing.assert_allclose(reverse, finite_difference, rtol=3e-7, atol=1e-9)
+
+
+@pytest.mark.unit
+def test_omnigenous_field_callback_periodicity():
+    """The full-torus TO chart keeps the field period specified by its callback."""
+    nfp, alpha, eta, iota = 3, 0.4, 1.1, 0.7
+    for frequency in (1, nfp):
+        field = OmnigenousFieldLCForm(
+            NFP=nfp,
+            helicity=(1, 0),
+            S_list=np.array([0.1]),
+            D_list=np.ones(1),
+            S_func=lambda x, y, p: p[0] * x * jnp.sin(frequency * y),
+            D_func=_omnigenous_field_distance,
+        )
+        first = _omnigenous_field_mapped_point(field, "LCForm", eta, alpha, iota)
+        next_period = _omnigenous_field_mapped_point(
+            field, "LCForm", eta, alpha + 2 * np.pi / nfp, iota
+        )
+        np.testing.assert_allclose(next_period[1] - first[1], 2 * np.pi / nfp)
+        if frequency == nfp:
+            np.testing.assert_allclose(next_period[0], first[0], atol=1e-13)
+        else:
+            assert abs(next_period[0] - first[0]) > 0.05
 
 
 @pytest.mark.unit

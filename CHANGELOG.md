@@ -3,6 +3,14 @@ Changelog
 
 New Features
 
+- Added `OmnigenityHarmonics` objective function and `OmnigenousField`-related types.
+  - Added two new omnigenous field parameterizations in `magnetic_fields/_core.py`:
+    - `OmnigenousFieldOOPS`: the example mapping used in the OOPS paper by Liu et al.
+    - `OmnigenousFieldLCForm`: the mapping form proposed by Landreman et al., referred to here as the “LCForm”.
+  - Added the `OmnigenityHarmonics` objective in `objectives/_omnigenity.py`, enabling direct spectral optimization of `OmnigenousField`, `OmnigenousFieldOOPS`, and `OmnigenousFieldLCForm`.
+  - Updated plotting support so `plot_boozer_surface` recognizes different `OmnigenousField` input types.
+  - Added tutorials for using the `OmnigenityHarmonics` objective and for visualizing `OmnigenousFieldOOPS` and `OmnigenousFieldLCForm`.
+
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 
 Performance Improvements

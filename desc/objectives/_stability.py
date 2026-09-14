@@ -1180,11 +1180,12 @@ class FinitenStability(_Objective):
         eq = self.things[0]
         n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
         n_surf = n_theta * n_zeta
+        surf_grid_NFP = 128 if self._axisym else eq.NFP
         phi_pest_grid = LinearGrid(
             rho=1.0,
             theta=level_grid.unique_theta,
             zeta=level_grid.unique_zeta,
-            NFP=level_grid.NFP,
+            NFP=surf_grid_NFP,
             sym=False,
         )
         setattr(self, f"_{pre}phi_pest_grid", phi_pest_grid)
@@ -1254,8 +1255,6 @@ class FinitenStability(_Objective):
             )
         )
         surf_nodes0 = rtz0.reshape(n_theta, n_zeta, 3).transpose(1, 0, 2)
-        surf_grid_NFP = 128 if self._axisym else eq.NFP
-        print(surf_grid_NFP)
         surf_grid0 = Grid(surf_nodes0.reshape(n_surf, 3), NFP=surf_grid_NFP)
         interp0 = eq.compute(
             ["interpolator_pest"],

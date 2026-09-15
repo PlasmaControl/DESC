@@ -2,6 +2,7 @@
 
 from functools import partial
 
+from adv_jax_math import batch_map  # noqa: F401
 from jax._src.api import (
     _check_input_dtype_jacfwd,
     _check_input_dtype_jacrev,
@@ -197,6 +198,21 @@ def vmap_chunked(
     - https://github.com/jax-ml/jax/issues/26689
     - https://github.com/jax-ml/jax/issues/27591
     - https://github.com/jax-ml/jax/issues/31919
+    - Due to an actively worked on issue in JAX,
+      https://docs.jax.dev/en/latest/jep/
+      2026-custom-derivatives.html#main-problem-descriptions,
+      this function can simply ignore custom derivative rules
+      of the function in wraps if ``chunk_size`` is not ``None``,
+      and therefore can damp the effeciency gains of ``sparse_pullback``.
+      Use ``batch_map`` instead to avoid this,
+      or try to make a hack with jax.custom_transforms to bypass this.
+    - Only out axes = 0 is supported.
+
+    See Also
+    --------
+    batch_map
+        If the function supports native vectorization, use ``batch_map`` instead
+        for the reasons discussed the docstring.
 
     Parameters
     ----------
@@ -227,49 +243,6 @@ def vmap_chunked(
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
         _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
-    )
-
-
-def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=identity
-):
-    """Compute ``chunk_reduction(fun(fun_input))`` in batches.
-
-    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
-    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
-    supplied function. This makes compilation faster and avoids the weaknesses of
-    applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303.
-
-    Parameters
-    ----------
-    fun : callable
-        Natively vectorized function.
-    fun_input : pytree
-        Data to split into batches to feed to ``fun``.
-    batch_size : int or None
-        Size of batches. If no batching should be done or the batch size is the
-        full input then supply ``None``.
-    reduction : callable or None
-        Binary reduction operation.
-        Should take two arguments and return one output, e.g. ``jnp.add``.
-    chunk_reduction : callable
-        Chunk-wise reduction operation.
-        Should typically apply ``reduction`` along the mapped axis,
-        e.g. ``jnp.add.reduce``.
-
-    Returns
-    -------
-    fun_output
-        Returns ``chunk_reduction(fun(fun_input))``.
-
-    """
-    return (
-        chunk_reduction(fun(fun_input))
-        if batch_size is None
-        else _evaluate_in_chunks(
-            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
-        )
     )
 
 

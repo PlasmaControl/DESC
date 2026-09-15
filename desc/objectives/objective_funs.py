@@ -824,7 +824,7 @@ class ObjectiveFunction(IOAble):
         )
         if self._is_mpi:
             self._deriv_mode = "blocked"
-            
+
         rev_objs = [o.name for o in self.objectives if o._deriv_mode == "rev"]
         warnif(
             len(rev_objs) > 0 and self._deriv_mode == "batched",

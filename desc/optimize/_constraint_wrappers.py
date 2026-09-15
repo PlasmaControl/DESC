@@ -1052,32 +1052,26 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        if not (self._constraint._is_mpi or self._objective._is_mpi):
-            tangents = _proximal_get_tangents(
-                self._constraint,
-                xf,
-                v,
-                constants[1],
-                self._eq_solve_objective._feasible_tangents,
-                self._dxdc,
-                self._dimc_per_thing,
-                self._eq_idx,
-                "scaled_error",
-            )
-            g = self._objective.compute_scaled_error(xg, constants[0])
-            g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
-            return tangents @ g_vjp
-        elif self._constraint._is_mpi:
-            # TODO: implement parallel constraint for ProximalProjection
-            raise NotImplementedError(
-                "Parallel constraint for ProximalProjection not implemented yet. "
-                "Please use only one Equilibrium constraint."
-            )
-        else:
-            # TODO: apply vjp for multidevice similar to #2030
+        if self._objective._is_mpi:
+            # a VJP would need the objectives on the other ranks to communicate with
+            # each other, so form the full Jacobian instead.
             f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
             J = self.jac_scaled_error(x, constants)
             return f.T @ J
+        tangents = _proximal_get_tangents(
+            self._constraint,
+            xf,
+            v,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents,
+            self._dxdc,
+            self._dimc_per_thing,
+            self._eq_idx,
+            "scaled_error",
+        )
+        g = self._objective.compute_scaled_error(xg, constants[0])
+        g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
+        return tangents @ g_vjp
 
     def hess(self, x, constants=None):
         """Compute Hessian of self.compute_scalar.
@@ -1230,28 +1224,17 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        if not self._constraint._is_mpi:
-            tangents = _proximal_get_tangents(
-                self._constraint,
-                xf,
-                v,
-                constants[1],
-                self._eq_solve_objective._feasible_tangents,
-                self._dxdc,
-                self._dimc_per_thing,
-                self._eq_idx,
-                op,
-            )
-        else:
-            # TODO: implement parallel constraint for ProximalProjection
-            # Note: the workers no longer need a second loop for this, the constraints
-            # share the loop of the objective. What is left is that _get_tangent is
-            # vectorized over v by batched_vectorize, and MPI calls cannot be traced,
-            # so the tangents have to be computed for all directions at once instead.
-            raise NotImplementedError(
-                "Parallel constraint for ProximalProjection not implemented yet. "
-                "Please use only one Equilibrium constraint."
-            )
+        tangents = _proximal_get_tangents(
+            self._constraint,
+            xf,
+            v,
+            constants[1],
+            self._eq_solve_objective._feasible_tangents,
+            self._dxdc,
+            self._dimc_per_thing,
+            self._eq_idx,
+            op,
+        )
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size

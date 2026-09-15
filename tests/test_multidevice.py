@@ -298,9 +298,12 @@ def test_multidevice_nonlinear_constraint_derivatives():
     )
     con1.build(verbose=0)
 
-    with run_with_mpi(objective, constraints, verbose=0) as is_root:
+    # lsq-auglag handles the nonlinear constraints itself, so they are not separated
+    # into equilibrium and other constraints like they are for the proximal wrapper
+    with run_with_mpi(objective, constraints, "lsq-auglag", verbose=0) as is_root:
         if is_root:
             con2 = objective._constraints
+            assert objective._eq_constraints is None
             assert con2._is_mpi
             assert [len(ids) for ids in con2._obj_per_rank] == [1, 1, 0]
 
@@ -320,6 +323,7 @@ def test_multidevice_nonlinear_constraint_derivatives():
         verbose=0,
     )
     assert objective._constraints is None
+    assert objective._eq_constraints is None
 
 
 @pytest.mark.mpi_run
@@ -400,6 +404,78 @@ def test_multidevice_proximal_derivatives():
 
             f1 = prox1.jac_scaled_error(prox1.x(eq1))
             f2 = prox2.jac_scaled_error(prox2.x(eq2))
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+
+@pytest.mark.mpi_run
+def test_multidevice_proximal_eq_constraint_derivatives():
+    """Test that proximal derivatives are same with parallel equilibrium constraint."""
+    eq = get("precise_QH")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(1, 1, 1, 2, 2, 2)
+
+    eq1 = eq.copy()
+    eq2 = eq.copy()
+
+    gM = eq.M_grid
+    gN = eq.N_grid
+    grid1 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.2, 0.6], sym=True)
+    grid2 = LinearGrid(M=gM, N=gN, NFP=eq.NFP, rho=[0.4, 0.8, 1.0], sym=True)
+
+    # everything on a single device, to compare against
+    objective1 = ObjectiveFunction(
+        QuasisymmetryTwoTerm(eq=eq1, helicity=(1, eq.NFP), grid=grid1),
+        deriv_mode="blocked",
+    )
+    con1 = ObjectiveFunction(
+        [ForceBalance(eq=eq1, grid=grid1), ForceBalance(eq=eq1, grid=grid2)],
+        deriv_mode="blocked",
+    )
+    con1.build(verbose=0)
+    prox1 = ProximalProjection(
+        objective=objective1, constraint=con1, eq=eq1, solve_options={"maxiter": 1}
+    )
+    prox1.build(verbose=0)
+
+    # the objective runs on the root rank, only the equilibrium constraint is split
+    objective2 = ObjectiveFunction(
+        QuasisymmetryTwoTerm(eq=eq2, helicity=(1, eq.NFP), grid=grid1, rank=0),
+        deriv_mode="blocked",
+        mpi=MPI,
+    )
+    constraints = (
+        ForceBalance(eq=eq2, grid=grid1, device_id=0, rank=0),
+        ForceBalance(eq=eq2, grid=grid2, device_id=1, rank=1),
+    ) + get_fixed_boundary_constraints(eq2)
+
+    with run_with_mpi(
+        objective2, constraints, "proximal-lsq-exact", verbose=0
+    ) as is_root:
+        if is_root:
+            con2 = objective2._eq_constraints
+            assert objective2._constraints is None
+            assert con2._is_mpi and con2._obj_type == "eq-con"
+            assert [len(ids) for ids in con2._obj_per_rank] == [1, 1, 0]
+
+            prox2 = ProximalProjection(
+                objective=objective2,
+                constraint=con2,
+                eq=eq2,
+                solve_options={"maxiter": 1},
+            )
+            prox2.build(verbose=0)
+
+            # evaluate away from the initial state, so that the equilibrium is
+            # perturbed and re-solved
+            x1 = prox1.x(eq1) * (1 + 1e-6)
+            x2 = prox2.x(eq2) * (1 + 1e-6)
+
+            f1 = prox1.grad(x1)
+            f2 = prox2.grad(x2)
+            np.testing.assert_allclose(f2, f1, atol=1e-8)
+
+            f1 = prox1.jac_scaled_error(x1)
+            f2 = prox2.jac_scaled_error(x2)
             np.testing.assert_allclose(f2, f1, atol=1e-8)
 
 

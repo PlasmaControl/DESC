@@ -125,10 +125,14 @@ if __name__ == "__main__":
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > 1, :
     ]
     # nonlinear constraints can be given a device_id and rank to run them on different
-    # devices as well, but that is not supported by the proximal wrapper yet, so here
-    # ForceBalance is computed on the master rank
+    # devices as well. The equilibrium constraint of the proximal wrapper is split over
+    # the ranks the same way, here by giving each rank half of the flux surfaces
+    rho = jnp.linspace(0.1, 1.0, 10)
+    fgrid1 = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho[:5], sym=True)
+    fgrid2 = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho[5:], sym=True)
     constraints = (
-        ForceBalance(eq=eq),
+        ForceBalance(eq=eq, grid=fgrid1, device_id=0, rank=0),
+        ForceBalance(eq=eq, grid=fgrid2, device_id=1, rank=1),
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
         FixPressure(eq=eq),
@@ -143,8 +147,9 @@ if __name__ == "__main__":
 
     # this context manager builds the problem on every rank, then puts the workers in
     # a loop to listen to the master to compute the objective function and its
-    # derivatives. Only the master rank gets is_root=True, and prints.
-    with run_with_mpi(objective, constraints, verbose=3) as is_root:
+    # derivatives. Only the master rank gets is_root=True, and prints. It needs the
+    # optimizer to know which constraints the proximal wrapper will take care of.
+    with run_with_mpi(objective, constraints, optimizer, verbose=3) as is_root:
         # apart from cost evaluation and derivatives, everything else will be only
         # performed on the master rank
         if is_root:

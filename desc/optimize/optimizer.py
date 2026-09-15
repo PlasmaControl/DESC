@@ -576,7 +576,44 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def build_for_mpi(objective, constraints=(), verbose=1):
+def _parse_nonlinear_constraints(eq, nonlinear_constraints):
+    """Split nonlinear constraints for Proximal.
+
+    Parameters
+    ----------
+    eq: Equilibrium
+    nonlinear constraints : tuple of Objective
+        Nonlinear constraints to parse.
+
+    Returns
+    -------
+    eq_constraints : tuple of Objective
+        Constraints which can be handled directly by Proximal,
+        i.e. ones involving the equilibrium and without bounds.
+    other_constraints : tuple of Objective
+        Remaining nonlinear constraints. Can be empty.
+    """
+    eq_constraints, other_constraints = [], []
+    for con in nonlinear_constraints:
+        if con._equilibrium and con.bounds is None and con.things == [eq]:
+            eq_constraints.append(con)
+        else:
+            other_constraints.append(con)
+    return eq_constraints, other_constraints
+
+
+def _uses_proximal(eq, optimizer, nonlinear_constraints):
+    """Whether the optimizer will wrap the problem in a ProximalProjection."""
+    if eq is None or not len(nonlinear_constraints):
+        return False
+    optimizer = optimizer if isinstance(optimizer, Optimizer) else Optimizer(optimizer)
+    wrapper, submethod = _parse_method(optimizer.method)
+    if wrapper is None and optimizers[submethod]["equality_constraints"]:
+        return False
+    return wrapper is None or wrapper.lower() in ["prox", "proximal"]
+
+
+def build_for_mpi(objective, constraints=(), optimizer="lsq-exact", verbose=1):
     """Build a parallel objective and its nonlinear constraints on every rank.
 
     When using MPI, only the root rank runs the optimization, the other ranks wait in
@@ -586,7 +623,7 @@ def build_for_mpi(objective, constraints=(), verbose=1):
     nonlinear ones to the ObjectiveFunction, so that they can use the same worker loop,
     then builds everything. In a parallel script it replaces ``objective.build()``,
 
-        objective = build_for_mpi(objective, constraints)
+        objective = build_for_mpi(objective, constraints, optimizer)
         with objective:
             if rank == 0:
                 eq.optimize(objective=objective, constraints=constraints, ...)
@@ -599,6 +636,10 @@ def build_for_mpi(objective, constraints=(), verbose=1):
         The same constraints that will be passed to the optimizer. The nonlinear ones
         are computed in parallel only if they are given a ``rank`` or a ``device_id``,
         otherwise they are computed on the root rank as usual.
+    optimizer : Optimizer or str, optional
+        The optimizer that will be used, or its method name. Needed because the
+        equilibrium constraints are only separated from the other nonlinear ones if
+        the proximal wrapper takes care of them.
     verbose : int, optional
         Level of output. Only the root rank prints.
 
@@ -608,6 +649,8 @@ def build_for_mpi(objective, constraints=(), verbose=1):
         Built objective function, that also knows about the nonlinear constraints.
 
     """
+    from desc.equilibrium import Equilibrium
+
     errorif(
         not isinstance(objective, ObjectiveFunction),
         TypeError,
@@ -628,35 +671,56 @@ def build_for_mpi(objective, constraints=(), verbose=1):
     )
     verbose = verbose if (not is_mpi or objective.rank == 0) else 0
 
-    if is_mpi:
-        # ObjectiveFunction.build combines and builds these, see _build_constraints
-        objective._constraints = (
-            nonlinear_constraints if nonlinear_constraints else None
+    # the things of the whole problem, this is what combine_args ends up with on the
+    # root rank once the optimization starts. Taken from the sub-objectives since the
+    # ObjectiveFunction itself may not be built yet.
+    things = unique_list(
+        flatten_list(
+            [obj.things for obj in objective.objectives]
+            + [con.things for con in constraints]
         )
+    )[0]
+    eq = get_instance(things, Equilibrium)
+
+    if is_mpi:
+        eq_constraints = ()
+        if _uses_proximal(eq, optimizer, nonlinear_constraints):
+            # the equilibrium constraints are taken care of by the proximal wrapper and
+            # the rest is given to the optimizer, so they cannot share a worker loop
+            eq_constraints, nonlinear_constraints = _parse_nonlinear_constraints(
+                eq, nonlinear_constraints
+            )
+            errorif(
+                len(eq_constraints) and len(nonlinear_constraints),
+                NotImplementedError,
+                "The proximal wrapper cannot handle the nonlinear constraints "
+                f"{nonlinear_constraints} along with the equilibrium constraints "
+                f"{eq_constraints}.",
+            )
+        # ObjectiveFunction.build combines and builds these, see _build_constraints
+        objective._constraints = nonlinear_constraints or None
+        objective._eq_constraints = eq_constraints or None
     if not objective.built:
         objective.build(verbose=verbose)
-    elif is_mpi and objective._constraints is not None:
+    elif is_mpi:
         objective._build_constraints(verbose=verbose)
 
-    # make the objective and the constraints take the same state vector, this is what
-    # combine_args does on the root rank once the optimization starts
-    things = unique_list(
-        flatten_list([objective.things] + [con.things for con in constraints])
-    )[0]
+    # make the objective and the constraints take the same state vector
     objective._set_things(things)
-    if is_mpi and objective._constraints is not None:
-        objective._constraints._set_things(things)
+    for cons in [objective._constraints, objective._eq_constraints] if is_mpi else []:
+        if cons is not None:
+            cons._set_things(things)
     return objective
 
 
 @contextlib.contextmanager
-def run_with_mpi(objective, constraints=(), verbose=1):
+def run_with_mpi(objective, constraints=(), optimizer="lsq-exact", verbose=1):
     """Build a problem for MPI and keep the worker ranks listening to the root rank.
 
     Combines ``build_for_mpi`` with the context manager of the ObjectiveFunction, so
     that a parallel script is
 
-        with run_with_mpi(objective, constraints) as is_root:
+        with run_with_mpi(objective, constraints, optimizer) as is_root:
             if is_root:
                 eq.optimize(objective=objective, constraints=constraints, ...)
 
@@ -674,6 +738,10 @@ def run_with_mpi(objective, constraints=(), verbose=1):
         The same constraints that will be passed to the optimizer. The nonlinear ones
         are computed in parallel only if they are given a ``rank`` or a ``device_id``,
         otherwise they are computed on the root rank as usual.
+    optimizer : Optimizer or str, optional
+        The optimizer that will be used, or its method name. Needed because the
+        equilibrium constraints are only separated from the other nonlinear ones if
+        the proximal wrapper takes care of them.
     verbose : int, optional
         Level of output. Only the root rank prints.
 
@@ -683,7 +751,7 @@ def run_with_mpi(objective, constraints=(), verbose=1):
         Whether this rank is the one that should run the optimization.
 
     """
-    objective = build_for_mpi(objective, constraints, verbose)
+    objective = build_for_mpi(objective, constraints, optimizer, verbose)
     if not objective._is_mpi:
         yield True
     else:
@@ -692,9 +760,15 @@ def run_with_mpi(objective, constraints=(), verbose=1):
 
 
 def _maybe_wrap_nonlinear_constraints(
-    eq, objective, nonlinear_constraints, method, options, nonlinear_constraint=None
+    eq, objective, nonlinear_constraints, method, options, eq_constraint=None
 ):
-    """Use ProximalProjection to handle nonlinear constraints."""
+    """Use ProximalProjection to handle nonlinear constraints.
+
+    ``eq_constraint`` is an already combined and built ObjectiveFunction of the
+    equilibrium constraints, used instead of combining them here. It is only relevant
+    for the proximal wrapper with MPI, the other methods handle the nonlinear
+    constraints themselves and ignore it.
+    """
     if eq is None:  # not deal with an equilibrium problem -> no ProximalProjection
         return objective, nonlinear_constraints
     wrapper, method = _parse_method(method)
@@ -719,8 +793,8 @@ def _maybe_wrap_nonlinear_constraints(
         objective = ProximalProjection(
             objective,
             constraint=(
-                nonlinear_constraint
-                if nonlinear_constraint is not None
+                eq_constraint
+                if eq_constraint is not None
                 else _combine_constraints(nonlinear_constraints)
             ),
             perturb_options=perturb_options,
@@ -751,24 +825,39 @@ def get_combined_constraint_objectives(  # noqa: C901
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
     # for a parallel objective, the nonlinear constraints are already combined and
-    # built by every rank in build_for_mpi, reuse that ObjectiveFunction so
-    # that the root rank and the workers use the same one
+    # built by every rank in build_for_mpi, reuse those ObjectiveFunctions so that the
+    # root rank and the workers use the same ones. The equilibrium constraints are kept
+    # apart because they are given to the proximal wrapper, not to the optimizer.
     mpi_constraint = getattr(objective, "_constraints", None)
-    mpi_constraint = (
-        mpi_constraint if isinstance(mpi_constraint, ObjectiveFunction) else None
-    )
+    mpi_eq_constraint = getattr(objective, "_eq_constraints", None)
+    if not isinstance(mpi_constraint, ObjectiveFunction):
+        mpi_constraint = None
+    if not isinstance(mpi_eq_constraint, ObjectiveFunction):
+        mpi_eq_constraint = None
+    mpi_cons = [con for con in [mpi_constraint, mpi_eq_constraint] if con is not None]
     errorif(
-        mpi_constraint is not None
-        and {id(con) for con in mpi_constraint.objectives}
+        len(mpi_cons)
+        and {id(con) for mpi_con in mpi_cons for con in mpi_con.objectives}
         != {id(con) for con in nonlinear_constraints},
         ValueError,
         "The nonlinear constraints given to the optimizer are not the same as the "
         "ones given to build_for_mpi.",
     )
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
-        eq, objective, nonlinear_constraints, opt_method, options, mpi_constraint
+        eq, objective, nonlinear_constraints, opt_method, options, mpi_eq_constraint
     )
     is_prox = isinstance(objective, ProximalProjection)
+    if not is_prox and mpi_eq_constraint is not None:
+        # build_for_mpi was given a different optimizer than the one that is running,
+        # so it split off the equilibrium constraints for a wrapper that isn't used
+        errorif(
+            mpi_constraint is not None,
+            NotImplementedError,
+            "Without the proximal wrapper the equilibrium constraints and the other "
+            "nonlinear constraints have to be in the same parallel ObjectiveFunction. "
+            "Pass the optimizer that is actually used to build_for_mpi.",
+        )
+        mpi_constraint = mpi_eq_constraint
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used

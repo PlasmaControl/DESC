@@ -67,6 +67,7 @@ class QuadraticFluxPM(_Objective):
         "_bs_chunk_size",
         "_vacuum",
         "_field_fixed",
+        "_dipole_fields",
     ]
 
     _scalar = False
@@ -91,6 +92,7 @@ class QuadraticFluxPM(_Objective):
         name="Quadratic flux",
         field_fixed=None,
         jac_chunk_size=None,
+        use_induction_matrix=True,
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
@@ -109,6 +111,7 @@ class QuadraticFluxPM(_Objective):
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
         self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+        self._use_induction_matrix = use_induction_matrix
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -129,6 +132,7 @@ class QuadraticFluxPM(_Objective):
 
     def build(self, use_jit=True, verbose=1):
         from desc.magnetic_fields import SumMagneticField
+        from desc.dipole import _Dipole
 
         eq = self._eq
 
@@ -181,13 +185,55 @@ class QuadraticFluxPM(_Objective):
             )
         )
 
-        Bcoils = np.linalg.norm(self._field_fixed.compute_magnetic_field(
-                            jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
-                            source_grid=self._field_grid,
-                            basis="rpz",
-                            chunk_size=self._bs_chunk_size), axis=1)
+        # Bcoils = np.linalg.norm(self._field_fixed.compute_magnetic_field(
+        #                     jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
+        #                     source_grid=self._field_grid,
+        #                     basis="rpz",
+        #                     chunk_size=self._bs_chunk_size), axis=1)
+        # print("Bcoils",Bcoils)
 
-
+        Bcoils_vec = self._field_fixed.compute_magnetic_field(
+            jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
+            source_grid=self._field_grid,
+            basis="rpz",
+            chunk_size=self._bs_chunk_size,
+        )
+        Bcoils = jnp.sum(Bcoils_vec * eval_data["n_rho"], axis=-1)
+ 
+        # ---- induction-matrix fast path ----
+        # If EVERY field being optimized here is a fixed-geometry _Dipole/
+        # DipoleSet (position/orientation/m0 are not optimizable -- only
+        # rho is), B.n at each eval point is exactly linear in each
+        # dipole's M0 = m0 * tanh(rho): (B.n)_i = sum_j g_ij * M0_j. g_ij
+        # depends only on fixed dipole geometry and eq's (fixed) surface,
+        # so it can be built once here and reused every objective call as
+        # a single matrix-vector product, instead of re-running the full
+        # Biot-Savart sum (dipole_field over every dipole x every eval
+        # point x every symmetric/field-period image) on every iteration.
+        # See DipoleSet.calc_g for the derivation and a numerical
+        # verification against compute_magnetic_field.
+        #
+        # This is skipped (falls back to the original direct-field path)
+        # if ANY field being optimized is not a _Dipole/DipoleSet -- e.g. a
+        # real Coil/CoilSet whose geometry DOES change during optimization,
+        # for which no fixed induction matrix exists.
+        self._dipole_fields = [f for f in self._field if isinstance(f, _Dipole)]
+        induction_matrices = None
+        if (
+            self._use_induction_matrix
+            and len(self._dipole_fields) == len(self._field)
+            and len(self._dipole_fields) > 0
+        ):
+            induction_matrices = [
+                dipole_field.calc_g(eq, grid=eval_grid)
+                for dipole_field in self._dipole_fields
+            ]
+            if verbose > 0:
+                print(
+                    "Using precomputed induction matrix for "
+                    f"{len(self._dipole_fields)} fixed-geometry dipole field(s)"
+                )
+ 
         self._constants = {
             "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
@@ -197,6 +243,7 @@ class QuadraticFluxPM(_Objective):
             "eval_profiles": eval_profiles,
             "B_plasma": Bplasma,
             "B_coils": Bcoils,
+            "induction_matrices": induction_matrices,
         }
 
         timer.stop("Precomputing transforms")
@@ -237,18 +284,33 @@ class QuadraticFluxPM(_Objective):
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
         B_coils = constants["B_coils"]
-
-        x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
-
-        # B_ext is not pre-computed because field is not fixed
-        B_ext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=constants["field_grid"],
-            basis="rpz",
-            params=field_params,
-            chunk_size=self._bs_chunk_size,
-        )
-        B_ext = jnp.sum(B_ext * eval_data["n_rho"], axis=-1)
+ 
+        induction_matrices = constants.get("induction_matrices")
+        if induction_matrices is not None:
+            B_ext = jnp.zeros(eval_data["R"].shape[0])
+            for g_ij, dipole_field, params in zip(
+                induction_matrices, self._dipole_fields, field_params
+            ):
+                rho_list = params if isinstance(params, (list, tuple)) else [params]
+                rho_raw = jnp.asarray(
+                    [jnp.atleast_1d(p["rho"])[0] for p in rho_list]
+                )
+                M0 = dipole_field.m0 * jnp.tanh(rho_raw)
+                B_ext = B_ext + g_ij @ M0
+        else:
+            x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
+ 
+            # B_ext is not pre-computed because field is not fixed
+            B_ext_vec = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=constants["field_grid"],
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
+            B_ext = jnp.sum(B_ext_vec * eval_data["n_rho"], axis=-1)
+        print("B_ext:",B_ext)
+ 
         f = (B_ext + B_plasma + B_coils) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
 

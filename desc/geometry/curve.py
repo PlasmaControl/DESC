@@ -928,7 +928,9 @@ class FourierPlanarCurve(Curve):
         warnif(
             np.max(np.abs(coords_rotated[:, 2])) > 1e-14,  # check Z=0 for all points
             UserWarning,
-            "Curve values are not planar! Using the projection onto a plane.",
+            "Curve values are not planar! "
+            f"Max planarity violation of {np.max(np.abs(coords_rotated[:, 2])):1.2e} m."
+            " Using the projection onto a plane.",
         )
 
         # polar angle
@@ -1341,7 +1343,9 @@ class FourierXYCurve(Curve):
         warnif(
             np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
             UserWarning,
-            "Curve values are not planar! Using the projection onto a plane.",
+            "Curve values are not planar! "
+            f"Max planarity violation of {np.max(np.abs(Z)):1.2e} m."
+            " Using the projection onto a plane.",
         )
 
         if isinstance(s, str):

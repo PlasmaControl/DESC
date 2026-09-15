@@ -467,9 +467,7 @@ def _project_x_scale(x_scale, objective):
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
-        # need to project x_scale down to correct size. diag(Z.T @ diag(w) @ Z) is
-        # sum_i w_i Z_ij**2, and Z is the feasible tangents with D divided out and the
-        # fixed rows dropped, so this avoids forming the dim_x by dim_x diagonal.
+        # need to project x_scale down to correct size using nullspace Z
         V = objective._feasible_tangents
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
         x_scale = jnp.abs((x_scale / objective._D**2) @ (V * V))

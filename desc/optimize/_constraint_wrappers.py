@@ -135,9 +135,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._ADinv = np.asarray(self._ADinv)
         self._Ainv = np.asarray(self._D)[self._unfixed_idx, None] * self._ADinv
         self._dim_x = self._objective.dim_x
-        # D @ Z with 0 rows for the fixed parameters, see factorize_linear_constraints.
-        # Z itself is not kept: it is only ever needed as D @ Z, and at high resolution
-        # it is comparable in size to the Jacobian.
+        # D @ Z with 0 rows for the fixed parameters, see factorize_linear_constraints
         self._feasible_tangents = self._recover.feasible_tangents
         self._dim_x_reduced = self._feasible_tangents.shape[1]
 
@@ -233,8 +231,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             # where ZA is the nullspace of A, and Z is the nullspace of AD, with unit
             # norm columns. The tangents are D @ Z, so they are ZA up to a column
             # scaling, and so are the old tangents. Updating them for the new D is
-            # then just a rescaling by the new column norms, and neither ZA nor Z has
-            # to be stored.
+            # then just a rescaling by the new column norms
             self._feasible_tangents = normalize_columns(
                 self._feasible_tangents, 1 / self._D
             )

@@ -251,8 +251,8 @@ class _Project(IOAble):
     @jit
     def __call__(self, x_full):
         """Project a full state vector into the reduced optimization vector."""
-        # Z.T @ y[unfixed_idx] == feasible_tangents.T @ (y / D), since the tangents
-        # are D @ Z with zero rows where the parameters are fixed.
+        # Z.T @ y[unfixed_idx] == feasible_tangents.T @ (y / D), since the
+        # feasible_tangents are D @ Z with zero rows where the parameters are fixed.
         x_reduced = self.feasible_tangents.T @ (x_full / self.D**2 - self.xp / self.D)
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
@@ -268,7 +268,6 @@ class _Recover(IOAble):
     @jit
     def __call__(self, x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
-        # D * (xp + scatter(Z @ x_reduced)) with the D folded into the tangents
         x_full = self.D * self.xp + self.feasible_tangents @ x_reduced
         return jnp.atleast_1d(jnp.squeeze(x_full))
 

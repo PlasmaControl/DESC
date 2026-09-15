@@ -307,12 +307,6 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         """
         return jnp.tanh(self._rho)
 
-    # @rho_tilde.setter
-    # def rho_tilde(self, new):
-    #     """Set the dipole via its physical (bounded) strength; converts to the
-    #     underlying unconstrained `rho` under the hood."""
-    #     self._rho = jnp.arctanh(jnp.float64(float(np.squeeze(new))))
-
     @rho_tilde.setter
     def rho_tilde(self, new):
         new = jnp.clip(jnp.asarray(float(np.squeeze(new))), -1 + 1e-7, 1 - 1e-7)
@@ -377,7 +371,8 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             Grid used to discretize coil. If an integer, uses that many equally spaced
             points. Should NOT include endpoint at 2pi.
         transforms : dict of Transform or array-like
-            Transforms for R, Z, lambda, etc. Default is to build from grid.
+            Unused, for the same reason as ``source_grid``. Kept for API
+            compatibility.
         compute_A_or_B: {"A", "B"}, optional
             whether to compute the magnetic vector potential "A" or the magnetic field
             "B". Defaults to "B"
@@ -406,19 +401,11 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             phi_coords = coords[:, 1]
             coords = rpz2xyz(coords)
 
-        # if params is None:
-        #     params = {
-        #         get_params(["x", "y", "z", "phi", "theta", "m0", "rho"], dipole, basis=basis) for dipole in self
-        #         # "x": self.x,
-        #         # "y": self.y,  
-        #         # "z": self.z,
-        #         # "phi": self.phi,
-        #         # "theta": self.theta,
-        #         # "m0": self.m0,
-        #         # "rho": self.rho,
-        #         # "M0": self.M0,
-        #     }
-
+        # rho is the only registered dof, so it's the only quantity that
+        # needs to support being overridden via `params` (e.g. during
+        # optimization/perturbation). Everything else below is fixed
+        # geometry, read straight off `self` -- no grid, no transforms, no
+        # data_index/compute_fun round-trip needed for a single point.
         if params is None:
             rho = jnp.tanh(self.rho)
         else:
@@ -878,7 +865,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         # if user supplied initial data for each dipole we also need to vmap over that.
         data = vmap(
-            lambda d, x: self.compute(
+            lambda d, x: self[0].compute(
                 names, grid=grid, transforms=transforms, data=d, params=x, **kwargs
             )
         )(tree_stack(data), tree_stack(params))
@@ -1214,8 +1201,10 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             dipoleset += rotated_dipoles
 
         return cls(*dipoleset)
+
     
-    def calc_g(dipoles,eq, M_surf=8, N_surf=12):
+    
+    def calc_g(self, eq, grid=None, M_surf=8, N_surf=12):
         '''
         Calculate the inductance matrix
 
@@ -1226,52 +1215,76 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         mu_0 = 4 * jnp.pi * 1e-7
         if grid is None:
             grid = LinearGrid(M=M_surf, N=N_surf, NFP=eq.NFP, sym=False, endpoint=True)
-
-        # n surface vectors
-        n_surf = eq.surface.compute(['n_rho'], grid=grid)['n_rho']
+ 
+        # surface normal and eval positions, both explicitly in xyz -- n_rho
+        # defaults to (R, phi, Z) COMPONENTS, not xyz, which silently gives
+        # wrong dot products below except at phi=0 (confirmed against a
+        # real Equilibrium/FourierRZToroidalSurface).
+        n_surf = eq.surface.compute(['n_rho'], grid=grid, basis='xyz')['n_rho']
         data = eq.compute(["X", "Y", "Z"], grid=grid)
-
-        # n surface positions
-        #xyz = np.column_stack([data["X"], data["Y"], data["Z"]])
         xyz = jnp.stack([data["X"], data["Y"], data["Z"]], axis=-1)
-
-        # m-vector of the dipole, in xyz coordinates
-        #m_vec = np.array([d.m_xyz for d in dipoles]) 
-
-        theta = jnp.asarray([d.theta for d in dipoles])
-        phi = jnp.asarray([d.phi for d in dipoles])
-        m_hat = jnp.stack(
+ 
+        # unique (stored) dipole geometry
+        theta = jnp.asarray([d.theta for d in self])
+        phi = jnp.asarray([d.phi for d in self])
+        m_hat_unique = jnp.stack(
             [jnp.sin(theta) * jnp.cos(phi),
-            jnp.sin(theta) * jnp.sin(phi),
-            jnp.cos(theta)],
+             jnp.sin(theta) * jnp.sin(phi),
+             jnp.cos(theta)],
             axis=-1,
         )
-        m_pos = jnp.stack([jnp.asarray([d.X, d.Y, d.Z]) for d in dipoles])
-
-        # m dipole positions
-        #m_pos = np.array([[d.X, d.Y, d.Z] for d in dipoles]) 
-
-
-
-        # compute (n x m) pairwise distances
-        #nax = np.newaxis
-        r_ij = xyz[:,None,:] - m_pos[None,:,:]
-
-        # take (n x m) scalar magnitude
+        m_pos_unique = jnp.stack([self.X, self.Y, self.Z], axis=-1)
+        n_unique = len(self)
+ 
+        m_pos_full, m_hat_full = m_pos_unique, m_hat_unique
+        owner_full = jnp.arange(n_unique)
+ 
+        if self.sym:
+            normal = jnp.array(
+                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
+            )
+            F = reflection_matrix(normal) @ reflection_matrix([0, 0, 1])
+            # position reflects normally; moment picks up an extra minus
+            # sign beyond the geometric reflection -- see docstring note.
+            m_pos_sym = m_pos_unique @ F.T
+            m_hat_sym = -(m_hat_unique @ F.T)
+            m_pos_full = jnp.concatenate([m_pos_full, m_pos_sym], axis=0)
+            m_hat_full = jnp.concatenate([m_hat_full, m_hat_sym], axis=0)
+            # identity owner mapping -- each dipole's mirror image belongs
+            # to its OWN column, no reversal (see docstring note).
+            owner_full = jnp.concatenate([owner_full, jnp.arange(n_unique)])
+ 
+        m_pos_all = [m_pos_full]
+        m_hat_all = [m_hat_full]
+        owner_all = [owner_full]
+        for k in range(1, self.NFP):
+            Rz = rotation_matrix(axis=[0, 0, 1], angle=2 * jnp.pi * k / self.NFP)
+            m_pos_all.append(m_pos_full @ Rz.T)
+            m_hat_all.append(m_hat_full @ Rz.T)
+            owner_all.append(owner_full)
+        m_pos_all = jnp.concatenate(m_pos_all, axis=0)
+        m_hat_all = jnp.concatenate(m_hat_all, axis=0)
+        owner_all = jnp.concatenate(owner_all, axis=0)
+ 
+        # pairwise geometry: (n_eval, n_images) -- this is the expensive
+        # part (1/r^3 falloffs, dot products for every image against every
+        # eval point) that gets computed ONCE here rather than every
+        # optimization iteration.
+        r_ij = xyz[:, None, :] - m_pos_all[None, :, :]
         r_mag = jnp.linalg.norm(r_ij, axis=-1)
-
-        # get unit vector
-        r_unit = r_ij / r_mag[:,:,None]
-
-        # these dot products will be used to compute the inductance matrix
-        r_dot_n = jnp.sum(r_unit * n_surf[:,None,:], axis=-1)
-        r_dot_m = jnp.sum(r_unit * m_hat[None,:,:], axis=-1)
-        n_dot_m = jnp.sum( n_surf[:,None,:] * m_hat[None,:,:], axis=-1)
-
-        # compute: mu0/4pi (3 r.n r.m - n.m) / r^3
-        g_ij = mu_0 / (4*jnp.pi) * (3 * r_dot_n * r_dot_m - n_dot_m) / r_mag**3
-
-        return g_ij, xyz, grid
+        r_unit = r_ij / r_mag[:, :, None]
+ 
+        r_dot_n = jnp.sum(r_unit * n_surf[:, None, :], axis=-1)
+        r_dot_m = jnp.sum(r_unit * m_hat_all[None, :, :], axis=-1)
+        n_dot_m = jnp.sum(n_surf[:, None, :] * m_hat_all[None, :, :], axis=-1)
+ 
+        g_image = mu_0 / (4 * jnp.pi) * (3 * r_dot_n * r_dot_m - n_dot_m) / r_mag ** 3
+ 
+        # fold every image's contribution back onto its owning unique dipole
+        g_ij = jnp.zeros((xyz.shape[0], n_unique))
+        g_ij = g_ij.at[:, owner_all].add(g_image)
+ 
+        return g_ij
 
     def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
         """Save CoilSet as a MAKEGRID-formatted coil txtfile.
@@ -1472,20 +1485,45 @@ def export_dipoles(dipole_set, f):
 
 
 
-def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde):
+def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde, rho_tilde_clip=0.95):
     '''
-    Creates a Dipole object using given data
+    Creates a Dipole object using given data.
+
+    Parameters
+    ----------
+    rho_tilde_clip : float, optional
+        Maximum |rho_tilde| magnitude to initialize a dipole at. Imported
+        data (e.g. the output of a prior DipoleDiscreteness-driven run) can
+        arrive essentially saturated at rho_tilde ~= +-1; since rho_tilde is
+        stored internally via arctanh, that starting point has a
+        near-vanishing gradient (d(tanh)/d(rho) -> 0 as |rho_tilde| -> 1),
+        which silently stalls any objective built on rho_tilde (e.g.
+        DipoleVolume) even though it looks like the optimizer isn't doing
+        anything. Clipping the *starting* magnitude keeps the same sign/
+        discreteness while leaving a usable gradient. Set to ``None`` to
+        disable and use the raw imported value as before.
     '''
+    if rho_tilde_clip is not None:
+        rho_tilde = jnp.clip(rho_tilde, -rho_tilde_clip, rho_tilde_clip)
     dip = _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, 
                    #rho=rho_tilde
                    )
     dip.rho_tilde = rho_tilde
     return dip
 
-def import_dipoles(NFP, sym, filename):
+def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
     '''
     Creates a DipoleSet object using data from a given CSV file containing
     each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
+
+    Parameters
+    ----------
+    rho_tilde_clip : float or None, optional
+        Passed through to ``create_dipole``; caps the starting |rho_tilde|
+        magnitude so a saturated CSV (e.g. the output of a prior
+        DipoleDiscreteness run) doesn't start every dipole with a
+        near-vanishing gradient. See ``create_dipole`` docstring. Default
+        0.95; pass ``None`` to use the raw imported values unclipped.
     '''
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
@@ -1494,13 +1532,9 @@ def import_dipoles(NFP, sym, filename):
             (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
             for line in reader
         ]
-    csv_data = [
-        (..., np.clip(float(line["rho (unitless)"]), -0.95, 0.95))
-        for line in reader
-    ]
     dipole_set = DipoleSet(NFP=NFP, sym=sym)
     for line in csv_data:
         if (line[-1] != 0):
-            dipole_set.append( create_dipole(*line))
+            dipole_set.append( create_dipole(*line, rho_tilde_clip=rho_tilde_clip))
 
     return dipole_set

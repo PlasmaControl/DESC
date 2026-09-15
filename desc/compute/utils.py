@@ -105,7 +105,7 @@ def compute(  # noqa: C901
                 f"Variable name {name} is deprecated and will be removed in a future "
                 f"DESC version, use name {deprecated_names.get(name, None)} instead.",
             )
-    bad_kwargs = kwargs.keys() - allowed_kwargs
+    bad_kwargs = kwargs.keys() - allowed_kwargs - {"num_transit"}
     errorif(bad_kwargs, msg=f"Unrecognized argument(s): {bad_kwargs}")
 
     for name in names:

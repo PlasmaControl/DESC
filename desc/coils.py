@@ -2691,7 +2691,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
             check_intersection=check_intersection,
         )
 
-    def to_FourierXYZ(self, N=10, grid=None, s=None, name="", check_intersection=False) -> "CoilSet[FourierXYZCoil]":
+    def to_FourierXYZ(
+        self, N=10, grid=None, s=None, name="", check_intersection=False
+    ) -> "CoilSet[FourierXYZCoil]":
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters

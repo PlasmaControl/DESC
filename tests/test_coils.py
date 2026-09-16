@@ -771,9 +771,21 @@ class TestCoilSet:
         coils1 = MixedCoilSet.from_symmetry(coil1, NFP=4)
         coil2 = FourierPlanarCoil(center=[100, 0, 0])
         coils2 = coils1 + [coil2]
+        coil3 = coil1.copy()
+        coil3.change_resolution(N=4)
+        coil4 = coil1.copy()
+        coils3 = CoilSet(coil3, coil3)
+        coils4 = CoilSet(coil4, coil4)
+        with pytest.warns(UserWarning, match="Could not make"):
+            coils34 = coils3 + coils4
         assert coils2[-1] is coil2
         coils2 = coils1 + MixedCoilSet([coil2, coil2], check_intersection=False)
         assert coils2[-1] is coil2
+
+        assert coils34[0] is coils3
+        assert coils34[1] is coils4
+
+        assert isinstance(coils34, MixedCoilSet)
 
         with pytest.raises(TypeError):
             _ = coils1 + FourierRZCurve()
@@ -1510,7 +1522,7 @@ def test_precomputed_biot_savart_source():
         )
 
     # MixedCoilSet accepts one source grid per member coil
-    grids = [LinearGrid(N=40), None]
+    grids = [LinearGridCurve(N=40), None]
     source = mixed._as_precomputed_source(source_grid=grids)
     np.testing.assert_allclose(
         source.compute_magnetic_field(pts),
@@ -1520,7 +1532,7 @@ def test_precomputed_biot_savart_source():
     )
     # CoilSet requires a single shared grid
     with pytest.raises(ValueError, match="single source_grid"):
-        coilset._as_precomputed_source(source_grid=[LinearGrid(N=40)])
+        coilset._as_precomputed_source(source_grid=[LinearGridCurve(N=40)])
 
     # field_line_integrate takes the precomputed path automatically for coil
     # fields

@@ -467,10 +467,10 @@ def _project_x_scale(x_scale, objective):
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
-        # need to project x_scale down to correct size
-        Z = objective._Z
+        # need to project x_scale down to correct size using nullspace Z
+        V = objective._feasible_tangents
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
+        x_scale = jnp.abs((x_scale / objective._D**2) @ (V * V))
         x_scale = jnp.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
     return x_scale
 

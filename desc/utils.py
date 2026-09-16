@@ -10,6 +10,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
+from desc import config as desc_config
 from desc.backend import fori_loop, jax, jit, jnp, pure_callback, sign
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
@@ -1067,20 +1068,37 @@ def xyz2rpz_vec(vec, x=None, y=None, phi=None):
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
 
-    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
-    def inner(vec, phi):
-        rot = jnp.array(
+    if desc_config["kind"] == "gpu":
+        # bunch of small 3x3 matmuls is slow on GPU
+        vec = jnp.asarray(vec)
+        cos = jnp.cos(phi)
+        sin = jnp.sin(phi)
+        return jnp.stack(
             [
-                [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
-                [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-            ]
+                vec[..., 0] * cos + vec[..., 1] * sin,
+                vec[..., 1] * cos - vec[..., 0] * sin,
+                jnp.broadcast_to(
+                    vec[..., 2], jnp.broadcast_shapes(vec.shape[:-1], cos.shape)
+                ),
+            ],
+            axis=-1,
         )
-        rot = rot.T
-        polar = jnp.matmul(rot, vec)
-        return polar
+    else:
 
-    return inner(vec, phi)
+        @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+        def inner(vec, phi):
+            rot = jnp.array(
+                [
+                    [jnp.cos(phi), -jnp.sin(phi), jnp.zeros_like(phi)],
+                    [jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                    [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+                ]
+            )
+            rot = rot.T
+            polar = jnp.matmul(rot, vec)
+            return polar
+
+        return inner(vec, phi)
 
 
 def rpz2xyz_vec(vec, x=None, y=None, phi=None):
@@ -1102,20 +1120,37 @@ def rpz2xyz_vec(vec, x=None, y=None, phi=None):
     if x is not None and y is not None:
         phi = jnp.arctan2(y, x)
 
-    @functools.partial(jnp.vectorize, signature="(3),()->(3)")
-    def inner(vec, phi):
-        rot = jnp.array(
+    if desc_config["kind"] == "gpu":
+        # bunch of small 3x3 matmuls is slow on GPU
+        vec = jnp.asarray(vec)
+        cos = jnp.cos(phi)
+        sin = jnp.sin(phi)
+        return jnp.stack(
             [
-                [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
-                [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
-                [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
-            ]
+                vec[..., 0] * cos - vec[..., 1] * sin,
+                vec[..., 0] * sin + vec[..., 1] * cos,
+                jnp.broadcast_to(
+                    vec[..., 2], jnp.broadcast_shapes(vec.shape[:-1], cos.shape)
+                ),
+            ],
+            axis=-1,
         )
-        rot = rot.T
-        cart = jnp.matmul(rot, vec)
-        return cart
+    else:
 
-    return inner(vec, phi)
+        @functools.partial(jnp.vectorize, signature="(3),()->(3)")
+        def inner(vec, phi):
+            rot = jnp.array(
+                [
+                    [jnp.cos(phi), jnp.sin(phi), jnp.zeros_like(phi)],
+                    [-jnp.sin(phi), jnp.cos(phi), jnp.zeros_like(phi)],
+                    [jnp.zeros_like(phi), jnp.zeros_like(phi), jnp.ones_like(phi)],
+                ]
+            )
+            rot = rot.T
+            cart = jnp.matmul(rot, vec)
+            return cart
+
+        return inner(vec, phi)
 
 
 def copy_rpz_periods(rpz, NFP):

@@ -2241,7 +2241,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
         return cls(*coils, check_intersection=check_intersection)
 
     @classmethod
-    def from_symmetry(cls, coils: "T|CoilSet[T]", NFP=1, sym=False, check_intersection=False)->"CoilSet[T]":
+    def from_symmetry(
+        cls, coils: "T|CoilSet[T]", NFP=1, sym=False, check_intersection=False
+    ) -> "CoilSet[T]":
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between

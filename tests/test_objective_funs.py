@@ -3800,9 +3800,7 @@ class TestComputeScalarResolution:
                 LinkingCurrentConsistency(
                     eq,
                     coilset,
-                    grid=LinearGridCurve(
-                        M=int(eq.M_grid * res), N=int(eq.N_grid * res)
-                    ),
+                    grid=LinearGridFlux(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
                 ),
                 use_jit=False,
             )

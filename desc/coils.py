@@ -1628,6 +1628,7 @@ def _check_type(coil0, coil):
             ),
         )
 
+
 T = TypeVar("T")
 
 

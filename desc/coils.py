@@ -4,8 +4,8 @@ import numbers
 import os
 from abc import ABC
 from collections.abc import MutableSequence
-from typing import TypeVar, Generic, Self
 from functools import partial
+from typing import Generic, TypeVar
 
 import numpy as np
 from scipy.constants import mu_0

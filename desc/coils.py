@@ -2314,7 +2314,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
         return cls(*coilset, check_intersection=check_intersection)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, method="cubic", check_intersection=False)->"CoilSet[SplineXYZCoil]":
+    def from_makegrid_coilfile(
+        cls, coil_file, method="cubic", check_intersection=False
+    ) -> "CoilSet[SplineXYZCoil]":
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed

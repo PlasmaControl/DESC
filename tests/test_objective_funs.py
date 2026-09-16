@@ -3777,7 +3777,7 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGridFlux(N=int(5 + 3 * res)), target=1),
+                objective(coilset, grid=LinearGridCurve(N=int(5 + 3 * res)), target=1),
                 use_jit=False,
             )
             obj.build(verbose=0)
@@ -3800,7 +3800,9 @@ class TestComputeScalarResolution:
                 LinkingCurrentConsistency(
                     eq,
                     coilset,
-                    grid=LinearGridFlux(M=int(eq.M_grid * res), N=int(eq.N_grid * res)),
+                    grid=LinearGridCurve(
+                        M=int(eq.M_grid * res), N=int(eq.N_grid * res)
+                    ),
                 ),
                 use_jit=False,
             )

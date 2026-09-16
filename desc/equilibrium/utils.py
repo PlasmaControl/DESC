@@ -15,7 +15,7 @@ from desc.profiles import PowerSeriesProfile, _Profile
 from desc.utils import warnif
 
 
-def parse_profile(prof, name="", **kwargs) -> _Profile|None:
+def parse_profile(prof, name="", **kwargs) -> _Profile | None:
     """Parse an object into a Profile.
 
     Parameters

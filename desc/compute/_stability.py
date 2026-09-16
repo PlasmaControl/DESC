@@ -1302,7 +1302,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     if phi_matrix is not None:
         # change to free-boundary when phi_matrix is provided)
         phi_matrix = phi_matrix / a_N
-        print("success!")
         b_idx = slice(
             n_total - n_per_shell, n_total
         )  # indices of boundary; not yet reduced to ring
@@ -2316,7 +2315,6 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Aur = (W * psi_r2 * sqrtg * F) * xr
 
         if phi_matrix is not None:
-            print("adding vacuum energy")
             # Vacuum energy contribution (free boundary): matrix-free form of
             # the rho-rho block `_agni3_assemble` adds from `phi_matrix`
             # (b_idx x b_idx), acting only on the outermost (boundary) rho

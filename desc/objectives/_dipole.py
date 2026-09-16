@@ -185,13 +185,6 @@ class QuadraticFluxPM(_Objective):
             )
         )
 
-        # Bcoils = np.linalg.norm(self._field_fixed.compute_magnetic_field(
-        #                     jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
-        #                     source_grid=self._field_grid,
-        #                     basis="rpz",
-        #                     chunk_size=self._bs_chunk_size), axis=1)
-        # print("Bcoils",Bcoils)
-
         Bcoils_vec = self._field_fixed.compute_magnetic_field(
             jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
             source_grid=self._field_grid,
@@ -309,7 +302,6 @@ class QuadraticFluxPM(_Objective):
                 chunk_size=self._bs_chunk_size,
             )
             B_ext = jnp.sum(B_ext_vec * eval_data["n_rho"], axis=-1)
-        print("B_ext:",B_ext)
  
         f = (B_ext + B_plasma + B_coils) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
         return f
@@ -398,14 +390,6 @@ class _DipoleObjective(_Objective):
         timer.stop("Precomputing dipole parameters")
         if verbose > 1:
             timer.disp("Precomputing dipole parameters")
-
-        # if self._normalize:
-        #     # NOTE: compute_scaling_factors is written for coils/equilibria.
-        #     # If it doesn't have a code path for _Dipole, replace this with
-        #     # an explicit scale (e.g. based on m0) -- see DipoleDiscreteness
-        #     # below for a subclass that just turns normalization off, since
-        #     # its output is already dimensionless.
-        #     self._scales = [compute_scaling_factors(dip) for dip in dipoles]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -498,27 +482,22 @@ class DipoleDiscreteness(_DipoleObjective):
         super().build(use_jit=use_jit, verbose=verbose)
         self._normalization = 1.0
 
-    # def compute(self, params, constants=None):
-    #     """Compute dipole discreteness.
-
-    #     Parameters
-    #     ----------
-    #     params : dict or list of dict
-    #         Dictionary (or list, one per dipole) of the dipole's degrees of
-    #         freedom.
-    #     constants : dict
-    #         Dictionary of constant data. Defaults to ``self._constants``.
-
-    #     Returns
-    #     -------
-    #     d : ndarray, shape(num_dipoles,)
-
-    #     """
-    #     data = super().compute(params, constants=constants)
-    #     rho_raw = jnp.asarray([jnp.atleast_1d(d["rho"])[0] for d in data])
-    #     rho_tilde = jnp.tanh(rho_raw)
-        # return jnp.abs(rho_tilde) * (1 - jnp.abs(rho_tilde))
     def compute(self, params, constants=None):
+        """Compute dipole discreteness.
+
+        Parameters
+        ----------
+        params : dict or list of dict
+            Dictionary (or list, one per dipole) of the dipole's degrees of
+            freedom.
+        constants : dict
+            Dictionary of constant data. Defaults to ``self._constants``.
+
+        Returns
+        -------
+        d : ndarray, shape(num_dipoles,)
+
+        """
         if constants is None:
             constants = self._constants
         p = params if params is not None else constants["params"]
@@ -607,4 +586,3 @@ class DipoleVolume(_DipoleObjective):
         rho_tilde = jnp.tanh(rho_raw)
         eps = 1e-8
         return jnp.sqrt(jnp.abs(rho_tilde) + eps)   # DipoleVolume specifically
-    

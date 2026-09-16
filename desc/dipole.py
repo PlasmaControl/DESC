@@ -1,6 +1,5 @@
 """Classes for dipoles."""
 
-import pdb
 import os
 import csv
 
@@ -9,7 +8,6 @@ from collections.abc import MutableSequence
 from functools import partial
 
 import numpy as np
-from desc.integrals import compute_B_plasma
 
 from desc.backend import (
     fori_loop,
@@ -47,11 +45,7 @@ from desc.utils import (
     xyz2rpz,
     xyz2rpz_vec,
 )
-from desc.utils import errorif, reflection_matrix, rotation_matrix
-
-
 import numbers
-from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
     _parse_parameterization,
@@ -178,7 +172,18 @@ class _Dipole(_MagneticField, Optimizable, ABC):
         radially inward.
     """
     
-    _io_attrs_ = _MagneticField._io_attrs_ + ["_X"] + ["_Y"] + ["_Z"] + ["_phi"] + ["_theta"] + ["_m0"] + ["_rho"] + ["_name", "_shift", "_rotmat"] + ["_name"]
+    _io_attrs_ = _MagneticField._io_attrs_ + [
+        "_X",
+        "_Y",
+        "_Z",
+        "_phi",
+        "_theta",
+        "_m0",
+        "_rho",
+        "_name",
+        "_shift",
+        "_rotmat",
+    ]
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs + ["_name"]
 
     def __init__(self, X=0.0, Y=0.0, Z=0.0, phi=0.0, theta=0.0, m0=1.0, rho=1.0, name=""):
@@ -329,7 +334,7 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @property
     def M0(self):
         """float: Effective dipole moment strength, with radial direction."""
-        return self._m0 * self._rho_tilde
+        return self._m0 * self.rho_tilde
     
     @property
     def m_xyz(self):

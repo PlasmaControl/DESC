@@ -9,9 +9,12 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
+    cross,
+    dot,
     errorif,
     parse_argname_change,
     rpz2xyz,
+    rpz2xyz_vec,
     safenorm,
     warnif,
 )
@@ -310,23 +313,36 @@ class Elongation(_Objective):
 class SLAMElongation(_Objective):
     """Elongation of constant Cartesian-X cross sections.
 
-    For each requested plane ``X = X0`` the surface points are viewed along the
-    Cartesian X axis and the elongation of the resulting (Y, Z) cross section is
-    measured. Unlike :class:`Elongation` (which measures the elongation of the
+    For each requested plane ``X - slope*Z = X0`` the surface points are viewed
+    along the direction normal to the line ``x = slope*z`` (in the Cartesian X-Z
+    plane) and the elongation of the resulting cross section is measured. With
+    the default ``slope=0`` this is the ``X = X0`` plane, perpendicular to the
+    Cartesian X axis, viewed in (Y, Z) -- matching :class:`Elongation`'s cousin
+    behavior but for Cartesian rather than toroidal cuts. A nonzero ``slope``
+    tilts the whole family of cutting planes (all parallel to the fixed line
+    ``x = slope*z`` through the origin, which only sets their common tilt) while
+    ``X0`` keeps its role of picking out each individual plane. Unlike
+    :class:`Elongation` (which measures the elongation of the
     constant-toroidal-angle R-Z cross section), this slices the geometry with
-    vertical Cartesian planes -- useful for mirror-like configurations where the
-    physically meaningful cross sections are perpendicular to a Cartesian axis.
+    Cartesian planes -- useful for mirror-like configurations where the
+    physically meaningful cross sections are perpendicular to a (possibly
+    tilted) Cartesian axis.
 
     The metric is a smooth, jit-compatible surrogate for "slice, fit an ellipse,
     read off the ellipticity":
 
-    1. Each grid point is weighted by a Gaussian in ``|X - X0|`` (a differentiable
-       replacement for a hard ``|X - X0| < tol`` mask, which would have a
-       data-dependent number of points and could not be jitted) times the surface
-       area element ``|e_theta x e_zeta|`` (so the result is a geometric integral
-       over the cut, independent of how the ``(theta, zeta)`` grid samples it).
-    2. The weighted 2x2 covariance of ``(Y, Z)`` is formed and its eigenvalues
-       ``l1 >= l2`` are taken in closed form.
+    1. Each grid point is weighted by a Gaussian in ``|u - u0|``, where
+       ``u = (X - slope*Z) / sqrt(1 + slope**2)`` is the signed distance along the
+       line's normal direction and ``u0 = X0 / sqrt(1 + slope**2)`` is the target
+       plane's location in that coordinate (a differentiable replacement for a
+       hard ``|u - u0| < tol`` mask, which would have a data-dependent number of
+       points and could not be jitted) times the surface area element
+       ``|e_theta x e_zeta|`` (so the result is a geometric integral over the cut,
+       independent of how the ``(theta, zeta)`` grid samples it).
+    2. The weighted 2x2 covariance of ``(Y, v)`` is formed, where
+       ``v = (slope*X + Z) / sqrt(1 + slope**2)`` is the coordinate spanning the
+       cut plane along the line's own direction (``v = Z`` when ``slope = 0``),
+       and its eigenvalues ``l1 >= l2`` are taken in closed form.
     3. The plane elongation is ``sqrt(l1 / l2)`` (exact ``a/b`` for a true
        ellipse).
 
@@ -339,12 +355,19 @@ class SLAMElongation(_Objective):
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
     X0 : float or array-like
-        Cartesian X location(s) [meters] of the plane(s) at which to measure the
-        cross-section elongation.
+        Location(s) [meters] of the plane(s) at which to measure the
+        cross-section elongation, as the ``X`` intercept of each plane
+        (``X - slope*Z = X0``). With the default ``slope=0`` this is the
+        Cartesian X location of the plane, as before.
+    slope : float
+        Slope ``dx/dz`` (dimensionless) of the fixed line ``x = slope*z`` (through
+        the origin) that sets the common tilt of every requested cutting plane.
+        Default 0, reproducing the original constant-Cartesian-X planes.
     bandwidth : float
         Width of the Gaussian selection kernel as a fraction of the current
-        X-extent of the surface. Default 0.01 (matching a thin slab). The result
-        is insensitive to this over a broad range.
+        extent of the surface along the line's normal direction. Default 0.01
+        (matching a thin slab). The result is insensitive to this over a broad
+        range.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``LinearGrid(M=4*eq.M, N=4*eq.N)`` for a ``FourierRZToroidalSurface`` (a
@@ -370,6 +393,7 @@ class SLAMElongation(_Objective):
         self,
         eq,
         X0,
+        slope=0,
         bandwidth=0.01,
         target=None,
         bounds=None,
@@ -386,6 +410,7 @@ class SLAMElongation(_Objective):
             target = 1
         self._grid = grid
         self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
+        self._slope = float(slope)
         self._bandwidth = bandwidth
         super().__init__(
             things=eq,
@@ -447,37 +472,45 @@ class SLAMElongation(_Objective):
             "transforms": transforms,
             "profiles": profiles,
             "X0": self._X0,
+            "slope": self._slope,
             "bandwidth": self._bandwidth,
         }
 
-        # Sanity-check the grid against the requested planes: a constant Cartesian
-        # X cross section only exists where the surface actually spans X0, and it
+        # Sanity-check the grid against the requested planes: a constant-u cross
+        # section (u = (X - slope*Z)/norm, the coordinate normal to the tilted
+        # cutting planes) only exists where the surface actually spans u0, and it
         # needs a range of toroidal angles (not a single zeta plane) to be
         # resolved. Warn early rather than silently returning garbage.
-        X_build = compute_fun(
+        XZ_build = compute_fun(
             eq,
-            ["X"],
+            ["X", "Z"],
             params=eq.params_dict,
             transforms=transforms,
             profiles=profiles,
-        )["X"]
-        Xmin, Xmax = float(jnp.min(X_build)), float(jnp.max(X_build))
+        )
+        norm = float(np.sqrt(1 + self._slope**2))
+        u_build = (XZ_build["X"] - self._slope * XZ_build["Z"]) / norm
+        umin, umax = float(jnp.min(u_build)), float(jnp.max(u_build))
         warnif(
             grid.num_zeta < 4,
             UserWarning,
             f"SLAMElongation grid samples only {grid.num_zeta} toroidal (zeta) "
-            "plane(s). A constant-Cartesian-X cross section needs a range of "
-            "toroidal angles to be resolved; pass a grid spanning many zeta "
-            "values (e.g. zeta=np.linspace(...)).",
+            "plane(s). A constant cross section needs a range of toroidal "
+            "angles to be resolved; pass a grid spanning many zeta values "
+            "(e.g. zeta=np.linspace(...)).",
         )
-        out_of_range = [float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)]
+        u0 = np.atleast_1d(self._X0) / norm
+        out_of_range = [
+            float(x)
+            for x, u in zip(np.atleast_1d(self._X0), u0)
+            if not (umin <= u <= umax)
+        ]
         warnif(
             len(out_of_range) > 0,
             UserWarning,
             f"SLAMElongation X0={out_of_range} lie outside the surface's "
-            f"X-range [{Xmin:.4g}, {Xmax:.4g}] on the given grid, so those planes "
-            "have no cross section. Elongation there defaults to ~1; check X0 and "
-            "the grid.",
+            f"range on the given grid, so those planes have no cross section. "
+            "Elongation there defaults to ~1; check X0, slope, and the grid.",
         )
 
         timer.stop("Precomputing transforms")
@@ -487,7 +520,7 @@ class SLAMElongation(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute the maximum constant-X cross-section elongation.
+        """Compute the maximum cross-section elongation over the requested planes.
 
         Parameters
         ----------
@@ -519,28 +552,38 @@ class SLAMElongation(_Objective):
         Z = data["Z"]
         dA = data["|e_theta x e_zeta|"]
 
-        # Gaussian selection width, as a fraction of the current X-extent, so the
+        # Rotate (X, Z) into the frame set by the cutting-plane normal: u is the
+        # coordinate normal to the planes (constant on each requested cut), v is
+        # the coordinate spanning the cut plane along the line's own direction.
+        # At slope=0, norm=1, u=X, v=Z -- identical to the un-tilted case.
+        slope = constants["slope"]
+        norm = jnp.sqrt(1 + slope**2)
+        u = (X - slope * Z) / norm
+        v = (slope * X + Z) / norm
+
+        # Gaussian selection width, as a fraction of the current u-extent, so the
         # relative slab thickness is preserved as the shape changes. Floor it so a
-        # degenerate (near-zero X-extent) grid cannot drive sigma -> 0.
-        Xspan = jnp.max(X) - jnp.min(X)
-        sigma = constants["bandwidth"] * jnp.maximum(Xspan, jnp.finfo(X.dtype).eps)
+        # degenerate (near-zero extent) grid cannot drive sigma -> 0.
+        Uspan = jnp.max(u) - jnp.min(u)
+        sigma = constants["bandwidth"] * jnp.maximum(Uspan, jnp.finfo(X.dtype).eps)
 
         def plane_elongation(x0):
-            # log-weights: smooth X-selection + log(area element). Working in log
+            u0 = x0 / norm
+            # log-weights: smooth u-selection + log(area element). Working in log
             # space and subtracting the max keeps the weights in (0, 1] so their
             # sum can never underflow to 0 (which would give 0/0 = NaN when a
             # plane is out of range or the grid is too sparse). The global shift
             # cancels in the normalized covariance, so the result is unchanged.
-            log_w = -0.5 * ((X - x0) / sigma) ** 2 + jnp.log(dA)
+            log_w = -0.5 * ((u - u0) / sigma) ** 2 + jnp.log(dA)
             w = jnp.exp(log_w - jnp.max(log_w))
             W = jnp.sum(w)
             Ybar = jnp.sum(w * Y) / W
-            Zbar = jnp.sum(w * Z) / W
+            Vbar = jnp.sum(w * v) / W
             dY = Y - Ybar
-            dZ = Z - Zbar
+            dV = v - Vbar
             cyy = jnp.sum(w * dY * dY) / W
-            czz = jnp.sum(w * dZ * dZ) / W
-            cyz = jnp.sum(w * dY * dZ) / W
+            czz = jnp.sum(w * dV * dV) / W
+            cyz = jnp.sum(w * dY * dV) / W
             # closed-form eigenvalues of [[cyy, cyz], [cyz, czz]] (smooth).
             # disc <= half_tr for a PSD covariance, so l1 >= l2 >= 0.
             half_tr = (cyy + czz) / 2
@@ -558,6 +601,256 @@ class SLAMElongation(_Objective):
         elongation = vmap(plane_elongation)(constants["X0"])
         return jnp.max(elongation)
 
+
+class SLAMCrossSection(_Objective):
+    """Area of constant Cartesian-X cross sections.
+
+    The companion of :class:`SLAMElongation`. Both slice the surface with the
+    same family of planes ``X - slope*Z = X0`` and form the same weighted 2x2
+    covariance of the in-plane coordinates; they differ only in which invariant
+    of its principal values ``l1 >= l2`` they return:
+
+    * :class:`SLAMElongation` returns the *ratio*   ``sqrt(l1 / l2)``
+    * this objective returns the *product*         ``2 * pi * sqrt(l1 * l2)``
+
+    Ratio and product together fix the cut's ellipse, so targeting an area here
+    while bounding elongation there fully specifies the cross section.
+
+    ``2 * pi * sqrt(l1 * l2)`` is exact for an ellipse, so it is most
+    trustworthy with the elongation held near 1.  ``A(z)`` is not a substitute:
+    it cuts at constant zeta, not constant X.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Equilibrium or FourierRZToroidalSurface that
+        will be optimized to satisfy the Objective.
+    X0 : float or array-like
+        Location(s) [meters] of the plane(s) at which to measure the
+        cross-section area, as the ``X`` intercept of each plane
+        (``X - slope*Z = X0``). With the default ``slope=0`` this is the
+        Cartesian X location of the plane.
+    slope : float
+        Slope ``dx/dz`` (dimensionless) of the fixed line ``x = slope*z`` that
+        sets the common tilt of every cutting plane, as in
+        :class:`SLAMElongation`. For planes square to an axis tilted by angle
+        ``alpha`` from the X axis toward +Z, use ``slope = -tan(alpha)``.
+        Default 0.
+    bandwidth : float
+        Width of the Gaussian selection kernel as a fraction of the current
+        extent of the surface along the line's normal direction. Default 0.01.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Should be
+        restricted in ``zeta`` to a single branch when a constant-X plane cuts
+        the torus more than once, exactly as for :class:`SLAMCenter`.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``None`` -- one of ``target`` or ``bounds`` is required.",
+        bounds_default="``None`` -- one of ``target`` or ``bounds`` is required.",
+    )
+
+    _scalar = False
+    _units = "(m^2)"
+    _print_value_fmt = "SLAM cross-section area: "
+
+    def __init__(
+        self,
+        eq,
+        X0,
+        slope=0,
+        bandwidth=0.01,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="SLAM cross-section area",
+        jac_chunk_size=None,
+    ):
+        errorif(
+            target is None and bounds is None,
+            ValueError,
+            "SLAMCrossSection needs an explicit target or bounds.",
+        )
+        self._grid = grid
+        self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
+        self._slope = float(slope)
+        self._bandwidth = bandwidth
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 4,
+                    N=eq.N * 4,
+                    NFP=eq.NFP,
+                    sym=False,
+                )
+        else:
+            grid = self._grid
+
+        self._dim_f = self._X0.size
+        self._data_keys = ["X", "Y", "Z", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "X0": self._X0,
+            "slope": self._slope,
+            "bandwidth": self._bandwidth,
+        }
+
+        # Same grid/plane sanity checks as SLAMElongation: a plane that does not
+        # intersect the surface, or a grid with too few toroidal planes, returns
+        # a number rather than failing, so warn at build time.
+        XZ_build = compute_fun(
+            eq,
+            ["X", "Z"],
+            params=eq.params_dict,
+            transforms=transforms,
+            profiles=profiles,
+        )
+        norm = float(np.sqrt(1 + self._slope**2))
+        u_build = (XZ_build["X"] - self._slope * XZ_build["Z"]) / norm
+        umin, umax = float(jnp.min(u_build)), float(jnp.max(u_build))
+        warnif(
+            grid.num_zeta < 4,
+            UserWarning,
+            f"SLAMCrossSection grid has only {grid.num_zeta} zeta plane(s); "
+            "the cuts need many.",
+        )
+        u0 = np.atleast_1d(self._X0) / norm
+        out_of_range = [
+            float(x)
+            for x, u in zip(np.atleast_1d(self._X0), u0)
+            if not (umin <= u <= umax)
+        ]
+        warnif(
+            len(out_of_range) > 0,
+            UserWarning,
+            f"SLAMCrossSection X0={out_of_range} lie off the surface.",
+        )
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["A"]
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the cross-section area at each requested plane.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        area : ndarray
+            Cross-section area at each requested plane, in square meters.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        X = data["X"]
+        Y = data["Y"]
+        Z = data["Z"]
+        dA = data["|e_theta x e_zeta|"]
+
+        # Identical framing to SLAMElongation: u is normal to the cutting planes,
+        # v spans them along the tilt line. At slope=0, u=X and v=Z.
+        slope = constants["slope"]
+        norm = jnp.sqrt(1 + slope**2)
+        u = (X - slope * Z) / norm
+        v = (slope * X + Z) / norm
+
+        Uspan = jnp.max(u) - jnp.min(u)
+        sigma = constants["bandwidth"] * jnp.maximum(Uspan, jnp.finfo(X.dtype).eps)
+
+        def plane_area(x0):
+            u0 = x0 / norm
+            # log-space weights, as in SLAMElongation, so the normalization can
+            # never underflow to 0 for a plane near the edge of the grid.
+            log_w = -0.5 * ((u - u0) / sigma) ** 2 + jnp.log(dA)
+            w = jnp.exp(log_w - jnp.max(log_w))
+            W = jnp.sum(w)
+            Ybar = jnp.sum(w * Y) / W
+            Vbar = jnp.sum(w * v) / W
+            dY = Y - Ybar
+            dV = v - Vbar
+            cyy = jnp.sum(w * dY * dY) / W
+            czz = jnp.sum(w * dV * dV) / W
+            cyz = jnp.sum(w * dY * dV) / W
+            half_tr = (cyy + czz) / 2
+            disc = jnp.sqrt(((cyy - czz) / 2) ** 2 + cyz**2)
+            l1 = half_tr + disc  # major variance
+            l2 = half_tr - disc  # minor variance
+            # Floor the minor variance as SLAMElongation does, so a degenerate
+            # cut gives a small finite area rather than a NaN gradient.
+            tiny = jnp.finfo(X.dtype).tiny
+            l2 = jnp.maximum(l2, 1e-12 * l1) + tiny
+            return 2 * jnp.pi * jnp.sqrt(l1 * l2)
+
+        return vmap(plane_area)(constants["X0"])
 
 
 class SLAMCenter(_Objective):
@@ -743,7 +1036,9 @@ class SLAMCenter(_Objective):
             "toroidal angles to be resolved; pass a grid spanning many zeta "
             "values (e.g. zeta=np.linspace(...)).",
         )
-        out_of_range = [float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)]
+        out_of_range = [
+            float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)
+        ]
         warnif(
             len(out_of_range) > 0,
             UserWarning,
@@ -819,6 +1114,251 @@ class SLAMCenter(_Objective):
         # shape (n_planes, 2) -> flatten to [Ybar_0, Zbar_0, Ybar_1, Zbar_1, ...]
         centers = vmap(plane_center)(constants["X0"])
         return centers.flatten()
+
+
+class SLAMStraightSectionCenter(_Objective):
+    """Keep constant-X cross-section centers on a straight mirror section.
+
+    This objective uses the same smooth constant-Cartesian-X slicing as
+    :class:`SLAMCenter`. For every plane ``X = X0`` it computes the
+    area-weighted center ``(Ybar, Zbar)`` of that cut.
+
+    By default the residual is ``Ybar - mean(Ybar)`` over the sampled stations.
+    Driving this to zero makes all selected cuts share one common Cartesian
+    ``Y`` coordinate while allowing that common value to move.
+
+    If ``Y0`` is supplied, the Y residual becomes ``Ybar - Y0`` instead. If
+    ``Z0`` is supplied, ``Zbar - Z0`` is appended to the residual. This is useful
+    when the desired ``X-Z`` relation comes from the centers of circular mirror
+    coils, e.g. ``Z0 = Zc(X0)``.
+
+    A constant-Cartesian-X plane cuts a full torus in *two* cross sections (the
+    ``+Y`` and ``-Y`` branches); their centroids would average together. Pass a
+    ``grid`` whose ``zeta`` range covers the branch you mean to constrain.
+
+    Parameters
+    ----------
+    eq : Equilibrium or FourierRZToroidalSurface
+        Object whose boundary/surface is being optimized.
+    X0 : float or array-like
+        Cartesian X station(s) [meters] across the straight section.
+    Y0 : float or array-like, optional
+        Absolute target Y center(s) [meters]. If omitted, the common Y is free.
+    Z0 : float or array-like, optional
+        Absolute target Z center(s) [meters], typically from ``Zc(X0)``.
+    bandwidth : float
+        Width of the Gaussian selection kernel as a fraction of the current
+        X-extent of the surface. Default 0.01 (matching a thin slab).
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Should be
+        restricted in ``zeta`` to a single branch.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _scalar = False
+    _units = "(m)"
+    _print_value_fmt = "SLAM straight-section center: "
+    _static_attrs = _Objective._static_attrs + ["_has_y_target", "_has_z_target"]
+
+    def __init__(
+        self,
+        eq,
+        X0,
+        Y0=None,
+        Z0=None,
+        bandwidth=0.01,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="SLAM straight-section center",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
+        self._has_y_target = Y0 is not None
+        self._has_z_target = Z0 is not None
+        self._Y0 = jnp.zeros_like(self._X0)
+        self._Z0 = jnp.zeros_like(self._X0)
+        if self._has_y_target:
+            self._Y0 = jnp.broadcast_to(jnp.asarray(Y0, dtype=float), self._X0.shape)
+        if self._has_z_target:
+            self._Z0 = jnp.broadcast_to(jnp.asarray(Z0, dtype=float), self._X0.shape)
+        self._bandwidth = bandwidth
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            if hasattr(eq, "L_grid"):
+                grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+            else:
+                grid = LinearGrid(
+                    rho=1.0,
+                    M=eq.M * 4,
+                    N=eq.N * 4,
+                    NFP=eq.NFP,
+                    sym=False,
+                )
+        else:
+            grid = self._grid
+
+        self._dim_f = self._X0.size * (1 + int(self._has_z_target))
+        self._data_keys = ["X", "Y", "Z", "|e_theta x e_zeta|"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+            "X0": self._X0,
+            "Y0": self._Y0,
+            "Z0": self._Z0,
+            "bandwidth": self._bandwidth,
+        }
+
+        X_build = compute_fun(
+            eq,
+            ["X"],
+            params=eq.params_dict,
+            transforms=transforms,
+            profiles=profiles,
+        )["X"]
+        Xmin, Xmax = float(jnp.min(X_build)), float(jnp.max(X_build))
+        warnif(
+            (not self._has_y_target) and self._X0.size < 2,
+            UserWarning,
+            "SLAMStraightSectionCenter needs at least two X0 stations when Y0 "
+            "is omitted; with one station Ybar - mean(Ybar) is identically zero.",
+        )
+        warnif(
+            grid.num_zeta < 4,
+            UserWarning,
+            f"SLAMStraightSectionCenter grid samples only {grid.num_zeta} "
+            "toroidal (zeta) plane(s). A constant-Cartesian-X cross section "
+            "needs a range of toroidal angles to be resolved; pass a grid "
+            "spanning many zeta values (e.g. zeta=np.linspace(...)).",
+        )
+        out_of_range = [
+            float(x) for x in np.atleast_1d(self._X0) if not (Xmin <= x <= Xmax)
+        ]
+        warnif(
+            len(out_of_range) > 0,
+            UserWarning,
+            f"SLAMStraightSectionCenter X0={out_of_range} lie outside the "
+            f"surface's X-range [{Xmin:.4g}, {Xmax:.4g}] on the given grid, so "
+            "those planes have no cross section; the reported center variation "
+            "there is unreliable. Check X0 and the grid.",
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute straight-section center residuals.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium or surface degrees of freedom,
+            eg Equilibrium.params_dict.
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants.
+
+        Returns
+        -------
+        center_residual : ndarray
+            Y residuals, optionally followed by Z residuals, in meters.
+
+        """
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        X = data["X"]
+        Y = data["Y"]
+        Z = data["Z"]
+        dA = data["|e_theta x e_zeta|"]
+
+        Xspan = jnp.max(X) - jnp.min(X)
+        sigma = constants["bandwidth"] * jnp.maximum(Xspan, jnp.finfo(X.dtype).eps)
+
+        def plane_center(x0):
+            log_w = -0.5 * ((X - x0) / sigma) ** 2 + jnp.log(dA)
+            w = jnp.exp(log_w - jnp.max(log_w))
+            W = jnp.sum(w)
+            Ybar = jnp.sum(w * Y) / W
+            Zbar = jnp.sum(w * Z) / W
+            return jnp.array([Ybar, Zbar])
+
+        centers = vmap(plane_center)(constants["X0"])
+        Ybar = centers[:, 0]
+        Zbar = centers[:, 1]
+
+        if self._has_y_target:
+            Y_residual = Ybar - constants["Y0"]
+        else:
+            Y_residual = Ybar - jnp.mean(Ybar)
+
+        if self._has_z_target:
+            Z_residual = Zbar - constants["Z0"]
+            return jnp.concatenate([Y_residual, Z_residual])
+        return Y_residual
 
 
 class Volume(_Objective):
@@ -1764,6 +2304,10 @@ class AxisTorsion(_Objective):
     This objective evaluates the local Frenet-Serret torsion of the equilibrium's
     magnetic axis at each grid node.
 
+    Evaluated on the ``rho = 0`` surface of the Equilibrium, so the Cartesian
+    conversion uses ``phi = zeta + omega``.  Not via ``eq.axis``, which has no
+    omega.  The grid must be at ``rho = 0``.
+
     Parameters
     ----------
     eq : Equilibrium
@@ -1824,26 +2368,35 @@ class AxisTorsion(_Objective):
 
         """
         eq = self.things[0]
-        axis = eq.axis
         if self._grid is None:
-            grid = LinearGrid(N=2 * eq.N + 5, NFP=eq.NFP, sym=eq.sym)
+            grid = LinearGrid(
+                rho=0.0,
+                theta=0.0,
+                zeta=np.linspace(0.0, 2 * np.pi, 2 * eq.N + 5, endpoint=False),
+                NFP=1,
+                sym=False,
+            )
         else:
             grid = self._grid
 
+        errorif(
+            not np.allclose(grid.nodes[:, 0], 0.0),
+            ValueError,
+            "AxisTorsion needs a grid at rho = 0.",
+        )
         self._dim_f = grid.num_nodes
-        self._data_keys = ["torsion"]
+        self._data_keys = ["e_zeta", "e_zeta_z", "e_zeta_zz", "phi"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        profiles = get_profiles(self._data_keys, obj=axis, grid=grid)
-        transforms = get_transforms(self._data_keys, obj=axis, grid=grid)
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         self._constants = {
             "transforms": transforms,
             "profiles": profiles,
-            "axis_params": axis.params_dict,
         }
 
         timer.stop("Precomputing transforms")
@@ -1875,19 +2428,161 @@ class AxisTorsion(_Objective):
         """
         if constants is None:
             constants = self.constants
-        axis_params = {
-            **constants["axis_params"],
-            "R_n": params["Ra_n"],
-            "Z_n": params["Za_n"],
-        }
         data = compute_fun(
-            "desc.geometry.curve.FourierRZCurve",
+            self.things[0],
             self._data_keys,
-            params=axis_params,
+            params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return jnp.abs(data["torsion"]).ravel()
+        # Frenet-Serret torsion of the rho = 0 curve, in Cartesian.  The basis
+        # vectors come out in (R, phi, Z) components at phi = zeta + omega, so
+        # they are rotated to xyz before the triple product.  The formula is
+        # invariant to the curve parameter, so zeta may be used directly.
+        phi = data["phi"]
+        x_s = rpz2xyz_vec(data["e_zeta"], phi=phi)
+        x_ss = rpz2xyz_vec(data["e_zeta_z"], phi=phi)
+        x_sss = rpz2xyz_vec(data["e_zeta_zz"], phi=phi)
+        dxd2x = cross(x_s, x_ss)
+        tau = dot(dxd2x, x_sss) / (
+            jnp.linalg.norm(dxd2x, axis=-1) ** 2 + jnp.finfo(phi.dtype).tiny
+        )
+        return jnp.abs(tau).ravel()
+
+
+class AxisChordStraightness(_Objective):
+    """Penalize magnetic-axis excursion from the chord through branch endpoints.
+
+    This objective evaluates the magnetic axis on a user-supplied zeta interval,
+    draws the straight line through the first and last axis points, and returns
+    the Cartesian perpendicular displacement of each interior sampled axis point
+    from that line.  It is meant for racetrack-like configurations where only
+    one straight branch should be kept straight; do not apply it over the whole
+    closed magnetic axis.
+
+    Evaluated on the ``rho = 0`` surface of the Equilibrium, so the Cartesian
+    conversion uses ``phi = zeta + omega``.  Not via ``eq.axis``, which has no
+    omega.  The grid must be at ``rho = 0``.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium whose magnetic axis will be optimized.
+    grid : LinearGrid
+        One-dimensional grid along the axis branch. It should contain a single
+        rho (which must be 0), single theta, and the zeta samples on the branch.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _units = "(m)"
+    _print_value_fmt = "Axis chord straightness: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="axis chord straightness",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays."""
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                rho=0.0,
+                theta=0.0,
+                zeta=np.linspace(0.0, 2 * np.pi / eq.NFP, 33),
+                NFP=1,
+                sym=False,
+            )
+        else:
+            grid = self._grid
+
+        errorif(
+            grid.num_nodes < 3,
+            ValueError,
+            "AxisChordStraightness needs at least 3 zeta samples so there are "
+            "interior axis points to compare with the endpoint chord.",
+        )
+        errorif(
+            not np.allclose(grid.nodes[:, 0], 0.0),
+            ValueError,
+            "AxisChordStraightness needs a grid at rho = 0.",
+        )
+        self._dim_f = 3 * (grid.num_nodes - 2)
+        self._data_keys = ["X", "Y", "Z"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        # Built against the Equilibrium, not eq.axis: X and Y must come out at
+        # phi = zeta + omega. See the class docstring.
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute perpendicular axis displacement from the branch endpoint chord."""
+        constants = self._get_deprecated_constants(constants)
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        x = jnp.vstack((data["X"], data["Y"], data["Z"])).T
+        p0 = x[0]
+        p1 = x[-1]
+        chord = p1 - p0
+        chord_norm2 = jnp.sum(chord**2) + jnp.finfo(chord.dtype).eps
+        t = jnp.sum((x - p0) * chord, axis=1) / chord_norm2
+        closest = p0 + t[:, jnp.newaxis] * chord
+        perpendicular = x - closest
+        return perpendicular[1:-1].ravel()
 
 
 class BScaleLength(_Objective):

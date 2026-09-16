@@ -39,6 +39,7 @@ from ._generic import (
 )
 from ._geometry import (
     AspectRatio,
+    AxisChordStraightness,
     AxisTorsion,
     BScaleLength,
     Elongation,
@@ -47,8 +48,10 @@ from ._geometry import (
     MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
-    SLAMElongation,
     SLAMCenter,
+    SLAMCrossSection,
+    SLAMElongation,
+    SLAMStraightSectionCenter,
     SurfaceArea,
     Volume,
 )

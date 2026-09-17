@@ -802,8 +802,8 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     + "(\\mathbf{B} \\cdot \\nabla B)}{B^4}",
     units="~",
     units_long="None",
-    description="Triple product quasisymmetry metric, normalized by the major "
-    "radius and the local field strength",
+    description="Triple product quasisymmetry metric, normalized by the cylindrical R "
+    "coordinate and the local field strength",
     dim=1,
     params=[],
     transforms={},

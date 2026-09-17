@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatible with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 
 Performance Improvements
@@ -15,6 +16,7 @@ Performance Improvements
 
 Breaking Changes and Deprecations
 
+- ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
@@ -32,20 +34,6 @@ Bug Fixes
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
-
-
-
-
-v0.17.3
--------
-
-New Features
-
-- Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatible with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
-
-Deprecations
-
-- ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
 
 
 v0.17.3

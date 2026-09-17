@@ -434,8 +434,8 @@ class QuasisymmetryTripleProduct(_Objective):
 
     f_T = ∇ψ × ∇B ⋅ ∇(𝐁 ⋅ ∇B)  (T⁴/m²)
 
-    With ``scale_invariant`` this is made dimensionless with the major radius and
-    the local field strength:
+    With ``scale_invariant`` this is made dimensionless with the local cylindrical
+    radius and field strength:
 
     f̂_T = R² f_T / B⁴
 

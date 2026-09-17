@@ -84,6 +84,7 @@ Omnigenity
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.Omnigenity
+    desc.objectives.OmnigenityHarmonics
     desc.objectives.Isodynamicity
 
 

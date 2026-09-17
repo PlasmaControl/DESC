@@ -175,6 +175,8 @@ Magnetic Fields
     desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.OmnigenousField
+    desc.magnetic_fields.OmnigenousFieldLCForm
+    desc.magnetic_fields.OmnigenousFieldOOPS
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
@@ -263,6 +265,7 @@ Objective Functions
     desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.Omnigenity
+    desc.objectives.OmnigenityHarmonics
     desc.objectives.PlasmaCoilSetDistanceBound
     desc.objectives.PlasmaCoilSetMinDistance
     desc.objectives.PlasmaVesselDistance

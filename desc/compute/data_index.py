@@ -286,6 +286,8 @@ _class_inheritance = {
         "desc.geometry.core.Curve",
     ],
     "desc.magnetic_fields._core.OmnigenousField": [],
+    "desc.magnetic_fields._core.OmnigenousFieldOOPS": [],
+    "desc.magnetic_fields._core.OmnigenousFieldLCForm": [],
 }
 _topological_order = {}
 data_index = {p: {} for p in _class_inheritance.keys()}

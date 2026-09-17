@@ -7,6 +7,7 @@ from ._core import (
     ScalarPotentialField,
     ScaledMagneticField,
     SplineMagneticField,
+    SplineZeta,
     SumMagneticField,
     ToroidalMagneticField,
     VectorPotentialField,

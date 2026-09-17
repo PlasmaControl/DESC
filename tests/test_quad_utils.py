@@ -21,6 +21,7 @@ from desc.integrals.quad_utils import (
     simpson2,
     tanh_sinh,
     uniform,
+    zernike_nodes_weights,
 )
 
 
@@ -97,6 +98,20 @@ def test_leggauss_lobatto():
     # make sure differentiable
     # https://github.com/PlasmaControl/DESC/pull/854#discussion_r1733323161
     assert np.isfinite(grad(fun)(jnp.arange(10) * np.pi)).all()
+
+
+@pytest.mark.unit
+def test_zernike_nodes_weights():
+    """Radial and poloidal quadratures each integrate a known function exactly."""
+    n_rho, n_theta = 6, 8
+    rho, w_rho, theta, w_theta = zernike_nodes_weights(n_rho, n_theta)
+    assert rho.shape == w_rho.shape == (n_rho,)
+    assert theta.shape == w_theta.shape == (n_theta,)
+
+    # int_0^1 rho drho = 1/2, exactly reproduced by the Gauss-Jacobi rule.
+    np.testing.assert_allclose(np.sum(w_rho * rho), 0.5, atol=1e-12)
+    # theta is a plain uniform rule on [0, 2*pi).
+    np.testing.assert_allclose(np.sum(w_theta), 2 * np.pi, atol=1e-12)
 
 
 @pytest.mark.unit

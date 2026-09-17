@@ -3,7 +3,7 @@
 import numpy as np
 
 from desc.basis import FourierSeries
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.transform import Transform
 
 from .linear_objectives import FixSumModesLambda, FixSumModesR, FixSumModesZ
@@ -52,7 +52,7 @@ def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
         phi = qsc.phi
         dphi = phi[1] - phi[0]
 
-        grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
+        grid = LinearGridFlux(M=0, L=0, zeta=phi, NFP=nfp)
         Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")
 
         # from integrating eqn A20 in
@@ -225,7 +225,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
         Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
         Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
 
-    grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
+    grid = LinearGridFlux(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
     Ztrans = Transform(grid, Zbasis, build_pinv=True, method="auto")
     Rtrans_sin = Transform(grid, Rbasis_sin, build_pinv=True, method="auto")
@@ -687,7 +687,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     bases["Zbasis_cos"] = Zbasis
     bases["Zbasis_sin"] = Zbasis_sin
 
-    grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
+    grid = LinearGridFlux(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
     Ztrans = Transform(grid, Zbasis, build_pinv=True, method="auto")
     Rtrans_sin = Transform(grid, Rbasis_sin, build_pinv=True, method="auto")

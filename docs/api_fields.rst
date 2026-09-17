@@ -62,6 +62,19 @@ There is also a class for representing omnigenous magnetic fields:
 
     desc.magnetic_fields.OmnigenousField
 
+``OmnigenousFieldConstructed`` stores a scalar QI reference in Boozer coordinates,
+with no independent optimization parameters. Create a snapshot with
+``from_samples`` or ``from_equilibrium`` and evaluate it with ``compute`` using
+``|B| constructed`` (tesla) or ``Bc normalized`` (dimensionless). It does not
+define a laboratory-frame vector field.
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.OmnigenousFieldConstructed
+
 For analyzing the structure of magnetic fields, it is often useful to find the trajectories
 of magnetic field lines, which can be done via ``desc.magnetic_fields.field_line_integrate``.
 

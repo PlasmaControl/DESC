@@ -1,11 +1,13 @@
-"""Objectives for targeting quasisymmetry."""
+"""Objectives for targeting quasisymmetry, omnigenity, and isodynamicity."""
 
 import warnings
+
+import numpy as np
 
 from desc.backend import jnp
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
-from desc.compute._omnigenity import _omnigenity_mapping
+from desc.compute._omnigenity import _omnigenity_mapping, _sample_boozer_data
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
@@ -872,6 +874,296 @@ class Omnigenity(_Objective):
             field_data["eta"]
         )
         return omnigenity_error * weights
+
+
+class QuasiIsodynamicityConstructed(_Objective):
+    """Difference from a QI reference constructed with the SQuID-like method.
+
+    The raw residual is ``B - B_C`` in tesla, flattened in C order
+    (rho, fieldline, zeta). The reference field is reconstructed from the current
+    parameters on every evaluation. With zero target and no loss, the scalar
+    objective is one half of the sum over surfaces of the angular mean squared
+    residual, using uniform field-line weights and trapezoidal toroidal weights.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        The only optimizable object. The constructed field adds no degrees of freedom.
+    grid : Grid or None
+        Full uniform nonsymmetric mesh used for the Boozer transform, including
+        its actual angular nodes. Without a grid, construct the rho=1 surface.
+    num_alpha, num_zeta, num_B_levels : int
+        Number of uniform midpoint labels, endpoint-inclusive Boozer toroidal
+        samples and inverse-branch field levels. Defaults are 16, 201 and 81.
+    M_booz, N_booz : int or None
+        Boozer harmonic resolutions. None defaults independently to twice the
+        equilibrium resolution; explicit zero does not disable the transform.
+    zeta0 : float
+        Boozer period origin in radians, default 0. Symmetric equilibria require
+        an integer value of ``zeta0*NFP/pi``.
+    helicity : tuple or None
+        Only poloidal closure ``(0, eq.NFP)`` is implemented, selected by None.
+    need_boozer : bool
+        Use the Boozer construction path. False is reserved and raises during build.
+    enforce_equal_bounce_distance : bool
+        Impose the complete QI construction. False reserves a weaker common-minimum
+        single-well construction and raises during build in this version.
+    method : {"B", "J"}
+        B compares field strengths. J reserves a PRX Energy action comparison and
+        raises NotImplementedError. This option is never passed to transforms.
+    span_rtol, field_tol : float
+        Relative minimum surface span and dimensionless field tolerance.
+    weight_regularization : float
+        Positive regularization of the construction weights, default 1e-12.
+    knot_margin : float
+        Minimum same-branch knot spacing divided by the field period, default 1e-12.
+    fieldline_batch_size, surf_batch_size : int or None
+        DESC batch sizes, default None and 1.
+
+    Notes
+    -----
+    Invalid starting fields raise during build. Invalid trial fields produce NaN
+    residuals, so a finite value never certifies a failed construction. Derivatives
+    are piecewise derivatives of the active minima, roots and center constraints.
+
+    As in the quasisymmetry objectives, normalization uses a characteristic field
+    strength fixed at build time. This differs from the paper's normalization by
+    the current field-strength span on each surface. With ``normalize=False``, the
+    residual retains units of tesla; angular quadrature weights are still applied.
+
+    Angular averaging keeps the objective scale independent of angular sampling
+    density; each additional surface contributes another mean squared residual.
+    This quadrature differs from :class:`Omnigenity`, so its objective weight is
+    not directly transferable when combining objectives.
+
+    References
+    ----------
+    A. G. Goodman et al., Journal of Plasma Physics 89, 905890504 (2023),
+    doi:10.1017/S002237782300065X. The paired-center projection preserves common
+    bounce distances and differs from the paper's discrete correction sequence.
+    """
+
+    __doc__ = __doc__.replace(
+        "\n    Notes\n",
+        collect_docs(
+            target_default="``target=0``.",
+            bounds_default="``target=0``.",
+            normalize_detail=" Uses the characteristic magnetic field at build time.",
+        )
+        + "\n    Notes\n",
+    )
+    _coordinates = "rtz"
+    _units = "(T)"
+    _print_value_fmt = "Constructed quasi-isodynamicity error: "
+    _static_attrs = _Objective._static_attrs + [
+        "_settings",
+        "_sampling",
+        "_method",
+    ]
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        num_alpha=16,
+        num_zeta=201,
+        num_B_levels=81,
+        M_booz=None,
+        N_booz=None,
+        zeta0=0.0,
+        helicity=None,
+        span_rtol=1e-12,
+        field_tol=1e-12,
+        weight_regularization=1e-12,
+        knot_margin=1e-12,
+        fieldline_batch_size=None,
+        surf_batch_size=1,
+        name="constructed quasi-isodynamicity",
+        jac_chunk_size=None,
+        *,
+        need_boozer=True,
+        enforce_equal_bounce_distance=True,
+        method="B",
+    ):
+        errorif(
+            not isinstance(method, str),
+            TypeError,
+            "method must be a string, either 'B' or 'J'.",
+        )
+        errorif(method not in ("B", "J"), ValueError, "method must be 'B' or 'J'.")
+        # TODO: Implement a second-invariant (J) residual.
+        errorif(
+            method == "J",
+            NotImplementedError,
+            "method='J' is reserved and not implemented.",
+        )
+        # The field factory owns construction defaults, policies and validation.
+        # Only options defining the objective itself are interpreted here.
+        self._settings = dict(
+            need_boozer=need_boozer,
+            enforce_equal_bounce_distance=enforce_equal_bounce_distance,
+            helicity=helicity,
+            num_B_levels=num_B_levels,
+            span_rtol=span_rtol,
+            field_tol=field_tol,
+            weight_regularization=weight_regularization,
+            knot_margin=knot_margin,
+            fieldline_batch_size=fieldline_batch_size,
+            surf_batch_size=surf_batch_size,
+        )
+        self._method = method
+        self._grid = grid
+        self._sampling = dict(
+            num_alpha=num_alpha,
+            num_zeta=num_zeta,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            zeta0=zeta0,
+        )
+        if target is None and bounds is None:
+            target = 0.0
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Prepare static Boozer transforms and validate the current input field."""
+        from desc.magnetic_fields import OmnigenousFieldConstructed
+
+        eq = self.things[0]
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+        # The factory determines the construction domain and validates the initial
+        # field. Retain only static sampling coordinates, never the initial Bc.
+        field = OmnigenousFieldConstructed.from_equilibrium(
+            eq,
+            grid=self._grid,
+            **self._sampling,
+            **self._settings,
+        )
+        # Keep the factory's canonical scalar types for static construction options.
+        # NumPy scalar booleans otherwise become 0D arrays in PyTree metadata.
+        settings = field.settings
+        self._settings = {key: settings[key] for key in self._settings}
+        M_booz, N_booz = settings["M_booz"], settings["N_booz"]
+        grid = self._grid
+        if grid is None:
+            grid = LinearGrid(
+                rho=np.asarray(field.rho),
+                M=2 * M_booz,
+                N=2 * N_booz,
+                NFP=eq.NFP,
+                sym=False,
+            )
+        self._data_keys = ["|B|_mn_B", "iota"]
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(
+            self._data_keys, obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        )
+        samples_per_surface = field.fieldline_labels.size * field.zeta.size
+        self._dim_f = field.rho.size * samples_per_surface
+        # Average over a field period, with half weights at its two endpoints.
+        # The field-line labels are uniform and exclude the duplicate endpoint.
+        weights = np.ones(field.zeta.size)
+        weights[[0, -1]] = 0.5
+        weights /= field.fieldline_labels.size * (field.zeta.size - 1)
+        weights = np.broadcast_to(
+            weights, (field.rho.size, field.fieldline_labels.size, field.zeta.size)
+        )
+        # These weights belong to the residual samples, not the Boozer fit grid.
+        self._constants = {
+            "profiles": profiles,
+            "transforms": transforms,
+            "rho": field.rho,
+            "fieldline_labels": field.fieldline_labels,
+            "zeta": field.zeta,
+            "M_booz": M_booz,
+            "N_booz": N_booz,
+            "NFP": field.NFP,
+            "sym": field.sym,
+            "fieldline_batch_size": self._settings.get("fieldline_batch_size"),
+            "surf_batch_size": self._settings.get("surf_batch_size"),
+            "quad_weights": np.sqrt(weights).ravel(),
+        }
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Return residuals in tesla, masking failed surfaces with NaN."""
+        from desc.magnetic_fields import OmnigenousFieldConstructed
+
+        constants = self._get_deprecated_constants(constants)
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            surf_batch_size=self._settings.get("surf_batch_size"),
+        )
+        B, iota = _sample_boozer_data(
+            constants["transforms"],
+            data,
+            constants["fieldline_labels"],
+            constants["zeta"],
+            fieldline_batch_size=self._settings.get("fieldline_batch_size"),
+            surf_batch_size=self._settings.get("surf_batch_size"),
+        )
+        field = OmnigenousFieldConstructed.from_samples(
+            B,
+            rho=constants["rho"],
+            fieldline_labels=constants["fieldline_labels"],
+            zeta=constants["zeta"],
+            iota=iota,
+            # Objective constants are dynamic PyTree leaves under the DESC JIT
+            # wrapper. Read construction metadata from the static transforms.
+            NFP=constants["transforms"]["grid"].NFP,
+            sym=constants["transforms"]["B"].basis.sym == "cos",
+            check=False,
+            **self._settings,
+        )
+        bc = field.compute("|B| constructed", check=False)["|B| constructed"]
+        return jnp.where(
+            field.valid_surface[:, None, None], B - bc.reshape(B.shape), jnp.nan
+        ).ravel()
+
+    @property
+    def need_boozer(self):
+        """bool: Use Boozer coordinates independently of harmonic resolution."""
+        return self._settings["need_boozer"]
+
+    @property
+    def enforce_equal_bounce_distance(self):
+        """bool: Apply the full QI enhancement to the common-minimum single wells."""
+        return self._settings["enforce_equal_bounce_distance"]
+
+    @property
+    def method(self):
+        """str: Residual definition; currently only B is implemented."""
+        return self._method
 
 
 class Isodynamicity(_Objective):

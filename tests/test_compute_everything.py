@@ -32,6 +32,7 @@ from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
+    OmnigenousFieldConstructed,
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
 
@@ -123,6 +124,12 @@ def test_compute_everything():
         "modes_R": [[0, 0], [1, 0], [0, 1]],
         "modes_Z": [[-1, 0], [0, -1]],
     }
+    constructed_rho = np.array([0.5, 1.0])
+    constructed_labels = np.arange(4) * np.pi / 2
+    constructed_zeta = np.linspace(0, 2 * np.pi / 3, 9)
+    constructed_B = np.broadcast_to(
+        2 + np.abs(2 * constructed_zeta / constructed_zeta[-1] - 1), (2, 4, 9)
+    )
     things = {
         # equilibria
         "desc.equilibrium.equilibrium.Equilibrium": get("W7-X"),
@@ -172,6 +179,17 @@ def test_compute_everything():
             helicity=(0, 2),
             B_lm=np.array([0.8, 0.9, 1.1, 1.2]),
             x_lmn=np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4]),
+        ),
+        "desc.magnetic_fields._core.OmnigenousFieldConstructed": (
+            OmnigenousFieldConstructed.from_samples(
+                constructed_B,
+                rho=constructed_rho,
+                fieldline_labels=constructed_labels,
+                zeta=constructed_zeta,
+                iota=np.array([0.5, 0.7]),
+                NFP=3,
+                num_B_levels=9,
+            )
         ),
         # coils
         "desc.coils.FourierRZCoil": FourierRZCoil(
@@ -230,6 +248,9 @@ def test_compute_everything():
         "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
+        "desc.magnetic_fields._core.OmnigenousFieldConstructed": {
+            "grid": LinearGrid(rho=constructed_rho, M=4, N=5, NFP=3)
+        },
     }
 
     with open("tests/inputs/master_compute_data_rpz.pkl", "rb") as file:
@@ -239,7 +260,10 @@ def test_compute_everything():
     error_rpz = False
 
     # some things can't compute "phi" and therefore can't convert to XYZ basis
-    no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
+    no_xyz_things = [
+        "desc.magnetic_fields._core.OmnigenousField",
+        "desc.magnetic_fields._core.OmnigenousFieldConstructed",
+    ]
 
     with warnings.catch_warnings():
         # Max resolution of master_compute_data_rpz.pkl limited by GitHub file

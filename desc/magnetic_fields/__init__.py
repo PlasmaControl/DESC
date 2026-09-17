@@ -3,6 +3,7 @@
 from ._core import (
     MagneticFieldFromUser,
     OmnigenousField,
+    OmnigenousFieldConstructed,
     PoloidalMagneticField,
     ScalarPotentialField,
     ScaledMagneticField,

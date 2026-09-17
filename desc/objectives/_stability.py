@@ -34,63 +34,6 @@ overwrite_stability = {
 }
 
 
-def _agni_sigma_shift(obj, constants):
-    """Shift-invert sigma for the finite-n eigensolve. Fixed unless tracking is on.
-
-    DEFAULT (AGNI_SIGMA_MODE=fixed): `sigma_factor * self._lambda_guess`, both
-    static -- the historical behaviour, byte-for-byte. Nothing below runs.
-
-    TRACKING (AGNI_SIGMA_MODE=track): sigma is re-based on `constants["lambda_guess"]`,
-    which `update_state` refreshes every outer step from the TRUSTED dense eigsh
-    (see the note at the end of update_state). That entry is a traced array, so
-    writing a new value of the same shape/dtype changes a VALUE, not a signature --
-    no recompile. This is the mechanism the file already documents and already
-    maintains; the only thing that was missing is that sigma read the STATIC
-    attribute instead of this traced one.
-
-    WHY tracking is wanted: the near-zero eigenvalue cluster sits at a FIXED
-    mu = 1/|sigma|, while the wanted mode's mu = 1/(lambda - sigma) moves as the
-    optimizer drives lambda -> 0. With sigma pinned, the wanted mode slides INTO
-    the cluster: separation 1.150 at the start, 1.023 at the observed drift point,
-    1.0046. At separation 1.0134 the objective read +2.14e-02 on a
-    genuinely UNSTABLE equilibrium. See BENCHMARKING.md section 10.
-
-    SCOPE (BENCHMARKING.md 10.8): this re-bases sigma from the value refreshed once
-    per OUTER step. It does NOT track sigma per trial point inside a line search --
-    that remains blocked, and would also break objective purity.
-
-    !! FACTOR WARNING !! `_sigma_factor` defaults to 10, which is correct for the
-    CONSTRUCTION-time convention (callers pass lambda_guess = lambda/10, so
-    10 * lambda/10 = lambda). Once `lambda_guess` holds the TRUE lambda, a factor of
-    10 puts sigma at 10x lambda and separation gets WORSE than the fixed default
-    (1.111 vs 1.150). BENCHMARKING.md 10.4(b) measured the sweet spot at
-    sigma ~ 2-3 x lambda: closer than that and the LU conditioning
-    (|lam - sigma| = 1.95e-5 against ||A|| = 2.8e7) costs accuracy instead.
-    Set AGNI_SIGMA_FACTOR=2.5 when enabling tracking.
-    """
-    import os as _os
-
-    import jax as _jax  # not imported at module scope in this file
-
-    # AGNI_SIGMA_MODE=track only. 'fixed' and 'adapt' both leave sigma alone here --
-    # 'adapt' re-shifts INSIDE the eigensolve instead, which needs no state.
-    # "track" or "track+adapt" both track here; "adapt" alone leaves sigma fixed at
-    # this level and does its re-shift inside the eigensolve instead.
-    if "track" not in _os.environ.get("AGNI_SIGMA_MODE", "fixed").lower():
-        return obj._sigma_factor * obj._lambda_guess
-
-    factor = float(_os.environ.get("AGNI_SIGMA_FACTOR", "2.5"))
-    lam_g = None if constants is None else constants.get("lambda_guess", None)
-    if lam_g is None:  # pre-first-refresh: nothing to track yet
-        return obj._sigma_factor * obj._lambda_guess
-    # stop_gradient: sigma is a SOLVER SETTING, not a physical parameter. It comes
-    # from the PREVIOUS outer step, so it is constant w.r.t. the current params --
-    # but JAX must be told, or a spurious dsigma/dp path appears. Hellmann-Feynman
-    # contains no sigma at all, so this cannot bias the gradient's form; a poor
-    # sigma degrades the ACCURACY of v, never the formula.
-    return factor * _jax.lax.stop_gradient(jnp.asarray(lam_g))
-
-
 class MercierStability(_Objective):
     """The Mercier criterion is a fast proxy for MHD stability.
 
@@ -657,24 +600,24 @@ class BallooningStability(_Objective):
 
 
 class FinitenStability(_Objective):
-    """A type of ideal MHD instability.
+    """Ideal MHD instability.
 
-    Finite-n ideal MHD ballooning modes are of significant interest.
+    Finite-n ideal MHD modes are of significant interest.
     With this class, we optimize MHD equilibria against the finite-n unstable modes.
 
     ``compute`` evaluates ``finite-n lambda3 rayleigh``: the Rayleigh quotient
     ``lambda_R = v^T A(p) v / v^T v`` where ``v`` is eigensolved from ``A(p)`` at that
-    same ``p`` (ARPACK on the host, via ``jax.pure_callback``). Because a callback
-    output carries no tangent, AD reduces the derivative to the Hellmann-Feynman
-    contraction ``v^T (dA/dp) v / v^T v`` automatically.
+    same ``p``. The eigensolve sits behind a ``custom_vjp`` with zero cotangents,
+    so AD reduces the derivative to the Hellmann-Feynman contraction
+    ``v^T (dA/dp) v / v^T v``. ``eigensolver`` picks the solve: ``eigsh_callback``
+    (dense ARPACK on the host, default), ``jax_lanczos`` (dense shift-invert on
+    device) or ``pcg_deflated`` (matrix-free Jacobi-Davidson; with ``coarse_grid``
+    and ``AGNI_COARSE_DEFL=1`` its preconditioner is deflated by coarse modes).
 
     The eigenvector is deliberately NOT cached. ProximalProjection re-solves the
     equilibrium before every objective evaluation; ``L_lmn`` then moves, ``theta``
     moves with it, and a 7e-5 mesh shift already sends the Rayleigh residual to ~4800
-    and flips lambda_R's sign. See WHY_V_CANNOT_BE_CACHED.md. The matrix-free solver
-    is not used anywhere in this objective. Historical note: ``update_state``
-    between accepted optimization steps to refresh the cached eigenvalue/eigenfunction
-    by running the warm-started matrix-free eigensolver.
+    and flips lambda_R's sign.
 
     Parameters
     ----------
@@ -692,8 +635,23 @@ class FinitenStability(_Objective):
         the same ``x``; reusing it after the equilibrium moves is silently
         wrong. Not for use by an optimizer or line search. Default None.
     lambda_guess : float, optional
-        Cached eigenvalue. Updated by ``update_state`` and used to set the
-        shift-invert sigma.
+        Eigenvalue estimate. ``sigma = sigma_factor * lambda_guess`` at
+        construction; must sit below the spectrum.
+    sigma_factor : float
+        Multiplier for the fixed shift. Default 1.3.
+    adapt : bool
+        pcg_deflated only. Each solve stores its lambda and eigenvector; the next
+        solve uses ``sigma = sigma_factor * lambda`` and starts from that vector.
+        The first solve uses ``sigma_factor * lambda_guess`` and the coarse seed.
+    eigensolver : {"eigsh_callback", "jax_lanczos", "pcg_deflated"}, optional
+        Eigensolver. None falls back to ``AGNI_EIGENSOLVER``, then eigsh_callback.
+    state_solver : {"dense_eigsh", "matfree"}
+        Solve used by ``update_state``.
+    coarse_grid, coarse_diffmat, coarse_density : optional
+        Coarse PEST level whose modes seed and deflate ``pcg_deflated``.
+    num_matvecs, k_defl, jd_outer, jd_inner, jd_maxdim, jd_keep, jd_tol, jd_theta_tol
+        Solver options forwarded to ``finite-n lambda3 rayleigh`` when not None
+        (see its registration); None falls back to the environment, then default.
     lambda0 : float
         Threshold for ``metric="shifted_relu"``.
     w0 : float
@@ -746,14 +704,19 @@ class FinitenStability(_Objective):
         "_use_v_fixed",
         "_lambda_guess",
         "_state_solver",
-        "_matfree_solver",
         "_sigma_factor",
+        # adapt: a flag and a host callback (a function, hashed by identity)
+        "_adapt",
+        "_store_guess",
         "_eigensolver",
         "_num_matvecs",
-        "_cg_tol",
-        "_cg_maxiter",
         "_k_defl",
-        "_rr_refine",
+        "_jd_outer",
+        "_jd_inner",
+        "_jd_maxdim",
+        "_jd_keep",
+        "_jd_tol",
+        "_jd_theta_tol",
         "_eigsh_tol",
         "_coupled_rt",
         "_n_rho_coupled",
@@ -820,14 +783,17 @@ class FinitenStability(_Objective):
         coarse_diffmat=None,
         coarse_density=None,
         state_solver="dense_eigsh",
-        matfree_solver=None,
         sigma_factor=1.3,
+        adapt=False,
         eigensolver=None,
         num_matvecs=None,
-        cg_tol=None,
-        cg_maxiter=None,
         k_defl=None,
-        rr_refine=None,
+        jd_outer=None,
+        jd_inner=None,
+        jd_maxdim=None,
+        jd_keep=None,
+        jd_tol=None,
+        jd_theta_tol=None,
         eigsh_tol=1e-8,
         coupled_rt=False,
         n_rho_coupled=None,
@@ -855,20 +821,24 @@ class FinitenStability(_Objective):
         self._grid = grid
         # OPTIONAL SECOND LEVEL, for coarse-space deflation (AGNI_COARSE_DEFL).
         # A coarse PEST grid + DiffMat whose generalized modes are prolonged to
-        # supply the fine solve's seed and deflation basis. See
-        # precond_stage2/METHOD.md sections 5 and 10. Unset -> nothing changes.
+        # supply the fine solve's seed and deflation basis. Unset -> nothing
+        # changes.
         self._coarse_grid = coarse_grid
         self._coarse_diffmat = coarse_diffmat
         self._coarse_density = coarse_density
         self._state_solver = state_solver
-        self._matfree_solver = matfree_solver
         self._sigma_factor = sigma_factor
+        self._adapt = adapt
+        self._store_guess = None
         self._eigensolver = eigensolver
         self._num_matvecs = num_matvecs
-        self._cg_tol = cg_tol
-        self._cg_maxiter = cg_maxiter
         self._k_defl = k_defl
-        self._rr_refine = rr_refine
+        self._jd_outer = jd_outer
+        self._jd_inner = jd_inner
+        self._jd_maxdim = jd_maxdim
+        self._jd_keep = jd_keep
+        self._jd_tol = jd_tol
+        self._jd_theta_tol = jd_theta_tol
         self._eigsh_tol = eigsh_tol
         self._coupled_rt = coupled_rt
         self._n_rho_coupled = n_rho_coupled
@@ -1010,7 +980,10 @@ class FinitenStability(_Objective):
             self._coarse_rho1d = None
         v_guess = self._v_guess
         if v_guess is None:
-            v_guess = np.ones(3 * n_rho * n_theta * n_zeta)
+            # adapt: zeros mean "no previous vector", so the coarse seed is used
+            v_guess = (np.zeros if self._adapt else np.ones)(
+                3 * n_rho * n_theta * n_zeta
+            )
         lambda_guess = setdefault(self._lambda_guess, -1e-1)
 
         # Coarse level, mirroring the fine one. rho is invariant under the
@@ -1059,6 +1032,19 @@ class FinitenStability(_Objective):
             "lambda_guess": jnp.asarray(lambda_guess),
             **coarse_constants,
         }
+        if self._adapt:
+            # Called from inside the jitted objective with each solve's result.
+            # It writes into THIS object's `_constants`, which the next call reads
+            # as traced values, so nothing recompiles.
+            def _store_guess(lam, v):
+                lam, v = np.asarray(lam).reshape(-1), np.asarray(v).reshape(-1)
+                c = self._constants
+                if lam.size == 1 and v.shape == c["v_guess"].shape:
+                    if np.isfinite(lam[0]) and np.all(np.isfinite(v)):
+                        c["lambda_guess"] = np.asarray(lam[0], dtype=float)
+                        c["v_guess"] = v.astype(c["v_guess"].dtype)
+
+            self._store_guess = _store_guess
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _mapped_grid(self, params, constants, level="fine"):
@@ -1153,19 +1139,18 @@ class FinitenStability(_Objective):
         return data
 
     def compute_data(self, params, constants=None, solve=False):
-        """Evaluate the fixed-vector Rayleigh quotient of the finite-n operator.
+        """Evaluate ``finite-n lambda3 rayleigh`` at ``params``.
 
+        Every call eigensolves ``A(params)`` with the configured ``eigensolver``
+        (dense ARPACK, dense shift-invert Lanczos, or matrix-free Jacobi-Davidson)
+        and returns the Rayleigh quotient with that eigenvector held fixed for AD.
         ``solve`` is accepted only for backwards compatibility and must be False.
-        This objective never solves an eigenproblem here: the eigenpair comes from
-        dense ``finite-n lambda3`` + eigsh in ``update_state``, and ``compute``
-        differentiates the Rayleigh quotient with that eigenvector held fixed.
         """
         errorif(
             solve,
             ValueError,
-            "FinitenStability.compute_data(solve=True) is not supported: it would "
-            "run the matrix-free eigensolver. Refresh the eigenpair with "
-            "update_state(state_solver='dense_eigsh') instead.",
+            "FinitenStability.compute_data(solve=True) is not supported; every call "
+            "already eigensolves at params.",
         )
         constants = self._constants if constants is None else constants
         eq = self.things[0]
@@ -1255,13 +1240,18 @@ class FinitenStability(_Objective):
             # here is what made the optimizer minimize a stale-vector quotient:
             # ProximalProjection re-solves the equilibrium before every evaluation,
             # L_lmn moves, theta moves with it, and a 7e-5 mesh shift already sends
-            # the Rayleigh residual to ~4800. See WHY_V_CANNOT_BE_CACHED.md.
-            # Fixed by default; AGNI_SIGMA_MODE=track re-bases it on the traced
-            # constants["lambda_guess"]. See _agni_sigma_shift -- including the
-            # FACTOR WARNING (set AGNI_SIGMA_FACTOR=2.5 when tracking).
-            "sigma": _agni_sigma_shift(self, constants),
+            # the Rayleigh residual to ~4800.
+            # Fixed shift from the construction-time lambda_guess. Under the
+            # matrix-free JD solve it only shifts the preconditioner.
+            "sigma": self._sigma_factor * self._lambda_guess,
             "eigsh_tol": self._eigsh_tol,
         }
+        if self._adapt:
+            _lg = constants["lambda_guess"]
+            options["sigma"] = self._sigma_factor * jnp.where(
+                _lg < 0, _lg, self._lambda_guess
+            )
+            options["v_guess"] = constants["v_guess"]
 
         # Solver options, forwarded as KWARGS -- but ONLY the ones the caller
         # actually set. They used to be stored on `self` and never passed, so the
@@ -1270,20 +1260,20 @@ class FinitenStability(_Objective):
         # Forwarding them unconditionally is WRONG even though it looks tidier:
         # an unset parameter would send its own default down, and since the kwarg
         # now beats the environment, that default would silently override every
-        # AGNI_* / CG_* variable in the job scripts. Measured: T1 has
-        # AGNI_NUM_MATVECS=50 and passes nothing, so an unconditional forward ran
-        # it at the objective's default of 64 instead -- same eigenvalue to 10
-        # digits, but |jit-dense| moved 7.163e-10 -> 7.154e-10.
+        # AGNI_* environment variable.
         #
         # None therefore means "not set": fall through to the environment, then
         # to the compute function's own default.
         for _key, _val in (
             ("eigensolver", self._eigensolver),
             ("num_matvecs", self._num_matvecs),
-            ("cg_tol", self._cg_tol),
-            ("cg_maxiter", self._cg_maxiter),
             ("k_defl", self._k_defl),
-            ("rr_refine", self._rr_refine),
+            ("jd_outer", self._jd_outer),
+            ("jd_inner", self._jd_inner),
+            ("jd_maxdim", self._jd_maxdim),
+            ("jd_keep", self._jd_keep),
+            ("jd_tol", self._jd_tol),
+            ("jd_theta_tol", self._jd_theta_tol),
         ):
             if _val is not None:
                 options[_key] = _val
@@ -1296,7 +1286,7 @@ class FinitenStability(_Objective):
             options["density"] = self._density
         options.update(coarse_opts)
 
-        return eq.compute(
+        data = eq.compute(
             "finite-n lambda3 rayleigh",
             grid=grid,
             diffmat=self._diffmat,
@@ -1305,6 +1295,13 @@ class FinitenStability(_Objective):
             override_grid=False,
             **options,
         )
+        if self._adapt and not self._use_v_fixed:
+            jax.debug.callback(
+                self._store_guess,
+                jax.lax.stop_gradient(data["finite-n lambda3 rayleigh"]),
+                jax.lax.stop_gradient(data["finite-n eigenfunction3 rayleigh"]),
+            )
+        return data
 
     def metric(self, lam, constants=None):
         """Apply the requested scalar metric to the finite-n eigenvalue."""
@@ -1327,14 +1324,15 @@ class FinitenStability(_Objective):
 
         Call this before each one-step DESC optimization solve. ``compute`` then
         returns the fixed-mode Rayleigh quotient, so DESC computes the gradient in
-        its usual way while the expensive eigensolve stays outside AD. By default
-        this preserves the original warm-started matrix-free refresh. If
-        ``state_solver="dense_eigsh"``, the cached eigenpair is instead refreshed
-        with dense ``finite-n lambda3`` and SciPy ARPACK ``eigsh``.
+        its usual way while the expensive eigensolve stays outside AD.
+        ``state_solver="dense_eigsh"`` (default) refreshes with dense
+        ``finite-n lambda3`` and SciPy ARPACK ``eigsh``; ``"matfree"`` runs
+        ``compute_data`` (the configured eigensolver) and refreshes only
+        ``lambda_guess``.
         """
         constants = self._constants if constants is None else constants
         state_solver = str(self._state_solver).lower()
-        if state_solver in {"matfree", "shiftinvert_cg"}:
+        if state_solver == "matfree":
             # MATRIX-FREE REFRESH. Required above ~32x32x12: the dense branch
             # below assembles the full fine matrix, which is 10.4 GB at
             # 32x32x12 and 53.5 GB at 48x48x12 --
@@ -1351,7 +1349,7 @@ class FinitenStability(_Objective):
             #     the prolonged coarse mode (`_seed_v0`) anyway, and merely
             #     un-warm-started without it.
             #
-            # `lambda_guess` IS refreshed, so AGNI_SIGMA_MODE=track still works.
+            # `lambda_guess` IS refreshed in `_constants`.
             #
             # Cost: one extra eigensolve per OUTER step -- not per objective
             # call -- so it amortises over the optimizer's inner evaluations.
@@ -1364,7 +1362,7 @@ class FinitenStability(_Objective):
             if hasattr(self, "_constants"):
                 self._constants["lambda_guess"] = lam
             return data
-        elif state_solver in {"dense", "dense_eigsh", "eigsh"}:
+        elif state_solver == "dense_eigsh":
             eq = self.things[0]
             grid = self._mapped_grid(params, constants)
             options = {

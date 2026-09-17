@@ -17,6 +17,14 @@ test_jax_lanczos_matches_dense
     Lanczos) reproduces the dense eigenvalue through
     ``finite-n lambda3 rayleigh``.
 
+test_jd_two_level_matches_dense / test_jd_gradient_matches_dense_eigenvector
+    ``eigensolver="pcg_deflated"`` (matrix-free Jacobi-Davidson with ring +
+    coarse-deflation preconditioner) reproduces the dense eigenpair, and its
+    Hellmann-Feynman gradient equals the one built from the dense eigenvector.
+
+test_jd_optimization_runs
+    Two ``eq.optimize`` iterations with the JD objective under ProximalProjection.
+
 test_matfree_operator_matches_dense_matrix
     The matrix-free operator, materialized column by column, equals the dense
     ``_agni3_assemble`` matrix entry-for-entry on the kept DOFs.
@@ -377,10 +385,8 @@ def test_stability_kwargs_are_registered():
     read = set(re.findall(r"kwargs\.get\(\s*[\"'](\w+)[\"']", src))
     read |= set(re.findall(r"kwargs\[\s*[\"'](\w+)[\"']\s*\]", src))
     read |= set(re.findall(r"kwargs\.pop\(\s*[\"'](\w+)[\"']", src))
-    # Options resolved through the kwarg-first helpers. Without these two the
-    # guard sees nothing: moving a read from `kwargs.get("cg_tol", ...)` to
-    # `_solver_opt(kwargs, "cg_tol", ...)` hid 16 options from it at once, and
-    # two of them (cg_tol, cg_maxiter) were unregistered and raised at runtime.
+    # Options resolved through the kwarg-first helpers (`_solver_opt`,
+    # `_solver_flag`) are reads too.
     read |= set(re.findall(r"_solver_opt\(\s*kwargs,\s*[\"'](\w+)[\"']", src))
     read |= set(re.findall(r"_solver_flag\(\s*kwargs,\s*[\"'](\w+)[\"']", src))
     assert read, "found no kwargs reads -- the regex needs updating"
@@ -402,35 +408,6 @@ def test_stability_kwargs_are_registered():
         "kwargs read by _stability.py but declared on no register_compute_fun, "
         f"so DESC will reject them at compute time: {missing}"
     )
-
-
-@pytest.mark.unit
-def test_agni_sigma_shift(monkeypatch):
-    """AGNI_SIGMA_MODE selects a fixed shift or one tracked off lambda_guess.
-
-    A bare object with just the two attrs `_agni_sigma_shift` reads is enough --
-    no equilibrium needed to exercise this dispatch.
-    """
-    from types import SimpleNamespace
-
-    from desc.objectives._stability import _agni_sigma_shift
-
-    obj = SimpleNamespace(_sigma_factor=2.0, _lambda_guess=-0.5)
-
-    # default ('fixed'): sigma_factor * lambda_guess, constants ignored
-    monkeypatch.delenv("AGNI_SIGMA_MODE", raising=False)
-    assert _agni_sigma_shift(obj, None) == -1.0
-    assert _agni_sigma_shift(obj, {"lambda_guess": -0.4}) == -1.0
-
-    # 'track' before any refresh has populated lambda_guess: same fixed fallback
-    monkeypatch.setenv("AGNI_SIGMA_MODE", "track")
-    assert _agni_sigma_shift(obj, None) == -1.0
-    assert _agni_sigma_shift(obj, {}) == -1.0
-
-    # 'track' with a tracked lambda_guess: AGNI_SIGMA_FACTOR * lambda_guess
-    monkeypatch.setenv("AGNI_SIGMA_FACTOR", "3.0")
-    got = float(_agni_sigma_shift(obj, {"lambda_guess": -0.4}))
-    assert got == pytest.approx(-1.2)
 
 
 @pytest.mark.unit
@@ -710,29 +687,14 @@ def test_jax_lanczos_matches_dense_axisym(monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.slow
-def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
-    """Both ring-block builds reproduce the dense matrix's sub-blocks.
+def test_ring_blocks_vmapped_match_dense(agni):
+    """The ring preconditioner's blocks equal the dense matrix's sub-blocks.
 
-    The solver assembles the ring preconditioner's blocks two ways: a vmapped
-    build over all rings at once (``build_ring_blocks``) and a plain host loop
-    over rings. They must agree, and both must equal the corresponding
-    sub-blocks of the dense assembled matrix.
-
-    This replaces the ``AGNI_RING_COMPARE`` environment-variable block that used
-    to live inside the compute function and ended in ``raise SystemExit(0)``. It
-    is a stronger check than that was: the old one compared the two builds
-    against EACH OTHER, so a shared error would have passed. Comparing both
-    against the dense assembly catches that.
-
-    The assertion below is the reference: the restricted assembler must match
-    the dense assembly to machine precision on every ring.
+    ``build_ring_blocks`` assembles every ring at once through the restricted
+    assembler; each block must equal the corresponding sub-block of the dense
+    assembled matrix to machine precision.
     """
-    from desc.compute._stability_solvers import (
-        build_ring_blocks,
-        finish_ring_block,
-        ring_index_maps,
-        ring_nodes,
-    )
+    from desc.compute._stability_solvers import build_ring_blocks, ring_index_maps
     from desc.compute.data_index import data_index
 
     deps = data_index["desc.equilibrium.equilibrium.Equilibrium"]["finite-n lambda3"][
@@ -756,11 +718,9 @@ def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
     keep = np.asarray(dense["keep"])
 
     res = agni["res"]
-    n_rho, n_theta, n_zeta = res
     sel, pad, G = ring_index_maps(keep, res)
-
-    # vmapped build, sigma=0 so the blocks are of A itself
-    vmapped = np.asarray(
+    # sigma=0 so the blocks are of A itself
+    blocks = np.asarray(
         build_ring_blocks(
             stability._agni3_assemble,
             params,
@@ -775,45 +735,23 @@ def test_ring_blocks_eager_and_vmapped_both_match_dense(agni):
         )
     )
 
-    worst_v = worst_e = 0.0
+    worst = 0.0
     for gi, g in enumerate(G):
         live = g[g >= 0]
         ref = A[np.ix_(live, live)]
         scale = max(np.max(np.abs(ref)), 1e-300)
+        got = blocks[gi][: live.size, : live.size]
+        worst = max(worst, float(np.max(np.abs(got - ref))) / scale)
 
-        got_v = vmapped[gi][: live.size, : live.size]
-        worst_v = max(worst_v, float(np.max(np.abs(got_v - ref))) / scale)
-
-        # eager: one ring at a time through the same assembler
-        i, k = divmod(gi, n_zeta)
-        nodes = ring_nodes(n_rho, n_theta, n_zeta, i, k)
-        out = stability._agni3_assemble(
-            params, transforms, {}, data, ring_nodes=jnp.asarray(nodes), **kw
-        )
-        blk = np.asarray(
-            finish_ring_block(out["A"], out["Linv"], out["au_diag"], n_theta)
-        )
-        # `sel[gi]` holds the positions WITHIN the 3*n_theta ring ordering that
-        # survive the keep mask. G holds the reduced indices COMPACTED to the
-        # front, which is a different indexing entirely -- using G's positions
-        # here gathers the wrong entries out of the ring block.
-        pos = np.asarray(sel)[gi][: live.size]
-        got_e = blk[np.ix_(pos, pos)]
-        got_e = 0.5 * (got_e + got_e.T)
-        worst_e = max(worst_e, float(np.max(np.abs(got_e - ref))) / scale)
-
-    print(f"\n  vmapped vs dense: {worst_v:.3e}\n  eager   vs dense: {worst_e:.3e}")
-    assert worst_v < 5e-15, f"vmapped ring blocks disagree with dense: {worst_v:.3e}"
-    assert worst_e < 5e-15, f"eager ring blocks disagree with dense: {worst_e:.3e}"
+    print(f"\n  ring blocks vs dense: {worst:.3e}")
+    assert worst < 5e-15, f"ring blocks disagree with dense: {worst:.3e}"
 
 
 # ---------------------------------------------------------------------------
 # FinitenStability objective, at CPU scale
 #
-# These cover what the opt-in gates in test_AGNI_precond.py cover at 32x32x12 --
-# the objective wrapper, the Hellmann-Feynman gradient, update_state -- but small
-# enough to run anywhere. The big gates stay: they are the ones tied to recorded
-# numbers. These exist so the code paths are not left uncovered when those skip.
+# The objective wrapper, the Hellmann-Feynman gradient and update_state, small
+# enough to run anywhere.
 # ---------------------------------------------------------------------------
 
 
@@ -884,8 +822,8 @@ def test_finiten_objective_gradient_is_hellmann_feynman(agni):
     whose backward rule is easy to get silently wrong -- a zero cotangent, or a
     NaN, still "works" and just stops the optimizer moving.
 
-    This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``;
-    the recorded end-to-end check is the opt-in T2 optimizer gate. ``v_fixed``
+    This is the only CPU-runnable coverage of ``_v_primal_fwd``/``_v_primal_bwd``
+    through the dense solve. ``v_fixed``
     would skip exactly that custom_vjp, so unlike the other objective tests
     this one cannot be de-solved onto the cache without losing its own point --
     it needs a real eigensolve and is skipped on GHA instead (see _ON_GHA).
@@ -924,7 +862,7 @@ def test_update_state_refreshes_the_eigenpair(agni):
     Covers the dense-refresh branch of ``update_state``, which the optimizer
     calls once per outer step. It is what supplies ``v_guess``/``lambda_guess``,
     and a silent failure there means the optimizer minimizes against a stale
-    vector -- the failure mode WHY_V_CANNOT_BE_CACHED.md documents.
+    vector.
     """
     lam_direct = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
     obj = _finiten_objective(agni, lambda_guess=lam_direct, state_solver="dense_eigsh")
@@ -977,154 +915,239 @@ def _build_pest_level(eq, n_rho, n_theta, n_zeta):
     return LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=1, sym=False), dm
 
 
-# NOT opt-in. This is the ONLY coverage of `_eigensolve_pcg` and `_coarse_space`
-# -- the ring preconditioner, the deflation projector, the prolongation and the
-# coarse generalized eigensolve. Gating it behind an environment variable meant
-# CI never ran it and those ~770 lines were reported as untested. It is slow
-# (~500 s), not special: CI runs `-m unit` with `--splits 8` and
-# `--splitting-algorithm least_duration`, which absorbs one long test into one
-# of eight parallel groups, and does NOT deselect `slow`.
-@pytest.mark.unit
-@pytest.mark.slow
-@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
-def test_pcg_deflated_two_level_matches_dense(agni):
-    """Ring-preconditioned PCG with coarse deflation reproduces the dense answer.
+# ---------------------------------------------------------------------------
+# Matrix-free Jacobi-Davidson (JD) eigensolve, two-level
+#
+# NOT opt-in. These are the only coverage of the matrix-free path:
+# `_eigensolve_pcg` (JD, ring preconditioner, deflation) and `_coarse_space`
+# (coarse generalized eigensolve + prolongation). They share one coarse level.
+# Coarse radial 16 is the measured floor for fine 24 radial (job 57261816): at
+# coarse 8 the old matrix-free solver returned the wrong mode with the wrong sign.
+# ---------------------------------------------------------------------------
 
-    This is the CPU-scale version of the `verify_coarse_defl` gate: a coarse
-    level is built at half the fine radial resolution, its softest generalized
-    modes are prolonged to seed and deflate the fine solve, and the resulting
-    Rayleigh quotient is compared against the dense ARPACK eigenvalue.
 
-    It is the only CPU-runnable coverage of ``_eigensolve_pcg`` and
-    ``_coarse_space`` -- roughly 770 lines that were otherwise exercised only by
-    a 20-minute GPU job. Those cover the ring preconditioner, the deflation
-    projector, the prolongation and the coarse generalized eigensolve.
-
-    RESOLUTION IS A CORRECTNESS THRESHOLD HERE, NOT A COST KNOB. Below it the
-    solve does not return a less accurate eigenvalue -- it returns the WRONG
-    MODE, with the opposite sign. Measured coarse-radial sweep at fine 24x12x8,
-    k_defl=50, num_matvecs=100, cg_maxiter=3000 (dense = -1.337622e-04):
-
-      coarse  8 : lam_R = +2.070e-03   SIGN FLIP -- unstable read as stable
-      coarse 12 : lam_R = -1.2323e-04  right sign, 7.9% off, trusted=False
-      coarse 16 : lam_R = -1.33623e-04 0.10% off, trusted=True
-
-    so the coarse floor is 16, and AGNI_TEST_CNR defaults there. Coarse 16 was
-    not more expensive than 12 (238 s vs 274 s), so the floor costs nothing.
-
-    Two things that do NOT work as diagnostics here, both measured above:
-
-    * The sign of the coarse eigenvalue lam_c0 does NOT predict success. It is
-      POSITIVE at coarse 12 (+1.06e-07) and coarse 16 (+6.16e-08), and both
-      land on the correct negative fine mode. The coarse space supplies a useful
-      subspace even when its own lowest Ritz value has not resolved the mode.
-    * The CG residual is anti-correlated with accuracy. Coarse 16 has the WORSE
-      relres (1.42 vs 0.91) and the BETTER answer (0.10% vs 7.9%); neither run
-      converged -- both burned the full iteration budget. Do not read relres as
-      a quality proxy on this operator.
-
-    At the marginal resolution the two estimators disagree: at coarse 12,
-    lam_mu = -1.33657e-04 is accurate to 0.08% while the returned lam_R is 7.9%
-    off. lam_R is the worse estimator there, and it is the one asserted on.
-    `trusted` flagged coarse 12 False and coarse 16 True, correctly in both.
-
-    So this test does NOT try to be cheap. It uses the same shape as the
-    `verify_coarse_defl` gate (coarse at the resolution floor, fine well above
-    it) and is marked opt-in accordingly. Attempts to shrink it by cutting the
-    CG budget, the Lanczos dimension or the coarse resolution all produced
-    positive lambda against a negative truth.
-    """
-    # No AGNI_COARSE_DEFL here. That variable gates the coarse block inside
-    # `FinitenStability.compute_data`; the compute function itself has no such
-    # gate and simply uses the coarse options it is handed.
-    nr, nt, nz = agni["res"]
-    lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
-
-    # Coarse level: half the fine radial resolution, theta/zeta unchanged. Do NOT
-    # coarsen theta/zeta too -- the deflation space then stops resolving the mode
-    # and the fine solve collapses onto the wrong one.
-    # Coarse level AT the resolution floor -- not below it. `verify_coarse_defl`
-    # uses fine 32 / coarse 16 for the same reason.
-    coarse_res = (int(os.environ.get("AGNI_TEST_CNR", 16)), nt, nz)
-    coarse_pest, coarse_diffmat = _build_pest_level(agni["eq"], *coarse_res)
-    coarse_grid = map_to_desc(agni["eq"], coarse_pest)
-    print(f"\n  fine {nr}x{nt}x{nz}  coarse {'x'.join(map(str, coarse_res))}")
-
+@pytest.fixture(scope="module")
+def agni_coarse(agni):
+    """Coarse level (16 radial, same theta/zeta) and the matrix-free JD kwargs."""
     from desc.compute.data_index import data_index
 
-    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
-    params = eq.params_dict
-    name = "finite-n lambda3 rayleigh"
-
-    # The coarse operator needs the same GEOMETRY quantities the fine one does
-    # (`sqrt(g)_PEST`, the metric components, ...) evaluated on the COARSE grid.
-    # `finiten_prefill` supplies only the 0-D and flux-function parts; DESC fills
-    # geometry from the key's declared dependencies, and only for the grid it was
-    # called with. So the coarse level gets its own compute over that list.
-    ckeys = data_index["desc.equilibrium.equilibrium.Equilibrium"][name][
-        "dependencies"
-    ]["data"]
+    eq = agni["eq"]
+    _, nt, nz = agni["res"]
+    coarse_res = (int(os.environ.get("AGNI_TEST_CNR", 16)), nt, nz)
+    coarse_pest, coarse_diffmat = _build_pest_level(eq, *coarse_res)
+    coarse_grid = map_to_desc(eq, coarse_pest)
+    # The coarse operator needs its own geometry on the COARSE grid; DESC fills
+    # it only for the grid it is called with, so compute the dependency list here.
+    ckeys = data_index["desc.equilibrium.equilibrium.Equilibrium"][
+        "finite-n lambda3 rayleigh"
+    ]["dependencies"]["data"]
     coarse_data = compute_fun(
         eq,
         ckeys,
-        params=params,
+        params=eq.params_dict,
         transforms=get_transforms(
             ckeys, obj=eq, grid=coarse_grid, diffmat=coarse_diffmat
         ),
         profiles=get_profiles(ckeys, eq, coarse_grid),
         data=finiten_prefill(eq, coarse_grid),
     )
-
-    data = compute_fun(
-        eq,
-        [name],
-        params=params,
-        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
-        profiles=get_profiles([name], eq, grid),
-        data=finiten_prefill(eq, grid),
+    lam_dense = float(np.asarray(agni["lam3"]["finite-n lambda3"])[0])
+    kw = dict(
         gamma=5.0 / 3.0,
         incompressible=False,
+        # Under JD sigma only builds the preconditioner (ring blocks of A - sigma I).
         sigma=1.3 * lam_dense,
         eigensolver="pcg_deflated",
         coarse_grid=coarse_grid,
         coarse_diffmat=coarse_diffmat,
         coarse_data=coarse_data,
-        coarse_params=params,
-        # The coupled Zernike operator reshapes by n_rho_coupled/n_theta_coupled;
-        # inheriting the FINE counts would reshape the coarse arrays and raise.
-        # Taken from the PEST grid, whose counts are concrete.
+        coarse_params=eq.params_dict,
+        # Counts from the PEST grid, which are concrete; the mapped grid's are not.
         coarse_res=(coarse_pest.num_rho, coarse_pest.num_theta, coarse_pest.num_zeta),
-        # Radial nodes for the prolongation, from the PEST nodes. rho is
-        # invariant under the PEST->DESC map, so these are the mapped rho values.
+        # rho is invariant under the PEST->DESC map, so these are the mapped rho.
         coarse_rho=tuple(np.unique(np.asarray(coarse_pest.nodes[:, 0]))),
         fine_rho=tuple(np.unique(np.asarray(agni["pest_grid"].nodes[:, 0]))),
-        # DELIBERATELY SMALL BUDGET. This test exists to COVER `_eigensolve_pcg`
-        # and `_coarse_space` -- the ring preconditioner, the deflation
-        # projector, the prolongation and the coarse generalized eigensolve --
-        # not to pin digits. `verify_coarse_defl` at 32x32x12 does that.
-        # Measured: cg_maxiter=3000 cost 650 s, 78% of the whole stability
-        # suite's runtime, for accuracy this test does not assert on.
-        k_defl=int(os.environ.get("AGNI_TEST_KDEFL", "50")),
-        num_matvecs=int(os.environ.get("AGNI_TEST_NMV", "100")),
-        cg_tol=1e-6,
-        cg_maxiter=int(os.environ.get("AGNI_TEST_CG", "3000")),
+        k_defl=50,
     )
-    lam_pcg = float(np.real(np.asarray(data[name]).reshape(-1)[0]))
+    return dict(
+        pest_grid=coarse_pest, diffmat=coarse_diffmat, kw=kw, lam_dense=lam_dense
+    )
 
-    reldiff = abs(lam_pcg - lam_dense) / abs(lam_dense)
-    print(f"\n  dense lambda3   = {lam_dense:.9e}")
-    print(f"  pcg_deflated    = {lam_pcg:.9e}  (reldiff={reldiff:.2e})")
-    assert np.isfinite(lam_pcg), "pcg_deflated returned a non-finite eigenvalue"
-    assert np.sign(lam_pcg) == np.sign(lam_dense), (
-        f"pcg_deflated flipped the sign: {lam_pcg:.6e} vs dense {lam_dense:.6e} "
-        "-- an unstable equilibrium reported as stable"
+
+def _dense_v(agni):
+    """The dense ARPACK eigenvector on the kept DOFs."""
+    return np.asarray(agni["lam3"]["finite-n eigenfunction3"]).reshape(-1)[agni["keep"]]
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
+def test_jd_two_level_matches_dense(agni, agni_coarse):
+    """Matrix-free JD with coarse deflation reproduces the dense eigenpair."""
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    name = "finite-n lambda3 rayleigh"
+    data = compute_fun(
+        eq,
+        [name],
+        params=eq.params_dict,
+        transforms=get_transforms([name], obj=eq, grid=grid, diffmat=dm),
+        profiles=get_profiles([name], eq, grid),
+        data=finiten_prefill(eq, grid),
+        **agni_coarse["kw"],
     )
-    # Order of magnitude, not precision -- see the budget note above.
-    assert 0.2 < abs(lam_pcg / lam_dense) < 5.0, (
-        f"pcg_deflated magnitude is off by more than 5x: {lam_pcg:.6e} vs dense "
-        f"{lam_dense:.6e}. At this budget it need not converge, but it must land "
-        "on the same mode."
+    lam_dense = agni_coarse["lam_dense"]
+    lam = float(np.real(np.asarray(data[name]).reshape(-1)[0]))
+    v = np.asarray(data[name + " v"]).reshape(-1)
+    vd = _dense_v(agni)
+    overlap = abs(np.vdot(v, vd)) / (np.linalg.norm(v) * np.linalg.norm(vd))
+    reldiff = abs(lam - lam_dense) / abs(lam_dense)
+    print(f"\n  dense lambda3 = {lam_dense:.12e}")
+    print(f"  JD            = {lam:.12e}  (reldiff={reldiff:.2e})")
+    print(f"  |<v_JD, v_dense>| = {overlap:.12f}")
+    assert np.isfinite(lam), "JD returned a non-finite eigenvalue"
+    assert np.sign(lam) == np.sign(
+        lam_dense
+    ), f"JD flipped the sign: {lam:.6e} vs dense {lam_dense:.6e}"
+    np.testing.assert_allclose(lam, lam_dense, rtol=1e-6)
+    assert overlap > 0.999, f"JD eigenvector is not the dense mode: {overlap:.6f}"
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
+def test_jd_gradient_matches_dense_eigenvector(agni, agni_coarse):
+    """The gradient through JD equals the gradient with the dense eigenvector.
+
+    Both are the Hellmann-Feynman contraction v^T (dA/dp) v / v^T v; they differ
+    only in which v is used. This is what the optimizer consumes, so it checks
+    that JD's eigenvector (not just its eigenvalue) is accurate enough.
+    """
+    eq, grid, dm = agni["eq"], agni["grid"], agni["diffmat"]
+    name = "finite-n lambda3 rayleigh"
+    tr = get_transforms([name], obj=eq, grid=grid, diffmat=dm)
+    pr = get_profiles([name], eq, grid)
+    pre = finiten_prefill(eq, grid)
+
+    def lam_of(p, **kw):
+        d = compute_fun(
+            eq, [name], params=p, transforms=tr, profiles=pr, data=dict(pre), **kw
+        )
+        return jnp.real(jnp.reshape(d[name], (-1,))[0])
+
+    lam_jd, g_jd = jax.value_and_grad(lambda p: lam_of(p, **agni_coarse["kw"]))(
+        eq.params_dict
     )
+    lam_d, g_d = jax.value_and_grad(
+        lambda p: lam_of(
+            p,
+            gamma=5.0 / 3.0,
+            incompressible=False,
+            sigma=agni_coarse["kw"]["sigma"],
+            v_fixed=_dense_v(agni),
+        )
+    )(eq.params_dict)
+    print(f"\n  lambda JD = {float(lam_jd):.12e}   dense v = {float(lam_d):.12e}")
+    for key in ("R_lmn", "Z_lmn", "L_lmn"):
+        a, b = np.asarray(g_d[key]), np.asarray(g_jd[key])
+        assert np.all(np.isfinite(b)), f"JD gradient has non-finite {key}"
+        rel = np.linalg.norm(b - a) / max(np.linalg.norm(a), 1e-300)
+        print(
+            f"  |d/d{key}| dense-v {np.linalg.norm(a):.6e}  JD {np.linalg.norm(b):.6e}"
+            f"  reldiff={rel:.3e}"
+        )
+        assert rel < 1e-4, f"JD gradient differs in d/d{key}: reldiff={rel:.3e}"
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.skipif(_ON_GHA, reason=_GHA_SKIP_REASON)
+def test_jd_optimization_runs(agni, agni_coarse, monkeypatch):
+    """Two optimizer iterations with the JD objective, as the production driver.
+
+    Same wiring as the 48x48x12 runs: ProximalProjection keeps force balance,
+    the objective runs JD with coarse deflation (AGNI_COARSE_DEFL=1) on every
+    evaluation, and the gradient is the blocked reverse pass through `_v_primal`.
+    Checks that the whole chain traces, jits and returns finite numbers.
+    """
+    from desc.objectives import (
+        FixAnisotropy,
+        FixAtomicNumber,
+        FixBoundaryR,
+        FixBoundaryZ,
+        FixCurrent,
+        FixElectronDensity,
+        FixElectronTemperature,
+        FixIonTemperature,
+        FixIota,
+        FixPressure,
+        FixPsi,
+        ForceBalance,
+        ObjectiveFunction,
+    )
+
+    monkeypatch.setenv("AGNI_COARSE_DEFL", "1")
+    eq = agni["eq"].copy()
+    stability = _finiten_objective(
+        dict(agni, eq=eq),
+        build=False,
+        lambda_guess=agni_coarse["lam_dense"],
+        eigensolver="pcg_deflated",
+        k_defl=50,
+        coarse_grid=agni_coarse["pest_grid"],
+        coarse_diffmat=agni_coarse["diffmat"],
+    )
+    # ForceBalance in the objective as well as in the constraints, as the
+    # production drivers do; it also keeps the objective non-scalar for
+    # proximal-lsq-exact.
+    objective = ObjectiveFunction(
+        (stability, ForceBalance(eq=eq, weight=500.0)), deriv_mode="blocked"
+    )
+    objective.build(verbose=0)
+    lam0 = float(
+        np.real(np.asarray(objective.compute_scaled_error(objective.x(eq)))[0])
+    )
+    assert not objective.scalar
+
+    # Free only the low-order boundary shape (max(|m|,|n|) <= 1, R00 fixed).
+    R = np.asarray(eq.surface.R_basis.modes)
+    Z = np.asarray(eq.surface.Z_basis.modes)
+    constraints = [
+        ForceBalance(eq=eq),
+        FixBoundaryR(eq=eq, modes=np.vstack(([0, 0, 0], R[np.max(np.abs(R), 1) > 1]))),
+        FixBoundaryZ(eq=eq, modes=Z[np.max(np.abs(Z), 1) > 1]),
+        FixPsi(eq=eq),
+    ]
+    # Fix every profile the equilibrium actually has; this is a shape optimization.
+    for attr, cls in (
+        ("pressure", FixPressure),
+        ("iota", FixIota),
+        ("current", FixCurrent),
+        ("electron_density", FixElectronDensity),
+        ("electron_temperature", FixElectronTemperature),
+        ("ion_temperature", FixIonTemperature),
+        ("atomic_number", FixAtomicNumber),
+        ("anisotropy", FixAnisotropy),
+    ):
+        if getattr(eq, attr, None) is not None:
+            constraints.append(cls(eq=eq))
+
+    eq, result = eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer="proximal-lsq-exact",
+        maxiter=2,
+        verbose=3,
+        copy=False,
+        options={"solve_options": {"maxiter": 10, "verbose": 0}},
+    )
+    lam1 = float(
+        np.real(np.asarray(objective.compute_scaled_error(objective.x(eq)))[0])
+    )
+    print(f"\n  lambda before = {lam0:.9e}  after = {lam1:.9e}  nfev={result['nfev']}")
+    assert np.isfinite(lam0) and np.isfinite(lam1)
+    assert np.all(np.isfinite(np.asarray(result["x"])))
+    # Starts within 1e-3 of the dense answer, so the objective saw the right mode.
+    np.testing.assert_allclose(lam0, agni_coarse["lam_dense"], rtol=1e-3)
 
 
 @pytest.mark.unit

@@ -1,15 +1,9 @@
 """Numerical machinery for the finite-n (AGNI) stability eigensolver.
 
 This module holds the *algorithms* that ``_stability.py``'s compute functions
-call: the block ("ring") preconditioner, preconditioned CG with deflation, and
-the coarse-to-fine prolongation used to seed and deflate the fine solve.
-
-It exists so that no numerical method lives outside the package. Before this
-module, ``_stability.py`` reached these routines by inserting absolute paths
-into ``sys.path`` at call time and importing ``restricted_assemble``,
-``ritz_store``, ``pcg_test`` and ``coarse_deflation`` from a scratch directory.
-That made the solver unrunnable for anyone else and untestable except by
-scraping a subprocess's stdout.
+call for the matrix-free Jacobi-Davidson eigensolve: the block ("ring")
+preconditioner, the deflation term built from coarse modes, and the
+coarse-to-fine prolongation used to seed and deflate the fine solve.
 
 Nothing here knows about resolution, basis, equilibrium or optimizer settings.
 Those are the caller's business: a driver (or a test) picks them, calls in, and
@@ -38,7 +32,6 @@ import numpy as np
 from desc.backend import jax, jnp
 
 __all__ = [
-    "GROUP_PARTITIONS",
     "apply_space",
     "apply_space_t",
     "barycentric_matrix",
@@ -46,22 +39,17 @@ __all__ = [
     "coarse_gen_modes",
     "coarse_seed_and_deflation",
     "deflation_Y",
-    "factor_ring_blocks",
     "finish_ring_block",
     "fourier_interp_matrix",
     "from_phys",
     "from_phys_h",
-    "group_index_matrix",
     "make_block_precond",
     "level_meta",
     "make_transfer",
-    "pcg",
-    "pcg_deflated",
     "ring_index_maps",
     "ring_nodes",
     "to_phys",
     "to_phys_h",
-    "transfer_matrices",
 ]
 
 
@@ -99,9 +87,8 @@ def from_phys(meta, u_full):
 def to_phys_h(meta, u_full):
     """Transpose of `to_phys`.
 
-    Needed because the prolongation's adjoint is not its inverse: ``P^T`` must
-    be the true transpose or the deflated CG loses symmetry and stops being a
-    valid Krylov method.
+    Needed because the prolongation's adjoint is not its inverse: ``PT`` in
+    `make_transfer` must be the true transpose of ``P``.
     """
     unodes = u_full.reshape(meta["n_total"], 3)
     qnodes = jnp.einsum("nij,nj->ni", meta["linv_dt_h"], meta["diag"] * unodes)
@@ -199,26 +186,12 @@ def apply_space_t(u, pr, pt, pz, scale):
     return scale * jnp.einsum("ia,jb,kc,ijkq->abcq", pr, pt, pz, u)
 
 
-def transfer_matrices(rho_c, rho_f, res_c, res_f, nfp):
-    """The three 1-D interpolation matrices, coarse -> fine.
-
-    Radial is barycentric on the actual radial nodes; theta and zeta are exact
-    Fourier. Returned separately (not as one big Kronecker product) because the
-    tensor structure is what keeps the transfer cheap.
-    """
-    pr = barycentric_matrix(rho_c, rho_f)
-    pt = fourier_interp_matrix(res_c[1], res_f[1], 2.0 * np.pi)
-    pz = fourier_interp_matrix(res_c[2], res_f[2], 2.0 * np.pi / nfp)
-    return jnp.asarray(pr), jnp.asarray(pt), jnp.asarray(pz)
-
-
 def make_transfer(meta_c, meta_f, pr, pt, pz):
     """Return ``(P, PT)`` as callables on reduced-coordinate vectors.
 
     ``PT`` is the exact transpose of ``P``, not an inverse and not a
-    re-derived restriction. Verify it with `adjoint_defect` before trusting a
-    deflated solve: if ``<P q_c, q_f> != <q_c, PT q_f>`` the deflation space is
-    not what the CG thinks it is.
+    re-derived restriction (checked by
+    ``tests/test_stability_solvers.py::test_prolongation_adjoint_is_exact``).
     """
 
     def P(q_c):
@@ -232,197 +205,9 @@ def make_transfer(meta_c, meta_f, pr, pt, pz):
     return P, PT
 
 
-def adjoint_defect(P, PT, n_c, n_f, trials=8, seed=0):
-    """Worst relative ``<P x, y> vs <x, PT y>`` mismatch over random pairs.
-
-    A number, not an assertion, so callers decide the tolerance. Machine-epsilon
-    values (~1e-14) are expected; anything larger means ``PT`` is not the
-    transpose of ``P``.
-    """
-    rng = np.random.default_rng(seed)
-    worst = 0.0
-    for _ in range(trials):
-        x = jnp.asarray(rng.standard_normal(n_c))
-        y = jnp.asarray(rng.standard_normal(n_f))
-        lhs = float(jnp.vdot(P(x), y).real)
-        rhs = float(jnp.vdot(x, PT(y)).real)
-        scale = max(abs(lhs), abs(rhs), 1e-300)
-        worst = max(worst, abs(lhs - rhs) / scale)
-    return worst
-
-
 # ---------------------------------------------------------------------------
 # Block ("ring") preconditioner
 # ---------------------------------------------------------------------------
-
-#: Node groupings the block preconditioner can use. Each maps to one dense
-#: block that gets factorized exactly.
-#:
-#: ``theta_line``
-#:     One block per ``(rho, zeta)``, spanning all theta and all 3 components:
-#:     block size ``3 * n_theta``. This is the poloidal "ring" -- the production
-#:     choice, and the cheapest grouping that still captures the dominant
-#:     poloidal coupling.
-#: ``shell``
-#:     One block per ``rho``, spanning all ``(theta, zeta)`` and all components:
-#:     block size ``3 * n_theta * n_zeta``. Adds the toroidal coupling the rings
-#:     drop. Stronger, but block cost grows as ``n_zeta^3``, so it pays only
-#:     when toroidal coupling actually limits convergence.
-#: ``zeta_line``, ``radial_line``, ``node3``
-#:     Toroidal lines, radial lines, and the pointwise 3x3 -- diagnostics for
-#:     locating which direction dominates the conditioning.
-GROUP_PARTITIONS = ("theta_line", "shell", "zeta_line", "radial_line", "node3")
-
-
-# Each builder yields one group per block. ``red`` is applied component-outer, so
-# a group's DOFs are ordered (component, then the swept indices) -- the same
-# order the assembled blocks use. Kept at module level so `group_index_matrix`
-# stays a dispatch, not a five-way branch.
-
-
-def _groups_theta_line(red, n_rho, n_theta, n_zeta):
-    for i in range(n_rho):
-        for k in range(n_zeta):
-            yield [red(c, i, j, k) for c in range(3) for j in range(n_theta)]
-
-
-def _groups_shell(red, n_rho, n_theta, n_zeta):
-    for i in range(n_rho):
-        yield [
-            red(c, i, j, k)
-            for c in range(3)
-            for j in range(n_theta)
-            for k in range(n_zeta)
-        ]
-
-
-def _groups_zeta_line(red, n_rho, n_theta, n_zeta):
-    for i in range(n_rho):
-        for j in range(n_theta):
-            yield [red(c, i, j, k) for c in range(3) for k in range(n_zeta)]
-
-
-def _groups_radial_line(red, n_rho, n_theta, n_zeta):
-    for j in range(n_theta):
-        for k in range(n_zeta):
-            yield [red(c, i, j, k) for c in range(3) for i in range(n_rho)]
-
-
-def _groups_node3(red, n_rho, n_theta, n_zeta):
-    for i in range(n_rho):
-        for j in range(n_theta):
-            for k in range(n_zeta):
-                yield [red(c, i, j, k) for c in range(3)]
-
-
-_GROUP_BUILDERS = {
-    "theta_line": _groups_theta_line,
-    "shell": _groups_shell,
-    "zeta_line": _groups_zeta_line,
-    "radial_line": _groups_radial_line,
-    "node3": _groups_node3,
-}
-
-
-def group_index_matrix(keep, res, partition="theta_line"):
-    """``(m, b)`` reduced indices per group; ``-1`` pads groups short of ``b``.
-
-    Dropped DOFs are COMPACTED OUT, not left in place. The Dirichlet mask
-    removes the ``xi^rho`` DOFs on the innermost and outermost rho shells, so a
-    boundary group has fewer live DOFs than an interior one. Rather than leave
-    holes where they fell, each group's live indices are packed to the front and
-    the row is padded with ``-1`` at the END; ``b`` is the longest LIVE group,
-    which can be narrower than the nominal group size. Groups with no live DOFs
-    are dropped entirely.
-
-    This convention is load-bearing, not cosmetic: block assembly, the
-    preconditioner apply and every recorded conditioning number were all
-    produced with it. Leaving the holes in place instead yields a different
-    ``b``, a different block layout, and a preconditioner that silently
-    misaligns against the blocks -- it does not error, it just makes CG worse.
-
-    Parameters
-    ----------
-    keep : ndarray
-        Indices of retained DOFs within the length-``3*n_total`` vector.
-    res : tuple
-        ``(n_rho, n_theta, n_zeta)``.
-    partition : str
-        One of `GROUP_PARTITIONS`.
-
-    Returns
-    -------
-    Gs : ndarray, shape (m, b)
-        Live reduced indices packed to the front of each row, ``-1`` after.
-    """
-    if partition not in GROUP_PARTITIONS:
-        raise ValueError(
-            f"unknown partition {partition!r}; expected one of {GROUP_PARTITIONS}"
-        )
-    n_rho, n_theta, n_zeta = res
-    n_total = n_rho * n_theta * n_zeta
-    keep = np.asarray(keep)
-    full_to_red = -np.ones(3 * n_total, dtype=np.int64)
-    full_to_red[keep] = np.arange(keep.size)
-
-    def red(c, i, j, k):
-        return full_to_red[c * n_total + (i * n_theta + j) * n_zeta + k]
-
-    groups = list(_GROUP_BUILDERS[partition](red, n_rho, n_theta, n_zeta))
-    groups = [[x for x in g if x >= 0] for g in groups]
-    groups = [g for g in groups if g]
-    if not groups:
-        raise ValueError(f"partition {partition!r} produced no live groups")
-    b = max(len(g) for g in groups)
-    Gs = -np.ones((len(groups), b), dtype=np.int64)
-    for gi, g in enumerate(groups):
-        Gs[gi, : len(g)] = g
-    return Gs
-
-
-def factor_ring_blocks(blocks, ridge=0.0, verbose=False):
-    """Cholesky-factorize the block diagonal, escalating a ridge if needed.
-
-    The blocks are the exact diagonal sub-blocks of ``H = A - sigma B``. When
-    ``sigma`` sits below the spectrum ``H`` is SPD and so is every principal
-    submatrix, so ``ridge=0`` should succeed. It is when ``sigma`` has drifted
-    into the spectrum -- or when blocks were obtained by probing and carry
-    inter-group contamination -- that a ridge becomes necessary.
-
-    The ridge that was actually needed is returned, because it is a direct
-    measure of how far the blocks are from positive definite. A large ridge is a
-    warning that the shift is wrong, not a knob to turn.
-
-    Returns
-    -------
-    L : ndarray or None
-        Lower Cholesky factors, shape ``(m, b, b)``. None if every trial failed.
-    ok : bool
-    ridge_used : float or None
-    """
-    b = blocks.shape[-1]
-    eye = jnp.eye(b, dtype=blocks.dtype)[None]
-    scale = float(jnp.mean(jnp.abs(jnp.diagonal(blocks, axis1=-2, axis2=-1))))
-    trials = [ridge] if ridge > 0 else [0.0]
-    if ridge <= 0:
-        trials += [
-            scale * f
-            for f in (1e-8, 1e-6, 1e-4, 1e-3, 1e-2, 1e-1, 1.0, 3.0, 1e1, 3e1, 1e2, 1e3)
-        ]
-    for r in trials:
-        L = jnp.linalg.cholesky(blocks + r * eye)
-        ok = bool(jnp.all(jnp.isfinite(L)))
-        if ok:
-            if verbose:
-                print(
-                    f"[factor] cholesky ok with ridge={r:.6e} "
-                    f"(mean |block diag| = {scale:.6e}, ratio {r / scale:.2e})",
-                    flush=True,
-                )
-            return L, True, r
-        if verbose:
-            print(f"[factor] ridge={r:.6e} failed, escalating", flush=True)
-    return None, False, None
 
 
 def make_block_precond(L, Gs, n):
@@ -435,7 +220,7 @@ def make_block_precond(L, Gs, n):
     it in bounds.
 
     The scatter uses ``.add`` rather than ``.set`` so that overlapping
-    partitions would accumulate. For the partitions in `GROUP_PARTITIONS` the
+    partitions would accumulate. For the ring groups of `ring_index_maps` the
     groups are disjoint, so add and set coincide -- but add is the correct
     operation for the additive Schwarz form this is.
     """
@@ -463,176 +248,11 @@ def make_block_precond(L, Gs, n):
 
 
 # ---------------------------------------------------------------------------
-# Preconditioned CG, with and without deflation
-# ---------------------------------------------------------------------------
-
-
-def _pcg_report(k, relres):
-    """Host callback: one line of real wall-clock CG progress.
-
-    DEBUG ONLY (see ``progress_every`` on `pcg`). Prints its own
-    ``time.time()`` so the interval between lines is an actual per-iteration
-    wall-clock measurement, not inferred from compile-log timestamps.
-    """
-    import time as _time
-
-    print(
-        f"[cg progress] iter={int(k)} relres={float(relres):.3e} "
-        f"t={_time.time():.3f}",
-        flush=True,
-    )
-
-
-def pcg(Hf, b_rhs, M, tol, maxiter, progress_every=0):
-    """Preconditioned CG that reports its own iteration count.
-
-    Parameters
-    ----------
-    progress_every : int
-        DEBUG ONLY, default 0 (off, zero added cost -- no `lax.cond`/callback
-        is even traced). When > 0, every `progress_every`-th iteration fires a
-        `jax.debug.callback` printing (iter, relres, host time.time()) --
-        real per-iteration wall-clock, not a guess from compile-event gaps.
-        The `lax.cond` guard means the host round-trip only happens on those
-        iterations, not every one.
-
-    Returns
-    -------
-    x, iters, relres
-        As *traced* arrays, not Python scalars. Do not convert here: this runs
-        as the ``OPinv`` inside a Lanczos iteration that is itself under a jit
-        trace, and forcing concretization breaks that caller.
-    """
-    bnorm = jnp.linalg.norm(b_rhs)
-
-    def body(state):
-        x, r, p, rz, k, _ = state
-        Ap = Hf(p)
-        alpha = rz / jnp.vdot(p, Ap)
-        x = x + alpha * p
-        r = r - alpha * Ap
-        z = M(r)
-        rz_new = jnp.vdot(r, z)
-        p = z + (rz_new / rz) * p
-        k_new = k + 1
-        relres_new = jnp.linalg.norm(r) / bnorm
-        if progress_every:
-            jax.lax.cond(
-                (k_new % progress_every) == 0,
-                lambda _: jax.debug.callback(
-                    _pcg_report, k_new, relres_new, ordered=True
-                ),
-                lambda _: None,
-                operand=None,
-            )
-        return (x, r, p, rz_new, k_new, relres_new)
-
-    def cond(state):
-        _, _, _, _, k, relres = state
-        return (k < maxiter) & (relres > tol)
-
-    x0 = jnp.zeros_like(b_rhs)
-    r0 = b_rhs
-    z0 = M(r0)
-    state = (x0, r0, z0, jnp.vdot(r0, z0), 0, jnp.array(1.0))
-    x, r, p, rz, k, relres = jax.lax.while_loop(cond, body, state)
-    return x, k, relres
-
-
-def _make_deflation(Hf, Z):
-    """Build the ``H``-orthogonal projector pair for a deflation space ``Z``.
-
-    Returns ``(project, correct)`` where ``project(v) = v - H Z (Z^T H Z)^-1
-    Z^T v`` removes the components CG cannot resolve, and ``correct(b)`` supplies
-    the exact solution inside ``span(Z)``.
-
-    The point of deflation: the modes that make ``H`` ill-conditioned are the
-    softest ones, and they are precisely what the coarse level resolves well. If
-    they are solved exactly and projected out, CG only has to work on the rest,
-    where the preconditioned spectrum is clustered.
-    """
-    HZ = jax.vmap(Hf, in_axes=1, out_axes=1)(Z)  # (n, k)
-    # RG: Z^H H Z (Hermitian inner product), not Z^T H Z -- H is Hermitian, not
-    # symmetric, whenever Z/H are complex (axisym=True). conj() is a no-op for
-    # real Z/H, so the 3D path is unchanged.
-    ZtHZ = jnp.conj(Z).T @ HZ
-    # Symmetrize: Z^H H Z is Hermitian in exact arithmetic, and forcing it keeps
-    # the Cholesky below well posed.
-    ZtHZ = 0.5 * (ZtHZ + jnp.conj(ZtHZ).T)
-    chol = jax.scipy.linalg.cho_factor(ZtHZ, lower=True)
-
-    def coarse_solve(rhs):
-        return jax.scipy.linalg.cho_solve(chol, rhs)
-
-    def project(v):
-        return v - HZ @ coarse_solve(jnp.conj(Z).T @ v)
-
-    def correct(b_rhs):
-        return Z @ coarse_solve(jnp.conj(Z).T @ b_rhs)
-
-    return project, correct
-
-
-def pcg_deflated(Hf, b_rhs, M, tol, maxiter, Z=None, x0=None):
-    """Preconditioned CG with optional deflation by a coarse space ``Z``.
-
-    With ``Z=None`` this is exactly `pcg`. With ``Z`` supplied, the solve is
-    split: the component in ``span(Z)`` is obtained by a direct solve of the
-    small ``Z^T H Z`` system, and CG runs only on the ``H``-orthogonal
-    complement.
-
-    Parameters
-    ----------
-    Hf : callable
-        Applies ``H = A - sigma B``. Must be symmetric, and SPD for CG to be
-        legal -- which requires ``sigma`` below the spectrum.
-    b_rhs : ndarray
-    M : callable
-        Preconditioner apply, e.g. from `make_block_precond`.
-    tol, maxiter : float, int
-        Relative-residual tolerance and iteration cap. Hitting the cap is not an
-        error; check the returned ``relres`` rather than assuming convergence.
-    Z : ndarray, optional
-        ``(n, k)`` deflation basis, typically prolonged coarse modes.
-    x0 : ndarray, optional
-        Initial guess, typically a prolonged coarse eigenvector.
-
-    Returns
-    -------
-    x, iters, relres
-        Traced arrays; see `pcg`.
-    """
-    if Z is None:
-        if x0 is None:
-            return pcg(Hf, b_rhs, M, tol, maxiter)
-        # Shift to a zero initial guess by solving for the correction.
-        r0 = b_rhs - Hf(x0)
-        dx, k, relres = pcg(Hf, r0, M, tol, maxiter)
-        return x0 + dx, k, relres
-
-    project, correct = _make_deflation(Hf, Z)
-
-    # Exact part inside span(Z), plus the deflated CG on the complement.
-    x_coarse = correct(b_rhs)
-    r0 = project(b_rhs - Hf(x_coarse) if x0 is None else b_rhs - Hf(x_coarse + x0))
-
-    def MP(r):
-        return project(M(r))
-
-    def HP(v):
-        return project(Hf(v))
-
-    dx, k, relres = pcg(HP, r0, MP, tol, maxiter)
-    x = x_coarse + dx + (0.0 if x0 is None else x0)
-    return x, k, relres
-
-
-# ---------------------------------------------------------------------------
 # Coarse generalized eigensolve and the deflation space it supplies
 # ---------------------------------------------------------------------------
 
 
-def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3):
+def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3, chunk=2048):
     """Softest ``k`` generalized modes of ``(Hc, M_block)`` on the coarse level.
 
     Solves the pencil by congruence: with ``M_block = L L^T`` from the block
@@ -642,11 +262,17 @@ def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3):
     SOFTEST end, which is the end that matters: those are the modes the fine
     solve struggles with and the ones worth deflating.
 
+    Memory: ``A`` is formed in ONE working copy of ``Hc``, updated in place
+    ``chunk`` columns (then rows) at a time inside a single ``lax.scan``, so the
+    peak is ``Hc`` + the working copy + the LU factor, plus ``O(n * chunk)``
+    per step. Forming it with whole-matrix gathers and scatters kept several
+    ``n x n`` temporaries alive and ran out of memory at ``n = 34080``.
+
     Fully traceable -- safe inside jit, no host round-trips.
 
-    NO RIDGE ESCALATION. `factor_ring_blocks` chooses its ridge by reading a
-    concrete bool off a traced array, which cannot be traced, so ``ridge`` is a
-    static argument here. Both bases measured ridge=0 at 32x32x12. A non-SPD
+    NO RIDGE ESCALATION: choosing a ridge by reading a concrete bool off a
+    traced array cannot be traced, so ``ridge`` is a static argument here. Both
+    bases measured ridge=0 at 32x32x12. A non-SPD
     block therefore yields NaN rather than silently escalating -- visible in the
     result, which is the safer failure.
 
@@ -657,11 +283,13 @@ def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3):
     blocks : ndarray, (m, b, b)
         Coarse block-diagonal of the mass/preconditioner operator.
     Gs : ndarray, (m, b)
-        Group index map from `group_index_matrix`. Padding may be ``-1``.
+        Group index map from `ring_index_maps`. Padding may be ``-1``.
     k, num_matvecs, seed : int
         Static. ``k`` modes retained, ``num_matvecs`` Lanczos steps.
     ridge : float
         Static Cholesky ridge.
+    chunk : int
+        Static. Columns (rows) transformed per in-place step.
 
     Returns
     -------
@@ -687,26 +315,75 @@ def coarse_gen_modes(Hc, blocks, Gs, k, num_matvecs, ridge=0.0, seed=3):
 
         The groups PARTITION the reduced indices, so ``Mat[idx]`` is a permuted
         copy -- ``(m, b, ncols)`` with ``m*b ~ n`` -- and one batched triangular
-        solve covers every block. Works for any ``ncols``, which is why the
-        reduction (``ncols=n``) and the back-transform (``ncols=k``) share it.
+        solve covers every block. Works for any ``ncols``: a chunk of columns
+        during the reduction, ``ncols=k`` for the back-transform.
         """
         Lu = L if lower else jnp.swapaxes(L, -1, -2)
         Y = Mat[idx] * mask3
         Zb = solve_triangular(Lu, Y, lower=lower) * mask3
         return jnp.zeros_like(Mat).at[idx].add(Zb)
 
-    # A = L^-1 Hc L^-H, formed as L^-1 (L^-1 Hc)^H using Hc's HERMITIAN (not
-    # merely symmetric) symmetry -- measured ||Hc-Hc^H||/||Hc|| ~ 1e-17 vs
-    # ||Hc-Hc^T||/||Hc|| ~ 3e-3 for axisym=True's complex Hc. L is the MASS
-    # matrix's Cholesky factor and stays real, so this conj only ever touches
-    # Hc's own adjoint, not L's -- a no-op when Hc is real (3D).
-    A = blk_solve(jnp.conj(jnp.swapaxes(blk_solve(Hc, True), 0, 1)), True)
-    A = 0.5 * (A + jnp.conj(jnp.swapaxes(A, 0, 1)))
+    # A = L^-1 Hc L^-T in place, three passes over one working copy:
+    #   0  columns:  A[:, j] <- L^-1 A[:, j]              gives L^-1 Hc
+    #   1  rows:     A[i, :] <- (L^-1 A[i, :]^T)^T         gives (L^-1 Hc) L^-T
+    #   2  Hermitian part: rows and columns <- 0.5 (A + A^H), chunk by chunk
+    # L is the MASS matrix's Cholesky factor and stays real, so L^-H = L^-T and
+    # the row pass is the same solve on transposed rows. Taking the Hermitian
+    # part after the congruence equals taking it before (the map is linear and
+    # L is real), so for axisym=True's complex Hc -- Hermitian to ~1e-17 but
+    # not symmetric, ||Hc-Hc^T||/||Hc|| ~ 3e-3 -- the result is the same as
+    # symmetrizing Hc first.
+    #
+    # Passes 0 and 1 must touch every column (row) exactly once. The last
+    # step is clamped to start at n - c and masks out the columns an earlier
+    # step already did. Pass 2 is idempotent (an entry already equal to the
+    # conjugate of its mirror averages to itself), so its clamped step needs
+    # no mask.
+    n = Hc.shape[0]
+    c = int(min(chunk, n))
+    n_full = (n // c) * c
+    starts = list(range(0, n_full, c))
+    firsts = list(starts)
+    if n_full < n:
+        starts.append(n - c)
+        firsts.append(n_full)
+    n_steps = len(starts)
+    xs = (
+        jnp.repeat(jnp.arange(3), n_steps),
+        jnp.asarray(starts * 3),
+        jnp.asarray(firsts * 3),
+    )
+    offs = jnp.arange(c)
 
+    def _cols(A, s, first):
+        X = jax.lax.dynamic_slice(A, (0, s), (n, c))
+        new = (s + offs >= first)[None, :]
+        X = jnp.where(new, blk_solve(X, True), X)
+        return jax.lax.dynamic_update_slice(A, X, (0, s))
+
+    def _rows(A, s, first):
+        X = jax.lax.dynamic_slice(A, (s, 0), (c, n)).T
+        new = (s + offs >= first)[None, :]
+        X = jnp.where(new, blk_solve(X, True), X)
+        return jax.lax.dynamic_update_slice(A, X.T, (s, 0))
+
+    def _herm(A, s, first):
+        R = jax.lax.dynamic_slice(A, (s, 0), (c, n))
+        C = jax.lax.dynamic_slice(A, (0, s), (n, c))
+        M = 0.5 * (R + jnp.conj(C).T)
+        A = jax.lax.dynamic_update_slice(A, M, (s, 0))
+        return jax.lax.dynamic_update_slice(A, jnp.conj(M).T, (0, s))
+
+    def _step(A, x):
+        stage, s, first = x
+        return jax.lax.switch(stage, (_cols, _rows, _herm), A, s, first), None
+
+    A, _ = jax.lax.scan(_step, Hc, xs)
     lu = jax.scipy.linalg.lu_factor(A)
+    del A
     tri = decomp.tridiag_sym(num_matvecs, reortho="full", materialize=True)
     alg = eig.eigh_partial(tri)
-    v0 = jax.random.normal(jax.random.PRNGKey(seed), (A.shape[0],), dtype=Hc.dtype)
+    v0 = jax.random.normal(jax.random.PRNGKey(seed), (n,), dtype=Hc.dtype)
     v0 = v0 / jnp.linalg.norm(v0)
     mu, vecs = alg(lambda rhs: jax.scipy.linalg.lu_solve(lu, rhs), v0)
 
@@ -742,7 +419,7 @@ def coarse_seed_and_deflation(
     Returns
     -------
     v0 : ndarray, (n_f,)
-        Unit-norm prolonged softest mode; the Lanczos/CG start vector.
+        Unit-norm prolonged softest mode; the Jacobi-Davidson start vector.
     Z : ndarray, (n_f, k)
         Prolonged deflation basis. Column 0 is ``v0`` up to scaling.
     lam_c : ndarray, (k,)
@@ -788,7 +465,7 @@ def ring_index_maps(keep, res):
     pad : ndarray, (m, b) float
         1.0 on real entries, 0.0 on padding.
     G : ndarray, (m, b) int
-        The reduced indices, ``-1`` padded, as `group_index_matrix` returns.
+        The reduced indices, ``-1`` padded, compacted to the front of each row.
     """
     n_rho, n_theta, n_zeta = res
     n_total = n_rho * n_theta * n_zeta
@@ -849,7 +526,7 @@ def finish_ring_block(A_blk, Linv, au_diag_blk, n_nodes):
 
 
 def build_ring_blocks(
-    assemble, params, transforms, profiles, data, kwargs, res, sel, pad, sigma
+    assemble, params, transforms, profiles, data, kwargs, res, sel, pad, sigma, batch=64
 ):
     """Ring blocks of ``H = A - sigma I``, all rings at once under ``vmap``.
 
@@ -888,8 +565,9 @@ def build_ring_blocks(
 
     # Blocked, not one jax.vmap over all m rings: a full vmap needs
     # O(m*n_total) memory regardless of jit (test_AGNI.py's _Ax_block hit
-    # the same wall). batch_size caps it at 64 rings at a time.
-    blk = jax.lax.map(one_ring, nodes_all, batch_size=min(64, m))
+    # the same wall). batch_size caps it at `batch` rings at a time; memory per
+    # ring grows with n_total (48x48x48 at 64 rings: one 62.5 GB allocation).
+    blk = jax.lax.map(one_ring, nodes_all, batch_size=min(batch, m))
     rows = sel[:, :, None]
     cols = sel[:, None, :]
     ar = jnp.arange(m)[:, None, None]
@@ -907,11 +585,10 @@ def build_ring_blocks(
 def factor_ring_blocks_traced(blocks, ridge=0.0):
     """Cholesky at a FIXED ridge, safe under trace.
 
-    `factor_ring_blocks` selects its ridge by reading ``bool(jnp.all(...))`` off
-    a traced array, which cannot be traced. This variant factors once at the
-    given ridge and reports finiteness as a traced flag instead. A non-SPD block
-    therefore yields NaN rather than escalating -- visible in the result, which
-    is the safer failure inside a jitted solve.
+    Factors once at the given ridge and reports finiteness as a traced flag. A
+    non-SPD block (sigma above lambda_min) yields NaN rather than escalating a
+    ridge -- visible in the result, which is the safer failure inside a jitted
+    solve.
     """
     b = blocks.shape[-1]
     eye = jnp.eye(b, dtype=blocks.dtype)[None]

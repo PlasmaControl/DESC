@@ -837,8 +837,8 @@ def _f_T_normalized(params, transforms, profiles, data, **kwargs):
     "``ptolemy_linear_transform``.",
 )
 def _f_B(params, transforms, profiles, data, **kwargs):
+    # reshape to (num rho, transforms["B"].basis.num_modes)
     B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1))
-    # B_mn has shape (num modes, num rho)
     B_mn = kwargs["matrix"] @ B_mn.T
     data["f_B"] = B_mn[kwargs["idx"]].T
     return data
@@ -866,8 +866,8 @@ def _f_B(params, transforms, profiles, data, **kwargs):
     "``ptolemy_linear_transform``.",
 )
 def _f_B_normalized(params, transforms, profiles, data, **kwargs):
+    # reshape to (num rho, transforms["B"].basis.num_modes)
     B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1))
-    # B_mn has shape (num modes, num rho), normalize each surface
     B_mn = kwargs["matrix"] @ B_mn.T
     norm = jnp.linalg.norm(B_mn, axis=0)
     data["f_B_normalized"] = (B_mn[kwargs["idx"]] / norm).T

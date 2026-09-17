@@ -31,44 +31,6 @@ from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
-def _agni_mem_trace_enabled(kwargs):
-    flag = os.environ.get("AGNI_MEM_TRACE", "0").strip().lower()
-    return bool(kwargs.get("debug_matfree", False)) or flag not in {
-        "",
-        "0",
-        "false",
-        "no",
-        "off",
-    }
-
-
-def _agni_mem_trace(kwargs, *parts):
-    if _agni_mem_trace_enabled(kwargs):
-        print(*parts)
-
-
-class _NoRitzStore:
-    """Stand-in for `ritz_store` when it is not importable.
-
-    Reports an empty store and swallows writes, which is exactly what the real
-    module does under jit -- `put` refuses tracers and `get` returns None while
-    tracing. Recycling is an ITERATION-COUNT optimisation, never a correctness
-    one, so degrading to a cold start is the correct fallback.
-    """
-
-    @staticmethod
-    def get():
-        return None
-
-    @staticmethod
-    def put(Z, kmax=None):
-        return None
-
-    @staticmethod
-    def bump_solve():
-        return None
-
-
 def _solver_opt(kwargs, name, env, default, cast=None):
     """Resolve a solver option: KWARG FIRST, then environment, then default.
 
@@ -778,6 +740,34 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
 
+    # (A kron I_m)/(I_na kron B) sliced by column/row, without materializing
+    # the full Kronecker product. Verified against dense kron+slice, 0 error.
+    def _kron_I_right_slice_cols(A, m, idx):
+        a_idx, i_idx = jnp.divmod(idx, m)
+        cols = A[:, a_idx]
+        na, k = A.shape[0], idx.size
+        out = jnp.zeros((na, m, k), dtype=cols.dtype)
+        out = out.at[
+            jnp.arange(na)[:, None], i_idx[None, :], jnp.arange(k)[None, :]
+        ].set(cols)
+        return out.reshape(na * m, k)
+
+    def _kron_I_left_slice_cols(B, na, idx):
+        a_idx, j_idx = jnp.divmod(idx, B.shape[1])
+        cols = B[:, j_idx]
+        nb, k = B.shape[0], idx.size
+        out = jnp.zeros((na, nb, k), dtype=cols.dtype)
+        out = out.at[
+            a_idx[None, :], jnp.arange(nb)[:, None], jnp.arange(k)[None, :]
+        ].set(cols)
+        return out.reshape(na * nb, k)
+
+    def _kron_I_right_slice_rows(A, m, idx):  # (A kron I_m)^T = A^T kron I_m
+        return _kron_I_right_slice_cols(A.T, m, idx).T
+
+    def _kron_I_left_slice_rows(B, na, idx):  # (I_na kron B)^T = I_na kron B^T
+        return _kron_I_left_slice_cols(B.T, na, idx).T
+
     if axisym:
         if n_mode_axisym == 0 and incompressible:
             return NotImplementedError
@@ -814,7 +804,29 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     I_zeta0 = jax.lax.stop_gradient(jnp.eye(n_zeta_max))
 
-    if coupled_rt:
+    # Avoid materializing the full (n_total, n_total) kron just to slice it
+    # down to one ring a few lines later (was OOMing at 3D scale). Every ring
+    # fixes one zeta index, so this is exact and reduces to the untouched
+    # original path whenever n_zeta_max==1 (axisym).
+    _ring_precoupled = kwargs.get("ring_nodes", None)
+    if coupled_rt and _ring_precoupled is not None and n_zeta_max > 1:
+        _ridx = jnp.asarray(_ring_precoupled)
+        _n_rt = n_rho_max * n_theta_max
+        D_rho = jax.lax.stop_gradient(
+            _kron_I_right_slice_cols(D_rho0, n_zeta_max, _ridx)
+        )
+        D_theta = jax.lax.stop_gradient(
+            _kron_I_right_slice_cols(D_theta0, n_zeta_max, _ridx)
+        )
+        D_zeta = jax.lax.stop_gradient(_kron_I_left_slice_cols(D_zeta0, _n_rt, _ridx))
+        D_thetaT = jax.lax.stop_gradient(
+            _kron_I_right_slice_rows(_cT(D_theta0), n_zeta_max, _ridx)
+        )
+        D_zetaT = jax.lax.stop_gradient(
+            _kron_I_left_slice_rows(_cT(D_zeta0), _n_rt, _ridx)
+        )
+        _coupled_rt_presliced = True
+    elif coupled_rt:
         # D_rho0/D_theta0 already couple (rho, theta); only tensor with zeta.
         I_rt0 = jax.lax.stop_gradient(jnp.eye(n_rho_max * n_theta_max))
         D_rho = jax.lax.stop_gradient(jnp.kron(D_rho0, I_zeta0))
@@ -822,6 +834,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zeta = jax.lax.stop_gradient(jnp.kron(I_rt0, D_zeta0))
         D_thetaT = jax.lax.stop_gradient(jnp.kron(_cT(D_theta0), I_zeta0))
         D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rt0, _cT(D_zeta0)))
+        _coupled_rt_presliced = False
     else:
         I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
         I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -834,6 +847,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zetaT = jax.lax.stop_gradient(
             jnp.kron(I_rho0, jnp.kron(I_theta0, _cT(D_zeta0)))
         )
+        _coupled_rt_presliced = False
 
     # Quadrature weights still factorize (tensor-product) in both modes.
     W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
@@ -847,11 +861,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # transposes), the accumulators shrink to 3*|R|, and node-diagonal
     # quantities are restricted to the ring's nodes.
     #
-    # This replaces `restricted_assemble._rewrite_source()`, which produced the
-    # same thing by reading THIS function's source with inspect.getsource,
-    # regex-rewriting it and exec'ing the result -- a construction that could
-    # not be packaged, could not be tested directly, and silently depended on
-    # the exact text below.
     _Rnode = kwargs.get("ring_nodes", None)
     if _Rnode is None:
         _nR = n_total
@@ -916,11 +925,14 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                 M = M[:, _Rnode]
             return M
 
-    D_rho = _selc(D_rho)
-    D_theta = _selc(D_theta)
-    D_zeta = _selc(D_zeta)
-    D_thetaT = _selr(D_thetaT)
-    D_zetaT = _selr(D_zetaT)
+    if not _coupled_rt_presliced:
+        D_rho = _selc(D_rho)
+        D_theta = _selc(D_theta)
+        D_zeta = _selc(D_zeta)
+        D_thetaT = _selr(D_thetaT)
+        D_zetaT = _selr(D_zetaT)
+    # else: already built directly in sliced form above -- _selc/_selr would
+    # double-slice with the wrong shape.
 
     # Arbitrary choice. Mostly used to decide the range of eigenvalues of
     # the mass matrix. Pre-conditioning should remove this factor
@@ -1392,12 +1404,18 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # (rt_size*n_zeta)^2 intermediate onto the DEVICE, where np.kron kept it
         # on the host for free. At 32x32x12 that is 1.21 GB for Q and another
         # 1.21 GB for `penalty`, and this assembly already peaks at 69.18 GB of
-        # a 73.70 GB limit (METHOD.md 5.2) -- 4.5 GB of headroom. Job 56839366,
+        # a 73.70 GB limit -- 4.5 GB of headroom. Job 56839366,
         # a case that had COMPLETED as, then OOMed on the 10.42 GB
         # gather below.
         #
         # So: device only when the input is actually traced.
-        if isinstance(Q_rt, jax.core.Tracer) or isinstance(A, jax.core.Tracer):
+        if _coupled_rt_presliced:
+            # Ring fixes one zeta index for both row and column, so the
+            # double-sliced kron(Q_rt, I_zeta) reduces to a direct submatrix
+            # of Q_rt -- no kron, no (n_total, n_total) intermediate.
+            _a_idx = _ridx // n_zeta_max
+            Q = Q_rt[_a_idx][:, _a_idx]
+        elif isinstance(Q_rt, jax.core.Tracer) or isinstance(A, jax.core.Tracer):
             Q = Q_rt if n_zeta_max == 1 else jnp.kron(Q_rt, jnp.eye(n_zeta_max))
         else:
             Q = (
@@ -2068,15 +2086,32 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     if coupled_rt:
         # D is the full (n_rho*n_theta) coupled (rho, theta) operator: flatten the
         # (rho, theta) axes, apply, reshape back. d_dz stays separable in zeta.
+        def _rt_apply(D, u):
+            """Real (rho, theta) matrix D applied to u, rho-major, per zeta plane.
+
+            One zeta plane uses a matrix-vector product, and a complex u is split into
+            real and imaginary parts so D is never converted to complex. Inside
+            Jacobi-Davidson's compiled loops, ``D @ U`` with U of shape (n, 1) and
+            complex was lowered to convert/broadcast/multiply with an n x n complex
+            temporary per product: one 77.55 GB allocation at DSHAPE 96x128.
+            """
+            if n_zeta == 1:
+                U = u.reshape(-1)
+            else:
+                U = u.reshape(n_rho * n_theta, n_zeta)
+            if jnp.iscomplexobj(U) and not jnp.iscomplexobj(D):
+                DU = D @ U.real + 1j * (D @ U.imag)
+            else:
+                DU = D @ U
+            return DU.reshape(n_rho, n_theta, n_zeta)
+
         def d_dr(D, u):
             """Radial derivative via the coupled (rho, theta) operator."""
-            U = u.reshape(n_rho * n_theta, n_zeta)
-            return (D @ U).reshape(n_rho, n_theta, n_zeta)
+            return _rt_apply(D, u)
 
         def d_dv(D, u):
             """Poloidal derivative via the coupled (rho, theta) operator."""
-            U = u.reshape(n_rho * n_theta, n_zeta)
-            return (D @ U).reshape(n_rho, n_theta, n_zeta)
+            return _rt_apply(D, u)
 
         def d_dz(D, u):
             return jnp.einsum("ij,klj->kli", D, u)
@@ -2179,8 +2214,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
         def _apply_penalty(u):
             # Q = kron(Q_rt, I_zeta) acting on rho-major (rho, theta, zeta) data.
-            U = u.reshape(rt_size, n_zeta)
-            return (alphaQ_rt @ U).reshape(n_rho, n_theta, n_zeta)
+            return _rt_apply(alphaQ_rt, u)
 
     def Ax_full(x_flat):
         x = jnp.transpose(x_flat.reshape(3, n_total), axes=(1, 0))
@@ -2385,8 +2419,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         x_full = jnp.zeros(3 * n_total, dtype=x_reduced.dtype)
         # unique_indices=True: keep is a concatenation of disjoint aranges, so
         # the indices are unique. Declaring it lets JAX form the scatter's
-        # transpose, which jax.scipy cg needs for its (symmetric) transpose-solve
-        # in the matfree-library shiftinvert_cg path.
+        # transpose, which reverse-mode AD through the scatter needs.
         x_full = x_full.at[keep].set(x_reduced, unique_indices=True)
         y_full = Ax_full(x_full)
         return y_full[keep]
@@ -2562,42 +2595,41 @@ def _agni3_store_rayleigh_mode_data(data, v, op):
     gamma="float: adiabatic constant",
     density="ndarray: the radial density profile",
     sigma="float: shift for the ARPACK eigsh that supplies the fresh eigenvector",
+    v_guess="ndarray: pcg_deflated only. Full-length start vector; used instead of "
+    "the coarse seed when nonzero",
     eigensolver="str: 'eigsh_callback' (default), 'jax_lanczos' or 'pcg_deflated'. "
     "Env AGNI_EIGENSOLVER is a fallback only -- the kwarg wins",
     coarse_num_matvecs="int: Lanczos matvec count for the COARSE generalized "
-    "solve (default 100). Deliberately separate from num_matvecs: the two levels "
-    "were never tied together, and the old code gave them different defaults "
-    "while reading one env var",
-    sigma_mode="str: 'fixed' (default) or 'adapt'. Env AGNI_SIGMA_MODE is a fallback",
-    sigma_factor="float: shift multiplier for sigma_mode='adapt' (default 2.5)",
+    "solve that builds the deflation basis (default 100). Env "
+    "AGNI_COARSE_NUM_MATVECS is a fallback",
+    sigma_mode="str: jax_lanczos only. 'fixed' (default) or 'adapt' (second pass "
+    "at sigma_factor * lambda). Env AGNI_SIGMA_MODE is a fallback",
+    sigma_factor="float: jax_lanczos only. Shift multiplier for sigma_mode='adapt' "
+    "(default 2.5)",
     factor="str: dense factorization for the shift-invert, 'lu' (default) or "
     "'cholesky'. Env AGNI_FACTOR is a fallback",
     gpu_lu="bool: keep the dense LU on device (default False)",
-    cg_maxiter_cold="int: CG budget on the first, un-warm-started solve "
-    "(default 6*cg_maxiter)",
-    cg_maxiter_pass1="int: CG budget for the adapt first pass",
     k_defl="int: deflation rank (default 50). Env AGNI_K_DEFL is a fallback",
-    rr_refine="bool: Rayleigh-Ritz re-extraction of the eigenvector (default False)",
-    ring_traced="bool: build ring blocks with one vmapped call instead of a host "
-    "loop (default True). The host loop is not traceable, so it cannot be used "
-    "under jit",
-    traced_defl="bool: traced deflation-space truncation (default True). The "
-    "eager branch is not traceable",
-    z_init="str: path to a saved seed/deflation basis",
-    debug_matfree="bool: print matrix-free operator diagnostics (read by "
-    "`_agni3_matfree_operator`, which this compute function builds its "
-    "jax_lanczos and pcg_deflated operators from)",
+    ring_batch="int: pcg_deflated. Rings assembled at once for the ring "
+    "preconditioner (default 64); lower it when the ring build runs out of memory",
+    jd_outer="int: pcg_deflated. Maximum Jacobi-Davidson iterations (default 200)",
+    jd_inner="int: PCG iterations per Jacobi-Davidson correction solve (default 100)",
+    jd_maxdim="int: Jacobi-Davidson search-space size before restart (default 60)",
+    jd_keep="int: Ritz vectors kept at a Jacobi-Davidson restart (default 10)",
+    jd_tol="float: stop Jacobi-Davidson when ||A u - theta u||/|theta| <= jd_tol "
+    "(default 0 = off)",
+    jd_theta_tol="float: stop Jacobi-Davidson when the relative change of theta "
+    "between outer iterations <= jd_theta_tol (default 1e-8; 0 = off)",
+    jd_print="int: print theta and residual every N Jacobi-Davidson outer "
+    "iterations (default 0 = off)",
     eigsh_tol="float: tolerance for the ARPACK eigsh",
-    num_matvecs="int: Lanczos matvec count for the FINE solve (default 50). "
+    num_matvecs="int: jax_lanczos only. Lanczos matvec count (default 50). "
     "Env AGNI_NUM_MATVECS is a fallback only -- the kwarg wins",
-    cg_tol="float: relative-residual tolerance for the inner PCG (default 1e-10). "
-    "Env CG_TOL is a fallback only",
-    cg_maxiter="int: inner PCG iteration cap (default 8000). Env CG_MAXITER is a "
-    "fallback only. Hitting the cap is not an error -- check the reported relres",
     coarse_grid="Grid: optional COARSE level (mapped to DESC coords at these "
     "params) whose generalized modes of (H_c, M_ring,c) supply the deflation "
-    "space and the Lanczos seed. Active only with AGNI_COARSE_DEFL=1 and "
-    "AGNI_EIGENSOLVER=pcg_deflated.",
+    "space and the Jacobi-Davidson start vector. Used by eigensolver='pcg_deflated' "
+    "whenever it is given (the FinitenStability objective builds it only with "
+    "AGNI_COARSE_DEFL=1).",
     coarse_diffmat="DiffMat: differentiation operators for coarse_grid",
     coarse_data="dict: prefilled flux/0-D data on coarse_grid, from the coarse "
     "level's own LinearGrid (its rho set differs from the fine one)",
@@ -2628,10 +2660,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     Called by
     ---------
     ``FinitenStability.compute_data`` through DESC's normal ``eq.compute`` path,
-    with the compute key ``"finite-n lambda3 rayleigh"``. The optimization driver
-    in ``AGNI_var/dense-eigsh-optimization/run_dense_eigsh_opt.py`` builds a
-    ``FinitenStability`` objective, then DESC calls this function during objective
-    and Jacobian evaluations.
+    with the compute key ``"finite-n lambda3 rayleigh"``, during objective and
+    Jacobian evaluations.
 
     Inputs
     ------
@@ -2645,10 +2675,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     -------------
     ``AGNI_EIGENSOLVER=eigsh_callback`` uses a host scipy ARPACK callback.
     ``AGNI_EIGENSOLVER=jax_lanczos`` assembles/factorizes in JAX and uses matfree
-    Lanczos. ``AGNI_FACTOR=lu`` (default) or ``cholesky`` picks the dense
-    factorization behind that path's shift-invert ``OPinv``. ``AGNI_SIGMA_MODE=adapt``
-    does the two-pass shift update used by the optimizer. ``AGNI_DIAG=1`` prints
-    xcheck; ``AGNI_DIAG=2`` also prints r_mu and separation diagnostics.
+    Lanczos; ``AGNI_FACTOR=lu`` (default) or ``cholesky`` picks the dense
+    factorization behind its shift-invert ``OPinv``, and ``AGNI_SIGMA_MODE=adapt``
+    gives it a second pass at ``sigma_factor * lambda``.
+    ``AGNI_EIGENSOLVER=pcg_deflated`` is matrix-free Jacobi-Davidson with the
+    ring + coarse-deflation preconditioner (``jd_*`` options).
+    ``AGNI_DIAG=1`` prints xcheck; ``AGNI_DIAG=2`` also prints r_mu and
+    separation diagnostics.
 
     Outputs
     -------
@@ -2660,12 +2693,10 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     Examples
     --------
-    The normal optimizer route is not a direct call to this function:
-
-    ``sbatch --export=ALL,AGNI_SIGMA_MODE=adapt,N_STEPS=1,LAMBDA_FLOOR=-1.0e-6,UNFIX_K=4 job_sigma_repeat.sl``
-
-    A value/gradient gate uses:
-
+    ``tests/test_AGNI.py``: ``test_jax_lanczos_matches_dense`` (dense path),
+    ``test_jd_two_level_matches_dense`` and ``test_jd_gradient_matches_dense_eigenvector``
+    (matrix-free JD), ``test_jd_optimization_runs`` (optimizer route through
+    ``FinitenStability``).
     """
     # noqa: unused dependency
     _ = params["Psi"]
@@ -2715,12 +2746,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         Test examples
         -------------
-        The regression job exercises this path by default:
-
-
-        The GPU optimizer also uses this unless ``AGNI_EIGENSOLVER`` is changed:
-
-        ``sbatch --export=ALL,AGNI_SIGMA_MODE=adapt,LAMBDA_FLOOR=-1e-6,UNFIX_K=4,N_STEPS=1 job_sigma_repeat.sl``
+        ``tests/test_AGNI.py::test_finiten_objective_gradient_is_hellmann_feynman``.
         """
         p_h = {k: jnp.asarray(val) for k, val in params_host.items()}
         d_h = dict(_other_data)
@@ -2797,7 +2823,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     _sigma_mode = str(
         _solver_opt(kwargs, "sigma_mode", "AGNI_SIGMA_MODE", "fixed")
     ).lower()
-    _valid = {"fixed", "track", "adapt", "track+adapt", "adapt+track"}
+    _valid = {"fixed", "adapt"}
     if _sigma_mode not in _valid:
         raise ValueError(
             "AGNI_SIGMA_MODE must be one of {}, got {!r}".format(
@@ -2809,8 +2835,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # Dense factorization used as the shift-invert OPinv in `_eigensolve_jax`.
     # `H = A - sigma I` is SPD whenever sigma sits below the whole spectrum, which
     # is the operating regime, so `potrf` (n^3/3) may replace `getrf` (2n^3/3).
-    # Default stays `lu` so this is opt-in and A/B-able against every prior run.
-    # See AGNI_var/precond_stage2/CHOLESKY_EFFICIENCY.md.
+    # Default stays `lu` so this is opt-in.
     _factor = str(_solver_opt(kwargs, "factor", "AGNI_FACTOR", "lu")).lower()
     if _factor not in {"lu", "cholesky"}:
         raise ValueError(
@@ -2852,11 +2877,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         Test examples
         -------------
-        Use the same regression or optimizer scripts with the JAX eigensolver
-        explicitly enabled:
-
-
-        ``sbatch --export=ALL,AGNI_EIGENSOLVER=jax_lanczos,AGNI_SIGMA_MODE=adapt,LAMBDA_FLOOR=-1e-6,UNFIX_K=4,N_STEPS=1 job_sigma_repeat.sl``
+        ``tests/test_AGNI.py::test_jax_lanczos_matches_dense``.
         """
         d_h = dict(_other_data)
         d_h.update(data_d)
@@ -2869,7 +2890,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
             Called by
             ---------
-            ``_eigensolve_jax`` once for fixed/track modes and twice for adapt
+            ``_eigensolve_jax`` once for fixed mode and twice for adapt
             modes. The first call uses the configured ``sigma``. The second call
             uses ``AGNI_SIGMA_FACTOR * lam_mu`` when that value is finite and
             negative.
@@ -3029,107 +3050,73 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         return v, lam_mu
 
-    def _eigensolve_pcg(params_d, data_d, _Zc_in=None, _v0c_in=None):
-        """Matrix-free shifted eigensolve with ring block-Jacobi PCG as OPinv.
+    def _eigensolve_pcg(params_d, data_d, _Zc_in=None, _v0c_in=None, sigma=sigma):
+        """Matrix-free Jacobi-Davidson eigensolve (``eigensolver='pcg_deflated'``).
 
-        Uses a deflation space carried over from the PREVIOUS objective evaluation.
+        Never forms the fine matrix: ``A`` is applied through
+        ``_agni3_matfree_operator``. Finds the lowest eigenpair of ``A`` with
+        Jacobi-Davidson (JD):
 
-        Selected by ``AGNI_EIGENSOLVER=pcg_deflated``. Additive: the
-        ``jax_lanczos`` and host-callback paths are untouched.
+        * Search space ``V``; each iteration does Rayleigh-Ritz with the exact
+          ``A`` over ``V`` -> lowest Ritz pair ``(theta, u)``, residual
+          ``r = A u - theta u``.
+        * Correction equation ``(I - u u^H)(A - sigma I)(I - u u^H) t = -r``,
+          solved with ``jd_inner`` projected PCG iterations, preconditioned by
+          ``M^-1 = M_ring^-1 + Y Y^H``: ring block-Jacobi Cholesky of
+          ``A - sigma I`` plus the deflation built from the coarse modes ``Z``.
+          ``t`` is orthogonalized and appended to ``V``.
+        * At ``jd_maxdim`` vectors, restart from the ``jd_keep`` lowest Ritz
+          vectors. Stop at ``jd_outer`` iterations, or earlier on ``jd_tol``
+          (eig-res) or ``jd_theta_tol`` (relative change of theta).
 
-        Never forms a dense matrix. ``A`` is applied through
-        ``_agni3_matfree_operator``; the preconditioner blocks come from the
-        source-rewriting restricted assembler in ``../precond_harmonic``
-        (validated to 1e-16 against dense-extracted blocks on both bases).
+        ``sigma`` does not pick the eigenvalue (Rayleigh-Ritz does); it only
+        shifts the preconditioner and the correction operator, and must sit below
+        the spectrum so the ring blocks are SPD. Start vector: the prolonged
+        softest coarse mode ``_v0c_in``, else a fixed random vector.
 
-        Deflation vectors are the Lanczos Ritz vectors of the previous
-        evaluation, which are otherwise discarded. Offline replay over a real
-        optimiser trajectory measured one-step-old vectors giving
-        ~4x fewer inner iterations, with a stale space costing ITERATIONS and not
-        CORRECTNESS. They are carried in ``ritz_store``, an eager-only module
-        global -- see that file for why this is temporary and what it guards.
-
-        Env: ``CG_MAXITER`` (inner iterations per Lanczos step, default 8000),
-        ``CG_TOL``, ``AGNI_K_DEFL`` (deflation rank, default 50).
-
-        Cost note: the ring blocks depend on the equilibrium and are therefore
-        rebuilt EVERY evaluation -- a Python loop over ``n_rho*n_zeta`` rings.
-        That is the dominant setup cost and the obvious thing to batch later.
+        ``_Zc_in`` / ``_v0c_in`` come from ``_coarse_space``, built outside the
+        custom_vjp. Everything here is fixed-shape and traceable.
         """
         import numpy as _np
 
-        # `ritz_store` carries Ritz vectors between EAGER evaluations. It is
-        # explicitly a temporary shortcut (its own docstring: "deliberately
-        # temporary"), it REFUSES tracers, and coarse-space deflation overrides
-        # it when active -- so under jit, which is the production path, it does
-        # nothing at all.
-        #
-        # It therefore stays OPTIONAL rather than being vendored: importing it is
-        # a no-op for every jitted run, and requiring it would make the whole
-        # deflated path depend on a directory outside the package. Absent, the
-        # solve simply starts cold, which costs iterations and never correctness
-        # (PCG converges to the same solution for any SPD preconditioner, and the
-        # eigenvalue comes from Lanczos on the exact operator).
-        try:
-            import ritz_store as _rs
-        except ModuleNotFoundError:
-            _rs = _NoRitzStore()
-
         from ._stability_solvers import build_ring_blocks as _build_rings
-        from ._stability_solvers import factor_ring_blocks as _fb
+        from ._stability_solvers import deflation_Y as _defl_Y
         from ._stability_solvers import factor_ring_blocks_traced as _fbt
-        from ._stability_solvers import finish_ring_block as _finish_blk
         from ._stability_solvers import make_block_precond as _mkprec
-        from ._stability_solvers import pcg as _pcg
         from ._stability_solvers import ring_index_maps as _ring_maps
-        from ._stability_solvers import ring_nodes as _ring_nodes_fn
 
-        _cgmax = _solver_opt(kwargs, "cg_maxiter", "CG_MAXITER", 8000, int)
-        # COLD START. With no carried-over vectors the first evaluation has only
-        # the ring preconditioner, and at 32x32x12 (n=36096) CG_MAXITER=8000 is
-        # not enough: measured lam_R=+2.62 against a true -2.94e-04, i.e. lam_mu
-        # fine but the EIGENVECTOR garbage, which poisons the Hellmann-Feynman
-        # gradient and hence the optimiser's first step. Pay more once, then let
-        # recycling carry the rest -- this is the "converged high-res solve, then
-        # reuse its Ritz vectors" workflow, not a fudge.
-        _cgwarm = _solver_opt(
-            kwargs, "cg_maxiter_cold", "CG_MAXITER_COLD", 6 * _cgmax, int
+        _jd_outer = _solver_opt(kwargs, "jd_outer", "AGNI_JD_OUTER", 200, int)
+        _jd_inner = _solver_opt(kwargs, "jd_inner", "AGNI_JD_INNER", 100, int)
+        _jd_maxdim = _solver_opt(kwargs, "jd_maxdim", "AGNI_JD_MAXDIM", 60, int)
+        _jd_keep = _solver_opt(kwargs, "jd_keep", "AGNI_JD_KEEP", 10, int)
+        # DEBUG: print theta and |r| every N iterations (0 = off)
+        _jd_print = _solver_opt(kwargs, "jd_print", "AGNI_JD_PRINT", 0, int)
+        # Early stop (0 = off; jd_outer stays the maximum):
+        #   jd_tol       stop when eig-res ||A u - theta u|| / |theta| <= jd_tol
+        #   jd_theta_tol stop when |theta - theta_prev| / |theta| <= jd_theta_tol
+        # Measured (C7): Zernike 3D eig-res plateaued at ~3e-3 while theta was
+        # already fixed to 1e-9, so jd_tol alone may never trigger there.
+        _jd_tol = _solver_opt(kwargs, "jd_tol", "AGNI_JD_TOL", 0.0, float)
+        # Default 1e-8: measured at 48x48x16 it kept lambda within 1e-7 of the
+        # converged value at 4-9x less work than a 200,000-multiplication budget.
+        # The eigenvector is NOT converged at that point (residual ~1).
+        _jd_theta_tol = _solver_opt(
+            kwargs, "jd_theta_tol", "AGNI_JD_THETA_TOL", 1e-8, float
         )
-        _cgtol = _solver_opt(kwargs, "cg_tol", "CG_TOL", 1e-10, float)
-        _kdefl = _solver_opt(kwargs, "k_defl", "AGNI_K_DEFL", 50, int)
-        # Rayleigh-Ritz re-extraction of the eigenvector. See the block in
-        # `_solve_at` for what it does and why. Default off so it can be A/B'd
-        # against the archived runs.
-        _rr_refine = _solver_flag(kwargs, "rr_refine", "AGNI_RR_REFINE")
 
         d_h = dict(_other_data)
         d_h.update(data_d)
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
         _Ax = _opm["Ax"]
         nA = int(_opm["n_keep"])
-        # Device view. Nothing on this path consumes it yet, but `keep` is an
-        # index array of the operator and belongs on device as jnp.
-        _keep_dev = jnp.asarray(_opm["keep"])
-        # HOST copy, derived from the resolution rather than read back from the
-        # operator dict. `keep` is grid structure -- it is
-        #     arange(n_shell, n_total - n_shell) U arange(n_total, 3*n_total)
-        # for fixed boundary, or
-        #     arange(n_shell, n_total) U arange(n_total, 3*n_total)
-        # for free boundary (phi_matrix passed as a transform), with
-        # n_shell = n_theta_max*n_zeta_max -- so it is fixed once the
-        # resolution (and the fixed/free choice) is fixed and carries no
-        # dependence on params. Reading it out of the dict made it a TRACER
-        # inside the custom_vjp primal and jit died on it.
-        #
-        # It has to be host-concrete, not merely jnp: the consumers build `sel`
-        # and `pad` of shape (m, b) where b is the largest surviving ring, and b
-        # is an array SHAPE. Shapes cannot be derived from traced values, so
-        # jnp.asarray here would only move the failure one frame deeper.
-        # n_shell = n_theta*n_zeta = n_total//n_rho by construction. Derived this
-        # way rather than from named keys because the matfree operator dict
-        # exposes n_rho/n_theta/n_zeta while the keep construction in
-        # _agni3_assemble is written in terms of n_theta_max/n_zeta_max -- job
-        # 56806648 died on KeyError('n_theta_max') from assuming they matched.
+        n_rho = int(_opm["n_rho"])
+        n_theta = int(_opm["n_theta"])
+        n_zeta = int(_opm["n_zeta"])
+        # HOST copy of `keep`, derived from the resolution rather than read back
+        # from the operator dict: it feeds array SHAPES in the ring maps, so it
+        # cannot be a tracer. It is grid structure,
+        #     arange(n_shell, n_total - n_shell) U arange(n_total, 3*n_total),
+        # with n_shell = n_total // n_rho.
         _ntot_op = int(_opm["n_total"])
         _nshell = _ntot_op // int(_opm["n_rho"])
         if transforms.get("phi_matrix", None) is not None:
@@ -3148,401 +3135,213 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                     f"operator's (sizes {_keep.size} vs {_keep_ref.size}). The "
                     "construction in _agni3_matfree_operator has changed."
                 )
-        n_rho = int(_opm["n_rho"])
-        n_theta = int(_opm["n_theta"])
-        n_zeta = int(_opm["n_zeta"])
-        n_total = n_rho * n_theta * n_zeta
 
-        def _Hf(x):
-            return _Ax(x) - sigma * x
-
-        # ---- seed: prolonged low-res dense solve, if the store is empty ----
-        # Replaces the random cold start, which HANDOFF 5.2 measured as the WORST
-        # option. AGNI_Z_INIT points at an .npz from precond_stage2/make_seed.py.
-        _seed_v0 = None
-        if _rs.get() is None:
-            _zi = str(_solver_opt(kwargs, "z_init", "AGNI_Z_INIT", "")).strip()
-            if _zi:
-                _sd = _np.load(_zi)
-                if int(_sd["n_f"]) != nA:
-                    raise RuntimeError(
-                        f"AGNI_Z_INIT {_zi} was built for n={int(_sd['n_f'])} but "
-                        f"this grid has n={nA}. Regenerate it."
-                    )
-                _rs.put(_np.asarray(_sd["Z"]), kmax=_kdefl)
-                _seed_v0 = jnp.asarray(_sd["v0"])
-                if _xcheck:
-                    jax.debug.print(
-                        "[pcg_defl] seeded from {f}: lam_coarse_0={l:.6e}",
-                        f=_zi.split("/")[-1],
-                        l=float(_np.asarray(_sd["lam_coarse"])[0]),
-                    )
-        _Z = _rs.get()
-
-        # COARSE-SPACE DEFLATION is computed OUTSIDE this function and arrives
-        # as arguments -- see `_coarse_space` and `_v_primal`. It used to run
-        # HERE, inside the custom_vjp, where it built a whole subgraph (dense
-        # coarse assembly, Cholesky reduction, 100-step Lanczos) from traced
-        # inputs. Those results have nowhere to live in the custom_vjp's jaxpr
-        # and ended up as jaxpr CONSTANTS, so MLIR lowering died in
-        # `ir_constant` with "No constant handler for DynamicJaxprTracer"
-        # . Bisected with the
-        # local lowering probe: gradient lowers CLEAN with AGNI_COARSE_DEFL=0
-        # and BLOCKS with it on, traced rings/deflation identical in both.
-        if _Zc_in is not None:
-            _Z = _Zc_in
-        if _v0c_in is not None:
-            _seed_v0 = _v0c_in
-
-        # ---- ring blocks of A, assembled ONCE (sigma-independent) ----------
-        # sigma enters only as -sigma*I on the block diagonal, so re-shifting for
-        # AGNI_SIGMA_MODE=adapt costs a diagonal subtraction plus a batched
-        # Cholesky -- NOT another ~3 min reassembly. That is what makes the
-        # two-pass adapt affordable on the matrix-free path.
-        # AGNI_RING_TRACED=1 replaces the host loop below with a single vmapped
-        # assembly (`build_ring_blocks_traced`), which is what makes this path
-        # jittable: the eager version does a device_get per ring and a
-        # variable-size boolean gather, both illegal under trace. Verified
-        # against the eager blocks at 9.126e-17 relative; see METHOD.md 3.1.
-        # DEFAULT TRACED. The eager branch does `np.asarray(jax.device_get(...))` per
-        # ring, which cannot survive a trace, so it made the whole pcg_deflated
-        # path unusable under jit -- and jit is the production path. The two
-        # builds are numerically identical: both reproduce the dense matrix's
-        # sub-blocks to 5.013e-16 (test_ring_blocks_eager_and_vmapped_both_match_dense).
-        # Set ring_traced=False / AGNI_RING_TRACED=0 for the host loop.
-        use_traced_rings = _solver_flag(
-            kwargs, "ring_traced", "AGNI_RING_TRACED", default="1"
-        )
-        fine_res = (n_rho, n_theta, n_zeta)
-        if use_traced_rings:
-            # `_rpb` is imported inside the coarse-deflation branch above, which
-            # may not have run; the traced ring build is independent of it.
-            ring_sel, ring_pad, _G = _ring_maps(_np.asarray(_keep), fine_res)
-            _b = int(_G.shape[1])
-            # sigma=0: assemble UNSHIFTED so the adapt second pass still costs a
-            # diagonal subtraction rather than a reassembly.
-            _Ablk = _build_rings(
-                _agni3_assemble,
-                params_d,
-                transforms,
-                profiles,
-                d_h,
-                kwargs,
-                fine_res,
-                ring_sel,
-                ring_pad,
-                0.0,
-            )
-            _nal = None
-            # diag(pad): the shift must touch real entries only, leaving the
-            # inert identity that `build_ring_blocks_traced` puts on padding.
-            ring_pad_diag = ring_pad[:, :, None] * jnp.eye(_b, dtype=_Ablk.dtype)[None]
-        else:
-            _f2r = _np.ones(3 * n_total, dtype=_np.int64) * -1
-            _f2r[_keep] = _np.arange(_keep.size)
-            _grp = []
-            for _i in range(n_rho):
-                for _k in range(n_zeta):
-                    _nodes = _ring_nodes_fn(n_rho, n_theta, n_zeta, _i, _k)
-                    _full = _np.concatenate(
-                        [_nodes, _nodes + n_total, _nodes + 2 * n_total]
-                    )
-                    _grp.append((_nodes, _f2r[_full]))
-            _b = max(int((_g >= 0).sum()) for _, _g in _grp)
-            _Ablk = _np.zeros((len(_grp), _b, _b))
-            _nal = _np.zeros(len(_grp), dtype=int)
-            _G = -_np.ones((len(_grp), _b), dtype=_np.int64)
-            for _gi, (_nodes, _red) in enumerate(_grp):
-                _out = _agni3_assemble(
-                    params_d,
-                    transforms,
-                    profiles,
-                    d_h,
-                    ring_nodes=jnp.asarray(_nodes),
-                    **kwargs,
-                )
-                _blk = _np.asarray(
-                    jax.device_get(
-                        _finish_blk(
-                            _out["A"], _out["Linv"], _out["au_diag"], _nodes.size
-                        )
-                    )
-                )
-                _alive = _red >= 0
-                _idx = _red[_alive]
-                _na = int(_idx.size)
-                _sub = _blk[_np.ix_(_alive, _alive)]
-                _Ablk[_gi, :_na, :_na] = 0.5 * (_sub + _sub.T)
-                _nal[_gi] = _na
-                _G[_gi, :_na] = _idx
-            ring_pad_diag = None
+        # ---- preconditioner at sigma: ring blocks + coarse deflation ----------
+        # One vmapped ring assembly (sub-blocks of the dense matrix to 5e-16,
+        # test_ring_blocks_vmapped_match_dense), shifted by -sigma inside.
+        ring_sel, ring_pad, _G = _ring_maps(_keep, (n_rho, n_theta, n_zeta))
         _Gn = _np.asarray(_G)
-        _Gs = jnp.asarray(_np.where(_Gn >= 0, _Gn, 0))
-        _mask = jnp.asarray((_Gn >= 0).astype(_np.float64))
-
-        def _solve_at(_sig, _iters, _Zin):
-            """One shift-invert Lanczos solve at shift ``_sig``.
-
-            Rebuilds only the sigma-dependent pieces: the shifted ring blocks
-            (diagonal subtraction + batched Cholesky) and, if deflation vectors
-            are supplied, ``Z^T H Z`` for this sigma (k matvecs).
-            """
-            if ring_pad_diag is not None:
-                # traced: blocks already carry identity on padding, so the shift
-                # is one masked diagonal subtraction. No host loop, no .copy().
-                _bs = _Ablk - _sig * ring_pad_diag
-            else:
-                _bs = _Ablk.copy()
-                for _gi in range(_bs.shape[0]):
-                    _na = int(_nal[_gi])
-                    _bs[_gi, :_na, :_na] -= _sig * _np.eye(_na)
-                    for _t in range(_na, _b):
-                        _bs[_gi, _t, _t] = 1.0
-                _bs = jnp.asarray(_bs)
-            if isinstance(_bs, jax.core.Tracer):
-                # `pcg_test.factor_blocks` picks its ridge by retrying until the
-                # factorization succeeds -- data-dependent control flow, plus
-                # float()/bool() on device values. Untraceable, and read-only
-                # (precond_harmonic/), so trace through a stage-2 companion that
-                # factors once at ridge 0. See `factor_blocks_traced.__doc__` for
-                # what that gives up.
-                _L, _ok, _ridge = _fbt(_bs)
-            else:
-                _L, _ok, _ridge = _fb(_bs, 0.0)
-            # Raise only when the flag is a concrete value. Under trace it is a
-            # tracer and `not _ok` would throw TracerBoolConversionError, so the
-            # check degrades to a device-side print rather than silently passing
-            # an indefinite H to CG.
-            if isinstance(_ok, jax.core.Tracer) or isinstance(_sig, jax.core.Tracer):
-                jax.debug.print(
-                    "[pcg_defl] WARNING ring blocks SPD={o} at sigma={s:.6e}; "
-                    "False means H is indefinite and CG is not legal.",
-                    o=_ok,
-                    s=_sig,
-                )
-            elif not _ok:
-                raise RuntimeError(
-                    f"pcg_deflated: ring blocks not SPD at sigma={_sig}. The shift "
-                    "is above lambda_min, so H is indefinite and CG is not legal."
-                )
-            _Mr = _mkprec(_L, _Gn, nA)
-
-            def _Hs(x):
-                return _Ax(x) - _sig * x
-
-            _Mop, _rk = _Mr, 0
-            if _Zin is not None and _Zin.shape[0] == nA:
-                _Zj = jnp.asarray(_Zin)
-                _HZ = jnp.stack(
-                    [_Hs(_Zj[:, _j]) for _j in range(_Zin.shape[1])], axis=1
-                )
-                # DEFAULT TRACED, for the same reason as the ring build above: the eager
-                # branch device_gets a (k_defl, k_defl) array and dies under trace.
-                if _solver_flag(kwargs, "traced_defl", "AGNI_TRACED_DEFL", default="1"):
-                    # TRACED truncation. The eager branch below selects surviving
-                    # directions with boolean masks -- a variable-size gather plus
-                    # `int(_kp.sum())` and a Python branch on it -- none of which
-                    # can be traced. `deflation_Y_traced` keeps all k columns and
-                    # ZEROES the rejected ones: `Y Y^T` is identical because a
-                    # zero column contributes nothing to the outer product.
-                    # Verified against this branch to 1.17e-15 on `Y Y^T`.
-                    from ._stability_solvers import deflation_Y as _defl_Y
-
-                    # Stays on device: the rank is consumed only by the
-                    # [pcg_defl] debug print, which takes a tracer. The `int()`
-                    # that used to be here forced a host sync on every solve.
-                    _Y, _rk = _defl_Y(_Zj, _HZ)
-
-                    def _M_deflated(r, _Y=_Y, _Mr=_Mr):
-                        return _Mr(r) + _Y @ (jnp.swapaxes(_Y, 0, 1) @ r)
-
-                    _Mop = _M_deflated
-                else:
-                    _A2 = _np.asarray(jax.device_get(jnp.swapaxes(_Zj, 0, 1) @ _HZ))
-                    _A2 = 0.5 * (_A2 + _A2.T)
-                    _dg = _np.diag(_A2).copy()
-                    _lv = _dg > 0.0
-                    _d = _np.ones_like(_dg)
-                    _d[_lv] = _np.sqrt(_dg[_lv])
-                    _Hh = (_A2[_np.ix_(_lv, _lv)] / _d[_lv][:, None]) / _d[_lv][None, :]
-                    _w, _Q = _np.linalg.eigh(0.5 * (_Hh + _Hh.T))
-                    _kp = _w > 1e-12 * float(_w.max())
-                    _rk = int(_kp.sum())
-                    if _rk > 0:
-                        _Y = jnp.asarray(
-                            ((_Zin[:, _lv] / _d[_lv][None, :]) @ _Q[:, _kp])
-                            / _np.sqrt(_w[_kp])[None, :]
-                        )
-
-                        def _M_deflated(r, _Y=_Y, _Mr=_Mr):
-                            return _Mr(r) + _Y @ (jnp.swapaxes(_Y, 0, 1) @ r)
-
-                        _Mop = _M_deflated
-
-            # Measure the inner solve on ONE representative rhs. The tolerance
-            # has historically NEVER been reached on this operator -- recorded
-            # relres after full solves: 1.05, 4.54 (RESULTS.md 3), 4.06, 10.54,
-            # 8.67, 2.28 (HANDOFF 8.0) -- so the iteration count, not the
-            # tolerance, is what stops CG. If deflation has changed that, k_used
-            # will come back BELOW _iters and a looser CG_TOL buys real time.
-            # DIAGNOSTIC ONLY. `_k_used`/`_relres` feed the [pcg_defl] line and
-            # nothing else, but the probe is a FULL extra PCG solve of `_iters`
-            # iterations -- roughly a 1/num_matvecs tax on every solve -- and the
-            # two device_gets are host round-trips that cannot be traced. Gate on
-            # the same flag that prints them.
-            # Under trace the device_gets are illegal, so keep the probe's
-            # results on device and let jax.debug.print format them -- it takes
-            # tracers. Skipping the probe entirely under trace would be cheaper
-            # but would silently drop `relres` from every jitted run, and relres
-            # is the measurement that diagnosed the sigma=-1e-5 stall.
-            if _xcheck:
-                _probe = _pcg(_Hs, jnp.ones((nA,), dtype=_dtype), _Mop, _cgtol, _iters)
-                if isinstance(_probe[1], jax.core.Tracer):
-                    _k_used, _relres = _probe[1], _probe[2]
-                else:
-                    _k_used = int(jax.device_get(_probe[1]))
-                    _relres = float(jax.device_get(_probe[2]))
-            else:
-                _k_used, _relres = -1, float("nan")
-
-            def _OPinv(b):
-                x, _kk, _rr = _pcg(_Hs, b, _Mop, _cgtol, _iters)
-                return x
-
-            _tri = decomp.tridiag_sym(_num_matvecs, reortho="full", materialize=True)
-            _alg = eig.eigh_partial(_tri)
-            if _seed_v0 is not None:
-                _v0 = _seed_v0.astype(_dtype)
-            else:
-                _v0 = jnp.asarray(
-                    np.random.default_rng(0).standard_normal(nA), dtype=_dtype
-                )
-            _v0 = _v0 / jnp.linalg.norm(_v0)
-            _mu, _vecs = _alg(_OPinv, _v0)
-            _ordr = jnp.argsort(jnp.abs(_mu), descending=True)
-            _sel = _ordr[0]
-            _lm = _sig + 1.0 / jnp.where(_mu[_sel] == 0, jnp.inf, _mu[_sel])
-
-            if _rr_refine:
-                # RAYLEIGH-RITZ RE-EXTRACTION against A itself.
-                #
-                # `_vecs[_sel]` is the eigenvector of the Lanczos tridiagonal,
-                # and T = Q^T (OPinv + E) Q carries CG's residual E. Q itself is
-                # orthonormal to machine precision (reortho="full" above), so
-                # the SPACE is clean and only the SELECTION WITHIN it is
-                # corrupted. That asymmetry is the whole story behind lam_mu
-                # staying accurate while lam_R = v^T A v / v^T v goes positive:
-                # Ritz VALUES of the perturbed operator are first-order
-                # insensitive for a well-separated dominant mode under
-                # shift-invert, Ritz VECTORS are not (error ~ ||E||/gap).
-                #
-                # The rows of `_vecs` are eigenvectors of a symmetric T mapped
-                # through orthonormal Q, so they are themselves an orthonormal
-                # basis for the SAME Krylov space. Project A onto it and solve
-                # the m x m symmetric problem. This never references _OPinv, so
-                # the eigenvector stops inheriting CG's residual, and the answer
-                # is the variational minimum of the Rayleigh quotient over the
-                # whole space -- a guaranteed upper bound on lambda_1, and
-                # optimal among every vector the space contains.
-                #
-                # Requirement on CG drops from "accurate enough that T's
-                # eigenvector is right" to "the space contains v_1".
-                #
-                # Cost: _num_matvecs applications of Ax, against the
-                # _num_matvecs * _iters that the solve already spent -- 1/8000
-                # of the run at CG_MAXITER=8000. Memory: one (nA, m) array.
-                #
-                # `jax.lax.map`, NOT a Python loop. The `jnp.stack([_Ax(...)
-                # for _j in range(...)])` form used for _HZ above unrolls one
-                # full copy of the Ax subgraph PER COLUMN into the jaxpr. That
-                # is tolerable for _HZ at k=50; at _num_matvecs=100 stacked on
-                # top of it, XLA compile time blew past the 30-minute wall
-                # without the solve ever starting. lax.map traces Ax once
-                # and loops at runtime, so the graph stays O(1) in m.
-                #
-                # Not vmap: that would batch 100 simultaneous Ax applications
-                # and multiply the working set by m. lax.map is sequential and
-                # keeps the memory identical to the Lanczos loop that already
-                # applies Ax one vector at a time.
-                _Vb = _vecs.T
-                _AVb = jax.lax.map(_Ax, _vecs).T
-                _Ah = _Vb.T @ _AVb
-                _Ah = 0.5 * (_Ah + _Ah.T)
-                _wr, _er = jnp.linalg.eigh(_Ah)
-                # eigh returns ascending, so column 0 is the most negative
-                # Rayleigh quotient == the most unstable mode.
-                _vv = _Vb @ _er[:, 0]
-                _vv = _vv / jnp.linalg.norm(_vv)
-                if _xcheck:
-                    jax.debug.print(
-                        "[rr_refine] m={m} lam_RR={w:.8e} lam_mu={l:.8e} "
-                        "(lam_RR is the variational optimum over the Krylov "
-                        "space; lam_R downstream should now match it)",
-                        m=_num_matvecs,
-                        w=_wr[0],
-                        l=_lm,
-                    )
-            else:
-                _vv = _vecs[_sel]
-                _vv = _vv / jnp.linalg.norm(_vv)
-            return _vv, _lm, _ordr, _vecs, _rk, _k_used, _relres
-
-        # COLD == a genuine cold start: NO deflation vectors and no seed, i.e.
-        # the ring preconditioner alone. That is the only case the larger budget
-        # is for (see CG_MAXITER_COLD above: ring-only at 32x32x12 gave
-        # lam_R=+2.62 against a true -2.94e-04).
-        #
-        # It is NOT "first solve in the process". That test fired on solve 1 of
-        # every run regardless of whether a coarse level had supplied Z and v0,
-        # so a single-solve job ALWAYS took the cold budget and CG_MAXITER was
-        # ignored entirely; and under jit `_rs.put` (below) is behind a Tracer
-        # guard that never passes while `_rs.bump_solve()` is not, so solves 2+
-        # took the SMALL budget with an empty store -- the ring-only case, now
-        # unprotected. Keying on the deflation space fixes both. `_Z.shape` is
-        # static, so this is jit-safe.
-        _rs.bump_solve()  # kept: bookkeeping other tooling reads
-        _first = (_Z is None) or (int(_Z.shape[-1]) == 0)
-        _cgfull = _cgwarm if _first else _cgmax
-        # Pass 1 only needs lam_mu, which is the ROBUST quantity -- it stayed
-        # accurate to 2.5e-06 in runs where the eigenvector was unusable. So it
-        # runs at a fraction of the iterations.
-        _cgp1 = _solver_opt(
-            kwargs, "cg_maxiter_pass1", "CG_MAXITER_PASS1", max(1000, _cgfull // 4), int
+        _bs = _build_rings(
+            _agni3_assemble,
+            params_d,
+            transforms,
+            profiles,
+            d_h,
+            kwargs,
+            (n_rho, n_theta, n_zeta),
+            ring_sel,
+            ring_pad,
+            sigma,
+            _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
         )
-
-        if _adapt:
-            _, _lam1, _, _, _, _k1, _r1 = _solve_at(sigma, _cgp1, _Z)
-            # Stays on device. sigma is only ever used in arithmetic and in
-            # jax.debug.print, both of which accept a tracer, so there is no
-            # reason to round-trip lam1 to the host to scale it.
-            _sig2 = _adapt_factor * _lam1
-            _sig2 = jnp.where(jnp.isfinite(_sig2) & (_sig2 < 0), _sig2, sigma)
-            _v, _lam, _ordr, _vecs, _rank, _ku, _rr = _solve_at(_sig2, _cgfull, _Z)
-            _sig_used = _sig2
-        else:
-            _v, _lam, _ordr, _vecs, _rank, _ku, _rr = _solve_at(sigma, _cgfull, _Z)
-            _k1, _r1 = 0, float("nan")
-            _sig_used = sigma
-
-        if not isinstance(_vecs, jax.core.Tracer):
-            _take = _np.asarray(jax.device_get(_ordr))[: min(_kdefl, _num_matvecs)]
-            _rs.put(_np.asarray(jax.device_get(_vecs))[_take].T, kmax=_kdefl)
-        if _xcheck:
+        _L, _ok, _ = _fbt(_bs)
+        if isinstance(_ok, jax.core.Tracer) or isinstance(sigma, jax.core.Tracer):
             jax.debug.print(
-                "[pcg_defl] n={n} rings={g} cg={c}(used {ku}, relres {rr:.3e}) "
-                "pass1={p}(used {k1}) sigma={s:.6e} defl_rank={r} lam_mu={l:.8e}",
+                "[jd] ring blocks SPD={o} at sigma={s:.6e} "
+                "(False: sigma is above lambda_min and the solve is invalid)",
+                o=_ok,
+                s=sigma,
+            )
+        elif not bool(_ok):
+            raise RuntimeError(
+                f"pcg_deflated: ring blocks not SPD at sigma={sigma}. The shift is "
+                "above lambda_min, so A - sigma I is indefinite."
+            )
+        _Mr = _mkprec(_L, _Gn, nA)
+        _Mop, _rk = _Mr, 0
+        if _Zc_in is not None and _Zc_in.shape[0] == nA:
+            _Zj = jnp.asarray(_Zc_in)
+            # vmap traces the operator once regardless of k_defl.
+            _HZ = jax.vmap(lambda x: _Ax(x) - sigma * x, in_axes=1, out_axes=1)(_Zj)
+            _Y, _rk = _defl_Y(_Zj, _HZ)
+
+            # Hermitian outer product: Y is complex for axisym=True.
+            def _Mdefl(r, _Y=_Y):
+                return _Mr(r) + _Y @ (jnp.conj(jnp.swapaxes(_Y, 0, 1)) @ r)
+
+            _Mop = _Mdefl
+
+        def _H(X):
+            return jnp.conj(jnp.swapaxes(X, -1, -2))
+
+        # ---- Jacobi-Davidson ---------------------------------------------------
+        _m = _jd_maxdim
+        if _v0c_in is not None:
+            _u0 = jnp.asarray(_v0c_in).astype(_dtype)
+        else:
+            _u0 = jnp.asarray(
+                np.random.default_rng(0).standard_normal(nA), dtype=_dtype
+            )
+        _u0 = _u0 / jnp.linalg.norm(_u0)
+        _V = jnp.zeros((nA, _m), dtype=_dtype).at[:, 0].set(_u0)
+        _AV = jnp.zeros((nA, _m), dtype=_dtype).at[:, 0].set(_Ax(_u0))
+        _live = jnp.arange(_m)
+
+        def _ritz(V, AV, j):
+            used = _live < j
+            both = used[:, None] & used[None, :]
+            S = _H(V) @ AV
+            S = 0.5 * (S + _H(S))
+            S = jnp.where(both, S, 0.0)
+            # unused slots get a diagonal above every Ritz value, so the lowest
+            # eigenpairs live on the used block only
+            big = jnp.linalg.norm(S) + 1.0
+            S = S + jnp.diag(jnp.where(used, 0.0, big)).astype(S.dtype)
+            return jnp.linalg.eigh(S)
+
+        def _proj_pcg(u, b):
+            def P(x):
+                return x - u * jnp.vdot(u, x)
+
+            def Op(x):
+                Px = P(x)
+                return P(_Ax(Px) - sigma * Px)
+
+            def Pre(x):
+                return P(_Mop(P(x)))
+
+            def body(st):
+                x, r, p, rz, k, ok = st
+                Ap = Op(p)
+                curv = jnp.real(jnp.vdot(p, Ap))
+                good = curv > 0
+                a = jnp.where(good, rz / jnp.where(good, curv, 1.0), 0.0)
+                x = x + a * p
+                r = r - a * Ap
+                z = Pre(r)
+                rzn = jnp.real(jnp.vdot(r, z))
+                p = z + (rzn / rz) * p
+                return (x, r, p, rzn, k + jnp.where(good, 1, 0), good)
+
+            r0 = P(b)
+            z0 = Pre(r0)
+            st = (
+                jnp.zeros_like(b),
+                r0,
+                z0,
+                jnp.real(jnp.vdot(r0, z0)),
+                0,
+                jnp.array(True),
+            )
+            x, _, _, _, k, _ = jax.lax.while_loop(
+                lambda s: (s[4] < _jd_inner) & s[5], body, st
+            )
+            return P(x), k
+
+        def _outer(state):
+            V, AV, j, it, kt, th_prev, _, _ = state
+            w, Y = _ritz(V, AV, j)
+            y = Y[:, 0]
+            u = V @ y
+            Au = AV @ y
+            nu = jnp.linalg.norm(u)
+            u, Au = u / nu, Au / nu
+            r = Au - w[0] * u
+            rn = jnp.linalg.norm(r)
+            # stopping quantities of the CURRENT space (checked by `_go`)
+            eres = rn / jnp.maximum(jnp.abs(w[0]), 1e-300)
+            dth = jnp.abs(w[0] - th_prev) / jnp.maximum(jnp.abs(w[0]), 1e-300)
+            t, k = _proj_pcg(u, -r)
+
+            def _restart(a):
+                V_, AV_, _, Y_ = a
+                Yk = Y_[:, :_jd_keep]
+                Vn = jnp.zeros_like(V_).at[:, :_jd_keep].set(V_ @ Yk)
+                AVn = jnp.zeros_like(AV_).at[:, :_jd_keep].set(AV_ @ Yk)
+                return Vn, AVn, jnp.asarray(_jd_keep)
+
+            V, AV, j = jax.lax.cond(
+                j >= _m, _restart, lambda a: (a[0], a[1], a[2]), (V, AV, j, Y)
+            )
+            for _ in range(2):
+                t = t - V @ (_H(V) @ t)
+            tn = jnp.linalg.norm(t)
+            good = jnp.isfinite(tn) & (tn > 1e-300)
+            t = t / jnp.where(good, tn, 1.0)
+            V = jnp.where(good, V.at[:, j].set(t), V)
+            AV = jnp.where(good, AV.at[:, j].set(_Ax(t)), AV)
+            j = j + jnp.where(good, 1, 0)
+            if _jd_print:
+                jax.lax.cond(
+                    (it + 1) % _jd_print == 0,
+                    lambda: jax.debug.print(
+                        "[jd it] iter={o} theta={t:.10e} |r|={rn:.3e} "
+                        "eig-res={e:.3e} dtheta={d:.3e} pcg={k}",
+                        o=it + 1,
+                        t=w[0],
+                        rn=rn,
+                        e=eres,
+                        d=dth,
+                        k=k,
+                        ordered=False,
+                    ),
+                    lambda: None,
+                )
+            return (V, AV, j, it + 1, kt + k, w[0], eres, dth)
+
+        def _go(state):
+            it, eres, dth = state[3], state[6], state[7]
+            done = jnp.array(False)
+            if _jd_tol > 0:
+                done = done | (eres <= _jd_tol)
+            if _jd_theta_tol > 0:
+                done = done | (dth <= _jd_theta_tol)
+            return (it < _jd_outer) & ~done
+
+        _inf = jnp.asarray(jnp.inf)
+        _V, _AV, _j, _it, _kt, _, _eres, _dth = jax.lax.while_loop(
+            _go,
+            _outer,
+            (_V, _AV, jnp.asarray(1), jnp.asarray(0), jnp.asarray(0), _inf, _inf, _inf),
+        )
+        _w, _Y = _ritz(_V, _AV, _j)
+        _vv = _V @ _Y[:, 0]
+        _vv = _vv / jnp.linalg.norm(_vv)
+        if _xcheck:
+            _rfin = jnp.linalg.norm(_AV @ _Y[:, 0] - _w[0] * (_V @ _Y[:, 0]))
+            jax.debug.print(
+                "[jd] n={n} rings={g} defl_rank={r} sigma={s:.6e} iters={ou} "
+                "(max {o}) inner={i} maxdim={m} keep={kp} tol={tl:.1e} "
+                "theta_tol={ttl:.1e} pcg_total={k} theta={t:.8e} eig-res={e:.3e} "
+                "(last check {el:.3e}, dtheta {d:.3e})",
                 n=nA,
                 g=int(_Gn.shape[0]),
-                c=_cgfull,
-                ku=_ku,
-                rr=_rr,
-                p=(_cgp1 if _adapt else 0),
-                k1=_k1,
-                s=_sig_used,
-                r=_rank,
-                l=_lam,
+                r=_rk,
+                s=sigma,
+                ou=_it,
+                o=_jd_outer,
+                i=_jd_inner,
+                m=_m,
+                kp=_jd_keep,
+                tl=_jd_tol,
+                ttl=_jd_theta_tol,
+                k=_kt,
+                t=_w[0],
+                e=_rfin / jnp.maximum(jnp.abs(_w[0]), 1e-300),
+                el=_eres,
+                d=_dth,
             )
-        return _v, _lam
+        return _vv, _w[0]
 
     def _coarse_space(params_d, data_d):
         """Build the coarse deflation basis and seed OUTSIDE the custom_vjp.
@@ -3566,22 +3365,15 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         n_rho = int(_opm["n_rho"])
         n_theta = int(_opm["n_theta"])
         n_zeta = int(_opm["n_zeta"])
-        # ---- COARSE-SPACE DEFLATION (AGNI_COARSE_DEFL) ---------------------
+        # ---- COARSE-SPACE DEFLATION (active when coarse_grid is given) -------
         # The objective passes a SECOND level at this evaluation's parameters
         # (already stop_gradient'd there). Its generalized modes of the pencil
         # (H_c, M_ring,c) are the deflation space theory asks for -- eigenvectors
         # of the PRECONDITIONED operator, not of H alone -- and its softest mode,
-        # prolonged, is the Lanczos start. See precond_stage2/METHOD.md 4.1, 5.
-        #
-        # This OVERRIDES ritz_store when active: measured at Zernike 48x48x12,
-        # the coarse generalized space converged at a quarter of the ring-only
-        # budget while fine Ritz vectors were the worst of the three arms.
+        # prolonged, is the Jacobi-Davidson start vector.
         _cg = kwargs.get("coarse_grid", None)
         if _cg is not None:
-            # Fully in-package: prolongation, coarse generalized eigensolve and the
-            # deflation basis it supplies. Verified bit-identical to the
-            # precond_stage2 originals by
-            # tests/test_stability_solvers.py::test_port_matches_original_*.
+            # Prolongation, coarse generalized eigensolve and the deflation basis.
             from ._stability_solvers import barycentric_matrix as _bary
             from ._stability_solvers import build_ring_blocks as _build_rings
             from ._stability_solvers import coarse_seed_and_deflation as _cseed
@@ -3623,13 +3415,15 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
-            _cA = _agni3_assemble(_cpar, _ctr, profiles, _cdata, **_ckw)["A"]
-            _cHc = 0.5 * (_cA + jnp.swapaxes(_cA, 0, 1)) - sigma * jnp.eye(_nc)
-            # Ring blocks of H_c, with the -sigma shift applied inside. Traced
-            # build: `build_ring_blocks_params` is the eager host loop and does a
-            # device_get per ring, which cannot survive jit. The coarse level
-            # runs at ONE fixed sigma, so unlike the fine level there is nothing
-            # to gain by assembling unshifted and shifting later.
+            # Shift the diagonal only: a dense eye(_nc) and an explicit
+            # 0.5 * (A + A^H) would each hold another n x n copy. The Hermitian
+            # part is taken inside `coarse_gen_modes` after the congruence,
+            # which gives the same matrix (see the comment there).
+            _cdiag = jnp.arange(_nc)
+            _cHc = _agni3_assemble(_cpar, _ctr, profiles, _cdata, **_ckw)["A"]
+            _cHc = _cHc.at[_cdiag, _cdiag].add(-sigma)
+            # Ring blocks of H_c, with the -sigma shift applied inside (traced
+            # build, safe under jit).
             # Host-derived for the same reason as the fine level above: this
             # feeds array shapes, so it cannot be a tracer.
             _cntot = int(_cop["n_total"])
@@ -3658,6 +3452,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _csel,
                 _cpad,
                 sigma,
+                _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
             )
             _cGn = _np.asarray(_cG)
             # Interpolation matrices: radial node positions only, no equilibrium.
@@ -3705,7 +3500,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 _pt,
                 _pz,
                 _kc,
-                _solver_opt(kwargs, "coarse_num_matvecs", "AGNI_NUM_MATVECS", 100, int),
+                _solver_opt(
+                    kwargs, "coarse_num_matvecs", "AGNI_COARSE_NUM_MATVECS", 100, int
+                ),
             )
             # Stays on device. `_Z` is only ever passed to `_solve_at`, which
             # does `jnp.asarray(_Zin)` and reads `.shape` -- both fine for a
@@ -3724,7 +3521,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         return _Z, _seed_v0
 
-    def _eigensolve(params_d, data_d, _Zc_in=None, _v0c_in=None):
+    def _eigensolve(params_d, data_d, _Zc_in=None, _v0c_in=None, _sig_in=sigma):
         """Dispatch the primal eigensolve used by ``_v_primal``.
 
         Inputs are array-only DESC ``params`` and ``data``. Output is always
@@ -3737,7 +3534,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         if _eigensolver == "jax_lanczos":
             return _eigensolve_jax(params_d, data_d)
         if _eigensolver == "pcg_deflated":
-            return _eigensolve_pcg(params_d, data_d, _Zc_in, _v0c_in)
+            return _eigensolve_pcg(params_d, data_d, _Zc_in, _v0c_in, _sig_in)
         return jax.pure_callback(
             _assemble_and_solve_host,
             (
@@ -3750,9 +3547,19 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     # Built OUTSIDE the custom_vjp, then passed in. See `_coarse_space`.
     _Zc_ext, _v0c_ext = _coarse_space(params, _array_data)
+    # pcg_deflated warm start: a nonzero full-length `v_guess` (the previous
+    # solve's `finite-n eigenfunction3 rayleigh`) replaces the coarse seed.
+    _vg = kwargs.get("v_guess", None)
+    if _eigensolver == "pcg_deflated" and _vg is not None:
+        _vg = jnp.asarray(_vg).reshape(-1)
+        if _vg.shape[0] == 3 * int(_op["n_total"]):
+            _vg = _vg[_op["keep"]]
+            if _v0c_ext is None:
+                _v0c_ext = np.random.default_rng(0).standard_normal(_vg.shape[0])
+            _v0c_ext = jnp.where(jnp.linalg.norm(_vg) > 0, _vg, _v0c_ext)
 
     @jax.custom_vjp
-    def _v_primal(params_d, data_d, _Zc_in, _v0c_in):
+    def _v_primal(params_d, data_d, _Zc_in, _v0c_in, _sig_in):
         """Return the fresh primal eigenpair with a custom derivative rule.
 
         Called directly below before building ``Av``. Inputs are the array-only
@@ -3761,9 +3568,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         the current primal point, but the backward pass returns zero cotangents
         for all inputs so the optimizer sees the fixed-vector Rayleigh gradient.
         """
-        return _eigensolve(params_d, data_d, _Zc_in, _v0c_in)
+        return _eigensolve(params_d, data_d, _Zc_in, _v0c_in, _sig_in)
 
-    def _v_primal_fwd(params_d, data_d, _Zc_in, _v0c_in):
+    def _v_primal_fwd(params_d, data_d, _Zc_in, _v0c_in, _sig_in):
         """Forward rule for ``_v_primal``.
 
         Inputs are the same array-only ``params`` and ``data`` dictionaries. It
@@ -3771,8 +3578,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         calculation. The residual saves only the inputs because the backward rule
         must manufacture matching zero cotangents for the same pytrees.
         """
-        v_out = _eigensolve(params_d, data_d, _Zc_in, _v0c_in)
-        return v_out, (params_d, data_d, _Zc_in, _v0c_in)
+        v_out = _eigensolve(params_d, data_d, _Zc_in, _v0c_in, _sig_in)
+        return v_out, (params_d, data_d, _Zc_in, _v0c_in, _sig_in)
 
     def _v_primal_bwd(res, g):
         """Backward rule for ``_v_primal``.
@@ -3786,7 +3593,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         2. no gradient through the eigensolve or eigenvector selection,
         3. gradient only through ``Av = Ax(v)`` in the Rayleigh quotient.
         """
-        params_d, data_d, _Zc_in, _v0c_in = res
+        params_d, data_d, _Zc_in, _v0c_in, _sig_in = res
         # Zero for the coarse inputs too: the coarse level is a solver aid the
         # objective already stop_gradient'd, so it carries no derivative. `None`
         # is an empty pytree and tree_map returns None, which is the correct
@@ -3796,6 +3603,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             jax.tree_util.tree_map(jnp.zeros_like, data_d),
             jax.tree_util.tree_map(jnp.zeros_like, _Zc_in),
             jax.tree_util.tree_map(jnp.zeros_like, _v0c_in),
+            jnp.zeros_like(_sig_in),
         )
 
     _v_primal.defvjp(_v_primal_fwd, _v_primal_bwd)
@@ -3810,7 +3618,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         v = jnp.asarray(_v_fixed)
         lam_mu = jnp.asarray(jnp.nan)  # no eigensolve ran
     else:
-        v, lam_mu = _v_primal(params, _array_data, _Zc_ext, _v0c_ext)
+        # sigma is an explicit input: under adapt it is traced, and a tracer
+        # closed over inside the custom_vjp cannot be lowered.
+        v, lam_mu = _v_primal(
+            params, _array_data, _Zc_ext, _v0c_ext, jnp.asarray(sigma, dtype=float)
+        )
 
     Av = _op["Ax"](v)
     vv = jnp.vdot(v, v)

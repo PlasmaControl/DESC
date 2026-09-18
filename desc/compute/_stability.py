@@ -3648,7 +3648,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     )
 
     data["finite-n lambda3 rayleigh"] = jnp.atleast_1d(lam_R)
-    data["f residual"] = jnp.atleast_1d(resid)
+    data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
     # So a caller can take v from a value call and pass it back as `v_fixed`.
     data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
     data = _agni3_store_rayleigh_mode_data(data, v, _op)

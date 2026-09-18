@@ -99,6 +99,6 @@ def set_device(kind="cpu", gpuid=None):
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
             visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
             visible = [i for i in visible if i]
-            os.environ["CUDA_VISIBLE_DEVICES"] = (
+            os.environ["JAX_CUDA_VISIBLE_DEVICES"] = (
                 visible[int(gpuid)] if visible else str(int(gpuid))
             )

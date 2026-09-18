@@ -64,10 +64,11 @@ def _warn_if_bounds(objective, constraint, x0, options):
     m = objective.dim_f + (0 if constraint is None else constraint.dim_f)
     n = x0.size
     if m - dim_f_bounded < min(m, n):
-        supplied = hasattr(options, "tr_method")
-        tr_method = options.get("tr_method", "qr")
+        # we only want to warn if the user supplied a method that is not svd
+        # if user didn't supply, the default qr will be switched to svd
+        tr_method = options.get("tr_method", "svd")
         warnif(
-            supplied and tr_method != "svd",
+            tr_method != "svd",
             UserWarning,
             f"Objectives {[obj.name for obj in bounded]} use bounds instead of target, "
             + f"so they can zero out {dim_f_bounded} of the {m} rows of the ({m}, {n}) "
@@ -76,7 +77,7 @@ def _warn_if_bounds(objective, constraint, x0, options):
             + "options={'tr_method': 'svd'}.",
         )
         # if not set by user, use SVD to avoid rank-deficiency issues
-        if not supplied:
+        if not hasattr(options, "tr_method"):
             options["tr_method"] = "svd"
     return options
 

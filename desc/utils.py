@@ -1028,9 +1028,9 @@ def rotate_vector_to_vector(u, v):
     Parameters
     ----------
     u : array-like, shape(3,)
-        first vector, to be rotated onto second vector v
+        first vector, in cartesian basis, to be rotated onto second vector v
     v :  array-like, shape(3,)
-        vector to rotate u onto
+        vector, in cartesian basis, to rotate u onto
 
     Returns
     -------
@@ -1041,7 +1041,7 @@ def rotate_vector_to_vector(u, v):
     u = safenormalize(u)
     v = safenormalize(v)
 
-    # 2. Compute the dot product
+    # Compute the dot product
     dot = jnp.dot(u, v)
 
     # things needed for near antiparallel case

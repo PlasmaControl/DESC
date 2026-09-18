@@ -75,7 +75,7 @@ def set_device(kind="cpu", gpuid=None):
         other codes can use them.
     gpuid : int, optional
         Index of the GPU to use, in ``nvidia-smi`` ordering, or an index into
-        ``CUDA_VISIBLE_DEVICES`` if that is set. If ``None``, JAX will use every
+        ``JAX_CUDA_VISIBLE_DEVICES`` if that is set. If ``None``, JAX will use every
         visible GPU, which is usually what you want on a cluster where the scheduler
         already assigned the GPUs.
 

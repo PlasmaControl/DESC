@@ -97,7 +97,7 @@ def set_device(kind="cpu", gpuid=None):
         if kind == "gpu" and gpuid is not None:
             # so that the ids assigned by CUDA match those from nvidia-smi
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+            visible = os.environ.get("JAX_CUDA_VISIBLE_DEVICES", "").split(",")
             visible = [i for i in visible if i]
             os.environ["JAX_CUDA_VISIBLE_DEVICES"] = (
                 visible[int(gpuid)] if visible else str(int(gpuid))

@@ -672,7 +672,9 @@ class FinitenStability(_Objective):
         external-kink-type fine eigenmode.
     phi_chunk_size : int, optional
         Chunk size for the singular-integral computation behind
-        ``phi_matrix``. Default None (no chunking).
+        ``phi_matrix``. Default 1. Unchunked (``None``) fuses the whole
+        boundary singular-integral computation into one GPU kernel, which
+        can take XLA pathologically long to compile.
 
     """
 
@@ -866,7 +868,7 @@ class FinitenStability(_Objective):
         jac_chunk_size=None,
         v_fixed=None,
         free_boundary=False,
-        phi_chunk_size=None,
+        phi_chunk_size=1,
     ):
         if target is None and bounds is None:
             target = 0

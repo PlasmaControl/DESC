@@ -1279,7 +1279,7 @@ class FinitenStability(_Objective):
             is_meshgrid=True,
             spacing=jnp.asarray(getattr(self, f"_{pre}phi_surf_spacing")),
             weights=jnp.asarray(getattr(self, f"_{pre}phi_surf_weights")),
-            NFP=eq.NFP,
+            NFP=phi_pest_grid.NFP,
             _unique_rho_idx=jnp.array([0]),
             _unique_poloidal_idx=jnp.arange(n_theta),
             _unique_zeta_idx=jnp.arange(n_zeta) * n_theta,

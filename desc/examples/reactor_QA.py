@@ -63,7 +63,7 @@ eq.current = PowerSeriesProfile(np.zeros(eq.L + 1), np.arange(eq.L + 1), sym=Fal
 grid = LinearGrid(
     rho=np.linspace(1 / eq.L_grid, 1, eq.L_grid) - 1 / (2 * eq.L_grid),
     M=eq.M_grid,
-    N=eq.N_grid,
+    N=(2 * eq.N_grid),
     NFP=eq.NFP,
     sym=True,
 )

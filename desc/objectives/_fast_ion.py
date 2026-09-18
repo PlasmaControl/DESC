@@ -103,6 +103,8 @@ class GammaC(_Objective):
         nufft_eps=1e-7,
         spline=True,
         Nemov=True,
+        device_id=0,
+        rank=None,
         **kwargs,
     ):
         errorif(
@@ -170,6 +172,8 @@ class GammaC(_Objective):
             deriv_mode=deriv_mode,
             jac_chunk_size=jac_chunk_size,
             name=name,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

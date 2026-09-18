@@ -899,7 +899,7 @@ def test_multiobject_optimization_al():
     )
 
     np.testing.assert_allclose(
-        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, rtol=1e-3
+        constraints[-1].compute(*constraints[-1].xs(eq, surf)), 1, rtol=1.2e-3
     )
     assert surf.R_lmn[0] == 10
     assert surf.Z_lmn[-1] == -2

@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jit, jnp, put
 from desc.objectives import (
     BoundaryRSelfConsistency,
+    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     ObjectiveFunction,
     get_fixed_boundary_constraints,
@@ -635,14 +636,14 @@ class ProximalProjection(ObjectiveFunction):
         # desc.optimize.optimizer) and also removing columns corresponding to these
         # variables from the constraint matrix A in
         # desc.objectives.utils.factorize_linear_constraints.
-        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        for arg in ["R_lmn", "Z_lmn", "L_lmn", "W_lmn", "Ra_n", "Za_n", "Wa_n"]:
             self._args.remove(arg)
 
         dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn"]:
+            if arg not in ["Rb_lmn", "Zb_lmn", "Wb_lmn"]:
                 x_idx = self._eq.x_idx[arg]
                 dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
@@ -660,6 +661,12 @@ class ProximalProjection(ObjectiveFunction):
                 Ainv = np.linalg.pinv(A)
                 dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
                 dxdc.append(dxdZb)
+            if arg == "Wb_lmn" and self._eq.W_basis.num_modes:
+                c = get_instance(self._eq_linear_constraints, BoundaryWSelfConsistency)
+                A = c.jac_unscaled(xz)[0]["W_lmn"]
+                Ainv = np.linalg.pinv(A)
+                dxdWb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["W_lmn"]] @ Ainv
+                dxdc.append(dxdWb)
         # dxdc is a matrix that when multiplied by the optimization variables (only
         # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
         # Zb_lmn part will be 0, but they will be represented by the equivalent

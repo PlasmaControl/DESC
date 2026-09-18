@@ -37,7 +37,12 @@ __all__ = [
 
 
 class FourierRZCurve(Curve):
-    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle phi.
+    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle s.
+
+    When a nonzero ``W_n`` is given, the curve parameter ``s`` is a generalized
+    toroidal angle and the physical cylindrical angle is
+    ``phi = s + W(s)``, with W a periodic Fourier series. The default W = 0
+    recovers the standard parameterization by the cylindrical angle, ie s = phi.
 
     Parameters
     ----------
@@ -53,19 +58,35 @@ class FourierRZCurve(Curve):
         Whether to enforce stellarator symmetry.
     name : str
         Name for this curve.
+    W_n : array-like, optional
+        Fourier coefficients for the toroidal stream function omega, such that
+        the cylindrical angle is phi = s + W(s). Default is zero (phi = s).
+    modes_W : array-like, optional
+        Mode numbers associated with W_n.
 
     """
 
     _io_attrs_ = Curve._io_attrs_ + [
         "_R_n",
         "_Z_n",
+        "_W_n",
         "_R_basis",
         "_Z_basis",
+        "_W_basis",
         "_sym",
         "_NFP",
     ]
 
-    _static_attrs = Curve._static_attrs + ["_sym", "_NFP", "_R_basis", "_Z_basis"]
+    _static_attrs = Curve._static_attrs + [
+        "_sym",
+        "_NFP",
+        "_R_basis",
+        "_Z_basis",
+        "_W_basis",
+    ]
+    # curves saved before the generalized toroidal angle existed have no omega
+    # state; _set_up defaults it to zero (phi = s)
+    _io_attrs_optional_ = ["_W_n", "_W_basis"]
 
     def __init__(
         self,
@@ -76,13 +97,24 @@ class FourierRZCurve(Curve):
         NFP=1,
         sym="auto",
         name="",
+        *,
+        W_n=None,
+        modes_W=None,
     ):
         super().__init__(name)
-        R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
+        if W_n is None:
+            W_n = np.array([])
+        R_n, Z_n, W_n = np.atleast_1d(R_n), np.atleast_1d(Z_n), np.atleast_1d(W_n)
         if modes_R is None:
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
             modes_Z = np.arange(-(Z_n.size // 2), Z_n.size // 2 + 1)
+        if modes_W is None:
+            modes_W = (
+                np.arange(-(W_n.size // 2), W_n.size // 2 + 1)
+                if W_n.size
+                else np.array([], dtype=int)
+            )
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")
@@ -90,29 +122,58 @@ class FourierRZCurve(Curve):
             Z_n = np.array([0.0])
             modes_Z = np.array([0])
 
-        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+        modes_R, modes_Z, modes_W = (
+            np.asarray(modes_R, dtype=int),
+            np.asarray(modes_Z, dtype=int),
+            np.asarray(modes_W, dtype=int),
+        )
 
         assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
         assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
-
-        assert issubclass(modes_R.dtype.type, np.integer)
-        assert issubclass(modes_Z.dtype.type, np.integer)
+        assert W_n.size == modes_W.size, "W_n size and modes_W must be the same size"
 
         if sym == "auto":
-            if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
+            # omega is odd under stellarator symmetry, like Z
+            if (
+                np.all(R_n[modes_R < 0] == 0)
+                and np.all(Z_n[modes_Z >= 0] == 0)
+                and np.all(W_n[modes_W >= 0] == 0)
+            ):
                 sym = True
             else:
                 sym = False
         self._sym = sym
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
+        NW = np.max(abs(modes_W)) if modes_W.size else 0
         N = max(NR, NZ)
         self._NFP = check_posint(NFP, "NFP", False)
         self._R_basis = FourierSeries(N, int(NFP), sym="cos" if sym else False)
         self._Z_basis = FourierSeries(N, int(NFP), sym="sin" if sym else False)
+        # No omega modes means no generalized toroidal angle, so the basis must be
+        # empty. A non-symmetric FourierSeries at N=0 still carries the n=0 mode,
+        # which would give every asymmetric curve -- and the coils that subclass
+        # them -- a spurious omega degree of freedom.
+        self._W_basis = FourierSeries(
+            NW, int(NFP), sym="sin" if (sym or not modes_W.size) else False
+        )
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
+        self._W_n = copy_coeffs(W_n, modes_W, self.W_basis.modes[:, 2])
+
+    def _set_up(self):
+        """Set unset attributes after loading.
+
+        Ensures objects saved by DESC versions without a generalized toroidal
+        angle load with exactly zero omega.
+        """
+        super()._set_up()
+        if not hasattr(self, "_W_basis") or self._W_basis is None:
+            # saved without omega, so the basis is empty regardless of symmetry
+            self._W_basis = FourierSeries(0, int(self.NFP), sym="sin")
+        if not hasattr(self, "_W_n") or self._W_n is None:
+            self._W_n = np.zeros(self.W_basis.num_modes)
 
     @property
     def sym(self):
@@ -130,6 +191,11 @@ class FourierRZCurve(Curve):
         return self._Z_basis
 
     @property
+    def W_basis(self):
+        """Spectral basis for W (omega) Fourier series."""
+        return self._W_basis
+
+    @property
     def NFP(self):
         """Number of field periods."""
         return self._NFP
@@ -139,28 +205,44 @@ class FourierRZCurve(Curve):
         """Maximum mode number."""
         return max(self.R_basis.N, self.Z_basis.N)
 
-    def change_resolution(self, N=None, NFP=None, sym=None):
+    @property
+    def Nw(self):
+        """Maximum mode number of the omega basis."""
+        return self.W_basis.N
+
+    def change_resolution(self, N=None, NFP=None, sym=None, Nw=None):
         """Change the maximum toroidal resolution."""
         N = check_nonnegint(N, "N")
+        Nw = check_nonnegint(Nw, "Nw")
         NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
+            or ((Nw is not None) and (Nw != self.Nw))
             or ((NFP is not None) and (NFP != self.NFP))
             or ((sym is not None) and (sym != self.sym))
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
+            Nw = int(Nw if Nw is not None else self.Nw)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
+            W_modes_old = self.W_basis.modes
             self.R_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
             )
             self.Z_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
+            W_sym = "sin" if self.sym else self.sym
+            if not W_modes_old.size and Nw == 0:
+                # no omega before and none asked for: keep the basis empty, see
+                # the note in __init__
+                W_sym = "sin"
+            self.W_basis.change_resolution(N=Nw, NFP=self.NFP, sym=W_sym)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+            self.W_n = copy_coeffs(self.W_n, W_modes_old, self.W_basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -218,6 +300,22 @@ class FourierRZCurve(Curve):
             raise ValueError(
                 f"Z_n should have the same size as the basis, got {len(new)} for "
                 + f"basis with {self.Z_basis.num_modes} modes"
+            )
+
+    @optimizable_parameter
+    @property
+    def W_n(self):
+        """Spectral coefficients for omega (phi = s + W(s))."""
+        return self._W_n
+
+    @W_n.setter
+    def W_n(self, new):
+        if len(new) == self.W_basis.num_modes:
+            self._W_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"W_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.W_basis.num_modes} modes"
             )
 
     @classmethod
@@ -357,8 +455,15 @@ class FourierRZCurve(Curve):
         """
         # this is the base class scale:
         scales = super()._get_ess_scale(alpha, order, min_value)
-        # we use ESS for the following:
-        modes = {"R_n": self.R_basis.modes, "Z_n": self.Z_basis.modes}
+        # we use ESS for the following.  W_n is the generalized toroidal angle
+        # (phi = s + W(s)); it is a Fourier series in the same variable as
+        # R_n, Z_n and so gets the same spectral scaling.  Empty basis when
+        # omega == 0, in which case this contributes nothing.
+        modes = {
+            "R_n": self.R_basis.modes,
+            "Z_n": self.Z_basis.modes,
+            "W_n": self.W_basis.modes,
+        }
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales

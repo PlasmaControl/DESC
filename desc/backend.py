@@ -12,8 +12,6 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-OMEGA_IS_0 = True
-
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False

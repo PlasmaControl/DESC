@@ -56,7 +56,12 @@ def _solve_axisym(
 
     surf_axisym = surface.copy()
     pres_vac = pressure.copy()
-    surf_axisym.change_resolution(L, M, Ni)
+    # Mw/Nw must be passed: change_resolution defaults them to the surface's
+    # CURRENT values, so a positional (L, M, 0) call would start the
+    # axisymmetric stage with omega at FULL strength. _add_shaping then ramps
+    # omega from zero on top of that, ending at twice the requested boundary.
+    # A no-op without omega, where Mw and Nw are already 0.
+    surf_axisym.change_resolution(L, M, Ni, Mw=0, Nw=0)
     # start with zero pressure
     pres_vac.params *= 0
 
@@ -98,7 +103,7 @@ def _solve_axisym(
 
             surf_i = eqi.surface
             surf_i2 = surface.copy()
-            surf_i2.change_resolution(Li, Mi, Ni)
+            surf_i2.change_resolution(Li, Mi, Ni, Mw=0, Nw=0)
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 
@@ -340,15 +345,32 @@ def _add_shaping(
 
     eqi = eqfam[-1].copy()
     eqfam_temp = eqfam.copy()
-    # make sure its at full resolution
-    eqi.change_resolution(eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid)
+    # make sure its at full resolution, omega included: eqi comes from the
+    # omega-free axisymmetric stage, so without Lw/Mw/Nw it would have no omega
+    # modes, get no BoundaryWSelfConsistency, and fail on the Wb_lmn delta below
+    eqi.change_resolution(
+        eq.L,
+        eq.M,
+        eq.N,
+        eq.L_grid,
+        eq.M_grid,
+        eq.N_grid,
+        Lw=eq.Lw,
+        Mw=eq.Mw,
+        Nw=eq.Nw,
+    )
 
     bdry_steps = 0 if eq.N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
     bdry_ratio = 0 if eq.N else 1
 
     surf_axisym = eq.surface.copy()
-    surf_axisym.change_resolution(eq.L, eq.M, 0)
-    surf_axisym.change_resolution(eq.L, eq.M, eq.N)
+    # Mw/Nw must be passed explicitly: change_resolution defaults them to the
+    # surface's CURRENT values, so a positional (L, M, 0) call leaves omega at
+    # full strength.  get_deltas would then see identical W_lmn, emit no
+    # Wb_lmn, and every intermediate would pair an axisymmetric R, Z with a
+    # fully rotated toroidal angle -- non-nested at any bdry_step.
+    surf_axisym.change_resolution(eq.L, eq.M, 0, Mw=0, Nw=0)
+    surf_axisym.change_resolution(eq.L, eq.M, eq.N, Mw=eq.surface.Mw, Nw=eq.surface.Nw)
 
     ii = len(eqfam_temp)
     stop = False
@@ -360,6 +382,15 @@ def _add_shaping(
             deltas["Rb_lmn"] *= bdry_step
         if "Zb_lmn" in deltas:
             deltas["Zb_lmn"] *= bdry_step
+        # deltas is recomputed from the same two fixed surfaces every iteration,
+        # so an unscaled Wb_lmn would be applied IN FULL at every step and
+        # overshoot omega by the number of steps. The reference surface above
+        # has omega stripped, so the axisymmetric stage must start omega-free
+        # too (see the note there) or the delta is applied twice over.
+        # Measured: intermediates stay nested either way, at omega = 0.05 and
+        # 0.3 alike -- the ramp is about not double counting, not nestedness.
+        if "Wb_lmn" in deltas:
+            deltas["Wb_lmn"] *= bdry_step
         bdry_ratio += bdry_step
 
         constraints_i = get_fixed_boundary_constraints(eq=eqi)

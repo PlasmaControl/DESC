@@ -382,8 +382,10 @@ class TestFourierRZToroidalSurface:
             surface.compute("S")["S"], surface2.compute("S")["S"], rtol=1e-3
         )
 
-        # test assert statements
-        with pytest.raises(NotImplementedError):
+        # zeta != phi is supported now (it fits the toroidal stream function
+        # omega = phi - zeta), but passing the poloidal angle as the toroidal
+        # coordinate is not a valid toroidal chart and must be rejected
+        with pytest.raises(ValueError, match="not a valid toroidal"):
             FourierRZToroidalSurface.from_values(
                 coords,
                 theta,

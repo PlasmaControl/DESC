@@ -688,9 +688,15 @@ class BoundaryError(_Objective):
             # sheet current stuff
             if self._sheet_current:
                 p = self._eq.surface
+                # The sheet current surface inherits the plasma boundary's
+                # geometry, so it needs the boundary's omega too: with a
+                # generalized toroidal angle the surface compute functions
+                # depend on W_lmn, and omitting it raises KeyError: 'W_lmn'.
+                # For omega == 0 the basis is empty and this is a no-op.
                 sheet_params = {
                     "R_lmn": self._eq.params_dict["Rb_lmn"],
                     "Z_lmn": self._eq.params_dict["Zb_lmn"],
+                    "W_lmn": self._eq.params_dict["Wb_lmn"],
                     "I": self._eq.params_dict["I"],
                     "G": self._eq.params_dict["G"],
                     "Phi_mn": self._eq.params_dict["Phi_mn"],
@@ -815,9 +821,13 @@ class BoundaryError(_Objective):
 
             if self._sheet_current:
                 p = self._eq.surface
+                # see the note in build(): the sheet current surface needs the
+                # boundary's omega as well, or the surface compute functions
+                # raise KeyError: 'W_lmn'.  No-op when omega == 0.
                 sheet_params = {
                     "R_lmn": eq_params["Rb_lmn"],
                     "Z_lmn": eq_params["Zb_lmn"],
+                    "W_lmn": eq_params["Wb_lmn"],
                     "I": eq_params["I"],
                     "G": eq_params["G"],
                     "Phi_mn": eq_params["Phi_mn"],

@@ -22,6 +22,7 @@ Breaking Changes and Deprecations
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero

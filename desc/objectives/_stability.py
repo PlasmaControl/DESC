@@ -1162,7 +1162,7 @@ class FinitenStability(_Objective):
         eq = self.things[0]
         n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
         n_surf = n_theta * n_zeta
-        surf_grid_NFP = 128 if self._axisym else eq.NFP
+        surf_grid_NFP = 128 if self._axisym else level_grid.NFP
         phi_pest_grid = LinearGrid(
             rho=1.0,
             theta=level_grid.unique_theta,
@@ -1181,15 +1181,14 @@ class FinitenStability(_Objective):
         # `assert basis.M <= potential_grid.M` fails. `min(...)` only ever
         # REDUCES resolution relative to what was asked for, so this is a
         # no-op whenever the grid already resolves eq.Phi_basis fine.
-        eq_phi_basis = eq.Phi_basis
         setattr(
             self,
             f"_{pre}phi_basis",
             DoubleFourierSeries(
                 M=phi_pest_grid.M,  # min(eq_phi_basis.M, phi_pest_grid.M),
                 N=phi_pest_grid.N,  # min(eq_phi_basis.N, phi_pest_grid.N),
-                NFP=eq_phi_basis.NFP,
-                sym=eq_phi_basis.sym,
+                NFP=phi_pest_grid.NFP,
+                sym=phi_pest_grid.sym,
             ),
         )
         # AGNI (theta outer, zeta fastest) -> BIEST (zeta outer, theta

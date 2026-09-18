@@ -220,9 +220,11 @@ class _CoilObjective(_Objective):
         )
 
         _build_coilset_tree()
-        quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])[
-            self._coilset_tree["objective_mask"]
-        ]
+        quad_weights = np.sqrt(
+            np.concatenate([g.spacing[:, 2] for g in grid])[
+                self._coilset_tree["objective_mask"]
+            ]
+        )
 
         if self._broadcast_input.lower() == "node":
             grid_nodes_unmasked = [
@@ -2634,7 +2636,9 @@ class CoilSetLinkingNumber(_Objective):
             params=params, grid=constants["grid"]
         )
 
-        return jnp.abs(link).sum(axis=0)
+        # the diagonal entries of "link" should be excluded
+        mask = ~jnp.eye(self._dim_f, dtype=bool)
+        return jnp.abs(link).sum(axis=0, where=mask)
 
 
 class SurfaceCurrentRegularization(_Objective):

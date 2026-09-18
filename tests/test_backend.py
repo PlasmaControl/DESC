@@ -2,9 +2,11 @@
 
 import numpy as np
 import pytest
+from packaging.version import Version
 
 from desc.backend import (
     _lstsq,
+    fori_loop,
     jax,
     jnp,
     put,
@@ -47,6 +49,27 @@ def test_vmap():
     outputs = np.array([[0, 1, 8], [125, 64, 27], [0, -1, -8]])
     np.testing.assert_allclose(vmap(f)(inputs), outputs)
     np.testing.assert_allclose(vmap(f, out_axes=1)(inputs), outputs.T)
+
+
+@pytest.mark.unit
+@pytest.mark.skipif(
+    Version(jax.__version__).release != (0, 9, 2),
+    reason="DESC only backports this JAX scan-transpose fix to JAX 0.9.2",
+)
+def test_linear_transpose_scan():
+    """Test transposing a scan with a closed-over linear operand."""
+    x = jnp.arange(4.0)
+
+    def fun(x):
+        return fori_loop(
+            0,
+            3,
+            lambda i, value: value + (i + 1) * x,
+            jnp.zeros_like(x),
+        )
+
+    transpose = jax.linear_transpose(fun, x)(jnp.ones_like(x))[0]
+    np.testing.assert_allclose(transpose, 6 * jnp.ones_like(x))
 
 
 @pytest.mark.unit
@@ -143,9 +166,7 @@ def test_lstsq():
     # square
     A = rng.standard_normal((5, 5))
     b = rng.standard_normal(5)
-    np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
-    )
+    np.testing.assert_allclose(_lstsq(A, b), np.linalg.solve(A, b), rtol=1e-6)
     # scalar
     A = rng.standard_normal((1, 5))
     b = rng.standard_normal(1)

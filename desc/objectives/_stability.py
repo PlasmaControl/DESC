@@ -670,9 +670,6 @@ class FinitenStability(_Objective):
         coarse-space deflation basis is built free-boundary too -- a
         fixed-boundary coarse basis can fail to represent an
         external-kink-type fine eigenmode.
-    phi_problem : str, optional
-        Vacuum problem type forwarded to the ``"phi_matrix_pest"`` compute
-        key. Default ``"exterior Neumann"``.
     phi_chunk_size : int, optional
         Chunk size for the singular-integral computation behind
         ``phi_matrix``. Default None (no chunking).
@@ -772,7 +769,7 @@ class FinitenStability(_Objective):
         "_coarse_density",
         # Free-boundary (phi_matrix) option. `_free_boundary` gates whether
         # `compute_data`/`update_state` build/forward phi_matrix at all.
-        # `_phi_problem`/`_phi_chunk_size` are plain solver knobs, same
+        # `_phi_chunk_size` is a plain solver knob, same
         # treatment as `_eigsh_tol` etc. above. Everything else here
         # (`_phi_pest_grid`, `_phi_surf_spacing`/`_phi_surf_weights`,
         # `_phi_st`/`_phi_sz`/`_phi_q`, `_phi_interpolator`, and their
@@ -792,7 +789,6 @@ class FinitenStability(_Objective):
         # all: the interpolator depends only on this fixed scaffolding, not
         # on the moving boundary, so there is nothing to recompute.
         "_free_boundary",
-        "_phi_problem",
         "_phi_chunk_size",
         "_phi_pest_grid",
         "_phi_surf_spacing",
@@ -870,7 +866,6 @@ class FinitenStability(_Objective):
         jac_chunk_size=None,
         v_fixed=None,
         free_boundary=False,
-        phi_problem="exterior Neumann",
         phi_chunk_size=None,
     ):
         if target is None and bounds is None:
@@ -899,7 +894,6 @@ class FinitenStability(_Objective):
         # `_build_phi_scaffolding`/`_phi_matrix`. `_phi_st`/`_phi_sz`/`_phi_q`
         # (and the coarse_ counterparts) are set in `build()`.
         self._free_boundary = free_boundary
-        self._phi_problem = phi_problem
         self._phi_chunk_size = phi_chunk_size
         self._state_solver = state_solver
         self._sigma_factor = sigma_factor
@@ -1246,7 +1240,7 @@ class FinitenStability(_Objective):
             ["interpolator_pest"],
             grid=surf_grid0,
             pest_grid=phi_pest_grid,
-            problem=self._phi_problem,
+            problem="exterior Neumann",
             chunk_size=self._phi_chunk_size,
             params=eq.params_dict,
         )["interpolator_pest"]
@@ -1301,7 +1295,7 @@ class FinitenStability(_Objective):
             ["phi_matrix_pest"],
             grid=surf_grid,
             pest_grid=phi_pest_grid,
-            problem=self._phi_problem,
+            problem="exterior Neumann",
             chunk_size=self._phi_chunk_size,
             Phi_basis=getattr(self, f"_{pre}phi_basis"),
             data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},

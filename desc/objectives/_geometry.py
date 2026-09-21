@@ -311,43 +311,18 @@ class Elongation(_Objective):
 
 
 class SLAMElongation(_Objective):
-    """Elongation of constant Cartesian-X cross sections.
+    """Max/min radius ratio of tilted Cartesian cross sections of the boundary.
 
-    For each requested plane ``X - slope*Z = X0`` the surface points are viewed
-    along the direction normal to the line ``x = slope*z`` (in the Cartesian X-Z
-    plane) and the elongation of the resulting cross section is measured. With
-    the default ``slope=0`` this is the ``X = X0`` plane, perpendicular to the
-    Cartesian X axis, viewed in (Y, Z) -- matching :class:`Elongation`'s cousin
-    behavior but for Cartesian rather than toroidal cuts. A nonzero ``slope``
-    tilts the whole family of cutting planes (all parallel to the fixed line
-    ``x = slope*z`` through the origin, which only sets their common tilt) while
-    ``X0`` keeps its role of picking out each individual plane. Unlike
-    :class:`Elongation` (which measures the elongation of the
-    constant-toroidal-angle R-Z cross section), this slices the geometry with
-    Cartesian planes -- useful for mirror-like configurations where the
-    physically meaningful cross sections are perpendicular to a (possibly
-    tilted) Cartesian axis.
+    Each plane ``X - slope*Z = X0`` is cut through the ``rho`` surface (the
+    boundary by default). Along every
+    theta line the crossing is a Gaussian-weighted average over zeta, giving an
+    ordered closed curve in the plane coordinates ``(Y, v)``, with
+    ``v = (slope*X + Z) / sqrt(1 + slope**2)``. About the curve's area centroid,
+    the ratio of a smooth maximum to a smooth minimum radius is returned.
 
-    The metric is a smooth, jit-compatible surrogate for "slice, fit an ellipse,
-    read off the ellipticity":
-
-    1. Each grid point is weighted by a Gaussian in ``|u - u0|``, where
-       ``u = (X - slope*Z) / sqrt(1 + slope**2)`` is the signed distance along the
-       line's normal direction and ``u0 = X0 / sqrt(1 + slope**2)`` is the target
-       plane's location in that coordinate (a differentiable replacement for a
-       hard ``|u - u0| < tol`` mask, which would have a data-dependent number of
-       points and could not be jitted) times the surface area element
-       ``|e_theta x e_zeta|`` (so the result is a geometric integral over the cut,
-       independent of how the ``(theta, zeta)`` grid samples it).
-    2. The weighted 2x2 covariance of ``(Y, v)`` is formed, where
-       ``v = (slope*X + Z) / sqrt(1 + slope**2)`` is the coordinate spanning the
-       cut plane along the line's own direction (``v = Z`` when ``slope = 0``),
-       and its eigenvalues ``l1 >= l2`` are taken in closed form.
-    3. The plane elongation is ``sqrt(l1 / l2)`` (exact ``a/b`` for a true
-       ellipse).
-
-    The objective returns the maximum elongation over all requested planes as a
-    single scalar.
+    The ratio is 1 only for a circle and ``a/b`` for an ellipse, so it penalizes
+    triangularity and any other non-circular shaping, unlike a covariance
+    measure. The maximum over planes is returned.
 
     Parameters
     ----------
@@ -355,25 +330,23 @@ class SLAMElongation(_Objective):
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
     X0 : float or array-like
-        Location(s) [meters] of the plane(s) at which to measure the
-        cross-section elongation, as the ``X`` intercept of each plane
-        (``X - slope*Z = X0``). With the default ``slope=0`` this is the
-        Cartesian X location of the plane, as before.
+        X intercept(s) [m] of the cutting planes ``X - slope*Z = X0``.
     slope : float
-        Slope ``dx/dz`` (dimensionless) of the fixed line ``x = slope*z`` (through
-        the origin) that sets the common tilt of every requested cutting plane.
-        Default 0, reproducing the original constant-Cartesian-X planes.
+        Common tilt ``dx/dz`` of the planes. Default 0 gives ``X = X0``.
     bandwidth : float
-        Width of the Gaussian selection kernel as a fraction of the current
-        extent of the surface along the line's normal direction. Default 0.01
-        (matching a thin slab). The result is insensitive to this over a broad
-        range.
+        Gaussian width along the plane normal, as a fraction of the surface's
+        extent along that normal on the grid. Default 0.01.
+    sharpness : float
+        Sharpness of the smooth max/min, in units of the mean radius. Larger is
+        closer to the true max/min. Default 4000.
+    rho : float
+        Flux surface to cut. Default 1 (the boundary). Only used when ``grid``
+        is None; a supplied grid sets its own surface. Pass one objective per
+        surface to shape the interior as well as the boundary.
     grid : Grid, optional
-        Collocation grid containing the nodes to evaluate at. Defaults to
-        ``LinearGrid(M=4*eq.M, N=4*eq.N)`` for a ``FourierRZToroidalSurface`` (a
-        fine grid is recommended so each plane is well sampled). Note the grid
-        should be dense enough in both ``theta`` and ``zeta`` for the cross
-        sections to be resolved.
+        LinearGrid on a single rho surface, with a zeta window that covers every
+        plane on every theta line. Defaults to
+        ``LinearGrid(rho=rho, M=4*eq.M, N=4*eq.N)``.
 
     """
 
@@ -395,6 +368,7 @@ class SLAMElongation(_Objective):
         X0,
         slope=0,
         bandwidth=0.01,
+        sharpness=4000.0,
         target=None,
         bounds=None,
         weight=1,
@@ -402,6 +376,7 @@ class SLAMElongation(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        rho=1.0,
         grid=None,
         name="SLAM elongation",
         jac_chunk_size=None,
@@ -409,9 +384,11 @@ class SLAMElongation(_Objective):
         if target is None and bounds is None:
             target = 1
         self._grid = grid
+        self._rho = float(rho)
         self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
         self._slope = float(slope)
         self._bandwidth = bandwidth
+        self._sharpness = float(sharpness)
         super().__init__(
             things=eq,
             target=target,
@@ -438,28 +415,22 @@ class SLAMElongation(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            if hasattr(eq, "L_grid"):
-                grid = QuadratureGrid(
-                    L=eq.L_grid,
-                    M=eq.M_grid,
-                    N=eq.N_grid,
-                    NFP=eq.NFP,
-                )
-            else:
-                # if not an Equilibrium, is a Surface, has no radial resolution.
-                # use a fine grid so each constant-X plane is well sampled.
-                grid = LinearGrid(
-                    rho=1.0,
-                    M=eq.M * 4,
-                    N=eq.N * 4,
-                    NFP=eq.NFP,
-                    sym=False,
-                )
+            grid = LinearGrid(
+                rho=self._rho, M=eq.M * 4, N=eq.N * 4, NFP=eq.NFP, sym=False
+            )
         else:
             grid = self._grid
+        # any single flux surface works: the cut curve's centroid and radii are
+        # computed from X, Y, Z on that surface alone. num_rho must still be 1
+        # because meshgrid_reshape(...)[0] keeps only the first rho index.
+        errorif(
+            grid.num_rho != 1,
+            ValueError,
+            "SLAMElongation needs a LinearGrid on a single rho surface.",
+        )
 
         self._dim_f = 1
-        self._data_keys = ["X", "Y", "Z", "|e_theta x e_zeta|"]
+        self._data_keys = ["X", "Y", "Z"]
 
         timer = Timer()
         if verbose > 0:
@@ -474,14 +445,11 @@ class SLAMElongation(_Objective):
             "X0": self._X0,
             "slope": self._slope,
             "bandwidth": self._bandwidth,
+            "sharpness": self._sharpness,
         }
 
-        # Sanity-check the grid against the requested planes: a constant-u cross
-        # section (u = (X - slope*Z)/norm, the coordinate normal to the tilted
-        # cutting planes) only exists where the surface actually spans u0, and it
-        # needs a range of toroidal angles (not a single zeta plane) to be
-        # resolved. Warn early rather than silently returning garbage.
-        XZ_build = compute_fun(
+        # every theta line must cross every plane inside the zeta window
+        XZ = compute_fun(
             eq,
             ["X", "Z"],
             params=eq.params_dict,
@@ -489,28 +457,20 @@ class SLAMElongation(_Objective):
             profiles=profiles,
         )
         norm = float(np.sqrt(1 + self._slope**2))
-        u_build = (XZ_build["X"] - self._slope * XZ_build["Z"]) / norm
-        umin, umax = float(jnp.min(u_build)), float(jnp.max(u_build))
-        warnif(
-            grid.num_zeta < 4,
-            UserWarning,
-            f"SLAMElongation grid samples only {grid.num_zeta} toroidal (zeta) "
-            "plane(s). A constant cross section needs a range of toroidal "
-            "angles to be resolved; pass a grid spanning many zeta values "
-            "(e.g. zeta=np.linspace(...)).",
-        )
-        u0 = np.atleast_1d(self._X0) / norm
-        out_of_range = [
+        u = grid.meshgrid_reshape(
+            np.asarray((XZ["X"] - self._slope * XZ["Z"]) / norm), "rtz"
+        )[0]
+        u0 = np.asarray(self._X0) / norm
+        lo, hi = u.min(axis=1), u.max(axis=1)
+        missed = [
             float(x)
-            for x, u in zip(np.atleast_1d(self._X0), u0)
-            if not (umin <= u <= umax)
+            for x, c in zip(np.asarray(self._X0), u0)
+            if np.any(c < lo) or np.any(c > hi)
         ]
         warnif(
-            len(out_of_range) > 0,
+            len(missed) > 0,
             UserWarning,
-            f"SLAMElongation X0={out_of_range} lie outside the surface's "
-            f"range on the given grid, so those planes have no cross section. "
-            "Elongation there defaults to ~1; check X0, slope, and the grid.",
+            f"SLAMElongation: planes X0={missed} miss some theta lines on the grid.",
         )
 
         timer.stop("Precomputing transforms")
@@ -520,7 +480,7 @@ class SLAMElongation(_Objective):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
-        """Compute the maximum cross-section elongation over the requested planes.
+        """Compute the maximum radius ratio over the requested planes.
 
         Parameters
         ----------
@@ -534,8 +494,7 @@ class SLAMElongation(_Objective):
         Returns
         -------
         elongation : float
-            Maximum cross-section elongation over the requested planes,
-            dimensionless.
+            Maximum over planes of smooth max radius / smooth min radius.
 
         """
         if constants is None:
@@ -547,59 +506,45 @@ class SLAMElongation(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        X = data["X"]
-        Y = data["Y"]
-        Z = data["Z"]
-        dA = data["|e_theta x e_zeta|"]
+        grid = constants["transforms"]["grid"]
+        X = grid.meshgrid_reshape(data["X"], "rtz")[0]
+        Y = grid.meshgrid_reshape(data["Y"], "rtz")[0]
+        Z = grid.meshgrid_reshape(data["Z"], "rtz")[0]
 
-        # Rotate (X, Z) into the frame set by the cutting-plane normal: u is the
-        # coordinate normal to the planes (constant on each requested cut), v is
-        # the coordinate spanning the cut plane along the line's own direction.
-        # At slope=0, norm=1, u=X, v=Z -- identical to the un-tilted case.
         slope = constants["slope"]
         norm = jnp.sqrt(1 + slope**2)
         u = (X - slope * Z) / norm
         v = (slope * X + Z) / norm
+        sigma = constants["bandwidth"] * jnp.maximum(
+            jnp.max(u) - jnp.min(u), jnp.finfo(X.dtype).eps
+        )
+        kappa = constants["sharpness"]
 
-        # Gaussian selection width, as a fraction of the current u-extent, so the
-        # relative slab thickness is preserved as the shape changes. Floor it so a
-        # degenerate (near-zero extent) grid cannot drive sigma -> 0.
-        Uspan = jnp.max(u) - jnp.min(u)
-        sigma = constants["bandwidth"] * jnp.maximum(Uspan, jnp.finfo(X.dtype).eps)
+        def plane_ratio(x0):
+            # crossing of each theta line: weights normalized along zeta
+            log_w = -0.5 * ((u - x0 / norm) / sigma) ** 2
+            log_w = log_w - jnp.max(log_w, axis=1, keepdims=True)
+            w = jnp.exp(log_w)
+            w = w / jnp.sum(w, axis=1, keepdims=True)
+            y = jnp.sum(w * Y, axis=1)
+            z = jnp.sum(w * v, axis=1)
 
-        def plane_elongation(x0):
-            u0 = x0 / norm
-            # log-weights: smooth u-selection + log(area element). Working in log
-            # space and subtracting the max keeps the weights in (0, 1] so their
-            # sum can never underflow to 0 (which would give 0/0 = NaN when a
-            # plane is out of range or the grid is too sparse). The global shift
-            # cancels in the normalized covariance, so the result is unchanged.
-            log_w = -0.5 * ((u - u0) / sigma) ** 2 + jnp.log(dA)
-            w = jnp.exp(log_w - jnp.max(log_w))
-            W = jnp.sum(w)
-            Ybar = jnp.sum(w * Y) / W
-            Vbar = jnp.sum(w * v) / W
-            dY = Y - Ybar
-            dV = v - Vbar
-            cyy = jnp.sum(w * dY * dY) / W
-            czz = jnp.sum(w * dV * dV) / W
-            cyz = jnp.sum(w * dY * dV) / W
-            # closed-form eigenvalues of [[cyy, cyz], [cyz, czz]] (smooth).
-            # disc <= half_tr for a PSD covariance, so l1 >= l2 >= 0.
-            half_tr = (cyy + czz) / 2
-            disc = jnp.sqrt(((cyy - czz) / 2) ** 2 + cyz**2)
-            l1 = half_tr + disc  # major variance
-            l2 = half_tr - disc  # minor variance
-            # floor the minor variance relative to the major one so a degenerate
-            # (line-like or single-point) cut yields a finite elongation, not inf,
-            # and add a tiny absolute term so an all-zero-variance cut (a plane
-            # that has drifted fully out of range) yields ~1 rather than 0/0.
-            tiny = jnp.finfo(X.dtype).tiny
-            l2 = jnp.maximum(l2, 1e-12 * l1) + tiny
-            return jnp.sqrt((l1 + tiny) / l2)
+            # area centroid of the closed curve (shoelace)
+            yn, zn = jnp.roll(y, -1), jnp.roll(z, -1)
+            cr = y * zn - yn * z
+            A = jnp.sum(cr) / 2
+            yc = jnp.sum((y + yn) * cr) / (6 * A)
+            zc = jnp.sum((z + zn) * cr) / (6 * A)
 
-        elongation = vmap(plane_elongation)(constants["X0"])
-        return jnp.max(elongation)
+            r = jnp.sqrt((y - yc) ** 2 + (z - zc) ** 2)
+            rbar = jnp.mean(r)
+            s = kappa * (r / rbar - 1)
+            # log-mean-exp: exact for a circle, below the true max otherwise
+            smax = jnp.max(s) + jnp.log(jnp.mean(jnp.exp(s - jnp.max(s))))
+            smin = jnp.max(-s) + jnp.log(jnp.mean(jnp.exp(-s - jnp.max(-s))))
+            return (1 + smax / kappa) / (1 - smin / kappa)
+
+        return jnp.max(vmap(plane_ratio)(constants["X0"]))
 
 
 class SLAMCrossSection(_Objective):
@@ -639,6 +584,11 @@ class SLAMCrossSection(_Objective):
     bandwidth : float
         Width of the Gaussian selection kernel as a fraction of the current
         extent of the surface along the line's normal direction. Default 0.01.
+    normal_axis : {"X", "Y"}
+        Cartesian coordinate normal to the cutting planes. "X" (default) gives
+        planes ``X - slope*Z = X0`` with Y in-plane, for a mirror leg whose axis
+        runs along X. "Y" gives planes ``Y - slope*Z = Y0`` with X in-plane, for
+        a section whose axis runs along Y. ``X0`` is the intercept either way.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at. Should be
         restricted in ``zeta`` to a single branch when a constant-X plane cuts
@@ -654,6 +604,8 @@ class SLAMCrossSection(_Objective):
     _scalar = False
     _units = "(m^2)"
     _print_value_fmt = "SLAM cross-section area: "
+    # a str attribute would otherwise be treated as a pytree leaf and break jit
+    _static_attrs = _Objective._static_attrs + ["_normal_axis"]
 
     def __init__(
         self,
@@ -668,6 +620,7 @@ class SLAMCrossSection(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        normal_axis="X",
         grid=None,
         name="SLAM cross-section area",
         jac_chunk_size=None,
@@ -677,7 +630,13 @@ class SLAMCrossSection(_Objective):
             ValueError,
             "SLAMCrossSection needs an explicit target or bounds.",
         )
+        errorif(
+            normal_axis not in ("X", "Y"),
+            ValueError,
+            "SLAMCrossSection normal_axis must be 'X' or 'Y'.",
+        )
         self._grid = grid
+        self._normal_axis = normal_axis
         self._X0 = jnp.atleast_1d(jnp.asarray(X0, dtype=float))
         self._slope = float(slope)
         self._bandwidth = bandwidth
@@ -748,13 +707,14 @@ class SLAMCrossSection(_Objective):
         # a number rather than failing, so warn at build time.
         XZ_build = compute_fun(
             eq,
-            ["X", "Z"],
+            ["X", "Y", "Z"],
             params=eq.params_dict,
             transforms=transforms,
             profiles=profiles,
         )
         norm = float(np.sqrt(1 + self._slope**2))
-        u_build = (XZ_build["X"] - self._slope * XZ_build["Z"]) / norm
+        n_build = XZ_build["Y"] if self._normal_axis == "Y" else XZ_build["X"]
+        u_build = (n_build - self._slope * XZ_build["Z"]) / norm
         umin, umax = float(jnp.min(u_build)), float(jnp.max(u_build))
         warnif(
             grid.num_zeta < 4,
@@ -815,6 +775,10 @@ class SLAMCrossSection(_Objective):
         Y = data["Y"]
         Z = data["Z"]
         dA = data["|e_theta x e_zeta|"]
+        if self._normal_axis == "Y":
+            # planes ``Y - slope*Z = Y0`` with X in-plane: swapping the two
+            # Cartesian coordinates reuses the whole framing below unchanged.
+            X, Y = Y, X
 
         # Identical framing to SLAMElongation: u is normal to the cutting planes,
         # v spans them along the tilt line. At slope=0, u=X and v=Z.

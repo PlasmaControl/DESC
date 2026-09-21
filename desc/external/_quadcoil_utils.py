@@ -8,11 +8,11 @@ from desc.backend import jit, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
-from desc.utils import warnif
-from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_linear_transform
 
 # Used in create_source_grid only
-from ..integrals.singularities import best_params, best_ratio
+from desc.integrals.singularities import best_params, best_ratio
+from desc.utils import warnif
+from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_linear_transform
 
 # Data keys needed to calculate Bnormal_plasma.
 _BPLASMA_DATA_KEYS = [

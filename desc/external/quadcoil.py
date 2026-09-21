@@ -1,3 +1,5 @@
+"""QUADCOIL objective."""
+
 import warnings
 
 from desc.backend import jit, jnp

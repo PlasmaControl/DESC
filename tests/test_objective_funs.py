@@ -1917,6 +1917,7 @@ class TestObjectiveFunction:
         # one way and half going the other way
         coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
+
         # add a coil along the axis that links all the other coils
         coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
@@ -1927,6 +1928,17 @@ class TestObjectiveFunction:
         # while the axis links all 10 modular coils
         expected = np.array([1] * 10 + [10])
         np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+        # produce a coilset of non-planar coils with nonzero writhe
+        coil3 = FourierXYZCoil(
+            X_n=[0, 0.5, 5, 1, 0], Y_n=[0, 0, 0, 0, 0.5], Z_n=[0, -1, 0, 0, 1]
+        )
+        coilset3 = CoilSet.from_symmetry(coil3, NFP=5, check_intersection=False)
+        obj = CoilSetLinkingNumber(coilset3)
+        obj.build()
+        out = obj.compute_scaled_error(coilset3.params_dict)
+        expected = np.array([0] * 5)
+        np.testing.assert_allclose(out, expected, atol=1e-12)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -2271,59 +2283,33 @@ class TestObjectiveFunction:
         test(field, grid, "sqrt(Phi)")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("use_bounce1d", [False, True])
-    def test_objective_against_compute_bounce(self, use_bounce1d):
+    def test_objective_against_compute_bounce(self):
         """Test objectives are built properly."""
         eq = get("W7-X")
         rho = np.linspace(0.1, 1, 3)
-        obj_grid = LinearGrid(
-            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=use_bounce1d and eq.sym
-        )
+        obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_transit = 4
+        field_period_transits = 20
         opts = dict(
-            Y_B=64,
-            num_transit=num_transit,
-            num_well=15 * num_transit,
+            Y_B=13,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
         names = ["effective ripple", "Gamma_c"]
-        if use_bounce1d:
-            names = ["old " + n for n in names]
-            angle = None
-            alpha = np.array([0.0])
-            zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * opts["Y_B"])
-            grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
-        else:
-            angle = Bounce2D.angle(eq, X, Y, rho)
-            grid = obj_grid
+        angle = Bounce2D.angle(eq, X, Y, rho)
+        grid = obj_grid
 
         data = eq.compute(names, grid, angle=angle, **opts)
-        obj = EffectiveRipple(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-6,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        obj = EffectiveRipple(eq, grid=obj_grid, nufft_eps=1e-6, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
-        obj = GammaC(
-            eq,
-            grid=obj_grid,
-            nufft_eps=1e-7,
-            use_bounce1d=use_bounce1d,
-            X=X,
-            Y=Y,
-            **opts,
-        )
+        obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
@@ -2505,7 +2491,8 @@ def test_derivative_modes():
         jac_chunk_size="auto",
         use_jit=False,
     )
-    obj1.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj1.build()
     obj2.build()
     # check that default size works for blocked
     assert obj2.objectives[0]._jac_chunk_size == 2
@@ -2513,7 +2500,8 @@ def test_derivative_modes():
     assert obj2.objectives[2]._jac_chunk_size is None
     # hard to say what size auto will give, just check it is >0
     assert obj1._jac_chunk_size > 0
-    obj3.build()
+    with pytest.warns(UserWarning, match="batched"):
+        obj3.build()
     x = obj1.x(eq, surf)
     v = jnp.ones_like(x)
     g1 = obj1.grad(x)
@@ -3469,8 +3457,8 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {EffectiveRipple, GammaC}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_transit"] = 4
-        kwargs["num_well"] = 15 * kwargs["num_transit"]
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     return objective(eq=eq, **kwargs)
@@ -3967,11 +3955,15 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res)), target=1),
                 use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
+
+        # verify obj.compute_scalar is not zero, so the resolution test is meaningful
+        assert not np.isclose(f[-1], 0, atol=1e-8)
+
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
     @pytest.mark.unit
@@ -4392,22 +4384,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε¹ᐧ⁵) error in integrals with v_||. For the
-        # gradient it is probably O(ε) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.0025)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, EffectiveRipple, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=1e-6)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4426,22 +4403,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        # This test needs high tolerance because the no nuffts + spline
-        # method for bounce points doesn't do a Newton step. Recall
-        # an O(ε) error in the spline approximation of bounce point
-        # yields O(ε⁰ᐧ⁵) error in integrals with 1/v_||. For the gradient
-        # it is probably O(ε⁰ᐧ³³) in general, but you'd need to work this out
-        # from the supplementary information.
-        # TODO: Reduce tolerance after someone implements the Newton step.
-        #       (When we used to do the Newton step the atol could be 1e-6).
-        np.testing.assert_allclose(g, g_0, atol=0.042)
-
-        obj = ObjectiveFunction(
-            _reduced_resolution_objective(eq, GammaC, use_bounce1d=True)
-        )
-        obj.build(verbose=0)
-        g = obj.grad(obj.x())
-        assert not np.any(np.isnan(g))
+        np.testing.assert_allclose(g, g_0, atol=2e-5)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):

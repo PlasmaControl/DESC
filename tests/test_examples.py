@@ -174,7 +174,15 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-3e3, 3e3), eq=eq)
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
+    # solve with bounds creates singular Jacobian which QR cannot handle
+    eq.solve(
+        objective=obj,
+        ftol=1e-16,
+        xtol=1e-16,
+        maxiter=200,
+        verbose=3,
+        options={"tr_method": "svd"},
+    )
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute_scaled_error(obj.x(eq))
@@ -268,9 +276,9 @@ def test_qh_optimization():
 
     eq1 = run_qh_step(0, eq)
 
-    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1)
+    obj = QuasisymmetryBoozer(helicity=(1, eq1.NFP), eq=eq1, surf_batch_size=1)
     obj.build()
-    B_asym = obj.compute(*obj.xs(eq1))
+    B_asym = obj.compute_unscaled(*obj.xs(eq1))
 
     np.testing.assert_array_less(np.abs(B_asym).max(), 1e-1)
     np.testing.assert_array_less(eq1.compute("a_major/a_minor")["a_major/a_minor"], 5)
@@ -1171,6 +1179,7 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+    # this will internally switch to tr_method="svd"
     [eq], _ = optimizer.optimize(eq, objective, constraints, maxiter=2, verbose=3)
 
     # second, test optimizing both the equilibrium and the field simultaneously
@@ -1178,7 +1187,7 @@ def test_omnigenity_proximal():
         (
             GenericObjective("R0", thing=eq, target=1.0, name="major radius"),
             AspectRatio(eq=eq, bounds=(0, 10)),
-            Omnigenity(eq=eq, field=field),  # field is not fixed
+            Omnigenity(eq=eq, field=field, surf_batch_size=1),  # field is not fixed
         )
     )
     constraints = (
@@ -1188,6 +1197,7 @@ def test_omnigenity_proximal():
         FixPsi(eq=eq),
     )
     optimizer = Optimizer("proximal-lsq-exact")
+    # this will internally switch to tr_method="svd"
     (eq, field), _ = optimizer.optimize(
         (eq, field), objective, constraints, maxiter=2, verbose=3
     )
@@ -2408,7 +2418,9 @@ def test_ballooning_stability_opt():
         gtol=1e-6,
         maxiter=2,  # increase maxiter to 50 for a better result
         verbose=3,
-        options={"initial_trust_ratio": 2e-3},
+        # Jacobian has only 2 rows and 1 of them can be full of 0s
+        # default QR can fail, choose SVD instead
+        options={"initial_trust_ratio": 2e-3, "tr_method": "svd"},
     )
     data = eq.compute("ideal ballooning lambda", grid=grid)
     lam2_optimized = data["ideal ballooning lambda"].max((-1, -2, -3))

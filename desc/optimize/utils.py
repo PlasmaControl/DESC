@@ -176,6 +176,20 @@ def gershgorin_bounds(H):
 
 
 @jit
+def _chol_failed(L):
+    """Whether a Cholesky factor is unusable because the matrix was not positive.
+
+    ``potrf`` only errors out, and so returns nan, when a pivot comes out
+    non-positive. A pivot at the noise level instead completes but gives a factor that
+    is useless to solve with, and which of the two a marginal matrix gets depends on
+    the LAPACK build, so treat both as a failure.
+    """
+    d = jnp.diag(L)
+    tol = L.shape[-1] * jnp.finfo(L.dtype).eps
+    return jnp.any(jnp.isnan(L)) | (jnp.min(d) ** 2 <= tol * jnp.max(d) ** 2)
+
+
+@jit
 def _cholmod(A, maxiter=4):
     """Modified Cholesky factorization of indefinite matrix.
 
@@ -186,7 +200,10 @@ def _cholmod(A, maxiter=4):
 
     Attempts to find smallest alpha to the nearest order of magnitude,
     in maxiter steps (so 2**maxiter values of alpha will be scanned over).
-    Scans over values of -log(abs(lb))< log(alpha) < log(abs(lb))
+    Scans over values of -log(abs(lb)) < log(alpha) < log(abs(lb)). If the
+    Gershgorin lower bound is zero, a matrix-scaled machine epsilon, floored
+    at the dtype's smallest normal value, supplies the positive reference
+    value for the logarithmic search.
 
     Cost is approximately maxiter times the cost of a single cholesky
     factorization.
@@ -211,35 +228,48 @@ def _cholmod(A, maxiter=4):
     n = A.shape[0]
     eye = jnp.eye(n)
     # upper and lower bounds on eig(A)
-    lb, ub = gershgorin_bounds(A)
+    lb, _ = gershgorin_bounds(A)
+    abs_lb = jnp.abs(lb)
+    scale = jnp.max(jnp.abs(A))
+    scale = jnp.where(scale > 0, scale, jnp.ones_like(scale))
+    fallback_scale = jnp.maximum(
+        jnp.finfo(scale.dtype).eps * scale,
+        jnp.finfo(scale.dtype).tiny,
+    )
+    alpha_scale = jnp.where(
+        abs_lb > 0,
+        abs_lb,
+        fallback_scale,
+    )
     # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
     # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
     # that it's actually greater than the maximum alpha
-    ub = jnp.log10(jnp.abs(lb)) + 1
+    ub = jnp.log10(alpha_scale) + 1
     # we know alpha > 0 because otherwise initial factorization would have succeeded
     # but we'd like to be a bit better (in log scaling). This is just a heuristic but
     # seems ok in practice
     m = jnp.mean(jnp.abs(A))
+    m = jnp.where(m > 0, m, alpha_scale)
     lb = ub - 2 * abs(ub) - abs(jnp.log10(m))
     # values to try
     alphas = jnp.logspace(lb, ub, k)
     kbest = k // 2
     klow = 0
-    khigh = k
+    khigh = k - 1
     # first we try alpha = max, which we know will succeed by gershgorin bounds
     # but might be too big a correction, so then we try to reduce it while keeping
     # A + alpha*I positive definite
-    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    Lbest = jnp.linalg.cholesky(A + alphas[-1] * eye)
     for i in range(maxiter):
         L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
         # check if it succeeded
-        isnan = jnp.any(jnp.isnan(L))
+        failed = _chol_failed(L)
         # adjust bounds for correction
-        klow = isnan * kbest + (1 - isnan) * klow
-        khigh = isnan * khigh + (1 - isnan) * kbest
+        klow = failed * kbest + (1 - failed) * klow
+        khigh = failed * khigh + (1 - failed) * kbest
         kbest = (klow + khigh) // 2
         # if it succeeded, mark it as the best so far
-        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, None)
+        Lbest = cond(failed, lambda _: Lbest, lambda _: L, None)
     return Lbest
 
 
@@ -263,7 +293,7 @@ def chol(A):
 
     """
     L = jnp.linalg.cholesky(A)
-    L = cond(jnp.any(jnp.isnan(L)), lambda A: _cholmod(A), lambda A: L, A)
+    L = cond(_chol_failed(L), lambda A: _cholmod(A), lambda A: L, A)
     return L
 
 

@@ -954,6 +954,10 @@ class TestGrid:
         grid_curve = LinearGridCurve(N=8)
         np.testing.assert_allclose(np.sum(grid_curve.weights), 2 * np.pi)
 
+        # surface coordinate system (θ,ζ): ∫ dθ dζ = 4π²
+        grid_surf = LinearGridToroidalSurface(M=8, N=8)
+        np.testing.assert_allclose(np.sum(grid_surf.weights), (2 * np.pi) ** 2)
+
         # flux coordinate system (ρ,θ,ζ): ∫ dρ dθ dζ = 4π²
         grid_flux = LinearGridFlux(L=8, M=8, N=8)
         np.testing.assert_allclose(np.sum(grid_flux.weights), (2 * np.pi) ** 2)

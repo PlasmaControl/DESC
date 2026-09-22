@@ -1,6 +1,7 @@
 """Objectives for targeting MHD stability."""
 
 import os
+import time
 
 import numpy as np
 
@@ -809,6 +810,26 @@ class FinitenStability(_Objective):
         # fails, since eq.Phi_basis has nothing to do with this grid's
         # resolution.
         "_phi_basis",
+        # Quadrature resolution of the singular integral, decoupled from the
+        # evaluation grid. `phi_n_theta`/`phi_n_zeta` size the SOURCE grid;
+        # the EVAL grid stays the stability boundary shell, so `phi_matrix`
+        # keeps its (n_theta*n_zeta)^2 shape and drops into the operator
+        # unchanged. None = inherit the level grid (N_source == N_eval, the
+        # original behaviour). The source grid, its PEST nodes and its
+        # spacing/weights are resolution-only, hence static like the rest of
+        # the scaffolding above.
+        "_phi_n_theta",
+        "_phi_n_zeta",
+        "_phi_upscaled",
+        "_phi_src_pest_grid",
+        "_phi_src_nodes",
+        "_phi_src_spacing",
+        "_phi_src_weights",
+        "_coarse_phi_upscaled",
+        "_coarse_phi_src_pest_grid",
+        "_coarse_phi_src_nodes",
+        "_coarse_phi_src_spacing",
+        "_coarse_phi_src_weights",
         "_coarse_phi_pest_grid",
         "_coarse_phi_surf_spacing",
         "_coarse_phi_surf_weights",
@@ -869,6 +890,8 @@ class FinitenStability(_Objective):
         v_fixed=None,
         free_boundary=False,
         phi_chunk_size=1,
+        phi_n_theta=None,
+        phi_n_zeta=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -897,6 +920,8 @@ class FinitenStability(_Objective):
         # (and the coarse_ counterparts) are set in `build()`.
         self._free_boundary = free_boundary
         self._phi_chunk_size = phi_chunk_size
+        self._phi_n_theta = phi_n_theta
+        self._phi_n_zeta = phi_n_zeta
         self._state_solver = state_solver
         self._sigma_factor = sigma_factor
         self._adapt = adapt
@@ -955,6 +980,24 @@ class FinitenStability(_Objective):
             "FinitenStability requires diffmat for finite-n lambda3 matfree.",
         )
 
+        # Progress trace. build() does several things that can each take minutes
+        # at production resolution -- transform construction on the flux and
+        # quadrature grids, the coordinate map for the phi scaffolding, and the
+        # singular-integral interpolator -- and without this it is impossible to
+        # tell which one is running. Costs nothing when verbose=0.
+        _t0 = time.time()
+
+        def _step(msg):
+            if verbose > 0:
+                print(f"  [build] {time.time() - _t0:7.1f} s  {msg}", flush=True)
+
+        _step(
+            f"start: PEST grid {self._grid.num_rho}x{self._grid.num_theta}"
+            f"x{self._grid.num_zeta}, eq L/M/N={eq.L}/{eq.M}/{eq.N}, "
+            f"eq L/M/N_grid={eq.L_grid}/{eq.M_grid}/{eq.N_grid}, NFP={eq.NFP}, "
+            f"free_boundary={self._free_boundary}"
+        )
+
         self._dim_f = 1
         grid_PEST = self._grid
         # Flux functions (coordinates="r"). These are constant on a rho surface, so
@@ -997,8 +1040,10 @@ class FinitenStability(_Objective):
         # traced nodes and is safe to use inside AD.
         self._zero_d_keys = zero_d_keys = ["a"]
         quad_grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        _step(f"quad grid built ({quad_grid.num_nodes} nodes); transforms...")
         quad_transforms = get_transforms(zero_d_keys, obj=eq, grid=quad_grid)
         quad_profiles = get_profiles(zero_d_keys, eq, quad_grid)
+        _step("quad transforms done")
 
         rho_nodes = np.asarray(grid_PEST.nodes[:, 0])
         rho_unique = np.unique(rho_nodes)
@@ -1010,8 +1055,22 @@ class FinitenStability(_Objective):
             sym=eq.sym,
         )
         assert not flux_grid.axis.size
+        # This is the usual suspect for a long build: the flux grid is
+        # (n_rho unique) x (2*M_grid+1) x (2*N_grid*NFP+1) nodes and the
+        # transform matrices are that many rows by the basis mode count. Both
+        # scale with the EQUILIBRIUM's resolution, so re-expressing an NFP=P
+        # equilibrium at NFP=1 (which multiplies N and N_grid by P) makes this
+        # step ~P times more expensive even though the stability grid is
+        # unchanged.
+        _step(
+            f"flux grid built ({flux_grid.num_nodes} nodes = "
+            f"{rho_unique.size} rho x {flux_grid.num_theta} theta "
+            f"x {flux_grid.num_zeta} zeta); transforms for "
+            f"{len(flux_keys)} keys..."
+        )
         flux_transforms = get_transforms(flux_keys, obj=eq, grid=flux_grid)
         flux_profiles = get_profiles(flux_keys, eq, flux_grid)
+        _step("flux transforms done")
         n_rho = grid_PEST.num_rho
         n_theta = grid_PEST.num_theta
         n_zeta = grid_PEST.num_zeta
@@ -1078,6 +1137,9 @@ class FinitenStability(_Objective):
             c_flux_grid = LinearGrid(
                 rho=np.unique(c_rho), M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False
             )
+            _step(
+                f"coarse flux grid built ({c_flux_grid.num_nodes} nodes); transforms..."
+            )
             coarse_constants = {
                 "coarse_PEST_nodes": c_nodes,
                 "coarse_unique_rho_idx": jnp.asarray(c_uidx),
@@ -1087,8 +1149,13 @@ class FinitenStability(_Objective):
                 ),
                 "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
             }
+            _step("coarse flux transforms done")
             if self._free_boundary:
+                _step(
+                    "coarse phi scaffolding (map_coordinates + BIEST interpolator)..."
+                )
                 self._build_phi_scaffolding(cg, "coarse_")
+                _step("coarse phi scaffolding done")
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -1106,7 +1173,19 @@ class FinitenStability(_Objective):
             **coarse_constants,
         }
         if self._free_boundary:
+            _step("fine phi scaffolding (map_coordinates + BIEST interpolator)...")
             self._build_phi_scaffolding(grid_PEST, "")
+            # `_phi_st`/`_phi_sz`/`_phi_q` are ints (see `_build_phi_scaffolding`),
+            # not arrays, so report the polar-grid support directly. The source
+            # grid is whatever the scaffolding actually built, which is the eval
+            # grid unless phi_n_theta/phi_n_zeta asked for more.
+            _src = getattr(self, "_phi_src_pest_grid", None) or self._phi_pest_grid
+            _step(
+                f"fine phi scaffolding done: polar support st={self._phi_st}, "
+                f"sz={self._phi_sz}, q={self._phi_q}; source grid "
+                f"{_src.num_theta}x{_src.num_zeta} -> eval grid "
+                f"{self._phi_pest_grid.num_theta}x{self._phi_pest_grid.num_zeta}"
+            )
         if self._adapt:
             # Called from inside the jitted objective with each solve's result.
             # It writes into THIS object's `_constants`, which the next call reads
@@ -1120,7 +1199,10 @@ class FinitenStability(_Objective):
                         c["v_guess"] = v.astype(c["v_guess"].dtype)
 
             self._store_guess = _store_guess
+
+        _step("constants assembled; _Objective.build (jit setup)...")
         super().build(use_jit=use_jit, verbose=verbose)
+        _step("done")
 
     def _build_phi_scaffolding(self, level_grid, pre):
         """Static, resolution-only free-boundary scaffolding for one level.
@@ -1214,15 +1296,82 @@ class FinitenStability(_Objective):
             .reshape(n_surf),
         )
 
+        # SOURCE grid: where the singular integral is actually quadratured.
+        # Defaults to the eval grid (`phi_pest_grid`, the stability boundary
+        # shell), which is the original N_source == N_eval behaviour. Raising it
+        # resolves the integral -- which is what makes the discrete operator
+        # self-adjoint in the surface measure, and hence the vacuum term a
+        # proper energy -- WITHOUT touching the mode count or the size of the
+        # returned matrix: `_lsmr_compute_phi_matrix` returns (N_eval, N_eval)
+        # either way, and `basis` is still capped by the eval grid above.
+        n_theta_src = int(setdefault(self._phi_n_theta, n_theta))
+        n_zeta_src = int(setdefault(self._phi_n_zeta, n_zeta))
+        upscaled = (n_theta_src != n_theta) or (n_zeta_src != n_zeta)
+        setattr(self, f"_{pre}phi_upscaled", upscaled)
+        n_surf_src = n_theta_src * n_zeta_src
+
+        if upscaled:
+            # Span the SAME angles as the eval grid, just sampled more finely.
+            zeta_eval = np.asarray(phi_pest_grid.nodes[:, 2])
+            zeta_span = (
+                n_zeta * float(np.diff(np.unique(zeta_eval))[0])
+                if n_zeta > 1
+                else 2 * np.pi / max(int(surf_grid_NFP), 1)
+            )
+            src_pest_grid = LinearGrid(
+                rho=1.0,
+                theta=np.linspace(0.0, 2 * np.pi, n_theta_src, endpoint=False),
+                zeta=np.linspace(0.0, zeta_span, n_zeta_src, endpoint=False),
+                NFP=surf_grid_NFP,
+                sym=False,
+            )
+            setattr(self, f"_{pre}phi_src_pest_grid", src_pest_grid)
+            setattr(
+                self,
+                f"_{pre}phi_src_spacing",
+                np.asarray(src_pest_grid.spacing)
+                .reshape(n_theta_src, n_zeta_src, 3)
+                .transpose(1, 0, 2)
+                .reshape(n_surf_src, 3),
+            )
+            setattr(
+                self,
+                f"_{pre}phi_src_weights",
+                np.asarray(src_pest_grid.weights)
+                .reshape(n_theta_src, n_zeta_src)
+                .transpose(1, 0)
+                .reshape(n_surf_src),
+            )
+        else:
+            src_pest_grid = phi_pest_grid
+            for _a in ("phi_src_pest_grid", "phi_src_spacing", "phi_src_weights"):
+                setattr(self, f"_{pre}{_a}", None)
+
         # One-time, EAGER, concrete build of the interpolator (picks (st, sz,
         # q) itself via the default heuristic, since we have real geometry
         # data to base it on here -- unlike inside a traced `_phi_matrix`
         # call). Reused as-is by every later `_phi_matrix` call, at any
         # params: see the docstring above for why that is exact, not an
         # approximation of convenience.
+        #
+        # Built on the SOURCE grid, with the eval grid handed over as
+        # `potential_grid`. When the two differ, `_interpolator_pest` also
+        # rfft-interpolates the boundary geometry onto the eval grid and
+        # publishes it as `data["potential data"]`. Expect
+        # `singularities.py`'s "Frequency spectrum of FFT interpolation will be
+        # truncated" warning once N_eval < N_source//2 + 1: that is the
+        # intended regime here (the eval grid only ever needs its own
+        # resolution), not a defect.
         nodes0 = np.reshape(
-            np.asarray(phi_pest_grid.meshgrid_reshape(phi_pest_grid.nodes, "rtz")),
-            (n_surf, 3),
+            np.asarray(src_pest_grid.meshgrid_reshape(src_pest_grid.nodes, "rtz")),
+            (n_surf_src, 3),
+        )
+        setattr(self, f"_{pre}phi_src_nodes", nodes0 if upscaled else None)
+        _t = time.time()
+        print(
+            f"    [phi:{pre or 'fine'}] map_coordinates on {n_surf_src} surface "
+            "nodes...",
+            flush=True,
         )
         rtz0 = np.asarray(
             eq.map_coordinates(
@@ -1235,12 +1384,19 @@ class FinitenStability(_Objective):
                 params=eq.params_dict,
             )
         )
-        surf_nodes0 = rtz0.reshape(n_theta, n_zeta, 3).transpose(1, 0, 2)
-        surf_grid0 = Grid(surf_nodes0.reshape(n_surf, 3), NFP=surf_grid_NFP)
+        print(
+            f"    [phi:{pre or 'fine'}] map_coordinates done "
+            f"({time.time() - _t:.1f} s); building BIEST interpolator...",
+            flush=True,
+        )
+        _t = time.time()
+        surf_nodes0 = rtz0.reshape(n_theta_src, n_zeta_src, 3).transpose(1, 0, 2)
+        surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
         interp0 = eq.compute(
             ["interpolator_pest"],
             grid=surf_grid0,
-            pest_grid=phi_pest_grid,
+            pest_grid=src_pest_grid,
+            potential_grid=phi_pest_grid,
             problem="exterior Neumann",
             chunk_size=self._phi_chunk_size,
             params=eq.params_dict,
@@ -1249,15 +1405,27 @@ class FinitenStability(_Objective):
         setattr(self, f"_{pre}phi_sz", int(interp0.sz))
         setattr(self, f"_{pre}phi_q", int(interp0.q))
         setattr(self, f"_{pre}phi_interpolator", interp0)
+        print(
+            f"    [phi:{pre or 'fine'}] interpolator done ({time.time() - _t:.1f} s): "
+            f"st={interp0.st}, sz={interp0.sz}, q={interp0.q}",
+            flush=True,
+        )
 
     def _phi_matrix(self, params, grid, level="fine"):
         """Free-boundary vacuum-response operator, differentiable in params.
 
         Rebuilt fresh from the CURRENT boundary geometry on every call
         (unlike the scaffolding from ``_build_phi_scaffolding``, all of
-        which is fixed), by slicing the boundary (rho=1) shell out of the
-        already-mapped ``grid`` rather than a second ``map_coordinates``
-        call. ``level`` selects fine vs. coarse scaffolding/resolution.
+        which is fixed). ``level`` selects fine vs. coarse
+        scaffolding/resolution.
+
+        At the default quadrature resolution the boundary (rho=1) shell is
+        sliced out of the already-mapped ``grid``, avoiding a second
+        ``map_coordinates`` call. When ``phi_n_theta``/``phi_n_zeta`` refine the
+        quadrature, those nodes are not in ``grid`` and get their own surface
+        map -- same pattern as ``_mapped_grid``, still differentiable in
+        ``params``. Either way the returned matrix is (N_eval, N_eval) on the
+        stability boundary shell, so the operator is unaffected.
         """
         eq = self.things[0]
         pre = "" if level == "fine" else "coarse_"
@@ -1265,37 +1433,70 @@ class FinitenStability(_Objective):
         n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
         n_surf = n_theta * n_zeta
         phi_pest_grid = getattr(self, f"_{pre}phi_pest_grid")
+        upscaled = bool(getattr(self, f"_{pre}phi_upscaled", False))
 
-        bnd_nodes = grid.nodes[-n_surf:]  # AGNI order, rho=1 shell
-        surf_nodes = jnp.transpose(
-            bnd_nodes.reshape(n_theta, n_zeta, 3), (1, 0, 2)
-        ).reshape(
-            n_surf, 3
-        )  # -> BIEST order (zeta outer, theta fastest)
+        if upscaled:
+            # The quadrature grid is finer than the stability boundary, so its
+            # nodes are not in `grid` and have to be mapped themselves. Same
+            # pattern as `_mapped_grid`: traced nodes, still differentiable in
+            # `params`, just on a surface instead of a volume.
+            src_pest_grid = getattr(self, f"_{pre}phi_src_pest_grid")
+            n_theta_s = src_pest_grid.num_theta
+            n_zeta_s = src_pest_grid.num_zeta
+            rtz = eq.map_coordinates(
+                jnp.asarray(getattr(self, f"_{pre}phi_src_nodes")),
+                inbasis=("rho", "theta_PEST", "zeta"),
+                outbasis=("rho", "theta", "zeta"),
+                period=(jnp.inf, 2 * jnp.pi, jnp.inf),
+                tol=1e-12,
+                maxiter=50,
+                params=params,
+            )
+            surf_nodes = jnp.transpose(
+                rtz.reshape(n_theta_s, n_zeta_s, 3), (1, 0, 2)
+            ).reshape(n_theta_s * n_zeta_s, 3)
+            spacing = getattr(self, f"_{pre}phi_src_spacing")
+            weights = getattr(self, f"_{pre}phi_src_weights")
+        else:
+            src_pest_grid = phi_pest_grid
+            n_theta_s, n_zeta_s = n_theta, n_zeta
+            bnd_nodes = grid.nodes[-n_surf:]  # AGNI order, rho=1 shell
+            surf_nodes = jnp.transpose(
+                bnd_nodes.reshape(n_theta, n_zeta, 3), (1, 0, 2)
+            ).reshape(
+                n_surf, 3
+            )  # -> BIEST order (zeta outer, theta fastest)
+            spacing = getattr(self, f"_{pre}phi_surf_spacing")
+            weights = getattr(self, f"_{pre}phi_surf_weights")
 
+        n_surf_s = n_theta_s * n_zeta_s
         surf_grid = Grid(
             nodes=surf_nodes,
             jitable=True,
             is_meshgrid=True,
-            spacing=jnp.asarray(getattr(self, f"_{pre}phi_surf_spacing")),
-            weights=jnp.asarray(getattr(self, f"_{pre}phi_surf_weights")),
+            spacing=jnp.asarray(spacing),
+            weights=jnp.asarray(weights),
             NFP=phi_pest_grid.NFP,
             _unique_rho_idx=jnp.array([0]),
-            _unique_poloidal_idx=jnp.arange(n_theta),
-            _unique_zeta_idx=jnp.arange(n_zeta) * n_theta,
-            _inverse_rho_idx=jnp.zeros(n_surf, dtype=int),
-            _inverse_poloidal_idx=jnp.tile(jnp.arange(n_theta), n_zeta),
-            _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta), n_theta),
+            _unique_poloidal_idx=jnp.arange(n_theta_s),
+            _unique_zeta_idx=jnp.arange(n_zeta_s) * n_theta_s,
+            _inverse_rho_idx=jnp.zeros(n_surf_s, dtype=int),
+            _inverse_poloidal_idx=jnp.tile(jnp.arange(n_theta_s), n_zeta_s),
+            _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta_s), n_theta_s),
         )
 
         # Prefill the frozen interpolator so DESC's dependency resolution
         # skips recomputing "interpolator_pest" entirely -- see
         # `_build_phi_scaffolding`'s docstring for why that is exact, not an
         # approximation, and why rebuilding it here would be tracer-unsafe.
+        # `grid` (the data grid) and `pest_grid` are the SOURCE side;
+        # `potential_grid` is the EVAL side. They coincide unless the
+        # quadrature was refined. The result is (N_eval, N_eval) either way.
         data_phi = eq.compute(
             ["phi_matrix_pest"],
             grid=surf_grid,
-            pest_grid=phi_pest_grid,
+            pest_grid=src_pest_grid,
+            potential_grid=phi_pest_grid,
             problem="exterior Neumann",
             chunk_size=self._phi_chunk_size,
             Phi_basis=getattr(self, f"_{pre}phi_basis"),

@@ -74,12 +74,25 @@ def _D_plus_half(
 
     D[Φ](x) = ∫_y Φ(y)〈∇_x G(x−y),ds(y)〉.
 
+    The integral runs over the N_source quadrature points (``source_data``,
+    ``interpolator.source_grid``) and is evaluated at the N_eval points
+    (``eval_data``, ``interpolator.eval_grid``). The two need not match.
+
     Parameters
     ----------
+    eval_data : dict
+        Data at the N_eval evaluation points. With ``basis`` supplied,
+        ``eval_data["Phi(x) (periodic)"]`` is the eval-grid Vandermonde,
+        shape (N_eval, N_modes).
+    source_data : dict
+        Data at the N_source quadrature points. With ``basis`` supplied,
+        ``source_data["Phi (periodic)"]`` is the source-grid Vandermonde,
+        shape (N_source, N_modes).
     basis : DoubleFourierSeries
-        If not supplied, then computes (D[Φ] + Φ/2)(x).
+        If not supplied, then computes (D[Φ] + Φ/2)(x), shape (N_eval,).
         If supplied, then constructs the operator which
-        acts on the spectral coefficients of Φ in the supplied + secular basis.
+        acts on the spectral coefficients of Φ in the supplied + secular basis,
+        shape (N_eval, N_modes).
     prune_data : bool
         Whether the data should be pruned. Default is True.
     _midpoint_quad : bool
@@ -153,15 +166,18 @@ def _compute_single_layer_matrix(
     Parameters
     ----------
     eval_data : dict
-        Data at evaluation points (R, phi, Z and any eval_keys needed by the kernel).
+        Data at the N_eval evaluation points (R, phi, Z and any eval_keys needed
+        by the kernel).
     source_data : dict
-        Data at source points (must include |e_theta x e_zeta| and geometry).
-        Does not need to include B0*n.
-        In _lsmr_compute_phi_matrix, eval_data and source_data are hard-coded
-        to be the same.
+        Data at the N_source quadrature points (must include |e_theta x e_zeta|
+        and geometry). Does not need to include B0*n; the caller supplies it
+        per-column. N_source need not equal N_eval.
     interpolator : _BIESTInterpolator
     chunk_size : int or None
         Chunk size for eval-point batching *inside* each ``singular_integral`` call.
+    ndim : int or None
+        Number of columns carried through the integral, i.e. N_modes when
+        ``source_data["B0*n"]`` is a Vandermonde matrix.
 
     Returns
     -------
@@ -187,7 +203,7 @@ def _compute_single_layer_matrix(
 
 
 def _lsmr_compute_phi_matrix(
-    potential_data,
+    eval_data,
     source_data,
     interpolator,
     phi_transform,
@@ -203,15 +219,31 @@ def _lsmr_compute_phi_matrix(
     solves D @ A_mn = M_S in one batch, returning E @ A_mn where E is the
     Vandermonde matrix (so the output maps directly to nodal potential values).
 
+    Two grids, and they need not have the same size:
+
+    * the SOURCE grid (``interpolator.source_grid``) holds the N_source
+      quadrature points that discretize the singular integrals;
+    * the EVAL grid (``interpolator.eval_grid``) holds the N_eval points where
+      those integrals are evaluated, i.e. where B_n is supplied and Phi is
+      wanted.
+
+    Refining only the source grid resolves the singular integral -- which is
+    what makes the discrete operator self-adjoint in the surface measure --
+    without changing the size of the returned matrix or the number of modes.
+
     Parameters
     ----------
-    potential_data : dict
-        Data at potential grid points (geometry, not B0*n).
+    eval_data : dict
+        Data at the N_eval evaluation points (geometry, not B0*n).
     source_data : dict
-        Data at source grid points (geometry including |e_theta x e_zeta|).
+        Data at the N_source quadrature points (geometry including
+        |e_theta x e_zeta|).
     interpolator : _BIESTInterpolator
-    basis : DoubleFourierSeries
-        Spectral basis for the periodic part of the potential.
+        Carries both grids; nothing in it requires N_source == N_eval.
+    phi_transform : Transform
+        Built on the SOURCE grid (see ``get_transforms``: "Phi_PEST" uses
+        ``kwargs["pest_grid"]``), so its Vandermonde and pseudoinverse are
+        source-grid quantities. The eval-grid counterparts are built here.
     problem : str
         One of {"interior Neumann", "exterior Neumann", "interior Dirichlet"}.
     chunk_size : int or None
@@ -221,13 +253,14 @@ def _lsmr_compute_phi_matrix(
 
     Returns
     -------
-    A : jnp.ndarray, shape (N_potential, N_source)
-        Matrix satisfying Phi (periodic) = A @ B_n.
+    A_mn : jnp.ndarray, shape (N_modes, N_eval)
+        Nodal B_n on the eval grid -> spectral coefficients of Phi (periodic).
+    A : jnp.ndarray, shape (N_eval, N_eval)
+        Matrix satisfying Phi (periodic) = A @ B_n, both nodal on the eval grid.
     """
     assert problem in {"interior Neumann", "exterior Neumann", "interior Dirichlet"}
 
-    # hard-code that Phi & Bn are on same grid (necessary for ext. mode stability)
-    potential_grid = interpolator.eval_grid
+    eval_grid = interpolator.eval_grid
     source_grid = interpolator.source_grid
 
     basis = phi_transform.basis
@@ -236,35 +269,44 @@ def _lsmr_compute_phi_matrix(
             source_grid.can_fft2
         ), f"pest_grid must have can_fft2=True, got {source_grid}"
         assert (
-            potential_grid.can_fft2
-        ), f"potential pest_grid must have can_fft2=True, got {potential_grid}"
-    assert basis.M <= potential_grid.M
-    assert basis.N <= potential_grid.N
+            eval_grid.can_fft2
+        ), f"potential pest_grid must have can_fft2=True, got {eval_grid}"
+    # The mode count is bounded by the EVAL grid, never by the source grid, so
+    # refining the quadrature alone never changes the number of unknowns.
+    assert basis.M <= eval_grid.M
+    assert basis.N <= eval_grid.N
 
-    # Build double-layer operator D: shape (N_potential, N_modes).
-    # Prune into a separate copy so original dicts are available for M_S below.
+    same_grid = eval_grid == source_grid
 
-    # phi_transform.matrices["direct1"][0][0][0] is just basis.evaluate(grid)
-    Phi = phi_transform.matrices["direct1"][0][0][0]
-    potential_data_d, source_data_d = _prune_data(
-        potential_data,
-        potential_grid,
+    # Vandermonde matrices. `phi_transform.matrices["direct1"][0][0][0]` is just
+    # basis.evaluate(source_grid), and its "pinv" the matching pseudoinverse.
+    # Reused verbatim when the grids coincide so that case stays bit-identical.
+    Phi_src = phi_transform.matrices["direct1"][0][0][0]  # (N_source, N_modes)
+    Phi_eval = Phi_src if same_grid else basis.evaluate(eval_grid)  # (N_eval, N_modes)
+    # B_n is supplied nodally ON THE EVAL GRID, so the fit to spectral
+    # coefficients has to be the eval-grid pseudoinverse.
+    pinv_eval = (  # (N_modes, N_eval)
+        phi_transform.matrices["pinv"] if same_grid else jnp.linalg.pinv(Phi_eval)
+    )
+
+    # Double-layer operator D, shape (N_eval, N_modes). Prune into a separate
+    # copy so the original dicts are still available for M_S below.
+    eval_data_d, source_data_d = _prune_data(
+        eval_data,
+        eval_grid,
         source_data,
         source_grid,
         _kernel_dipole_plus_half,
     )
+    eval_data_d["Phi(x) (periodic)"] = Phi_eval  # (N_eval, N_modes)
+    source_data_d["Phi (periodic)"] = Phi_src  # (N_source, N_modes)
 
-    potential_data_d["Phi(x) (periodic)"] = Phi
-    source_data_d["Phi (periodic)"] = (
-        Phi if (potential_grid == source_grid) else basis.evaluate(source_grid)
-    )
-
-    pinv = phi_transform.matrices["pinv"]
-
-    source_data["B0*n"] = Phi  # use same basis for B0*n as for phi
+    # Expand B0*n in the same basis as Phi. This lives on the SOURCE grid: it is
+    # what the quadrature integrates against.
+    source_data["B0*n"] = Phi_src  # (N_source, N_modes)
 
     D = _D_plus_half(
-        potential_data_d,
+        eval_data_d,
         source_data_d,
         interpolator,
         basis,
@@ -273,26 +315,26 @@ def _lsmr_compute_phi_matrix(
         _midpoint_quad=_midpoint_quad,
         _D_quad=_D_quad,
     )
-    assert D.shape == (potential_grid.num_nodes, basis.num_modes)
+    assert D.shape == (eval_grid.num_nodes, basis.num_modes)
     if problem == "exterior Neumann" or problem == "interior Dirichlet":
-        D -= Phi
+        D -= Phi_eval
 
-    # Build single-layer matrix M_S: shape (N_potential, N_modes).
-    # Uses the original (unpruned) data so that |e_theta x e_zeta| is available.
+    # Single-layer matrix M_S, shape (N_eval, N_modes). Uses the original
+    # (unpruned) data so that |e_theta x e_zeta| is available.
     M_S = _compute_single_layer_matrix(
-        potential_data, source_data, interpolator, chunk_size, ndim=basis.num_modes
+        eval_data, source_data, interpolator, chunk_size, ndim=basis.num_modes
     )
-    # Solve D @ A_mn = M_S for all N_source right-hand sides simultaneously.
-    # A_mn has shape (N_modes, N_source).
-    if potential_grid.num_nodes == basis.num_modes:
+    # Solve D @ A_mn = M_S for all N_modes right-hand sides simultaneously.
+    # A_mn is (N_modes, N_modes) here; @ pinv_eval makes it (N_modes, N_eval).
+    if eval_grid.num_nodes == basis.num_modes:
         A_mn = jnp.linalg.solve(D, M_S)
-        A_mn = A_mn @ pinv
     else:
         A_mn = jnp.linalg.lstsq(D, M_S)[0]
-        A_mn = A_mn @ pinv
+    A_mn = A_mn @ pinv_eval  # (N_modes, N_eval)
 
-    # Phi (periodic) = Phi_E @ A_mn @ B_n, shape (N_potential, N_source).
-    return A_mn, -Phi @ A_mn  # sign convention that makes B dot n the outward normal
+    # Phi (periodic) = Phi_eval @ A_mn @ B_n, shape (N_eval, N_eval).
+    # Sign convention makes B dot n the outward normal.
+    return A_mn, -Phi_eval @ A_mn
 
 
 @register_compute_fun(

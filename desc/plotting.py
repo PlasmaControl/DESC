@@ -31,7 +31,7 @@ from desc.grid import (
     LinearGridFlux,
     LinearGridToroidalSurface,
 )
-from desc.integrals import surface_averages_map
+from desc.integrals import surface_averages, surface_averages_map
 from desc.magnetic_fields import OmnigenousField, field_line_integrate
 from desc.particles import trace_particles
 from desc.utils import (
@@ -3363,7 +3363,7 @@ def plot_boozer_surface(
     return fig, ax
 
 
-def plot_qs_error(  # noqa: 16 fxn too complex
+def plot_qs_error(
     eq,
     log=True,
     fB=True,
@@ -3464,69 +3464,39 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        data = eq.compute(["R0", "|B|"])
-    R0 = data["R0"]
-    B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
-
     plot_data = {"rho": rho}
 
     grid = LinearGridFlux(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=rho)
     names = []
+    booz = {}
     if fB:
-        names += ["|B|_mn_B"]
+        names += ["f_B_normalized"]
         transforms = get_transforms(
-            "|B|_mn_B", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "f_B_normalized", obj=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
-        matrix, modes, idx = ptolemy_linear_transform(
+        matrix, _, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
             helicity=helicity,
             NFP=transforms["B"].basis.NFP,
         )
-    if fC or fT:
-        names += ["sqrt(g)"]
+        booz = {"matrix": matrix, "idx": idx}
     if fC:
-        names += ["f_C"]
+        names += ["f_C_normalized", "sqrt(g)"]
     if fT:
-        names += ["f_T"]
+        names += ["f_T_normalized", "sqrt(g)"]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute(
-            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity
+            names, grid=grid, M_booz=M_booz, N_booz=N_booz, helicity=helicity, **booz
         )
-
-    if fB:
-        B_mn = data["|B|_mn_B"].reshape((len(rho), -1))
-        B_mn = (matrix @ B_mn.T).T
-        f_B = np.sqrt(np.sum(B_mn[:, idx] ** 2, axis=-1)) / np.sqrt(
-            np.sum(B_mn**2, axis=-1)
-        )
-        plot_data["f_B"] = f_B
-    if fC:
-        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
-        f_C = grid.meshgrid_reshape(data["f_C"], "rtz")
-        f_C = (
-            np.mean(np.abs(f_C) * sqrtg, axis=(1, 2))
-            / np.mean(sqrtg, axis=(1, 2))
-            / B0**3
-        )
-        plot_data["f_C"] = f_C
-    if fT:
-        sqrtg = grid.meshgrid_reshape(data["sqrt(g)"], "rtz")
-        f_T = grid.meshgrid_reshape(data["f_T"], "rtz")
-        f_T = (
-            np.mean(np.abs(f_T) * sqrtg, axis=(1, 2))
-            / np.mean(sqrtg, axis=(1, 2))
-            * R0**2
-            / B0**4
-        )
-        plot_data["f_T"] = f_T
 
     plot_op = ax.semilogy if log else ax.plot
 
     if fB:
+        # norm of the symmetry breaking modes relative to all the modes
+        f_B = np.linalg.norm(data["f_B_normalized"], axis=-1)
+        plot_data["f_B"] = f_B
         plot_op(
             rho,
             f_B,
@@ -3537,6 +3507,10 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             lw=lw[0 % len(lw)],
         )
     if fC:
+        f_C = surface_averages(
+            grid, np.abs(data["f_C_normalized"]), data["sqrt(g)"], expand_out=False
+        )
+        plot_data["f_C"] = f_C
         plot_op(
             rho,
             f_C,
@@ -3547,6 +3521,10 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             lw=lw[1 % len(lw)],
         )
     if fT:
+        f_T = surface_averages(
+            grid, np.abs(data["f_T_normalized"]), data["sqrt(g)"], expand_out=False
+        )
+        plot_data["f_T"] = f_T
         plot_op(
             rho,
             f_T,

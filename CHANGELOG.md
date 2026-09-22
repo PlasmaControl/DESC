@@ -5,6 +5,7 @@ New Features
 
 - Restructures the grid classes to allow for new grids in different coordinate systems besides flux coordinates. The old grid classes are aliased to the new grids of type ``AbstractGridFlux`` and are backwards compatible with the new API. ``Curve`` objects now expect a compute grid of type ``AbstractGridCurve``, and ``FourierRZToroidalSurface`` objects now expect a compute grid of type ``AbstractGridToroidalSurface``.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 
 Performance Improvements
 
@@ -34,7 +35,8 @@ Bug Fixes
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
-
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
 
 v0.17.3
 -------

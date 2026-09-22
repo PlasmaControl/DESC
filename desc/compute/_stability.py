@@ -1297,6 +1297,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # normalize by a_N since Phi = phi_matrix @ B
     # and B = grad(Phi), so phi_matrix has units length
     phi_matrix = transforms.get("phi_matrix", None)
+    # Pre-symmetrization asymmetry of the vacuum term, filled in below when the
+    # free-boundary branch runs. NaN means "no vacuum term here".
+    vacuum_asym = jnp.asarray(jnp.nan)
 
     n_per_shell = n_theta_max * n_zeta_max
     # NumPy (concrete), not jnp: n_total/n_per_shell/n_rho_max are all static ints, so
@@ -1329,7 +1332,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         phi_matrix_full = jnp.zeros((n_total, n_total))
         phi_matrix_full = phi_matrix_full.at[b_idx, b_idx].set(phi_matrix)
         A = A.at[rho_idx, rho_idx].add(
-            _fit(
+            0.5
+            * _fit(
                 -_cT(
                     W
                     * psi_r**3  # this is just for consistency; psi' = 1 here
@@ -1340,18 +1344,32 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                     @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta))
                 )
             )
-        )
-        """# for testing
-        new_term = _fit(
-            -_cT(
-                W
-                * psi_r**3  # this is just for consistency; psi' = 1 here
-                * (iota * D_theta + D_zeta)
+            + 0.5
+            * _fit(
+                -_cT(
+                    phi_matrix_full
+                    @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta))
+                )
+                @ (
+                    W
+                    * psi_r**3  # this is just for consistency; psi' = 1 here
+                    * (iota * D_theta + D_zeta)
+                )
             )
-            @ (phi_matrix_full @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta)))
         )
-        new_term = new_term.at[b_idx, b_idx].set(0)
-        np.testing.assert_allclose(new_term, 0)"""
+
+        # Diagnostic, BEFORE symmetrizing: how far diag(measure) @ phi is from
+        # self-adjoint on the boundary block. The term's antisymmetric part is
+        # L^H antisym(B) L, so this small (n_per_shell x n_per_shell) block is the
+        # faithful measure of it and is cheap. Skipped on the ring path, which
+        # restricts these arrays and does not need the diagnostic.
+        if _Rnode is None:
+            _d1 = jnp.reshape((W * psi_r**3)[b_idx], -1)
+            _d2 = jnp.reshape((psi_r / sqrtg_grad_rho)[b_idx], -1)
+            _B = _d1[:, None] * phi_matrix * _d2[None, :]
+            vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
+                jnp.linalg.norm(_B), 1e-300
+            )
 
     # purely stabilizing and doesn't change the marginal stability
     A = A.at[rho_idx, rho_idx].add(
@@ -1650,6 +1668,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         "g_vv": g_vv,
         "iota": iota,
         "keep": keep,
+        # Pre-symmetrization asymmetry of the vacuum term; NaN when fixed boundary.
+        "vacuum_asym": vacuum_asym,
         "n_rho_max": n_rho_max,
         "n_theta_max": n_theta_max,
         "n_total": n_total,
@@ -1929,6 +1949,9 @@ def _AGNI3(params, transforms, profiles, data, **kwargs):
     )
 
     data["finite-n lambda3"] = w
+    # Diagnostic: how far diag(surface measure) @ phi was from self-adjoint BEFORE
+    # the vacuum term was symmetrized. NaN for a fixed-boundary solve.
+    data["finite-n vacuum asym"] = np.atleast_1d(_as["vacuum_asym"])
     data["finite-n eigenfunction3"] = v_full
     data["finite-n xi"] = xi_full
     data["finite-n deltaB"] = np.sqrt(deltaB2)
@@ -2000,6 +2023,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     phi_matrix = transforms.get("phi_matrix", None)
     if phi_matrix is not None:
         phi_matrix = phi_matrix / a_N
+    # Pre-symmetrization asymmetry of the vacuum term, filled in below when the
+    # free-boundary branch runs. NaN means "no vacuum term here".
+    vacuum_asym = jnp.asarray(jnp.nan)
 
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
@@ -2070,6 +2096,18 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # matches `_agni3_assemble`'s sqrtg_grad_rho, used by the vacuum-energy
         # (free-boundary) term added to Ar in `Ax_full` below.
         sqrtg_grad_rho = sqrtg * jnp.sqrt(g_sup_rr)
+
+        # Diagnostic, BEFORE the symmetrization applied in `Ax_full`: how far
+        # diag(surface measure) @ phi is from self-adjoint on the boundary block.
+        # The vacuum term's antisymmetric part is L^H antisym(B) L, so this small
+        # (n_theta*n_zeta)^2 block measures it faithfully and costs nothing.
+        # Computed once here, in the setup, NOT inside the per-matvec closure.
+        _d1 = jnp.reshape((W * psi_r3)[-1], -1)
+        _d2 = jnp.reshape((psi_r / sqrtg_grad_rho)[-1], -1)
+        _B = _d1[:, None] * phi_matrix * _d2[None, :]
+        vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
+            jnp.linalg.norm(_B), 1e-300
+        )
 
     # Match _agni3_assemble's route to g^rv/g^rz exactly: build them from the PEST
     # lower metric via g¹² = (g₁₃g₂₃ - g₁₂g₃₃)/(√g)², rather than reading data["g^rv"].
@@ -2359,7 +2397,18 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
             pu_bnd = phi_matrix @ u[-1].reshape(-1)
             pu = jnp.zeros_like(u).at[-1].set(pu_bnd.reshape(n_theta, n_zeta))
             y = W * psi_r3 * pu
-            Ar += -(d_dv(_cT(D_theta0), iota * y) + d_dz(_cT(D_zeta0), y))
+
+            u_t = (W * psi_r3) * bp_grad_xr
+            pu_t_bnd = _cT(phi_matrix) @ u_t[-1].reshape(-1)
+            pu_t = jnp.zeros_like(u_t).at[-1].set(pu_t_bnd.reshape(n_theta, n_zeta))
+            y_t = (psi_r / sqrtg_grad_rho) * pu_t
+
+            Ar += -0.5 * (
+                d_dv(_cT(D_theta0), iota * y)
+                + d_dz(_cT(D_zeta0), y)
+                + d_dv(_cT(D_theta0), iota * y_t)
+                + d_dz(_cT(D_zeta0), y_t)
+            )
 
         # Compressibility terms
         gp = gamma * sqrtg * W * p0
@@ -2439,6 +2488,8 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         "g_vv": g_vv,
         "iota": iota,
         "keep": keep,
+        # Pre-symmetrization asymmetry of the vacuum term; NaN when fixed boundary.
+        "vacuum_asym": vacuum_asym,
         "n_keep": n_keep,
         "n_rho": n_rho,
         "n_theta": n_theta,
@@ -3649,6 +3700,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
     data["finite-n lambda3 rayleigh"] = jnp.atleast_1d(lam_R)
     data["finite-n lambda3 rayleigh residual"] = jnp.atleast_1d(resid)
+    # Diagnostic: how far diag(surface measure) @ phi was from self-adjoint BEFORE
+    # the vacuum term was symmetrized. NaN for a fixed-boundary solve.
+    data["finite-n vacuum asym"] = jnp.atleast_1d(_op["vacuum_asym"])
     # So a caller can take v from a value call and pass it back as `v_fixed`.
     data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
     data = _agni3_store_rayleigh_mode_data(data, v, _op)

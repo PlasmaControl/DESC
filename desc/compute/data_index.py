@@ -249,6 +249,9 @@ _class_inheritance = {
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.NurbsRPZCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
         "desc.geometry.core.Surface",
     ],

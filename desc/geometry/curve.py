@@ -1692,3 +1692,204 @@ class SplineXYZCurve(Curve):
             method=method,
             name=name,
         )
+
+
+def _unclose_nurbs_pts(R, phi, Z, W):
+    if (
+        np.allclose(
+            [R[0], phi[0], Z[0], W[0]], [R[-1], phi[-1], Z[-1], W[-1]], atol=1e-14
+        )
+        and R.size != 1
+    ):
+        closedR, closedphi, closedZ, closedW = R.copy(), phi.copy(), Z.copy(), W.copy()
+        R, phi, Z, W = R[:-1], phi[:-1], Z[:-1], W[:-1]
+        flag = True
+    else:
+        closedR, closedphi, closedZ, closedW = (
+            np.append(R, R[0]),
+            np.append(phi, phi[0]),
+            np.append(Z, Z[0]),
+            np.append(W, W[0]),
+        )
+        flag = False
+    return R, phi, Z, W, closedR, closedphi, closedZ, closedW, flag
+
+
+class NurbsRPZCurve(Curve):
+    """B-Spline curve of degree p defined in cylindrical coordinates (R, phi, Z).
+
+    Parameters
+    ----------
+    R, phi, Z: array-like
+        Points for R, phi, Z describing the curve. If the endpoint is included
+        (ie, X[0] == X[-1]), then the final point will be dropped.
+    knots : ndarray or "arclength"
+        Knot vector , i.e. a 1D ndarray of the knot points (of length #TODO).
+        If None, defaults to uniform knots, i.e. an linearly spaced points
+        in [0, 2pi). If supplied, should lie in [0,2pi].
+        Alternatively, the string "arclength" can be supplied to use the normalized
+        distance between points.
+    degree : int
+        Degree of B-spline basis functions, which defaults to 3 (cubic).
+
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_R",
+        "_phi",
+        "_Z",
+    ]
+
+    _static_attrs = Curve._static_attrs + [
+        "_degree",
+        "_knot_parametrization",
+    ]
+
+    def __init__(
+        self,
+        R,
+        phi,
+        Z,
+        W,
+        n_ctrl_points,
+        sym,
+        nfp,
+        degree=3,
+        knot_parametrization="uniform",
+        name="",
+    ):
+        super().__init__(name)
+        R, phi, Z, W = (
+            np.atleast_1d(R),
+            np.atleast_1d(phi),
+            np.atleast_1d(Z),
+            np.atleast_1d(W),
+        )
+        R, phi, Z, W = np.broadcast_arrays(R, phi, Z, W)
+
+        errorif(
+            not np.all(np.diff(phi) > 0),
+            ValueError,
+            "phi control points must be strictly increasing, got " f"{phi}",
+        )
+
+        self._R = R
+        self._phi = phi
+        self._Z = Z
+        self._W = W
+
+        self._nfp = nfp
+        self._sym = sym
+        self._n_ctrl_points = n_ctrl_points
+        self._knot_parametrization = knot_parametrization
+        self._degree = degree
+
+    @optimizable_parameter
+    @property
+    def R(self):
+        """Coordinates for R."""
+        return self._R
+
+    @R.setter
+    def R(self, new):
+        if len(new) == len(self._n_ctrl_points):
+            self._R = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R should have {self._n_ctrl_points} control points,"
+                + f"got {len(new)}. "
+            )
+
+    @optimizable_parameter
+    @property
+    def phi(self):
+        """Coordinates for Y."""
+        return self._phi
+
+    @phi.setter
+    def phi(self, new):
+        if len(new) == len(self._n_ctrl_points):
+            self._phi = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"phi should have {self._n_ctrl_points} control points,"
+                + f"got {len(new)}. "
+            )
+
+    @optimizable_parameter
+    @property
+    def Z(self):
+        """Coordinates for Z."""
+        return self._Z
+
+    @Z.setter
+    def Z(self, new):
+        if len(new) == len(self._n_ctrl_points):
+            self._Z = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z should have {self._n_ctrl_points} control points,"
+                + f"got {len(new)}. "
+            )
+
+    @optimizable_parameter
+    @property
+    def W(self):
+        """NURBS weights."""
+        return self._W
+
+    @W.setter
+    def W(self, new):
+        if len(new) == len(self._n_ctrl_points):
+            self._W = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"W should have {self._n_ctrl_points} control points,"
+                + f"got {len(new)}. "
+            )
+
+    # leaving knots unoptimizeable for now
+
+    @property
+    def knot_parametrization(self):
+        """Knots for spline."""
+        return self._knot_parametrization
+
+    @knot_parametrization.setter
+    def knot_parametrization(self, new):
+        if new in ("uniform", "chord"):
+            self._knot_parametrization = new
+        else:
+            raise TypeError(
+                'Knot parametrization must be either "uniform" or "chord". '
+            )
+
+    @property
+    def N(self):
+        """Number of knots in the spline."""
+        return self._R.size
+
+    @property
+    def sym(self):
+        """bool: Whether the curve is stellarator symmetric."""
+        return self._sym
+
+    @property
+    def nfp(self):
+        """int: Number of field periods."""
+        return self._nfp
+
+    @property
+    def degree(self):
+        """Degree of B splines."""
+        return self._degree
+
+    @degree.setter
+    def degree(self, new):
+        if isinstance(new, int):
+            self._degree = new
+        else:
+            raise TypeError("Degree must be an integer. ")

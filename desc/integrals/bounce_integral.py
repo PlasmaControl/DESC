@@ -26,7 +26,7 @@ from orthax.chebyshev import chebvander
 from orthax.legendre import leggauss
 
 from desc.backend import jax, jnp, rfft2
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.integrals._bounce_utils import (
     _bounce_points,
     _halley,
@@ -205,7 +205,7 @@ class Bounce2D(_Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, θ, ζ) with uniformly spaced nodes
         (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
         Number of poloidal and toroidal nodes preferably rounded down to powers of two.
@@ -465,7 +465,7 @@ class Bounce2D(_Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, θ, ζ).
             The ζ coordinates (the unique values prior to taking the tensor-product)
             must be strictly increasing.
@@ -590,7 +590,7 @@ class Bounce2D(_Bounce):
 
             in_name = "vartheta"
             zeta = fourier_pts(Y, (0, 2 * jnp.pi / eq.NFP))
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 rho=rho, M=eq.L_basis.M, zeta=Y if eq.N > 0 else 1, NFP=eq.NFP
             )
             if iota is None:
@@ -599,7 +599,7 @@ class Bounce2D(_Bounce):
         elif name == "delta":
             in_name = "alpha"
             zeta = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
-            grid = LinearGrid(
+            grid = LinearGridFlux(
                 rho=rho, M=eq.L_basis.M, zeta=zeta if eq.N > 0 else 1, NFP=eq.NFP
             )
             if iota is None:
@@ -1330,7 +1330,7 @@ class Bounce1D(_Bounce):
 
     Parameters
     ----------
-    grid : Grid
+    grid : AbstractGridFlux
         Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
         The ζ coordinates are preferably uniformly spaced as they are the
         knots for the spline interpolation.
@@ -1492,7 +1492,7 @@ class Bounce1D(_Bounce):
 
         Parameters
         ----------
-        grid : Grid
+        grid : AbstractGridFlux
             Tensor-product grid in (ρ, α, ζ) Clebsch coordinates.
             The ζ coordinates (the unique values prior to taking the tensor-product)
             must be strictly increasing.
@@ -2083,7 +2083,7 @@ class BounceOptions(NamedTuple):
 
         eq = o.things[0]
         if o._grid is None:
-            o._grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+            o._grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         assert o._grid.can_fft2
 
         X = o._hyperparam.pop("X")
@@ -2116,7 +2116,7 @@ class BounceOptions(NamedTuple):
         o._constants["lambda"] = get_transforms(
             "lambda",
             eq,
-            grid=LinearGrid(
+            grid=LinearGridFlux(
                 rho=rho,
                 M=eq.L_basis.M,  # assuming this doesn't change in optimization
                 zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,

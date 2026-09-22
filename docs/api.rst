@@ -134,10 +134,14 @@ Grid
     :recursive:
     :template: class.rst
 
-    desc.grid.ConcentricGrid
-    desc.grid.Grid
-    desc.grid.LinearGrid
-    desc.grid.QuadratureGrid
+    desc.grid.CustomGridCurve
+    desc.grid.LinearGridCurve
+    desc.grid.CustomGridToroidalSurface
+    desc.grid.LinearGridToroidalSurface
+    desc.grid.CustomGridFlux
+    desc.grid.LinearGridFlux
+    desc.grid.QuadratureGridFlux
+    desc.grid.ConcentricGridFlux
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces
 

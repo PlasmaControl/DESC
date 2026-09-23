@@ -2044,6 +2044,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     # Pre-symmetrization asymmetry of the vacuum term, filled in below when the
     # free-boundary branch runs. NaN means "no vacuum term here".
     vacuum_asym = jnp.asarray(jnp.nan)
+    # (phi_matrix, boundary measure on the W*psi_r^3 side, boundary measure on the
+    # psi_r/(sqrt(g)|grad rho|) side); None when fixed boundary.
+    vac_measures = None
 
     def _cT(x):
         return jnp.conjugate(jnp.transpose(x))
@@ -2126,6 +2129,11 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
             jnp.linalg.norm(_B), 1e-300
         )
+        # The same two boundary measures, kept so the vacuum term's ENERGY can be
+        # evaluated on the converged eigenfunction (see
+        # `_agni3_store_rayleigh_mode_data`). Boundary shell only, so this is two
+        # (n_theta*n_zeta,) vectors plus a reference to `phi_matrix`, not a copy.
+        vac_measures = (phi_matrix, _d1, _d2)
 
     # Match _agni3_assemble's route to g^rv/g^rz exactly: build them from the PEST
     # lower metric via g¹² = (g₁₃g₂₃ - g₁₂g₃₃)/(√g)², rather than reading data["g^rv"].
@@ -2508,6 +2516,8 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         "keep": keep,
         # Pre-symmetrization asymmetry of the vacuum term; NaN when fixed boundary.
         "vacuum_asym": vacuum_asym,
+        # Ingredients for the vacuum ENERGY diagnostic; None when fixed boundary.
+        "vac_measures": vac_measures,
         "n_keep": n_keep,
         "n_rho": n_rho,
         "n_theta": n_theta,
@@ -2609,6 +2619,32 @@ def _agni3_store_rayleigh_mode_data(data, v, op):
         )
     )
 
+    # VACUUM ENERGY, evaluated on the converged eigenfunction.
+    #
+    # `phi_matrix` picks up a sign flip in `desc.compute._laplace` and another in
+    # the vacuum term here, so the net sign is not obvious by inspection. Physics
+    # fixes it: the vacuum term is a field energy, so its contribution to dW must
+    # be POSITIVE (stabilizing) for any displacement. A negative value means the
+    # two flips do not cancel as intended and the free-boundary term is driving
+    # the instability instead of resisting it.
+    #
+    # Consistency with the reported eigenvalue: `Ax_full` applies
+    # `diagBsqinv * Linv_DT` to its input before using it, exactly as this
+    # function does above, so the `xr` here is the same vector the vacuum term
+    # acts on inside the operator. With b = (iota*D_theta + D_zeta) xi^rho on the
+    # boundary shell, the operator adds
+    #     -0.5 * (L^H m1 P m2 L + L^H m2 P^H m1 L)
+    # to the rho-rho block, whose quadratic form is -Re<m1 b, P (m2 b)>. That is
+    # the vacuum part of `vdot(v, Ax(v))`, i.e. of the numerator of lambda.
+    vac = op.get("vac_measures", None)
+    if vac is None:
+        vacuum_energy = jnp.asarray(jnp.nan)
+    else:
+        _P, _m1, _m2 = vac
+        _b = (iota * xr_v + xr_z)[-1].reshape(-1)
+        vacuum_energy = -jnp.real(jnp.vdot(_m1 * _b, _P @ (_m2 * _b)))
+
+    data["finite-n vacuum energy"] = jnp.atleast_1d(vacuum_energy)
     data["finite-n eigenfunction3 rayleigh"] = v_full
     data["finite-n xi rayleigh"] = xi_full
     data["finite-n deltaB rayleigh"] = jnp.sqrt(deltaB2)

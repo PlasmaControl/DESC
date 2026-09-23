@@ -424,6 +424,12 @@ def coarse_seed_and_deflation(
         Prolonged deflation basis. Column 0 is ``v0`` up to scaling.
     lam_c : ndarray, (k,)
         Coarse generalized eigenvalues, for reporting.
+    X_c : ndarray, (n_c, k)
+        The same modes BEFORE prolongation, unit-norm, on the coarse grid. `Z`
+        cannot substitute: it lives in the fine space, so it cannot be paired
+        with the coarse operator to form a Rayleigh quotient. Returned so the
+        caller -- which is the only place `sigma` is known -- can report a
+        coarse eigenvalue directly comparable to the fine level's lambda.
     """
     lam_c, X_c = coarse_gen_modes(
         Hc, blocks_c, Gs_c, k, num_matvecs, ridge=ridge, seed=seed
@@ -433,7 +439,7 @@ def coarse_seed_and_deflation(
     Z = jnp.swapaxes(jax.vmap(P)(jnp.swapaxes(X_c, 0, 1)), 0, 1)
     v0 = Z[:, 0]
     v0 = v0 / jnp.linalg.norm(v0)
-    return v0, Z, lam_c
+    return v0, Z, lam_c, X_c
 
 
 # ---------------------------------------------------------------------------

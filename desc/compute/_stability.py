@@ -3559,7 +3559,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _kc = min(_kdefl, _nc - 1)
             # `_cGn` carries -1 padding; the in-package routine derives its own
             # mask from it, so no separate mask argument is passed.
-            _v0c, _Zc, _lamc = _cseed(
+            _v0c, _Zc, _lamc, _Xc = _cseed(
                 _cHc,
                 _cblk,
                 _cGn,
@@ -3580,11 +3580,35 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _Z = _Zc
             _seed_v0 = _v0c
             if _xcheck:
+                # TWO DIFFERENT NUMBERS, easy to confuse:
+                #
+                # `mu_0` is the softest GENERALIZED eigenvalue of the pencil
+                # (H_c, M), H_c = A_c - sigma*I and M its ring-block-diagonal.
+                # `coarse_gen_modes` solves it by congruence, which preserves
+                # inertia, so sign(mu_0) is the sign of `lambda_min(A_c)-sigma`
+                # -- NOT of lambda_min(A_c). mu_0 > 0 says only that the shift
+                # is valid (H_c is positive definite); it says nothing about
+                # stability. mu_0 near 0 means H_c is nearly singular, i.e.
+                # sigma is grazing the coarse spectrum.
+                #
+                # `lambda_c0` is the Rayleigh quotient of the UNSHIFTED coarse
+                # operator on that same mode (`+ sigma` undoes the in-place
+                # diagonal shift above). That one is on the same footing as the
+                # fine level's reported lambda, so the two can be compared --
+                # including their signs.
+                _x0 = _Xc[:, 0]
+                _lc0 = (
+                    jnp.real(jnp.vdot(_x0, _cHc @ _x0)) / jnp.real(jnp.vdot(_x0, _x0))
+                    + sigma
+                )
                 jax.debug.print(
-                    "[coarse_defl] n_c={nc} k={k} lam_c0={l:.6e} Z{z}",
+                    "[coarse_defl] n_c={nc} k={k} lambda_c0={lc:.6e} "
+                    "mu_0={m:.6e} (sigma={s:.3e}) Z{z}",
                     nc=_nc,
                     k=_kc,
-                    l=_lamc[0],
+                    lc=_lc0,
+                    m=_lamc[0],
+                    s=sigma,
                     z=_Zc.shape[1],
                 )
 

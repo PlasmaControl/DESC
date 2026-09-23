@@ -1328,34 +1328,25 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # iota_s = iota[b_idx, :]
 
         # add vacuum energy \int dS dθdζ√gΦ [Bp · ∇ξ^ρ]
-        # pad phi_matrix to full size and add to the rho-rho block of A
-        phi_matrix_full = jnp.zeros((n_total, n_total))
-        phi_matrix_full = phi_matrix_full.at[b_idx, b_idx].set(phi_matrix)
+        #
+        # The vacuum operator couples the BOUNDARY SHELL ONLY, so contract
+        # against `phi_matrix` (n_per_shell, n_per_shell) directly and slice the
+        # two factors to that shell. Padding it up to (n_total, n_total) first
+        # is exactly equivalent -- the padding is zero, so the product only ever
+        # touches the boundary rows -- but at 48x41x17 that padded array is
+        # 8.34 GiB of 99.96% zeros holding 3.7 MB of content, and it OOM'd.
+        #
+        # Shapes work on both paths: on the dense path `X_bnd` is
+        # (n_per_shell, n_total); on the ring path D_theta/D_zeta are already
+        # column-sliced by `_selc`, so it is (n_per_shell, n_R). Either way the
+        # products below match the block they are added to.
+        L_bp = iota * D_theta + D_zeta
+        # this is just for consistency; psi' = 1 here
+        X_bnd = (W * psi_r**3 * L_bp)[b_idx]
+        Y_bnd = (psi_r / sqrtg_grad_rho * L_bp)[b_idx]
+        phi_Y = phi_matrix @ Y_bnd
         A = A.at[rho_idx, rho_idx].add(
-            0.5
-            * _fit(
-                -_cT(
-                    W
-                    * psi_r**3  # this is just for consistency; psi' = 1 here
-                    * (iota * D_theta + D_zeta)
-                )
-                @ (
-                    phi_matrix_full
-                    @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta))
-                )
-            )
-            + 0.5
-            * _fit(
-                -_cT(
-                    phi_matrix_full
-                    @ (psi_r / sqrtg_grad_rho * (iota * D_theta + D_zeta))
-                )
-                @ (
-                    W
-                    * psi_r**3  # this is just for consistency; psi' = 1 here
-                    * (iota * D_theta + D_zeta)
-                )
-            )
+            0.5 * _fit(-_cT(X_bnd) @ phi_Y) + 0.5 * _fit(-_cT(phi_Y) @ X_bnd)
         )
 
         # Diagnostic, BEFORE symmetrizing: how far diag(measure) @ phi is from

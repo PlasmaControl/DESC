@@ -809,8 +809,10 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # fixes one zeta index, so this is exact and reduces to the untouched
     # original path whenever n_zeta_max==1 (axisym).
     _ring_precoupled = kwargs.get("ring_nodes", None)
-    if coupled_rt and _ring_precoupled is not None and n_zeta_max > 1:
+    _preslice = _ring_precoupled is not None and n_zeta_max > 1
+    if _preslice:
         _ridx = jnp.asarray(_ring_precoupled)
+    if coupled_rt and _preslice:
         _n_rt = n_rho_max * n_theta_max
         D_rho = jax.lax.stop_gradient(
             _kron_I_right_slice_cols(D_rho0, n_zeta_max, _ridx)
@@ -825,7 +827,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zetaT = jax.lax.stop_gradient(
             _kron_I_left_slice_rows(_cT(D_zeta0), _n_rt, _ridx)
         )
-        _coupled_rt_presliced = True
+        _presliced = True
     elif coupled_rt:
         # D_rho0/D_theta0 already couple (rho, theta); only tensor with zeta.
         I_rt0 = jax.lax.stop_gradient(jnp.eye(n_rho_max * n_theta_max))
@@ -834,7 +836,32 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zeta = jax.lax.stop_gradient(jnp.kron(I_rt0, D_zeta0))
         D_thetaT = jax.lax.stop_gradient(jnp.kron(_cT(D_theta0), I_zeta0))
         D_zetaT = jax.lax.stop_gradient(jnp.kron(I_rt0, _cT(D_zeta0)))
-        _coupled_rt_presliced = False
+        _presliced = False
+    elif _preslice:
+        # Same trick for SEPARABLE D_rho0/D_theta0/D_zeta0 (coupled_rt=False),
+        # one Kronecker factor deeper. With rho-major node ordering,
+        #   D_rho   = kron(D_rho0, I_theta kron I_zeta)  = kron(D_rho0, I_ntz)
+        #   D_theta = kron(I_rho, kron(D_theta0, I_zeta))
+        #   D_zeta  = kron(I_rho kron I_theta, D_zeta0)  = kron(I_nrt, D_zeta0)
+        # so each is (A kron I) or (I kron B) and goes through the helpers above.
+        # The only intermediate is kron(D_theta0, I_zeta), which is
+        # (n_theta*n_zeta)^2 -- ~4 MB at 41x17, against 8.3 GB for n_total^2.
+        # Without this the ring path built the full kron inside every ring, so
+        # `ring_batch` could not bound it: 48x41x17 asked for 8.34 GiB per ring.
+        _n_tz = n_theta_max * n_zeta_max
+        _n_rt = n_rho_max * n_theta_max
+        D_rho = jax.lax.stop_gradient(_kron_I_right_slice_cols(D_rho0, _n_tz, _ridx))
+        D_theta = jax.lax.stop_gradient(
+            _kron_I_left_slice_cols(jnp.kron(D_theta0, I_zeta0), n_rho_max, _ridx)
+        )
+        D_zeta = jax.lax.stop_gradient(_kron_I_left_slice_cols(D_zeta0, _n_rt, _ridx))
+        D_thetaT = jax.lax.stop_gradient(
+            _kron_I_left_slice_rows(jnp.kron(_cT(D_theta0), I_zeta0), n_rho_max, _ridx)
+        )
+        D_zetaT = jax.lax.stop_gradient(
+            _kron_I_left_slice_rows(_cT(D_zeta0), _n_rt, _ridx)
+        )
+        _presliced = True
     else:
         I_rho0 = jax.lax.stop_gradient(jnp.eye(n_rho_max))
         I_theta0 = jax.lax.stop_gradient(jnp.eye(n_theta_max))
@@ -847,7 +874,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zetaT = jax.lax.stop_gradient(
             jnp.kron(I_rho0, jnp.kron(I_theta0, _cT(D_zeta0)))
         )
-        _coupled_rt_presliced = False
+        _presliced = False
 
     # Quadrature weights still factorize (tensor-product) in both modes.
     W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
@@ -925,7 +952,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
                 M = M[:, _Rnode]
             return M
 
-    if not _coupled_rt_presliced:
+    if not _presliced:
         D_rho = _selc(D_rho)
         D_theta = _selc(D_theta)
         D_zeta = _selc(D_zeta)
@@ -1418,7 +1445,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # gather below.
         #
         # So: device only when the input is actually traced.
-        if _coupled_rt_presliced:
+        if _presliced:
             # Ring fixes one zeta index for both row and column, so the
             # double-sliced kron(Q_rt, I_zeta) reduces to a direct submatrix
             # of Q_rt -- no kron, no (n_total, n_total) intermediate.

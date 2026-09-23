@@ -31,17 +31,6 @@ from desc.utils import cross, dot, errorif, safediv, setdefault, warnif
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
 
-# data needed by VacuumGuidingCenterTrajectory in flux coordinates
-_GC_FLUX_DATA_KEYS = [
-    "B",
-    "|B|",
-    "grad(|B|)",
-    "e^rho",
-    "e^theta",
-    "e^zeta",
-    "b",
-]
-
 
 def _precompute_zernike_bases(eq):
     """Precompute polynomial coefficient Zernike bases of an Equilibrium.
@@ -281,6 +270,8 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     # Additional arguments needed by the model.
     # Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
     args: list[str] = eqx.field(static=True)
+    # quantities that vf will call compute for
+    data_keys: list[str] = eqx.field(static=True)
 
     @property
     @abstractmethod
@@ -346,6 +337,15 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     vcoords = ["vpar"]
     args = ["m", "q", "mu"]
+    data_keys = [
+        "B",
+        "|B|",
+        "grad(|B|)",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+        "b",
+    ]
 
     def __init__(self, frame):
         assert frame in ["lab", "flux"]
@@ -428,21 +428,22 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             spacing=jnp.zeros((3,)).T,
             jitable=True,
         )
-        data_keys = _GC_FLUX_DATA_KEYS
 
         # precomputed polynomial coefficient bases for fast basis evaluation,
         # built once outside the ODE solve (see zernike_mode in trace_particles)
         zernike_bases = kwargs.get("zernike_bases", None)
         if zernike_bases is None:
-            transforms = get_transforms(data_keys, eq, grid, jitable=True)
+            transforms = get_transforms(self.data_keys, eq, grid, jitable=True)
         else:
-            transforms = _get_precomputed_transforms(zernike_bases, eq, grid, data_keys)
+            transforms = _get_precomputed_transforms(
+                zernike_bases, eq, grid, self.data_keys
+            )
         profiles = {"current": eq.current, "iota": eq.iota}
         if iota is not None:
             profiles["iota"] = iota
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            data_keys,
+            self.data_keys,
             params,
             transforms,
             profiles,
@@ -1232,8 +1233,7 @@ def trace_particles(
         Relative and absolute tolerances for PID stepsize controller.
     max_steps : int
         Maximum number of steps for whole integration. This will be passed
-        to the diffrax.diffeqsolve function. Defaults to
-        (ts[-1] - ts[0]) / min_step_size
+        to the diffrax.diffeqsolve function. Defaults to max(len(ts)*1000, 100_000)
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     bounds : array of shape(3, 2), optional
@@ -1340,7 +1340,7 @@ def trace_particles(
     stepsize_controller = PIDController(
         rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
     )
-    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
+    max_steps = setdefault(max_steps, max(len(ts) * 1000, 100_000))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(

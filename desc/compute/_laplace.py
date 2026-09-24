@@ -348,7 +348,7 @@ def _lsmr_compute_phi_matrix(
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
+    data=["|e_theta x e_zeta|", "e_theta", "e_zeta", "omega"],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.equilibrium.equilibrium.Equilibrium",
@@ -459,9 +459,10 @@ def _interpolator_pest(params, transforms, profiles, data, **kwargs):
                 dy=dz,
             ).ravel(order="F")
 
-        data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
-        zeta = potential_grid.nodes[:, 2]
-        data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
+        data["potential data"] = apply(data, fun, ("R", "Z"))
+        # PEST is defined by phi = zeta, taken on the target grid (phi is secular
+        # in zeta, so unlike R and Z it cannot be FFT-interpolated by `fun`).
+        data["potential data"]["phi"] = potential_grid.nodes[:, 2]
 
     return data
 
@@ -520,10 +521,10 @@ def _potential_grid_position(params, transforms, profiles, data, **kwargs):
 def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["A_mn"], data["phi_matrix"] = _lsmr_compute_phi_matrix(
-        data.get("potential data", data),
-        data,
-        data["interpolator"],
-        transforms["Phi"],
+        eval_data=data.get("potential data", data),
+        source_data=data,
+        interpolator=data["interpolator"],
+        phi_transform=transforms["Phi"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         _midpoint_quad=kwargs.get("_midpoint_quad", False),
@@ -576,17 +577,14 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
 # THEN USE THAT INSTEAD IN THE KERNELS TO COMPUTE D AND M_S
 def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
-    # Relabel PEST basis vectors to the standard key names expected by the
-    # BIEST kernels (_kernel_monopole, _kernel_dipole_plus_half).
-    # The same relabeling was applied in _interpolator_pest, so the data
-    # passed here is consistent with what the interpolator was built with.
+    # Relabel PEST basis vectors to the standard key names expected by kernels
     data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
-        data.get("potential data", data),
-        data,
-        data["interpolator_pest"],
-        transforms["Phi_PEST"],
+        eval_data=data.get("potential data", data),
+        source_data=data,
+        interpolator=data["interpolator_pest"],
+        phi_transform=transforms["Phi_PEST"],
         problem=kwargs["problem"],
         chunk_size=kwargs.get("chunk_size", None),
         pest_coords=True,

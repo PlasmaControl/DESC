@@ -878,6 +878,13 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     # Quadrature weights still factorize (tensor-product) in both modes.
     W = jnp.kron(W_rho, jnp.kron(W_theta, W_zeta))[:, None]
+    # SURFACE quadrature weight, for the free-boundary vacuum term only. That term is
+    # an integral over the boundary surface, so its measure is (theta, zeta) alone --
+    # weighting it with the volume weight `W` multiplies it by the boundary node's
+    # radial weight w_rho[-1], which shrinks like 1/n_rho. That under-weighted the
+    # vacuum energy by a factor that vanishes under radial refinement, driving the
+    # free-boundary problem toward the fixed-boundary answer as n_rho grew.
+    W_surf = jnp.kron(W_theta, W_zeta)[:, None]
     n_total = n_rho_max * n_theta_max * n_zeta_max
 
     # ------------------------------------------------------------------
@@ -1369,7 +1376,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # products below match the block they are added to.
         L_bp = iota * D_theta + D_zeta
         # this is just for consistency; psi' = 1 here
-        X_bnd = (W * psi_r**3 * L_bp)[b_idx]
+        # W_surf, not W: surface measure, applied after slicing to the boundary
+        # shell so the (n_per_shell, 1) weight lines up with the sliced rows.
+        X_bnd = W_surf * (psi_r**3 * L_bp)[b_idx]
         Y_bnd = (psi_r / sqrtg_grad_rho * L_bp)[b_idx]
         phi_Y = phi_matrix @ Y_bnd
         A = A.at[rho_idx, rho_idx].add(
@@ -1382,7 +1391,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # faithful measure of it and is cheap. Skipped on the ring path, which
         # restricts these arrays and does not need the diagnostic.
         if _Rnode is None:
-            _d1 = jnp.reshape((W * psi_r**3)[b_idx], -1)
+            _d1 = jnp.reshape(W_surf * (psi_r**3)[b_idx], -1)
             _d2 = jnp.reshape((psi_r / sqrtg_grad_rho)[b_idx], -1)
             _B = _d1[:, None] * phi_matrix * _d2[None, :]
             vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
@@ -2082,6 +2091,9 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
     n0 = _reshape(kwargs.get("density", np.ones((n_rho, n_theta, n_zeta))))
     W = _reshape(jnp.kron(w_rho, jnp.kron(w_theta, w_zeta)))
+    # SURFACE weight for the vacuum term -- see the matching comment in
+    # `_agni3_assemble`. Shape (n_theta, n_zeta), to be applied on the boundary shell.
+    W_surf = jnp.kron(w_theta, w_zeta).reshape(n_theta, n_zeta)
 
     iota = _reshape(data["iota"])
     iotainv = _reshape(1.0 / data["iota"])
@@ -2123,7 +2135,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # The vacuum term's antisymmetric part is L^H antisym(B) L, so this small
         # (n_theta*n_zeta)^2 block measures it faithfully and costs nothing.
         # Computed once here, in the setup, NOT inside the per-matvec closure.
-        _d1 = jnp.reshape((W * psi_r3)[-1], -1)
+        _d1 = jnp.reshape(W_surf * psi_r3[-1], -1)
         _d2 = jnp.reshape((psi_r / sqrtg_grad_rho)[-1], -1)
         _B = _d1[:, None] * phi_matrix * _d2[None, :]
         vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
@@ -2418,16 +2430,26 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
             # (b_idx x b_idx), acting only on the outermost (boundary) rho
             # shell. `bp_grad_xr` is (iota*D_theta + D_zeta) @ xr, i.e. the
             # dense path's inner `(iota * D_theta + D_zeta)` applied to xi^rho.
+            # m1 = W_surf * psi_r^3 carries the SURFACE quadrature weight (the
+            # volume weight W would add a spurious w_rho[-1] ~ 1/n_rho); m2 =
+            # psi_r/(sqrt(g)|grad rho|) carries the geometry and no weight. Only
+            # the boundary shell participates, so everything is built there
+            # directly and scattered into the zero-padded full array.
             bp_grad_xr = iota * xr_v + xr_z
-            u = (psi_r / sqrtg_grad_rho) * bp_grad_xr
-            pu_bnd = phi_matrix @ u[-1].reshape(-1)
-            pu = jnp.zeros_like(u).at[-1].set(pu_bnd.reshape(n_theta, n_zeta))
-            y = W * psi_r3 * pu
+            m1_bnd = W_surf * psi_r3[-1]
+            m2_bnd = (psi_r / sqrtg_grad_rho)[-1]
 
-            u_t = (W * psi_r3) * bp_grad_xr
-            pu_t_bnd = _cT(phi_matrix) @ u_t[-1].reshape(-1)
-            pu_t = jnp.zeros_like(u_t).at[-1].set(pu_t_bnd.reshape(n_theta, n_zeta))
-            y_t = (psi_r / sqrtg_grad_rho) * pu_t
+            u_bnd = m2_bnd * bp_grad_xr[-1]
+            pu_bnd = phi_matrix @ u_bnd.reshape(-1)
+            y = jnp.zeros_like(xr).at[-1].set(m1_bnd * pu_bnd.reshape(n_theta, n_zeta))
+
+            u_t_bnd = m1_bnd * bp_grad_xr[-1]
+            pu_t_bnd = _cT(phi_matrix) @ u_t_bnd.reshape(-1)
+            y_t = (
+                jnp.zeros_like(xr)
+                .at[-1]
+                .set(m2_bnd * pu_t_bnd.reshape(n_theta, n_zeta))
+            )
 
             Ar += -0.5 * (
                 d_dv(_cT(D_theta0), iota * y)
@@ -2642,7 +2664,20 @@ def _agni3_store_rayleigh_mode_data(data, v, op):
     else:
         _P, _m1, _m2 = vac
         _b = (iota * xr_v + xr_z)[-1].reshape(-1)
-        vacuum_energy = -jnp.real(jnp.vdot(_m1 * _b, _P @ (_m2 * _b)))
+        # NORMALIZED by lambda's own denominator, vdot(v, v), so this is the
+        # vacuum term's contribution TO lambda and is directly comparable to it.
+        #
+        # The raw quadratic form is not: lambda is a Rayleigh quotient and so is
+        # invariant to the scale of the eigenvector, but `xi^H A_vac xi` is not.
+        # For one physical mode, refining the radial grid grows vdot(v, v) with
+        # the node count, the returned eigenvector comes back scaled down by
+        # 1/sqrt(n_rho), and the raw form -- quadratic in the boundary values --
+        # falls like 1/n_rho. An n_rho scan then shows it dropping 4x while the
+        # eigenfunction is visually unchanged, which is an artifact of scale, not
+        # a physical weakening of the vacuum response.
+        vacuum_energy = -jnp.real(jnp.vdot(_m1 * _b, _P @ (_m2 * _b))) / jnp.real(
+            jnp.vdot(v, v)
+        )
 
     data["finite-n vacuum energy"] = jnp.atleast_1d(vacuum_energy)
     data["finite-n eigenfunction3 rayleigh"] = v_full

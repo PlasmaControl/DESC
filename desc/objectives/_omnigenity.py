@@ -2,12 +2,19 @@
 
 import warnings
 
-from desc.backend import jnp
+import numpy as np
+
+from desc.backend import jnp, vmap
 from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
-from desc.compute._omnigenity import _omnigenity_mapping
+from desc.compute._omnigenity import (
+    SOFTPLUS_SHARPNESS,
+    _omnigenity_mapping,
+    boozer_second_adiabatic_invariant_alpha_derivative_from_data,
+    boozer_soft_connectivity_penalty_from_data,
+)
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, _Grid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -993,3 +1000,368 @@ class Isodynamicity(_Objective):
             profiles=constants["profiles"],
         )
         return data["isodynamicity"]
+
+
+class SecondAdiabaticInvariantAlphaDerivative(_Objective):
+    r"""Boozer-space second adiabatic invariant derivative along alpha.
+
+    Targets the omnigenity condition by directly penalizing the derivative
+    of the second adiabatic invariant (bounce action) :math:`J^*` with respect
+    to the field-line label :math:`\alpha`:
+
+    .. math::
+
+        \frac{\partial J^*}{\partial \alpha} = 0, \quad
+        J^*(\psi, B_{\rm bounce}, \alpha) = \oint \sqrt{2m(E - \mu B)}\,d\ell
+
+    A smooth `softplus` kernel is used to resolve the square-root endpoint
+    singularity at bounce points, enabling exact, stable reverse-mode
+    automatic differentiation.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid used to compute Boozer coefficients and surface extrema.
+        Must be non-symmetric. Defaults to the boundary surface with
+        ``LinearGrid(rho=1.0, M=2*M_booz, N=2*N_booz, NFP=eq.NFP, sym=False)``.
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    num_alpha : int, optional
+        Number of alpha samples per surface. The actual alpha values are
+        computed dynamically from iota:
+        ``linspace(alpha0 - π, alpha0, N)`` where
+        ``alpha0 = π - iota * π/nfp``. Defaults to 48.
+    t : ndarray, optional
+        Normalized pitch samples used to define
+        ``B_star = (1-t) * B_min + t * B_max`` on each surface.
+        Defaults to 48 points in [0.05, 0.95].
+    nzeta : int, optional
+        Number of Boozer toroidal samples used for the line integral. Default = 100.
+    zeta_min, zeta_max : float, optional
+        Boozer toroidal integration bounds. ``zeta_max`` defaults to one field period.
+    softplus_sharpness : float, optional
+        Sharpness of the smooth cutoff used in the second adiabatic invariant.
+        Default = 100.0.
+    soft_extrema_tau : float, optional
+        Temperature parameter for the soft Log-Sum-Exp extrema estimators.
+        Default = 0.1.
+
+    References
+    ----------
+    .. [1] Chen, H., Lu, Z., Xu, G., et al. (2026). "Direct Optimization
+       of Stellarator Omnigenity from the Second Adiabatic Invariant."
+       arXiv:2608.02418.
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _coordinates = "r"
+    _units = "(1/T)"
+    _print_value_fmt = "dJ/dalpha: "
+    _static_attrs = _Objective._static_attrs + [
+        "_data_keys",
+        "_grid",
+        "_nzeta",
+        "_num_alpha",
+        "_soft_extrema_tau",
+        "_softplus_sharpness",
+        "_t",
+        "_zeta_max",
+        "_zeta_min",
+        "M_booz",
+        "N_booz",
+    ]
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        M_booz=None,
+        N_booz=None,
+        num_alpha=48,
+        t=None,
+        nzeta=100,
+        zeta_min=0.0,
+        zeta_max=None,
+        softplus_sharpness=SOFTPLUS_SHARPNESS,
+        soft_extrema_tau=0.1,
+        name="Second adiabatic invariant alpha derivative",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self.M_booz = M_booz if M_booz is not None else 2 * eq.M
+        self.N_booz = N_booz if N_booz is not None else 2 * eq.N
+        self._grid = grid
+        self._num_alpha = num_alpha
+        self._t = np.linspace(0.05, 0.95, 48) if t is None else np.asarray(t)
+        self._nzeta = nzeta
+        self._zeta_min = zeta_min
+        self._zeta_max = zeta_max
+        self._softplus_sharpness = softplus_sharpness
+        self._soft_extrema_tau = soft_extrema_tau
+        self._jac_chunk_size = jac_chunk_size
+
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays and grid."""
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=2 * self.M_booz,
+                N=2 * self.N_booz,
+                NFP=eq.NFP,
+                sym=False,
+            )
+        else:
+            grid = self._grid
+
+        assert isinstance(grid, _Grid), f"Expected Grid, got {type(grid)}."
+        assert not grid.sym, "Grid must not be symmetric."
+
+        self._data_keys = ["|B|_mn_B", "iota"]
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._constants = {
+            "transforms": get_transforms(
+                self._data_keys,
+                obj=eq,
+                grid=grid,
+                M_booz=self.M_booz,
+                N_booz=self.N_booz,
+            ),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=grid),
+            "t": jnp.asarray(self._t),
+        }
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1.0 / scales["B"]
+
+        self._dim_f = grid.num_rho * self._num_alpha * self._t.size
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute ``dJ/dalpha`` on the configured rho/alpha/t grid."""
+        constants = self._get_deprecated_constants(constants)
+        zeta_max = (
+            2 * np.pi / constants["transforms"]["grid"].NFP
+            if self._zeta_max is None
+            else self._zeta_max
+        )
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        dJ_dalpha = boozer_second_adiabatic_invariant_alpha_derivative_from_data(
+            constants["transforms"]["grid"],
+            constants["transforms"]["B"].basis,
+            data,
+            constants["t"],
+            num_alpha=self._num_alpha,
+            nzeta=self._nzeta,
+            zeta_min=self._zeta_min,
+            zeta_max=zeta_max,
+            softplus_sharpness=self._softplus_sharpness,
+            soft_extrema_tau=self._soft_extrema_tau,
+        )
+        return jnp.ravel(dJ_dalpha)
+
+
+class SoftConnectivity(_Objective):
+    r"""Soft-connectivity penalty for :math:`|B|` along Boozer field lines.
+
+    Enforces clean, single-well magnetic field structure along field lines
+    without secondary local wells or trapped-branch bifurcations:
+
+    .. math::
+
+        \mathcal{P}_{\rm conn} = \int \sigma(\Delta \zeta) \operatorname{softplus}(-\partial_\zeta |B|) + (1-\sigma(\Delta \zeta)) \operatorname{softplus}(\partial_\zeta |B|)
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    spline : SplineZeta
+        Spline parameterized control points defining the well extrema.
+    grid : Grid, optional
+        Collocation grid used to compute Boozer coefficients.
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    num_alpha : int, optional
+        Number of alpha samples per surface. Default = 48.
+    t : ndarray, optional
+        Normalized Boozer toroidal path samples in [0, 1]. Default = linspace(0, 1, 200).
+    sigmoid_sharpness : float, optional
+        Transition sharpness between left and right well sides. Default = 10.0.
+
+    References
+    ----------
+    .. [1] Chen, H., Lu, Z., Xu, G., et al. (2026). "Direct Optimization
+       of Stellarator Omnigenity from the Second Adiabatic Invariant."
+       arXiv:2608.02418.
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _coordinates = "r"
+    _units = "~"
+    _print_value_fmt = "Soft connectivity penalty: "
+    _static_attrs = _Objective._static_attrs + [
+        "_data_keys",
+        "_grid",
+        "_num_alpha",
+        "_sigmoid_sharpness",
+        "_t",
+        "M_booz",
+        "N_booz",
+    ]
+
+    def __init__(
+        self,
+        eq,
+        spline,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        M_booz=None,
+        N_booz=None,
+        num_alpha=50,
+        t=None,
+        sigmoid_sharpness=50.0,
+        name="Soft connectivity penalty",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self.M_booz = M_booz if M_booz is not None else 2 * eq.M
+        self.N_booz = N_booz if N_booz is not None else 2 * eq.N
+        self._grid = grid
+        self._num_alpha = num_alpha
+        self._t = np.linspace(0.0, 1.0, 200) if t is None else np.asarray(t)
+        self._sigmoid_sharpness = sigmoid_sharpness
+        self._jac_chunk_size = jac_chunk_size
+
+        things = [eq, spline]
+        super().__init__(
+            things=things,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays and grid."""
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                rho=np.array([1.0]),
+                M=2 * self.M_booz,
+                N=2 * self.N_booz,
+                NFP=eq.NFP,
+                sym=False,
+            )
+        else:
+            grid = self._grid
+
+        assert isinstance(grid, _Grid), f"Expected Grid, got {type(grid)}."
+        assert not grid.sym, "Grid must not be symmetric."
+
+        self._data_keys = ["|B|_mn_B", "iota"]
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._constants = {
+            "transforms": get_transforms(
+                self._data_keys,
+                obj=eq,
+                grid=grid,
+                M_booz=self.M_booz,
+                N_booz=self.N_booz,
+            ),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=grid),
+            "t": jnp.asarray(self._t),
+        }
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._dim_f = grid.num_rho * self._num_alpha * self._t.size
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_1, params_2=None, constants=None):
+        """Compute soft-connectivity penalty residuals."""
+        constants = self._get_deprecated_constants(constants)
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self._data_keys,
+            params=params_1,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        spline = self.things[1]
+        spline_knots = spline.reduced_knots(params_2)
+
+        penalty = boozer_soft_connectivity_penalty_from_data(
+            constants["transforms"]["grid"],
+            constants["transforms"]["B"].basis,
+            data,
+            constants["t"],
+            reduced_alpha_knots=spline_knots["reduced_alpha_knots"],
+            zeta_min_knots=spline_knots["zeta_min_knots"],
+            zeta_max_knots=spline_knots["zeta_max_knots"],
+            num_alpha=self._num_alpha,
+            sigmoid_sharpness=self._sigmoid_sharpness,
+            spline_symmetry=spline.symmetry,
+        )
+        return jnp.ravel(penalty)

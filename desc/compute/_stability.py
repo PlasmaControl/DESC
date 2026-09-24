@@ -1345,7 +1345,10 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # jnp, not np: on the ring path `_nodesel` indexes this with `ring_nodes`,
     # which is a TRACER under the vmap that builds all rings at once. numpy
     # cannot be indexed by a tracer.
-    boundary = _nodesel(jnp.asarray((rho_shell == 0) | (rho_shell == (n_rho_max - 1))))
+    _bc_shell = rho_shell == 0
+    if phi_matrix is None:
+        _bc_shell = _bc_shell | (rho_shell == (n_rho_max - 1))
+    boundary = _nodesel(jnp.asarray(_bc_shell))
 
     # add vacuum energy contribution
     if phi_matrix is not None:
@@ -2249,15 +2252,20 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     B_scaled = jnp.einsum("...ij,...i,...j->...ij", B_blocks, diagBsqinv, diagBsqinv)
 
     n_per_shell = n_theta * n_zeta
-    boundary_idx = jnp.concatenate(
-        [jnp.arange(n_per_shell), jnp.arange(n_total - n_per_shell, n_total)]
-    )
+    # `boundary_idx` (where xi^rho is pinned, so its cross-couplings are stripped from
+    # the mass blocks below) MUST match `keep`. It used to cover both shells
+    # unconditionally, which removed the rho-upsilon and rho-zeta couplings from the
+    # outer shell even in a free-boundary solve, where that xi^rho is a live DOF.
     if phi_matrix is not None:
         # free boundary: only remove rho=0 (the axis); keep the outer shell
         keep_rho = jnp.arange(n_per_shell, n_total)
+        boundary_idx = jnp.arange(n_per_shell)
     else:
         # fixed boundary: remove rho=0 and rho=1 (Dirichlet xi^rho=0)
         keep_rho = jnp.arange(n_per_shell, n_total - n_per_shell)
+        boundary_idx = jnp.concatenate(
+            [jnp.arange(n_per_shell), jnp.arange(n_total - n_per_shell, n_total)]
+        )
     keep_tangent = jnp.arange(n_total, 3 * n_total)
     keep = jnp.concatenate([keep_rho, keep_tangent])
     n_keep = keep.size

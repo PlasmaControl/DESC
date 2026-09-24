@@ -225,7 +225,7 @@ def _convert_basis(p, data, basis):
     # convert data from default 'rpz' basis to 'xyz' basis, if requested by the user
     if basis == "xyz":
         for name in data.keys():
-            if name == "potential data":
+            if name in ("potential data", "potential data pest"):
                 continue
             errorif(
                 data_index[p][name]["dim"] == (3, 3),

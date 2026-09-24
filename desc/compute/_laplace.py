@@ -59,6 +59,28 @@ _doc = {
 }
 
 
+def _interp_to_potential_grid(data, source_grid, potential_grid, keys):
+    """FFT-interpolate periodic surface data from the source grid to the eval grid.
+
+    Only quantities that are PERIODIC in (theta, zeta) may go through here -- R, Z
+    and omega. phi may not: it is secular in zeta (it advances by 2*pi per toroidal
+    transit), so the callers take its secular part from the target grid's own nodes.
+    """
+    dt = 2 * jnp.pi / source_grid.num_theta
+    dz = 2 * jnp.pi / source_grid.num_zeta / source_grid.NFP
+
+    def fun(x):
+        return rfft_interp2d(
+            source_grid.meshgrid_reshape(x, "rtz")[0],
+            potential_grid.num_theta,
+            potential_grid.num_zeta,
+            dx=dt,
+            dy=dz,
+        ).ravel(order="F")
+
+    return apply(data, fun, keys)
+
+
 def _D_plus_half(
     eval_data,
     source_data,
@@ -348,7 +370,7 @@ def _lsmr_compute_phi_matrix(
     params=[],
     transforms={"grid": []},
     profiles=[],
-    data=["|e_theta x e_zeta|", "e_theta", "e_zeta", "omega"],
+    data=["|e_theta x e_zeta|", "e_theta", "e_zeta"],
     parameterization=[
         "desc.geometry.surface.FourierRZToroidalSurface",
         "desc.equilibrium.equilibrium.Equilibrium",
@@ -371,28 +393,6 @@ def _interpolator(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     potential_grid = kwargs.get("potential_grid", grid)
     data["interpolator"] = get_interpolator(potential_grid, grid, data, **kwargs)
-
-    if potential_grid == grid:
-        data["potential data"] = apply(data, subset=("R", "phi", "Z"))
-    else:
-        dt = 2 * jnp.pi / grid.num_theta
-        dz = 2 * jnp.pi / grid.num_zeta / grid.NFP
-
-        # TODO: just interpolate Rb_mn, Zb_mn, and omegab_mn onto potential grid
-        #       to avoid interpolation on oversampled grid
-        def fun(x):
-            return rfft_interp2d(
-                grid.meshgrid_reshape(x, "rtz")[0],
-                potential_grid.num_theta,
-                potential_grid.num_zeta,
-                dx=dt,
-                dy=dz,
-            ).ravel(order="F")
-
-        data["potential data"] = apply(data, fun, ("R", "omega", "Z"))
-        zeta = potential_grid.nodes[:, 2]
-        data["potential data"]["phi"] = zeta + data["potential data"]["omega"]
-
     return data
 
 
@@ -441,29 +441,6 @@ def _interpolator_pest(params, transforms, profiles, data, **kwargs):
     data["interpolator_pest"] = get_interpolator(
         potential_grid, pest_grid, source_data, **kwargs
     )
-
-    if potential_grid == pest_grid:
-        data["potential data"] = apply(data, subset=("R", "phi", "Z"))
-    else:
-        dt = 2 * jnp.pi / pest_grid.num_theta
-        dz = 2 * jnp.pi / pest_grid.num_zeta / pest_grid.NFP
-
-        def fun(x):
-            return rfft_interp2d(
-                pest_grid.meshgrid_reshape(x, "rtz")[
-                    0
-                ],  # rtz_grid.meshgrid_reshape(x, "rtz")[0],
-                potential_grid.num_theta,
-                potential_grid.num_zeta,
-                dx=dt,
-                dy=dz,
-            ).ravel(order="F")
-
-        data["potential data"] = apply(data, fun, ("R", "Z"))
-        # PEST is defined by phi = zeta, taken on the target grid (phi is secular
-        # in zeta, so unlike R and Z it cannot be FFT-interpolated by `fun`).
-        data["potential data"]["phi"] = potential_grid.nodes[:, 2]
-
     return data
 
 
@@ -476,14 +453,81 @@ def _interpolator_pest(params, transforms, profiles, data, **kwargs):
     dim=1,
     coordinates="rtz",
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[],
-    data=["interpolator"],
+    data=["interpolator", "R", "Z", "omega", "phi"],
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
     public=False,
+    potential_grid="""LinearGrid :
+        Grid to evaluate potential on boundary.
+        If not given, defaults to the source grid.
+        """,
 )
 def _potential_grid_position(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
+    # Its own compute function rather than a side effect of "interpolator": callers
+    # may prefill a frozen interpolator (see FinitenStability._phi_matrix), which
+    # makes DESC skip `_interpolator` entirely. As a side effect this key then went
+    # missing and the consumer silently fell back to SOURCE-grid data.
+    grid = transforms["grid"]
+    potential_grid = kwargs.get("potential_grid", grid)
+
+    if potential_grid == grid:
+        out = apply(data, subset=("R", "phi", "Z"))
+    else:
+        out = _interp_to_potential_grid(data, grid, potential_grid, ("R", "omega", "Z"))
+        # phi is secular in zeta, so only its periodic part omega is interpolated;
+        # the secular part comes from the TARGET grid.
+        out["phi"] = potential_grid.nodes[:, 2] + out["omega"]
+
+    # theta/zeta are read off the target grid, never interpolated. `_singular_part`
+    # needs them to place the polar quadrature nodes around each eval point.
+    out["theta"] = potential_grid.nodes[:, 1]
+    out["zeta"] = potential_grid.nodes[:, 2]
+    data["potential data"] = out
+    return data
+
+
+@register_compute_fun(
+    name="potential data pest",
+    label="potential data (PEST)",
+    units="~",
+    units_long="not applicable",
+    description="RpZ position on the potential grid, PEST coordinates",
+    dim=1,
+    coordinates="rtz",
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["interpolator_pest", "R", "Z", "phi"],
+    parameterization="desc.equilibrium.equilibrium.Equilibrium",
+    public=False,
+    pest_grid="""Grid :
+        Grid in PEST (rvp) coordinates used as the SOURCE grid, as for
+        ``interpolator_pest``.
+        """,
+    potential_grid="""LinearGrid :
+        Grid to evaluate potential on boundary.
+        If not given, defaults to ``pest_grid``.
+        """,
+)
+def _potential_grid_position_pest(params, transforms, profiles, data, **kwargs):
+    # noqa: unused dependency
+    pest_grid = kwargs["pest_grid"]
+    potential_grid = kwargs.get("potential_grid", pest_grid)
+
+    if potential_grid == pest_grid:
+        out = apply(data, subset=("R", "phi", "Z"))
+    else:
+        out = _interp_to_potential_grid(data, pest_grid, potential_grid, ("R", "Z"))
+        # PEST is DEFINED by phi = zeta, so omega is identically zero here and no
+        # periodic part needs interpolating -- unlike the non-PEST case above, this
+        # stays true even if the toroidal stream function is ever implemented.
+        out["phi"] = potential_grid.nodes[:, 2]
+
+    out["theta"] = potential_grid.nodes[:, 1]
+    out["zeta"] = potential_grid.nodes[:, 2]
+    data["potential data pest"] = out
     return data
 
 
@@ -504,7 +548,7 @@ def _potential_grid_position(params, transforms, profiles, data, **kwargs):
         (set(_kernel_dipole_plus_half.keys) - {"Phi (periodic)"})
         | (set(_kernel_monopole.keys) - {"B0*n"})
     )
-    + ["interpolator"],
+    + ["interpolator", "potential data"],
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
     parameterization="desc.geometry.surface.FourierRZToroidalSurface",
@@ -521,7 +565,11 @@ def _potential_grid_position(params, transforms, profiles, data, **kwargs):
 def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
     # noqa: unused dependency
     data["A_mn"], data["phi_matrix"] = _lsmr_compute_phi_matrix(
-        eval_data=data.get("potential data", data),
+        # "potential data" is on `potential_grid`, the EVAL grid; `data` is on the
+        # SOURCE grid. No .get fallback: a missing key must fail loudly rather than
+        # silently substitute source-grid data, which is only correct when the two
+        # grids coincide.
+        eval_data=data["potential data"],
         source_data=data,
         interpolator=data["interpolator"],
         phi_transform=transforms["Phi"],
@@ -555,6 +603,7 @@ def _phi_matrix_compute(params, transforms, profiles, data, **kwargs):
         "e_theta_PEST x e_phi|r,v",
         "|e_theta_PEST x e_phi|r,v|",
         "interpolator_pest",
+        "potential data pest",
     ],
     resolution_requirement="tz",
     parameterization="desc.equilibrium.equilibrium.Equilibrium",
@@ -581,7 +630,10 @@ def _phi_matrix_pest_compute(params, transforms, profiles, data, **kwargs):
     data["e_theta x e_zeta"] = data["e_theta_PEST x e_phi|r,v"]
     data["|e_theta x e_zeta|"] = data["|e_theta_PEST x e_phi|r,v|"]
     data["A_mn"], data["phi_matrix_pest"] = _lsmr_compute_phi_matrix(
-        eval_data=data.get("potential data", data),
+        # EVAL grid (`potential_grid`) vs SOURCE grid (`pest_grid`, which
+        # phi_n_theta/phi_n_zeta refine). No .get fallback -- see the non-PEST
+        # sibling above.
+        eval_data=data["potential data pest"],
         source_data=data,
         interpolator=data["interpolator_pest"],
         phi_transform=transforms["Phi_PEST"],

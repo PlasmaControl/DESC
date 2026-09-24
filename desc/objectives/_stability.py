@@ -1355,9 +1355,11 @@ class FinitenStability(_Objective):
         # approximation of convenience.
         #
         # Built on the SOURCE grid, with the eval grid handed over as
-        # `potential_grid`. When the two differ, `_interpolator_pest` also
-        # rfft-interpolates the boundary geometry onto the eval grid and
-        # publishes it as `data["potential data"]`. Expect
+        # `potential_grid`. When the two differ, the boundary geometry is
+        # rfft-interpolated onto the eval grid by the `"potential data pest"`
+        # compute function -- a dependency of `phi_matrix_pest` in its own right,
+        # so it still runs even though prefilling the interpolator below makes
+        # DESC skip `_interpolator_pest` entirely. Expect
         # `singularities.py`'s "Frequency spectrum of FFT interpolation will be
         # truncated" warning once N_eval < N_source//2 + 1: that is the
         # intended regime here (the eval grid only ever needs its own

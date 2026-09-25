@@ -37,6 +37,7 @@ from ._generic import (
 )
 from ._geometry import (
     AspectRatio,
+    AxisTorsion,
     BScaleLength,
     Elongation,
     GoodCoordinates,

@@ -57,6 +57,7 @@ Geometry
     desc.objectives.Volume
     desc.objectives.MeanCurvature
     desc.objectives.PrincipalCurvature
+    desc.objectives.AxisTorsion
     desc.objectives.PlasmaVesselDistance
     desc.objectives.BScaleLength
     desc.objectives.MirrorRatio

@@ -9,9 +9,12 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import (
     Timer,
     copy_rpz_periods,
+    cross,
+    dot,
     errorif,
     parse_argname_change,
     rpz2xyz,
+    rpz2xyz_vec,
     safenorm,
     warnif,
 )
@@ -1098,6 +1101,157 @@ class PrincipalCurvature(_Objective):
         return jnp.maximum(
             jnp.abs(data["curvature_k1_rho"]), jnp.abs(data["curvature_k2_rho"])
         )
+
+
+class AxisTorsion(_Objective):
+    """Target a particular value for the magnetic axis torsion.
+
+    Torsion measures the rate at which the magnetic axis leaves its osculating plane.
+    This objective evaluates the local Frenet-Serret torsion of the equilibrium's
+    magnetic axis at each grid node.
+
+    Evaluated on the ``rho = 0`` surface of the Equilibrium.  The grid must be at
+    ``rho = 0``.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at. Defaults to
+        ``LinearGrid(N=2*eq.N+5)``.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.",
+        bounds_default="``target=0``.",
+    )
+
+    _units = "(m^-1)"
+    _print_value_fmt = "Axis torsion: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        grid=None,
+        name="axis torsion",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if self._grid is None:
+            grid = LinearGrid(
+                rho=0.0,
+                theta=0.0,
+                zeta=np.linspace(0.0, 2 * np.pi, 2 * eq.N + 5, endpoint=False),
+                NFP=1,
+                sym=False,
+            )
+        else:
+            grid = self._grid
+
+        errorif(
+            not np.allclose(grid.nodes[:, 0], 0.0),
+            ValueError,
+            "AxisTorsion needs a grid at rho = 0.",
+        )
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["e_zeta", "e_zeta_z", "e_zeta_zz", "phi"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
+        self._constants = {
+            "transforms": transforms,
+            "profiles": profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["a"]
+
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute magnetic axis torsion.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
+
+        Returns
+        -------
+        tau : ndarray
+            Magnetic axis torsion at each point (m^-1).
+
+        """
+        constants = self._get_deprecated_constants(constants)
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        # Frenet-Serret torsion of the rho = 0 curve, in Cartesian.  The basis
+        # vectors come out in (R, phi, Z) components at phi, so
+        # they are rotated to xyz before the triple product.  The formula is
+        # invariant to the curve parameter, so zeta may be used directly.
+        phi = data["phi"]
+        x_s = rpz2xyz_vec(data["e_zeta"], phi=phi)
+        x_ss = rpz2xyz_vec(data["e_zeta_z"], phi=phi)
+        x_sss = rpz2xyz_vec(data["e_zeta_zz"], phi=phi)
+        dxd2x = cross(x_s, x_ss)
+        tau = dot(dxd2x, x_sss) / (
+            jnp.linalg.norm(dxd2x, axis=-1) ** 2 + jnp.finfo(phi.dtype).tiny
+        )
+        return jnp.abs(tau).ravel()
 
 
 class BScaleLength(_Objective):

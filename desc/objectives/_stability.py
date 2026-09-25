@@ -1407,10 +1407,24 @@ class FinitenStability(_Objective):
         # skips recomputing "interpolator_pest" entirely -- see
         # `_build_phi_scaffolding`'s docstring for why that is exact, not an
         # approximation, and why rebuilding it here would be tracer-unsafe.
+        # `pest_grid`/`potential_grid` MUST match what `_build_phi_scaffolding` passed
+        # when it built the interpolator being prefilled below, or the three disagree
+        # about which grid is which. `pest_grid` is the SOURCE side -- it also selects
+        # the grid for transforms["Phi_PEST"], whose Vandermonde
+        # `_lsmr_compute_phi_matrix` uses as `Phi_src`, shape (N_source, N_modes), and
+        # assigns to `source_data["B0*n"]`. Passing the eval grid here made that
+        # eval-sized, and left "potential data pest" on the source grid via its
+        # equal-grid branch. Both only bite when the quadrature is refined
+        # (`upscaled`); with source == eval the two grids are the same object and
+        # nothing distinguishes them.
+        #
+        # The Phi basis resolution is NOT affected: `_{pre}phi_basis` was built from
+        # `phi_pest_grid.M/N`, so `assert basis.M <= eval_grid.M` still holds.
         data_phi = eq.compute(
             ["phi_matrix_pest"],
             grid=surf_grid,
-            pest_grid=phi_pest_grid,
+            pest_grid=src_pest_grid,
+            potential_grid=phi_pest_grid,
             problem="exterior Neumann",
             chunk_size=self._phi_chunk_size,
             Phi_basis=getattr(self, f"_{pre}phi_basis"),

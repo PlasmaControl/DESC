@@ -1415,7 +1415,8 @@ class FinitenStability(_Objective):
             ).reshape(
                 n_surf, 3
             )  # -> BIEST order (zeta outer, theta fastest)
-            spacing = getattr(self, f"_{pre}phi_surf_spacing")
+            spacing = getattr(self, f"_{pre}phi_surf_spacing")  # noqa: E501
+            self._check_b_idx_alignment(grid, surf_nodes, n_theta, n_zeta, level)
             weights = getattr(self, f"_{pre}phi_surf_weights")
 
         n_surf_s = n_theta_s * n_zeta_s
@@ -1470,6 +1471,62 @@ class FinitenStability(_Objective):
         return jnp.transpose(
             phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta), (1, 0, 3, 2)
         ).reshape(n_surf, n_surf)
+
+    def _check_b_idx_alignment(self, grid, surf_nodes, n_theta, n_zeta, level):
+        """DIAGNOSTIC: the phi surface must BE AGNI's boundary shell, node for node.
+
+        Gated on ``AGNI_CHECK_BIDX=1``. Uses ``jax.debug.print`` because ``grid.nodes``
+        is traced inside ``compute_data``, so concrete asserts would fail on the trace
+        rather than on the data.
+
+        Four things, all of which must come out zero:
+
+        ``surf_vs_bidx``
+            Un-permuting ``surf_nodes`` back from BIEST order must recover
+            ``grid.nodes[b_idx]`` EXACTLY, with ``b_idx`` built here by the same formula
+            ``_agni3_assemble`` uses. This is the check asked for.
+        ``rho_spread``
+            Every node in ``b_idx`` must sit on one flux surface. ``rho`` is invariant
+            under the PEST->DESC map, so this is exact, and ``rho_shell`` should be 1.0
+            for a free-boundary run (SHIFT/FLIP/RESCALE force ``rho[-1] == 1``).
+        ``agni_zeta_pattern``
+            Within the shell, AGNI order is theta-outer / zeta-fastest, so zeta must
+            repeat identically for every theta. ``zeta`` is also invariant,
+            so this is exact -- and it is the check that a (theta, zeta) transposition
+            would fail. It cannot be done with theta, whose DESC value varies with zeta.
+        ``biest_zeta_pattern``
+            The mirror image for ``surf_nodes``: BIEST order is zeta-outer, so each row
+            of ``(n_zeta, n_theta)`` must hold a single zeta.
+        """
+        if os.environ.get("AGNI_CHECK_BIDX") != "1":
+            return
+        n_surf = n_theta * n_zeta
+        n_total = grid.num_nodes
+        b_idx = slice(n_total - n_surf, n_total)
+        bnd = grid.nodes[b_idx, :]
+
+        # Undo the BIEST reorder that produced surf_nodes; must recover bnd.
+        back = jnp.transpose(surf_nodes.reshape(n_zeta, n_theta, 3), (1, 0, 2)).reshape(
+            n_surf, 3
+        )
+
+        agni_zeta = bnd[:, 2].reshape(n_theta, n_zeta)
+        biest_zeta = surf_nodes[:, 2].reshape(n_zeta, n_theta)
+        jax.debug.print(
+            "[b_idx {lvl}] n_total={nt} n_surf={ns}  surf_vs_bidx={d:.3e}  "
+            "rho_shell={r:.9f} rho_spread={rs:.3e}  "
+            "agni_zeta_pattern={az:.3e}  biest_zeta_pattern={bz:.3e}",
+            lvl=level,
+            nt=n_total,
+            ns=n_surf,
+            d=jnp.max(jnp.abs(back - bnd)),
+            r=jnp.max(bnd[:, 0]),
+            rs=jnp.max(bnd[:, 0]) - jnp.min(bnd[:, 0]),
+            # every theta row must carry the same zeta sequence
+            az=jnp.max(jnp.abs(agni_zeta - agni_zeta[0][None, :])),
+            # every BIEST row must carry a single zeta
+            bz=jnp.max(jnp.abs(biest_zeta - biest_zeta[:, :1])),
+        )
 
     def _mapped_grid(self, params, constants, level="fine"):
         """Map the PEST nodes to DESC coordinates at THESE parameters.

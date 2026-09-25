@@ -1350,6 +1350,37 @@ class FinitenStability(_Objective):
         level_grid = self._grid if level == "fine" else self._coarse_grid
         n_theta, n_zeta = level_grid.num_theta, level_grid.num_zeta
         n_surf = n_theta * n_zeta
+
+        # DIAGNOSTIC ONLY: replace the vacuum response with c*I. Returns before any
+        # mapping or eq.compute, so the real phi_matrix is not built at all.
+        #
+        # A diagonal is permutation-invariant (Pi^T (c I) Pi == c I),
+        # so this is completely insensitive to any BIEST<->AGNI ordering or index
+        # misalignment. And because the diagonal measures commute, the vacuum term
+        # collapses to a LOCAL nodal operator on the boundary shell,
+        #     A_vac = -c * L^H diag(m1*m2) L,
+        # with m1 = W_surf*psi_r**3 > 0, m2 = psi_r/|e_theta x e_zeta| > 0. So if the
+        # grid-scale oscillation survives this, it is not coming from the vacuum
+        # RESPONSE -- look at L_bp/W_surf/b_idx and the boundary DOF gating instead.
+        #
+        # SIGN: xi^H A_vac xi = -c * ||(m1 m2)^(1/2) L xi||^2. So c > 0 is
+        # DESTABILIZING (lambda -> -inf); the penalty that drives
+        # B_p.grad xi^rho -> 0 on the boundary, i.e. the fixed-boundary limit, is
+        # c < 0. `[vacuum energy]` must come out POSITIVE for the penalizing sign.
+        #
+        # The penalty forces L xi^rho -> 0, i.e. xi^rho constant along field lines on
+        # the boundary (so constant, for irrational lines) -- not xi^rho = 0. It
+        # approaches fixed boundary up to a uniform xi^rho on that shell.
+        _phi_diag = os.environ.get("AGNI_PHI_DIAG")
+        if _phi_diag is not None:
+            _c = float(_phi_diag)
+            print(
+                f"[phi] *** DIAGNOSTIC: phi_matrix = {_c:g} * I "
+                f"({n_surf}x{n_surf}), level={level}. NOT A PHYSICAL RUN. ***",
+                flush=True,
+            )
+            return _c * jnp.eye(n_surf)
+
         phi_pest_grid = getattr(self, f"_{pre}phi_pest_grid")
         upscaled = bool(getattr(self, f"_{pre}phi_upscaled", False))
 

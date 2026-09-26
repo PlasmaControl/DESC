@@ -2493,6 +2493,7 @@ def test_signed_PlasmaVesselDistance():
 
     # with changing eq
     eq = Equilibrium(M=1, N=1)
+    initial_current = eq.c_l.copy()
     surf = eq.surface.copy()
     surf.change_resolution(M=1, N=1)
     grid = LinearGrid(M=20, N=8, NFP=eq.NFP)
@@ -2511,7 +2512,8 @@ def test_signed_PlasmaVesselDistance():
     (eq, surf), _ = optimizer.optimize(
         (eq, surf),
         objective,
-        constraints=(FixParameters(surf),),
+        # Current is unrelated to this geometry-only optimization.
+        constraints=(FixParameters(surf), FixCurrent(eq=eq)),
         verbose=3,
         maxiter=60,
         ftol=1e-8,
@@ -2524,6 +2526,7 @@ def test_signed_PlasmaVesselDistance():
         atol=1e-2,
         err_msg="allowing eq to change",
     )
+    np.testing.assert_array_equal(eq.c_l, initial_current)
 
 
 @pytest.mark.unit

@@ -1464,6 +1464,30 @@ class FinitenStability(_Objective):
             params=params,
         )
         phi_matrix = data_phi["phi_matrix_pest"]
+
+        # DIAGNOSTIC ONLY: scale the REAL vacuum response. Unlike AGNI_PHI_DIAG, which
+        # substitutes c*I, this keeps phi_matrix's structure -- its m-coupling, its ~1/k
+        # spectrum, its self-adjointness in the surface measure -- and changes only how
+        # stiffly the boundary is restrained. So it varies the one quantity the diagonal
+        # substitute cannot vary independently, and `[vacuum energy]` should scale with
+        # it while the mode shape does not, unless stiffness is what selects the mode.
+        #
+        # SIGN: the vacuum term is stabilizing as computed, so a POSITIVE scale keeps it
+        # so. s > 1 stiffens the boundary toward the fixed-boundary limit; 0 < s < 1
+        # softens it; s = 0 is free boundary with no vacuum response at all (which is
+        # NOT the same as fixed boundary -- the outer xi^rho is still a live DOF, just
+        # unrestrained). A NEGATIVE scale flips it to destabilizing and lambda will run
+        # away; that is a sign check, not a physical run.
+        _phi_scale = os.environ.get("AGNI_PHI_SCALE")
+        if _phi_scale is not None:
+            _s = float(_phi_scale)
+            print(
+                f"[phi] *** DIAGNOSTIC: phi_matrix scaled by {_s:g}, level={level}. "
+                "NOT A PHYSICAL RUN. ***",
+                flush=True,
+            )
+            phi_matrix = _s * phi_matrix
+
         # BIEST -> AGNI ordering, on BOTH axes, to match that level's own
         # boundary-shell node order (what _agni3_assemble/
         # _agni3_matfree_operator expect for the (n_per_shell, n_per_shell)

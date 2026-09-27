@@ -65,19 +65,16 @@ config = {"device": None, "avail_mem": None, "kind": None}
 def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
-    This only sets environment variables that JAX reads when it initializes, so it
-    must be called before importing JAX or anything else from DESC.
+    Only affects JAX, the GPUs visible to non-JAX codes are not changed. Must be called
+    before importing JAX or anything else from DESC.
 
     Parameters
     ----------
     kind : {``'cpu'``, ``'gpu'``, ``'tpu'``}
-        Which device to use. On CPU, the accelerators are left untouched so that
-        other codes can use them.
+        Which device to use.
     gpuid : int, optional
-        Index of the GPU to use, in ``nvidia-smi`` ordering, or an index into
-        ``JAX_CUDA_VISIBLE_DEVICES`` if that is set. If ``None``, JAX will use every
-        visible GPU, which is usually what you want on a cluster where the scheduler
-        already assigned the GPUs.
+        Index of the GPU to use among the visible ones. If ``None``, uses all visible
+        GPUs.
 
     """
     if kind not in ["cpu", "gpu", "tpu"]:
@@ -97,8 +94,11 @@ def set_device(kind="cpu", gpuid=None):
         if kind == "gpu" and gpuid is not None:
             # so that the ids assigned by CUDA match those from nvidia-smi
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-            visible = os.environ.get("JAX_CUDA_VISIBLE_DEVICES", "").split(",")
-            visible = [i for i in visible if i]
-            os.environ["JAX_CUDA_VISIBLE_DEVICES"] = (
-                visible[int(gpuid)] if visible else str(int(gpuid))
-            )
+            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+            visible = [i for i in visible if i.strip()]
+            if visible and not 0 <= int(gpuid) < len(visible):
+                raise ValueError(
+                    f"gpuid {gpuid} is out of range for "
+                    f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}"
+                )
+            os.environ["JAX_CUDA_VISIBLE_DEVICES"] = str(int(gpuid))

@@ -12,7 +12,7 @@ from jax._src.api import (
     _jacrev_unravel,
     _std_basis,
 )
-from jax._src.api_util import _ensure_index, argnums_partial, check_callable
+from jax._src.api_util import _ensure_index, check_callable
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
@@ -30,12 +30,6 @@ from jax.tree_util import (
 
 from desc.backend import jax, jnp, scan, vmap
 from desc.utils import errorif, identity
-
-try:
-    from jax.extend import linear_util as lu
-except ImportError:
-    from jax import linear_util as lu
-
 
 try:
     from jax._src.lax.control_flow.loops import _batch_and_remainder
@@ -100,6 +94,20 @@ def _scan_reduce(
     return result
 
 
+def _argnums_partial(fun, argnums, args, kwargs):
+    """Bind all arguments of ``fun`` except those in ``argnums``."""
+    argnums = (argnums,) if isinstance(argnums, int) else tuple(argnums)
+    dyn_args = tuple(args[i] for i in argnums)
+
+    def f_partial(*dyn):
+        full_args = list(args)
+        for i, a in zip(argnums, dyn):
+            full_args[i] = a
+        return fun(*full_args, **kwargs)
+
+    return f_partial, dyn_args
+
+
 def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     """A helper function to wrap f with a scan_fun.
 
@@ -115,14 +123,9 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     scan_fun = _scan_append if reduction is None else _scan_reduce
 
     def f_(*args, **kwargs):
-        f_partial, dyn_args = argnums_partial(
-            lu.wrap_init(fun, kwargs),
-            argnums,
-            args,
-            require_static_args_hashable=False,
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         return scan_fun(
-            lambda x: chunk_reduction(f_partial.call_wrapped(*x)),
+            lambda x: chunk_reduction(f_partial(*x)),
             dyn_args,
             reduction,
         )
@@ -378,27 +381,6 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
             return jnp.expand_dims(result, axis=dims_to_expand)
 
     return wrapped
-
-
-def _argnums_partial(fun, argnums, args, kwargs):
-    """Bind every argument except those in ``argnums``.
-
-    This mirrors JAX's internal ``argnums_partial`` but returns a plain callable
-    (and the tuple of differentiated arguments) instead of a
-    ``linear_util.WrappedFun``. A plain callable is what the public
-    ``jax.jvp``/``jax.vjp`` expect, so we avoid the private ``jax._src`` helpers
-    (e.g. ``_jvp``, which was removed in JAX 0.10.2).
-    """
-    argnums_t = (argnums,) if isinstance(argnums, int) else tuple(argnums)
-    dyn_args = tuple(args[i] for i in argnums_t)
-
-    def f_partial(*dyn):
-        full_args = list(args)
-        for i, a in zip(argnums_t, dyn):
-            full_args[i] = a
-        return fun(*full_args, **kwargs)
-
-    return f_partial, dyn_args
 
 
 def jacfwd_chunked(

@@ -363,6 +363,29 @@ def test_proximal_jac_atf(benchmark):
 
 @pytest.mark.slow
 @pytest.mark.benchmark
+def test_proximal_jac_atf_chunked(benchmark):
+    """Benchmark computing jacobian of constrained proximal projection."""
+    eq = desc.examples.get("ATF")
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.linspace(0.1, 1, 10))
+    objective = ObjectiveFunction(QuasisymmetryTwoTerm(eq, grid=grid))
+    # chunk the computation, total size is 252, so this should take at most
+    # 2.5x the unchunked case above
+    constraint = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=100)
+    prox = ProximalProjection(
+        objective, constraint, eq, solve_options={"solve_during_proximal_build": False}
+    )
+    prox.build()
+    x = prox.x(eq)
+    prox.jac_scaled_error(x).block_until_ready()
+
+    def run(x, prox):
+        prox.jac_scaled_error(x).block_until_ready()
+
+    benchmark.pedantic(run, args=(x, prox), rounds=10, iterations=1)
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark
 def test_proximal_jac_atf_with_eq_update(benchmark):
     """Benchmark computing jacobian of constrained proximal projection."""
     # Compare with test_proximal_jac_atf, this test additionally benchmarks the
@@ -515,44 +538,29 @@ def test_LinearConstraintProjection_build(benchmark):
 @pytest.mark.benchmark
 def test_objective_compute_ripple(benchmark):
     """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, False, "compute_scaled_error")
-
-
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_compute_ripple_bounce1d(benchmark):
-    """Benchmark computing objective for effective ripple."""
-    _test_objective_ripple(benchmark, True, "compute_scaled_error")
+    _test_objective_ripple(benchmark, "compute_scaled_error")
 
 
 @pytest.mark.slow
 @pytest.mark.benchmark
 def test_objective_grad_ripple(benchmark):
     """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, False, "jac_scaled_error")
+    _test_objective_ripple(benchmark, "jac_scaled_error")
 
 
-@pytest.mark.slow
-@pytest.mark.benchmark
-def test_objective_grad_ripple_bounce1d(benchmark):
-    """Benchmark computing objective gradient for effective ripple."""
-    _test_objective_ripple(benchmark, True, "jac_scaled_error")
-
-
-def _test_objective_ripple(benchmark, use_bounce1d, method):
+def _test_objective_ripple(benchmark, method):
     eq = desc.examples.get("W7-X")
     with pytest.warns(UserWarning, match="Reducing radial"):
         eq.change_resolution(L=eq.L // 2, M=eq.M // 2, N=eq.N // 2)
-    num_transit = 20
+    field_period_transits = 100
     objective = ObjectiveFunction(
         [
             EffectiveRipple(
                 eq,
-                num_transit=num_transit,
-                num_well=10 * num_transit,
+                field_period_transits=field_period_transits,
+                num_well=2 * field_period_transits,
                 num_quad=16,
-                Y_B=64,
-                use_bounce1d=use_bounce1d,
+                Y_B=13,
             )
         ]
     )

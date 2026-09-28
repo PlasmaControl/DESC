@@ -600,7 +600,10 @@ class Bounce2D(_Bounce):
             in_name = "alpha"
             zeta = cheb_pts(Y, (0, 2 * jnp.pi / eq.NFP))[::-1]
             grid = LinearGrid(
-                rho=rho, M=eq.L_basis.M, zeta=zeta if eq.N > 0 else 1, NFP=eq.NFP
+                rho=rho,
+                M=max(eq.L_basis.M, eq.W_basis.M),
+                zeta=zeta if max(eq.N, eq.W_basis.N) > 0 else 1,
+                NFP=eq.NFP,
             )
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
@@ -615,6 +618,10 @@ class Bounce2D(_Bounce):
             outbasis=name,
             tol=tol,
             maxiter=maxiter,
+            W_lmn=params.get("W_lmn"),
+            omega=(
+                get_transforms("omega", eq, grid)["W"] if eq.W_basis.num_modes else None
+            ),
         )
         return angle if (name == "lambda") else angle[..., ::-1]
 
@@ -2113,16 +2120,19 @@ class BounceOptions(NamedTuple):
         o._constants["quad"] = BounceOptions._quad(eta, o._hyperparam.pop("num_quad"))
 
         rho = o._grid.compress(o._grid.nodes[:, 0])
-        o._constants["lambda"] = get_transforms(
-            "lambda",
-            eq,
-            grid=LinearGrid(
-                rho=rho,
-                M=eq.L_basis.M,  # assuming this doesn't change in optimization
-                zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,
-                NFP=eq.NFP,
-            ),
-        )["L"]
+        grid = LinearGrid(
+            rho=rho,
+            # assuming this doesn't change in optimization
+            M=max(eq.L_basis.M, eq.W_basis.M),
+            zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,
+            NFP=eq.NFP,
+        )
+        o._constants["lambda"] = get_transforms("lambda", eq, grid=grid)["L"]
+        o._constants["omega"] = (
+            get_transforms("omega", eq, grid=grid)["W"]
+            if eq.W_basis.num_modes
+            else None
+        )
         o._constants["profiles"] = get_profiles(names, eq, grid=o._grid)
         o._constants["transforms"] = get_transforms(names, eq, grid=o._grid)
         o._dim_f = o._grid.num_rho

@@ -52,6 +52,22 @@ def _precompute_zernike_bases(eq):
     else:
         bases["Z"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
         bases["L"] = _PrecomputedFourierZernikeBasis(eq.L_basis)
+    # toroidal stream function omega (phi = zeta + omega) has its own basis. If it
+    # has no modes, _get_precomputed_transforms uses a standard Transform for it.
+    if eq.W_basis.num_modes:
+        for c in ["Z", "R"]:
+            if eq.W_basis.equiv(getattr(eq, c + "_basis")):
+                bases["W"] = bases[c]
+                break
+        else:  # if we didn't exit the loop early
+            warnif(
+                eq.W_basis.L > 24,
+                UserWarning,
+                "Evaluating the polynomial coefficient form of the Zernike radial "
+                "basis in double precision loses accuracy for L > 24. Consider "
+                "using zernike_mode='jacobi' for particle tracing instead.",
+            )
+            bases["W"] = _PrecomputedFourierZernikeBasis(eq.W_basis)
     # stellarator symmetry only drops (m,n) sign combinations, so the bases
     # usually keep the same (l,m) pairs and therefore the same radial
     # polynomials. Share the one array, so that the radial factor of all of
@@ -227,18 +243,29 @@ def _get_precomputed_transforms(bases, eq, grid, data_keys):
     evaluates with the precomputed polynomial coefficient bases and shares one
     transform between quantities with the same basis (e.g. Z and lambda).
     """
+    from desc.transform import Transform
+
     derivs = get_derivs(data_keys, eq, has_axis=False)
     transforms = {"grid": grid}
-    for c in ["R", "Z", "L"]:
+    for c in derivs:
+        if not hasattr(eq, c + "_basis"):  # e.g. "grid", already in transforms
+            continue
+        if c not in bases:  # e.g. omega of an equilibrium without omega modes
+            transforms[c] = Transform(
+                grid,
+                getattr(eq, c + "_basis"),
+                derivs=derivs[c],
+                build=False,
+                method="jitable",
+            )
+            continue
         for cc in transforms:
             if bases[c] is getattr(transforms[cc], "basis", None):
                 transforms[c] = transforms[cc]
                 break
         else:  # if we didn't exit the loop early
             ders = np.unique(
-                np.vstack(
-                    [derivs[cc] for cc in ["R", "Z", "L"] if bases[cc] is bases[c]]
-                ),
+                np.vstack([derivs[cc] for cc in derivs if bases.get(cc) is bases[c]]),
                 axis=0,
             ).astype(int)
             transforms[c] = _StackedTransform(grid, bases[c], derivs=ders)
@@ -1264,6 +1291,8 @@ def trace_particles(
         Additional keyword arguments to pass to the field computation,
             - iota : Profile
                 Iota profile of the Equilibrium, if not already assigned.
+                Defaults to ``field.get_profile("iota")`` for an Equilibrium
+                with a current profile.
             - source_grid: Grid
                 Source grid to use for field computation during Biot-Savart.
             - zernike_bases : dict of _PrecomputedFourierZernikeBasis
@@ -1304,6 +1333,17 @@ def trace_particles(
         params = field.params_dict
     if not options:
         options = {}
+    if (
+        isinstance(field, Equilibrium)
+        and field.iota is None
+        and options.get("iota", None) is None
+    ):
+        # iota from the current profile needs flux surface integrals, which the
+        # single point grids of the ODE right hand side can't do (they give
+        # iota = 0), so compute the iota profile once here
+        iota = field.get_profile("iota", params=params)
+        options["iota"] = iota
+        params = {**params, "i_l": iota.params}
 
     errorif(
         zernike_mode not in ["poly", "jacobi"],

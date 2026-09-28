@@ -628,6 +628,15 @@ class FinitenStability(_Objective):
         PEST grid used for the finite-n operator.
     diffmat: DiffMat
         Differentiation matrices for the PEST grid.
+    axisym : bool, optional
+        Whether the equilibrium is axisymmetric. True requires a single-zeta-plane
+        grid (``n_zeta == 1``): the toroidal derivative is then the scalar
+        ``1j*n_mode_axisym`` rather than ``diffmat.D_zeta``, so the operator is
+        complex Hermitian and one toroidal mode number is studied at a time.
+        Default False.
+    n_mode_axisym : int, optional
+        Toroidal mode number ``n`` studied when ``axisym=True``; ignored
+        otherwise. Default 1.
     v_guess : ndarray, optional
         Cached full eigenfunction. Updated by ``update_state``.
     v_fixed : ndarray, optional
@@ -856,7 +865,7 @@ class FinitenStability(_Objective):
         v_guess=None,
         lambda_guess=None,
         grid=None,
-        axisym=None,
+        axisym=False,
         gamma=0.0,
         n_mode_axisym=1,
         incompressible=False,
@@ -895,7 +904,10 @@ class FinitenStability(_Objective):
         if target is None and bounds is None:
             target = 0
 
-        self._axisym = axisym
+        # Static (see `_static_attrs`) and read as a concrete Python bool by
+        # `_build_phi_scaffolding` and the compute keys, so it is never None or a
+        # traced value.
+        self._axisym = bool(axisym)
         self._v_guess = v_guess
         self._v_fixed = None if v_fixed is None else jnp.asarray(v_fixed)
         self._use_v_fixed = v_fixed is not None

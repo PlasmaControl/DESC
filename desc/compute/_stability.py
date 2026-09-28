@@ -1360,7 +1360,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
         # surface quantities
         # psi_r_s = 1  # psi_r[b_idx, :] = 1 on the boundary
-        # print(psi_r_s)
         sqrtg_grad_rho = sqrtg * jnp.sqrt(g_sup_rr)
         # iota_s = iota[b_idx, :]
 
@@ -1379,8 +1378,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # products below match the block they are added to.
         L_bp = iota * D_theta + D_zeta
         # this is just for consistency; psi' = 1 here
-        # W_surf, not W: surface measure, applied after slicing to the boundary
-        # shell so the (n_per_shell, 1) weight lines up with the sliced rows.
         X_bnd = W_surf * (psi_r**3 * L_bp)[b_idx]
         Y_bnd = (psi_r / sqrtg_grad_rho * L_bp)[b_idx]
         phi_Y = phi_matrix @ Y_bnd
@@ -2140,6 +2137,24 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # Computed once here, in the setup, NOT inside the per-matvec closure.
         _d1 = jnp.reshape(W_surf * psi_r3[-1], -1)
         _d2 = jnp.reshape((psi_r / sqrtg_grad_rho)[-1], -1)
+
+        # psi_r on the boundary shell, as the vacuum term uses it. The derivation of
+        # B_n = (psi'/|e_theta x e_zeta|) L xi^rho assumes this is 1. DESC's RAW psi_r is
+        # Psi*rho/pi (= 1/pi at rho=1 for Psi=1), but the normalization above by
+        # a_N**2*B_N with B_N = |Psi|/(pi*a_N**2) cancels the pi, the a_N and the Psi, so
+        # psi_r as used is identically rho -- hence 1 only if the outermost radial node
+        # really sits at rho = 1, which is the staircase/rescale map's business.
+        # jax.debug.print because these are traced; once per build, not per matvec.
+        jax.debug.print(
+            "[psi_r] boundary shell as used: min={a} max={b}   (1 expected)\n"
+            "[psi_r] raw = {c}   a_N = {d}   B_N = {e}   psi_r^4 (enters W_V) = {f}",
+            a=jnp.min(psi_r[-1]),
+            b=jnp.max(psi_r[-1]),
+            c=jnp.max(_reshape(data["psi_r"])[-1]),
+            d=a_N,
+            e=B_N,
+            f=jnp.max(psi_r[-1]) ** 4,
+        )
         _B = _d1[:, None] * phi_matrix * _d2[None, :]
         vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
             jnp.linalg.norm(_B), 1e-300

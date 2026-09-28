@@ -54,6 +54,7 @@ __all__ = [
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
+    "plot_particle_loss_fraction",
     "plot_particle_trajectories",
     "plot_section",
     "plot_surfaces",
@@ -4357,6 +4358,73 @@ def plot_field_lines(
     if return_data:
         return fig, plot_data
     return fig
+
+
+def plot_particle_loss_fraction(
+    particles,
+    model,
+    field,
+    tmax=1e-3,
+    tmin=1e-7,
+    nt=1000,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
+    """Plot the fraction of lost particles vs time, log-log.
+
+    A particle is lost once it leaves the tracing bounds (for an Equilibrium,
+    rho > 1), after which ``trace_particles`` returns NaN for it.
+
+    Parameters
+    ----------
+    particles : AbstractParticleInitializer
+        Initial distribution of particles.
+    model : AbstractTrajectoryModel
+        Trajectory model to integrate with.
+    field : Equilibrium or MagneticField
+        Source of the magnetic field, compatible with ``model.frame``.
+    tmax : float
+        Final time, in seconds.
+    tmin : float
+        First time after t = 0 where the loss fraction is evaluated, in seconds.
+    nt : int
+        Number of logarithmically spaced times between ``tmin`` and ``tmax``.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    return_data : bool
+        If True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        ``figsize``: tuple of length 2, the size of the figure (to be passed to
+        matplotlib). Other keyword arguments are passed to
+        ``desc.particles.trace_particles``.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes
+        Axes being plotted to.
+    plot_data : dict
+        Dictionary of the data plotted, only returned if ``return_data=True``.
+        Contains the times ``"t"``, the loss fraction ``"loss_fraction"`` and the
+        traced positions ``"x"`` and velocities ``"v"``.
+
+    """
+    figsize = kwargs.pop("figsize", (6, 6))
+    ts = np.concatenate([[0.0], np.logspace(np.log10(tmin), np.log10(tmax), nt)])
+    x, v = trace_particles(field, particles, model, ts, throw=False, **kwargs)
+    # once a particle is lost its output is NaN, so summing over particles gives
+    # the number of lost particles at each time
+    loss_fraction = np.sum(np.isnan(x[:, :, 0]), axis=0) / x.shape[0]
+
+    fig, ax = _format_ax(ax, figsize=figsize)
+    ax.loglog(ts[1:], loss_fraction[1:])
+    ax.set_ylabel("Loss fraction")
+    ax.set_xlabel("Time (s)")
+    if return_data:
+        return fig, ax, {"t": ts, "loss_fraction": loss_fraction, "x": x, "v": v}
+    return fig, ax
 
 
 def plot_particle_trajectories(  # noqa: C901

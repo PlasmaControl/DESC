@@ -2,6 +2,7 @@
 
 import os
 import csv
+import jax
 
 from abc import ABC
 from collections.abc import MutableSequence
@@ -746,40 +747,145 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         """bool: Whether this dipole set is stellarator symmetric."""
         return self._sym
 
+    def tree_flatten(self):
+        """Custom JAX pytree registration, overriding _AutoRegisterPytree's
+        generic behavior (desc/io/core.py).
+
+        Without this override: `_dipoles` isn't in `_static_attrs`, so the
+        generic flattener treats it as dynamic state and recurses into it --
+        and since every individual `_Dipole` is ALSO independently pytree-
+        registered, JAX walks all the way down into each dipole's own
+        X/Y/Z/phi/theta/m0/rho attributes. At n_dipoles=75,460 this produced
+        528,220 leaves from a single flatten (confirmed via
+        jax.tree_util.tree_flatten timing), and since `self` is an implicit
+        positional argument to every @jit-decorated _Objective method
+        (compute_scalar, grad, jac_scaled, ...), this recursive flatten ran
+        on every trace/compile -- not the actual rho array itself, which is
+        tiny, but the *bookkeeping* around 75,460 individual Python objects.
+
+        The evolving optimization state (rho) is never read from `self`
+        inside a traced compute() call -- it arrives through the separate
+        `x`/`field_params` argument via unpack_params, which is the normal
+        DESC Optimizable.params_dict/pack_params machinery (a completely
+        separate, non-jit, Python-level system from this pytree
+        registration). So DipoleSet can be treated as fully static from
+        JIT's perspective: zero dynamic children, everything as hashable
+        aux_data. jit correctly still recompiles if a genuinely different
+        DipoleSet object (different Python identity) is ever passed in.
+        """
+        children = ()
+        aux_data = (tuple(self._dipoles), self._NFP, self._sym, self._name)
+        return children, aux_data
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        """Inverse of tree_flatten -- rebuilds a DipoleSet wrapping the same
+        underlying _Dipole objects (no copying), so this stays cheap."""
+        dipoles, NFP, sym, name = aux_data
+        return cls(*dipoles, NFP=NFP, sym=sym, name=name)
+
+    def _invalidate_geometry_cache(self):
+        """Clear cached aggregate arrays after the dipole list itself changes
+        (append/insert/delete/item-replace). Position/orientation/m0 are fixed,
+        non-optimizable geometry, so caching them avoids rebuilding a 75,460-
+        element array via a Python loop on every access -- these properties
+        were previously rebuilt from scratch every single call, including
+        calls made from inside JIT-traced objective compute functions."""
+        for key in ("_X_cache", "_Y_cache", "_Z_cache", "_phi_cache", "_theta_cache", "_m0_cache"):
+            self.__dict__.pop(key, None)
+
+    def _cached_aggregate(self, cache_key, compute_fn):
+        """Return a cached aggregate array, but only ever persist a CONCRETE
+        (non-traced) result. If the first computation happens to occur while
+        inside an active JAX trace, the returned value would be a tracer tied
+        to that specific trace -- caching it would leak that tracer past the
+        trace's lifetime and crash on any later use (UnexpectedTracerError).
+        So: always recompute while tracing (cheap, and JAX handles it fine
+        inside the trace itself); only cache once we get a real array back."""
+        cached = self.__dict__.get(cache_key)
+        if cached is not None and not isinstance(cached, jax.core.Tracer):
+            return cached
+        value = compute_fn()
+        if not isinstance(value, jax.core.Tracer):
+            self.__dict__[cache_key] = value
+        return value
+
     @property
     def X(self):
         """X coordinates of all dipoles."""
-        return jnp.asarray([dipole.X for dipole in self])
-
+        return self._cached_aggregate(
+            "_X_cache", lambda: jnp.asarray([dipole.X for dipole in self])
+        )
 
     @property
     def Y(self):
         """Y coordinates of all dipoles."""
-        return jnp.asarray([dipole.Y for dipole in self])
-
+        return self._cached_aggregate(
+            "_Y_cache", lambda: jnp.asarray([dipole.Y for dipole in self])
+        )
 
     @property
     def Z(self):
         """Z coordinates of all dipoles."""
-        return jnp.asarray([dipole.Z for dipole in self])
-
+        return self._cached_aggregate(
+            "_Z_cache", lambda: jnp.asarray([dipole.Z for dipole in self])
+        )
 
     @property
     def phi(self):
         """Azimuthal angles of all dipoles."""
-        return jnp.asarray([dipole.phi for dipole in self])
-
+        return self._cached_aggregate(
+            "_phi_cache", lambda: jnp.asarray([dipole.phi for dipole in self])
+        )
 
     @property
     def theta(self):
         """Polar angles of all dipoles."""
-        return jnp.asarray([dipole.theta for dipole in self])
+        return self._cached_aggregate(
+            "_theta_cache", lambda: jnp.asarray([dipole.theta for dipole in self])
+        )
 
     @property
     def m0(self):
-        """Dipole moment magnitudes of all dipoles.
-        """
-        return jnp.asarray([dipole.m0 for dipole in self])
+        """Dipole moment magnitudes of all dipoles."""
+        return self._cached_aggregate(
+            "_m0_cache", lambda: jnp.asarray([dipole.m0 for dipole in self])
+        )
+
+    # @property
+    # def X(self):
+    #     """X coordinates of all dipoles."""
+    #     return jnp.asarray([dipole.X for dipole in self])
+
+
+    # @property
+    # def Y(self):
+    #     """Y coordinates of all dipoles."""
+    #     return jnp.asarray([dipole.Y for dipole in self])
+
+
+    # @property
+    # def Z(self):
+    #     """Z coordinates of all dipoles."""
+    #     return jnp.asarray([dipole.Z for dipole in self])
+
+
+    # @property
+    # def phi(self):
+    #     """Azimuthal angles of all dipoles."""
+    #     return jnp.asarray([dipole.phi for dipole in self])
+
+
+    # @property
+    # def theta(self):
+    #     """Polar angles of all dipoles."""
+    #     return jnp.asarray([dipole.theta for dipole in self])
+
+    # @property
+    # def m0(self):
+    #     """Dipole moment magnitudes of all dipoles.
+    #     """
+    #     return jnp.asarray([dipole.m0 for dipole in self])
 
     @property
     def shift(self):
@@ -792,25 +898,49 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         """Rotation matrices of all dipoles."""
         return jnp.asarray([dipole.rotmat for dipole in self])
     
-    @property
-    def rho(self):
-        """list: Optimization parameters for each dipole from (-1, 1)."""
-        return [dipole.rho for dipole in self.dipoles]
+    # @property
+    # def rho(self):
+    #     """list: Optimization parameters for each dipole from (-1, 1)."""
+    #     return [dipole.rho for dipole in self.dipoles]
 
     @property
     def rho_tilde(self):
         """list: """
         return [dipole.rho_tilde for dipole in self.dipoles]
 
+    # @rho.setter
+    # def rho(self, new):
+    #     # new must be a 1D iterable regardless of the tree structure of the dipoleSet
+    #     old, tree = tree_flatten(self.rho)
+    #     new = jnp.atleast_1d(new).flatten()
+    #     new = jnp.broadcast_to(new, (len(old),))
+    #     new = tree_unflatten(tree, new)
+    #     for dipole, cur in zip(self.dipoles, new):
+    #         dipole.rho = cur
+
+    @optimizable_parameter
+    @property
+    def rho(self):
+        """ndarray, shape(n,): raw (unconstrained) optimizer variable for
+        every dipole in this set, as ONE array leaf rather than one leaf
+        per dipole (previously a python list -- 75,460 separate leaves at
+        scale, which is what blew up autodiff/JIT compilation)."""
+        return jnp.asarray([dipole._rho for dipole in self.dipoles])
+
     @rho.setter
     def rho(self, new):
-        # new must be a 1D iterable regardless of the tree structure of the dipoleSet
-        old, tree = tree_flatten(self.rho)
-        new = jnp.atleast_1d(new).flatten()
-        new = jnp.broadcast_to(new, (len(old),))
-        new = tree_unflatten(tree, new)
+        new = jnp.broadcast_to(jnp.atleast_1d(new), (len(self),))
         for dipole, cur in zip(self.dipoles, new):
-            dipole.rho = cur
+            dipole._rho = cur
+
+    optimizable_params = Optimizable.optimizable_params
+    params_dict = Optimizable.params_dict
+    dimensions = Optimizable.dimensions
+    x_idx = Optimizable.x_idx
+    dim_x = Optimizable.dim_x
+    pack_params = Optimizable.pack_params
+    unpack_params = Optimizable.unpack_params
+    _get_ess_scale = Optimizable._get_ess_scale
 
     def _all_rhos(self, rhos=None):
         """Return an array of all the rhos."""
@@ -1434,22 +1564,39 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     def __getitem__(self, i):
         return self.dipoles[i]
 
+    # def __setitem__(self, i, new_item):
+    #     if not isinstance(new_item, _Dipole):
+    #         raise TypeError("Members of DipoleSet must be of type Dipole.")
+    #     self._dipoles[i] = new_item
+
+    # def __delitem__(self, i):
+    #     del self._dipoles[i]
+
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Dipole):
             raise TypeError("Members of DipoleSet must be of type Dipole.")
         self._dipoles[i] = new_item
+        self._invalidate_geometry_cache()
 
     def __delitem__(self, i):
         del self._dipoles[i]
-
-    def __len__(self):
-        return len(self._dipoles)
+        self._invalidate_geometry_cache()
 
     def insert(self, i, new_item):
         """Insert a new dipole into the dipoleset at position i."""
         if not isinstance(new_item, _Dipole):
             raise TypeError("Members of DipoleSet must be of type Dipole.")
         self._dipoles.insert(i, new_item)
+        self._invalidate_geometry_cache()
+
+    def __len__(self):
+        return len(self._dipoles)
+
+    # def insert(self, i, new_item):
+    #     """Insert a new dipole into the dipoleset at position i."""
+    #     if not isinstance(new_item, _Dipole):
+    #         raise TypeError("Members of DipoleSet must be of type Dipole.")
+    #     self._dipoles.insert(i, new_item)
     
     def __repr__(self):
         """Get the string form of the object."""
@@ -1532,14 +1679,24 @@ def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
     '''
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
-
+ 
         csv_data = [
-            (float(line["x (m)"]), float(line["y (m)"]), float(line["z (m)"]), float(line["phi (rad)"]), float(line["theta (rad)"]), float(line["m0"]),float(line["rho (unitless)"]))
+            (
+                float(line["x (m)"]),
+                float(line["y (m)"]),
+                float(line["z (m)"]),
+                float(line["phi (rad)"]),
+                float(line["theta (rad)"]),
+                float(line["m0"]),
+                float(line["rho (unitless)"]),
+                float(line["Ic"]),
+            )
             for line in reader
         ]
     dipole_set = DipoleSet(NFP=NFP, sym=sym)
     for line in csv_data:
-        if (line[-1] != 0):
-            dipole_set.append( create_dipole(*line, rho_tilde_clip=rho_tilde_clip))
-
+        dipole_params, Ic = line[:-1], line[-1]
+        if Ic != 0:
+            dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=rho_tilde_clip))
+ 
     return dipole_set

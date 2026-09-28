@@ -21,7 +21,8 @@ from ._coils import (
 from ._dipole import (
     QuadraticFluxPM,
     DipoleDiscreteness,
-    DipoleVolume
+    DipoleVolume,
+    DipoleTikhonov
 )
 from ._equilibrium import (
     CurrentDensity,
@@ -107,5 +108,6 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
     ShareParameters,
+    FixDipoleRho
 )
 from .objective_funs import ObjectiveFunction

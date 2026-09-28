@@ -2919,7 +2919,75 @@ class FixCoilCurrent(FixParameters):
             self._normalization = np.max((mean_current, 1))
         super().build(use_jit=use_jit, verbose=verbose)
 
+class FixDipoleRho(FixParameters):
+    """Fixes rho (density) parameter(s) of a DipoleSet.
 
+    Parameters
+    ----------
+    dipole : DipoleSet
+        DipoleSet whose rho values will be fixed.
+    target : dict of {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Default is target=dipole.rho.
+    bounds : tuple of dict {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+    weight : dict of {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+        rho is already dimensionless, so this is False by default.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing.
+    indices : bool or ndarray of bool/int, optional
+        Boolean mask or integer indices into dipole.rho specifying which
+        dipole densities to fix. True/False fixes all/none.
+    name : str, optional
+        Name of the objective function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from desc.objectives import FixDipoleRho
+
+        # fix rho for the first 10 dipoles only
+        idx = np.zeros(len(dipoles.rho), dtype=bool)
+        idx[:10] = True
+        obj = FixDipoleRho(dipoles, indices=idx)
+
+        # fix every dipole's rho (e.g. to freeze the whole density while
+        # optimizing something else, like orientation)
+        obj = FixDipoleRho(dipoles, indices=True)
+
+    """
+
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed dipole rho error: "
+
+    def __init__(
+        self,
+        dipole,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        indices=True,
+        name="fixed dipole rho",
+    ):
+        params = {"rho": indices}
+        super().__init__(
+            thing=dipole,
+            params=params,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+        
 class FixSumCoilCurrent(FixCoilCurrent):
     """Fixes the sum of coil current(s) in a Coil or CoilSet.
 

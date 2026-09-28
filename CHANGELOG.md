@@ -6,6 +6,7 @@ New Features
 - Adds ``SecondAdiabaticInvariantAlphaDerivative`` and ``SoftConnectivity`` objectives for omnigenity optimization targeting the second adiabatic invariant (bounce action) $J^*$ along Boozer magnetic field lines and enforcing clean single-well magnetic field structure.
 - Introduces ``SplineZeta`` parameterization in ``desc.magnetic_fields`` for managing toroidal extrema curves $\zeta_{\rm min}(\alpha)$ and $\zeta_{\rm max}(\alpha)$ with optional stellarator symmetry.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 
 Performance Improvements
 
@@ -13,6 +14,7 @@ Performance Improvements
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
 
 Breaking Changes and Deprecations
 
@@ -25,6 +27,8 @@ Bug Fixes
 - Fixes NaN Jacobian in ``SurfaceMatch``, which returned the distance ``sqrt(dR^2 + dZ^2)`` between the surface and its target. That has an infinite derivative where it vanishes, which is every node whenever the surface starts equal to its target -- the normal way to use the objective. It now returns the signed ``[dR, dZ]`` components, so ``dim_f`` is ``2 * grid.num_nodes`` rather than ``grid.num_nodes``. A least-squares optimizer squares and sums them itself, so the cost is unchanged. Also corrects the objective's units from ``(T m^2)`` to ``(m)``.
 - Regularizes the elongation approximation ``a_major/a_minor``, which took ``sqrt(|u|)`` of the isoperimetric deficit ``u``. ``u`` is exactly zero for a circular cross-section, so ``d(elongation)/dA`` diverged there (measured ~2e9 at a circle), making an objective such as ``Elongation(bounds=(1.0, 1.005))`` -- which targets a circle by construction -- ill-conditioned or NaN. The branch point is genuine, so the fix replaces ``sqrt(|u|)`` with the smooth ``(u^2 + d^2)^(1/4)``, ``d = 1e-12 * P^2``. Values away from a circle are unchanged to every printed digit; near a circle they shift by ~1e-6.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
+- Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero
   (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
@@ -33,6 +37,8 @@ Bug Fixes
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
 
 
 

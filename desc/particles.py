@@ -4,6 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 
 import equinox as eqx
+import numpy as np
 from diffrax import (
     AbstractTerm,
     Event,
@@ -16,18 +17,232 @@ from diffrax import (
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
 from desc.backend import jax, jnp, tree_map
+from desc.basis import _PrecomputedFourierZernikeBasis
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
-from desc.compute.utils import get_profiles, get_transforms
+from desc.compute.utils import get_derivs, get_profiles, get_transforms
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
-from desc.utils import cross, dot, errorif, safediv, setdefault
+from desc.utils import cross, dot, errorif, safediv, setdefault, warnif
 
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
+
+
+def _precompute_zernike_bases(eq):
+    """Precompute polynomial coefficient Zernike bases of an Equilibrium.
+
+    Used to speed up the repeated single-point basis evaluations during
+    particle tracing, see ``_PrecomputedFourierZernikeBasis``.
+    """
+    warnif(
+        max(eq.R_basis.L, eq.Z_basis.L, eq.L_basis.L) > 24,
+        UserWarning,
+        "Evaluating the polynomial coefficient form of the Zernike radial basis "
+        "in double precision loses accuracy for L > 24. Consider using "
+        "zernike_mode='jacobi' for particle tracing instead.",
+    )
+    bases = {"R": _PrecomputedFourierZernikeBasis(eq.R_basis)}
+    # Z and L bases are usually identical, share the tables and the transform
+    if eq.Z_basis.equiv(eq.L_basis):
+        bases["Z"] = bases["L"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
+    else:
+        bases["Z"] = _PrecomputedFourierZernikeBasis(eq.Z_basis)
+        bases["L"] = _PrecomputedFourierZernikeBasis(eq.L_basis)
+    # stellarator symmetry only drops (m,n) sign combinations, so the bases
+    # usually keep the same (l,m) pairs and therefore the same radial
+    # polynomials. Share the one array, so that the radial factor of all of
+    # them is a single computation the compiler can evaluate once.
+    lm = bases["R"].modes[bases["R"].unique_LM_idx, :2]
+    for b in bases.values():
+        if b is not bases["R"] and np.array_equal(b.modes[b.unique_LM_idx, :2], lm):
+            b._radial_coeffs = bases["R"]._radial_coeffs
+    return bases
+
+
+class _StackedTransform:
+    """Transform-like class evaluating all derivative orders in one operation.
+
+    Private, duck-typed stand-in for ``desc.transform.Transform``, used by
+    ``_get_precomputed_transforms`` for repeated single-point evaluation during
+    particle tracing. ``Transform`` builds one matrix per derivative order,
+    each with its own radial, poloidal and toroidal factor evaluations, and
+    ``transform`` does one matrix-vector product per derivative order — many
+    tiny kernels per ODE step. This class instead computes each factor once for
+    all derivative orders (the basis functions of all orders are combinations
+    of only ``dr x dt x dz`` factor sets) and evaluates all of them together.
+
+    Rather than assembling the ``num_derivs x num_modes`` matrix of every basis
+    function at the node and contracting it with the coefficients, the sum over
+    modes is split: the toroidal factor is contracted with the coefficients
+    first, leaving a sum over the much smaller set of ``(l,m)`` pairs. That
+    costs ``n_dz x num_modes + num_derivs x K_lm`` instead of
+    ``num_derivs x num_modes`` multiply-adds per node — with only three
+    distinct toroidal derivative orders and ``K_lm ~ num_modes / (2N+1)``, an
+    order of magnitude less work.
+
+    Parameters
+    ----------
+    grid : Grid
+        Nodes to evaluate at.
+    basis : _PrecomputedFourierZernikeBasis
+        Basis with precomputed radial polynomial coefficients.
+    derivs : ndarray of int, shape(num_derivatives,3)
+        Orders of derivatives needed, in (rho, theta, zeta).
+    """
+
+    def __init__(self, grid, basis, derivs):
+        self._grid = grid
+        self._basis = basis
+        self._cache = {}
+        derivs = np.atleast_2d(derivs).astype(int)
+        self._idx = {(d[0], d[1], d[2]): i for i, d in enumerate(derivs.tolist())}
+
+        rad_coeffs = basis._radial_coeffs  # (n_dr, K_lm, lmax + 1)
+        n_dr, K_lm, _ = rad_coeffs.shape
+        lmax = rad_coeffs.shape[-1] - 1
+        errorif(
+            derivs[:, 0].max() >= n_dr,
+            NotImplementedError,
+            f"basis has radial coefficients up to derivative order {n_dr - 1}, "
+            f"got {derivs[:, 0].max()}",
+        )
+        r, t, z = grid.nodes.T
+        _, m, n = basis.modes.T
+        dr, dt, self._dz = derivs.T
+
+        # Static mode bookkeeping, all on the numpy mode tables of the basis.
+        # Split the spectrum into dense (LM x N) blocks by grouping the (l,m)
+        # pairs by the set of toroidal modes they appear with: stellarator
+        # symmetry gives two blocks (m>=0 with n>=0 and m<0 with n<0), no
+        # symmetry gives one. The blocks partition the modes, so the toroidal
+        # contraction costs exactly one pass over the spectrum per order.
+        inv_M = np.asarray(basis.inverse_M_idx)
+        inv_LM = np.asarray(basis.inverse_LM_idx)
+        inv_N = np.asarray(basis.inverse_N_idx)
+        present = np.zeros((K_lm, basis.unique_N_idx.size), dtype=bool)
+        present[inv_LM, inv_N] = True
+        mode_of = np.zeros_like(present, dtype=int)
+        mode_of[inv_LM, inv_N] = np.arange(basis.num_modes)
+        patterns, group = np.unique(present, axis=0, return_inverse=True)
+        group = group.ravel()  # numpy has shipped both 1d and 2d for this
+        lm_blocks = [np.flatnonzero(group == p) for p in range(len(patterns))]
+        n_blocks = [np.flatnonzero(pat) for pat in patterns]
+        # mode index of each (N, LM) pair of a block, so that indexing the
+        # coefficients with it puts the contracted toroidal axis first
+        self._blocks = [
+            (mode_of[np.ix_(lm, nb)].T, nb) for lm, nb in zip(lm_blocks, n_blocks)
+        ]
+        lm_perm = np.concatenate(lm_blocks)
+
+        # radial factors of all radial derivative orders, by Horner's scheme on
+        # the polynomial coefficients (which are in descending powers of rho).
+        # Contracting the powers of rho against the coefficients instead would
+        # be a matrix product whose contraction axis is only lmax+1 long, which
+        # spends most of its GEMM tiles on padding, while the Horner chain is
+        # elementwise and fuses into a single kernel.
+        # has shape num_nodes x n_dr x K_lm
+        rho = r[:, np.newaxis]
+        cf = rad_coeffs.reshape((-1, lmax + 1))
+        radial = jnp.broadcast_to(cf[:, 0], (rho.shape[0], cf.shape[0]))
+        for p in range(1, lmax + 1):
+            radial = radial * rho + cf[:, p]
+        radial = radial.reshape((-1, n_dr, K_lm))
+
+        def fourier_all(x, mm, NFP, n_dt):
+            # same expression as desc.basis.fourier, with the derivative order
+            # broadcast on a new axis. shape (num_nodes, n_dt, K). Successive
+            # derivative orders of a sinusoid alternate between its sine and
+            # cosine, so all of them follow from evaluating each once — the
+            # only transcendentals in the whole right hand side
+            m_abs = np.abs(mm) * NFP
+            arg = m_abs * x[:, np.newaxis] + (mm >= 0) * (np.pi / 2)
+            ders = [jnp.sin(arg), m_abs * jnp.cos(arg)][:n_dt]
+            while len(ders) < n_dt:
+                ders.append(-(m_abs**2) * ders[-2])
+            return jnp.stack(ders, axis=1)
+
+        poloidal = fourier_all(t, m[basis.unique_M_idx], 1, derivs[:, 1].max() + 1)
+        self._toroidal = fourier_all(
+            z, n[basis.unique_N_idx], basis.NFP, derivs[:, 2].max() + 1
+        )
+        # radial x poloidal factor of every requested derivative order over the
+        # (l,m) pairs, ordered to match the toroidal contraction blocks.
+        # has shape num_nodes x num_derivs x K_lm
+        self._RT = (
+            radial[:, dr][:, :, lm_perm]
+            * poloidal[:, dt][:, :, inv_M[basis.unique_LM_idx][lm_perm]]
+        )
+
+    @property
+    def basis(self):
+        """_PrecomputedFourierZernikeBasis: basis being evaluated."""
+        return self._basis
+
+    @property
+    def grid(self):
+        """Grid: nodes being evaluated at."""
+        return self._grid
+
+    def _evaluate(self, c):
+        """Evaluate all derivative orders of coefficients c, shape(num_modes,)."""
+        # Contract the toroidal factor with the coefficients block by block,
+        # leaving a sum over (l,m) pairs. shape (num_nodes, n_dz, K_lm).
+        # Written as a broadcast reduction rather than a matrix product on
+        # purpose: the contracted axis is only 2N+1 long, so a GEMM spends most
+        # of its tiles on padding, while this fuses into a single reduce loop.
+        G = jnp.concatenate(
+            [
+                (self._toroidal[:, :, nb, np.newaxis] * c[modes]).sum(axis=2)
+                for modes, nb in self._blocks
+            ],
+            axis=2,
+        )
+        # sum over the (l,m) pairs, the minor axis of both operands, so that
+        # the radial and poloidal factors fuse into the reduction
+        return (self._RT * G[:, self._dz]).sum(axis=-1)
+
+    def transform(self, c, dr=0, dt=0, dz=0):
+        """Transform from spectral to physical space. See Transform.transform.
+
+        All derivative orders are evaluated on the first call with a given
+        coefficient vector and cached, so the calls for the remaining
+        derivative orders are free (the cache is only valid within a single jit
+        trace, as is this whole class).
+        """
+        val = self._cache.get(id(c))
+        if val is None or val[0] is not c:
+            val = (c, self._evaluate(c))
+            self._cache[id(c)] = val
+        return val[1][:, self._idx[(dr, dt, dz)]]
+
+
+def _get_precomputed_transforms(bases, eq, grid, data_keys):
+    """Build the transforms dict for compute_fun from precomputed bases.
+
+    Equivalent to ``get_transforms(data_keys, eq, grid, jitable=True)``, but
+    evaluates with the precomputed polynomial coefficient bases and shares one
+    transform between quantities with the same basis (e.g. Z and lambda).
+    """
+    derivs = get_derivs(data_keys, eq, has_axis=False)
+    transforms = {"grid": grid}
+    for c in ["R", "Z", "L"]:
+        for cc in transforms:
+            if bases[c] is getattr(transforms[cc], "basis", None):
+                transforms[c] = transforms[cc]
+                break
+        else:  # if we didn't exit the loop early
+            ders = np.unique(
+                np.vstack(
+                    [derivs[cc] for cc in ["R", "Z", "L"] if bases[cc] is bases[c]]
+                ),
+                axis=0,
+            ).astype(int)
+            transforms[c] = _StackedTransform(grid, bases[c], derivs=ders)
+    return transforms
 
 
 class AbstractTrajectoryModel(AbstractTerm, ABC):
@@ -55,6 +270,8 @@ class AbstractTrajectoryModel(AbstractTerm, ABC):
     # Additional arguments needed by the model.
     # Eg, "m", "q", "mu", for mass, charge, magnetic moment (mv⊥²/2|B|).
     args: list[str] = eqx.field(static=True)
+    # quantities that vf will call compute for
+    data_keys: list[str] = eqx.field(static=True)
 
     @property
     @abstractmethod
@@ -120,6 +337,15 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
 
     vcoords = ["vpar"]
     args = ["m", "q", "mu"]
+    data_keys = [
+        "B",
+        "|B|",
+        "grad(|B|)",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+        "b",
+    ]
 
     def __init__(self, frame):
         assert frame in ["lab", "flux"]
@@ -202,23 +428,22 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
             spacing=jnp.zeros((3,)).T,
             jitable=True,
         )
-        data_keys = [
-            "B",
-            "|B|",
-            "grad(|B|)",
-            "e^rho",
-            "e^theta",
-            "e^zeta",
-            "b",
-        ]
 
-        transforms = get_transforms(data_keys, eq, grid, jitable=True)
+        # precomputed polynomial coefficient bases for fast basis evaluation,
+        # built once outside the ODE solve (see zernike_mode in trace_particles)
+        zernike_bases = kwargs.get("zernike_bases", None)
+        if zernike_bases is None:
+            transforms = get_transforms(self.data_keys, eq, grid, jitable=True)
+        else:
+            transforms = _get_precomputed_transforms(
+                zernike_bases, eq, grid, self.data_keys
+            )
         profiles = {"current": eq.current, "iota": eq.iota}
         if iota is not None:
             profiles["iota"] = iota
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
-            data_keys,
+            self.data_keys,
             params,
             transforms,
             profiles,
@@ -984,6 +1209,7 @@ def trace_particles(
     options=None,
     throw=True,
     return_aux=False,
+    zernike_mode="poly",
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1007,8 +1233,7 @@ def trace_particles(
         Relative and absolute tolerances for PID stepsize controller.
     max_steps : int
         Maximum number of steps for whole integration. This will be passed
-        to the diffrax.diffeqsolve function. Defaults to
-        (ts[-1] - ts[0]) / min_step_size
+        to the diffrax.diffeqsolve function. Defaults to max(len(ts)*1000, 100_000)
     min_step_size: float
         minimum step size (in t) that the integration can take. Defaults to 1e-8
     bounds : array of shape(3, 2), optional
@@ -1041,6 +1266,10 @@ def trace_particles(
                 Iota profile of the Equilibrium, if not already assigned.
             - source_grid: Grid
                 Source grid to use for field computation during Biot-Savart.
+            - zernike_bases : dict of _PrecomputedFourierZernikeBasis
+                Precomputed polynomial coefficient bases for R, Z and lambda, as
+                returned by ``desc.particles._precompute_zernike_bases``. If
+                given, this is used and ``zernike_mode`` is ignored.
     throw : bool, optional
         Whether to throw an error if the integration fails. If False, will return NaN
         for the points where the integration failed. Defaults to True.
@@ -1050,6 +1279,16 @@ def trace_particles(
         from `diffrax.diffeqsolve`. Defaults to False. `ts` may become useful if
         `SaveAt(steps=True)` is used (see `_trace_particles`). Note that `x`, `v` and
         `ts` will be padded with NaNs to `max_steps` size in that case.
+    zernike_mode : {"poly", "jacobi"}
+        How to evaluate the Zernike radial basis when tracing in an Equilibrium
+        with ``frame="flux"``. ``"poly"`` (default) precomputes the polynomial
+        coefficients of the basis functions once before the integration, so
+        that the ODE right hand side evaluates the basis with dense matrix
+        products, which is usually much faster. Note that the polynomial
+        coefficient form loses accuracy for radial resolution L > 24 (a warning
+        is thrown). ``"jacobi"`` evaluates the basis with the stable Jacobi
+        recurrence of ``zernike_radial`` at every step. Ignored if
+        ``zernike_bases`` is given in ``options``.
 
     Returns
     -------
@@ -1065,6 +1304,21 @@ def trace_particles(
         params = field.params_dict
     if not options:
         options = {}
+
+    errorif(
+        zernike_mode not in ["poly", "jacobi"],
+        ValueError,
+        f"zernike_mode must be 'poly' or 'jacobi', got {zernike_mode}",
+    )
+    if (
+        zernike_mode == "poly"
+        and isinstance(field, Equilibrium)
+        and model.frame == "flux"
+    ):
+        # precompute polynomial coefficient tables for the Zernike radial basis
+        # once, outside the ODE solve, so that the RHS evaluates the basis with
+        # dense matrix products instead of the sequential Jacobi recurrence
+        options.setdefault("zernike_bases", _precompute_zernike_bases(field))
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
@@ -1086,7 +1340,7 @@ def trace_particles(
     stepsize_controller = PIDController(
         rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
     )
-    max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
+    max_steps = setdefault(max_steps, max(len(ts) * 1000, 100_000))
 
     y0, model_args = initializer.init_particles(model, field)
     return _trace_particles(

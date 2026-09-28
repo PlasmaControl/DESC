@@ -467,3 +467,100 @@ def test_init_curve_particles():
     # smaller curve is out of larger equilibrium, so it should fail
     with pytest.raises(match="Mapping from lab to flux coordinates failed"):
         _, _ = particles.init_particles(model, eq_large)
+
+
+@pytest.mark.unit
+def test_precomputed_zernike_bases():
+    """Test precomputed polynomial Zernike bases against the standard path."""
+    from desc.basis import FourierZernikeBasis, _PrecomputedFourierZernikeBasis
+    from desc.compute.utils import _compute as compute_fun
+    from desc.compute.utils import get_transforms
+    from desc.particles import (
+        _GC_FLUX_DATA_KEYS,
+        _get_precomputed_transforms,
+        _precompute_zernike_bases,
+    )
+    from desc.profiles import PowerSeriesProfile
+
+    rng = np.random.default_rng(0)
+    nodes = np.column_stack(
+        [
+            rng.uniform(1e-6, 1, 7),
+            rng.uniform(0, 2 * np.pi, 7),
+            rng.uniform(0, 2 * np.pi, 7),
+        ]
+    )
+    derivs = [
+        (0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 1, 0), (0, 1, 1),
+        (0, 2, 0), (1, 0, 0), (1, 0, 1), (1, 1, 0), (2, 0, 0),
+    ]  # fmt: skip
+    # basis function values agree for all needed derivative orders
+    for sym in ["cos", "sin", False]:
+        basis = FourierZernikeBasis(6, 6, 4, NFP=3, sym=sym)
+        pre = _PrecomputedFourierZernikeBasis(basis)
+        for d in derivs:
+            np.testing.assert_allclose(
+                pre.evaluate(nodes, np.array(d)),
+                basis.evaluate(nodes, np.array(d)),
+                rtol=1e-8,
+                atol=1e-8,
+                err_msg=f"sym={sym} d={d}",
+            )
+
+    # data used by the guiding center model agrees between the transforms
+    # built from the precomputed bases and the standard jitable transforms
+    eq = Equilibrium(L=6, M=6, N=4, NFP=3, iota=PowerSeriesProfile([1.1, 0, 0.5]))
+    pts = nodes[:5]
+    grid = Grid(pts, spacing=np.zeros_like(pts), jitable=True)
+    bases = _precompute_zernike_bases(eq)
+    assert bases["Z"] is bases["L"]
+    transforms_new = _get_precomputed_transforms(bases, eq, grid, _GC_FLUX_DATA_KEYS)
+    assert transforms_new["Z"] is transforms_new["L"]
+    transforms_old = get_transforms(_GC_FLUX_DATA_KEYS, eq, grid, jitable=True)
+    profiles = {"current": eq.current, "iota": eq.iota}
+    data_new = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        _GC_FLUX_DATA_KEYS,
+        eq.params_dict,
+        transforms_new,
+        profiles,
+    )
+    data_old = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
+        _GC_FLUX_DATA_KEYS,
+        eq.params_dict,
+        transforms_old,
+        profiles,
+    )
+    for key in _GC_FLUX_DATA_KEYS:
+        np.testing.assert_allclose(
+            data_new[key],
+            data_old[key],
+            rtol=1e-8,
+            atol=1e-10 * np.abs(data_old[key]).max(),
+            err_msg=key,
+        )
+
+    # tracing with the two modes gives the same trajectories
+    surf = FourierRZToroidalSurface(
+        R_lmn=np.array([10.0, 1.0]),
+        modes_R=np.array([[0, 0], [1, 0]]),
+        Z_lmn=np.array([0, -1.0]),
+        modes_Z=np.array([[0, 0], [-1, 0]]),
+    )
+    eq2 = Equilibrium(
+        surface=surf, L=6, M=6, N=0, Psi=3, iota=PowerSeriesProfile([1.1, 0, 0.5])
+    )
+    particles = ManualParticleInitializerLab(
+        R0=[10.4, 10.6], phi0=[0, 0.1], Z0=[0.0, 0.0], xi0=[0.7, -0.7], E=1e5
+    )
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    ts = np.linspace(0, 1e-5, 5)
+    x_poly, v_poly = trace_particles(
+        eq2, particles, model, ts, min_step_size=1e-9, zernike_mode="poly"
+    )
+    x_jac, v_jac = trace_particles(
+        eq2, particles, model, ts, min_step_size=1e-9, zernike_mode="jacobi"
+    )
+    np.testing.assert_allclose(x_poly, x_jac, rtol=1e-4, atol=1e-7)
+    np.testing.assert_allclose(v_poly, v_jac, rtol=1e-4, atol=1e-7)

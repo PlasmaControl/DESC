@@ -10,6 +10,7 @@ updates:
     schedule:
       interval: "daily"
     labels: ["dependencies", "skip_changelog", "run_benchmarks"]
+    versioning-strategy: "increase-if-necessary"
     groups:
       # group similar dependencies together into fewer PRs
       docs:
@@ -41,6 +42,7 @@ updates:
           - "orthax"
           - "quadax"
           - "jax-finufft"
+          - "adv-jax-math"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -25,15 +25,26 @@ class InputReader:
     ----------
     cl_args : None, str, or list (Default = None)
         command line arguments to parse
+        If these are not None, then it is assumed that this
+        is being invoked as a call of desc from the command
+        line. In that case, if called on a vmec input file, the
+        corresponding converted DESC input file will be saved
+        automatically.
+    save_converted_vmec_input : bool (Default = False)
+        If True, then if a VMEC input file is converted to
+        DESC input, will save the input file. False by default,
+        but True when DESC module is invoked from the command line
+        on an input file like ``python -m desc input.vmec``.
 
     """
 
-    def __init__(self, cl_args=None):
+    def __init__(self, cl_args=None, save_converted_vmec_input=False):
         """Initialize InputReader instance."""
         self._args = None
         self._inputs = None
         self._input_path = None
         self._output_path = None
+        self._save_converted_vmec_input = save_converted_vmec_input
 
         if cl_args is not None:
             if isinstance(cl_args, os.PathLike):
@@ -215,9 +226,19 @@ class InputReader:
             isVMEC = re.search(r"&INDATA", line, re.IGNORECASE)
             if isVMEC:
                 print("Converting VMEC input to DESC input")
-                path = self.input_path + "_desc"
+                # use a buffer here to avoid having to read/write a file
+                # unless specified by flag
+                path = (
+                    self.input_path + "_desc"
+                    if self._save_converted_vmec_input
+                    else io.StringIO()
+                )
                 InputReader.vmec_to_desc_input(self.input_path, path)
-                print("Generated DESC input file {}:".format(path))
+                if self._save_converted_vmec_input:
+                    print("Generated DESC input file {}:".format(path))
+                else:
+                    # put buffer back to start so it may be read again
+                    path.seek(0)
                 return self.parse_inputs(path)
 
             # extract numbers & words
@@ -680,9 +701,11 @@ class InputReader:
 
         """
         # open the file, unless its already open
+        opened_here = False
         if not isinstance(filename, io.IOBase):
             filename = os.path.expanduser(filename)
             f = open(filename, "w+")
+            opened_here = True
         else:
             f = filename
         f.seek(0)
@@ -783,7 +806,11 @@ class InputReader:
         for n, R0, Z0 in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
-        f.close()
+        # only close the file if we opened it here, as we also
+        # can use this function to write to an already open file
+        # or to an in-memory buffer
+        if opened_here:
+            f.close()
 
     @staticmethod
     def desc_output_to_input(  # noqa: C901 - fxn too complex

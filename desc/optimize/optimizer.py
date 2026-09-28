@@ -195,7 +195,7 @@ class Optimizer(IOAble):
             and constraints in the ``Objective values`` key.
 
         """
-        options = {} if options is None else options
+        options = {} if options is None else options.copy()
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
         if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)
@@ -520,7 +520,11 @@ def _print_output(things, things0, objective, constraints, result):
     print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
     print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    fse = result.get("fse", None)
+    f0se = result.get("f0se", None)
+    values = objective.print_value(
+        x=objective.x(*state), x0=objective.x(*state_0), fse=fse, f0se=f0se
+    )
     for con in constraints:
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]

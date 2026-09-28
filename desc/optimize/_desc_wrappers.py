@@ -237,9 +237,6 @@ def _optimize_desc_aug_lagrangian_least_squares(
 
     """
     options = {} if options is None else options
-    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-        options.setdefault("initial_trust_radius", 1e-3)
-        options.setdefault("max_trust_radius", 1.0)
     options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 

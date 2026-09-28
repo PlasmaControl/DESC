@@ -1028,7 +1028,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             final_coilset = CoilSet(*coils, check_intersection=check_intersection)
         return final_coilset
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1043,9 +1043,9 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------

@@ -77,7 +77,7 @@ def lsq_auglag(  # noqa: C901
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'jac'``, the scale is iteratively updated using the
-        inverse norms of the columns of the Jacobian matrix. Hessian scaling will
+        inverse norms of the columns of the Jacobian matrix. Jacobian scaling will
         automatically be used anywhere ``x_scale==0``.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function.
@@ -277,8 +277,10 @@ def lsq_auglag(  # noqa: C901
         x_scale = jnp.zeros_like(z)
     else:
         x_scale = jnp.broadcast_to(x_scale, x0.shape)
-        # add ones for slack variables
-        x_scale = jnp.concatenate([x_scale, jnp.zeros(z0.size - x0.size)])
+        # slack variables get automatic scaling only if everything else does,
+        # otherwise a fixed scale of 1
+        slack_scale = 0.0 if jnp.all(x_scale == 0) else 1.0
+        x_scale = jnp.concatenate([x_scale, jnp.full(z0.size - x0.size, slack_scale)])
     scale, scale_inv = compute_jac_scale(J, x_scale)
 
     v, dv = cl_scaling_vector(z, g, lb, ub)

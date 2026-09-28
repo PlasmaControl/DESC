@@ -72,8 +72,18 @@ from desc.optimize import (
     optimizers,
     sgd,
 )
-from desc.optimize.optimizer import _parse_x_scale
-from desc.optimize.utils import chol, gershgorin_bounds
+from desc.optimize.optimizer import (
+    _flatten_like,
+    _parse_x_scale,
+    _project_x_scale_linear,
+)
+from desc.optimize.utils import (
+    chol,
+    compute_hess_scale,
+    compute_jac_scale,
+    gershgorin_bounds,
+    split_x_scale,
+)
 from desc.utils import get_all_instances
 
 
@@ -437,6 +447,75 @@ class TestLSQTR:
             },
         )
         np.testing.assert_allclose(out["x"], p)
+
+
+@pytest.mark.unit
+def test_mixed_fixed_and_adaptive_x_scale():
+    """Test that zeros in x_scale use adaptive scaling for just those entries."""
+    x_scale = np.array([0.0, 2.0, 0.0, 0.5])
+    fixed, is_auto = split_x_scale(x_scale)
+    np.testing.assert_array_equal(fixed, [1.0, 2.0, 1.0, 0.5])
+    np.testing.assert_array_equal(is_auto, [True, False, True, False])
+    is_auto = np.asarray(is_auto)
+
+    A = default_rng(0).random((6, 4))
+    for compute, M in [(compute_jac_scale, A), (compute_hess_scale, A.T @ A)]:
+        scale, scale_inv = map(np.asarray, compute(M, x_scale))
+        auto_scale = np.asarray(compute(M)[0])
+        np.testing.assert_allclose(scale[is_auto], auto_scale[is_auto])
+        np.testing.assert_allclose(scale[~is_auto], x_scale[~is_auto])
+        np.testing.assert_allclose(scale_inv, 1 / scale)
+
+    # the solvers should still converge with a mix of fixed and adaptive scales
+    out = fmintr(
+        scalar_fun,
+        np.ones(2),
+        scalar_grad,
+        scalar_hess,
+        verbose=0,
+        x_scale=np.array([0.0, 1.0]),
+        ftol=0,
+        xtol=0,
+        gtol=1e-12,
+        options={"tr_method": "exact"},
+    )
+    np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+
+    out = sgd(
+        scalar_fun,
+        np.ones(2),
+        scalar_grad,
+        method="optax-sgd",
+        verbose=0,
+        x_scale=np.array([0.0, 1.0]),
+        ftol=1e-12,
+        xtol=1e-12,
+        gtol=1e-12,
+        maxiter=2000,
+    )
+    np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def res(p):
+        return vector_fun(x, p) - y
+
+    p0 = p + 0.25 * (default_rng(0).random(p.size) - 0.5)
+    out = lsqtr(
+        res,
+        p0,
+        Derivative(res, 0, "fwd"),
+        verbose=0,
+        x_scale=np.array([0.0, 1.0] * 3),
+        options={
+            "initial_trust_radius": 0.15,
+            "max_trust_radius": 0.25,
+            "tr_method": "cho",
+        },
+    )
+    np.testing.assert_allclose(out["x"], p, atol=1e-6, rtol=1e-6)
 
 
 @pytest.mark.unit
@@ -812,6 +891,31 @@ class TestAllOptimizers:
             maxiter=5,
         )
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize("opt", ["scipy-trf", "scipy-trust-exact", "scipy-SLSQP"])
+    def test_mixed_x_scale(self, opt):
+        """Test scipy wrappers with x_scale mixing fixed and adaptive scaling."""
+        if optimizers[opt]["scalar"]:
+            eq, obj, con = self.eqe, self.eobj, self.econ
+        else:
+            eq, obj, con = self.eqf, self.fobj, self.fcon
+        if not obj.built:
+            obj.build()
+
+        # ESS for everything except lambda, which is scaled adaptively
+        x_scale = {key: "ess" for key in eq.params_dict}
+        x_scale["L_lmn"] = "auto"
+        _, out = eq.solve(
+            objective=obj,
+            constraints=con,
+            optimizer=opt,
+            x_scale=x_scale,
+            copy=True,
+            verbose=0,
+            maxiter=2,
+        )
+        assert np.all(np.isfinite(out["x"]))
+
 
 @pytest.mark.slow
 @pytest.mark.regression
@@ -1086,9 +1190,47 @@ def test_auglag():
         options={"initial_multipliers": "least_squares"},
     )
 
+    # mixing fixed and adaptive scales should not change the solution
+    x_scale = np.where(np.arange(n) % 2, 1.0, 0.0)
+    out5 = fmin_auglag(
+        fun,
+        x0,
+        grad,
+        hess=hess,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale=x_scale,
+        ftol=0,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
+        verbose=3,
+        maxiter=None,
+        options={"initial_multipliers": "least_squares"},
+    )
+    out6 = lsq_auglag(
+        vecfun,
+        x0,
+        jac,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale=x_scale,
+        ftol=0,
+        xtol=1e-8,
+        gtol=1e-8,
+        ctol=1e-8,
+        verbose=3,
+        maxiter=None,
+        options={"initial_multipliers": "least_squares", "tr_method": "cho"},
+    )
+
     np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-4, atol=1e-4)
     np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-4, atol=1e-4)
     np.testing.assert_allclose(out4["x"], out3["x"], rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(out5["x"], out3["x"], rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(out6["x"], out3["x"], rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.slow
@@ -1891,11 +2033,15 @@ def test_parse_x_scale(DummyCoilSet):
             _parse_x_scale([np.ones(dim_eq - 1)], [eq], {})
     with pytest.raises(ValueError):
         _parse_x_scale("foo", [eq], {})
-    with pytest.raises(TypeError):
+    with pytest.raises(ValueError):
         _parse_x_scale(["foo", "bar"], [eq, coils], {})
+    with pytest.raises(ValueError, match="same keys"):
+        _parse_x_scale({"R_lmn": 1}, [eq], {})
 
-    with pytest.warns(DeprecationWarning):
+    # an array should only warn once, however many things it is split between
+    with pytest.warns(DeprecationWarning) as record:
         _parse_x_scale(np.ones(dim_eq), [eq], {})
+    assert sum(issubclass(w.category, DeprecationWarning) for w in record) == 1
 
     xsc = _parse_x_scale(1, [eq], {})
     xsc = eq.pack_params(xsc[0])
@@ -1932,6 +2078,25 @@ def test_parse_x_scale(DummyCoilSet):
     assert (xsc[dim_eq:] == 0).all()
     assert (xsc[:dim_eq] == 1).all()
     assert xsc.shape == (dim_eq + dim_coil,)
+
+    # different kinds of scaling for different parameters of the same thing, where
+    # zeros inside a numeric array mean automatic scaling for just those entries
+    Zb_scale = np.full_like(eq.Zb_lmn, 2.0)
+    Zb_scale[0] = 0
+    spec = {key: 1.0 for key in eq.params_dict}
+    spec.update({"R_lmn": "ess", "L_lmn": "auto", "Zb_lmn": Zb_scale})
+    xsc = _parse_x_scale([spec], [eq], {})[0]
+    np.testing.assert_allclose(xsc["R_lmn"], eq._get_ess_scale()["R_lmn"])
+    assert (xsc["L_lmn"] == 0).all()
+    np.testing.assert_allclose(xsc["Zb_lmn"], Zb_scale)
+    assert (xsc["Rb_lmn"] == 1).all()
+
+    # x_scale is flattened to match nested things, but a spec for a single thing that
+    # is itself a list is left alone. Any non-list objects can stand in for things.
+    nested = ["a", ("b", "c")]
+    assert _flatten_like(["x", ("y", "z")], nested) == ["x", "y", "z"]
+    assert _flatten_like([[1, 2], "y"], ["a", "b"]) == [[1, 2], "y"]
+    assert _flatten_like(["x", "y", "z"], nested) is None
 
 
 @pytest.mark.unit
@@ -2114,3 +2279,55 @@ def test_get_ess_scale():  # noqa: C901
     )
     np.testing.assert_allclose(eq2_scale["I"], default)
     np.testing.assert_allclose(eq2_scale["G"], default)
+
+
+@pytest.mark.unit
+def test_linear_constraint_x_scale():
+    """Test how x_scale is handled with linear constraints."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(2, 2, 0, 4, 4, 0)
+    obj = ObjectiveFunction(ForceBalance(eq=eq))
+    constraints = maybe_add_self_consistency(eq, get_fixed_boundary_constraints(eq=eq))
+    con = ObjectiveFunction(constraints)
+
+    # a numpy array is accepted, and zeros use the automatic scale
+    x_scale = np.full(eq.dim_x, 2.0)
+    x_scale[::2] = 0
+    lcp = LinearConstraintProjection(obj, con, x_scale=x_scale)
+    lcp.build(verbose=0)
+    np.testing.assert_allclose(lcp._D[x_scale != 0], 2.0)
+    assert (lcp._D[x_scale == 0] >= 1).all()
+
+    # the scale of a pre-built projection is fixed when it is created
+    with pytest.raises(ValueError, match="must be 'auto'"):
+        Optimizer("lsq-exact").optimize(
+            eq, LinearConstraintProjection(obj, con), x_scale="ess", maxiter=1
+        )
+    # and the scale used to build a projection is set by x_scale, not the options
+    with pytest.raises(ValueError, match="linear_constraint_options"):
+        Optimizer("lsq-exact").optimize(
+            eq,
+            obj,
+            constraints,
+            maxiter=1,
+            options={"linear_constraint_options": {"x_scale": "auto"}},
+        )
+
+    def reduced_scale(spec):
+        """Scale the optimizer sees for the reduced variables, 0 means adaptive."""
+        xsc = eq.pack_params(_parse_x_scale(spec, [eq], {})[0])
+        lcp = LinearConstraintProjection(obj, con, x_scale=xsc)
+        lcp.build(verbose=0)
+        return np.asarray(_project_x_scale_linear(xsc, [eq], lcp))
+
+    assert (reduced_scale("auto") == 0).all()
+    assert (reduced_scale(1.0) == 1).all()
+    # A reduced variable is only adaptive if none of the variables that make it up
+    # have a fixed scale, so at most the lambda coefficients can be adaptive here.
+    spec = {key: 1.0 for key in eq.params_dict}
+    spec["L_lmn"] = "auto"
+    mixed = reduced_scale(spec)
+    assert set(np.unique(mixed)) <= {0, 1}
+    assert mixed.sum() > 0
+    assert (mixed == 0).sum() <= eq.L_basis.num_modes

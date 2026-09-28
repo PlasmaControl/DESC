@@ -504,6 +504,29 @@ def check_termination(
     return success, message
 
 
+def split_x_scale(x_scale):
+    """Split an ``x_scale`` array into fixed scales and adaptive entries.
+
+    Entries of ``x_scale`` equal to 0 request adaptive Jacobian/Hessian scaling.
+
+    Parameters
+    ----------
+    x_scale : array_like
+        Characteristic scale of each variable, with 0 for adaptive scaling.
+
+    Returns
+    -------
+    fixed : jnp.ndarray
+        ``x_scale`` with 1 in place of the adaptive entries.
+    is_auto : jnp.ndarray of bool
+        True where the scale is adaptive.
+
+    """
+    x_scale = jnp.asarray(x_scale)
+    is_auto = x_scale == 0
+    return jnp.where(is_auto, 1.0, x_scale), is_auto
+
+
 @jit
 def compute_jac_scale(A, user_scale=None, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
@@ -516,7 +539,8 @@ def compute_jac_scale(A, user_scale=None, prev_scale_inv=None):
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
     scale = 1 / scale_inv
     if user_scale is not None:
-        scale = jnp.where(user_scale == 0, scale, user_scale)
+        fixed, is_auto = split_x_scale(user_scale)
+        scale = jnp.where(is_auto, scale, fixed)
         scale_inv = 1 / scale
     return scale, scale_inv
 
@@ -543,7 +567,8 @@ def compute_hess_scale(H, user_scale=None, prev_scale_inv=None):
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
     scale = 1 / scale_inv
     if user_scale is not None:
-        scale = jnp.where(user_scale == 0, scale, user_scale)
+        fixed, is_auto = split_x_scale(user_scale)
+        scale = jnp.where(is_auto, scale, fixed)
         scale_inv = 1 / scale
     return scale, scale_inv
 

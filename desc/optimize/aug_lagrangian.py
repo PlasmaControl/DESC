@@ -335,8 +335,10 @@ def fmin_auglag(  # noqa: C901
         x_scale = jnp.zeros_like(z)
     else:
         x_scale = jnp.broadcast_to(x_scale, x0.shape)
-        # add ones for slack variables
-        x_scale = jnp.concatenate([x_scale, jnp.zeros(z0.size - x0.size)])
+        # slack variables get automatic scaling only if everything else does,
+        # otherwise a fixed scale of 1
+        slack_scale = 0.0 if jnp.all(x_scale == 0) else 1.0
+        x_scale = jnp.concatenate([x_scale, jnp.full(z0.size - x0.size, slack_scale)])
     scale, scale_inv = compute_hess_scale(H, x_scale)
 
     v, dv = cl_scaling_vector(z, g, lb, ub)

@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, tree_map
+from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
     FixCurrent,
@@ -134,20 +134,27 @@ class Optimizer(IOAble):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
-            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
-            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
-            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
-            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
-            sets the default scale for variables without an ess rule defined.
-            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
-            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
-            If an array, should be the same size as sum(thing.dim_x for thing in
-            things). If a list, the list should have 1 element for each thing, and
-            each element should either be ``'ess'``, ``'auto'`` to use exponential
-            spectral scaling or automatic jacobian scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order`` and
+            ``ess_min_value`` which are passed through ``options``. ``ess_alpha`` is
+            the decay rate of the scaling, ``ess_order`` is the norm order for
+            multi-index modes, which can be ``1``, ``2``, or ``np.inf``, and
+            ``ess_min_value`` is the minimum allowed scale value. If not provided in
+            ``options``, the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'``
+            and ``ess_min_value=1e-7``. Variables without an ESS rule use automatic
+            scaling. If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'``, a number, or a dict
+            with the same keys as thing.params_dict. Each value in the dict can be
+            ``'ess'``, ``'auto'``, or a number or array of the same size as that
+            parameter, so that different variables of the same thing can use
+            different types of scaling, For example, to use ESS for all
+            variables of an equilibrium except the lambda coefficients, which are
+            scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
+            'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
+            scaling will be used. Passing a single array for all things is deprecated.
+            Where a linear constraint couples variables with a fixed scale to
+            variables with automatic scaling, the coupled variables are not scaled
+            adaptively, and the automatic ones are only scaled according to the
+            magnitude of their initial values.
         verbose : integer, optional
             * 0  : work silently.
             * 1 : display a termination report.
@@ -208,15 +215,20 @@ class Optimizer(IOAble):
         )
 
         # get unique things
+        things_nested = things if isinstance(things, (list, tuple)) else [things]
         things, indices, unique_indices = unique_list(
             flatten_list(things, flatten_tuple=True)
         )
         if isinstance(x_scale, (list, tuple)):
+            # x_scale can either have the same nesting as things, or be flat with one
+            # element for each thing
+            x_scale_flat = _flatten_like(x_scale, things_nested)
+            x_scale = list(x_scale) if x_scale_flat is None else x_scale_flat
             # make sure it stays in sync with things
-            assert len(x_scale) == len(
-                indices
-            ), f"expected {len(indices)} x_scales for {len(indices)} things but "
-            f"only got {len(x_scale)}"
+            assert len(x_scale) == len(indices), (
+                f"expected {len(indices)} x_scales for {len(indices)} things but "
+                f"only got {len(x_scale)}"
+            )
             x_scale = [x_scale[i] for i in unique_indices]
         counts = np.unique(indices, return_counts=True)[1]
         duplicate_idx = np.where(counts > 1)[0]
@@ -270,7 +282,17 @@ class Optimizer(IOAble):
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
-            x_scale_projected = _project_x_scale_prox(x_scale, things, objective)
+            errorif(
+                _has_fixed_scale(x_scale, things),
+                ValueError,
+                "x_scale must be 'auto' when the objective is a "
+                "LinearConstraintProjection, since its scale is set when it is "
+                "created. Pass x_scale to LinearConstraintProjection instead.",
+            )
+            # the projection's own scale is the one used in its D matrix
+            x_scale_projected = objective._x_scale
+            if isinstance(x_scale_projected, str):
+                x_scale_projected = jnp.zeros(objective._objective.dim_x)
             x_scale_projected = _project_x_scale_linear(
                 x_scale_projected, things, objective
             )
@@ -384,73 +406,130 @@ class Optimizer(IOAble):
         return things, result
 
 
-def _parse_x_scale(x_scale, things, options):
-    """Convert str/lists/dicts of scales into arrays for all dofs."""
-    if isinstance(x_scale, str):
-        if x_scale == "auto":
-            x_scale = ["auto"] * len(things)
-        elif x_scale == "ess":
-            x_scale = ["ess"] * len(things)
-        else:
-            raise ValueError(
-                "only 'auto' and 'ess' are allowed string values for x_scale"
-            )
-    if isinstance(x_scale, (jnp.ndarray, np.ndarray)) and not np.isscalar(x_scale):
-        warnings.warn(
-            "Passing in an array for x_scale has been deprecated and in the "
-            "future will throw an error. Instead, pass in a dict of arrays for each "
-            "Optimizable object, with each dict having the same structure as "
-            "thing.params_dict",
-            DeprecationWarning,
-        )
-        dimx_all = np.cumsum([t.dim_x for t in things])[:-1]
-        x_scale = jnp.split(x_scale, dimx_all)
-    if np.isscalar(x_scale) and not isinstance(x_scale, str):
-        full_like = lambda x: jnp.full_like(x, x_scale)
-        x_scale = [tree_map(full_like, t.params_dict) for t in things]
+def _flatten_like(x_scale, things):
+    """Flatten x_scale to have one entry for each thing in a nested list of things.
 
-    if len(things) == 1 and not isinstance(x_scale, (list, tuple)):
+    Only levels where things is nested are flattened, so the specification for a
+    single thing that is itself a list (eg one dict for each member of a collection)
+    is not split up. Returns None if x_scale doesn't have the same nesting as things.
+    """
+    if not isinstance(things, (list, tuple)):
+        return [x_scale]
+    if not isinstance(x_scale, (list, tuple)) or len(x_scale) != len(things):
+        return None
+    flat = [_flatten_like(x, t) for x, t in zip(x_scale, things)]
+    return None if any(f is None for f in flat) else [a for f in flat for a in f]
+
+
+def _is_flat_array(spec):
+    """Whether spec is a non-scalar array of scales."""
+    return isinstance(spec, (jnp.ndarray, np.ndarray)) and np.ndim(spec) > 0
+
+
+def _has_fixed_scale(x_scale, things):
+    """Whether any parsed x_scale entry is a fixed scale rather than adaptive."""
+    return any(
+        np.any(np.asarray(t.pack_params(s)) != 0) for s, t in zip(x_scale, things)
+    )
+
+
+def _parse_x_scale(x_scale, things, options):
+    """Convert x_scale specifications into a scale for every dof of each thing.
+
+    Parameters
+    ----------
+    x_scale : str, number, array, dict or list
+        Scale specification. Each thing gets one specification, either given
+        explicitly in a list or applied to all things. A specification for a thing
+        is ``'ess'``, ``'auto'``, a number, or a dict with the same keys as
+        ``thing.params_dict`` whose values are each ``'ess'``, ``'auto'``, or a
+        number or array of the same size as the parameter.
+    things : list of Optimizable
+        Objects being optimized.
+    options : dict
+        Optimizer options, may contain ``ess_alpha``, ``ess_order`` and
+        ``ess_min_value``.
+
+    Returns
+    -------
+    list
+        One entry per thing, with the same structure as ``thing.params_dict``.
+        Entries equal to 0 request adaptive Jacobian/Hessian scaling.
+
+    """
+    ess_kwargs = {
+        "alpha": options.pop("ess_alpha", 1.2),
+        "order": options.pop("ess_order", np.inf),
+        "min_value": options.pop("ess_min_value", 1e-7),
+    }
+
+    if _is_flat_array(x_scale):
+        x_scale = list(jnp.split(x_scale, np.cumsum([t.dim_x for t in things])[:-1]))
+    elif isinstance(x_scale, str) or (
+        not isinstance(x_scale, (dict, list, tuple)) and np.ndim(x_scale) == 0
+    ):
+        x_scale = [x_scale] * len(things)
+    elif len(things) == 1 and not isinstance(x_scale, (list, tuple)):
         x_scale = [x_scale]
     assert len(x_scale) == len(things), (
         f"expected {len(things)} x_scales for {len(things)} things but "
         f" got {len(x_scale)}"
     )
+    warnif(
+        any(_is_flat_array(xsc) for xsc in x_scale),
+        DeprecationWarning,
+        "Passing in an array for x_scale has been deprecated and in the "
+        "future will throw an error. Instead, pass in a dict of arrays for each "
+        "Optimizable object, with each dict having the same structure as "
+        "thing.params_dict",
+    )
+    return [_parse_thing_scale(s, t, ess_kwargs) for s, t in zip(x_scale, things)]
 
-    all_scales = []
-    ess_alpha = options.pop("ess_alpha", 1.2)
-    ess_order = options.pop("ess_order", np.inf)
-    ess_min_value = options.pop("ess_min_value", 1e-7)
-    ess_default = options.pop("ess_default", 0.0)
 
-    for xsc, tng in zip(x_scale, things):
-        if isinstance(xsc, (jnp.ndarray, np.ndarray)) or (
-            np.isscalar(xsc) and not isinstance(xsc, str)
-        ):
-            warnif(
-                not np.isscalar(xsc),
-                DeprecationWarning,
-                "Passing in an array for x_scale has been deprecated and in the "
-                "future will throw an error. Instead, pass in a dict of arrays for "
-                "each Optimizable object, with each dict having the same structure "
-                "as thing.params_dict",
+def _parse_thing_scale(spec, thing, ess_kwargs):
+    """Convert the scale specification for one thing to match thing.params_dict."""
+    if _is_flat_array(spec):
+        spec = thing.unpack_params(jnp.broadcast_to(spec, (thing.dim_x,)))
+
+    if isinstance(thing, OptimizableCollection):
+        members = list(thing)
+        specs = spec if isinstance(spec, list) else [spec] * len(members)
+        errorif(
+            len(specs) != len(members),
+            ValueError,
+            f"expected {len(members)} x_scales for {len(members)} members of "
+            f"{thing} but got {len(specs)}",
+        )
+        return [_parse_thing_scale(s, m, ess_kwargs) for s, m in zip(specs, members)]
+
+    params = thing.params_dict
+    if not isinstance(spec, dict):
+        # a string or number applies to every parameter
+        spec = {key: spec for key in params}
+    errorif(
+        spec.keys() != params.keys(),
+        ValueError,
+        f"x_scale dict must have the same keys as {type(thing).__name__}.params_dict"
+        f", expected {list(params.keys())} but got {list(spec.keys())}",
+    )
+
+    ess = None  # only computed if some parameter asks for it
+    scale = {}
+    for key, param in params.items():
+        value = spec[key]
+        if isinstance(value, str) and value == "ess":
+            ess = thing._get_ess_scale(**ess_kwargs) if ess is None else ess
+            # parameters without an ESS rule are automatically scaled
+            value = ess.get(key, "auto")
+        if isinstance(value, str):
+            errorif(
+                value != "auto",
+                ValueError,
+                f"x_scale strings must be 'ess' or 'auto', got '{value}'",
             )
-            all_scales.append(tng.unpack_params(jnp.broadcast_to(xsc, (tng.dim_x,))))
-        elif isinstance(xsc, dict) or (
-            isinstance(xsc, list) and isinstance(tng, OptimizableCollection)
-        ):
-            # we pack then unpack as a check for the correct size/structure
-            all_scales.append(tng.unpack_params(tng.pack_params(xsc)))
-        elif isinstance(xsc, str) and xsc == "ess":
-            scl = tng._get_ess_scale(ess_alpha, ess_order, ess_min_value, ess_default)
-            all_scales.append(scl)
-        elif isinstance(xsc, str) and xsc == "auto":
-            scl = tree_map(jnp.zeros_like, tng.params_dict)
-            all_scales.append(scl)
-        else:
-            raise TypeError(
-                f"all x_scales should be either 'ess', 'auto', or dict, got {type(xsc)}"
-            )
-    return all_scales
+            value = 0.0
+        scale[key] = jnp.broadcast_to(jnp.asarray(value, dtype=float), param.shape)
+    return scale
 
 
 def _project_x_scale_prox(x_scale, things, objective):
@@ -487,25 +566,24 @@ def _project_x_scale_prox(x_scale, things, objective):
 
 
 def _project_x_scale_linear(x_scale, things, objective):
-    """Project x_scale through linear constriant wrapper to remove fixed DoFs etc."""
+    """Project x_scale through linear constraint wrapper to remove fixed DoFs etc."""
     # sort by things to make x_scale match with objective.x
     if isinstance(x_scale, (list, tuple)):
         x_scale = [t.pack_params(x_scale[things.index(t)]) for t in objective.things]
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
-        # x_scale is already included in D matrix in constraint projection
-        # but still need to tell optimizer about automatic scaling and
-        # need to project x_scale down to correct size
+        # The fixed (nonzero) scales are already included in the D matrix of the
+        # projection, so the optimizer only needs to know which of the reduced
+        # variables to scale adaptively (0) and which not to scale further (1).
+        # The columns of Z have unit norm, so the sum below is the fraction of each
+        # reduced variable that lies on variables with a fixed scale. A reduced
+        # variable is only adaptive if that is zero, up to round-off in Z.
         Z = objective._Z
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
-        # this is equivalent to diag(Z.T @ diag(x) @ Z) but more efficient
-        x_scale = jnp.abs(Z**2 * x_scale[objective._unfixed_idx, None]).sum(axis=0)
-        # x_scale is 0 or 1, 0 means use auto jac scaling, 1 means the user scale was
-        # set as part of D
-        x_scale = jnp.where(
-            jnp.abs(x_scale) < np.finfo(x_scale.dtype).eps * max(Z.shape), 0, 1
-        )
+        has_fixed_scale = x_scale[objective._unfixed_idx] != 0
+        fixed_weight = (Z**2 * has_fixed_scale[:, None]).sum(axis=0)
+        x_scale = jnp.where(fixed_weight > np.finfo(Z.dtype).eps * max(Z.shape), 1, 0)
 
     return x_scale
 
@@ -751,10 +829,18 @@ def get_combined_constraint_objectives(  # noqa: C901
 
     # wrap to handle linear constraints
     if linear_constraint is not None:
+        linear_constraint_options = options.pop("linear_constraint_options", {})
+        errorif(
+            "x_scale" in linear_constraint_options,
+            ValueError,
+            "x_scale can't be passed through linear_constraint_options, it is set by "
+            "the x_scale argument of the optimizer.",
+        )
         objective = LinearConstraintProjection(
             objective,
             linear_constraint,
             x_scale=x_scale,
+            **linear_constraint_options,
         )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:

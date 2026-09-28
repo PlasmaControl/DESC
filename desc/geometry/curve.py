@@ -334,7 +334,7 @@ class FourierRZCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -349,9 +349,9 @@ class FourierRZCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------
@@ -634,7 +634,7 @@ class FourierXYZCurve(Curve):
             X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=basis.modes[:, 2], name=name
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -649,9 +649,9 @@ class FourierXYZCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------
@@ -987,7 +987,7 @@ class FourierPlanarCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1002,9 +1002,9 @@ class FourierPlanarCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------
@@ -1397,7 +1397,7 @@ class FourierXYCurve(Curve):
             name=name,
         )
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -1412,9 +1412,9 @@ class FourierXYCurve(Curve):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------

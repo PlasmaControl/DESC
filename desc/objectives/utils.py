@@ -10,6 +10,11 @@ from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
+def _get_auto_x_scale(x):
+    """Scale for the linear constraint projection determined from a state vector."""
+    return np.where(np.abs(x) < 1e2, 1, np.abs(x))
+
+
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
     """Compute and factorize A to get particular solution and nullspace.
 
@@ -26,9 +31,9 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     x_scale : array_like or ``'auto'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
-        If set to ``'auto'``, the scale is determined from the initial state vector.
-        This can be passed through optimizer options as
-        solve_options["linear_constraint_options"]["x_scale"].
+        If set to ``'auto'``, or for any entries equal to 0, the scale is determined
+        from the initial state vector. When optimizing with ``Optimizer.optimize``
+        this is set by its ``x_scale`` argument.
 
     Returns
     -------
@@ -123,9 +128,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
     # compute x_scale if not provided
-    x0 = objective.x(*objective.things)
-    auto_x_scale = np.where(np.abs(x0) < 1e2, 1, np.abs(x0))
-    if x_scale == "auto":
+    auto_x_scale = _get_auto_x_scale(objective.x(*objective.things))
+    if isinstance(x_scale, str) and x_scale == "auto":
         x_scale = auto_x_scale
     errorif(
         x_scale.shape != xp.shape,

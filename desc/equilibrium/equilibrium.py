@@ -2381,20 +2381,27 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
-            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
-            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
-            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
-            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
-            sets the default scale for variables without an ess rule defined.
-            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
-            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
-            If an array, should be the same size as sum(thing.dim_x for thing in
-            things). If a list, the list should have 1 element for each thing, and
-            each element should either be ``'ess'``, ``'auto'`` to use exponential
-            spectral scaling or automatic jacobian scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order`` and
+            ``ess_min_value`` which are passed through ``options``. ``ess_alpha`` is
+            the decay rate of the scaling, ``ess_order`` is the norm order for
+            multi-index modes, which can be ``1``, ``2``, or ``np.inf``, and
+            ``ess_min_value`` is the minimum allowed scale value. If not provided in
+            ``options``, the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'``
+            and ``ess_min_value=1e-7``. Variables without an ESS rule use automatic
+            scaling. If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'``, a number, or a dict
+            with the same keys as thing.params_dict. Each value in the dict can be
+            ``'ess'``, ``'auto'``, or a number or array of the same size as that
+            parameter, so that different variables of the same thing can use
+            different types of scaling, For example, to use ESS for all
+            variables of an equilibrium except the lambda coefficients, which are
+            scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
+            'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
+            scaling will be used. Passing a single array for all things is deprecated.
+            Where a linear constraint couples variables with a fixed scale to
+            variables with automatic scaling, the coupled variables are not scaled
+            adaptively, and the automatic ones are only scaled according to the
+            magnitude of their initial values.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2502,20 +2509,27 @@ class Equilibrium(IOAble, Optimizable):
             function. Default is ``'auto'``, which iteratively updates the scale using
             the inverse norms of the columns of the Jacobian or Hessian matrix.
             If set to ``'ess'``, the scale is set using Exponential Spectral Scaling,
-            this scaling is set with parameters, ``ess_alpha``, ``ess_order``,
-            ``ess_min_value`` and ``ess_default`` which are passed through ``options``.
-            ``ess_alpha`` is the decay rate of the scaling, ``ess_order`` is the norm
-            order for multi-index modes, which can be ``1``, ``2``, or ``np.inf``.
-            ``ess_min_value`` is the minimum allowed scale value, and ``ess_default``
-            sets the default scale for variables without an ess rule defined.
-            If not provided in ``options``, the defaults are: ``ess_alpha=1.2``,
-            ``ess_order=np.inf'``, ``ess_min_value=1e-7``, ``ess_default=0.0``.
-            If an array, should be the same size as sum(thing.dim_x for thing in
-            things). If a list, the list should have 1 element for each thing, and
-            each element should either be ``'ess'``, ``'auto'`` to use exponential
-            spectral scaling or automatic jacobian scaling for that thing, or a dict
-            with the same keys and dimensions as thing.params_dict to specify scales
-            manually. Anywhere ``x_scale==0``, automatic jacobian scaling will be used.
+            this scaling is set with parameters, ``ess_alpha``, ``ess_order`` and
+            ``ess_min_value`` which are passed through ``options``. ``ess_alpha`` is
+            the decay rate of the scaling, ``ess_order`` is the norm order for
+            multi-index modes, which can be ``1``, ``2``, or ``np.inf``, and
+            ``ess_min_value`` is the minimum allowed scale value. If not provided in
+            ``options``, the defaults are: ``ess_alpha=1.2``, ``ess_order=np.inf'``
+            and ``ess_min_value=1e-7``. Variables without an ESS rule use automatic
+            scaling. If a list, the list should have 1 element for each thing, and
+            each element should either be ``'ess'``, ``'auto'``, a number, or a dict
+            with the same keys as thing.params_dict. Each value in the dict can be
+            ``'ess'``, ``'auto'``, or a number or array of the same size as that
+            parameter, so that different variables of the same thing can use
+            different types of scaling, For example, to use ESS for all
+            variables of an equilibrium except the lambda coefficients, which are
+            scaled automatically, pass ``x_scale={**{k: 'ess' for k in eq.params_dict},
+            'L_lmn': 'auto'}``. Anywhere the scale is 0, automatic jacobian
+            scaling will be used. Passing a single array for all things is deprecated.
+            Where a linear constraint couples variables with a fixed scale to
+            variables with automatic scaling, the coupled variables are not scaled
+            adaptively, and the automatic ones are only scaled according to the
+            magnitude of their initial values.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -2649,7 +2663,7 @@ class Equilibrium(IOAble, Optimizable):
 
         return eq
 
-    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default=0.0):
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7, default="auto"):
         """Create x_scale using exponential spectral scaling.
 
         Parameters
@@ -2664,9 +2678,9 @@ class Equilibrium(IOAble, Optimizable):
             Default is 'np.inf'
         min_value : float, optional
             Minimum allowed scale value. Default is 1e-7
-        default : float, optional
-            Default scale for variables that don't have an ess rule defined. 0 means
-            use automatic jacobian scaling.
+        default : float or ``'auto'``, optional
+            Default scale for variables that don't have an ess rule defined.
+            ``'auto'`` means use automatic jacobian scaling.
 
         Returns
         -------

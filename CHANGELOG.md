@@ -35,7 +35,7 @@ Bug Fixes
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
-
+- Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 
 
 v0.17.3

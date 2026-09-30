@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.backend import jit, jnp
+from desc.backend import jit, jnp, vmap
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
@@ -15,7 +15,7 @@ from desc.magnetic_fields import (
 )
 from desc.particles import (
     CurveParticleInitializer,
-    FourierChebyshevField,
+    InterpolatedFieldFlux,
     ManualParticleInitializerFlux,
     ManualParticleInitializerLab,
     SurfaceParticleInitializer,
@@ -472,77 +472,69 @@ def test_init_curve_particles():
 
 
 @pytest.mark.unit
-def test_FourierChebyshevField_interpolation():
-    """Test the interpolation is accurate."""
-    eq = get("precise_QA")
-    with pytest.warns(UserWarning):
-        eq.iota = eq.get_profile("iota")
-    interpolator = FourierChebyshevField(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
-    interpolator.build(eq=eq)
-    interpolator.fit(
-        params=eq.params_dict, profiles={"current": eq.current, "iota": eq.iota}
-    )
-
-    assert interpolator.params_dict["coefs_real"].shape == (
-        13,
-        interpolator.N_fft,
-        interpolator.L,
-        interpolator.M_fft,
-    )
-
-    rhos = np.linspace(0.05, 1.0, 5)
-    grid = LinearGrid(rho=rhos, M=3, N=3, NFP=eq.NFP, sym=eq.sym)
-    keys = ["|B|", "b", "grad(|B|)", "e^rho", "e^theta*rho", "e^zeta"]
-    data = eq.compute(keys, grid=grid)
-
-    for i, coord in enumerate(grid.nodes):
-        rho, theta, zeta = coord
-        data_interp = interpolator.evaluate(rho, theta, zeta)
-        for key in keys:
-            msg = f"{key} mismatch at ρ={rho}, θ={theta}, ζ={zeta}"
-            np.testing.assert_allclose(
-                data[key][i], data_interp[key], rtol=5e-4, atol=5e-4, err_msg=msg
-            )
-
-
-@pytest.mark.unit
-def test_FourierChebyshevField_model_vf():
-    """Test the vector field evaluation using interpolated field."""
+def test_InterpolatedFieldFlux_model_vf():
+    """Test the vector field of the interpolated field against the exact one."""
     eq = get("precise_QA")
     iota = eq.get_profile("iota")
-    interpolator = FourierChebyshevField(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
-    interpolator.build(eq=eq)
-    interpolator.fit(
-        params=eq.params_dict, profiles={"current": eq.current, "iota": eq.iota}
-    )
+    params = eq.params_dict
+    params["i_l"] = iota.params
+    field = InterpolatedFieldFlux(L=32, M=32, N=16)
+    field.build(eq)
+    coef = field.fit(params, {"current": None, "iota": iota})
 
     model = VacuumGuidingCenterTrajectory(frame="flux")
-    rhos = np.linspace(0.05, 1.0, 3)
-    grid = LinearGrid(rho=rhos, M=2, N=2, NFP=eq.NFP, sym=eq.sym)
+    rng = np.random.default_rng(0)
+    n = 64
+    # full theta range for the stellarator symmetry fold, and the edge rho = 1
     particles = ManualParticleInitializerFlux(
-        rho0=grid.nodes[:, 0],
-        theta0=grid.nodes[:, 1],
-        zeta0=grid.nodes[:, 2],
-        xi0=2 * np.random.rand(grid.num_nodes) - 1,
+        rho0=np.append(rng.uniform(0.02, 1.0, n - 1), 1.0),
+        theta0=rng.uniform(0, 2 * np.pi, n),
+        zeta0=rng.uniform(0, 2 * np.pi, n),
+        xi0=rng.uniform(-1, 1, n),
         E=3.5e6,
     )
     x0, args = particles.init_particles(model=model, field=eq)
+    rho, theta = x0[:, 0], x0[:, 1]
+    x = jnp.column_stack([rho * jnp.cos(theta), rho * jnp.sin(theta), x0[:, 2:]])
 
-    for xi, argsi in zip(x0, args):
-        rho, theta, zeta, vpar = xi
-        xp = rho * np.cos(theta)
-        yp = rho * np.sin(theta)
-        x = jnp.array([xp, yp, zeta, vpar])
+    exact = vmap(lambda y, a: model.vf(0, y, [a, eq, params, {"iota": iota}]))(x, args)
+    interp = vmap(lambda y, a: model.vf(0, y, [a, field, coef, {}]))(x, args)
+    scale = np.sqrt(np.mean(exact**2, axis=0))
+    np.testing.assert_array_less(np.abs(interp - exact) / scale, 5e-4)
+    np.testing.assert_allclose(
+        field.evaluate(0.5, 4.0, 1.0)["|B|"], field.evaluate(0.5, 4.0, 1.0, coef)["|B|"]
+    )
 
-        params = eq.params_dict
-        params["i_l"] = iota.params
-        exact = model.vf(0, x=x, args=[argsi, eq, params, {"iota": iota}])
-        interpolated = model.vf(0, x=x, args=[argsi, interpolator, None, {}])
 
-        comps = ["xp_dot", "yp_dot", "zeta_dot", "vpar_dot"]
+@pytest.mark.unit
+def test_InterpolatedFieldFlux_trace():
+    """Test tracing with use_interpolation against tracing the Equilibrium."""
+    eq = get("precise_QA")
+    iota = eq.get_profile("iota")
+    params = eq.params_dict
+    params["i_l"] = iota.params
 
-        for i, comp in enumerate(comps):
-            msg = f"{comp} mismatch at ρ={rho}, θ={theta}, ζ={zeta}"
-            np.testing.assert_allclose(
-                exact[i], interpolated[i], rtol=2e-2, atol=1e-3, err_msg=msg
-            )
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    particles = ManualParticleInitializerFlux(
+        rho0=[0.3, 0.5, 0.7],
+        theta0=[0.1, 2.0, 4.0],
+        zeta0=[0.3, 1.0, 5.0],
+        xi0=[0.9, 0.3, -0.6],
+        E=1e4,
+    )
+    kwargs = dict(
+        field=eq,
+        initializer=particles,
+        model=model,
+        ts=np.linspace(0, 1e-5, 11),
+        params=params,
+        rtol=1e-8,
+        atol=1e-8,
+        max_steps=20000,
+        min_step_size=1e-10,
+        options={"iota": iota},
+    )
+    x_eq, v_eq = trace_particles(**kwargs)
+    x_int, v_int = trace_particles(use_interpolation=(32, 32, 16), **kwargs)
+    np.testing.assert_allclose(x_int, x_eq, atol=5e-5)
+    np.testing.assert_allclose(v_int, v_eq, atol=1e-6 * np.abs(v_eq).max())

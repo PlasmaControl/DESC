@@ -92,9 +92,10 @@ class FusionPower(_Objective):
         """
         eq = self.things[0]
         errorif(
-            eq.electron_density is None,
+            (eq.ion_density is None)
+            and (eq.electron_density is None or eq.atomic_number is None),
             ValueError,
-            "Equilibrium must have an electron density profile.",
+            "Equilibrium must have an ion density profile.",
         )
         errorif(
             eq.ion_temperature is None,

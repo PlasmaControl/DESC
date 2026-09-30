@@ -62,8 +62,7 @@ def write_ascii(fname, eq):  # noqa: C901
     L = max(pressure.basis.L, iota.basis.L)
     pressure.change_resolution(L)
     iota.change_resolution(L)
-    # always save as a full mode basis for legacy codes
-    # which expect this
+    # always save as a full mode basis for legacy codes which expect this
     if pressure.sym:
         pressure = PowerSeriesProfile(
             params=pressure.params, modes=pressure.basis.modes[:, 0], sym=False

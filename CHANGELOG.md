@@ -1,13 +1,74 @@
 Changelog
 =========
 
+New Features
+
+- Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+
 Performance Improvements
 
-- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep. On ``jax >= 0.10.0`` this uses ``qr_multiply`` to additionally avoid forming ``Q`` explicitly; on older versions a fallback preserves the same results.
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+- Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
+- Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
+- Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+
+Breaking Changes and Deprecations
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+
+Bug Fixes
+
+- Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
+- Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
+- Fixes bug in modified Cholesky factorization used by the trust-region
+  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
+  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
+  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
+  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+
+
+
+v0.17.3
+-------
+
+New Features
+
+- Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
+- Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
+- Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
+
+Performance Improvements
+
+- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep, and by using ``qr_multiply`` to apply ``Q`` without forming it explicitly.
+- Adds a pure-JAX ``qr_multiply`` fallback (a blocked Householder / compact-WY implementation) for ``jax < 0.10.0``, so the above ``Q``-avoidance speedup is available on the currently pinned JAX with no jaxlib rebuild (~1.5-2x faster than forming ``Q`` on CPU for tall Jacobians, larger on GPU).
+- Adds ``surf_batch_size`` kwarg to Boozer and omnigenous field compute variables, to allow for tuning of the memory usage when computing these quantities by choosing how many surfaces to simultaneously compute.
+  - Also adds ``surf_batch_size`` as an additional kwarg to ``make_boozmn_output``, as well as the objectives ``Omnigenity`` and ``QuasisymmetryBoozer``
 
 Bug Fixes
 
 - Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary, in-memory buffer, not to disk. Note that invoking DESC from the command like ``python -m desc input.vmec`` retains the current behavior of writing an input file for the converted DESC input.
+- Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
+- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
+  asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Bug (#2120) in ``desc.magnetic_fields.OmnigenousField`` computing NaNs when the ``B_lm`` corresponded to flat magnetic wells fixed by ``interpax`` ``v0.3.14``, updated tests to exercise this.
+- Fixes bug in ``reactor_QA.py`` script where the current profile was allowed to have a nonzero rho^1 component, which resulted in an unphysical profile near-axis.
+    - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
+- Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
+
+Breaking Changes
+
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
 
 
 v0.17.2
@@ -86,6 +147,9 @@ or if multiple things are being optimized, `x_scale` can be a list of dict, one 
 - Changes the import paths for ``desc.external`` to require reference to the sub-modules.
 - Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
 - Add support for Python 3.14
+- Adds support for optimization targeting individual coils in a coilset.
+    - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+    - Able to set weights to zero, excluding certain coils from the objective.
 
 Bug Fixes
 
@@ -121,9 +185,6 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
-- Adds support for optimization targeting individual coils in a coilset.
-  - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
-  - Able to set weights to zero, excluding certain coils from the objective.
 
 
 

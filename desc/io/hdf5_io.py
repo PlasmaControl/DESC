@@ -120,10 +120,23 @@ class hdf5Reader(hdf5IO, Reader):
         where : None or file instance
             specifies where to read obj from
 
+        Notes
+        -----
+        Attributes listed in the class attribute ``_io_attrs_optional_`` are
+        allowed to be absent from a file without warning. Use it for attributes
+        added after a file format was in circulation, whose ``_set_up`` assigns
+        a well defined default that reproduces the old behavior exactly (for
+        example the generalized toroidal angle coefficients, which default to
+        zero so that zeta remains the cylindrical angle phi).
+
         """
         loc = self.resolve_where(where)
+        optional = getattr(obj, "_io_attrs_optional_", ())
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
+                if attr in optional:
+                    # a default is assigned by the object's _set_up method
+                    continue
                 msg = (
                     "\n"
                     f"The object attribute '{attr}' was not loaded from the file.\n"

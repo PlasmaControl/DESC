@@ -53,38 +53,36 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO (#568): do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
-    name="B_phi_mn",
-    label="B_{\\phi, m, n}",
+    name="B_zeta_mn",
+    label="B_{\\zeta, m, n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    "magnetic field in (ρ,θ,ϕ) coordinates.",
+    "magnetic field.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_phi|r,t"],
+    data=["B_zeta"],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True, "sym": False},
-    aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
     " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
     "to reduce memory required for computation.",
 )
-def _B_phi_mn(params, transforms, profiles, data, **kwargs):
-    B_phi = transforms["grid"].meshgrid_reshape(data["B_phi|r,t"], "rtz")
+def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
+    B_zeta = transforms["grid"].meshgrid_reshape(data["B_zeta"], "rtz")
 
     def fitfun(x):
         return transforms["B"].fit(x.flatten(order="F"))
 
-    B_zeta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_phi)
+    B_zeta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_zeta)
     # modes stored as shape(rho, mn) flattened
-    data["B_phi_mn"] = B_zeta_mn.flatten()
+    data["B_zeta_mn"] = B_zeta_mn.flatten()
     return data
 
 
@@ -100,7 +98,7 @@ def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_phi_mn"],
+    data=["B_theta_mn", "B_zeta_mn"],
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
@@ -119,7 +117,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (transforms["grid"].num_rho, -1)
     )
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"].reshape(
+    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"].reshape(
         (transforms["grid"].num_rho, -1)
     )
     den_z = mask_z @ jnp.abs(NFP * wn)
@@ -238,7 +236,7 @@ def _w_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="nu",
-    label="\\nu = \\zeta_{B} - \\zeta",
+    label="\\nu = \\zeta_{B} - \\phi",
     units="rad",
     units_long="radians",
     description="Boozer toroidal stream function",
@@ -247,11 +245,13 @@ def _w_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer", "G", "I", "iota", "lambda"],
+    data=["w_Boozer", "G", "I", "iota", "lambda", "omega"],
 )
 def _nu(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu"] = (data["w_Boozer"] - data["I"] * data["lambda"]) / GI
+    data["nu"] = (
+        data["w_Boozer"] - data["I"] * data["lambda"] - data["G"] * data["omega"]
+    ) / GI
     return data
 
 
@@ -327,11 +327,13 @@ def _nu_B_mn(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer_t", "G", "I", "iota", "lambda_t"],
+    data=["w_Boozer_t", "G", "I", "iota", "lambda_t", "omega_t"],
 )
 def _nu_t(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_t"] = (data["w_Boozer_t"] - data["I"] * data["lambda_t"]) / GI
+    data["nu_t"] = (
+        data["w_Boozer_t"] - data["I"] * data["lambda_t"] - data["G"] * data["omega_t"]
+    ) / GI
     return data
 
 
@@ -346,11 +348,13 @@ def _nu_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer_z", "G", "I", "iota", "lambda_z"],
+    data=["w_Boozer_z", "G", "I", "iota", "lambda_z", "omega_z"],
 )
 def _nu_z(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_z"] = (data["w_Boozer_z"] - data["I"] * data["lambda_z"]) / GI
+    data["nu_z"] = (
+        data["w_Boozer_z"] - data["I"] * data["lambda_z"] - data["G"] * data["omega_z"]
+    ) / GI
     return data
 
 

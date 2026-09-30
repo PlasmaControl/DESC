@@ -504,8 +504,31 @@ def check_termination(
     return success, message
 
 
+def split_x_scale(x_scale):
+    """Split an ``x_scale`` array into fixed scales and adaptive entries.
+
+    Entries of ``x_scale`` equal to 0 request adaptive Jacobian/Hessian scaling.
+
+    Parameters
+    ----------
+    x_scale : array_like
+        Characteristic scale of each variable, with 0 for adaptive scaling.
+
+    Returns
+    -------
+    fixed : jnp.ndarray
+        ``x_scale`` with 1 in place of the adaptive entries.
+    is_auto : jnp.ndarray of bool
+        True where the scale is adaptive.
+
+    """
+    x_scale = jnp.asarray(x_scale)
+    is_auto = x_scale == 0
+    return jnp.where(is_auto, 1.0, x_scale), is_auto
+
+
 @jit
-def compute_jac_scale(A, prev_scale_inv=None):
+def compute_jac_scale(A, user_scale=None, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
     scale_inv = jnp.where(
@@ -514,7 +537,12 @@ def compute_jac_scale(A, prev_scale_inv=None):
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
-    return 1 / scale_inv, scale_inv
+    scale = 1 / scale_inv
+    if user_scale is not None:
+        fixed, is_auto = split_x_scale(user_scale)
+        scale = jnp.where(is_auto, scale, fixed)
+        scale_inv = 1 / scale
+    return scale, scale_inv
 
 
 @functools.partial(jit, donate_argnums=0)
@@ -528,7 +556,7 @@ def scale_columns(A, d):
 
 
 @jit
-def compute_hess_scale(H, prev_scale_inv=None):
+def compute_hess_scale(H, user_scale=None, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(
@@ -537,7 +565,12 @@ def compute_hess_scale(H, prev_scale_inv=None):
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
-    return 1 / scale_inv, scale_inv
+    scale = 1 / scale_inv
+    if user_scale is not None:
+        fixed, is_auto = split_x_scale(user_scale)
+        scale = jnp.where(is_auto, scale, fixed)
+        scale_inv = 1 / scale
+    return scale, scale_inv
 
 
 def f_where_x(x, xs, fs, dim=0):

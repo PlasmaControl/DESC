@@ -11,6 +11,7 @@ from .utils import (
     check_termination,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    split_x_scale,
 )
 
 
@@ -161,6 +162,8 @@ def sgd(  # noqa: C901
         deprecated_sgd = True
     if isinstance(x_scale, str):
         x_scale = 1.0
+    # adaptive scaling isn't supported by this method, so those entries are unscaled
+    x_scale, _ = split_x_scale(x_scale)
 
     options = {} if options is None else options
     nfev = 0

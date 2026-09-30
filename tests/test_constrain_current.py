@@ -7,7 +7,7 @@ from tests.test_axis_limits import not_implemented_limits
 import desc.io
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_params, get_profiles, get_transforms
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGridFlux, LinearGridFlux, QuadratureGridFlux
 
 
 class _ExactValueProfile:
@@ -66,9 +66,9 @@ class TestConstrainCurrent:
 
         def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
-            if grid_type != QuadratureGrid:
+            if grid_type != QuadratureGridFlux:
                 kwargs["sym"] = eq.sym
-            if grid_type == LinearGrid:
+            if grid_type == LinearGridFlux:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
@@ -121,9 +121,9 @@ class TestConstrainCurrent:
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(3, 3, 0, 6, 6, 0)
         # Only makes sense to test on configurations with fixed iota profiles.
-        test(eq, QuadratureGrid)
-        test(eq, ConcentricGrid)
-        test(eq, LinearGrid)
+        test(eq, QuadratureGridFlux)
+        test(eq, ConcentricGridFlux)
+        test(eq, LinearGridFlux)
 
     @pytest.mark.unit
     def test_current_to_iota_and_back(self):
@@ -149,9 +149,9 @@ class TestConstrainCurrent:
 
         def test(eq, grid_type):
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
-            if grid_type != QuadratureGrid:
+            if grid_type != QuadratureGridFlux:
                 kwargs["sym"] = eq.sym
-            if grid_type == LinearGrid:
+            if grid_type == LinearGridFlux:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
@@ -194,6 +194,6 @@ class TestConstrainCurrent:
         eq = desc.examples.get("ESTELL")
         with pytest.warns(UserWarning, match="Reducing radial"):
             eq.change_resolution(3, 3, 3, 6, 6, 6)
-        test(eq, QuadratureGrid)
-        test(eq, ConcentricGrid)
-        test(eq, LinearGrid)
+        test(eq, QuadratureGridFlux)
+        test(eq, ConcentricGridFlux)
+        test(eq, LinearGridFlux)

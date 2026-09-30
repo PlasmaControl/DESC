@@ -442,17 +442,13 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
         msg="Poloidal grid resolution is higher than necessary for coordinate mapping.",
     )
     warnif(
-        grid.M < lmbda.basis.M,
+        grid.M < lmbda.basis.M or (omega is not None and grid.M < omega.basis.M),
         ResolutionWarning,
-        msg="High frequency lambda modes will be truncated in coordinate mapping.",
+        msg="High frequency lambda/omega modes will be truncated in coordinate "
+        "mapping.",
     )
     lmbda_minus_iota_omega = lmbda.transform(L_lmn)
     if omega is not None:
-        warnif(
-            grid.M < omega.basis.M,
-            ResolutionWarning,
-            msg="High frequency omega modes will be truncated in coordinate mapping.",
-        )
         # iota is one value per unique rho; broadcast it to the (rho, theta, zeta)
         # node ordering that lmbda_minus_iota_omega is already in.
         lmbda_minus_iota_omega = lmbda_minus_iota_omega - iota[

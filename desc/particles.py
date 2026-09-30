@@ -16,7 +16,7 @@ from diffrax import (
 from interpax import Interpolator3D
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jnp, tree_map
+from desc.backend import jax, jit, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms

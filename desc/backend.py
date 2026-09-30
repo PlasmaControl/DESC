@@ -103,64 +103,85 @@ if use_jax:  # noqa: C901
         # used there only mattered for float32 throughput, which DESC does not use, so
         # plain matmuls are used here. Block sizes are the upstream A100-tuned values.
 
-        def _householder_multiply(a, taus, c, *, transpose=False):
-            """Apply the reflectors in ``a``/``taus`` to ``c`` from the left, one block.
+        def _householder_multiply(at, taus, c, *, transpose=False, offset=0):
+            """Apply reflectors in ``at``/``taus`` to ``c`` from the left, one block.
+
+            ``at`` holds the reflectors as rows, ie ``V.T``, which is how ``geqrf``
+            already returns them, so the ``(M, N)`` transpose is never formed and all
+            three products below come from dot dimension numbers alone.
 
             Forms ``Q = I - V T^{-1} V^H`` via the identity ``T^{-1} + T^{-H} = V^H V``,
-            recovering the triangular ``T^{-1}`` by correcting the diagonal.
+            recovering the triangular ``T^{-1}`` by correcting the diagonal. ``offset``
+            is the row of ``V`` the block's diagonal starts on; rows above it are
+            zeroed, so they leave ``c`` untouched.
             """
-            m, k = a.shape
-            # V: unit lower-trapezoidal (reflectors below the diagonal, unit diagonal).
-            V = jnp.where(
-                jnp.tril(jnp.ones((m, k), bool), -1), a, jnp.eye(m, k, dtype=a.dtype)
-            )
+            k, m = at.shape
+            # V is unit lower-trapezoidal, so V.T is unit upper-trapezoidal.
+            below = jnp.arange(m)[None, :] - (offset + jnp.arange(k)[:, None])
+            Vt = jnp.where(below > 0, at, (below == 0).astype(at.dtype))
+            Vh = Vt.conj()
             diag_correction = (1 / taus) if transpose else (1 / taus).conj()
             diag_correction = jnp.expand_dims(diag_correction, -1) * jnp.eye(
-                k, dtype=a.dtype
+                k, dtype=at.dtype
             )
-            Vh = V.conj().swapaxes(-1, -2)
             # solve_triangular reads only the relevant triangle, so passing the full
             # Gram matrix V^H V (minus the diagonal correction) recovers T^{-1}.
-            T_inv = Vh @ V - diag_correction
+            T_inv = Vh @ Vt.swapaxes(-1, -2) - diag_correction
             z = solve_triangular(T_inv, Vh @ c, lower=transpose)
             with jax.default_matmul_precision("highest"):
-                return c - V @ z
+                return c - Vt.swapaxes(-1, -2) @ z
 
-        def _blocked_householder_multiply(a, taus, c, *, left, transpose):
-            """Apply Q (or Q^H) to c in blocks (block sizes tuned on A100)."""
+        def _blocked_householder_multiply(at, taus, c, *, left, transpose):
+            """Apply Q (or Q^H) to c in blocks (block sizes tuned on A100).
+
+            ``at`` is ``V.T``, ie the reflectors as rows, straight out of ``geqrf``.
+            """
             if not left:  # c @ Q == (Q^H @ c^H)^H
                 ct = c.conj().swapaxes(-1, -2)
                 out = _blocked_householder_multiply(
-                    a, taus, ct, left=True, transpose=not transpose
+                    at, taus, ct, left=True, transpose=not transpose
                 )
                 return out.conj().swapaxes(-1, -2)
 
-            if a.ndim > 2:  # batch dims via vmap, keep the core logic 2-D
+            if at.ndim > 2:  # batch dims via vmap, keep the core logic 2-D
                 fn = functools.partial(
                     _blocked_householder_multiply, left=True, transpose=transpose
                 )
-                return vmap(fn)(a, taus, c)
+                return vmap(fn)(at, taus, c)
 
-            m = a.shape[0]
+            m = at.shape[-1]
             k = taus.shape[0]
             if k == 0:  # no reflectors -> Q is the identity
                 return c
             # Balances the per-block V^H V cost against the number of sequential blocks.
-            esize = a.dtype.itemsize
+            esize = at.dtype.itemsize
             hi_limit = 4096 * max(1, 8 // esize)
             mid_limit = 4096 * esize
             nb = min(k, 256 if m <= hi_limit else 128 if m <= mid_limit else 64)
 
-            blocks = range(0, k, nb)
-            for j0 in blocks if transpose else reversed(blocks):
-                c = c.at[j0:, :].set(
-                    _householder_multiply(
-                        a[j0:, j0 : j0 + nb],
-                        taus[j0 : j0 + nb],
-                        c[j0:, :],
-                        transpose=transpose,
-                    )
+            # Each block spans all m rows rather than only rows j0:, so every block
+            # has the same shape and the loop can be a scan compiled once instead of
+            # k/nb unrolled copies. That is worth ~30x in compile time on the shapes
+            # lsqtr factorizes, and the rows above the block cost O(m nb^2) extra
+            # flops, which is the cost model the block size is already chosen by.
+            # Blocks are contiguous rows of ``at``, so no copy of it is needed.
+            def block(c, j0, width):
+                return _householder_multiply(
+                    jax.lax.dynamic_slice(at, (j0, 0), (width, m)),
+                    jax.lax.dynamic_slice(taus, (j0,), (width,)),
+                    c,
+                    transpose=transpose,
+                    offset=j0,
                 )
+
+            n_full, tail = divmod(k, nb)
+            body = lambda c, i: (block(c, i * nb, nb), None)
+            if transpose:  # forward over the blocks, short tail last
+                c, _ = scan(body, c, jnp.arange(n_full))
+                c = block(c, n_full * nb, tail) if tail else c
+            else:
+                c = block(c, n_full * nb, tail) if tail else c
+                c, _ = scan(body, c, jnp.arange(n_full), reverse=True)
             return c
 
         @functools.partial(jit, static_argnames="mode")
@@ -175,21 +196,21 @@ if use_jax:  # noqa: C901
             k = min(m, n)
             # mode="raw" returns the packed reflectors (transposed) plus tau factors,
             # via the existing geqrf primitive -- no new primitive / jaxlib rebuild.
+            # h is (N, M): upper triangle of h.T = R, strict lower = the reflectors,
+            # so h holds V.T already. Transposing only the leading (N, k) block keeps
+            # the (M, N) transpose from ever being materialized.
             h, taus = jnp.linalg.qr(a, mode="raw")
-            packed = h.swapaxes(
-                -1, -2
-            )  # (M, N): lower triangle = reflectors, upper = R
-            R = jnp.triu(packed)[:k, :]
+            R = jnp.triu(h[:, :k].swapaxes(-1, -2))
             # When m <= n geqrf's last reflector (row m-1) is the identity (tau == 0).
             # Drop it statically -- the economic Q is unchanged and we avoid 1/0.
             n_refl = k - 1 if m <= n else k
-            V = packed[:, :n_refl]
+            Vt = h[:n_refl]
             taus = taus[:n_refl]
             c1d = c.ndim == 1
 
             if mode == "right":
                 cq = _blocked_householder_multiply(
-                    V, taus, c[None, :] if c1d else c, left=False, transpose=False
+                    Vt, taus, c[None, :] if c1d else c, left=False, transpose=False
                 )
                 cq = cq[:, :k]  # economic Q has min(M, N) columns
                 return (cq[0] if c1d else cq), R
@@ -197,7 +218,7 @@ if use_jax:  # noqa: C901
             C = c[:, None] if c1d else c
             pad = jnp.zeros((m - k, C.shape[1]), C.dtype)
             cq = _blocked_householder_multiply(
-                V, taus, jnp.vstack([C, pad]), left=True, transpose=False
+                Vt, taus, jnp.vstack([C, pad]), left=True, transpose=False
             )
             return (cq[:, 0] if c1d else cq), R
 

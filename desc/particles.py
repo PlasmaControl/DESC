@@ -1415,6 +1415,7 @@ class InterpolatedFieldFlux(IOAble):
         )
         self._prefilter_zeta = periodic(2 * self.N, 2 * self.N)
 
+    @jit
     def fit(self, params=None, profiles=None):
         """Compute the B-spline coefficients of the fields of an equilibrium.
 

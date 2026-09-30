@@ -1242,11 +1242,11 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="full_control_net",
-    label="R_i, phi_i, Z_i",
+    label="X_i, Y_i, Z_i",
     units="m",
     units_long="meters",
-    description="Full control vector (with wrapping for stellarator symmetry)",
-    dim=3,
+    description=("Full Cartesian control net (with wrapping for stellarator symmetry)"),
+    dim=0,
     params=["R", "phi", "Z"],
     transforms={"degree": [], "sym": [], "nfp": [], "knot_parametrization": []},
     profiles=[],

@@ -2,9 +2,12 @@
 
 import os
 import warnings
+from xml.sax.handler import property_xml_string
 
 import numpy as np
+from networkx import normalized_laplacian_spectrum
 
+from desc import optimize
 from desc.backend import (
     block_diag,
     execute_on_cpu,
@@ -17,6 +20,7 @@ from desc.backend import (
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import get_transforms
+from desc.geometry.curve import NurbsRPZCurve
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -1176,6 +1180,278 @@ class ZernikeRZToroidalSection(Surface):
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales
+
+
+class NurbsRZToroidalSurface(Surface):
+    """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_cs_end_r",
+        "_cs_end_theta",
+        "_cs_end_w",
+        "_cs_interior_r",
+        "_cs_interior_theta",
+        "_cs_interior_w",
+        "_NFP",
+    ]
+    _static_attrs = Surface._static_attrs + [
+        "_NFP",
+        "_n_cs",
+        "_n_points_per_cs",
+        "_local_basis",
+    ]
+
+    def __init__(
+        self,
+        interior_axis,
+        n_cs,
+        n_points_per_cs,
+        cs_end_r,
+        cs_end_theta,
+        cs_end_w,
+        cs_interior_r,
+        cs_interior_theta,
+        cs_interior_w,
+        cs_interior_phi,
+        local_basis="cylindrical",
+        NFP=2,
+        M=None,
+        N=None,
+        sym=True,
+        **kwargs,
+    ):
+
+        if sym:
+            assert n_cs >= 2, "Number of cross sections must be at least two. "
+
+        assert isinstance(
+            interior_axis, NurbsRPZCurve
+        ), f"Interior axis should be of type NurbsRPZCurve, got {interior_axis}"
+        assert (
+            sym == interior_axis.sym
+        ), "Interior axis and NurbsRZToroidalSurface must have the same symmetry"
+        assert (
+            NFP == interior_axis.nfp
+        ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
+        # since user needs to specify the number of dofs for the axis,
+        # just force the user to supply the interior axis
+        self._interior_axis = interior_axis
+
+        errorif(
+            local_basis not in ("cylindrical", "frenet", "bishop"),
+            ValueError,
+            f'Local basis must be ("cylindrical", "frenet", "bishop"); '
+            f"got {local_basis}",
+        )
+        self._local_basis = local_basis
+
+        self._n_points_per_cs = n_points_per_cs
+        self._n_cs = n_cs
+        self._sym = bool(sym)
+        self._M = check_nonnegint(M, "M")
+        self._N = check_nonnegint(N, "N")
+        self._NFP = check_posint(NFP, "NFP", False)
+
+        if sym:
+            # first control point of each end cross section sits at theta=0, a
+            # fixed point of the stellarator-symmetric reflection, so it isn't a
+            # free DOF: cs_end_theta stores only the remaining n_half - 1 angles
+            for name, arr in (
+                ("cs_end_r", cs_end_r),
+                ("cs_end_theta", cs_end_theta),
+                ("cs_end_w", cs_end_w),
+                ("cs_interior_r", cs_interior_r),
+                ("cs_interior_theta", cs_interior_theta),
+                ("cs_interior_w", cs_interior_w),
+                ("cs_interior_phi", cs_interior_phi),
+            ):
+                setattr(self, name, arr)
+        else:
+            raise NotImplementedError
+
+    # NOTE: the six cs_* DOF arrays below are stored flattened (1D), because
+    # DESC's Optimizable.pack_params/unpack_params concatenate every
+    # optimizable_parameter along axis 0 and cannot handle arrays with
+    # differing shapes beyond that axis. Each getter returns the flat array;
+    # reshape to the documented 2D shape (C order) wherever the natural grid
+    # layout is needed, e.g. in compute functions.
+
+    @optimizable_parameter
+    @property
+    def cs_end_r(self):
+        """ndarray: radial control points of the two symmetric end cross sections,
+        flattened from shape (2, n_points_per_cs//2 + 1)."""
+        return self._cs_end_r
+
+    @cs_end_r.setter
+    def cs_end_r(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != 2 * n_half,
+            ValueError,
+            f"cs_end_r must have shape {(2, n_half)}, got {new.shape}",
+        )
+        self._cs_end_r = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_end_theta(self):
+        """ndarray: angular control points of the two symmetric end cross sections,
+        flattened from shape (2, n_points_per_cs//2), excluding the fixed theta=0
+        point."""
+        return self._cs_end_theta
+
+    @cs_end_theta.setter
+    def cs_end_theta(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != 2 * (n_half - 1),
+            ValueError,
+            f"cs_end_theta must have shape {(2, n_half - 1)}, got {new.shape}",
+        )
+        self._cs_end_theta = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_end_w(self):
+        """ndarray: NURBS weights of the two symmetric end cross sections,
+        flattened from shape (2, n_points_per_cs//2 + 1)."""
+        return self._cs_end_w
+
+    @cs_end_w.setter
+    def cs_end_w(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != 2 * n_half,
+            ValueError,
+            f"cs_end_w must have shape {(2, n_half)}, got {new.shape}",
+        )
+        self._cs_end_w = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_r(self):
+        """ndarray: radial control points of the interior cross sections,
+        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        return self._cs_interior_r
+
+    @cs_interior_r.setter
+    def cs_interior_r(self, new):
+        shape = (self._n_cs - 2, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_r must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_r = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_theta(self):
+        """ndarray: angular control points of the interior cross sections,
+        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        return self._cs_interior_theta
+
+    @cs_interior_theta.setter
+    def cs_interior_theta(self, new):
+        shape = (self._n_cs - 2, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_theta must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_theta = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_w(self):
+        """ndarray: NURBS weights of the interior cross sections,
+        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        return self._cs_interior_w
+
+    @cs_interior_w.setter
+    def cs_interior_w(self, new):
+        shape = (self._n_cs - 2, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_w must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_w = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_phi(self):
+        """ndarray: (1, n_cs) array of zeta values for the interior cross sections"""
+        return self._cs_interior_phi
+
+    @cs_interior_phi.setter
+    def cs_interior_phi(self, new):
+        shape = self._n_cs - 2
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape,
+            ValueError,
+            f"cs_interior_phi must have shape {shape}, got {new.shape}",
+        )
+        errorif(
+            jnp.any(jnp.logical_or(new <= 0, new >= jnp.pi / self._NFP)),
+            ValueError,
+            f"all cs_interior_phi must lie within (0,π/NFP), got {new.shape}",
+        )
+        self._cs_interior_phi = new
+
+    @property
+    def interior_axis(self):
+        """NurbsRPZCurve: curve around which the spline dofs are specified in
+        local coordinates"""
+        return self._interior_axis
+
+    @interior_axis.setter
+    def interior_axis(self, new):
+        assert isinstance(
+            new, NurbsRPZCurve
+        ), f"Interior axis should be of type NurbsRPZCurve, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Interior axis and NurbsRZToroidalSurface must have the same symmetry"
+        assert (
+            self.NFP == new.nfp
+        ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
+        self._interior_axis = new
 
 
 def _constant_offset_surface(

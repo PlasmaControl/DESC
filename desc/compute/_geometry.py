@@ -1245,3 +1245,96 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
         )
     )
     return data
+
+
+@register_compute_fun(
+    name="full control net",
+    label="\\bf{p}_{ij}",
+    units="m",
+    units_long="meters",
+    description="Full Cartesian control net with wrapping for stellarator symmetry",
+    dim=1,
+    params=[
+        "cs_end_r",
+        "cs_end_theta",
+        "cs_end_w",
+        "cs_interior_r",
+        "cs_interior_theta",
+        "cs_interior_w",
+        "cs_interior_phi",
+    ],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _full_control_net(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+
+    n_half = n_points_per_cs // 2 + 1
+
+    # dofs
+    cs_end_r = params["cs_end_r"].reshape(2, n_half)
+    cs_end_theta = params["cs_end_theta"].reshape(2, n_half - 1)
+    cs_end_w = params["cs_end_w"].reshape(2, n_half)
+    cs_interior_r = params["cs_interior_r"].reshape(2, n_points_per_cs)
+    cs_interior_theta = params["cs_interior_theta"].reshape(2, n_points_per_cs)
+    cs_interior_w = params["cs_interior_w"].reshape(2, n_points_per_cs)
+    cs_interior_phi = params["cs_interior_phi"]
+
+    if not sym:
+        raise NotImplementedError
+    else:
+        # preprending theta=0 to end cross sections
+        cs_end_theta = jnp.append(jnp.zeros(2, 1), cs_end_theta, axis=1)
+
+        # tiling end theta, r, w around
+        if n_points_per_cs % 2 == 1:
+            cs_end_theta = jnp.concatenate(
+                (cs_end_theta, 2 * jnp.pi - cs_end_theta[:0:-1])
+            )
+            cs_end_r = jnp.concatenate((cs_end_r, cs_end_r[:0:-1]))
+            cs_end_w = jnp.concatenate((cs_end_w, cs_end_w[:0:-1]))
+        else:
+            cs_end_theta = jnp.concatenate(
+                (cs_end_theta, 2 * jnp.pi - cs_end_theta[-2:0:-1])
+            )
+            cs_end_r = jnp.concatenate((cs_end_r, cs_end_r[-2:0:-1]))
+            cs_end_w = jnp.concatenate((cs_end_w, cs_end_w[-2:0:-1]))
+
+        # assert that all of these have the same length as the non-end cross sections
+
+        assert cs_end_r.shape[1] == cs_interior_r.shape[1]
+        assert cs_end_theta.shape[1] == cs_interior_theta.shape[1]
+        assert cs_end_w.shape[1] == cs_interior_w.shape[1]
+
+    cs_phi = jnp.concatenate([0], cs_interior_phi, [jnp.pi / nfp])
+
+    # tiling all to 1fp
+    r_ctrl_half_fp = jnp.concatenate(
+        [cs_end_r[0, :], cs_interior_r, cs_end_r[1, :]], axis=0
+    )
+    theta_ctrl_half_fp = jnp.concatenate(
+        [cs_end_theta[0, :], cs_interior_theta, cs_end_theta[1, :]], axis=0
+    )
+    w_ctrl_half_fp = jnp.concatenate(
+        [cs_end_w[0, :], cs_interior_w, cs_end_w[1, :]], axis=0
+    )
+
+    r_ctrl_1fp = jnp.append(r_ctrl_half_fp, r_ctrl_half_fp[-2:0:-1])
+    theta_ctrl_1fp = jnp.append(theta_ctrl_half_fp, theta_ctrl_half_fp[-2:0:-1])
+    w_ctrl_1fp = jnp.append(w_ctrl_half_fp, w_ctrl_half_fp[-2:0:-1])
+    cs_phi_1fp = jnp.append(cs_phi, cs_phi[-2:0:-1])
+
+    # tiling to full device - necessary for proper spline definition
+    r_ctrl_full = jnp.tile(r_ctrl_1fp, nfp)
+    theta_ctrl_full = jnp.tile(theta_ctrl_1fp, nfp)
+    w_ctrl_full = jnp.tile(w_ctrl_1fp, nfp)
+    cs_phi_full = jnp.tile(cs_phi_1fp, nfp)
+
+    # converting to cartesian finally
+
+    return data

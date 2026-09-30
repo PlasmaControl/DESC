@@ -6,6 +6,7 @@ from .curve import (
     FourierRZCurve,
     FourierXYCurve,
     FourierXYZCurve,
+    NurbsRPZCurve,
     SplineXYZCurve,
 )
 from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection

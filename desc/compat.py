@@ -69,6 +69,34 @@ def ensure_positive_jacobian(eq):
     return eq
 
 
+def flip_magnetic_field(eq):
+    """Reverse the direction of the magnetic field.
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to flip the magnetic field of.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but with the reverse direction magnetic field.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            flip_magnetic_field(e)
+        return eq
+
+    eq.Psi *= -1
+
+    if eq.current is not None:
+        eq.c_l *= -1
+
+    return eq
+
+
 def flip_helicity(eq):
     """Change the sign of the helicity of an Equilibrium.
 

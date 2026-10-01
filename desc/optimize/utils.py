@@ -531,9 +531,10 @@ def scale_columns(A, d):
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
-    scale_inv = jnp.where(
-        scale_inv < jnp.finfo(H.dtype).eps * max(H.shape) * 1e1, 1, scale_inv
-    )
+    # ad-hoc min eps of 1e-14 bc for small problems with nearly-zero
+    # derivatives, tiny scale_inv can slip through
+    eps = jnp.maximum(jnp.finfo(H.dtype).eps * max(H.shape), 1e-14)
+    scale_inv = jnp.where(scale_inv < eps, 1, scale_inv)
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)

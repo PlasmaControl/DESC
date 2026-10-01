@@ -13,6 +13,7 @@ Performance Improvements
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
 - More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+- Switches to QR decomposition in the matrix inversion required for implicit differentiation used in optimizations where equilibrium force balance is enforced as a non-linear constraint (i.e. ``proximal-`` methods). Although the method is designed to closely match the previous SVD based algorithm, there can be slight numerical differences. The old behavior can be obtained by passing ``options = {"prox_inv_method": "svd"}`` to the optimizer.
 
 Breaking Changes and Deprecations
 

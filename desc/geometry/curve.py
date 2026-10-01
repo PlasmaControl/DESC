@@ -767,7 +767,7 @@ class FourierPlanarCurve(Curve):
     @normal.setter
     def normal(self, new):
         if len(np.asarray(new)) == 3:
-            self._normal = np.asarray(new) / np.linalg.norm(new)
+            self._normal = np.asarray(new).astype(float) / np.linalg.norm(new)
         else:
             raise ValueError(
                 "normal should be a 3 element vector in "
@@ -1121,7 +1121,7 @@ class FourierXYCurve(Curve):
     @normal.setter
     def normal(self, new):
         if len(np.asarray(new)) == 3:
-            self._normal = np.asarray(new) / np.linalg.norm(new)
+            self._normal = np.asarray(new).astype(float) / np.linalg.norm(new)
         else:
             raise ValueError(
                 "normal should be a 3 element vector in "

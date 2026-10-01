@@ -65,6 +65,50 @@ def print_backend_info():
     )
 
 
+def _is_converged(residual, tol):
+    return jnp.sum(residual * residual) <= tol**2
+
+
+def _lstsq(A, y):
+    """Cholesky factorized least-squares.
+
+    jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
+    so we use regularized cholesky.
+
+    For square systems, solves Ax=y directly.
+    """
+    A = jnp.atleast_2d(A)
+    y = jnp.atleast_1d(y)
+    eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
+    if A.shape[-2] == A.shape[-1]:
+        return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
+    elif A.shape[-2] > A.shape[-1]:
+        P = A.T @ A + eps * jnp.eye(A.shape[-1])
+        return cho_solve(cho_factor(P), A.T @ y)
+    else:
+        P = A @ A.T + eps * jnp.eye(A.shape[-2])
+        return A.T @ cho_solve(cho_factor(P), y)
+
+
+def _tangent_solve(g, y):
+    # System is always square.
+    return _lstsq(jax.jacfwd(g)(y), y)
+
+
+def _tangent_solve_scalar(g, y):
+    return y / g(1.0)
+
+
+def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
+    """Generalizes jax.lax.map; uses numpy."""
+    if not isinstance(xs, np.ndarray):
+        raise NotImplementedError(
+            "Require numpy array input, or install jax to support pytrees."
+        )
+    xs = np.moveaxis(xs, source=in_axes, destination=0)
+    return np.stack([f(x) for x in xs], axis=out_axes)
+
+
 def _diag_to_full(d, e):
     j = np.arange(d.shape[-1])
     return (
@@ -87,6 +131,30 @@ if use_jax:  # noqa: C901
     from jax.numpy.fft import ifft, irfft, irfft2, rfft, rfft2
     from jax.scipy.fft import dct, dctn, idct, idctn
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+
+    # Backport the scan-transpose fix from JAX 0.10.0 to JAX 0.9.2, which
+    # passes stale primitive linearity metadata to the transpose rule. This
+    # fails when jax.linear_transpose supplies a gradient accumulator for an
+    # operand that was originally recorded as nonlinear.
+    if Version(jax.__version__).release == (0, 9, 2):
+        from jax._src.interpreters import ad as _jax_ad
+        from jax._src.lax.control_flow import loops as _jax_loops
+
+        _jax_scan_transpose = _jax_ad.fancy_transposes[_jax_loops.scan_p]
+        if not getattr(_jax_scan_transpose, "_desc_linearity_backport", False):
+
+            @functools.wraps(_jax_scan_transpose)
+            def _scan_transpose_backport(
+                cts, *args, _transpose=_jax_scan_transpose, **params
+            ):
+                params["linear"] = tuple(
+                    isinstance(arg, _jax_ad.GradAccum) for arg in args
+                )
+                return _transpose(cts, *args, **params)
+
+            _scan_transpose_backport._desc_linearity_backport = True
+            _jax_loops._scan_transpose_fancy = _scan_transpose_backport
+            _jax_ad.fancy_transposes[_jax_loops.scan_p] = _scan_transpose_backport
 
     # TODO: remove fallback once JAX min version >= 0.10.0
     if Version(jax.__version__) >= Version("0.10.0"):
@@ -474,7 +542,7 @@ if use_jax:  # noqa: C901
 
             def condfun(state):
                 xk1, fk1, k1 = state
-                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+                return (k1 < maxiter) & (~_is_converged(fk1, tol))
 
             def bodyfun(state):
                 xk1, fk1, k1 = state
@@ -490,40 +558,16 @@ if use_jax:  # noqa: C901
             else:
                 return state[0]
 
-        def tangent_solve(g, y):
-            return y / g(1.0)
-
         if full_output:
             x, (res, niter) = jax.lax.custom_root(
-                res, x0, solve, tangent_solve, has_aux=True
+                res, x0, solve, _tangent_solve_scalar, has_aux=True
             )
             return x, (abs(res), niter)
         else:
-            x = jax.lax.custom_root(res, x0, solve, tangent_solve, has_aux=False)
+            x = jax.lax.custom_root(
+                res, x0, solve, _tangent_solve_scalar, has_aux=False
+            )
             return x
-
-    def _lstsq(A, y):
-        """Cholesky factorized least-squares.
-
-        jnp.linalg.lstsq doesn't have JVP defined and is slower than needed,
-        so we use regularized cholesky.
-
-        For square systems, solves Ax=y directly.
-        """
-        A = jnp.atleast_2d(A)
-        y = jnp.atleast_1d(y)
-        eps = jnp.sqrt(jnp.finfo(A.dtype).eps)
-        if A.shape[-2] == A.shape[-1]:
-            return jnp.linalg.solve(A, y) if y.size > 1 else jnp.squeeze(y / A)
-        elif A.shape[-2] > A.shape[-1]:
-            P = A.T @ A + eps * jnp.eye(A.shape[-1])
-            return cho_solve(cho_factor(P), A.T @ y)
-        else:
-            P = A @ A.T + eps * jnp.eye(A.shape[-2])
-            return A.T @ cho_solve(cho_factor(P), y)
-
-    def _tangent_solve(g, y):
-        return _lstsq(jax.jacfwd(g)(y), y)
 
     def root(
         fun,
@@ -609,7 +653,7 @@ if use_jax:  # noqa: C901
 
             def condfun(state):
                 xk1, fk1, k1 = state
-                return (k1 < maxiter) & (jnp.dot(fk1, fk1) > tol**2)
+                return (k1 < maxiter) & (~_is_converged(fk1, tol))
 
             def bodyfun(state):
                 xk1, fk1, k1 = state
@@ -666,15 +710,6 @@ else:  # pragma: no cover
         signature="(m),(n)->(m)",
         excluded={"eigvals_only", "select", "select_range", "tol"},
     )
-
-    def _map(f, xs, *, batch_size=None, in_axes=0, out_axes=0):
-        """Generalizes jax.lax.map; uses numpy."""
-        if not isinstance(xs, np.ndarray):
-            raise NotImplementedError(
-                "Require numpy array input, or install jax to support pytrees."
-            )
-        xs = np.moveaxis(xs, source=in_axes, destination=0)
-        return np.stack([f(x) for x in xs], axis=out_axes)
 
     def vmap(fun, in_axes=0, out_axes=0):
         """A numpy implementation of jax.lax.map whose API is a subset of jax.vmap.

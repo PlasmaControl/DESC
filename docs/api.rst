@@ -173,11 +173,13 @@ Magnetic Fields
     desc.magnetic_fields.CurrentPotentialField
     desc.magnetic_fields.FourierCurrentPotentialField
     desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.FreeSurfaceOuterField
     desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.OmnigenousField
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SourceFreeField
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
@@ -243,6 +245,7 @@ Objective Functions
     desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.ForceBalanceAnisotropic
+    desc.objectives.FreeSurfaceError
     desc.objectives.FusionPower
     desc.objectives.GammaC
     desc.objectives.GenericObjective

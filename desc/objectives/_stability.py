@@ -1827,6 +1827,7 @@ class FinitenStability(_Objective):
                 coarse_opts["coarse_phi_matrix"] = self._phi_matrix(
                     _pc, _grid_c, level="coarse"
                 )
+                _tmr.mark("phi_matrix coarse", coarse_opts["coarse_phi_matrix"])
 
         options = {
             "axisym": self._axisym,
@@ -1886,7 +1887,12 @@ class FinitenStability(_Objective):
         if self._density is not None:
             options["density"] = self._density
         if self._free_boundary:
+            # Timed on its own: this used to fall inside the `flux_data fine` interval,
+            # which made that row read 39.9 s free vs 2.5 s fixed and look like
+            # `_flux_data` was boundary-condition dependent. It is not -- the difference
+            # was the phi_matrix build hiding in the same interval.
             options["phi_matrix"] = self._phi_matrix(params, grid)
+            _tmr.mark("phi_matrix fine", options["phi_matrix"])
         options.update(coarse_opts)
 
         _fflux = self._flux_data(params, constants, grid)

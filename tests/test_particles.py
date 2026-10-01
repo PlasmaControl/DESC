@@ -485,9 +485,9 @@ def test_InterpolatedFieldFlux_model_vf():
     model = VacuumGuidingCenterTrajectory(frame="flux")
     rng = np.random.default_rng(0)
     n = 64
-    # full theta range for the stellarator symmetry fold, and the edge rho = 1
+    # full theta range for the stellarator symmetry fold, and both radial ends
     particles = ManualParticleInitializerFlux(
-        rho0=np.append(rng.uniform(0.02, 1.0, n - 1), 1.0),
+        rho0=np.append(rng.uniform(0.005, 1.0, n - 1), 1.0),
         theta0=rng.uniform(0, 2 * np.pi, n),
         zeta0=rng.uniform(0, 2 * np.pi, n),
         xi0=rng.uniform(-1, 1, n),
@@ -501,9 +501,6 @@ def test_InterpolatedFieldFlux_model_vf():
     interp = vmap(lambda y, a: model.vf(0, y, [a, field, coef, {}]))(x, args)
     scale = np.sqrt(np.mean(exact**2, axis=0))
     np.testing.assert_array_less(np.abs(interp - exact) / scale, 5e-4)
-    np.testing.assert_allclose(
-        field.evaluate(0.5, 4.0, 1.0)["|B|"], field.evaluate(0.5, 4.0, 1.0, coef)["|B|"]
-    )
 
 
 @pytest.mark.unit

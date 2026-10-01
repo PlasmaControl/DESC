@@ -1065,6 +1065,12 @@ def trace_particles(
         geometry information. This is usually much faster. Set to False to evaluate
         the field the standard way. Not used for tracing from Equilibrium field.
         Default is True.
+    use_interpolation : bool or tuple of int, optional
+        Only for an Equilibrium. If given, particles are initialized in the
+        Equilibrium but traced in an InterpolatedFieldFlux built from it, which is
+        much faster than evaluating the spectral representation at every step. A
+        tuple (L, M, N) sets its resolution, True uses (6 L, 6 M, max(3 N, 2)) of the
+        Equilibrium. Defaults to False.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1083,12 +1089,6 @@ def trace_particles(
         from `diffrax.diffeqsolve`. Defaults to False. `ts` may become useful if
         `SaveAt(steps=True)` is used (see `_trace_particles`). Note that `x`, `v` and
         `ts` will be padded with NaNs to `max_steps` size in that case.
-    use_interpolation : bool or tuple of int, optional
-        Only for an Equilibrium. If given, particles are initialized in the
-        Equilibrium but traced in an InterpolatedFieldFlux built from it, which is
-        much faster than evaluating the spectral representation at every step. A
-        tuple (L, M, N) sets its resolution, True uses (6 L, 6 M, max(3 N, 2)) of the
-        Equilibrium. Defaults to False.
 
     Returns
     -------
@@ -1322,16 +1322,15 @@ class InterpolatedFieldFlux(IOAble):
 
     The vacuum guiding center equations in flux coordinates only need seven scalar
     fields: |B|, ρ 𝐛⋅∇θ, 𝐛⋅∇ζ, 𝐃⋅∇ρ, ρ 𝐃⋅∇θ, 𝐃⋅∇ζ and 𝐛⋅∇|B|, where
-    𝐃 = 𝐛 × ∇|B| / |B|² (𝐛⋅∇ρ = 0). They are computed exactly on a uniform
-    LinearGrid and interpolated with a tensor-product cubic B-spline, so that an
+    𝐃 = 𝐛 × ∇|B| / |B|² and 𝐛⋅∇ρ = 0. They are computed exactly on a uniform
+    ``LinearGrid`` and interpolated with a tensor-product cubic B-spline, so that an
     evaluation reads a single 4×4×4 block of coefficients.
 
     The table covers one field period in ζ and, for a stellarator symmetric
     equilibrium, only θ ∈ [0, π]. Radial nodes start half a spacing off the axis and
-    end at ρ = 1. The axis is not a boundary: (-ρ, θ) is the point (ρ, θ + π), so
-    the table continues through it with the grid's own values. At ρ = 1 the spline
-    is closed by not-a-knot conditions, and evaluations slightly past ρ = 1 (solver
-    stages before a terminating event fires) extend its last cubic piece.
+    end at ρ = 1, and the radial spline is closed by not-a-knot conditions at both
+    ends. Evaluations between the axis and the first node, or slightly past ρ = 1
+    (solver stages before a terminating event fires), extend the end cubic pieces.
 
     Parameters
     ----------
@@ -1353,12 +1352,8 @@ class InterpolatedFieldFlux(IOAble):
         "D.e^zeta",
         "b.grad(|B|)",
     ]
-    # sign of each field at (-ρ, θ) relative to (ρ, θ + π), and fields that are odd
-    # under stellarator symmetry (θ, ζ) -> (-θ, -ζ)
-    _axis_parity = np.array([1, -1, 1, -1, -1, 1, 1])
-    _odd = np.array([0, 0, 0, 1, 0, 0, 1], dtype=bool)
-    # rows continued through the axis, enough for the prefilter end effect to decay
-    _n_axis = 8
+    # sign of each field under stellarator symmetry (θ, ζ) -> (-θ, -ζ)
+    _sym_parity = np.array([1, 1, 1, -1, 1, 1, -1])
 
     def __init__(self, L, M, N):
         self.L = L
@@ -1381,67 +1376,62 @@ class InterpolatedFieldFlux(IOAble):
         self.NFP = eq.NFP
         self.sym = eq.sym
         self.data_keys = ["|B|", "b", "grad(|B|)", "e^rho", "e^theta", "e^zeta"]
+        # nodes half a spacing off ρ = 0, where e^theta is singular, the last at ρ = 1;
+        # θ is offset the same way so that sym=True keeps exactly the nodes in (0, π)
         rho = (np.arange(self.L) + 0.5) / (self.L - 0.5)
+        theta = (np.arange(2 * self.M) + 0.5) * np.pi / self.M
         self.grid = LinearGrid(
-            rho=rho, theta=2 * self.M, zeta=2 * self.N, NFP=eq.NFP, sym=False
+            rho=rho, theta=theta, zeta=2 * self.N, NFP=eq.NFP, sym=eq.sym
         )
         self.transforms = get_transforms(self.data_keys, eq, self.grid)
-        # defaults for fit
-        self._eq_params = eq.params_dict
-        self._eq_profiles = {"current": eq.current, "iota": eq.iota}
 
-        # radial prefilter; not-a-knot at ρ = 1 adds the two coefficients past it
-        n = self._n_axis + self.L
-        A = np.zeros((n + 2, n + 2))
-        i = np.arange(n)
-        A[i, i] = 4 / 6
-        A[i, i + 1] = 1 / 6
-        A[i[1:], i[1:] - 1] = 1 / 6
-        A[0, :2] = [1, 0]
-        A[n, n - 4 : n + 1] = A[n + 1, n - 3 : n + 2] = [1, -4, 6, -4, 1]
-        # keep the rows from ρ = -1.5/(L - 0.5) on, the first a stencil can touch
-        self._prefilter_rho = np.linalg.inv(A)[self._n_axis - 2 :, :n]
+        # cubic B-spline interpolation matrix, A c = f for coefficients at nodes
+        # -2, ..., L + 1; the last 4 rows are not-a-knot conditions at both ends
+        L = self.L
+        A = np.zeros((L + 4, L + 4))
+        k = np.arange(L)
+        A[k, k + 1] = A[k, k + 3] = 1 / 6
+        A[k, k + 2] = 4 / 6
+        for row, col in enumerate([0, 1, L - 2, L - 1]):
+            A[L + row, col : col + 5] = [1, -4, 6, -4, 1]
+        self._prefilter_rho = jnp.asarray(np.linalg.inv(A)[:, :L])
 
-        # periodic prefilters, with one node before and two after so stencils don't wrap
+        # periodic prefilters, keeping 2 coefficients past each end of the stored
+        # range so the 4 wide stencil never wraps
         def periodic(m, stored):
             C = np.zeros((m, m))
             j = np.arange(m)
             C[j, j] = 4 / 6
             C[j, (j + 1) % m] = C[j, (j - 1) % m] = 1 / 6
-            return np.linalg.inv(C)[np.arange(-1, stored + 2) % m]
+            return jnp.asarray(np.linalg.inv(C)[np.arange(-2, stored + 2) % m])
 
-        self._prefilter_theta = periodic(
-            2 * self.M, self.M + 1 if self.sym else 2 * self.M
-        )
+        self._prefilter_theta = periodic(2 * self.M, self.M if self.sym else 2 * self.M)
         self._prefilter_zeta = periodic(2 * self.N, 2 * self.N)
 
     @jit
-    def fit(self, params=None, profiles=None):
+    def fit(self, eq_params, profiles):
         """Compute the B-spline coefficients of the fields of an equilibrium.
 
         Parameters
         ----------
-        params : dict, optional
+        eq_params : dict
             Equilibriums `params_dict` which contains the parameters that define
-            the equiliubrium. Defaults to that of the equilibrium given to ``build``.
-        profiles : dict of Profiles, optional
+            the equiliubrium.
+        profiles : dict of Profiles
             Profiles necessary to compute magnetic field. Either iota or current
-            profile must be given. Defaults to those of the equilibrium given to
-            ``build``.
+            profile must be given.
 
         Returns
         -------
         params : dict
-            The coefficients as ``{"coef": array (L + 4, n_theta, 2N + 3, 7)}``, to be
+            The coefficients as ``{"coeffs": array (L + 4, n_theta, 2N + 4, 7)}``, to be
             passed as ``params`` to ``evaluate`` and to the tracing functions.
 
         """
-        params = setdefault(params, self._eq_params)
-        profiles = setdefault(profiles, self._eq_profiles)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self.data_keys,
-            params,
+            eq_params,
             self.transforms,
             profiles,
         )
@@ -1461,37 +1451,37 @@ class InterpolatedFieldFlux(IOAble):
             axis=-1,
         )
         # LinearGrid orders the nodes with θ fastest, then ρ, then ζ
-        f = jnp.moveaxis(f.reshape(2 * self.N, self.L, 2 * self.M, 7), 0, 2)
-        axis = jnp.roll(f[self._n_axis - 1 :: -1], -self.M, axis=1)
-        f = jnp.concatenate([axis * self._axis_parity, f])
-        coef = jnp.einsum(
+        f = jnp.moveaxis(f.reshape(2 * self.N, self.L, -1, 7), 0, 2)
+        if self.sym:
+            # θ ∈ (π, 2π) from (θ, ζ) -> (-θ, -ζ), the ζ nodes map as j -> -j mod 2N
+            f = jnp.concatenate(
+                [f, jnp.roll(f[:, ::-1, ::-1], 1, axis=2) * self._sym_parity], axis=1
+            )
+        coeffs = jnp.einsum(
             "ai,bj,ck,ijkq->abcq",
             self._prefilter_rho,
             self._prefilter_theta,
             self._prefilter_zeta,
             f,
         )
-        return {"coef": coef}
+        return {"coeffs": coeffs}
 
-    def evaluate(self, rho, theta, zeta, params=None):
+    def evaluate(self, rho, theta, zeta, params):
         """Evaluate the interpolated fields at a point.
 
         Parameters
         ----------
         rho, theta, zeta : float
             Radial, poloidal and toroidal coordinates to evaluate, ρ in [0, 1].
-        params : dict, optional
-            Coefficients returned by ``fit``. If not given, ``fit`` is called for the
-            equilibrium given to ``build``, so pass them when evaluating many points.
+        params : dict
+            Coefficients returned by ``fit``.
 
         Returns
         -------
         data : dict
             |B|, b.e^theta*rho, b.e^zeta, D.e^rho, D.e^theta*rho, D.e^zeta and
-            b.grad(|B|), with D = b × grad(|B|) / |B|².
+            b.∇|B|, with D = b × ∇|B| / |B|².
         """
-        if params is None:
-            params = self.fit()
         period = 2 * jnp.pi / self.NFP
         theta = jnp.mod(theta, 2 * jnp.pi)
         zeta = jnp.mod(zeta, period)
@@ -1500,13 +1490,13 @@ class InterpolatedFieldFlux(IOAble):
             flip = theta > jnp.pi
             theta = jnp.where(flip, 2 * jnp.pi - theta, theta)
             zeta = jnp.where(flip, jnp.mod(-zeta, period), zeta)
-            sign = jnp.where(flip & self._odd, -1.0, 1.0)
+            sign = jnp.where(flip, self._sym_parity, 1)
         # position in node spacings from the first stored coefficient
         u = jnp.array(
             [
                 rho * (self.L - 0.5) + 1.5,
-                theta * self.M / jnp.pi,
-                zeta * 2 * self.N / period,
+                theta * self.M / jnp.pi + 1.5,
+                zeta * 2 * self.N / period + 2,
             ]
         )
         i = jnp.floor(u).astype(jnp.int32)
@@ -1523,7 +1513,7 @@ class InterpolatedFieldFlux(IOAble):
             / 6
         )
         block = jax.lax.dynamic_slice(
-            params["coef"], (i[0] - 1, i[1], i[2], jnp.int32(0)), (4, 4, 4, 7)
+            params["coeffs"], (*(i - 1), jnp.int32(0)), (4, 4, 4, 7)
         )
         f = sign * jnp.einsum("i,j,k,ijkq->q", w[:, 0], w[:, 1], w[:, 2], block)
         return dict(zip(self._keys, f))

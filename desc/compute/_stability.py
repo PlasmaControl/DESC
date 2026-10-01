@@ -31,6 +31,60 @@ from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
+class _PhaseTimer:
+    """Wall-clock breakdown of the eigensolve's phases. Off with ``AGNI_TIMING=0``.
+
+    Two things make a plain ``time.time()`` around these blocks lie, and both are
+    handled here:
+
+    * **Async dispatch.** jax returns as soon as work is QUEUED, so an unguarded clock
+      measures the dispatch and reports milliseconds for a phase taking minutes. Every
+      :meth:`mark` blocks on arrays produced by the phase it is closing, which also
+      pins the boundary: once it returns, everything dispatched so far has landed, so
+      work cannot silently drift into the next phase's total.
+    * **Tracing.** Under ``jit`` the Python body runs once at TRACE time, where these
+      durations measure tracing rather than execution. Handed a tracer, the timer
+      switches itself off instead of printing a fiction.
+
+    One honest limitation: a phase is credited only with work its blocked-on arrays
+    actually depend on. Anything built lazily and first needed later is charged to the
+    phase that forces it, so read neighbouring rows together rather than in isolation.
+    """
+
+    def __init__(self, label=""):
+        self.on = os.environ.get("AGNI_TIMING", "1") != "0"
+        self.label = label
+        self.t0 = self.last = time.time()
+
+    def mark(self, name, *arrays):
+        """Close a phase: block on its outputs, print its duration, restart the clock."""
+        if not self.on:
+            return
+        for a in arrays:
+            if isinstance(a, jax.core.Tracer):
+                self.on = False
+                return
+            try:
+                jax.block_until_ready(a)
+            except (TypeError, AttributeError):
+                # Only for a leaf that is not a device array (an int, None, a closure).
+                # Deliberately NOT `except Exception`: blocking is what SURFACES a
+                # failure in the phase being timed, so catching RESOURCE_EXHAUSTED here
+                # would report a timing as fine and let the run continue into work that
+                # cannot succeed. Let those propagate.
+                pass
+        now = time.time()
+        print(f"[timing] {self.label}{name:<28s} {now - self.last:8.1f} s", flush=True)
+        self.last = now
+
+    def total(self, name="TOTAL"):
+        if self.on:
+            print(
+                f"[timing] {self.label}{name:<28s} {time.time() - self.t0:8.1f} s",
+                flush=True,
+            )
+
+
 def _solver_opt(kwargs, name, env, default, cast=None):
     """Resolve a solver option: KWARG FIRST, then environment, then default.
 
@@ -3269,7 +3323,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         d_h = dict(_other_data)
         d_h.update(data_d)
+        _tmr = _PhaseTimer("fine ")
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
+        _tmr.mark("operator setup", _opm.get("keep"))
         _Ax = _opm["Ax"]
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
@@ -3318,6 +3374,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
         )
         _L, _ok, _ = _fbt(_bs)
+        _tmr.mark("ring blocks + Cholesky", _L)
         if isinstance(_ok, jax.core.Tracer) or isinstance(sigma, jax.core.Tracer):
             jax.debug.print(
                 "[jd] ring blocks SPD={o} at sigma={s:.6e} "
@@ -3337,6 +3394,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # vmap traces the operator once regardless of k_defl.
             _HZ = jax.vmap(lambda x: _Ax(x) - sigma * x, in_axes=1, out_axes=1)(_Zj)
             _Y, _rk = _defl_Y(_Zj, _HZ)
+            _tmr.mark("deflation basis (k_defl matvecs)", _Y)
 
             # Hermitian outer product: Y is complex for axisym=True.
             def _Mdefl(r, _Y=_Y):
@@ -3480,6 +3538,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         _w, _Y = _ritz(_V, _AV, _j)
         _vv = _V @ _Y[:, 0]
         _vv = _vv / jnp.linalg.norm(_vv)
+        _tmr.mark("jacobi-davidson", _vv)
+        _tmr.total()
         if _xcheck:
             _rfin = jnp.linalg.norm(_AV @ _Y[:, 0] - _w[0] * (_V @ _Y[:, 0]))
             jax.debug.print(
@@ -3575,7 +3635,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 "diffmat": _cdm,
                 "phi_matrix": transforms.get("coarse_phi_matrix"),
             }
+            _ctmr = _PhaseTimer("coarse ")
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
+            _ctmr.mark("operator setup", _cop.get("keep"))
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
             # Shift the diagonal only: a dense eye(_nc) and an explicit
@@ -3585,6 +3647,10 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _cdiag = jnp.arange(_nc)
             _cHc = _agni3_assemble(_cpar, _ctr, profiles, _cdata, **_ckw)["A"]
             _cHc = _cHc.at[_cdiag, _cdiag].add(-sigma)
+            # The dense n_c x n_c assemble. O(n_total**3) -- it multiplies full
+            # (n_total x n_total) operators -- so it is the first thing to look at
+            # when a solve stalls between [B_blocks cond] and [coarse_defl].
+            _ctmr.mark(f"dense assemble (n_c={_nc})", _cHc)
             # Ring blocks of H_c, with the -sigma shift applied inside (traced
             # build, safe under jit).
             # Host-derived for the same reason as the fine level above: this
@@ -3617,6 +3683,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 sigma,
                 _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
             )
+            _ctmr.mark("ring blocks", _cblk)
             _cGn = _np.asarray(_cG)
             # Interpolation matrices: radial node positions only, no equilibrium.
             #
@@ -3671,6 +3738,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # does `jnp.asarray(_Zin)` and reads `.shape` -- both fine for a
             # device array. The round-trip here moved k*nA doubles (50 x 81792 =
             # 33 MB at 48x48x12) to the host for nothing, and broke trace.
+            _ctmr.mark("generalized eigensolve", _Zc, _v0c)
+            _ctmr.total()
             _Z = _Zc
             _seed_v0 = _v0c
             if _xcheck:

@@ -759,7 +759,6 @@ class FourierRZToroidalSurface(Surface):
             base_surface.NFP,
             base_surface.sym,
         )
-
         if full_output:
             return offset_surface, data, (res, niter)
         else:

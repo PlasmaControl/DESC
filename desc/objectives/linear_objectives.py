@@ -333,7 +333,8 @@ class ShareParameters(_Objective):
         name="shared parameters",
     ):
         self._params = params
-        assert len(things) > 1, "only makes sense for >1 thing"
+        # Allow a single OptimizableCollection
+        assert len(things) >= 1, "must have at least 1 thing"
         assert np.all(
             [isinstance(things[0], type(t)) for t in things[1:]]
         ), f"expected same type for all things, got types {[type(t) for t in things]}"
@@ -347,6 +348,101 @@ class ShareParameters(_Objective):
             normalize_target=False,
             name=name,
         )
+
+    def _expand_param_shortcuts(self, params, thing):  # noqa: C901
+        """Expand shortcut syntax like {"current": [...]} into full pytree.
+
+        Example (CoilSet with 3 coils):
+            Input:
+                {"current": [False, True, True]}
+            Output:
+                [{"current": []}, {"current": [0]}, {"current": [0]}]
+
+        Example (MixedCoilSet with [TF(3), VF(2), aux(1)]):
+            Input:
+                {"current": [[False, True, True], [True, False], True]}
+            Output:
+                [
+                    [{"current": []}, {"current": [0]}, {"current": [0]}],
+                    [{"current": [0]}, {"current": []}],
+                    {"current": [0]},
+                ]
+        """
+        if not isinstance(params, dict):
+            return params
+
+        dims = thing.dimensions
+
+        def _is_int_scalar(x):
+            # True if x is a single integer (not bool)
+            return (
+                np.isscalar(x)
+                and not isinstance(x, (bool, np.bool_))
+                and np.issubdtype(np.asarray(x).dtype, np.integer)
+            )
+
+        def _split_for_children(val, n_children):
+            """Return one mask per child.
+
+            - flat index lists like [2] or [0, 2] apply to every child
+            - per-child specs like [True, False] or [[0], [1]] split across children
+            """
+            if isinstance(val, list) and len(val) == n_children:
+                # If not a flat list of integers, interpret as one entry per child
+                # e.g. [True, False]: child-specific
+                if not all(_is_int_scalar(v) for v in val):
+                    return val
+            # Otherwise, broadcast same value to all children
+            # e.g. [0,2] or True: apply everywhere
+            return [val] * n_children
+
+        def expand_node(mask, dim_node):
+            # Case 1: dict of parameters (e.g. {"current": 1})
+            if isinstance(dim_node, dict):
+                out = {}
+                for pname, dim in dim_node.items():
+                    # Get mask for this parameter
+                    if isinstance(mask, dict):
+                        if pname not in mask:
+                            continue  # parameter not specified, skip
+                        val = mask[pname]
+                    else:
+                        val = mask  # broadcast same mask to all params
+
+                    # Convert mask to explicit indices
+                    if val is True:
+                        out[pname] = np.arange(dim)  # select all DOFs
+                    elif val is False:
+                        out[pname] = np.array([], dtype=int)  # select none
+                    else:
+                        out[pname] = np.atleast_1d(
+                            np.asarray(val, dtype=int)
+                        )  # explicit indices
+                return out
+
+            # Case 2: split mask per child and recurse
+            if isinstance(dim_node, list):
+                if isinstance(mask, dict):
+                    # Parameter-centric input, split per child
+                    child_masks = []
+                    for i in range(len(dim_node)):
+                        child_mask = {}
+                        for pname, val in mask.items():
+                            child_mask[pname] = _split_for_children(val, len(dim_node))[
+                                i
+                            ]
+                        child_masks.append(child_mask)
+                    mask = child_masks
+                else:
+                    # Already per-child or broadcast
+                    mask = _split_for_children(mask, len(dim_node))
+
+                # Recurse on each child
+                return [expand_node(m, d) for m, d in zip(mask, dim_node)]
+
+            return mask
+
+        return expand_node(params, dims)
 
     def build(self, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -363,6 +459,10 @@ class ShareParameters(_Objective):
 
         # default params
         default_params = tree_map(lambda dim: np.arange(dim), thing.dimensions)
+
+        # Expand shorthand params into full pytree before broadcasting
+        self._params = self._expand_param_shortcuts(self._params, thing)
+
         self._params = setdefault(self._params, default_params)
         self._params = broadcast_tree(self._params, default_params)
         self._indices = tree_leaves(self._params)
@@ -390,7 +490,16 @@ class ShareParameters(_Objective):
         for t2 in self.things[1:]:
             tree_map_with_path(look, thing.dimensions, t2.dimensions, self._params)
 
-        self._dim_f = sum(idx.size for idx in self._indices) * (len(self.things) - 1)
+        # When operating on a single object, enforce global sharing:
+        # all selected DOFs (across all leaves) are grouped together
+        # number of constraints = (total selected DOFs - 1)
+        if len(self.things) == 1:
+            n_selected = sum(idx.size for idx in self._indices)
+            self._dim_f = max(n_selected - 1, 0)
+        else:
+            self._dim_f = sum(idx.size for idx in self._indices) * (
+                len(self.things) - 1
+            )
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -422,6 +531,32 @@ class ShareParameters(_Objective):
         #  [ 1 -1  0  0]
         #  [ 1 0  -1  0]
         #  [ 1 0   0 -1]
+
+        # Handle single OptimizableCollection
+        # Enforce equality between all selected DOFs by subtracting from a reference
+        if len(params) == 1:
+            params_1 = params[0]
+
+            leaf_params = tree_leaves(params_1)
+            leaf_indices = self._indices
+
+            group_vals = []
+
+            # collect all selected DOFs across the object
+            for param, idx in zip(leaf_params, leaf_indices):
+                if idx.size > 0:
+                    group_vals.append(jnp.atleast_1d(param[idx]))
+
+            # nothing to constrain if <=1 value
+            if len(group_vals) <= 1:
+                return jnp.array([])
+
+            vals = jnp.concatenate(group_vals)
+
+            # enforce all equal: x_i - x_0 = 0
+            ref = vals[0]
+            return vals[1:] - ref
+
         params_1 = params[0]
         reference_params_array = jnp.concatenate(
             [

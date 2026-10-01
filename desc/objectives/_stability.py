@@ -34,6 +34,30 @@ overwrite_stability = {
     """,
 }
 
+# Memory the boundary singular integral behind `phi_matrix` may use, per level, when the
+# caller does not pick a chunk size. 4 GiB is deliberately modest: the integral runs
+# alongside the ring-block preconditioner build, so it cannot have the device to itself.
+PHI_CHUNK_BUDGET_GIB = 4.0
+
+# Simultaneous live intermediates per eval point, MEASURED rather than assumed:
+# chunk_size=256 on a 35x35 eval grid against a 54x108 source asked for 44.21 GiB, and
+# 54*108*1225*8 = 57.2 MB per eval point, so 44.21 GiB / 256 / 57.2 MB = 3.24. The same
+# constant predicts 4.0 GiB for the 13x13 coarse level of that run, which did fit.
+_PHI_CHUNK_LIVE = 3.24
+
+
+def _phi_chunk_from_budget(
+    n_eval, n_src, n_modes, budget_gib=PHI_CHUNK_BUDGET_GIB, live=_PHI_CHUNK_LIVE
+):
+    """Eval points per singular-integral launch that fit in ``budget_gib``.
+
+    The peak is roughly
+
+        chunk * live * n_src * n_modes * 8   bytes
+    """
+    per_eval = live * n_src * n_modes * 8
+    return max(1, min(int(n_eval), int(budget_gib * (1024**3) // max(per_eval, 1))))
+
 
 class MercierStability(_Objective):
     """The Mercier criterion is a fast proxy for MHD stability.
@@ -680,10 +704,19 @@ class FinitenStability(_Objective):
         fixed-boundary coarse basis can fail to represent an
         external-kink-type fine eigenmode.
     phi_chunk_size : int, optional
-        Chunk size for the singular-integral computation behind
-        ``phi_matrix``. Default 1. Unchunked (``None``) fuses the whole
-        boundary singular-integral computation into one GPU kernel, which
-        can take XLA pathologically long to compile.
+        Eval points per launch in the singular-integral computation behind
+        ``phi_matrix``, for the FINE level. Left unset, it is derived from the
+        grids so the peak fits ``PHI_CHUNK_BUDGET_GIB`` (4 GiB) -- see
+        ``_phi_chunk_from_budget``, and note that a fixed value cannot suit more
+        than one resolution, since the cost per eval point grows with both the
+        source grid and the Phi basis. Pass an int to override.
+        ``0`` means UNCHUNKED, which fuses the whole boundary integral into one
+        GPU kernel that XLA can take pathologically long to compile.
+    phi_chunk_size_coarse : int, optional
+        The same, for the COARSE level. Defaults to ``phi_chunk_size`` when that
+        was given explicitly, otherwise derived from the coarse grids. The coarse
+        level has far fewer eval points and a smaller basis, so deriving it
+        separately lets it run a much larger chunk than the fine level can.
 
     """
 
@@ -801,6 +834,9 @@ class FinitenStability(_Objective):
         # on the moving boundary, so there is nothing to recompute.
         "_free_boundary",
         "_phi_chunk_size",
+        "_phi_chunk_size_coarse",
+        "_phi_chunk",
+        "_coarse_phi_chunk",
         "_phi_pest_grid",
         "_phi_surf_spacing",
         "_phi_surf_weights",
@@ -897,7 +933,8 @@ class FinitenStability(_Objective):
         jac_chunk_size=None,
         v_fixed=None,
         free_boundary=False,
-        phi_chunk_size=1,
+        phi_chunk_size=None,
+        phi_chunk_size_coarse=None,
         phi_n_theta=None,
         phi_n_zeta=None,
     ):
@@ -931,6 +968,7 @@ class FinitenStability(_Objective):
         # (and the coarse_ counterparts) are set in `build()`.
         self._free_boundary = free_boundary
         self._phi_chunk_size = phi_chunk_size
+        self._phi_chunk_size_coarse = phi_chunk_size_coarse
         self._phi_n_theta = phi_n_theta
         self._phi_n_zeta = phi_n_zeta
         self._state_solver = state_solver
@@ -1334,13 +1372,35 @@ class FinitenStability(_Objective):
         )
         surf_nodes0 = rtz0.reshape(n_theta_src, n_zeta_src, 3).transpose(1, 0, 2)
         surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
+
+        # Resolve THIS level's chunk size, now that both grids and the basis exist.
+        #
+        #   fine:   phi_chunk_size,        else derived from the fine grids
+        #   coarse: phi_chunk_size_coarse, else phi_chunk_size if that was given,
+        #                                  else derived from the COARSE grids
+        #
+        # Deriving per level is the point of the split: the coarse level has far fewer
+        # eval points and a much smaller basis, so it can run a chunk the fine level
+        # cannot afford. A single explicit `phi_chunk_size` still governs both, which is
+        # what a caller asking for one number means. `0` -> None -> unchunked.
+        _explicit = self._phi_chunk_size_coarse if pre else self._phi_chunk_size
+        if _explicit is None and pre:
+            _explicit = self._phi_chunk_size
+        if _explicit is None:
+            _chunk = _phi_chunk_from_budget(
+                n_surf, n_surf_src, getattr(self, f"_{pre}phi_basis").num_modes
+            )
+        else:
+            _chunk = int(_explicit) or None
+        setattr(self, f"_{pre}phi_chunk", _chunk)
+
         interp0 = eq.compute(
             ["interpolator_pest"],
             grid=surf_grid0,
             pest_grid=src_pest_grid,
             potential_grid=phi_pest_grid,
             problem="exterior Neumann",
-            chunk_size=self._phi_chunk_size,
+            chunk_size=_chunk,
             params=eq.params_dict,
         )["interpolator_pest"]
         setattr(self, f"_{pre}phi_st", int(interp0.st))
@@ -1470,7 +1530,11 @@ class FinitenStability(_Objective):
             pest_grid=src_pest_grid,
             potential_grid=phi_pest_grid,
             problem="exterior Neumann",
-            chunk_size=self._phi_chunk_size,
+            # This level's resolved chunk, set in `_build_phi_scaffolding`. It must be
+            # the per-level value, not `self._phi_chunk_size`: the coarse level's
+            # interpolator was built with the coarse chunk, and a fine-sized one here
+            # would be the out-of-memory case all over again.
+            chunk_size=getattr(self, f"_{pre}phi_chunk"),
             Phi_basis=getattr(self, f"_{pre}phi_basis"),
             data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
             params=params,
@@ -1672,7 +1736,13 @@ class FinitenStability(_Objective):
         constants = self._constants if constants is None else constants
         eq = self.things[0]
 
+        # for debugging
+        from desc.compute._stability import _PhaseTimer
+
+        _tmr = _PhaseTimer("setup ")
+
         grid = self._mapped_grid(params, constants)
+        _tmr.mark("mapped_grid fine", grid.nodes)
 
         # COARSE-SPACE DEFLATION (AGNI_COARSE_DEFL=1 and a coarse_grid supplied).
         #
@@ -1698,6 +1768,7 @@ class FinitenStability(_Objective):
         ):
             _pc = jax.lax.stop_gradient(params)
             _grid_c = self._mapped_grid(_pc, constants, level="coarse")
+            _tmr.mark("mapped_grid coarse", _grid_c.nodes)
             # The coarse operator needs the same GEOMETRY quantities the fine one
             # does (`sqrt(g)_PEST`, the metric components, ...), evaluated on the
             # COARSE grid. `_flux_data` supplies only the 0-D and flux-function
@@ -1707,14 +1778,17 @@ class FinitenStability(_Objective):
             _ckeys = data_index["desc.equilibrium.equilibrium.Equilibrium"][
                 "finite-n lambda3 rayleigh"
             ]["dependencies"]["data"]
+            _cflux = self._flux_data(_pc, constants, _grid_c, "coarse")
+            _tmr.mark("flux_data coarse", *_cflux.values())
             _cdata = eq.compute(
                 _ckeys,
                 grid=_grid_c,
                 diffmat=self._coarse_diffmat,
                 params=_pc,
-                data=self._flux_data(_pc, constants, _grid_c, "coarse"),
+                data=_cflux,
                 override_grid=False,
             )
+            _tmr.mark("geometry coarse", *_cdata.values())
             _cg0 = self._coarse_grid
             coarse_opts = {
                 "coarse_grid": _grid_c,
@@ -1815,15 +1889,23 @@ class FinitenStability(_Objective):
             options["phi_matrix"] = self._phi_matrix(params, grid)
         options.update(coarse_opts)
 
+        _fflux = self._flux_data(params, constants, grid)
+        _tmr.mark("flux_data fine", *_fflux.values())
         data = eq.compute(
             "finite-n lambda3 rayleigh",
             grid=grid,
             diffmat=self._diffmat,
             params=params,
-            data=self._flux_data(params, constants, grid),
+            data=_fflux,
             override_grid=False,
             **options,
         )
+        # NOTE this row CONTAINS the `[timing] coarse ...` / `[timing] fine ...` rows,
+        # which `_AGNI3_rayleigh` prints from inside this same call. Do not add it to
+        # them -- compare it against their sum to see what the eigensolve costs beyond
+        # its own phases (mode-data storage, the Rayleigh quotient, deflation plumbing).
+        _tmr.mark("eq.compute total (incl. above)", data["finite-n lambda3 rayleigh"])
+        _tmr.total("compute_data")
         if self._adapt and not self._use_v_fixed:
             jax.debug.callback(
                 self._store_guess,

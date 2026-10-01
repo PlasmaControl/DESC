@@ -35,6 +35,7 @@ Bug Fixes
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- Add normalization to the metric tensor in the VacuumBoundaryError and BoundaryError compute objectives. This prevents the optimizer from prefering surfaces with a smaller surface area.
 
 
 

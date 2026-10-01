@@ -154,8 +154,15 @@ class Equilibrium(IOAble, Optimizable):
         (ie, e_theta x e_zeta points outward from the surface).
     ensure_nested : bool
         If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem to attempt to refine initial guess to improve
-        coordinate mapping.
+        run a small optimization problem or solve a harmonic BVP to attempt to refine
+        the initial guess to improve coordinate mapping, with the method used
+        determined by ``ensure_nested_method``.
+    ensure_nested_method : {"opt","map2disc"}
+        The method to use for refining the initial guess if not nested.
+        "opt" (default) runs a small optimization using the GoodCoordinates
+        objective. "map2disc" uses the ``map2disc_jax`` package to solve a
+        harmonic BVP for a nested mapping. ``map2disc_jax`` must be installed
+        to use that method.
 
     """
 
@@ -235,6 +242,7 @@ class Equilibrium(IOAble, Optimizable):
         spectral_indexing=None,
         check_orientation=True,
         ensure_nested=True,
+        ensure_nested_method="opt",
         **kwargs,
     ):
         errorif(
@@ -432,7 +440,10 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
-            self.set_initial_guess(ensure_nested=ensure_nested)
+            self.set_initial_guess(
+                ensure_nested=ensure_nested,
+                ensure_nested_method=ensure_nested_method,
+            )
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -509,7 +520,7 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True):
+    def set_initial_guess(self, *args, ensure_nested=True, ensure_nested_method="opt"):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -529,8 +540,15 @@ class Equilibrium(IOAble, Optimizable):
                 of a grid.
         ensure_nested : bool
             If True, and the default initial guess does not produce nested surfaces,
-            run a small optimization problem to attempt to refine initial guess to
-            improve coordinate mapping.
+            run a small optimization problem or solve a harmonic BVP to attempt to
+            refine the initial guess to improve coordinate mapping, with the method
+            used determined by ``ensure_nested_method``.
+        ensure_nested_method : {"opt","map2disc"}
+            The method to use for refining the initial guess if not nested.
+            "opt" (default) runs a small optimization using the GoodCoordinates
+            objective. "map2disc" uses the ``map2disc_jax`` package to solve a
+            harmonic BVP for a nested mapping. ``map2disc_jax`` must be installed
+            to use that method.
 
         Examples
         --------
@@ -570,7 +588,12 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(self, *args, ensure_nested=ensure_nested)
+        set_initial_guess(
+            self,
+            *args,
+            ensure_nested=ensure_nested,
+            ensure_nested_method=ensure_nested_method,
+        )
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""

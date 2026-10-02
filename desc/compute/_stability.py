@@ -3364,7 +3364,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         d_h.update(data_d)
         _tmr = _PhaseTimer("fine ")
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
-        _tmr.mark("operator setup", _opm.get("keep"))
+        # Block on every ARRAY in the op dict (functions and ints filtered out), not
+        # just `keep`: that is a cheap index array, so it forced none of the metric
+        # or vacuum work and this phase read an implausible 0.2-0.5 s.
+        _tmr.mark(
+            "operator setup",
+            *[v for v in _opm.values() if hasattr(v, "shape")],
+        )
         _Ax = _opm["Ax"]
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
@@ -3676,7 +3682,10 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             }
             _ctmr = _PhaseTimer("coarse ")
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
-            _ctmr.mark("operator setup", _cop.get("keep"))
+            _ctmr.mark(
+                "operator setup",
+                *[v for v in _cop.values() if hasattr(v, "shape")],
+            )
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
             # Shift the diagonal only: a dense eye(_nc) and an explicit
@@ -3908,6 +3917,14 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # only through Ax(v). Reusing v at a DIFFERENT x is a measured catastrophic
     # failure -- a 7e-5 relative mesh shift flipped lam_R's sign and moved it
     # 66x -- so this must not be reachable by an optimizer or line search.
+    # Everything above is tracing/setup; the solve starts here. `compute_data` reports
+    # `eq.compute total`, and this timer reports the span INSIDE `_AGNI3_rayleigh`, so
+    # the difference is DESC resolving this key's geometry dependencies on the fine grid
+    # -- work that happens before this function is entered and that no timer could reach
+    # from in here. At 25x25 that difference was ~88 s fixed / ~155 s free, the largest
+    # single unattributed block left.
+    _atmr = _PhaseTimer("agni ")
+
     _v_fixed = kwargs.get("v_fixed", None)
     if _v_fixed is not None:
         v = jnp.asarray(_v_fixed)
@@ -3919,9 +3936,12 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             params, _array_data, _Zc_ext, _v0c_ext, jnp.asarray(sigma, dtype=float)
         )
 
+    _atmr.mark("eigensolve (coarse+fine above)", v)
+
     Av = _op["Ax"](v)
     vv = jnp.vdot(v, v)
     lam_R = jnp.real(jnp.vdot(v, Av) / vv)
+    _atmr.mark("rayleigh quotient", lam_R)
 
     if _xcheck and _v_fixed is None:
         _den = jnp.maximum(jnp.abs(lam_mu), 1e-300)
@@ -3950,6 +3970,12 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # So a caller can take v from a value call and pass it back as `v_fixed`.
     data["finite-n lambda3 rayleigh v"] = jnp.atleast_1d(v)
     data = _agni3_store_rayleigh_mode_data(data, v, _op)
+    # Reconstructs the eigenfunction and every derived field -- xi, deltaB and deltaV
+    # with their three components each -- and, for free boundary ONLY, the vacuum
+    # energy through phi_matrix. Untimed until now, and free-boundary-asymmetric by
+    # construction, so a candidate for the free/fixed gap.
+    _atmr.mark("mode data + vacuum energy", data["finite-n xi rayleigh"])
+    _atmr.total("AGNI span (eq.compute minus DESC deps)")
     return data
 
 

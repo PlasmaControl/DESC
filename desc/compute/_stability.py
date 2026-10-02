@@ -1500,39 +1500,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
 
-    def component_to_node_permutn(N: int) -> jnp.ndarray:
-        """
-        Build the permutation that converts component-major ordering to node-major.
-
-        Component-major vector layout (length 3N):
-            [ rho_1..N | theta_1..N | zeta_1..N ]
-
-        Node-major vector layout (length 3N):
-            [ rho_1, theta_1, zeta_1 | ... | rho_N, theta_N, zeta_N ]
-
-        The returned permutation `p` satisfies:
-            x_node = x_comp[p]
-            M_node = M_comp[p][:, p]
-
-        Parameters
-        ----------
-        N : int
-            Number of spatial nodes per component.
-
-        Returns
-        -------
-        jnp.ndarray, shape (3*N,)
-            Permutation indices from component-major to node-major.
-        """
-        k = jnp.arange(N, dtype=jnp.int64)
-
-        perm = jnp.empty(3 * N, dtype=jnp.int64)
-        perm = perm.at[3 * k + 0].set(k)
-        perm = perm.at[3 * k + 1].set(N + k)
-        perm = perm.at[3 * k + 2].set(2 * N + k)
-
-        return perm
-
     if _Rnode is not None:
         # RING PATH ends here. Everything past this point -- the component/node
         # permutation, the whitening, the keep-mask reduction -- is global to the
@@ -1540,33 +1507,36 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # (`ring_block`) finishes the block from these three pieces.
         return {"A": A, "Linv": Linv, "au_diag": au_diag}
 
-    # components to node permutations
-    p = component_to_node_permutn(n_total)
-    A = A[p][:, p]
+    # MEMORY: the (n_total x n_total) derivative operators are dead from here on;
+    # drop them so eager callers (the coarse level) do not hold them during the tail.
+    del D_rho, D_theta, D_zeta, D_thetaT, D_zetaT, C_rho, C_theta, C_zeta
 
-    # L^-1 A L^-T
-    A = A.reshape(n_total, 3, n_total, 3)
-    A = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A, Linv)
+    # L^-1 A L^-T per node pair, done directly in COMPONENT-MAJOR order. The old code
+    # permuted to node-major (A[p][:, p]), whitened, and permuted back
+    # (A[pinv][:, pinv]); the two permutations cancel, and each held a full copy.
+    # Component-major view: A4[l, i, q, j] = A[l*n_total + i, q*n_total + j]
+    # (l, q components; i, j nodes). Two one-sided products, so at most two
+    # full-size arrays are live at once (the old 3-operand einsum also held an
+    # intermediate).
+    A = A.reshape(3, n_total, 3, n_total)
+    A = jnp.einsum("ikl,liqj->kiqj", Linv, A)  # left:  L^-1 at row node i
+    A = jnp.einsum("kiqj,jbq->kibj", A, Linv)  # right: L^-T at column node j
 
     node_idx = jnp.arange(n_total)
+    # A[:, node_idx, :, node_idx] has shape (n_total, 3, 3) = [i, c, c'], the same
+    # per-node 3x3 blocks the old node-major A[node_idx, :, node_idx, :] addressed.
 
     # Add a constant shift to the diagonal of A (in the whitened L^-1 A L^-T
     # basis) for positive-definiteness, BEFORE adding the instability drive.
     # This uniformly shifts every eigenvalue by the constant.
-    A = A.at[node_idx, :, node_idx, :].add(_fit(1e-14 * jnp.eye(3)))
+    A = A.at[:, node_idx, :, node_idx].add(_fit(1e-14 * jnp.eye(3)))
 
     # Add transformed instability-drive contribution without materializing Au.
     L0 = Linv[:, :, 0]
     au_node = au_diag[:, None, None] * L0[:, :, None] * L0[:, None, :]
-    A = A.at[node_idx, :, node_idx, :].add(_fit(au_node))
+    A = A.at[:, node_idx, :, node_idx].add(_fit(au_node))
 
     A = A.reshape(3 * n_total, 3 * n_total)
-
-    # node to component permutation
-    pinv = jnp.empty_like(p)
-    pinv = pinv.at[p].set(jnp.arange(3 * n_total))
-
-    A = A[pinv][:, pinv]
 
     # store indices needed to apply dirichlet BC to ξ^ρ
     n_shell = n_theta_max * n_zeta_max

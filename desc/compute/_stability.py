@@ -1426,17 +1426,74 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         # touches the boundary rows -- but at 48x41x17 that padded array is
         # 8.34 GiB of 99.96% zeros holding 3.7 MB of content, and it OOM'd.
         #
-        # Shapes work on both paths: on the dense path `X_bnd` is
+        # Shapes work on both paths: on the dense path the left factor is
         # (n_per_shell, n_total); on the ring path D_theta/D_zeta are already
         # column-sliced by `_selc`, so it is (n_per_shell, n_R). Either way the
         # products below match the block they are added to.
-        L_bp = iota * D_theta + D_zeta
-        # this is just for consistency; psi' = 1 here
-        X_bnd = W_surf * (psi_r**3 * L_bp)[b_idx]
-        Y_bnd = (psi_r / sqrtg_grad_rho * L_bp)[b_idx]
-        phi_Y = phi_matrix @ Y_bnd
+        #
+        # ROWS ONLY. `b_idx` indexes axis 0, and the two axes mean different
+        # things: the ROW is the surface point where L xi^rho is evaluated, and it
+        # is contracted away by the products below; the COLUMN is the xi^rho DOF
+        # being differentiated, and it survives into A[rho_idx, rho_idx]. Slicing
+        # columns as well would drop how a derivative AT the boundary depends on
+        # INTERIOR xi^rho -- zero for a separable D_theta, but NOT zero under
+        # `coupled_rt`, where the Zernike-Fourier D_theta couples rho.
+        #
+        # Every factor is restricted BEFORE any product is formed. Each is either
+        # (n_total, 1) per-node or a diffmat whose rows are nodes, so the slice
+        # distributes:
+        #
+        #     (c * (iota*D_theta + D_zeta))[b_idx]
+        #         == c[b_idx] * (iota[b_idx]*D_theta[b_idx] + D_zeta[b_idx])
+        #
+        # That is row-slicing commuting with a row-wise scaling and a sum, so it
+        # holds for ANY D_theta, coupled or not. Do not confuse it with the much
+        # stronger claim that these rows VANISH away from the boundary shell: that
+        # one does need block diagonality in rho and is false under coupled_rt.
+        # `scripts/check_boundary_slice.py` checks both.
+        #
+        # `W_surf` is already (n_per_shell, 1), and the `vacuum_asym` diagnostic
+        # below already slices its per-node factors this way, so this is the shape
+        # the block was half-written in.
+        #
+        # psi' = 1 here; psi_r**3 is kept only for consistency with the derivation.
+        # Inline, one statement per term like every other term in this function:
+        # W_V, then W_V^H. Both are needed -- phi_matrix is not self-adjoint in the
+        # surface measure (`vacuum_asym` measures ~1.2e-2), and on the dense path
+        # nothing downstream symmetrizes for it.
         A = A.at[rho_idx, rho_idx].add(
-            0.5 * _fit(-_cT(X_bnd) @ phi_Y) + 0.5 * _fit(-_cT(phi_Y) @ X_bnd)
+            0.5
+            * _fit(
+                -_cT(
+                    W_surf
+                    * (psi_r**3)[b_idx]
+                    * (iota[b_idx] * D_theta[b_idx] + D_zeta[b_idx])
+                )
+                @ (
+                    phi_matrix
+                    @ (
+                        (psi_r / sqrtg_grad_rho)[b_idx]
+                        * (iota[b_idx] * D_theta[b_idx] + D_zeta[b_idx])
+                    )
+                )
+            )
+        )
+        A = A.at[rho_idx, rho_idx].add(
+            0.5
+            * _fit(
+                -_cT(
+                    phi_matrix
+                    @ (
+                        (psi_r / sqrtg_grad_rho)[b_idx]
+                        * (iota[b_idx] * D_theta[b_idx] + D_zeta[b_idx])
+                    )
+                )
+                @ (
+                    W_surf
+                    * (psi_r**3)[b_idx]
+                    * (iota[b_idx] * D_theta[b_idx] + D_zeta[b_idx])
+                )
+            )
         )
 
         # Diagnostic, BEFORE symmetrizing: how far diag(measure) @ phi is from

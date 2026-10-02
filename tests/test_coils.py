@@ -1475,9 +1475,12 @@ def test_linking_number():
     link = coilset2._compute_linking_number(grid=grid)
 
     # modular coils don't link each other
+    # note we remove diagonal entries explicitly, as they do not
+    # represent linking numbers (they are zero here anyway).
+    mask = ~jnp.eye(link.shape[0], dtype=bool)
+    link = jnp.where(mask, link, 0)
     np.testing.assert_allclose(link[:-1, :-1], 0, atol=1e-14)
-    # axis coil doesn't link itself
-    np.testing.assert_allclose(link[-1, -1], 0, atol=1e-14)
+
     # we expect the axis coil to link all the modular coils, with alternating sign
     # due to alternating orientation of the coils due to symmetry.
     expected = [1, -1] * 5

@@ -53,38 +53,36 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO (#568): do math to change definition of nu so that we can just use B_zeta_mn here
 @register_compute_fun(
-    name="B_phi_mn",
-    label="B_{\\phi, m, n}",
+    name="B_zeta_mn",
+    label="B_{\\zeta, m, n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Fourier coefficients for covariant toroidal component of "
-    "magnetic field in (ρ,θ,ϕ) coordinates.",
+    "magnetic field.",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["B_phi|r,t"],
+    data=["B_zeta"],
     resolution_requirement="tz",
     grid_requirement={"is_meshgrid": True, "sym": False},
-    aliases="B_zeta_mn",  # TODO(#568): remove when phi != zeta
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
     surf_batch_size="int: Number of flux surfaces to compute simultaneously. Defaults"
     " to ``grid.num_rho`` e.g. compute all flux surfaces simultaneously. Decrease "
     "to reduce memory required for computation.",
 )
-def _B_phi_mn(params, transforms, profiles, data, **kwargs):
-    B_phi = transforms["grid"].meshgrid_reshape(data["B_phi|r,t"], "rtz")
+def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
+    B_zeta = transforms["grid"].meshgrid_reshape(data["B_zeta"], "rtz")
 
     def fitfun(x):
         return transforms["B"].fit(x.flatten(order="F"))
 
-    B_zeta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_phi)
+    B_zeta_mn = vmap_chunked(fitfun, chunk_size=kwargs.get("surf_batch_size"))(B_zeta)
     # modes stored as shape(rho, mn) flattened
-    data["B_phi_mn"] = B_zeta_mn.flatten()
+    data["B_zeta_mn"] = B_zeta_mn.flatten()
     return data
 
 
@@ -100,7 +98,7 @@ def _B_phi_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="rtz",
-    data=["B_theta_mn", "B_phi_mn"],
+    data=["B_theta_mn", "B_zeta_mn"],
     grid_requirement={"is_meshgrid": True, "sym": False},
     M_booz="int: Maximum poloidal mode number for Boozer harmonics. Default 2*eq.M",
     N_booz="int: Maximum toroidal mode number for Boozer harmonics. Default 2*eq.N",
@@ -119,7 +117,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
         (transforms["grid"].num_rho, -1)
     )
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"].reshape(
+    num_z = (mask_z @ sign(wm)) * data["B_zeta_mn"].reshape(
         (transforms["grid"].num_rho, -1)
     )
     den_z = mask_z @ jnp.abs(NFP * wn)
@@ -238,7 +236,7 @@ def _w_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="nu",
-    label="\\nu = \\zeta_{B} - \\zeta",
+    label="\\nu = \\zeta_{B} - \\phi",
     units="rad",
     units_long="radians",
     description="Boozer toroidal stream function",
@@ -247,11 +245,13 @@ def _w_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer", "G", "I", "iota", "lambda"],
+    data=["w_Boozer", "G", "I", "iota", "lambda", "omega"],
 )
 def _nu(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu"] = (data["w_Boozer"] - data["I"] * data["lambda"]) / GI
+    data["nu"] = (
+        data["w_Boozer"] - data["I"] * data["lambda"] - data["G"] * data["omega"]
+    ) / GI
     return data
 
 
@@ -327,11 +327,13 @@ def _nu_B_mn(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer_t", "G", "I", "iota", "lambda_t"],
+    data=["w_Boozer_t", "G", "I", "iota", "lambda_t", "omega_t"],
 )
 def _nu_t(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_t"] = (data["w_Boozer_t"] - data["I"] * data["lambda_t"]) / GI
+    data["nu_t"] = (
+        data["w_Boozer_t"] - data["I"] * data["lambda_t"] - data["G"] * data["omega_t"]
+    ) / GI
     return data
 
 
@@ -346,11 +348,13 @@ def _nu_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_Boozer_z", "G", "I", "iota", "lambda_z"],
+    data=["w_Boozer_z", "G", "I", "iota", "lambda_z", "omega_z"],
 )
 def _nu_z(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_z"] = (data["w_Boozer_z"] - data["I"] * data["lambda_z"]) / GI
+    data["nu_z"] = (
+        data["w_Boozer_z"] - data["I"] * data["lambda_z"] - data["G"] * data["omega_z"]
+    ) / GI
     return data
 
 
@@ -755,6 +759,26 @@ def _f_C(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="f_C_normalized",
+    label="\\frac{[(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi)"
+    + " - (M G + N I) \\mathbf{B}] \\cdot \\nabla B}{B^3}",
+    units="~",
+    units_long="None",
+    description="Two-term quasisymmetry metric, normalized by the cube of the "
+    "local field strength",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["f_C", "|B|"],
+)
+def _f_C_normalized(params, transforms, profiles, data, **kwargs):
+    data["f_C_normalized"] = data["f_C"] / data["|B|"] ** 3
+    return data
+
+
+@register_compute_fun(
     name="f_T",
     label="\\nabla \\psi \\times \\nabla B \\cdot \\nabla "
     + "(\\mathbf{B} \\cdot \\nabla B)",
@@ -773,6 +797,84 @@ def _f_T(params, transforms, profiles, data, **kwargs):
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="f_T_normalized",
+    label="\\frac{R^2 \\nabla \\psi \\times \\nabla B \\cdot \\nabla "
+    + "(\\mathbf{B} \\cdot \\nabla B)}{B^4}",
+    units="~",
+    units_long="None",
+    description="Triple product quasisymmetry metric, normalized by the cylindrical R "
+    "coordinate and the local field strength",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["f_T", "|B|", "R"],
+)
+def _f_T_normalized(params, transforms, profiles, data, **kwargs):
+    data["f_T_normalized"] = data["R"] ** 2 * data["f_T"] / data["|B|"] ** 4
+    return data
+
+
+@register_compute_fun(
+    name="f_B",
+    label="\\{B_{mn}^{\\mathrm{Boozer}}(\\rho) \\vert m/n \\neq M/N\\}",
+    units="T",
+    units_long="Tesla",
+    description="Symmetry breaking Boozer harmonics of magnetic field, "
+    "shape (num rho, num modes)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn_B"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True, "sym": False},
+    matrix="ndarray: Transform matrix from the double-Fourier coefficients to the "
+    "double-angle coefficients, as returned by ``ptolemy_linear_transform``.",
+    idx="ndarray: Indices of the symmetry breaking modes, as returned by "
+    "``ptolemy_linear_transform``.",
+)
+def _f_B(params, transforms, profiles, data, **kwargs):
+    # reshape to (num modes, num rho)
+    B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1)).T
+    B_mn = kwargs["matrix"] @ B_mn
+    data["f_B"] = B_mn[kwargs["idx"]].T
+    return data
+
+
+@register_compute_fun(
+    name="f_B_normalized",
+    label="\\{B_{mn}^{\\mathrm{Boozer}}(\\rho) \\vert m/n \\neq M/N\\} / "
+    "(\\sum_{mn} B_{mn}^{\\mathrm{Boozer}}(\\rho)^2)^{1/2}",
+    units="~",
+    units_long="None",
+    description="Symmetry breaking Boozer harmonics of magnetic field, normalized "
+    "by the norm of all the harmonics on that surface, shape (num rho, num modes)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn_B"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True, "sym": False},
+    matrix="ndarray: Transform matrix from the double-Fourier coefficients to the "
+    "double-angle coefficients, as returned by ``ptolemy_linear_transform``.",
+    idx="ndarray: Indices of the symmetry breaking modes, as returned by "
+    "``ptolemy_linear_transform``.",
+)
+def _f_B_normalized(params, transforms, profiles, data, **kwargs):
+    # reshape to (num modes, num rho)
+    B_mn = data["|B|_mn_B"].reshape((transforms["grid"].num_rho, -1)).T
+    B_mn = kwargs["matrix"] @ B_mn
+    norm = jnp.linalg.norm(B_mn, axis=0)
+    data["f_B_normalized"] = (B_mn[kwargs["idx"]] / norm).T
     return data
 
 

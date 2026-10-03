@@ -10,7 +10,7 @@ import numpy as np
 from scipy.special import factorial
 from termcolor import colored
 
-from desc.backend import fori_loop, jax, jit, jnp, pure_callback, sign
+from desc.backend import fori_loop, jax, jit, jnp, pure_callback, scan, sign
 
 PRINT_WIDTH = 60  # current longest name is BootstrapRedlConsistency with pre-text
 
@@ -431,6 +431,85 @@ def svd_inv_null(A):
     Ainv = vhk.T @ jnp.diag(s) @ uk.T
     Z = vh[num:, :].T.conj()
     return Ainv, Z
+
+
+def eigh_tridiagonal_top_k(d, e, k=1):
+    """Largest ``k`` eigenpairs of real symmetric tridiagonal matrices.
+
+    Eigenvalues come from bisection on Sturm counts (the number of negative pivots
+    of T - σ), eigenvectors from a twisted factorization at each eigenvalue
+    (Dhillon & Parlett, Linear Algebra Appl. 387, 2004). Each costs O(N) per
+    eigenpair, against O(N³) time and O(N²) memory for a dense ``eigh``.
+    The eigenvalues returned are Rayleigh quotients of the eigenvectors, so their
+    first derivatives are the Hellmann-Feynman ones. Eigenvectors have no derivative.
+
+    Parameters
+    ----------
+    d : jnp.ndarray
+        Diagonals, shape (..., N).
+    e : jnp.ndarray
+        Off-diagonals, shape (..., N - 1).
+    k : int
+        Number of largest eigenpairs.
+
+    Returns
+    -------
+    w : jnp.ndarray
+        Eigenvalues in descending order, shape (..., k).
+    v : jnp.ndarray
+        Unit eigenvectors, shape (..., N, k).
+
+    """
+    # rows on the leading axis for scan, eigenpairs on the trailing axis
+    d0 = jnp.moveaxis(jax.lax.stop_gradient(d), -1, 0)[..., None]
+    e0 = jnp.moveaxis(jax.lax.stop_gradient(e), -1, 0)[..., None]
+    N = d0.shape[0]
+    z = jnp.zeros_like(d0[:1])
+    e2 = jnp.concatenate([z, e0**2])  # e2[i] couples rows i - 1 and i
+    radius = jnp.concatenate([z, jnp.abs(e0)]) + jnp.concatenate([jnp.abs(e0), z])
+    pivmin = jnp.finfo(d0.dtype).tiny * jnp.maximum(1.0, e2.max(0))
+
+    def pivots(shift, d, e2):
+        """Pivots of the LDLᵀ factorization of T - shift, row by row."""
+
+        def step(q, x):
+            q = x[0] - shift - x[1] / q
+            q = jnp.where(jnp.abs(q) < pivmin, -pivmin, q)
+            return q, q
+
+        return scan(step, jnp.ones_like(shift), (d, e2))[1]
+
+    def bisect(_, interval):
+        lo, hi = interval
+        mid = (lo + hi) / 2
+        # the (N - 1 - j)-th smallest eigenvalue lies below mid
+        below = (pivots(mid, d0, e2) < 0).sum(0) > N - 1 - jnp.arange(k)
+        return jnp.where(below, lo, mid), jnp.where(below, mid, hi)
+
+    shape = d0.shape[1:-1] + (k,)
+    lo = jnp.broadcast_to((d0 - radius).min(0), shape)
+    hi = jnp.broadcast_to((d0 + radius).max(0), shape)
+    lo, hi = fori_loop(0, jnp.finfo(d0.dtype).nmant + 3, bisect, (lo, hi))
+    lam = (lo + hi) / 2
+
+    # twisted factorization: top-down and bottom-up pivots meet at the row r
+    # where |gamma| is smallest; the eigenvector is x_r = 1 continued both ways
+    dp = pivots(lam, d0, e2)
+    dm = pivots(lam, d0[::-1], jnp.concatenate([e2[1:], z])[::-1])[::-1]
+    r = jnp.argmin(jnp.abs(dp + dm - (d0 - lam)), axis=0)
+    row = jnp.arange(N - 1).reshape((-1,) + (1,) * r.ndim)
+    up = jnp.where(row < r, -e0 / dp[:-1], 1.0)  # x_i = up_i x_{i+1}, i < r
+    down = jnp.where(row + 1 > r, -e0 / dm[1:], 1.0)  # x_i = down_{i-1} x_{i-1}, i > r
+    one = jnp.ones_like(up[:1])
+    x = jnp.concatenate([jnp.cumprod(up[::-1], axis=0)[::-1], one]) * (
+        jnp.concatenate([one, jnp.cumprod(down, axis=0)])
+    )
+    v = jnp.moveaxis(x / jnp.linalg.norm(x, axis=0), 0, -2)
+
+    w = jnp.sum(d[..., None] * v**2, axis=-2) + 2 * jnp.sum(
+        e[..., None] * v[..., :-1, :] * v[..., 1:, :], axis=-2
+    )
+    return w, v
 
 
 def combination_permutation(m, n, equals=True):

@@ -14,6 +14,7 @@ Performance Improvements
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- ``ideal ballooning lambda`` now finds only the requested ``Neigvals`` largest eigenpairs of each tridiagonal ballooning matrix (bisection + twisted factorization, O(N) per eigenpair) instead of a dense ``eigh`` of every matrix. On a W7-X scan of 2400 field lines with 598 points this is ~9x faster and uses ~150x less memory for the eigenvalues (~270x less for their gradient), with eigenvalues unchanged to 1e-13.
 - More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
 
 Breaking Changes and Deprecations

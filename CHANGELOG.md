@@ -35,6 +35,7 @@ Bug Fixes
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
 
 
 

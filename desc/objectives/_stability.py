@@ -717,6 +717,24 @@ class FinitenStability(_Objective):
         was given explicitly, otherwise derived from the coarse grids. The coarse
         level has far fewer eval points and a smaller basis, so deriving it
         separately lets it run a much larger chunk than the fine level can.
+    phi_scale : float, optional
+        DIAGNOSTIC, free boundary only. Multiply ``phi_matrix`` by this before it
+        reaches the operator, scaling how stiffly the boundary displacement is
+        restrained while leaving the vacuum response's structure -- its m-coupling,
+        its ~1/k spectrum, its self-adjointness in the surface measure -- intact.
+        ``s > 1`` stiffens toward the fixed-boundary limit and ``s -> inf`` must
+        reproduce the fixed-boundary eigenpair, which is a validity test;
+        ``0 < s < 1`` softens; ``s = 0`` leaves the outer ``xi^rho`` a live but
+        unrestrained DOF, which is NOT fixed boundary; ``s < 0`` flips the term to
+        destabilizing and ``lambda`` runs away. Default None (unscaled, the physical
+        operator).
+    zero_drive : bool, optional
+        DIAGNOSTIC. Seed ``finite-n instability drive`` with zeros instead of
+        computing it, removing the only destabilizing term. What remains --
+        field-line bending, and the vacuum response under free boundary -- is
+        stabilizing, so ``lambda >= 0`` up to roundoff; a negative eigenvalue then
+        localizes the fault to a term that should be stabilizing. Also prunes the
+        drive's own dependencies, since DESC skips any seeded key. Default False.
 
     """
 
@@ -781,6 +799,10 @@ class FinitenStability(_Objective):
         "_incompressible",
         "_density",
         "_metric",
+        # Diagnostic/validity knobs. Static because they change the OPERATOR, so a
+        # compiled graph built with one value must not be reused with another.
+        "_phi_scale",
+        "_zero_drive",
         # 1D rho nodes of each level, as tuples of Python floats. Static because
         # `compute_data` passes them into the compute function, where an ordinary
         # pytree leaf arrives as a tracer and cannot be used to build the
@@ -937,6 +959,8 @@ class FinitenStability(_Objective):
         phi_chunk_size_coarse=None,
         phi_n_theta=None,
         phi_n_zeta=None,
+        phi_scale=None,
+        zero_drive=False,
     ):
         if target is None and bounds is None:
             target = 0
@@ -948,6 +972,14 @@ class FinitenStability(_Objective):
         self._v_guess = v_guess
         self._v_fixed = None if v_fixed is None else jnp.asarray(v_fixed)
         self._use_v_fixed = v_fixed is not None
+        # VALIDITY-TEST knobs, both diagnostic and both static. Kept as plain Python
+        # (a float-or-None and a bool) so they can live in the jit signature: neither
+        # is ever rebound after construction, which is the invariant every other
+        # static attr here relies on. `phi_scale` only rescales `phi_matrix`, which
+        # reaches the solve as a traced array, so varying it across instances costs a
+        # treedef but never bakes a matrix into the HLO the way `_v_fixed` did.
+        self._phi_scale = None if phi_scale is None else float(phi_scale)
+        self._zero_drive = bool(zero_drive)
         self._lambda_guess = setdefault(lambda_guess, -1e-1)
         self._gamma = gamma
         self._n_mode_axisym = n_mode_axisym
@@ -1554,9 +1586,14 @@ class FinitenStability(_Objective):
         # NOT the same as fixed boundary -- the outer xi^rho is still a live DOF, just
         # unrestrained). A NEGATIVE scale flips it to destabilizing and lambda will run
         # away; that is a sign check, not a physical run.
-        _phi_scale = os.environ.get("AGNI_PHI_SCALE")
-        if _phi_scale is not None:
-            _s = float(_phi_scale)
+        #
+        # As s -> inf the boundary penalty becomes infinitely stiff, so the
+        # free-boundary eigenpair must converge to the FIXED-boundary one. That limit
+        # is a validity test, so this is a CONSTRUCTOR ARGUMENT and nothing else -- a
+        # pytest case passes it directly, and a script that wants it from the
+        # environment reads the environment itself and passes the value in.
+        if self._phi_scale is not None:
+            _s = self._phi_scale
             print(
                 f"[phi] *** DIAGNOSTIC: phi_matrix scaled by {_s:g}, level={level}. "
                 "NOT A PHYSICAL RUN. ***",
@@ -1717,6 +1754,26 @@ class FinitenStability(_Objective):
             data[key] = grid.copy_data_from_other(
                 jnp.asarray(flux_data[key]), flux_grid, surface_label="rho"
             )
+
+        # VALIDITY TEST, not a physical run: `zero_drive=True` removes the drive.
+        #
+        # `finite-n instability drive` is the only destabilizing term that is a plain
+        # per-node multiplication -- 2 (J x grad(rho)) . (B.grad) grad(rho) / (g^rr)^2
+        # (desc/compute/_metric.py:2721) -- so with it zeroed the operator keeps only
+        # field-line bending and, free boundary, the vacuum response. Both are
+        # stabilizing, so `lambda` must come back >= 0 up to the assembler's 1e-14
+        # shift and the solver tolerance. A negative lambda then localizes the bug to a
+        # term that should be stabilizing, isolated from the drive that normally masks
+        # it. `tests/test_AGNI.py` can assert that directly.
+        #
+        # Seeded into the `data=` dict rather than zeroed where it is consumed: DESC's
+        # `_compute` skips any key already present AND prunes its dependencies
+        # (desc/compute/utils.py:273-280), so this both overrides the value and stops
+        # `J x grad(rho)` / `(B*grad) grad(rho)` from being computed at all. Doing it
+        # here covers BOTH levels -- fine and coarse route their seed through this
+        # method -- and `grid` is this level's own mapped grid, so the shape is right.
+        if self._zero_drive:
+            data["finite-n instability drive"] = jnp.zeros(grid.num_nodes)
         return data
 
     def compute_data(self, params, constants=None, solve=False):

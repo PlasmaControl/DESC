@@ -85,6 +85,25 @@ class _PhaseTimer:
             )
 
 
+def _op_arrays(op):
+    """Every array leaf of an ``_agni3_matfree_operator`` dict, for a timer to block on.
+
+    Marking on ``op.values()`` is not enough. ``vac_measures`` is a TUPLE,
+    ``(phi_matrix, _d1, _d2)``, so a ``hasattr(v, "shape")`` filter over the values
+    skips it -- and those are precisely the free-boundary arrays. A mark built that way
+    under-reports the free-boundary build specifically, which is the one quantity these
+    timers exist to measure. Flattening the pytree reaches them; ``Ax`` and the other
+    closures come back as leaves without ``.shape`` and are dropped.
+    """
+    return [
+        v
+        for v in jax.tree_util.tree_leaves(
+            {k: v for k, v in op.items() if not callable(v)}
+        )
+        if hasattr(v, "shape")
+    ]
+
+
 def _solver_opt(kwargs, name, env, default, cast=None):
     """Resolve a solver option: KWARG FIRST, then environment, then default.
 
@@ -2956,9 +2975,23 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     _ = params["Psi"]
+    # THREE fine-resolution operator builds happen per `compute_data` call, and only
+    # the middle one was ever marked:
+    #
+    #   here              -> `_op`, needed for `Ax` in the Rayleigh quotient
+    #   `_eigensolve_pcg` -> `_opm`, marked "fine operator setup"
+    #   `_coarse_space`   -> `_opm`, used ONLY for `level_meta` plus four static ints
+    #
+    # So two full builds sat inside the unattributed remainder of `eq.compute`, and
+    # every one of them is boundary-dependent (`phi_matrix is not None` gates the
+    # vacuum measures, the keep mask and the mass-block stripping). That, not DESC's
+    # dependency resolution, is what can carry a free-vs-fixed gap: the compute key's
+    # dependency list is identical under both boundary conditions.
+    _btmr = _PhaseTimer("build ")
     _op = _agni3_matfree_operator(params, transforms, profiles, data, **kwargs)
     n_keep = _op["n_keep"]
     _dtype = _op["Linv_DT"].dtype
+    _btmr.mark("fine operator 1/3 (rayleigh)", *_op_arrays(_op))
 
     sigma = kwargs.get("sigma", -1e-1)
     eigsh_tol = kwargs.get("eigsh_tol", 1e-8)
@@ -3364,13 +3397,11 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         d_h.update(data_d)
         _tmr = _PhaseTimer("fine ")
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
-        # Block on every ARRAY in the op dict (functions and ints filtered out), not
-        # just `keep`: that is a cheap index array, so it forced none of the metric
-        # or vacuum work and this phase read an implausible 0.2-0.5 s.
-        _tmr.mark(
-            "operator setup",
-            *[v for v in _opm.values() if hasattr(v, "shape")],
-        )
+        # Block on every ARRAY LEAF, not just `keep` -- that is a cheap index array, so
+        # it forced none of the metric or vacuum work and this phase read an
+        # implausible 0.2-0.5 s. `_op_arrays` rather than a filter over `.values()`:
+        # see its docstring for why the values view misses `vac_measures`.
+        _tmr.mark("operator setup", *_op_arrays(_opm))
         _Ax = _opm["Ax"]
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
@@ -3628,7 +3659,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         _kdefl = _solver_opt(kwargs, "k_defl", "AGNI_K_DEFL", 50, int)
         d_h = dict(_other_data)
         d_h.update(data_d)
+        # A full fine build for `level_meta` (Linv_DT, diagBsqinv, keep) plus four
+        # static ints -- it never touches `Ax` or the vacuum term. If this mark is
+        # large, the fix is to pass the metadata down from the build at the top of
+        # `_AGNI3_rayleigh` instead of rebuilding, which is a pure deletion.
+        _btmr2 = _PhaseTimer("build ")
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
+        _btmr2.mark("fine operator 3/3 (coarse meta)", *_op_arrays(_opm))
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
         n_theta = int(_opm["n_theta"])
@@ -3682,10 +3719,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             }
             _ctmr = _PhaseTimer("coarse ")
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
-            _ctmr.mark(
-                "operator setup",
-                *[v for v in _cop.values() if hasattr(v, "shape")],
-            )
+            _ctmr.mark("operator setup", *_op_arrays(_cop))
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
             # Shift the diagonal only: a dense eye(_nc) and an explicit
@@ -3917,12 +3951,27 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # only through Ax(v). Reusing v at a DIFFERENT x is a measured catastrophic
     # failure -- a 7e-5 relative mesh shift flipped lam_R's sign and moved it
     # 66x -- so this must not be reachable by an optimizer or line search.
-    # Everything above is tracing/setup; the solve starts here. `compute_data` reports
-    # `eq.compute total`, and this timer reports the span INSIDE `_AGNI3_rayleigh`, so
-    # the difference is DESC resolving this key's geometry dependencies on the fine grid
-    # -- work that happens before this function is entered and that no timer could reach
-    # from in here. At 25x25 that difference was ~88 s fixed / ~155 s free, the largest
-    # single unattributed block left.
+    # Everything above is tracing/setup; the solve starts here.
+    #
+    # ACCOUNTING, measured at 25x25 free (AGNI_COARSE_NUM_MATVECS=50):
+    #
+    #   compute_data                             312.2
+    #   +- objective-side setup                   67.2   (mapped_grid/flux/geom/phi)
+    #   +- eq.compute total                      244.9
+    #      +- unattributed                       ~119.8  <- the largest block left
+    #      +- coarse solve ("coarse TOTAL")       28.2
+    #      +- this timer's span                   96.9
+    #
+    # The unattributed block is NOT DESC resolving this key's dependencies: the
+    # dependency list is keyed on "finite-n lambda3 rayleigh" alone and is identical
+    # free and fixed, so it cannot carry a free-vs-fixed gap. It is work inside this
+    # function, above this line -- chiefly the two unmarked fine operator builds (see
+    # the note at the top, and the "build fine operator 1/3 / 3/3" marks).
+    #
+    # The coarse level is NOT in this span: `coarse_seed_and_deflation` runs further up
+    # and arrives here as `_Zc_ext`/`_v0c_ext`, so the first mark below covers the FINE
+    # solve only. It measured fine TOTAL + ~2 s in all three runs of the num_matvecs
+    # sweep (91.1/89.1, 65.7/65.4, 79.7/77.9), which is what that mark should equal.
     _atmr = _PhaseTimer("agni ")
 
     _v_fixed = kwargs.get("v_fixed", None)
@@ -3936,7 +3985,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             params, _array_data, _Zc_ext, _v0c_ext, jnp.asarray(sigma, dtype=float)
         )
 
-    _atmr.mark("eigensolve (coarse+fine above)", v)
+    _atmr.mark("fine eigensolve (coarse ran upstream)", v)
 
     Av = _op["Ax"](v)
     vv = jnp.vdot(v, v)

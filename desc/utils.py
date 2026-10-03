@@ -436,12 +436,32 @@ def svd_inv_null(A):
 def eigh_tridiagonal_top_k(d, e, k=1):
     """Largest ``k`` eigenpairs of real symmetric tridiagonal matrices.
 
-    Eigenvalues come from bisection on Sturm counts (the number of negative pivots
-    of T - σ), eigenvectors from a twisted factorization at each eigenvalue
-    (Dhillon & Parlett, Linear Algebra Appl. 387, 2004). Each costs O(N) per
-    eigenpair, against O(N³) time and O(N²) memory for a dense ``eigh``.
-    The eigenvalues returned are Rayleigh quotients of the eigenvectors, so their
-    first derivatives are the Hellmann-Feynman ones. Eigenvectors have no derivative.
+    T has diagonal ``d`` and off-diagonal ``e``: row i couples point i only to its
+    neighbours i - 1 and i + 1, as on a discretized ballooning field line. A dense
+    ``eigh`` of every matrix computes all N eigenpairs (O(N³) work, O(N²) memory);
+    here each requested eigenpair costs O(N) work and memory.
+
+    1. Counting eigenvalues above a trial value σ. Gaussian elimination of T - σ
+       down the line gives the pivots q₁ = d₁ - σ, qᵢ = dᵢ - σ - eᵢ₋₁² / qᵢ₋₁, which
+       are ratios of neighbouring values of the solution X of (T - σ) X = 0 started
+       at one end: qᵢ = -eᵢ Xᵢ₊₁ / Xᵢ. The number of negative pivots equals the
+       number of eigenvalues below σ (Sylvester's law of inertia); equivalently the
+       number of eigenvalues above σ is the number of sign changes of X (Sturm's
+       theorem; at σ = 0 this is Newcomb's criterion).
+    2. Bisection. Start from an interval that contains every eigenvalue (Gershgorin's
+       theorem), take its midpoint σ, count, and keep the half that holds the j-th
+       largest eigenvalue. Each halving gains one binary digit; ``nmant + 3``
+       halvings (55 in float64) reach machine precision. Same as LAPACK ``?stebz``.
+    3. Eigenvector. Eliminate T - λ from both ends of the line ("twisted
+       factorization"), join the two at the row r where the eigenvector is largest,
+       set X_r = 1 and step outwards with the pivot ratios. Every step moves toward a
+       decaying tail, so it is stable. Same as LAPACK ``?lar1v`` (Dhillon & Parlett,
+       Linear Algebra Appl. 387, 2004).
+    4. Derivative. For an exact eigenvector, λ = Xᵀ T X does not change to first
+       order when X changes, so dλ = Xᵀ dT X (Hellmann-Feynman). The eigenvalue is
+       therefore returned as Xᵀ T X with X held fixed, and its derivative is exactly
+       that; nothing is differentiated through the bisection. Eigenvectors have no
+       derivative.
 
     Parameters
     ----------

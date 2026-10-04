@@ -1113,8 +1113,13 @@ def _softplus_relu(x, beta=SOFTPLUS_SHARPNESS):
 
 
 def _softplus_relu_sigmoid(x, beta=SOFTPLUS_SHARPNESS):
-    """Derivative of ``_softplus_relu``: ``sigmoid(beta * x)``."""
-    return 1.0 / (1.0 + jnp.exp(-beta * x))
+    """Derivative of ``_softplus_relu``: ``sigmoid(beta * x)``.
+
+    Written as 0.5 * (1 + tanh(beta * x / 2)) (= sigmoid): the form
+    1 / (1 + exp(-beta * x)) overflows for beta * x < -709 and its derivative
+    becomes inf / inf = NaN (softplus_sharpness >= ~300 on deep pitches).
+    """
+    return 0.5 * (1.0 + jnp.tanh(0.5 * beta * x))
 
 
 def _reshape_surface_coefficients(grid, values):
@@ -1174,7 +1179,12 @@ def _boozer_second_adiabatic_surface_alpha_deriv(
     arg = 1.0 - B[None] / B_star[:, None, None]
     cutoff = _softplus_relu(arg, beta=softplus_sharpness)
     sig = _softplus_relu_sigmoid(arg, beta=softplus_sharpness)
-    sqrt_c = jnp.sqrt(jnp.maximum(cutoff, 1e-30))
+    # cutoffs below 1e-200 count as zero: at high sharpness (>= ~250) the softplus
+    # tail reaches denormal numbers (~1e-300), where 1/sqrt(cutoff) in the Jacobian
+    # overflows and the gradient turns NaN (LT3 run490-494, 10-02). The change of
+    # J|| is < 1e-100, i.e. none at the default sharpness.
+    cutoff = jnp.where(cutoff > 1e-200, cutoff, 0.0)
+    sqrt_c = jnp.sqrt(jnp.maximum(cutoff, 1e-200))
 
     safe_sqrt_c = jnp.where(cutoff > 0, sqrt_c, 1e-30)
     # df/dB for f = sqrt(cutoff) / B:

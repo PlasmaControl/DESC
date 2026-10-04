@@ -1,6 +1,8 @@
 from interpax import interp1d
 
-from desc.backend import jnp, sign
+from desc.backend import jnp, scan, sign, vmap
+from desc.compute.utils import compute as compute_fun
+from desc.grid import LinearGrid
 
 from ..utils import (
     cross,
@@ -1133,6 +1135,242 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     data["frenet_binormal"] = cross(
         data["frenet_tangent"], data["frenet_normal"]
     ) * jnp.linalg.det(params["rotmat"].reshape((3, 3)))
+    return data
+
+
+@register_compute_fun(
+    name="double_reflection_rmf",
+    label="\\mathbf{T}_{\\mathrm{Bishop}}",
+    units="~",
+    units_long="None",
+    description="Tangent unit vector to curve in Bishop frame",
+    dim=3,
+    params=[],
+    transforms={"nfp": [], "sym": []},
+    profiles=[],
+    coordinates="s",
+    data=["x", "frenet_tangent", "phi"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _double_reflection_rmf(params, transforms, profiles, data, **kwargs):
+    # chord/reflection math below is only valid in true Cartesian coordinates,
+    # not rpz components -- convert in, and back out, explicitly
+    x = rpz2xyz(data["x"])
+    T = rpz2xyz_vec(data["frenet_tangent"], phi=data["phi"])
+
+    x0, y0 = x[0, 0], x[0, 1]
+    normal0 = jnp.array([x0, y0, 0.0])  # seed direction: R-hat at the first point
+    normal0 = normal0 - (normal0 @ T[0]) * T[0]  # project out the tangent component
+    normal0 = normal0 / jnp.linalg.norm(normal0)  # normalize the seed
+
+    def _step(N_i, step_in):
+        x_i, x_ip1, T_i, T_ip1 = step_in
+        v1 = x_ip1 - x_i  # chord to the next point
+        c1 = v1 @ v1
+        r_L = N_i - (2 / c1) * (v1 @ N_i) * v1  # reflect N through the chord's bisector
+        t_L = T_i - (2 / c1) * (v1 @ T_i) * v1  # reflect T the same way
+
+        v2 = T_ip1 - t_L  # mismatch between reflected and actual tangent
+        c2 = v2 @ v2
+        N_ip1 = jnp.where(
+            c2 > jnp.finfo(jnp.float64).eps,
+            r_L - (2 / c2) * (v2 @ r_L) * v2,  # second reflection corrects the mismatch
+            r_L,  # tangent already matches, skip the second reflection
+        )
+        N_ip1 = N_ip1 / jnp.linalg.norm(N_ip1)  # renormalize
+        return N_ip1, N_ip1
+
+    _, N_rest = scan(
+        _step, normal0, (x[:-1], x[1:], T[:-1], T[1:])
+    )  # propagate along the curve
+    N = jnp.concatenate([normal0[None], N_rest])  # prepend the seed vector
+    B = jnp.cross(T, N)  # complete the right-handed frame
+
+    data["double_reflection_rmf"] = (T, N, B)  # Cartesian; converted back by the caller
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_frame",
+    label="{\\mathbf{T}, \\mathbf{N}, \\mathbf{B}}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Closed Bishop/rotation minimizing frame",
+    dim=3,
+    params=[],
+    transforms={"nfp": [], "sym": []},
+    profiles=[],
+    coordinates="s",
+    data=["s", "phi", "frenet_tangent"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_frame(params, transforms, profiles, data, **kwargs):
+    # TODO: check this out again
+    nfp = transforms["nfp"]
+    sym = transforms["sym"]
+    quadpoints = data["s"]
+
+    period = 2 * jnp.pi / nfp
+    k = jnp.floor(quadpoints / period).astype(
+        int
+    )  # which field-period copy each point is in
+    s_local = quadpoints - k * period  # reduce each point into a single field period
+
+    eps = jnp.finfo(jnp.float64).eps
+    n_prop = 2000
+    s_dense_base = jnp.linspace(
+        eps, period - eps, n_prop
+    )  # base propagation grid, one period
+
+    snap_tol = 1e-9
+    s_req = jnp.unique(s_local)  # distinct reduced positions actually requested
+    j = jnp.clip(jnp.searchsorted(s_dense_base, s_req), 1, n_prop - 1)
+    d_grid = jnp.minimum(
+        jnp.abs(s_req - s_dense_base[j - 1]), jnp.abs(s_dense_base[j] - s_req)
+    )
+    t_extra = s_req[d_grid > snap_tol]  # requested points not already near a grid node
+    if len(t_extra) > 1:
+        t_extra = t_extra[
+            jnp.concatenate([jnp.array([True]), jnp.diff(t_extra) > snap_tol])
+        ]  # drop near-dupes
+    s_dense = jnp.sort(
+        jnp.concatenate([s_dense_base, t_extra])
+    )  # splice them in exactly
+
+    dense_grid = LinearGrid(
+        zeta=s_dense, NFP=nfp, sym=sym
+    )  # one period, with query points as nodes
+    # reuse every other static transform (degree, knot_parametrization, ...);
+    # only the grid actually changes between the outer and dense evaluation
+    dense_transforms = {**transforms, "grid": dense_grid}
+
+    dense_data = compute_fun(
+        "desc.geometry.curve.NurbsRPZCurve",
+        ["double_reflection_rmf"],
+        params=params,
+        transforms=dense_transforms,
+        profiles={},
+    )
+    _, bishop_N_dense, bishop_B_dense = dense_data[
+        "double_reflection_rmf"
+    ]  # propagated, one period
+
+    def _Rz(ang):
+        c, s = jnp.cos(ang), jnp.sin(ang)
+        return jnp.array(
+            [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+        )  # rotation about the axis
+
+    Rzp = _Rz(2 * jnp.pi / nfp)  # the rigid nfp-fold rotation between periods
+
+    # holonomy defect: angle between the propagated end frame and the rotated start
+    N_pred_end = Rzp @ bishop_N_dense[0]
+    B_pred_end = Rzp @ bishop_B_dense[0]
+    cos_defect = bishop_N_dense[-1] @ N_pred_end
+    sin_defect = bishop_N_dense[-1] @ B_pred_end
+    rot_defect = jnp.arctan2(sin_defect, cos_defect)
+
+    # linear-in-s correction that cancels the defect exactly (period = 2pi/nfp)
+    beta = -rot_defect * (nfp / (2 * jnp.pi)) * s_dense
+    cB, sB = jnp.cos(beta), jnp.sin(beta)
+    N_corr = (
+        cB[:, None] * bishop_N_dense + sB[:, None] * bishop_B_dense
+    )  # seamless one-period frame
+
+    j = jnp.clip(
+        jnp.searchsorted(s_dense, s_local), 1, len(s_dense) - 1
+    )  # locate each query's node
+    j = jnp.where(
+        jnp.abs(s_local - s_dense[j - 1]) < jnp.abs(s_dense[j] - s_local),
+        j - 1,
+        j,
+    )
+    N_local = N_corr[j]  # corrected normal at each query point's reduced position
+
+    angles = (
+        k * 2 * jnp.pi / nfp
+    )  # rotation to re-tile this point's own field-period copy
+    Rk = vmap(_Rz)(angles)  # one rotation matrix per query point
+    N_rot = jnp.einsum("nij,nj->ni", Rk, N_local)  # apply each point's own rotation
+
+    T = rpz2xyz_vec(
+        data["frenet_tangent"], phi=data["phi"]
+    )  # Cartesian, to match N_rot; tangent itself needs no field-period correction
+    N = (
+        N_rot - jnp.sum(N_rot * T, axis=1, keepdims=True) * T
+    )  # re-orthogonalize against exact T
+    N = N / jnp.linalg.norm(N, axis=1, keepdims=True)
+    B = jnp.cross(T, N)
+
+    # convert back to rpz components before storing, matching the usual convention
+    data["closed_bishop_frame"] = (
+        xyz2rpz_vec(T, phi=data["phi"]),
+        xyz2rpz_vec(N, phi=data["phi"]),
+        xyz2rpz_vec(B, phi=data["phi"]),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_tangent",
+    label="\\mathbf{T}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Tangent unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_tangent(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_tangent"] = data["closed_bishop_frame"][
+        0
+    ]  # T is the first element
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_normal",
+    label="\\mathbf{N}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Rotation-minimizing normal unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_normal(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_normal"] = data["closed_bishop_frame"][
+        1
+    ]  # N is the second element
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_binormal",
+    label="\\mathbf{B}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Binormal unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_binormal(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_binormal"] = data["closed_bishop_frame"][
+        2
+    ]  # B is the third element
     return data
 
 

@@ -1,4 +1,4 @@
-"""Helper functions for curve and surface classes."""
+"""Helper functions for spline curve and surface classes."""
 
 from desc.backend import jnp
 

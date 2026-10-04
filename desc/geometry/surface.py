@@ -2,12 +2,9 @@
 
 import os
 import warnings
-from xml.sax.handler import property_xml_string
 
 import numpy as np
-from networkx import normalized_laplacian_spectrum
 
-from desc import optimize
 from desc.backend import (
     block_diag,
     execute_on_cpu,
@@ -1303,11 +1300,39 @@ class NurbsRZToroidalSurface(Surface):
     # reshape to the documented 2D shape (C order) wherever the natural grid
     # layout is needed, e.g. in compute functions.
 
+    def compute(
+        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
+    ):
+        params = params or self.params_dict
+        axis_params = params.get("axis", self.interior_axis.params_dict)
+
+        cs_phis_full = jnp.concatenate([0], self.cs_interior_phi, [jnp.pi / self.NFP])
+        axis_grid = LinearGrid(zeta=cs_phis_full, nfp=self.NFP, sym=self.sym)
+
+        axis_data = self.interior_axis.compute(
+            [
+                "x",
+                "closed_bishop_T",
+                "closed_bishop_N",
+                "closed_bishop_B",
+            ],  # whatever axis quantities we need
+            grid=axis_grid,
+            params=axis_params,
+        )
+        data = data or {}
+        data.update({f"axis_{k}": v for k, v in axis_data.items()})
+
+        return super().compute(
+            names, grid=grid, params=params, transforms=transforms, data=data, **kwargs
+        )
+
     @optimizable_parameter
     @property
     def cs_end_r(self):
-        """ndarray: radial control points of the two symmetric end cross sections,
-        flattened from shape (2, n_points_per_cs//2 + 1)."""
+        """ndarray: radial control points of the two symmetric end cross sections.
+
+        Flattened from shape (2, n_points_per_cs//2 + 1).
+        """
         return self._cs_end_r
 
     @cs_end_r.setter
@@ -1324,9 +1349,11 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_end_theta(self):
-        """ndarray: angular control points of the two symmetric end cross sections,
-        flattened from shape (2, n_points_per_cs//2), excluding the fixed theta=0
-        point."""
+        """ndarray: angular control points of the end cross sections.
+
+        Flattened from shape (2, n_points_per_cs//2), excluding the fixed theta=0
+        point.
+        """
         return self._cs_end_theta
 
     @cs_end_theta.setter
@@ -1343,8 +1370,10 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_end_w(self):
-        """ndarray: NURBS weights of the two symmetric end cross sections,
-        flattened from shape (2, n_points_per_cs//2 + 1)."""
+        """ndarray: NURBS weights of the two symmetric end cross sections.
+
+        Flattened from shape (2, n_points_per_cs//2 + 1).
+        """
         return self._cs_end_w
 
     @cs_end_w.setter
@@ -1361,8 +1390,10 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_interior_r(self):
-        """ndarray: radial control points of the interior cross sections,
-        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        """ndarray: radial control points of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
         return self._cs_interior_r
 
     @cs_interior_r.setter
@@ -1379,8 +1410,10 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_interior_theta(self):
-        """ndarray: angular control points of the interior cross sections,
-        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        """ndarray: angular control points of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
         return self._cs_interior_theta
 
     @cs_interior_theta.setter
@@ -1397,8 +1430,10 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_interior_w(self):
-        """ndarray: NURBS weights of the interior cross sections,
-        flattened from shape (n_cs - 2, n_points_per_cs)."""
+        """ndarray: NURBS weights of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
         return self._cs_interior_w
 
     @cs_interior_w.setter
@@ -1415,7 +1450,7 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_interior_phi(self):
-        """ndarray: (1, n_cs) array of zeta values for the interior cross sections"""
+        """ndarray: (1, n_cs) array of zeta values for the interior cross sections."""
         return self._cs_interior_phi
 
     @cs_interior_phi.setter
@@ -1436,8 +1471,7 @@ class NurbsRZToroidalSurface(Surface):
 
     @property
     def interior_axis(self):
-        """NurbsRPZCurve: curve around which the spline dofs are specified in
-        local coordinates"""
+        """NurbsRPZCurve: curve around which the spline dofs are specified."""
         return self._interior_axis
 
     @interior_axis.setter

@@ -1266,7 +1266,12 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     transforms={"sym": [], "NFP": [], "n_points_per_cs": []},
     profiles=[],
     coordinates="",
-    data=[],
+    data=[
+        "axis_x",
+        "axis_closed_bishop_T",
+        "axis_closed_bishop_N",
+        "axis_closed_bishop_B",
+    ],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _full_control_net(params, transforms, profiles, data, **kwargs):
@@ -1311,7 +1316,7 @@ def _full_control_net(params, transforms, profiles, data, **kwargs):
         assert cs_end_theta.shape[1] == cs_interior_theta.shape[1]
         assert cs_end_w.shape[1] == cs_interior_w.shape[1]
 
-    cs_phi = jnp.concatenate([0], cs_interior_phi, [jnp.pi / nfp])
+    cs_phi = jnp.append([0], cs_interior_phi)
 
     # tiling all to 1fp
     r_ctrl_half_fp = jnp.concatenate(
@@ -1324,10 +1329,10 @@ def _full_control_net(params, transforms, profiles, data, **kwargs):
         [cs_end_w[0, :], cs_interior_w, cs_end_w[1, :]], axis=0
     )
 
-    r_ctrl_1fp = jnp.append(r_ctrl_half_fp, r_ctrl_half_fp[-2:0:-1])
-    theta_ctrl_1fp = jnp.append(theta_ctrl_half_fp, theta_ctrl_half_fp[-2:0:-1])
-    w_ctrl_1fp = jnp.append(w_ctrl_half_fp, w_ctrl_half_fp[-2:0:-1])
-    cs_phi_1fp = jnp.append(cs_phi, cs_phi[-2:0:-1])
+    r_ctrl_1fp = jnp.append(r_ctrl_half_fp, r_ctrl_half_fp[:0:-1])
+    theta_ctrl_1fp = jnp.append(theta_ctrl_half_fp, theta_ctrl_half_fp[:0:-1])
+    w_ctrl_1fp = jnp.append(w_ctrl_half_fp, w_ctrl_half_fp[:0:-1])
+    cs_phi_1fp = jnp.append(cs_phi, cs_phi[:0:-1])
 
     # tiling to full device - necessary for proper spline definition
     r_ctrl_full = jnp.tile(r_ctrl_1fp, nfp)
@@ -1337,4 +1342,26 @@ def _full_control_net(params, transforms, profiles, data, **kwargs):
 
     # converting to cartesian finally
 
+    return data
+
+
+# TODO: placeholder only, to satisfy the generic Surface-level "a" quantity's
+# dependency on "A" so the package's dependency index can build at import
+# time. Replace with a real cross-sectional-area calculation.
+@register_compute_fun(
+    name="A",
+    label="A",
+    units="m^2",
+    units_long="square meters",
+    description="Area of the cross-sectional surface (not yet implemented)",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _A_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["A"] = jnp.array(0.0)
     return data

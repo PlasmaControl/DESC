@@ -784,8 +784,6 @@ class FourierRZToroidalSurface(Surface):
             Axis of the surface.
 
         """
-        from desc.geometry import FourierRZCurve
-
         # over-sample to get a good axis fit
         grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
         data = self.compute(["R", "Z"], grid=grid)
@@ -1142,8 +1140,6 @@ class ZernikeRZToroidalSection(Surface):
             Circular axis of the surface.
 
         """
-        from desc.geometry import FourierRZCurve
-
         grid = LinearGrid(rho=0)
         data = self.compute(["R", "Z"], grid=grid)
         axis = FourierRZCurve(R_n=data["R"][0], Z_n=data["Z"][0], sym=self.sym)

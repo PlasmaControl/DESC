@@ -5,6 +5,7 @@ import numbers
 import os
 import warnings
 from collections.abc import MutableSequence
+from typing import overload
 
 import numpy as np
 from scipy import special
@@ -39,13 +40,7 @@ from desc.objectives import (
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
-from desc.profiles import (
-    FourierZernikeProfile,
-    HermiteSplineProfile,
-    PowerSeriesProfile,
-    SplineProfile,
-    _Profile,
-)
+from desc.profiles import HermiteSplineProfile, SplineProfile, _Profile
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -673,9 +668,24 @@ class Equilibrium(IOAble, Optimizable):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
+    @overload
+    def get_surface_at(
+        self, rho: float, theta: None = None, zeta: None = None
+    ) -> FourierRZToroidalSurface: ...
+
+    @overload
+    def get_surface_at(
+        self, rho: None = None, theta: None = None, *, zeta: float
+    ) -> ZernikeRZToroidalSection: ...
+
+    @overload
+    def get_surface_at(
+        self, rho: None, theta: None, zeta: float
+    ) -> ZernikeRZToroidalSection: ...
+
     @execute_on_cpu
     def get_surface_at(
-        self, rho=None, theta=None, zeta=None
+        self, rho: float | None = None, theta: None = None, zeta: float | None = None
     ) -> FourierRZToroidalSurface | ZernikeRZToroidalSection:
         """Return a representation for a given coordinate surface.
 
@@ -782,10 +792,8 @@ class Equilibrium(IOAble, Optimizable):
             surface.Z_lmn = Zb
             return surface
 
-    def get_profile(
-        self, name, grid=None, kind="spline", **kwargs
-    ) -> SplineProfile | PowerSeriesProfile | FourierZernikeProfile:
-        """Return a SplineProfile of the desired quantity.
+    def get_profile(self, name, grid=None, kind="spline", **kwargs) -> _Profile:
+        """Return a profile of the desired quantity.
 
         Parameters
         ----------
@@ -801,7 +809,7 @@ class Equilibrium(IOAble, Optimizable):
 
         Returns
         -------
-        profile : SplineProfile
+        profile : Profile
             Radial profile of the desired quantity.
 
         """

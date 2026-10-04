@@ -6,7 +6,7 @@ from typing import Literal, overload
 import desc.io
 from desc.backend import execute_on_cpu
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry.surface import Surface
+from desc.geometry.surface import FourierRZToroidalSurface
 from desc.profiles import _Profile
 
 
@@ -18,22 +18,21 @@ def listall():
     return names_stripped
 
 
-## Typing is somewhat awkward for get(),
-## given its various return types
 @overload
-def get(name, data=None) -> Equilibrium: ...
+def get(name: str, data: None = None) -> Equilibrium: ...
 @overload
-def get(name, data="all") -> EquilibriaFamily: ...
+def get(name: str, data: Literal["all"]) -> EquilibriaFamily: ...
 @overload
-def get(name, data="boundary") -> Surface: ...
+def get(name: str, data: Literal["boundary"]) -> FourierRZToroidalSurface: ...
 @overload
-def get(name, data=Literal["pressure", "iota", "current"]) -> _Profile: ...
+def get(name: str, data: Literal["pressure", "iota", "current"]) -> _Profile: ...
 
 
 @execute_on_cpu
 def get(
-    name, data: None | Literal["all", "boundary", "pressure", "iota", "current"] = None
-) -> Equilibrium | EquilibriaFamily | Surface | _Profile:
+    name: str,
+    data: None | Literal["all", "boundary", "pressure", "iota", "current"] = None,
+) -> Equilibrium | EquilibriaFamily | FourierRZToroidalSurface | _Profile:
     """Get example equilibria and data.
 
     Returns a solved equilibrium or selected attributes for one of several examples.

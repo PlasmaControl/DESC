@@ -1,11 +1,13 @@
 """Classes for magnetic field coils."""
 
+from __future__ import annotations
+
 import numbers
 import os
 from abc import ABC
 from collections.abc import MutableSequence
 from functools import partial
-from typing import Generic, TypeVar
+from typing import TypeVar, cast, overload
 
 import numpy as np
 from scipy.constants import mu_0
@@ -1629,10 +1631,11 @@ def _check_type(coil0, coil):
         )
 
 
-T = TypeVar("T")
+_CoilT = TypeVar("_CoilT", bound=_Coil)
+_C = TypeVar("_C", bound=_Coil)
 
 
-class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
+class CoilSet(OptimizableCollection, _Coil, MutableSequence[_CoilT]):
     """Set of coils of different geometry but shared parameterization and resolution.
 
     Parameters
@@ -1664,11 +1667,18 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
         + ["_NFP", "_sym", "_name"]
     )
 
-    def __init__(self, *coils, NFP=1, sym=False, name="", check_intersection=False):
-        coils = flatten_list(coils, flatten_tuple=True)
-        assert all([isinstance(coil, (_Coil)) for coil in coils])
-        [_check_type(coil, coils[0]) for coil in coils]
-        self._coils = list(coils)
+    def __init__(
+        self,
+        *coils: _CoilT | list[_CoilT],
+        NFP=1,
+        sym=False,
+        name="",
+        check_intersection=False,
+    ):
+        coils_list = cast(list[_CoilT], flatten_list(coils, flatten_tuple=True))
+        assert all([isinstance(coil, (_Coil)) for coil in coils_list])
+        [_check_type(coil, coils_list[0]) for coil in coils_list]
+        self._coils = list(coils_list)
         self._NFP = int(NFP)
         self._sym = bool(sym)
         self._name = str(name)
@@ -1686,7 +1696,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
         self._name = str(new)
 
     @property
-    def coils(self):
+    def coils(self) -> list[_CoilT]:
         """list: coils in the coilset."""
         return self._coils
 
@@ -2154,14 +2164,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
     @classmethod
     def linspaced_angular(
         cls,
-        coil: T,
+        coil: _C,
         current=None,
         axis=[0, 0, 1],
         angle=2 * np.pi,
         n=10,
         endpoint=False,
         check_intersection=False,
-    ):
+    ) -> CoilSet[_C]:
         """Create a CoilSet by repeating a coil at equal spacing around the torus.
 
         Parameters
@@ -2199,13 +2209,13 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
     @classmethod
     def linspaced_linear(
         cls,
-        coil: T,
+        coil: _C,
         current=None,
         displacement=[2, 0, 0],
         n=4,
         endpoint=False,
         check_intersection=False,
-    ):
+    ) -> CoilSet[_C]:
         """Create a CoilSet by repeating a coil at equal spacing in a straight line.
 
         Parameters
@@ -2240,10 +2250,26 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
             coils.append(coili)
         return cls(*coils, check_intersection=check_intersection)
 
+    @overload
     @classmethod
     def from_symmetry(
-        cls, coils: "T|CoilSet[T]", NFP=1, sym=False, check_intersection=False
-    ) -> "CoilSet[T]":
+        cls, coils: CoilSet[_C], NFP=1, sym=False, check_intersection=False
+    ) -> CoilSet[_C]: ...
+
+    @overload
+    @classmethod
+    def from_symmetry(
+        cls, coils: _C | list[_C], NFP=1, sym=False, check_intersection=False
+    ) -> CoilSet[_C]: ...
+
+    @classmethod
+    def from_symmetry(
+        cls,
+        coils: _C | list[_C] | CoilSet[_C],
+        NFP=1,
+        sym=False,
+        check_intersection=False,
+    ) -> CoilSet[_C]:
         """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
@@ -2316,7 +2342,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
     @classmethod
     def from_makegrid_coilfile(
         cls, coil_file, method="cubic", check_intersection=False
-    ) -> "CoilSet[SplineXYZCoil]":
+    ) -> CoilSet[SplineXYZCoil]:
         """Create a CoilSet of SplineXYZCoils from a MAKEGRID-formatted coil txtfile.
 
         If the MAKEGRID contains more than one coil group (denoted by the number listed
@@ -2568,7 +2594,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
 
     def to_FourierPlanar(
         self, N=10, grid=None, basis="xyz", name="", check_intersection=False
-    ) -> "CoilSet[FourierPlanarCoil]":
+    ) -> CoilSet[FourierPlanarCoil]:
         """Convert all coils to FourierPlanarCoil.
 
         Note that some types of coils may not be representable in this basis.
@@ -2608,7 +2634,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
 
     def to_FourierXY(
         self, N=10, grid=None, s=None, basis="xyz", name="", check_intersection=False
-    ) -> "CoilSet[FourierXYCoil]":
+    ) -> CoilSet[FourierXYCoil]:
         """Convert all coils to FourierXYCoil.
 
         Note that some types of coils may not be representable in this basis.
@@ -2653,7 +2679,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
 
     def to_FourierRZ(
         self, N=10, grid=None, NFP=None, sym=False, name="", check_intersection=False
-    ) -> "CoilSet[FourierRZCoil]":
+    ) -> CoilSet[FourierRZCoil]:
         """Convert all coils to FourierRZCoil representation.
 
         Note that some types of coils may not be representable in this basis.
@@ -2693,7 +2719,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
 
     def to_FourierXYZ(
         self, N=10, grid=None, s=None, name="", check_intersection=False
-    ) -> "CoilSet[FourierXYZCoil]":
+    ) -> CoilSet[FourierXYZCoil]:
         """Convert all coils to FourierXYZCoil representation.
 
         Parameters
@@ -2730,7 +2756,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
 
     def to_SplineXYZ(
         self, knots=None, grid=None, method="cubic", name="", check_intersection=False
-    ) -> "CoilSet[SplineXYZCoil]":
+    ) -> CoilSet[SplineXYZCoil]:
         """Convert all coils to SplineXYZCoil representation.
 
         Parameters
@@ -2867,7 +2893,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
             )
             return is_nearly_intersecting
 
-    def __add__(self, other) -> "CoilSet[T]":
+    def __add__(self, other) -> CoilSet:
         if isinstance(other, (CoilSet)):
             try:
                 return CoilSet(*self.coils, *other.coils)
@@ -2887,7 +2913,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
             return NotImplemented
 
     # dunder methods required by MutableSequence
-    def __getitem__(self, i) -> T:
+    def __getitem__(self, i) -> _CoilT:
         return self.coils[i]
 
     def __setitem__(self, i, new_item):
@@ -2919,7 +2945,7 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[T], Generic[T]):
         )
 
 
-class MixedCoilSet(CoilSet):
+class MixedCoilSet(CoilSet[_Coil]):
     """Set of coils or coilsets of different geometry.
 
     Parameters
@@ -3643,7 +3669,9 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     return ratio.sum()
 
 
-def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=False):
+def initialize_modular_coils(
+    eq, num_coils, r_over_a=2.0, check_intersection=False
+) -> CoilSet[FourierPlanarCoil]:
     """Initialize a CoilSet of modular coils for stage 2 optimization.
 
     The coils will be planar, circular coils centered on the equilibrium magnetic axis,
@@ -3702,7 +3730,7 @@ def initialize_modular_coils(eq, num_coils, r_over_a=2.0, check_intersection=Fal
 
 def initialize_saddle_coils(
     eq, num_coils, r_over_a=0.5, offset=2.0, position="outer", check_intersection=False
-):
+) -> CoilSet[FourierPlanarCoil]:
     """Initialize a CoilSet of saddle coils for stage 2 optimization.
 
     The coils will be planar, circular coils positioned around the plasma without
@@ -3788,7 +3816,7 @@ def initialize_saddle_coils(
 
 def initialize_helical_coils(
     eq, num_coils, r_over_a=2.0, helicity=(1, 1), npts=100, check_intersection=False
-):
+) -> CoilSet[SplineXYZCoil]:
     """Initialize a CoilSet of helical coils for stage 2 optimization.
 
     The coils will be roughly a constant distance from the plasma surface as they wind

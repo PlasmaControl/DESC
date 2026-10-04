@@ -1180,7 +1180,6 @@ class SecondAdiabaticInvariantAlphaDerivative(_Objective):
         self._zeta_max = zeta_max
         self._softplus_sharpness = softplus_sharpness
         self._soft_extrema_tau = soft_extrema_tau
-        self._jac_chunk_size = jac_chunk_size
 
         super().__init__(
             things=eq,
@@ -1192,6 +1191,7 @@ class SecondAdiabaticInvariantAlphaDerivative(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1353,7 +1353,6 @@ class SoftConnectivity(_Objective):
         self._num_alpha = num_alpha
         self._t = np.linspace(0.0, 1.0, 200) if t is None else np.asarray(t)
         self._sigmoid_sharpness = sigmoid_sharpness
-        self._jac_chunk_size = jac_chunk_size
 
         things = [eq, spline]
         super().__init__(
@@ -1366,6 +1365,7 @@ class SoftConnectivity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

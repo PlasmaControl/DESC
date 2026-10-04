@@ -2535,7 +2535,10 @@ def test_signed_PlasmaVesselDistance():
     (eq, surf), _ = optimizer.optimize(
         (eq, surf),
         objective,
-        constraints=(FixParameters(surf),),
+        constraints=(
+            FixParameters(surf),
+            FixParameters(eq, {"Psi": True, "c_l": True, "p_l": True, "L_lmn": True}),
+        ),
         verbose=3,
         maxiter=60,
         ftol=1e-8,

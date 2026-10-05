@@ -1127,3 +1127,68 @@ class TestContinuationWithOmega:
         )
         assert final.is_nested()
         assert final.get_surface_at(rho=1.0).check_toroidal_map() > 0
+
+
+@pytest.mark.unit
+def test_linking_current_axis_with_omega(eq_omega):
+    """The linking-current objective must find the real axis when omega != 0.
+
+    Circular coils centred on the true magnetic axis (phi = zeta + omega) with
+    their normals along it link the axis exactly once each. The FourierRZCoil
+    built from eq.axis (R, Z at the DESC angle zeta, not at phi) is a different
+    curve for this strongly shaped mirror hybrid and misses some of the coils.
+    """
+    from desc.coils import FourierPlanarCoil, MixedCoilSet
+    from desc.objectives import LinkingCurrentConsistency
+
+    eq = eq_omega
+    grid = LinearGrid(rho=np.array([0.0]), M=0, N=360, NFP=eq.NFP, sym=False)
+    data = eq.compute(["X", "Y", "Z"], grid=grid)
+    period = np.column_stack([data["X"], data["Y"], data["Z"]])
+    axis = np.vstack(
+        [
+            period
+            @ np.array(
+                [[np.cos(a), np.sin(a), 0], [-np.sin(a), np.cos(a), 0], [0, 0, 1]]
+            )
+            for a in 2 * np.pi * np.arange(eq.NFP) / eq.NFP
+        ]
+    )
+    tangent = np.gradient(axis, axis=0)
+    coils = []
+    for i in range(0, axis.shape[0], 90):
+        n = tangent[i] / np.linalg.norm(tangent[i])
+        coils.append(
+            FourierPlanarCoil(
+                current=1.0, center=axis[i], normal=n, r_n=[0.3], basis="xyz"
+            )
+        )
+    coilset = MixedCoilSet(*coils, check_intersection=False)
+
+    # the old construction (R, Z of eq.axis at zeta taken as phi) is a different
+    # curve: 0.26 m from the true axis here, 3.7 minor radii
+    axis_rz = FourierRZCoil(
+        1.0,
+        eq.axis.R_n,
+        eq.axis.Z_n,
+        eq.axis.R_basis.modes[:, 2],
+        eq.axis.Z_basis.modes[:, 2],
+        eq.axis.NFP,
+    )
+    x_rz = axis_rz.compute("x", grid=LinearGrid(N=720), basis="xyz")["x"]
+    dist = np.linalg.norm(x_rz[:, None] - axis[None], axis=-1).min(axis=1)
+    a_grid = LinearGrid(L=eq.L_grid, M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+    a = float(np.squeeze(eq.compute("a", grid=a_grid, override_grid=False)["a"]))
+    assert dist.max() > 2 * a
+
+    obj = LinkingCurrentConsistency(eq, coilset, eq_fixed=True)
+    obj.build(verbose=0)
+    link = obj._constants["link"]
+    np.testing.assert_array_equal(np.abs(link), 1)
+    # currents that sum (with the linking signs) to G give zero error
+    G_grid = LinearGrid(rho=1.0, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    G = 2 * np.pi * eq.compute("G", grid=G_grid)["G"][0] / mu_0
+    for c, s in zip(coilset.coils, link):
+        c.current = s * G / len(coils)
+    err = obj.compute(coilset.params_dict)
+    np.testing.assert_allclose(err, 0, atol=1e-6 * abs(G))

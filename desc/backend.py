@@ -36,6 +36,10 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
+            if desc_config.get("kind") == "tpu":
+                desc_config["avail_mem"] = (
+                    jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3
+                )
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True

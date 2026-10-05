@@ -852,6 +852,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         D_zeta0 = transforms["diffmat"].D_zeta
 
     # Get differentiation matrices
+    # The dense assembler had NO marks at all -- `[B_blocks cond]` below was the only
+    # landmark in it -- so a coupled_rt run that spent 20 minutes somewhere in here
+    # could only be reported as "hung after B_blocks". These four cover the whole body;
+    # verification is that they sum to the enclosing `coarse dense assemble` mark.
+    _atm = _PhaseTimer("assemble ")
     D_rho0 = transforms["diffmat"].D_rho
     D_theta0 = transforms["diffmat"].D_theta
 
@@ -1092,6 +1097,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     F = -mu_0 * data["finite-n instability drive"][:, None] * (1 / B_N) ** 2
 
     C_zeta = _diag_col(partial_z_log_sqrtg) + D_zeta
+    # Covers the branch above: under `coupled_rt` without `ring_nodes` that is five
+    # full (n_total, n_total) Kronecker products, which is the first suspect for the
+    # coarse dense assemble's cost.
+    _atm.mark("diffmats + metric", D_rho, D_theta, D_zeta, A, B)
+
     C_rho = _diag_col(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
     C_theta = _diag_col(partial_v_log_sqrtg) + D_theta
 
@@ -1614,6 +1624,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         #    flush=True,
         # )
 
+    _atm.mark("term accumulation", A, B)
+
     A = A.at[ups_idx, rho_idx].set(_cT(A[rho_idx, ups_idx]))
     A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
     A = A.at[zeta_idx, ups_idx].set(_cT(A[ups_idx, zeta_idx]))
@@ -1723,6 +1735,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
             )
 
     Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
+    # Ends just past `[B_blocks cond]`, so that print keeps its meaning as a landmark.
+    _atm.mark("symmetrize + B_blocks + Cholesky", Linv, B_blocks)
 
     def component_to_node_permutn(N: int) -> jnp.ndarray:
         """
@@ -1771,7 +1785,9 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # L^-1 A L^-T
     A = A.reshape(n_total, 3, n_total, 3)
     A = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A, Linv)
-
+    # The L^-1 A L^-T congruence: O(n^3) like the accumulation above, and the other
+    # place a dense assemble can disappear into.
+    _atm.mark("whitening congruence", A)
     node_idx = jnp.arange(n_total)
 
     # Add a constant shift to the diagonal of A (in the whitened L^-1 A L^-T
@@ -1807,6 +1823,11 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     keep = jnp.concatenate([keep_1, keep_2])
 
     A = A[jnp.ix_(keep, keep)]
+    # The tail -- drive diagonal, node/component permutation, keep-mask reduction. It
+    # was outside the marks, which left ~0.8 s of a 2.7 s assemble unaccounted at a toy
+    # size; the whole point of these marks is that they add up, so it gets its own.
+    _atm.mark("drive + permute + keep", A)
+    _atm.total("dense assemble body")
 
     return {
         "A": A,
@@ -2988,6 +3009,22 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # dependency resolution, is what can carry a free-vs-fixed gap: the compute key's
     # dependency list is identical under both boundary conditions.
     _btmr = _PhaseTimer("build ")
+    # FORCE THE UPSTREAM DEPENDENCIES FIRST, on their own mark.
+    #
+    # This is the first `block_until_ready` inside `_AGNI3_rayleigh`, and jax is async:
+    # DESC resolved this key's geometry dependencies on the fine grid on the way in, but
+    # those arrays are still in flight. Whatever blocks first therefore absorbs ALL of
+    # that, and the operator-build mark below was being charged for it -- which is why
+    # it read 162.7 s at 35x35 for a function that allocates nothing larger than
+    # (n_total, 3, 3) and so cannot possibly cost that in arithmetic.
+    #
+    # Splitting them is the difference between "the operator build is slow" and "the
+    # geometry DESC computed before we were called is slow", which want completely
+    # different fixes.
+    _btmr.mark(
+        "DESC fine-grid deps (forced here)",
+        *[v for v in data.values() if hasattr(v, "shape")],
+    )
     _op = _agni3_matfree_operator(params, transforms, profiles, data, **kwargs)
     n_keep = _op["n_keep"]
     _dtype = _op["Linv_DT"].dtype

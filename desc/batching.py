@@ -448,17 +448,16 @@ def jacfwd_chunked(
         # More directions than fit in one chunk, so this will be split across
         # multiple scan iterations. Linearize once here instead of chunking
         # fresh _jvp calls -- see Derivative.linearize (in desc/derivatives.py)
-        # for the mechanism; same idea, just built on jax.linearize/WrappedFun
-        # directly since desc.derivatives can't be imported here without a
-        # circular import.
+        # for the mechanism; same idea, just built on jax.linearize directly
+        # since desc.derivatives can't be imported here without a circular import.
         f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
         if has_aux:
             y, jvp_fn, aux = jax.linearize(
-                lambda t: f_partial.call_wrapped(*t), dyn_args, has_aux=True
+                lambda t: f_partial(*t), dyn_args, has_aux=True
             )
         else:
-            y, jvp_fn = jax.linearize(lambda t: f_partial.call_wrapped(*t), dyn_args)
+            y, jvp_fn = jax.linearize(lambda t: f_partial(*t), dyn_args)
         jac = vmap_chunked(jvp_fn, chunk_size=chunk_size)(_std_basis(dyn_args))
         jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
         tree_map(partial(_check_output_dtype_jacfwd, holomorphic), y)

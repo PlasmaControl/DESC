@@ -109,7 +109,7 @@ if use_jax:  # noqa: C901
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
 
     # TODO: remove fallback once JAX min version >= 0.10.0
-    if Version(jax.__version__) >= Version("0.10.0"):
+    if Version(jax.__version__) >= Version("0.11.2"):
         from jax.scipy.linalg import qr_multiply
     else:
         # Implements `jax.scipy.linalg.qr_multiply` without the ``ormqr`` primitive

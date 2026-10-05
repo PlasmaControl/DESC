@@ -28,6 +28,178 @@ from desc.utils import (
     warnif,
 )
 
+def _optimize_scipy_minimize_patched(
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
+):
+    """Same as the stock scipy-minimize wrapper, but without the dense
+    np.eye(n) fallback in its per-iteration callback, which OOMs (~45 GB at
+    n=75,460) whenever no Hessian is tracked (true for l-bfgs-b/bfgs/CG).
+    Imports are local to avoid a circular import with _scipy_wrappers, which
+    itself imports `register_optimizer` from this module.
+    """
+    import scipy.optimize as _scipy_optimize
+    from desc.optimize._scipy_wrappers import (
+        compute_hess_scale,
+        evaluate_quadratic_form_hess,
+        f_where_x,
+        print_header_nonlinear,
+        print_iteration_nonlinear,
+        check_termination,
+    )
+
+    assert constraint is None, f"method {method} doesn't support constraints"
+    options = {} if options is None else options
+    options.setdefault("maxiter", stoptol["maxiter"])
+    options.setdefault("disp", False)
+    if method == "scipy-l-bfgs-b":
+        options.pop("disp")
+    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+    use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
+    if isinstance(x_scale, str) and x_scale == "auto" and use_hessian:
+        H = hess(x0)
+        scale, _ = compute_hess_scale(H)
+    elif isinstance(x_scale, str):
+        scale = 1.0
+    else:
+        scale = x_scale
+    if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
+        options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
+        options.setdefault("max_trust_radius", np.inf)
+
+    allx = [x0]
+    func_allx, func_allf = [], []
+    grad_allx, grad_allf = [], []
+    hess_allx, hess_allf = [], []
+    message = [""]
+    success = [None]
+
+    def fun_wrapped(xs):
+        x = xs * scale
+        f = f_where_x(x, func_allx, func_allf, dim=0) if len(func_allx) else np.array([])
+        if not f.size:
+            func_allx.append(x)
+            f = fun(x)
+            func_allf.append(f)
+        return f
+
+    def grad_wrapped(xs):
+        x = xs * scale
+        g = f_where_x(x, grad_allx, grad_allf, dim=1) if len(grad_allx) else np.array([])
+        if not g.size:
+            grad_allx.append(x)
+            g = grad(x)
+            grad_allf.append(g)
+        return g * scale
+
+    def hess_wrapped(xs):
+        x = xs * scale
+        H = f_where_x(x, hess_allx, hess_allf, dim=2) if len(hess_allx) else np.array([[]])
+        if not H.size:
+            hess_allx.append(x)
+            H = hess(x)
+            hess_allf.append(H)
+        return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
+
+    hess_wrapped = None if not use_hessian else hess_wrapped
+
+    def callback(xs):
+        x1 = xs * scale
+        eps = np.finfo(x1.dtype).eps
+        if np.all(np.isclose(x1, allx[-1], rtol=eps, atol=eps)):
+            return
+        f1 = f_where_x(x1, func_allx, func_allf, dim=0)
+        if not f1.size:
+            f1 = fun_wrapped(xs)
+        g1 = f_where_x(x1, grad_allx, grad_allf, dim=1)
+        if not g1.size:
+            g1 = grad_wrapped(xs) / scale
+        allx.append(x1)
+        g_norm = np.linalg.norm(g1, ord=np.inf)
+        x_norm = np.linalg.norm(x1)
+
+        if len(allx) < 2:
+            df = np.inf
+            dx_norm = np.inf
+            reduction_ratio = 0
+        else:
+            x2 = allx[-2]
+            f2 = f_where_x(x2, func_allx, func_allf, dim=0)
+            df = f2 - f1
+            dx = x1 - x2
+            dx_norm = jnp.linalg.norm(dx)
+            if len(hess_allx):
+                H1 = f_where_x(x1, hess_allx, hess_allf, dim=2)
+                predicted_reduction = -evaluate_quadratic_form_hess(H1, g1, dx)
+                if predicted_reduction > 0:
+                    reduction_ratio = df / predicted_reduction
+                elif predicted_reduction == df == 0:
+                    reduction_ratio = 1
+                else:
+                    reduction_ratio = 0
+            else:
+                # no real Hessian tracked (l-bfgs-b/bfgs/CG) -> skip the dense
+                # np.eye(n) fallback; crude accept/reject on cost improvement.
+                reduction_ratio = 1 if df > 0 else 0
+
+        if verbose > 1:
+            print_iteration_nonlinear(
+                len(allx) - 1, len(func_allx), f1, df, dx_norm, g_norm
+            )
+
+        success[0], message[0] = check_termination(
+            df, f1, dx_norm, x_norm, g_norm, reduction_ratio,
+            stoptol["ftol"], stoptol["xtol"], stoptol["gtol"],
+            len(allx) - 1, stoptol["maxiter"], len(func_allx), stoptol["max_nfev"],
+            dx_total=np.linalg.norm(x1 - x0),
+            max_dx=options.get("max_dx", np.inf),
+        )
+        if success[0] is not None:
+            raise StopIteration
+
+    if verbose > 1:
+        print_header_nonlinear()
+        f1 = fun_wrapped(x0 / scale)
+        g1 = grad_wrapped(x0 / scale) / scale
+        g_norm = np.linalg.norm(g1, ord=np.inf)
+        print_iteration_nonlinear(len(allx) - 1, len(func_allx), f1, np.inf, np.inf, g_norm)
+
+    try:
+        result = _scipy_optimize.minimize(
+            fun_wrapped, x0=x0 / scale, args=(),
+            method=method.replace("scipy-", ""),
+            jac=grad_wrapped, hess=hess_wrapped,
+            tol=stoptol["gtol"], options=options, callback=callback,
+        )
+        result["allx"] = allx
+        result["nfev"] = len(func_allx)
+        result["ngev"] = len(grad_allx)
+        result["nhev"] = len(hess_allx)
+        result["nit"] = len(allx) - 1
+    except StopIteration:
+        x = allx[-1]
+        f = f_where_x(x, func_allx, func_allf, dim=0)
+        g = f_where_x(x, grad_allx, grad_allf, dim=1)
+        H = f_where_x(x, hess_allx, hess_allf, dim=2) if len(hess_allx) else None
+        result = _scipy_optimize.OptimizeResult(
+            x=x, success=success[0], fun=f, grad=g, hess=H,
+            optimality=np.linalg.norm(g, ord=np.inf),
+            nfev=len(func_allx), ngev=len(grad_allx), nhev=len(hess_allx),
+            nit=len(allx) - 1, message=message[0], allx=allx,
+        )
+    if verbose > 0:
+        if result["success"]:
+            print(result["message"])
+        else:
+            print("Warning: " + result["message"])
+        print("         Current function value: {:.3e}".format(result["fun"]))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        print("         Iterations: {:d}".format(result["nit"]))
+        print("         Function evaluations: {:d}".format(result["nfev"]))
+        print("         Gradient evaluations: {:d}".format(result["ngev"]))
+        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+
+    return result
+
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
 
@@ -249,7 +421,6 @@ class Optimizer(IOAble):
 
         timer = Timer()
         _, method = _parse_method(self.method)
-
         timer.start("Initializing the optimization")
         if not is_linear_proj:
             objective, nonlinear_constraint = get_combined_constraint_objectives(
@@ -315,7 +486,22 @@ class Optimizer(IOAble):
 
         timer.start("Solution time")
 
-        result = optimizers[method]["fun"](
+        # result = optimizers[method]["fun"](
+        #     objective,
+        #     nonlinear_constraint,
+        #     x0,
+        #     method,
+        #     x_scale_projected,
+        #     verbose,
+        #     stoptol,
+        #     options,
+        # )
+        _fun = optimizers[method]["fun"]
+        if method == "scipy-l-bfgs-b":
+            # avoids an O(n^2) memory allocation in the stock wrapper's
+            # termination-check callback at large parameter counts
+            _fun = _optimize_scipy_minimize_patched
+        result = _fun(
             objective,
             nonlinear_constraint,
             x0,

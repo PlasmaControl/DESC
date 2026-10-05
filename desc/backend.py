@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 from packaging.version import Version
-from termcolor import colored
 
 import desc
 from desc import config as desc_config
@@ -14,12 +13,9 @@ from desc import set_device
 
 OMEGA_IS_0 = True
 
-if os.environ.get("DESC_BACKEND") == "numpy":
-    jnp = np
-    use_jax = False
-    set_device(kind="cpu")
-else:
-    if desc_config.get("device") is None:
+use_jax = os.environ.get("DESC_BACKEND") != "numpy"
+if use_jax:
+    if desc_config["kind"] is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -30,22 +26,46 @@ else:
             from jax import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
-            if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
-                warnings.warn(
-                    "JAX failed to detect GPU, are you sure you "
-                    + "installed JAX with GPU support?"
-                )
-                set_device("cpu")
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
-        use_jax = True
+            _device = jax.local_devices()[0]
+            _mem_stats = _device.memory_stats()  # None for CPU backends
     except ModuleNotFoundError:
-        jnp = np
-        x = jnp.linspace(0, 5, 2)
-        y = jnp.exp(x)
         use_jax = False
-        set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
+        warnings.warn("Failed to load JAX")
+
+if not use_jax:  # DESC_BACKEND=numpy, or JAX failed to load
+    jnp = np
+    x = jnp.linspace(0, 5, 2)
+    y = jnp.exp(x)
+    _device = _mem_stats = None
+    set_device("cpu")
+elif desc_config["kind"] != _device.platform:
+    warnings.warn(
+        f"JAX is running on {_device.platform}, not the requested "
+        + f"{desc_config['kind']}. Make sure JAX is installed with support "
+        + "for it, and that set_device was called before importing anything "
+        + "else from DESC."
+    )
+    desc_config["kind"] = _device.platform
+
+if _mem_stats is None:  # CPU backends don't report memory stats
+    import psutil
+
+    desc_config["device"] = "CPU"
+    desc_config["avail_mem"] = psutil.virtual_memory().available / 1024**3
+else:
+    # JAX only preallocates a fraction of the GPU memory,
+    # but we want to report the total available memory
+    _mem_frac = 1.0
+    if _device.platform == "gpu":
+        _mem_frac = float(
+            os.environ.get("XLA_CLIENT_MEM_FRACTION")
+            or os.environ.get("XLA_PYTHON_CLIENT_MEM_FRACTION")
+            or 0.75
+        )
+    desc_config["device"] = f"{_device.device_kind} (id={_device.id})"
+    desc_config["avail_mem"] = _mem_stats["bytes_limit"] / _mem_frac / 1024**3
 
 
 def print_backend_info():

@@ -295,10 +295,10 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 def _c_balloon(params, transforms, profiles, data, **kwargs):
     """Dimensionless c ρ² where c is defined in eq. 25b of arxiv.org/abs/2410.04576.
 
-    Also α = α_{DESC} + ι ζ₀ sign ι here, the same as in ``gds2`` (and so ``f`` and
-    ``g``), whereas above link has α = α_{DESC} + ι ζ₀. Then c, f and g are unchanged
-    when B is reversed (ψ → -ψ) and all change sign in left-handed coordinates, so the
-    ballooning eigenvalues depend on neither.
+    Also α = α_{DESC} + ι ζ₀ sign ι here, the same as in ``gds2`` (and
+    so ``f`` and ``g``), whereas above link has α = α_{DESC} + ι ζ₀. Then c, f
+    and g are unchanged when B is reversed (ψ → -ψ) and all change sign in
+    left-handed coordinates, so the ballooning eigenvalues depend on neither.
     """
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)

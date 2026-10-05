@@ -89,16 +89,43 @@ def set_device(kind="cpu", gpuid=None):
     config["kind"] = kind
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
+        import psutil
+
+        config["device"] = "CPU"
+        config["avail_mem"] = psutil.virtual_memory().available / 1024**3
     else:
         os.environ.pop("JAX_PLATFORMS", None)
-        if kind == "gpu" and gpuid is not None:
-            # so that the ids assigned by CUDA match those from nvidia-smi
-            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
-            visible = [i for i in visible if i.strip()]
+    if kind == "gpu":
+        # so that the ids assigned by CUDA match those from nvidia-smi
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+        visible = [i for i in visible if i.strip()]
+        if gpuid is not None:
             if visible and not 0 <= int(gpuid) < len(visible):
                 raise ValueError(
                     f"gpuid {gpuid} is out of range for "
                     f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}"
                 )
             os.environ["JAX_CUDA_VISIBLE_DEVICES"] = str(int(gpuid))
+        # pynvml namespace is exposed through nvidia-ml-py
+        from pynvml import (
+            nvmlDeviceGetHandleByIndex,
+            nvmlDeviceGetMemoryInfo,
+            nvmlDeviceGetName,
+            nvmlInit,
+            nvmlMemory_v2,
+            nvmlShutdown,
+        )
+
+        # physical id of the first GPU JAX will use
+        idx = 0 if gpuid is None else int(gpuid)
+        idx = int(visible[idx]) if visible else idx
+        nvmlInit()
+        try:
+            handle = nvmlDeviceGetHandleByIndex(idx)
+            # Use nvmlMemory_v2 to account for system-reserved memory
+            mem = nvmlDeviceGetMemoryInfo(handle, version=nvmlMemory_v2)
+            config["device"] = f"{nvmlDeviceGetName(handle)} (id={idx})"
+            config["avail_mem"] = (mem.total - mem.used) / 1024**3
+        finally:
+            nvmlShutdown()

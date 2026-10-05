@@ -24,6 +24,7 @@ from desc.coils import (
     FourierXYCoil,
     FourierXYZCoil,
     MixedCoilSet,
+    initialize_modular_coils,
 )
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
@@ -35,7 +36,6 @@ from desc.objectives import (
     AspectRatio,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
-    CoilCurvature,
     CoilLength,
     Energy,
     FixBoundaryR,
@@ -54,9 +54,11 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
+    PlasmaCoilSetMinDistance,
     PlasmaVesselDistance,
     QuadraticFlux,
     QuasisymmetryTripleProduct,
+    VacuumBoundaryError,
     Volume,
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
@@ -1194,14 +1196,9 @@ def test_constrained_AL_scalar():
 @pytest.mark.optimize
 def test_proximal_constrained_AL_lsq():
     """Test proximal-lsq-auglag with a non-equilibrium nonlinear constraint."""
-    eq = desc.examples.get("SOLOVEV")
-    solve_options = {"ftol": 1e-8, "xtol": 1e-8, "gtol": 1e-8, "maxiter": 50}
-    volume_target = 0.95 * float(eq.compute("V")["V"])
-
-    coil = FourierPlanarCoil(
-        r_n=[1.0], center=[4.0, 0, 0], normal=[0, 1, 0], current=1e6
-    )
-    length_target = 1.1 * float(coil.compute("length")["length"])
+    eq = desc.examples.get("precise_QA")
+    solve_options = {"ftol": 1e-6, "xtol": 1e-6, "gtol": 1e-6}
+    cset = initialize_modular_coils(eq, 3)
 
     R_modes = np.vstack(
         (
@@ -1216,57 +1213,54 @@ def test_proximal_constrained_AL_lsq():
     ]
 
     objective = ObjectiveFunction(
-        (
-            CoilCurvature(coil, target=0.5, weight=1e-2),
-            Volume(eq=eq, target=volume_target),
-        )
+        VacuumBoundaryError(eq=eq, field=cset, bs_chunk_size=10)
     )
+
     constraints = (
         ForceBalance(eq=eq),  # absorbed by proximal
-        CoilLength(coil, target=length_target),  # auglag
+        PlasmaCoilSetMinDistance(eq=eq, coil=cset, target=0.1),  # auglag
         FixBoundaryR(eq=eq, modes=R_modes),
         FixBoundaryZ(eq=eq, modes=Z_modes),
         FixPressure(eq=eq),
-        FixIota(eq=eq),
         FixPsi(eq=eq),
-        FixCoilCurrent(coil),
+        FixCurrent(eq=eq),
     )
 
-    objective.build(verbose=0)
+    objective.build()
     prox = ProximalProjection(objective, ObjectiveFunction(ForceBalance(eq=eq)), eq)
-    prox.build(verbose=0)
+    prox.build()
     state = prox._state
 
     for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
         assert arg not in state.args
     dim_eq = sum(eq.dimensions[arg] for arg in state.args)
     assert dim_eq < eq.dim_x
-    assert prox.dim_x == dim_eq + coil.dim_x
+    assert prox.dim_x == dim_eq + cset.dim_x
     assert prox._dimc_per_thing[prox._eq_idx] == dim_eq
     assert prox._dimx_per_thing[prox._eq_idx] == eq.dim_x
-    assert prox._dimc_per_thing[0] == prox._dimx_per_thing[0] == coil.dim_x
+    assert prox._dimc_per_thing[0] == prox._dimx_per_thing[0] == cset.dim_x
 
-    (eq_opt, coil_opt), _ = Optimizer("proximal-lsq-auglag").optimize(
-        (eq, coil),
+    (eq_opt, cset_opt), _ = Optimizer("proximal-lsq-auglag").optimize(
+        (eq, cset),
         objective=objective,
         constraints=constraints,
         maxiter=30,
-        verbose=0,
         copy=True,
         options={"solve_options": solve_options},
     )
 
+    distance = PlasmaCoilSetMinDistance(eq=eq, coil=cset, target=0.1)
+    distance.build()
     np.testing.assert_allclose(
-        float(coil_opt.compute("length")["length"]), length_target, rtol=1e-8
-    )
-    np.testing.assert_allclose(
-        float(eq_opt.compute("V")["V"]), volume_target, rtol=1e-6
+        distance.target,
+        distance.compute_unscaled(eq_opt.params_dict, cset_opt.params_dict),
+        atol=1e-3,
     )
 
     force = ObjectiveFunction(ForceBalance(eq=eq_opt))
-    force.build(verbose=0)
+    force.build()
     force_final = np.linalg.norm(force.compute_scaled_error(force.x(eq_opt)))
-    assert force_final < 1e-7
+    assert force_final < 1e-6
 
 
 @pytest.mark.slow

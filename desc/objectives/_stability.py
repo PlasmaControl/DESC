@@ -1954,12 +1954,23 @@ class FinitenStability(_Objective):
 
         _fflux = self._flux_data(params, constants, grid)
         _tmr.mark("flux_data fine", *_fflux.values())
+
+        _fdata = eq.compute(
+            _ckeys,
+            grid=grid,
+            diffmat=self._diffmat,
+            params=params,
+            data=_fflux,
+            override_grid=False,
+        )
+        _tmr.mark("geometry fine", *_fdata.values())
+
         data = eq.compute(
             "finite-n lambda3 rayleigh",
             grid=grid,
             diffmat=self._diffmat,
             params=params,
-            data=_fflux,
+            data=_fdata,
             override_grid=False,
             **options,
         )

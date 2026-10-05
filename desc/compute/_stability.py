@@ -275,10 +275,10 @@ def _gds2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="c ballooning",
-    # c = 2 a³ Bₙ μ₀ sign(ψ) dp/dψ / (|B|² b⋅∇ζ) (b × 𝛋) ⋅ ∇(α + ι ζ₀) ρ²
-    label="2 a^3 B_n \\mu_0 \\mathrm{sign}(\\psi) (\\partial_{\\psi} p) / "
+    # c = 2 a³ Bₙ μ₀ dp/dψ / (|B|² b⋅∇ζ) (b × 𝛋) ⋅ ∇(α + ι ζ₀ sign ι) ρ²
+    label="2 a^3 B_n \\mu_0 (\\partial_{\\psi} p) / "
     "(\\vert B \\vert^2 b \\cdot \\nabla ζ) (b \\times \\kappa) \\cdot "
-    "\\nabla (\\alpha + \\iota \\zeta_0) \\rho^2",
+    "\\nabla (\\alpha + \\iota \\zeta_0 \\mathrm{sign} \\iota) \\rho^2",
     units="~",
     units_long="None",
     description="Parameter in ideal ballooning equation",
@@ -287,17 +287,18 @@ def _gds2(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["a", "p_r", "psi", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "shear"],
+    data=["a", "p_r", "psi_r", "B^zeta", "rho", "cvdrift", "cvdrift0", "shear", "iota"],
     zeta0="array: points of vanishing integrated local shear to scan over. "
     "Default 15 points linearly spaced in [-π/2,π/2]. "
     "The values ``zeta0`` correspond to values of ι ζ₀ and not ζ₀.",
 )
 def _c_balloon(params, transforms, profiles, data, **kwargs):
-    """Dimensionless c sign(ψ) ρ².
+    """Dimensionless c ρ² where c is defined in eq. 25b of arxiv.org/abs/2410.04576.
 
-    Where c mentioned immediately prior is defined in
-    eq. 25b of arxiv.org/abs/2410.04576. Also α = α_{DESC} + ι ζ₀ here,
-    consistent with above link.
+    Also α = α_{DESC} + ι ζ₀ sign ι here, the same as in ``gds2`` (and so ``f`` and
+    ``g``), whereas above link has α = α_{DESC} + ι ζ₀. Then c, f and g are unchanged
+    when B is reversed (ψ → -ψ) and all change sign in left-handed coordinates, so the
+    ballooning eigenvalues depend on neither.
     """
     zeta0 = kwargs.get("zeta0", jnp.linspace(-0.5 * jnp.pi, 0.5 * jnp.pi, 15))
     zeta0 = zeta0.reshape(-1, 1)
@@ -305,13 +306,12 @@ def _c_balloon(params, transforms, profiles, data, **kwargs):
     psi_boundary = params["Psi"] / (2 * jnp.pi)
     data["c ballooning"] = (
         (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
-        * jnp.sign(data["psi"])
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]
         * (
             2 * data["rho"] ** 2 * data["cvdrift"]
-            - data["cvdrift0"] * data["shear"] * zeta0
+            - data["cvdrift0"] * data["shear"] * jnp.sign(data["iota"]) * zeta0
         )
     )
     return data

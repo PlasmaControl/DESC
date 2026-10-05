@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 from packaging.version import Version
-from termcolor import colored
 
 import desc
 from desc import config as desc_config
@@ -19,7 +18,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
 else:
-    if desc_config.get("device") is None:
+    if desc_config.get("kind") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -49,7 +48,7 @@ else:
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
+        warnings.warn("Failed to load JAX", "red")
 
 
 def print_backend_info():

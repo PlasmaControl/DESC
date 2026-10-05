@@ -79,7 +79,7 @@ class EffectiveRipple(_Objective):
         num_pitch=51,
         pitch_batch_size=None,
         surf_batch_size=1,
-        nufft_eps=1e-6,
+        nufft_eps=1e-8,
         spline=True,
         **kwargs,
     ):
@@ -91,11 +91,11 @@ class EffectiveRipple(_Objective):
             "EffectiveRipple.",
         )
         try:
-            import jax_finufft  # noqa: F401
+            import nufftax  # noqa: F401
         except Exception:
             warnif(
                 nufft_eps >= 1e-14,
-                msg="\njax-finufft is not installed properly.\n"
+                msg="\nnufftax is not installed properly.\n"
                 "Setting parameter nufft_eps to zero.\n"
                 "Performance may be somewhat slower.\n",
             )

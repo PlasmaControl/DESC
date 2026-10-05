@@ -99,11 +99,11 @@ class TestFastInterp:
 
         f = 2 * rfft(c, norm="forward")
         f = f.at[..., (0, -1) if (n % 2 == 0) else 0].divide(2)
-        np.testing.assert_allclose(nufft1d2r(xq, f, domain), func(xq))
+        np.testing.assert_allclose(nufft1d2r(xq, f, domain, eps=1e-8), func(xq))
 
         @grad
         def g(xq):
-            return nufft1d2r(xq, f, domain, eps=1e-7).sum()
+            return nufft1d2r(xq, f, domain, eps=1e-8).sum()
 
         @grad
         def true_g(xq):
@@ -165,7 +165,7 @@ class TestFastInterp:
         # multiple (2) fourier series evaluated at the same (3) points
         xq = np.array([7.34, 1.10134, 2.28])
         np.testing.assert_allclose(
-            nufft1d2r(xq, f, domain),
+            nufft1d2r(xq, f, domain, eps=1e-8),
             np.stack([func_2(xq), func_2(xq)]),
         )
 

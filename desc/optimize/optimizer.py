@@ -161,6 +161,10 @@ class Optimizer(IOAble):
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``solve_options``.
+            - ``"full_hessian"`` : bool, whether ``ProximalProjection`` should use
+              the exact implicit derivative of the equilibrium (including the
+              second order force residual term) instead of the Gauss-Newton
+              approximation. More accurate but more expensive. Default False.
 
             - ``"ess_alpha"`` : float, optional
               Decay rate of the scaling. Default is 1.2.
@@ -601,11 +605,13 @@ def _maybe_wrap_nonlinear_constraints(
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
+        full_hessian = options.pop("full_hessian", False)
         objective = ProximalProjection(
             objective,
             constraint=_combine_constraints(nonlinear_constraints),
             perturb_options=perturb_options,
             solve_options=solve_options,
+            full_hessian=full_hessian,
             eq=eq,
         )
         nonlinear_constraints = ()

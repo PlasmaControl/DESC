@@ -2,9 +2,11 @@
 
 import functools
 
+import jax
 import numpy as np
 
 from desc.backend import jit, jnp, put
+from desc.batching import vmap_chunked
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -571,6 +573,14 @@ class ProximalProjection(ObjectiveFunction):
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+    full_hessian : bool
+        How to compute the derivative of the equilibrium solution wrt the
+        optimization variables. The equilibrium solve minimizes 0.5*|F|^2, and when
+        the residual F is not ~0 at the solution (ie. low resolution, F overdetermined)
+        the default Gauss-Newton approximation (dF/dx)⁻¹ dF/dc can be inaccurate,
+        which can stall the optimizer. If True, use the exact implicit derivative
+        including the second order term Σ Fᵢ ∇²Fᵢ, at the cost of forming the Hessian
+        of 0.5*|F|^2 with Hessian-vector products. Default is False.
     name : str
         Name of the objective function.
     """
@@ -582,6 +592,7 @@ class ProximalProjection(ObjectiveFunction):
         eq,
         perturb_options=None,
         solve_options=None,
+        full_hessian=False,
         name="ProximalProjection",
     ):
         assert isinstance(objective, ObjectiveFunction), (
@@ -622,6 +633,7 @@ class ProximalProjection(ObjectiveFunction):
         self._use_jit = False
         self._compiled = False
         self._eq = eq
+        self._full_hessian = bool(full_hessian)
         self._name = name
 
     def _set_eq_state_vector(self):
@@ -1054,6 +1066,7 @@ class ProximalProjection(ObjectiveFunction):
             self._dimc_per_thing,
             self._eq_idx,
             "scaled_error",
+            self._full_hessian,
         )
         g = self._objective.compute_scaled_error(xg, constants[0])
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
@@ -1220,6 +1233,7 @@ class ProximalProjection(ObjectiveFunction):
             self._dimc_per_thing,
             self._eq_idx,
             op,
+            self._full_hessian,
         )
 
         if self._objective._deriv_mode == "batched":
@@ -1276,7 +1290,7 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
     return wrapper
 
 
-@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
+@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op", "full_hessian"))
 def _proximal_get_tangents(
     constraint,
     xf,
@@ -1287,6 +1301,7 @@ def _proximal_get_tangents(
     dimc_per_thing,
     eq_idx,
     op="scaled_error",
+    full_hessian=False,
 ):
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
     # where G is the objective function. Since DESC stores x and c in the same
@@ -1309,21 +1324,33 @@ def _proximal_get_tangents(
     # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
     if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
         eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
+            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op, full_hessian
         )
     else:
         dxdcv = vs[eq_idx] @ dxdc.T
         # atleast_2d and reshape are to also handle a single (1D) direction
         eq_tangents = _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
+            constraint,
+            xf,
+            constants,
+            eq_feasible_tangents,
+            jnp.atleast_2d(dxdcv),
+            op,
+            full_hessian,
         )
         eq_tangents = eq_tangents.reshape(dxdcv.shape)
     return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
 
 
-@jit_if_possible
+@jit_if_possible(static_argnames=("op", "full_hessian"))
 def _proximal_eq_tangents(
-    constraint, xf, constants, eq_feasible_tangents, dxdcv, op="scaled_error"
+    constraint,
+    xf,
+    constants,
+    eq_feasible_tangents,
+    dxdcv,
+    op="scaled_error",
+    full_hessian=False,
 ):
     # Note: dxdcv holds the directions in c, mapped to the full eq state vector, as
     # rows. It is either dxdc.T or v @ dxdc.T, the return has the same shape.
@@ -1339,6 +1366,10 @@ def _proximal_eq_tangents(
     # for the relation between Rb_lmn and R_lmn.
     dim_x_reduced = eq_feasible_tangents.shape[-1]
     tangents = jnp.concatenate([eq_feasible_tangents.T, dxdcv], axis=0)
+    if full_hessian:
+        return _proximal_eq_tangents_full_hessian(
+            constraint, xf, constants, eq_feasible_tangents, dxdcv, tangents
+        )
     J = getattr(constraint, "jvp_" + op)(tangents, xf, constants)
     Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
@@ -1348,6 +1379,34 @@ def _proximal_eq_tangents(
     # this is (dF/dx)⁻¹ @ dF/dc for all the directions at once  # noqa : E800
     dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
     # feasible_tangents maps the reduced eq state vector back to the full one
+    return dxdcv - (eq_feasible_tangents @ dfdc).T
+
+
+def _proximal_eq_tangents_full_hessian(
+    constraint, xf, constants, eq_feasible_tangents, dxdcv, tangents
+):
+    # The equilibrium x*(c) minimizes φ = 0.5 |F|², so it satisfies Zᵀ ∇ₓφ = 0 where
+    # Z is the feasible tangents. Differentiating wrt c gives
+    # dy/dc = -(Zᵀ H Z)⁻¹ Zᵀ H dxdc,  H = ∇ₓ²φ = Jᵀ J + Σ Fᵢ ∇²Fᵢ
+    # The Gauss-Newton version drops Σ Fᵢ ∇²Fᵢ, which is only valid if F ~ 0. We
+    # always use the scaled error here since that is what the eq solve minimizes.
+    dim_x_reduced = eq_feasible_tangents.shape[-1]
+    grad_phi = jax.grad(
+        lambda x: 0.5 * jnp.sum(constraint.compute_scaled_error(x, constants) ** 2)
+    )
+    chunk_size = constraint._jac_chunk_size
+    chunk_size = chunk_size if isinstance(chunk_size, int) else None
+    H = (
+        vmap_chunked(
+            lambda t: jax.jvp(grad_phi, (xf,), (t,))[1], chunk_size=chunk_size
+        )(tangents)
+        @ eq_feasible_tangents
+    )
+    Hyy, Hyc = H[:dim_x_reduced], H[dim_x_reduced:].T
+    w, V = jnp.linalg.eigh(0.5 * (Hyy + Hyy.T))
+    cutoff = jnp.finfo(w.dtype).eps * dim_x_reduced * jnp.max(jnp.abs(w))
+    wi = jnp.where(jnp.abs(w) < cutoff, 0, 1 / w)
+    dfdc = V @ (wi[:, None] * (V.T @ Hyc))
     return dxdcv - (eq_feasible_tangents @ dfdc).T
 
 

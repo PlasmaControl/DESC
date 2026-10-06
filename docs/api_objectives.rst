@@ -203,6 +203,7 @@ User defined objectives
     desc.objectives.GenericObjective
     desc.objectives.ObjectiveFromUser
     desc.objectives.LinearObjectiveFromUser
+    desc.objectives.DeflationOperator
 
 
 Utilities for getting common groups of constraints

@@ -3,18 +3,17 @@
 import warnings
 from functools import partial
 
+import numpy as np
 from interpax import interp1d
 
 try:
     from jax_finufft import nufft2, options
 
-    can_use_nufft = True
 except (ImportError, ModuleNotFoundError):
     warnings.warn(
         "jax_finufft is not installed. NUFFT functions will not be available.",
         UserWarning,
     )
-    can_use_nufft = False
 except Exception as e:
     error_str = str(e)
     # This error will probably happen pretty often, we skip it to prevent breaking
@@ -35,9 +34,16 @@ except Exception as e:
             f"will not be available: {e}",
             UserWarning,
         )
-    can_use_nufft = False
 
 from desc.backend import jax, jnp
+
+_JF_BUG = True
+"""https://github.com/flatironinstitute/jax-finufft/issues/158.
+
+   Wait for jax-finufft to merge
+   https://github.com/flatironinstitute/jax-finufft/pull/216
+   then bump min version and set this to False.
+"""
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
@@ -76,7 +82,7 @@ def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
         Real function value at query points.
 
     """
-    # This is optimized away under JIT if the operation is an idenity.
+    # This is optimized away under JIT if the operation is an identity.
     s = 2 * jnp.pi / (domain[1] - domain[0])
     x = (x - domain[0]) * s
 
@@ -98,6 +104,7 @@ def nufft2d2r(
     vec=False,
     eps=1e-6,
     mask=None,
+    fill_value=None,
 ):
     """Non-uniform 2D real fast Fourier transform of second type.
 
@@ -137,6 +144,13 @@ def nufft2d2r(
         of ``(x),(x),(b,f0,f1)->(b,x)``.
     eps : float
         Precision requested. Default is ``1e-6``.
+    mask : jnp.ndarray, optional
+        Boolean mask of points to interpolate to. Should have same shape as ``x0``
+        and ``x1``. This does nothing until the merge of
+        https://github.com/flatironinstitute/jax-finufft/pull/216.
+    fill_value : float
+        Value to pad array where the mask is false.
+        Default is 0.0.
 
     Returns
     -------
@@ -144,7 +158,7 @@ def nufft2d2r(
         Real function value at query points.
 
     """
-    # This is optimized away under JIT if the operation is an idenity.
+    # This is optimized away under JIT if the operation is an identity.
     s0 = 2 * jnp.pi / (domain0[1] - domain0[0])
     s1 = 2 * jnp.pi / (domain1[1] - domain1[0])
     x0 = (x0 - domain0[0]) * s0
@@ -160,19 +174,16 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    opts = options.Opts(modeord=1)
-
-    # TODO: Delete this if block after
-    # https://github.com/flatironinstitute/jax-finufft/pull/216 is merged
-    # and then bump min version requirement.
-    JF_BUG = True
-    if JF_BUG:
-        # https://github.com/flatironinstitute/jax-finufft/pull/159
+    if _JF_BUG:
         opts = options.Opts(modeord=0)
         f = jnp.fft.fftshift(f, (-2, -1))
         return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
 
-    return (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    opts = options.Opts(modeord=1)
+    f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    if mask is not None and fill_value is not None:
+        f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, fill_value)
+    return f
 
 
 # Warning: method must be specified as keyword argument.
@@ -187,7 +198,7 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
-def poly_val(*, x, c, der=False):
+def poly_val(x, *, c, der=0):
     """Evaluate polynomial ``c`` at the points ``x``.
 
     Parameters
@@ -198,8 +209,8 @@ def poly_val(*, x, c, der=False):
         Last axis should store coefficients of a polynomial. For a polynomial given by
         ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
         ``c[...,n-i]``.
-    der : bool
-        Whether to evaluate the derivative instead.
+    der : int
+        Derivative to evaluate.
 
     Returns
     -------
@@ -217,17 +228,27 @@ def poly_val(*, x, c, der=False):
 
     """
     if c.shape[-1] == 4:
-        if der:
+        if der == 0:
+            return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        if der == 1:
             return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
-        return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        if der == 2:
+            return 6 * c[..., 0] * x + 2 * c[..., 1]
 
     if c.shape[-1] == 3:
-        if der:
+        if der == 0:
+            return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+        if der == 1:
             return 2 * c[..., 0] * x + c[..., 1]
-        return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+        if der == 2:
+            return 2 * c[..., 0]
 
-    if der:
+    assert 0 <= der <= 2
+    if der >= 1:
         c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+    if der >= 2:
+        c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+
     return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
@@ -247,21 +268,69 @@ def _subtract_last(c, k):
     )
 
 
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    return jnp.where(mask, sentinel, r)
-
-
 _root_companion = jnp.vectorize(
     partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
 )
-_eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
-@partial(jax.custom_jvp, nondiff_argnames=("sort", "sentinel", "eps", "distinct"))
+def _root_eps():
+    # Safer to make this a callable since output depends on whether
+    # double precision is enabled before it is called.
+    return max(jnp.finfo(jnp.array(1.0).dtype).eps, 1e-11)
+
+
+def _distinct_roots(r, c, eps, keep_extrema=True):
+    """Returns the distinct roots given sorted roots.
+
+    When we return distinct roots we preserve continuity invariants.
+    For example, if we return an ordering of distinct roots where the
+    derivative is nonzero there and does not change sign between adjacent
+    roots, this violates the behavior implied by intermediate value theorem.
+    """
+    # Due to numerics and condition numbers, roots of multipliciy m > 1
+    # may not be at the same spot. To preserve above invariant, we discard
+    # duplicate roots that lie within ε of each other if the derivative at
+    # those points has the same sign.
+
+    p = jnp.sign(poly_val(r, c=c[..., None, :], der=1))
+
+    same_sign = p == jnp.roll(p, shift=1, axis=-1)
+    if keep_extrema:
+        same_sign &= p != 0
+    is_close = jnp.abs(jnp.diff(r, prepend=jnp.nan)) <= eps
+
+    bad_pair_right_member = same_sign & is_close
+    bad_pair_left__member = jnp.roll(bad_pair_right_member, shift=-1, axis=-1)
+    r = jnp.where(
+        bad_pair_left__member | bad_pair_right_member,
+        jnp.nan,
+        r,
+    )
+    return r
+
+
+def _correction_step(r, c, k, backward_stable, eps):
+    # Schröder first kind correction.
+    p0 = poly_val(r, c=c) - k
+    p1 = poly_val(r, c=c, der=1)
+    p2 = poly_val(r, c=c, der=2)
+    candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
+
+    res_old = jnp.abs(p0)
+    res_new = jnp.abs(poly_val(candidate, c=c) - k)
+    r = jnp.where(res_new < res_old, candidate, r)
+
+    if not backward_stable:
+        r = jnp.where(
+            (res_old <= eps) | (res_new <= eps),
+            r,
+            jnp.nan,
+        )
+
+    return r
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
     k=0.0,
@@ -269,7 +338,7 @@ def polyroot_vec(
     a_max=None,
     sort=False,
     sentinel=jnp.nan,
-    eps=_eps,
+    eps=-1.0,
     distinct=False,
 ):
     """Roots of polynomial with given coefficients.
@@ -283,20 +352,14 @@ def polyroot_vec(
     k : jnp.ndarray
         Shape (..., *c.shape[:-1]).
         Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
-    a_min : jnp.ndarray
+    a_min, a_max : jnp.ndarray
         Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots are returned, otherwise returns all complex roots.
-    a_max : jnp.ndarray
-        Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
+        If given returns roots in the interval [``a_min``, ``a_max``).
         If specified only real roots are returned, otherwise returns all complex roots.
     sort : bool
         Whether to sort the roots.
     sentinel : float
         Value with which to pad array in place of filtered elements.
-        Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while avoiding ``nan`` gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
@@ -310,43 +373,60 @@ def polyroot_vec(
         The roots of the polynomial, iterated over the last axis.
 
     """
+    if eps < 0:
+        eps = _root_eps()
+
     get_only_real_roots = not (a_min is None and a_max is None)
-    num_coef = c.shape[-1]
-    distinct = distinct and num_coef > 2
-    func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
+    degree = c.shape[-1] - 1
 
-    if (
-        num_coef in func
-        and get_only_real_roots
-        and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
-    ):
-        # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts. Also consumes less memory.
+    if degree <= 3 and get_only_real_roots and jnp.isrealobj(c) and jnp.isrealobj(k):
+        backward_stable = degree < 3
         c = jnp.moveaxis(c, -1, 0)
-        r = func[num_coef](*c[:-1], c[-1] - k, sentinel, eps, distinct)
-        if num_coef == 2:
-            r = r[jnp.newaxis]
+        r = {1: _root_linear, 2: _root_quadratic, 3: _root_cubic}[degree](
+            *c[:-1], c[-1] - k
+        )
         r = jnp.moveaxis(r, 0, -1)
-
-        # We already filtered distinct roots for quadratics.
-        distinct = distinct and num_coef > 3
+        c = jnp.moveaxis(c, 0, -1)
     else:
+        backward_stable = True
         r = _root_companion(_subtract_last(c, k))
+    assert r.shape[-1] == degree
 
+    # If the complex part is too big, then these would not be real roots of
+    # a nearby perturbed problem, so we set to nan so that they are not
+    # classified as candidates after the correction step.
     if get_only_real_roots:
-        a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
-        a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            (jnp.abs(r.imag) <= eps) & (a_min <= r.real) & (r.real <= a_max),
+            jnp.abs(r.imag) <= eps**0.5,
             r.real,
-            sentinel,
+            jnp.nan,
+        )
+    if degree > 1:
+        r = _correction_step(
+            r,
+            c[..., None, :],
+            jnp.expand_dims(k, -1),
+            backward_stable,
+            eps**0.5,
+        )
+    if get_only_real_roots:
+        a_min = -jnp.inf if a_min is None else jnp.expand_dims(a_min, -1)
+        a_max = +jnp.inf if a_max is None else jnp.expand_dims(a_max, -1)
+        r = jnp.where(
+            (a_min <= r.real) & (r.real < a_max),
+            r.real,
+            jnp.nan,
         )
 
+    distinct = distinct and (degree > 1)
     if sort or distinct:
-        r = jnp.sort(r, axis=-1)
+        r = jnp.sort(r, stable=False)
     if distinct:
-        r = _filter_distinct(r, sentinel, eps)
-    assert r.shape[-1] == num_coef - 1
+        r = _distinct_roots(r, c, eps)
+    if not np.isnan(sentinel):
+        r = jnp.where(jnp.isfinite(r), r, sentinel)
+
+    assert r.shape[-1] == degree
     return r
 
 
@@ -360,16 +440,17 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
 
     References
     ----------
-    Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm
-    and its applications. Kaya Unalmis et al. Journal of Plasma Physics.
+    See supplementary information in DESC/publications/unalmis2025.
 
     """
     c, k, a_min, a_max = primals
     dc, dk, _, _ = tangents
 
+    if eps < 0:
+        eps = _root_eps()
     r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
 
-    dc_dr = poly_val(x=r, c=c[..., None, :], der=True)
+    dc_dr = poly_val(r, c=c[..., None, :], der=1)
     dc_dr = jnp.where(
         jnp.abs(dc_dr) > eps,
         dc_dr,
@@ -378,88 +459,81 @@ def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
     dr = jnp.where(
         r == sentinel,
         0.0,
-        (jnp.expand_dims(dk, -1) - poly_val(x=r, c=dc[..., None, :])) / dc_dr,
+        (jnp.expand_dims(dk, -1) - poly_val(r, c=dc[..., None, :])) / dc_dr,
     )
     return r, dr
 
 
-def _root_cubic(a, b, c, d, sentinel, eps, distinct):
-    """Return real cubic root assuming real coefficients."""
-    # numerical.recipes/book.html, page 228
-
-    def irreducible(Q, R, b):
-        # Three irrational real roots.
-        theta = jnp.arccos(R / jnp.sqrt(Q**3))
-        return (
-            -2
-            * jnp.sqrt(Q)
-            * jnp.stack(
-                [
-                    jnp.cos(theta / 3),
-                    jnp.cos((theta + 2 * jnp.pi) / 3),
-                    jnp.cos((theta - 2 * jnp.pi) / 3),
-                ]
-            )
-            - b / 3
+def _irreducible(Q, R, b):
+    theta = jnp.arccos(R / jnp.sqrt(Q**3))
+    return (
+        -2
+        * jnp.sqrt(Q)
+        * jnp.stack(
+            [
+                jnp.cos(theta / 3),
+                jnp.cos((theta + 2 * jnp.pi) / 3),
+                jnp.cos((theta - 2 * jnp.pi) / 3),
+            ]
         )
-
-    def reducible(Q, R, b):
-        # One real and two complex roots.
-        A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3)))
-        B = Q / A
-        r1 = (A + B) - b / 3
-        return _concat_sentinel(r1[jnp.newaxis], sentinel, num=2)
-
-    def root(b, c, d):
-        b = b / a
-        c = c / a
-        Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
-        return jnp.where(
-            R**2 < Q**3,
-            irreducible(jnp.abs(Q), R, b),
-            reducible(Q, R, b),
-        )
-
-    return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for double precision.
-        jnp.abs(a) <= eps,
-        _concat_sentinel(
-            _root_quadratic(b, c, d, sentinel, eps, distinct),
-            sentinel,
-        ),
-        root(b, c, d),
+        - b / 3
     )
 
 
-def _root_quadratic(a, b, c, sentinel, eps, distinct):
+def _reducible(Q, R, b):
+    A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(R**2 - Q**3))
+    B = jnp.where(A == 0.0, 0.0, Q / A)
+    x = A + B
+    y = (0.5j * 3**0.5) * (A - B)
+    return jnp.stack(
+        [
+            x - b / 3,
+            # these can yield true real roots for A near B
+            -0.5 * x - b / 3 + y,
+            -0.5 * x - b / 3 - y,
+        ]
+    )
+
+
+def _cubic(a, b, c, d):
+    b = b / a
+    c = c / a
+    Q = (b**2 - 3 * c) / 9
+    R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
+    return jnp.where(R**2 < Q**3, _irreducible(Q, R, b), _reducible(Q, R, b))
+
+
+def _root_cubic(a, b, c, d):
+    """Return real cubic root assuming real coefficients.
+
+    Uses numerical.recipes/book.html, page 228, which is not backwards stable.
+    This can generate fake root with O(1) residual, so post-processing is needed.
+    Advantage is it is much more performant than eigenvalue solve, especially
+    when d is higher dimensional than a, b, c.
+    """
+    return jnp.where(
+        a == 0.0,
+        _concat_nan(_root_quadratic(b, c, d)),
+        _cubic(a, b, c, d),
+    )
+
+
+def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
-
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(
-        discriminant < 0,
-        sentinel,
-        jnp.where(a == 0, _root_linear(b, c, sentinel, eps), q / a),
-    )
-    r2 = jnp.where(
-        # more robust to remove repeated roots with discriminant
-        (discriminant < 0) | (distinct & (discriminant <= eps)),
-        sentinel,
-        c / q,
-    )
-    return jnp.stack([r1, r2])
+    q = -0.5 * (b + jnp.where(b >= 0.0, 1.0, -1.0) * jnp.sqrt(b**2 - 4 * a * c))
+    # second branch generalizes linear root
+    return jnp.stack([q / a, c / q])
 
 
-def _root_linear(a, b, sentinel, eps, distinct=False):
+def _root_linear(a, b):
     """Return real linear root assuming real coefficients."""
-    return jnp.where((a == 0) & (jnp.abs(b) <= eps), 0.0, -b / a)
+    return (-b / a)[None]
 
 
-def _concat_sentinel(r, sentinel, num=1):
-    """Concatenate ``sentinel`` ``num`` times to ``r`` on first axis."""
-    return jnp.concatenate((r, jnp.broadcast_to(sentinel, (num, *r.shape[1:]))))
+def _concat_nan(r, num=1):
+    """Concatenate nan ``num`` times to ``r`` on first axis."""
+    return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (num,) + r.shape[1:])))
 
 
 # TODO: replace the inner loop in orthax with this

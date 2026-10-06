@@ -214,7 +214,7 @@ class FixParameters(_Objective):
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -403,7 +403,7 @@ class ShareParameters(_Objective):
             2 or more dictionaries of params to fix parameters between.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants.
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -540,7 +540,7 @@ class BoundaryRSelfConsistency(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -650,7 +650,7 @@ class BoundaryZSelfConsistency(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -746,7 +746,7 @@ class AxisRSelfConsistency(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -843,7 +843,7 @@ class AxisZSelfConsistency(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1645,7 +1645,7 @@ class FixSumModesR(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1812,7 +1812,7 @@ class FixSumModesZ(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1981,7 +1981,7 @@ class FixSumModesLambda(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -2559,6 +2559,88 @@ class FixIonTemperature(FixParameters):
         super().build(use_jit=use_jit, verbose=verbose)
 
 
+class FixIonDensity(FixParameters):
+    """Fixes ion density profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        Must be broadcastable to ``Objective.dim_f``. Defaults to ``target=eq.ni_l``.
+    bounds : tuple of {float, ndarray}, optional
+        Lower and upper bounds on the objective. Overrides target.
+        Both bounds must be broadcastable to ``Objective.dim_f``.
+        Defaults to ``target=eq.ni_l``.
+    weight : {float, ndarray}, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        Must be broadcastable to ``Objective.dim_f``
+    normalize : bool, optional
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool, optional
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(indices).
+        If True/False uses all/none of the Profile.params indices.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _units = "(m^-3)"
+    _print_value_fmt = "Fixed ion density profile error: "
+
+    def __init__(
+        self,
+        eq,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed ion density",
+    ):
+        super().__init__(
+            thing=eq,
+            params={"ni_l": indices},
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        if eq.ion_density is None:
+            raise RuntimeError(
+                "Attempting to fix ion density on an Equilibrium with no "
+                + "ion density profile assigned."
+            )
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["n"]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+
 class FixAtomicNumber(FixParameters):
     """Fixes effective atomic number profile coefficients.
 
@@ -3051,7 +3133,7 @@ class FixSumCoilCurrent(FixCoilCurrent):
             List of dictionaries of degrees of freedom, eg CoilSet.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -3268,7 +3350,7 @@ class FixOmniBmax(_FixedObjective):
             Dictionary of field degrees of freedom, eg OmnigenousField.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -3475,7 +3557,7 @@ class FixNearAxisR(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -3484,7 +3566,6 @@ class FixNearAxisR(_FixedObjective):
 
         """
         f = jnp.dot(self._A, params["R_lmn"]).squeeze()
-
         return f
 
 
@@ -3627,7 +3708,7 @@ class FixNearAxisZ(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -3636,7 +3717,6 @@ class FixNearAxisZ(_FixedObjective):
 
         """
         f = jnp.dot(self._A, params["Z_lmn"]).squeeze()
-
         return f
 
 
@@ -3753,7 +3833,7 @@ class FixNearAxisLambda(_FixedObjective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------

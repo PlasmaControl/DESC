@@ -1370,7 +1370,7 @@ class FinitenStability(_Objective):
         )
         setattr(self, f"_{pre}phi_src_nodes", nodes0 if upscaled else None)
         eq, n_surf  # so linter doesn't complain
-        """
+
         rtz0 = np.asarray(
             eq.map_coordinates(
                 nodes0,
@@ -1406,6 +1406,8 @@ class FinitenStability(_Objective):
             _chunk = int(_explicit) or None
         setattr(self, f"_{pre}phi_chunk", _chunk)
 
+        surf_grid0  # so linter doesn't complain
+        """
         interp0 = eq.compute(
             ["interpolator_pest"],
             grid=surf_grid0,

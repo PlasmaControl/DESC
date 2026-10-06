@@ -1207,7 +1207,7 @@ class FinitenStability(_Objective):
                 "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
             }
             if self._free_boundary:
-                self._build_phi_scaffolding(cg, "coarse_")
+                pass  # self._build_phi_scaffolding(cg, "coarse_")
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -1227,7 +1227,7 @@ class FinitenStability(_Objective):
             **coarse_constants,
         }
         if self._free_boundary:
-            self._build_phi_scaffolding(grid_PEST, "")
+            pass  # self._build_phi_scaffolding(grid_PEST, "")
         if self._adapt:
             # Called from inside the jitted objective with each solve's result.
             # It writes into THIS object's `_constants`, which the next call reads

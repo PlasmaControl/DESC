@@ -69,6 +69,7 @@ def get_interpolator(
     """
     if st is None or sz is None or q is None:
         _st, _sz, _q = _best_params(source_grid, _best_ratio(source_data))
+        print(_st, _sz, _q)
         st = setdefault(st, _st)
         sz = setdefault(sz, _sz)
         q = setdefault(q, _q)

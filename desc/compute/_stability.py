@@ -30,6 +30,8 @@ from ..integrals.surface_integral import surface_integrals_map
 from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
+_MEM_KEYS_DUMPED = False
+
 
 def _mem_stats():
     """Device allocator state as a compact suffix, or ``""`` where unavailable.
@@ -56,11 +58,25 @@ def _mem_stats():
     if not st:
         return ""
     g = 1024.0**3
+    # One-time dump of every key this XLA build actually publishes. `max_free` below
+    # read 0.00G on every row of a real run while `in_use` was 2 GB, i.e.
+    # `largest_free_block_bytes` is not populated here and the `.get` default was being
+    # printed as if it were a measurement. Print the real key set once so the fields
+    # below can be trusted (or corrected) rather than assumed.
+    global _MEM_KEYS_DUMPED
+    if not _MEM_KEYS_DUMPED:
+        _MEM_KEYS_DUMPED = True
+        print(f"[mem] allocator publishes: {sorted(st)}", flush=True)
+
+    def _g(k):
+        v = st.get(k)
+        return "    -" if v is None else f"{v / g:5.2f}"
+
     return (
-        f"  [mem in_use={st.get('bytes_in_use', 0) / g:5.2f}G"
-        f" peak={st.get('peak_bytes_in_use', 0) / g:5.2f}G"
-        f" max_free={st.get('largest_free_block_bytes', 0) / g:5.2f}G"
-        f" limit={st.get('bytes_limit', 0) / g:5.1f}G"
+        f"  [mem in_use={_g('bytes_in_use')}G"
+        f" peak={_g('peak_bytes_in_use')}G"
+        f" max_free={_g('largest_free_block_bytes')}G"
+        f" limit={_g('bytes_limit')}G"
         f" allocs={st.get('num_allocs', 0)}]"
     )
 

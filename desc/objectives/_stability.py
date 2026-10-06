@@ -885,6 +885,8 @@ class FinitenStability(_Objective):
         "_phi_st",
         "_phi_sz",
         "_phi_q",
+        "_phi_ratio_n_theta",
+        "_phi_ratio_n_zeta",
         "_phi_upscaled",
         "_phi_src_pest_grid",
         "_phi_src_nodes",
@@ -952,6 +954,8 @@ class FinitenStability(_Objective):
         phi_st=None,
         phi_sz=None,
         phi_q=None,
+        phi_ratio_n_theta=None,
+        phi_ratio_n_zeta=None,
         phi_scale=None,
         zero_drive=False,
     ):
@@ -999,6 +1003,8 @@ class FinitenStability(_Objective):
         self._phi_st = phi_st
         self._phi_sz = phi_sz
         self._phi_q = phi_q
+        self._phi_ratio_n_theta = phi_ratio_n_theta
+        self._phi_ratio_n_zeta = phi_ratio_n_zeta
         self._state_solver = state_solver
         self._sigma_factor = sigma_factor
         self._adapt = adapt
@@ -1435,21 +1441,77 @@ class FinitenStability(_Objective):
                 surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
                 if srcmap_cache is not None:
                     srcmap_cache["surf_grid0"] = (nodes0, surf_grid0)
-            interp0 = eq.compute(
-                ["interpolator_pest"],
+            # Inlined from `_interpolator_pest` (desc/compute/_laplace.py:431-444)
+            # rather than going through `eq.compute(["interpolator_pest"], ...)`:
+            # fetch the three geometry keys, then call `get_interpolator` here.
+            #
+            # Same inputs, same result -- that compute function does exactly this, and
+            # the renames below are its, verbatim. What it isolates is the `eq.compute`
+            # machinery AROUND a key whose value is a Python object rather than an
+            # array: `interpolator_pest` is registered with `dim=1` and returns a
+            # `_BIESTInterpolator` into the `data` dict, and it is also handed
+            # `pest_grid`/`potential_grid`/`problem`/`chunk_size` as kwargs, which DESC
+            # routes through its transforms/dependency resolution before the function
+            # body ever runs.
+            #
+            # `get_interpolator` itself is cheap (a heuristic over two means, then an
+            # object holding two grid references and q**2 shift arrays), so if building
+            # the interpolator this way is fast while the `eq.compute` route is not,
+            # the cost is in that machinery and not in the geometry.
+            _d = eq.compute(
+                ["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
                 grid=surf_grid0,
-                pest_grid=src_pest_grid,
-                potential_grid=phi_pest_grid,
-                problem="exterior Neumann",
-                chunk_size=_chunk,
                 params=eq.params_dict,
-            )["interpolator_pest"]
+            )
+            interp0 = get_interpolator(
+                phi_pest_grid,
+                src_pest_grid,
+                {
+                    "e_theta": _d["e_theta_PEST"],
+                    "e_zeta": _d["e_phi|r,v"],
+                    "|e_theta x e_zeta|": _d["|e_theta_PEST x e_phi|r,v|"],
+                },
+            )
             print(
                 f"[phi] interpolator support level={'coarse' if pre else 'fine'}  "
                 f"st={int(interp0.st)} sz={int(interp0.sz)} q={int(interp0.q)}  "
                 "-- pass as phi_st/phi_sz/phi_q to skip this build entirely",
                 flush=True,
             )
+            # AGNI_PHI_CLEANUP=1: drop what this branch leaves in the process, then
+            # re-measure. TESTING A HYPOTHESIS, not a settled fix.
+            #
+            # What it is for: building the interpolator through `eq.compute` at the full
+            # source resolution makes EVERY later phase 2-13x slower, on code that never
+            # touches its result (cs_basis(11) vs (12)). Supplying st/sz/q skips that
+            # build and the run drops to 384.8 s -- faster than the fixed-boundary
+            # control. So something the build leaves behind is the cost, not the build.
+            #
+            # It is not capacity: the same run peaks at 4.83 GB against a 41.3 GB limit
+            # and 13742 allocations. And the device buffers here are freed by refcount
+            # when this frame exits anyway -- `surf_grid0` outlives it only via
+            # `srcmap_cache`, which `build` drops on return. That leaves the COMPILED
+            # EXECUTABLES as the thing that persists, which is what `clear_caches`
+            # targets: this branch compiles a geometry closure at (n_surf_src, ...)
+            # shapes that nothing downstream reuses.
+            #
+            # If clearing restores the fast path, the mechanism is cache/executable
+            # growth and the fix belongs in DESC rather than in a lower-resolution
+            # workaround. If it changes nothing, the cause is elsewhere and this comes
+            # straight back out. Safe to try here either way: the scaffolding runs once
+            # at build() time, before any solve has compiled anything worth keeping.
+            if os.environ.get("AGNI_PHI_CLEANUP", "0") not in ("0", "", "false"):
+                import gc
+
+                if srcmap_cache is not None:
+                    srcmap_cache.pop("surf_grid0", None)
+                gc.collect()
+                jax.clear_caches()
+                print(
+                    "[phi] AGNI_PHI_CLEANUP: dropped scaffolding intermediates and "
+                    "cleared jax caches",
+                    flush=True,
+                )
         setattr(self, f"_{pre}phi_interpolator", interp0)
 
     def _phi_matrix(self, params, grid, level="fine"):

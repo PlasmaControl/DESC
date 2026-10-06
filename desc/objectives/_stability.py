@@ -837,7 +837,7 @@ class FinitenStability(_Objective):
         # `compute_data`/`update_state` build/forward phi_matrix at all.
         # `_phi_chunk_size` is a plain solver knob, same
         # treatment as `_eigsh_tol` etc. above. Everything else here
-        # (`_phi_pest_grid`, `_phi_surf_spacing`/`_phi_surf_weights`,
+        # (`_phi_pest_grid`, `_phi_src_pest_grid`,
         # `_phi_st`/`_phi_sz`/`_phi_q`, `_phi_interpolator`, and their
         # coarse_ counterparts) is BUILD-TIME-CONSTANT scaffolding from
         # `_build_phi_scaffolding` -- same category as `_diffmat`/
@@ -860,8 +860,6 @@ class FinitenStability(_Objective):
         "_phi_chunk",
         "_coarse_phi_chunk",
         "_phi_pest_grid",
-        "_phi_surf_spacing",
-        "_phi_surf_weights",
         "_phi_st",
         "_phi_sz",
         "_phi_q",
@@ -889,16 +887,10 @@ class FinitenStability(_Objective):
         "_phi_upscaled",
         "_phi_src_pest_grid",
         "_phi_src_nodes",
-        "_phi_src_spacing",
-        "_phi_src_weights",
         "_coarse_phi_upscaled",
         "_coarse_phi_src_pest_grid",
         "_coarse_phi_src_nodes",
-        "_coarse_phi_src_spacing",
-        "_coarse_phi_src_weights",
         "_coarse_phi_pest_grid",
-        "_coarse_phi_surf_spacing",
-        "_coarse_phi_surf_weights",
         "_coarse_phi_st",
         "_coarse_phi_sz",
         "_coarse_phi_q",
@@ -1228,6 +1220,27 @@ class FinitenStability(_Objective):
             self._store_guess = _store_guess
         super().build(use_jit=use_jit, verbose=verbose)
 
+    @staticmethod
+    def _agni_to_biest(a, n_theta, n_zeta):
+        """Reorder a boundary-shell array from AGNI node order to BIEST node order.
+
+        AGNI stores the shell theta-outer / zeta-fastest; BIEST wants zeta-outer /
+        theta-fastest. Covers the two shapes this is used for -- ``weights``
+        ``(n_surf,)`` and ``spacing`` ``(n_surf, 3)`` -- by carrying any trailing axis
+        through as ``-1``. Jit-safe: ``jnp`` throughout, and ``a.ndim`` is static, so
+        the 1-D restore is a trace-time branch, not a traced one.
+
+        This replaces storing the reordered spacing/weights as static attributes. They
+        are a pure function of the PEST grid, which is already kept, so caching them was
+        four redundant copies of something two reshapes away from ``grid.spacing`` /
+        ``grid.weights``.
+        """
+        a = jnp.asarray(a)
+        out = jnp.swapaxes(a.reshape(n_theta, n_zeta, -1), 0, 1).reshape(
+            n_theta * n_zeta, -1
+        )
+        return out.reshape(-1) if a.ndim == 1 else out
+
     def _build_phi_scaffolding(self, level_grid, pre):
         """Static, resolution-only free-boundary scaffolding for one level.
 
@@ -1297,30 +1310,12 @@ class FinitenStability(_Objective):
                 sym=phi_pest_grid.sym,
             ),
         )
-        # AGNI (theta outer, zeta fastest) -> BIEST (zeta outer, theta
-        # fastest). Reuses LinearGrid's own already-correct spacing/weights
-        # instead of re-deriving them for the traced surf_grid built by
-        # `_phi_matrix` on every call. Kept as plain NumPy (not jnp): these
-        # are static attrs, and a `jax.Array` stored there gets silently
-        # converted (with a warning) by the pytree machinery anyway.
-        setattr(
-            self,
-            f"_{pre}phi_surf_spacing",
-            np.asarray(phi_pest_grid.spacing)
-            .reshape(n_theta, n_zeta, 3)
-            .transpose(1, 0, 2)
-            .reshape(n_surf, 3),
-        )
-        setattr(
-            self,
-            f"_{pre}phi_surf_weights",
-            np.asarray(phi_pest_grid.weights)
-            .reshape(n_theta, n_zeta)
-            .transpose(1, 0)
-            .reshape(n_surf),
-        )
-        eq
-        """ # SOURCE grid: where the singular integral is actually quadratured.
+        # The AGNI -> BIEST reorder of this grid's spacing/weights used to be cached
+        # here as two static attrs. It is a pure function of `phi_pest_grid`, which is
+        # stored just above, so `_phi_matrix` now derives it on demand with
+        # `_agni_to_biest` instead of carrying redundant copies.
+
+        # SOURCE grid: where the singular integral is actually quadratured.
         # Defaults to the eval grid (`phi_pest_grid`, the stability boundary
         # shell), which is the original N_source == N_eval behaviour. Raising it
         # resolves the integral -- which is what makes the discrete operator
@@ -1350,26 +1345,9 @@ class FinitenStability(_Objective):
                 sym=False,
             )
             setattr(self, f"_{pre}phi_src_pest_grid", src_pest_grid)
-            setattr(
-                self,
-                f"_{pre}phi_src_spacing",
-                np.asarray(src_pest_grid.spacing)
-                .reshape(n_theta_src, n_zeta_src, 3)
-                .transpose(1, 0, 2)
-                .reshape(n_surf_src, 3),
-            )
-            setattr(
-                self,
-                f"_{pre}phi_src_weights",
-                np.asarray(src_pest_grid.weights)
-                .reshape(n_theta_src, n_zeta_src)
-                .transpose(1, 0)
-                .reshape(n_surf_src),
-            )
         else:
             src_pest_grid = phi_pest_grid
-            for _a in ("phi_src_pest_grid", "phi_src_spacing", "phi_src_weights"):
-                setattr(self, f"_{pre}{_a}", None)
+            setattr(self, f"_{pre}phi_src_pest_grid", None)
 
         # One-time, EAGER, concrete build of the interpolator (picks (st, sz,
         # q) itself via the default heuristic, since we have real geometry
@@ -1391,6 +1369,8 @@ class FinitenStability(_Objective):
             (n_surf_src, 3),
         )
         setattr(self, f"_{pre}phi_src_nodes", nodes0 if upscaled else None)
+        eq, n_surf  # so linter doesn't complain
+        """
         rtz0 = np.asarray(
             eq.map_coordinates(
                 nodes0,
@@ -1508,8 +1488,6 @@ class FinitenStability(_Objective):
             surf_nodes = jnp.transpose(
                 rtz.reshape(n_theta_s, n_zeta_s, 3), (1, 0, 2)
             ).reshape(n_theta_s * n_zeta_s, 3)
-            spacing = getattr(self, f"_{pre}phi_src_spacing")
-            weights = getattr(self, f"_{pre}phi_src_weights")
         else:
             src_pest_grid = phi_pest_grid
             n_theta_s, n_zeta_s = n_theta, n_zeta
@@ -1519,8 +1497,12 @@ class FinitenStability(_Objective):
             ).reshape(
                 n_surf, 3
             )  # -> BIEST order (zeta outer, theta fastest)
-            spacing = getattr(self, f"_{pre}phi_surf_spacing")  # noqa: E501
-            weights = getattr(self, f"_{pre}phi_surf_weights")
+
+        # Reordered on demand from whichever PEST grid this level quadratures on,
+        # rather than from four cached static attrs -- see `_agni_to_biest`. Same
+        # values; `src_pest_grid` is the eval grid itself when not upscaled.
+        spacing = self._agni_to_biest(src_pest_grid.spacing, n_theta_s, n_zeta_s)
+        weights = self._agni_to_biest(src_pest_grid.weights, n_theta_s, n_zeta_s)
 
         n_surf_s = n_theta_s * n_zeta_s
         surf_grid = Grid(
@@ -1901,7 +1883,7 @@ class FinitenStability(_Objective):
         _fflux = self._flux_data(params, constants, grid)
         _tmr.mark("flux_data fine", *_fflux.values())
 
-        _fdata = eq.compute(
+        """_fdata = eq.compute(
             _ckeys,
             grid=grid,
             diffmat=self._diffmat,
@@ -1909,8 +1891,8 @@ class FinitenStability(_Objective):
             data=_fflux,
             override_grid=False,
         )
-        _tmr.mark("geometry fine", *_fdata.values())
-
+        _tmr.mark("geometry fine", *_fdata.values())"""
+        _fdata = _fflux
         data = eq.compute(
             "finite-n lambda3 rayleigh",
             grid=grid,

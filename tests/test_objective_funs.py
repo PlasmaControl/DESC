@@ -2302,9 +2302,7 @@ class TestObjectiveFunction:
         eq = get("reactor_QA")
         offset = 0.1
 
-        source_grid = QuadratureGrid(
-            L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-        )
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         surface_grid = LinearGrid(
             rho=1.0,
             M=eq.M_grid,
@@ -2332,9 +2330,8 @@ class TestObjectiveFunction:
         wall = eq.surface.constant_offset_surface(offset, grid=surface_grid)
         wall_data = wall.compute(["S", "|e_theta x e_zeta|"], grid=surface_grid)
         wall_area = float(wall_data["S"])
-        wall_weights = (
-            np.asarray(wall_data["|e_theta x e_zeta|"])
-            * np.asarray(surface_grid.weights)
+        wall_weights = np.asarray(wall_data["|e_theta x e_zeta|"]) * np.asarray(
+            surface_grid.weights
         )
         fusion_power = float(
             eq.compute("P_fusion", grid=source_grid, fuel="DT")["P_fusion"]
@@ -2360,9 +2357,7 @@ class TestObjectiveFunction:
         obj_scaled.build(use_jit=False, verbose=0)
         nwl_scaled = np.asarray(obj_scaled.compute(*obj_scaled.xs(eq_scaled)))
 
-        np.testing.assert_allclose(
-            nwl_scaled, nwl * scale**2, rtol=1e-5, atol=1e-12
-        )
+        np.testing.assert_allclose(nwl_scaled, nwl * scale**2, rtol=1e-5, atol=1e-12)
 
     @pytest.mark.unit
     def test_things_per_objective_idx(self):

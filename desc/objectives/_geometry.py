@@ -860,8 +860,8 @@ class NeutronWallLoading(_Objective):
         Collocation grid containing the nodes to evaluate source geometry at.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
     surface_grid : Grid, optional
-        Collocation grid containing the nodes to evaluate surface geometry at.
-        Defaults to ``LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)``.
+        Collocation grid containing the nodes to evaluate surface geometry at. Defaults
+        to ``LinearGrid(rho=1, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)``.
     fuel : str, optional
         Fusion fuel, assuming a 50/50 mix. One of {'DT'}. Default = 'DT'.
     eq_fixed, surface_fixed : bool, optional
@@ -1054,14 +1054,7 @@ class NeutronWallLoading(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["NWL"]
-        self._equil_data_keys = [
-            "R",
-            "phi",
-            "Z",
-            "sqrt(g)",
-            "<sigma*nu>",
-            "ni",
-        ]
+        self._equil_data_keys = ["R", "phi", "Z", "sqrt(g)", "<sigma*nu>", "ni"]
         self._surface_data_keys = ["R", "phi", "Z", "n_rho"]
 
         timer = Timer()
@@ -1088,9 +1081,9 @@ class NeutronWallLoading(_Objective):
             has_axis=surface_grid.axis.size,
         )
 
-        # compute returns points on the grid of the surface (dim_f = surface_grid.num_nodes)
-        # so set quad_weights to the surface grid to avoid it being incorrectly inferred
-        # from the source grid.
+        # compute returns points on the grid of the surface
+        # so, set quad_weights to the surface grid to avoid it being
+        # incorrectly inferred from the source grid.
         w = surface_grid.weights
         w *= jnp.sqrt(surface_grid.num_nodes)
 

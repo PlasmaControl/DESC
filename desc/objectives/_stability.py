@@ -838,7 +838,7 @@ class FinitenStability(_Objective):
         # `_phi_chunk_size` is a plain solver knob, same
         # treatment as `_eigsh_tol` etc. above. Everything else here
         # (`_phi_pest_grid`, `_phi_src_pest_grid`,
-        # `_phi_st`/`_phi_sz`/`_phi_q`, `_phi_interpolator`, and their
+        # `_phi_interpolator` and their
         # coarse_ counterparts) is BUILD-TIME-CONSTANT scaffolding from
         # `_build_phi_scaffolding` -- same category as `_diffmat`/
         # `_coarse_grid` above, and for the same reason: a Grid (or anything
@@ -860,9 +860,6 @@ class FinitenStability(_Objective):
         "_phi_chunk",
         "_coarse_phi_chunk",
         "_phi_pest_grid",
-        "_phi_st",
-        "_phi_sz",
-        "_phi_q",
         "_phi_interpolator",
         # Equilibrium's own Phi_basis, capped to what phi_pest_grid can
         # resolve (min(eq.Phi_basis.M, phi_pest_grid.M), same for N) and
@@ -891,9 +888,6 @@ class FinitenStability(_Objective):
         "_coarse_phi_src_pest_grid",
         "_coarse_phi_src_nodes",
         "_coarse_phi_pest_grid",
-        "_coarse_phi_st",
-        "_coarse_phi_sz",
-        "_coarse_phi_q",
         "_coarse_phi_interpolator",
         "_coarse_phi_basis",
     ]
@@ -988,8 +982,8 @@ class FinitenStability(_Objective):
         self._coarse_density = coarse_density
         # Free boundary: compute phi_matrix (the vacuum-response operator) and
         # forward it to "finite-n lambda3 rayleigh"/"finite-n lambda3". See
-        # `_build_phi_scaffolding`/`_phi_matrix`. `_phi_st`/`_phi_sz`/`_phi_q`
-        # (and the coarse_ counterparts) are set in `build()`.
+        # `_build_phi_scaffolding`/`_phi_matrix`. The scaffolding attrs (and their
+        # coarse_ counterparts) are set in `build()`.
         self._free_boundary = free_boundary
         self._phi_chunk_size = phi_chunk_size
         self._phi_chunk_size_coarse = phi_chunk_size_coarse
@@ -1414,9 +1408,7 @@ class FinitenStability(_Objective):
             chunk_size=_chunk,
             params=eq.params_dict,
         )["interpolator_pest"]
-        setattr(self, f"_{pre}phi_st", int(interp0.st))
-        setattr(self, f"_{pre}phi_sz", int(interp0.sz))
-        setattr(self, f"_{pre}phi_q", int(interp0.q))
+        interp0.sz  # prevent linter complaining
         """
         setattr(self, f"_{pre}phi_interpolator", interp0)"""
 

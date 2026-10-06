@@ -31,6 +31,40 @@ from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
+def _mem_stats():
+    """Device allocator state as a compact suffix, or ``""`` where unavailable.
+
+    Off with ``AGNI_TIMING_MEM=0``; returns ``""`` on CPU and under any allocator that
+    does not publish stats (``XLA_PYTHON_CLIENT_ALLOCATOR=platform``, for one).
+
+    ``max_free`` is ``largest_free_block_bytes`` and is the point of this: it is the
+    FRAGMENTATION metric. A carved-up arena still reports plenty of free bytes while the
+    longest contiguous run collapses, and that is the state in which a large allocation
+    gets expensive. It is also the thing the absence of OOM warnings does NOT rule out --
+    BFC logs allocation FAILURES, not the coalescing work it does to satisfy a request.
+
+    So: `in_use` well under `limit` and `max_free` staying large across phases means the
+    allocator is not under pressure and memory is not the explanation, measured rather
+    than inferred. `max_free` collapsing after a phase is the opposite.
+    """
+    if os.environ.get("AGNI_TIMING_MEM", "1") == "0":
+        return ""
+    try:
+        st = jax.local_devices()[0].memory_stats()
+    except Exception:  # noqa: BLE001 -- diagnostics never take a run down
+        return ""
+    if not st:
+        return ""
+    g = 1024.0**3
+    return (
+        f"  [mem in_use={st.get('bytes_in_use', 0) / g:5.2f}G"
+        f" peak={st.get('peak_bytes_in_use', 0) / g:5.2f}G"
+        f" max_free={st.get('largest_free_block_bytes', 0) / g:5.2f}G"
+        f" limit={st.get('bytes_limit', 0) / g:5.1f}G"
+        f" allocs={st.get('num_allocs', 0)}]"
+    )
+
+
 class _PhaseTimer:
     """Wall-clock breakdown of the eigensolve's phases. Off with ``AGNI_TIMING=0``.
 
@@ -74,7 +108,10 @@ class _PhaseTimer:
                 # cannot succeed. Let those propagate.
                 pass
         now = time.time()
-        print(f"[timing] {self.label}{name:<28s} {now - self.last:8.1f} s", flush=True)
+        print(
+            f"[timing] {self.label}{name:<28s} {now - self.last:8.1f} s{_mem_stats()}",
+            flush=True,
+        )
         self.last = now
 
     def total(self, name="TOTAL"):

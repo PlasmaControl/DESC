@@ -1881,9 +1881,10 @@ class FinitenStability(_Objective):
                 # phi_matrix too. Built at the stop_gradient'd _pc, like the
                 # rest of this branch: the coarse level is a solver aid and
                 # carries no derivative.
-                coarse_opts["coarse_phi_matrix"] = self._phi_matrix(
+                coarse_opts["coarse_phi_matrix"] = np.random.random(10)
+                """self._phi_matrix(
                     _pc, _grid_c, level="coarse"
-                )
+                )"""
                 _tmr.mark("phi_matrix coarse", coarse_opts["coarse_phi_matrix"])
 
         options = {
@@ -1948,7 +1949,9 @@ class FinitenStability(_Objective):
             # which made that row read 39.9 s free vs 2.5 s fixed and look like
             # `_flux_data` was boundary-condition dependent. It is not -- the difference
             # was the phi_matrix build hiding in the same interval.
-            options["phi_matrix"] = self._phi_matrix(params, grid)
+            options["phi_matrix"] = np.random.random(
+                10
+            )  # self._phi_matrix(params, grid)
             _tmr.mark("phi_matrix fine", options["phi_matrix"])
         options.update(coarse_opts)
 
@@ -2077,7 +2080,7 @@ class FinitenStability(_Objective):
                 # "finite-n lambda3 rayleigh" assembles in `compute_data`, or
                 # the cached eigenvector no longer matches the matrix being
                 # differentiated.
-                options["phi_matrix"] = self._phi_matrix(params, grid)
+                # noqa E800 options["phi_matrix"] = self._phi_matrix(params, grid)
                 # TEMPORARY: make phi_matrix small
                 options["phi_matrix"] = np.random.random(10)
             data = eq.compute(

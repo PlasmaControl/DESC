@@ -408,6 +408,7 @@ def coarse_seed_and_deflation(
     num_matvecs,
     ridge=0.0,
     seed=3,
+    n_start=10,
 ):
     """Softest coarse generalized modes, prolonged to the fine grid.
 
@@ -416,12 +417,21 @@ def coarse_seed_and_deflation(
     both a good starting vector and a deflation space that removes the fine
     operator's worst-conditioned directions.
 
+    Parameters
+    ----------
+    n_start : int
+        Softest prolonged modes summed (each normalized) into the start vector.
+        Under the stellarator reflection every mode is even or odd and JD keeps
+        the parity of its start; the softest coarse mode alone can be even while
+        the softest fine mode is odd, and JD then returns the softest even mode.
+
     Returns
     -------
     v0 : ndarray, (n_f,)
-        Unit-norm prolonged softest mode; the Jacobi-Davidson start vector.
+        Unit-norm sum of the ``n_start`` softest prolonged modes; the
+        Jacobi-Davidson start vector.
     Z : ndarray, (n_f, k)
-        Prolonged deflation basis. Column 0 is ``v0`` up to scaling.
+        Prolonged deflation basis.
     lam_c : ndarray, (k,)
         Coarse generalized eigenvalues, for reporting.
     """
@@ -431,7 +441,8 @@ def coarse_seed_and_deflation(
     P, _ = make_transfer(meta_c, meta_f, pr, pt, pz)
     # X_c is (n_c, k): vmap P over the k columns, then put k back on axis 1.
     Z = jnp.swapaxes(jax.vmap(P)(jnp.swapaxes(X_c, 0, 1)), 0, 1)
-    v0 = Z[:, 0]
+    modes = Z[:, :n_start]
+    v0 = jnp.sum(modes / jnp.linalg.norm(modes, axis=0), axis=1)
     v0 = v0 / jnp.linalg.norm(v0)
     return v0, Z, lam_c
 

@@ -1433,8 +1433,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         _bc_shell = _bc_shell | (rho_shell == (n_rho_max - 1))
     boundary = _nodesel(jnp.asarray(_bc_shell))
 
-    if _Rnode is None:
-        jax.debug.print("skipping vacuum term")
     r"""# add vacuum energy contribution
     if phi_matrix is not None:
         # change to free-boundary when phi_matrix is provided)
@@ -1815,7 +1813,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     keep_2 = jnp.arange(n_total, 3 * n_total)
 
     # don't apply bc if phi_matrix is provided
-    jax.debug.print("commenting out free-boundary keep")
     if False:  # phi_matrix is not None:
         # only remove ρ=0
         keep_1 = jnp.arange(n_shell, n_total)

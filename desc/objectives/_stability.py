@@ -1135,6 +1135,12 @@ class FinitenStability(_Objective):
         _, unique_rho_idx, inverse_rho_idx = np.unique(
             rho_PEST, return_index=True, return_inverse=True
         )
+        # zeta is also invariant under PEST --> DESC so long as omega=0
+        # that's checked later
+        zeta_PEST = np.asarray(PEST_nodes[:, 2])
+        _, unique_zeta_idx, inverse_zeta_idx = np.unique(
+            zeta_PEST, return_index=True, return_inverse=True
+        )
         # 1D radial nodes for the prolongation operator, kept as a concrete
         # numpy array on `self`. They cannot be recovered inside `compute_data`:
         # the mapped grid's nodes are built from params, and `constants` cross
@@ -1175,6 +1181,11 @@ class FinitenStability(_Objective):
             )
             c_rho = np.asarray(c_nodes[:, 0])
             _, c_uidx, c_iidx = np.unique(c_rho, return_index=True, return_inverse=True)
+            # Same zeta-invariance argument as the fine level above, same caveat.
+            c_zeta = np.asarray(c_nodes[:, 2])
+            _, c_zuidx, c_ziidx = np.unique(
+                c_zeta, return_index=True, return_inverse=True
+            )
             self._coarse_rho1d = tuple(
                 float(_x) for _x in c_rho.reshape(cg.num_rho, -1)[:, 0]
             )
@@ -1188,6 +1199,8 @@ class FinitenStability(_Objective):
                 "coarse_PEST_nodes": c_nodes,
                 "coarse_unique_rho_idx": jnp.asarray(c_uidx),
                 "coarse_inverse_rho_idx": jnp.asarray(c_iidx),
+                "coarse_unique_zeta_idx": jnp.asarray(c_zuidx),
+                "coarse_inverse_zeta_idx": jnp.asarray(c_ziidx),
                 "coarse_flux_transforms": get_transforms(
                     flux_keys, obj=eq, grid=c_flux_grid
                 ),
@@ -1204,6 +1217,8 @@ class FinitenStability(_Objective):
             "quad_profiles": quad_profiles,
             "unique_rho_idx": jnp.asarray(unique_rho_idx),
             "inverse_rho_idx": jnp.asarray(inverse_rho_idx),
+            "unique_zeta_idx": jnp.asarray(unique_zeta_idx),
+            "inverse_zeta_idx": jnp.asarray(inverse_zeta_idx),
             "quad_weights": 1.0,
             "lambda0": self._lambda0,
             "w0": self._w0,
@@ -1701,6 +1716,23 @@ class FinitenStability(_Objective):
             maxiter=50,
             params=params,
         )
+        # Check the zeta-invariance claim rather than trusting it, whenever the mapped
+        # nodes are concrete (every eager run) -- same pattern, and the same reasoning,
+        # as the rho check in `_coarse_space`. The precomputed zeta indices below are
+        # only valid while the map leaves zeta alone, and a silent violation would
+        # regroup nodes wrongly rather than fail, so this is the guard that makes the
+        # caveat in `build` enforceable instead of merely documented.
+        if not isinstance(DESC_nodes, jax.core.Tracer):
+            _z_pest = np.asarray(constants[pre + "PEST_nodes"])[:, 2]
+            _z_desc = np.asarray(jax.device_get(DESC_nodes))[:, 2]
+            if not np.allclose(_z_pest, _z_desc, rtol=0, atol=1e-12):
+                raise RuntimeError(
+                    "mapped grid: zeta is NOT invariant under the PEST->DESC map "
+                    f"(max |dzeta| = {np.abs(_z_pest - _z_desc).max():.3e}). The "
+                    "precomputed `unique_zeta_idx`/`inverse_zeta_idx` are therefore "
+                    "wrong -- stop passing them to Grid below (and drop them in "
+                    "`build`); the grid works without them, only slower."
+                )
         return Grid(
             nodes=DESC_nodes,
             coordinates="rtz",
@@ -1708,6 +1740,15 @@ class FinitenStability(_Objective):
             jitable=True,
             _unique_rho_idx=constants[pre + "unique_rho_idx"],
             _inverse_rho_idx=constants[pre + "inverse_rho_idx"],
+            # Supplying the ZETA pair as well is worth 2x on the dependency closure --
+            # 105 s -> 52 s at 24x35x35, see the measurement in `build`. Without it
+            # `jitable=True` leaves `_unique_zeta_idx`/`_inverse_zeta_idx` unset and
+            # `grid.N`/`num_zeta` fall back to 0/absent (desc/grid.py:888-914), which
+            # pushes the closure onto slower paths. Valid only while zeta == phi; see
+            # `build` for the full caveat and for why the POLOIDAL pair is deliberately
+            # not supplied.
+            _unique_zeta_idx=constants[pre + "unique_zeta_idx"],
+            _inverse_zeta_idx=constants[pre + "inverse_zeta_idx"],
         )
 
     def _flux_data(self, params, constants, grid, level="fine"):

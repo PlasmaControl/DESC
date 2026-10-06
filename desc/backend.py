@@ -11,12 +11,9 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-if os.environ.get("DESC_BACKEND") == "numpy":
-    jnp = np
-    use_jax = False
-    set_device(kind="cpu")
-else:
-    if desc_config.get("device") is None:
+use_jax = os.environ.get("DESC_BACKEND") != "numpy"
+if use_jax:
+    if desc_config["kind"] is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():

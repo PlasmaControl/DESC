@@ -2078,6 +2078,8 @@ class FinitenStability(_Objective):
                 # the cached eigenvector no longer matches the matrix being
                 # differentiated.
                 options["phi_matrix"] = self._phi_matrix(params, grid)
+                # TEMPORARY: make phi_matrix small
+                options["phi_matrix"] = np.random.random(10)
             data = eq.compute(
                 "finite-n lambda3",
                 grid=grid,

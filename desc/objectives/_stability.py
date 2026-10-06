@@ -10,6 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.integrals.singularities import get_interpolator
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
@@ -881,6 +882,9 @@ class FinitenStability(_Objective):
         # the scaffolding above.
         "_phi_n_theta",
         "_phi_n_zeta",
+        "_phi_st",
+        "_phi_sz",
+        "_phi_q",
         "_phi_upscaled",
         "_phi_src_pest_grid",
         "_phi_src_nodes",
@@ -945,6 +949,9 @@ class FinitenStability(_Objective):
         phi_chunk_size_coarse=None,
         phi_n_theta=None,
         phi_n_zeta=None,
+        phi_st=None,
+        phi_sz=None,
+        phi_q=None,
         phi_scale=None,
         zero_drive=False,
     ):
@@ -989,6 +996,9 @@ class FinitenStability(_Objective):
         self._phi_chunk_size_coarse = phi_chunk_size_coarse
         self._phi_n_theta = phi_n_theta
         self._phi_n_zeta = phi_n_zeta
+        self._phi_st = phi_st
+        self._phi_sz = phi_sz
+        self._phi_q = phi_q
         self._state_solver = state_solver
         self._sigma_factor = sigma_factor
         self._adapt = adapt
@@ -1152,6 +1162,14 @@ class FinitenStability(_Objective):
         # Coarse level, mirroring the fine one. rho is invariant under the
         # PEST->DESC map on either grid, so the same precomputed-index trick makes
         # the coarse mapped grid rebuildable from traced nodes.
+        # Shared by the coarse and fine scaffolding builds. The source-grid ->
+        # DESC-coordinate map is a pure function of the SOURCE nodes, not of which
+        # level asked, and with `phi_n_theta`/`phi_n_zeta` given both levels request
+        # the SAME source grid -- so the 5832-node Newton solve was being run twice
+        # on bit-identical input. Keyed on the nodes themselves rather than assumed:
+        # with those left None the source grid IS the level's own eval grid and the
+        # two differ, in which case this simply misses and recomputes.
+        _srcmap_cache = {}
         coarse_constants = {}
         if self._coarse_grid is not None:
             cg = self._coarse_grid
@@ -1180,7 +1198,7 @@ class FinitenStability(_Objective):
                 "coarse_flux_profiles": get_profiles(flux_keys, eq, c_flux_grid),
             }
             if self._free_boundary:
-                self._build_phi_scaffolding(cg, "coarse_")
+                self._build_phi_scaffolding(cg, "coarse_", _srcmap_cache)
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
@@ -1198,7 +1216,7 @@ class FinitenStability(_Objective):
             **coarse_constants,
         }
         if self._free_boundary:
-            self._build_phi_scaffolding(grid_PEST, "")
+            self._build_phi_scaffolding(grid_PEST, "", _srcmap_cache)
         if self._adapt:
             # Called from inside the jitted objective with each solve's result.
             # It writes into THIS object's `_constants`, which the next call reads
@@ -1235,7 +1253,7 @@ class FinitenStability(_Objective):
         )
         return out.reshape(-1) if a.ndim == 1 else out
 
-    def _build_phi_scaffolding(self, level_grid, pre):
+    def _build_phi_scaffolding(self, level_grid, pre, srcmap_cache=None):
         """Static, resolution-only free-boundary scaffolding for one level.
 
         ``pre`` is ``""`` for fine, ``"coarse_"`` for coarse, matching the
@@ -1364,20 +1382,6 @@ class FinitenStability(_Objective):
         )
         setattr(self, f"_{pre}phi_src_nodes", nodes0 if upscaled else None)
 
-        rtz0 = np.asarray(
-            eq.map_coordinates(
-                nodes0,
-                inbasis=("rho", "theta_PEST", "zeta"),
-                outbasis=("rho", "theta", "zeta"),
-                period=(np.inf, 2 * np.pi, np.inf),
-                tol=1e-12,
-                maxiter=50,
-                params=eq.params_dict,
-            )
-        )
-        surf_nodes0 = rtz0.reshape(n_theta_src, n_zeta_src, 3).transpose(1, 0, 2)
-        surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
-
         # Resolve THIS level's chunk size, now that both grids and the basis exist.
         #
         #   fine:   phi_chunk_size,        else derived from the fine grids
@@ -1399,18 +1403,54 @@ class FinitenStability(_Objective):
             _chunk = int(_explicit) or None
         setattr(self, f"_{pre}phi_chunk", _chunk)
 
-        interp0 = eq.compute(
-            ["interpolator_pest"],
-            grid=surf_grid0,
-            pest_grid=src_pest_grid,
-            potential_grid=phi_pest_grid,
-            problem="exterior Neumann",
-            chunk_size=_chunk,
-            params=eq.params_dict,
-        )["interpolator_pest"]
-        interp0.sz  # prevent linter complaining
-        """
-        setattr(self, f"_{pre}phi_interpolator", interp0)"""
+        # compute params if not supplied
+        _st, _sz, _q = self._phi_st, self._phi_sz, self._phi_q
+        if _st is not None and _sz is not None and _q is not None:
+            interp0 = get_interpolator(
+                phi_pest_grid, src_pest_grid, {}, st=int(_st), sz=int(_sz), q=int(_q)
+            )
+        else:
+            # Mapped once per distinct source grid, not once per level -- see the
+            # cache comment in `build`. `np.array_equal` on (n_surf_src, 3) is
+            # microseconds against a 5832-node Newton solve, and it is exact, so a
+            # genuinely different source grid simply misses.
+            _prev = None if srcmap_cache is None else srcmap_cache.get("surf_grid0")
+            if _prev is not None and np.array_equal(_prev[0], nodes0):
+                surf_grid0 = _prev[1]
+            else:
+                rtz0 = np.asarray(
+                    eq.map_coordinates(
+                        nodes0,
+                        inbasis=("rho", "theta_PEST", "zeta"),
+                        outbasis=("rho", "theta", "zeta"),
+                        period=(np.inf, 2 * np.pi, np.inf),
+                        tol=1e-12,
+                        maxiter=50,
+                        params=eq.params_dict,
+                    )
+                )
+                surf_nodes0 = rtz0.reshape(n_theta_src, n_zeta_src, 3).transpose(
+                    1, 0, 2
+                )
+                surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
+                if srcmap_cache is not None:
+                    srcmap_cache["surf_grid0"] = (nodes0, surf_grid0)
+            interp0 = eq.compute(
+                ["interpolator_pest"],
+                grid=surf_grid0,
+                pest_grid=src_pest_grid,
+                potential_grid=phi_pest_grid,
+                problem="exterior Neumann",
+                chunk_size=_chunk,
+                params=eq.params_dict,
+            )["interpolator_pest"]
+            print(
+                f"[phi] interpolator support level={'coarse' if pre else 'fine'}  "
+                f"st={int(interp0.st)} sz={int(interp0.sz)} q={int(interp0.q)}  "
+                "-- pass as phi_st/phi_sz/phi_q to skip this build entirely",
+                flush=True,
+            )
+        setattr(self, f"_{pre}phi_interpolator", interp0)
 
     def _phi_matrix(self, params, grid, level="fine"):
         """Free-boundary vacuum-response operator, differentiable in params.

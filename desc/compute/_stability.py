@@ -1816,7 +1816,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     # don't apply bc if phi_matrix is provided
     jax.debug.print("commenting out free-boundary keep")
-    if True:  # phi_matrix is not None:
+    if False:  # phi_matrix is not None:
         # only remove ρ=0
         keep_1 = jnp.arange(n_shell, n_total)
     else:
@@ -2407,7 +2407,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     # the mass blocks below) MUST match `keep`. It used to cover both shells
     # unconditionally, which removed the rho-upsilon and rho-zeta couplings from the
     # outer shell even in a free-boundary solve, where that xi^rho is a live DOF.
-    if True:  # phi_matrix is not None:
+    if False:  # phi_matrix is not None:
         # free boundary: only remove rho=0 (the axis); keep the outer shell
         keep_rho = jnp.arange(n_per_shell, n_total)
         boundary_idx = jnp.arange(n_per_shell)

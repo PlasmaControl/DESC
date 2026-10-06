@@ -772,12 +772,23 @@ class Equilibrium(IOAble, Optimizable):
             self.surface.change_resolution(
                 self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
             )
+        old_axis_W = self.axis.W_basis.num_modes
         self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym, Nz=self.Nz)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
         self._W_lmn = copy_coeffs(self.W_lmn, old_modes_W, self.W_basis.modes)
+        if not old_axis_W and self.axis.W_basis.num_modes and self.W_basis.num_modes:
+            # the axis omega was just created (zeros): set it to the equilibrium's
+            # omega on the axis, else AxisWSelfConsistency rewrites W_lmn at rho = 0
+            from desc.grid import LinearGrid
+
+            zeta = np.linspace(0, 2 * np.pi / self.NFP, 4 * self.Nz + 8, endpoint=False)
+            grid = LinearGrid(rho=0.0, theta=0.0, zeta=zeta, NFP=self.NFP)
+            omega = self.compute("omega", grid=grid)["omega"]
+            A = self.axis.W_basis.evaluate(grid.nodes)
+            self.axis.W_n = np.linalg.lstsq(A, np.asarray(omega), rcond=None)[0]
 
     @execute_on_cpu
     def get_surface_at(self, rho=None, theta=None, zeta=None):

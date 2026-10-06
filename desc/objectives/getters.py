@@ -140,7 +140,9 @@ def get_fixed_axis_constraints(eq, profiles=True, normalize=True):
     return constraints
 
 
-def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
+def get_fixed_boundary_constraints(
+    eq, profiles=True, normalize=True, fix_omega_interior=True
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -151,6 +153,10 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
         If True, also include constraints to fix all profiles assigned to equilibrium.
     normalize : bool
         Whether to apply constraints in normalized units.
+    fix_omega_interior : bool
+        If True (default), also fix the interior omega (W_lmn) when the
+        equilibrium has a generalized toroidal angle. False lets the solve
+        re-solve the interior omega with R, Z, lambda.
 
     Returns
     -------
@@ -165,7 +171,7 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
         FixBoundaryW(**kwargs),
         FixPsi(**kwargs),
     )
-    if eq.W_basis.num_modes:
+    if eq.W_basis.num_modes and fix_omega_interior:
         # by default keep interior omega fixed: the boundary supplies the
         # toroidal angle parameterization and interior omega is pure gauge
         constraints += (FixOmegaInterior(**kwargs),)

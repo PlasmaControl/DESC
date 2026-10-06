@@ -1168,8 +1168,7 @@ class NeutronWallLoading(_Objective):
             Neutron wall loading at each surface grid node (MW/m²).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         if self._eq_fixed:
             surface_params = params_1

@@ -172,7 +172,7 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         np.testing.assert_allclose(
             y1,
             y2,
-            atol=1e-6,
+            atol=1e2 * jnp.sqrt(jnp.finfo(y1.dtype).eps),
             rtol=1e-1,
             err_msg="Incompatible constraints detected, cannot satisfy constraint "
             + f"{con}.",
@@ -181,8 +181,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         # else check with tighter tols and throw an error, these tolerances
         # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
-        atol = 3e-14
-        rtol = 3e-14
+        atol = 3e2 * jnp.finfo(y1.dtype).eps
+        rtol = 3e2 * jnp.finfo(y1.dtype).eps
 
         try:
             np.testing.assert_allclose(

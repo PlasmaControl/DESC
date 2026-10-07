@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import in32bit, jit, jnp, put
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -87,6 +87,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         self._use_jit = False
         self._compiled = False
         self._name = name
+        self._jac_precision = objective._jac_precision
 
     def build(self, use_jit=None, verbose=1):
         """Build the objective.
@@ -385,7 +386,9 @@ class LinearConstraintProjection(ObjectiveFunction):
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
         v = self._feasible_tangents
-        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+        df = getattr(self._objective, "jvp_" + op)(
+            jnp.asarray(v.T, self._jac_precision), x, constants
+        )
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):
@@ -422,7 +425,10 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
 
         """
-        return self._jac(x_reduced, constants, "scaled_error")
+        if self._jac_precision == "float32":
+            return in32bit(self._jac, x_reduced, constants)
+        else:
+            return self._jac(x_reduced, constants, "scaled_error")
 
     def jac_unscaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_unscaled.

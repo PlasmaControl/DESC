@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp

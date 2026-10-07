@@ -347,6 +347,10 @@ class ObjectiveFunction(IOAble):
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
+    jac_precision: {"float64", "float32"}
+        Precision of the jacobian calculated by jac_scaled_error to reduce memory
+        consumption due to the jacobian calculation.
+        Default precision is float64
 
     """
 
@@ -367,6 +371,7 @@ class ObjectiveFunction(IOAble):
         "_things_per_objective_idx",
         "_use_jit",
         "_static_attrs",
+        "_jac_precision",
     ]
 
     def __init__(
@@ -376,6 +381,7 @@ class ObjectiveFunction(IOAble):
         deriv_mode="auto",
         name="ObjectiveFunction",
         jac_chunk_size="auto",
+        jac_precision="float64",
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -395,11 +401,13 @@ class ObjectiveFunction(IOAble):
             jac_chunk_size = 1
         assert deriv_mode in {"auto", "batched", "blocked"}
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
+        assert jac_precision in {"float32", "float64"}
 
         self._jac_chunk_size = jac_chunk_size
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
+        self._jac_precision = jac_precision
         self._built = False
         self._compiled = False
         self._name = name
@@ -917,6 +925,8 @@ class ObjectiveFunction(IOAble):
 
         fun = lambda x: getattr(self, "compute_" + op)(x, constants)
         if len(v) == 1:
+            # --no-verify jvpfun = lambda dx:
+            # --no-verify Derivative.compute_jvp(fun, 0, _as32bit(dx), _as32bit(x))
             jvpfun = lambda dx: Derivative.compute_jvp(fun, 0, dx, x)
             return batched_vectorize(
                 jvpfun, signature="(n)->(k)", chunk_size=self._jac_chunk_size
@@ -1283,6 +1293,7 @@ class _Objective(IOAble, ABC):
         "_scalar",
         "_units",
         "_static_attrs",
+        "_jac_precision",
     ]
 
     def __init__(
@@ -1297,6 +1308,7 @@ class _Objective(IOAble, ABC):
         deriv_mode="auto",
         name=None,
         jac_chunk_size=None,
+        jac_precision="float64",
     ):
         if self._scalar:
             assert self._coordinates == ""
@@ -1307,6 +1319,7 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert loss_function in [None, "mean", "min", "max", "sum"]
         assert deriv_mode in {"auto", "fwd", "rev"}
+        assert jac_precision in {"float32", "float64"}
         assert jac_chunk_size is None or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
@@ -1328,6 +1341,7 @@ class _Objective(IOAble, ABC):
             "sum": jnp.sum,
             None: None,
         }[loss_function]
+        self._jac_precision = jac_precision
 
         self._things = flatten_list([things], True)
 
@@ -1457,7 +1471,10 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(f, **kwargs))
+
+        out = jnp.atleast_1d(self._scale(f, **kwargs)).astype(self._jac_precision)
+        # --no-verify print("out data type = ", jnp.dtype(out))
+        return out
 
     @jit
     def compute_scaled_error(self, *args, **kwargs):
@@ -1466,7 +1483,12 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         if self._loss_function is not None:
             f = self._loss_function(f)
-        return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        out = jnp.atleast_1d(self._scale(self._shift(f), **kwargs)).astype(
+            self._jac_precision
+        )
+        print("out data type = ", jnp.dtype(out))
+        # --no-verify return jnp.atleast_1d(self._scale(self._shift(f), **kwargs))
+        return out
 
     def _shift(self, f):
         """Subtract target or clamp to bounds."""
@@ -1489,7 +1511,7 @@ class _Objective(IOAble, ABC):
                 target = self.target
             else:
                 target = self.target * self.normalization
-            f_target = f - target
+            f_target = f - target.astype(f.dtype)
         return f_target
 
     def _scale(self, f, *args, **kwargs):
@@ -1499,7 +1521,9 @@ class _Objective(IOAble, ABC):
             w = jnp.ones_like(f)
         else:
             w = constants["quad_weights"]
-        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+        f_norm = jnp.atleast_1d(f) / jnp.astype(
+            self.normalization, f.dtype
+        )  # normalization
         return f_norm * w * self.weight
 
     def _unscale(self, f_scaled, **kwargs):

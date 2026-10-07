@@ -1316,10 +1316,10 @@ class FinitenStability(_Objective):
                 grid=grid,
                 method="pest",
                 transforms=transforms,
+                diffmat=self._diffmat,
+                phi_matrix=phi_matrix,
+                coarse_phi_matrix=coarse_phi_matrix,
             ),
-            "diffmat": self._diffmat,
-            "phi_matrix": phi_matrix,
-            "coarse_phi_matrix": coarse_phi_matrix,
         }
 
     def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src):

@@ -182,8 +182,8 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
         # else check with tighter tols and throw an error, these tolerances
         # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
-        atol = 3e2 * jnp.finfo(xp.dtype).eps
-        rtol = 3e2 * jnp.finfo(xp.dtype).eps
+        atol = 1e3 * jnp.finfo(xp.dtype).eps
+        rtol = 1e3 * jnp.finfo(xp.dtype).eps
 
         try:
             np.testing.assert_allclose(

@@ -523,8 +523,8 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
         self._Phi_basis = DoubleFourierSeries(M=M_Phi, N=N_Phi, NFP=NFP, sym=sym_Phi)
         self._Phi_mn = copy_coeffs(Phi_mn, modes_Phi, self._Phi_basis.modes[:, 1:])
 
-        self._I = jnp.float64(float(np.squeeze(I)))
-        self._G = jnp.float64(float(np.squeeze(G)))
+        self._I = jnp.asarray(float(np.squeeze(I)), dtype=float)
+        self._G = jnp.asarray(float(np.squeeze(G)), dtype=float)
 
         super().__init__(
             R_lmn=R_lmn,
@@ -547,7 +547,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @I.setter
     def I(self, new):  # noqa: E743
-        self._I = jnp.float64(float(np.squeeze(new)))
+        self._I = jnp.asarray(float(np.squeeze(new)), dtype=float)
 
     @optimizable_parameter
     @property
@@ -557,7 +557,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
 
     @G.setter
     def G(self, new):
-        self._G = jnp.float64(float(np.squeeze(new)))
+        self._G = jnp.asarray(float(np.squeeze(new)), dtype=float)
 
     @optimizable_parameter
     @property
@@ -1527,8 +1527,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     if verbose > 1:
         timer.disp("Jacobian Calculation")
 
-    current_potential_field.I = jnp.float64(float(I))
-    current_potential_field.G = jnp.float64(float(G))
+    current_potential_field.I = jnp.asarray(float(I), dtype=float)
+    current_potential_field.G = jnp.asarray(float(G), dtype=float)
 
     # find the normal field from the secular part of the current potential
     # also mutliply by necessary weights and normal vector magnitude

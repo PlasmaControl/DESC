@@ -242,7 +242,7 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        self._Psi = jnp.float64(float(Psi))
+        self._Psi = jnp.asarray(float(Psi), dtype=float)
 
         errorif(
             spectral_indexing
@@ -1590,7 +1590,7 @@ class Equilibrium(IOAble, Optimizable):
 
     @Psi.setter
     def Psi(self, Psi):
-        self._Psi = jnp.float64(float(np.squeeze(Psi)))
+        self._Psi = jnp.asarray(float(np.squeeze(Psi)), dtype=float)
 
     @property
     def NFP(self):

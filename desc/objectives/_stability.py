@@ -719,6 +719,20 @@ class FinitenStability(_Objective):
         was given explicitly, otherwise derived from the coarse grids. The coarse
         level has far fewer eval points and a smaller basis, so deriving it
         separately lets it run a much larger chunk than the fine level can.
+    phi_st, phi_sz, phi_q : int, optional
+        Support sizes and quadrature order of the singular-integral partition, free
+        boundary only. Left unset they are chosen by
+        ``_best_params``/``_best_ratio`` -- see ``_phi_best_ratio``, which is cheap,
+        so there is normally no reason to pin them. Pass all three to skip that step
+        outright; passing only some is ignored.
+    phi_ratio_n_theta, phi_ratio_n_zeta : int, optional
+        Resolution of the grid ``_phi_best_ratio`` averages the boundary over to pick
+        ``(st, sz, q)``. Defaults to the boundary's own Nyquist rate
+        (``2*eq.M+1`` by ``2*eq.N*eq.NFP+1``, scaled to the source grid's toroidal
+        span and capped at the source resolution), which is already converged -- the
+        ratio changes in the 5th digit between that and the full source resolution.
+        Override only to check that claim. Ignored if ``phi_st``/``phi_sz``/``phi_q``
+        are given.
     phi_scale : float, optional
         DIAGNOSTIC, free boundary only. Multiply ``phi_matrix`` by this before it
         reaches the operator, scaling how stiffly the boundary displacement is
@@ -1169,13 +1183,13 @@ class FinitenStability(_Objective):
         # Coarse level, mirroring the fine one. rho is invariant under the
         # PEST->DESC map on either grid, so the same precomputed-index trick makes
         # the coarse mapped grid rebuildable from traced nodes.
-        # Shared by the coarse and fine scaffolding builds. The source-grid ->
-        # DESC-coordinate map is a pure function of the SOURCE nodes, not of which
-        # level asked, and with `phi_n_theta`/`phi_n_zeta` given both levels request
-        # the SAME source grid -- so the 5832-node Newton solve was being run twice
-        # on bit-identical input. Keyed on the nodes themselves rather than assumed:
-        # with those left None the source grid IS the level's own eval grid and the
-        # two differ, in which case this simply misses and recomputes.
+        # Shared by the coarse and fine scaffolding builds. `(st, sz, q)` is a pure
+        # function of the SOURCE grid, not of which level asked, and with
+        # `phi_n_theta`/`phi_n_zeta` given both levels request the SAME source grid --
+        # so it was being derived twice from bit-identical input. Keyed on the nodes
+        # themselves rather than assumed: with those left None the source grid IS the
+        # level's own eval grid and the two differ, in which case this simply misses
+        # and recomputes.
         _srcmap_cache = {}
         coarse_constants = {}
         if self._coarse_grid is not None:
@@ -1259,6 +1273,100 @@ class FinitenStability(_Objective):
             n_theta * n_zeta, -1
         )
         return out.reshape(-1) if a.ndim == 1 else out
+
+    def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src, NFP):
+        r"""``_best_ratio`` for the source grid, without mapping the source grid.
+
+        `_best_ratio` wants one scalar: the surface-area-weighted mean of
+        ``|e_zeta| / |e_theta|``, which sets the aspect ratio of the singular-integral
+        partition so it is ~circular in real space. It is a property of the BOUNDARY
+        SURFACE, not of the node set used to sample it -- so it does not need the real
+        source grid, and the real source grid is expensive: a uniform PEST grid has to
+        go through `eq.map_coordinates` (a Newton solve at every one of
+        ``n_theta_src * n_zeta_src`` nodes) before any geometry can be evaluated on it.
+
+        So evaluate on a plain `LinearGrid` in DESC coordinates instead, at whatever
+        resolution resolves the boundary, and correct for the measure.
+
+        The correction is the whole trick. `_best_ratio` takes an UNWEIGHTED mean over
+        the grid it is handed, which approximates ``(1/2pi) \int f dtheta_PEST`` only
+        because the real source grid is uniform in ``theta_PEST``. On a grid uniform in
+        DESC ``theta`` the same integral is
+
+            (1/2pi) \int f (dtheta_PEST/dtheta) dtheta
+
+        so every node must carry the weight ``theta_PEST_t``. Drop it and the result is
+        wrong by a RESOLUTION-INDEPENDENT bias -- measured at -4.2% (precise_QA), -4.5%
+        (W7-X), -3.9% (HELIOTRON) and -8.2% (NCSX), identical at 18x36 and at 54x108,
+        because refining converges faster to the wrong number. That bias is enough to
+        move ``(st, sz)`` by one or two on precise_QA and NCSX.
+
+        Folding the weight into the area element rather than reimplementing the mean
+        keeps `_best_ratio` itself as the single definition: it reads
+        ``|e_theta x e_zeta|`` only inside both means, so scaling that argument by the
+        Jacobian is exactly the weighted estimator.
+
+        With the weight in, this reproduces the mapped-source-grid ratio to 5-9 digits
+        on all five equilibria tested, at every resolution including the Nyquist one
+        below, and lands on identical ``(st, sz, q)`` in every case.
+
+        Note this assumes the toroidal angle needs no such correction -- i.e. that PEST
+        zeta IS DESC zeta, which holds while DESC's computational zeta is the geometric
+        angle phi. The same assumption is already baked into the source grid, whose
+        zeta column is used unmapped. If zeta ever stops being phi, a ``zeta_PEST_z``
+        weight belongs here too.
+
+        Returns ``(ratio, (n_theta, n_zeta))`` -- the second only so the caller can say
+        what it sampled.
+        """
+        # Nyquist for the boundary surface: the coarsest grid that still resolves every
+        # mode `eq` carries. Toroidally that is over ONE FIELD PERIOD of ``NFP``, which
+        # need not be the equilibrium's own -- a full-torus solve has ``NFP == 1`` while
+        # the boundary still carries ``eq.N * eq.NFP`` toroidal modes across it, hence
+        # the ``eq.NFP / NFP`` factor.
+        #
+        # Floored at 2 so a high ``NFP`` cannot round the toroidal count down to a
+        # single plane while the source grid has many, then capped at the source
+        # resolution -- in that order, so the cap wins. Asking for more points than the
+        # source grid has would make this cost more than the mapped path it replaces,
+        # and when the source IS one plane (axisymmetric, ``n_zeta_src == 1``) one
+        # plane is the right answer, not an under-resolution.
+        n_theta_r = self._phi_ratio_n_theta
+        n_zeta_r = self._phi_ratio_n_zeta
+        if n_theta_r is None:
+            n_theta_r = min(2 * int(eq.M) + 1, n_theta_src)
+        if n_zeta_r is None:
+            _per_period = 2 * int(eq.N) * int(eq.NFP) / max(int(NFP), 1) + 1
+            n_zeta_r = min(max(int(np.ceil(_per_period)), 2), n_zeta_src)
+        n_theta_r, n_zeta_r = max(int(n_theta_r), 2), max(int(n_zeta_r), 1)
+
+        ratio_grid = LinearGrid(
+            rho=1.0, theta=n_theta_r, zeta=n_zeta_r, NFP=NFP, sym=False
+        )
+        _d = eq.compute(
+            [
+                "|e_theta_PEST x e_phi|r,v|",
+                "e_theta_PEST",
+                "e_phi|r,v",
+                "theta_PEST_t",
+            ],
+            grid=ratio_grid,
+            params=eq.params_dict,
+        )
+        # `abs` because only the magnitude of the measure matters; `theta_PEST_t` is
+        # positive for any invertible angle map, so this is a guard, not a correction.
+        jac = np.abs(np.asarray(_d["theta_PEST_t"]))
+        ratio = float(
+            _best_ratio(
+                {
+                    "e_theta": _d["e_theta_PEST"],
+                    "e_zeta": _d["e_phi|r,v"],
+                    "|e_theta x e_zeta|": jac
+                    * np.asarray(_d["|e_theta_PEST x e_phi|r,v|"]),
+                }
+            )
+        )
+        return ratio, (n_theta_r, n_zeta_r)
 
     def _build_phi_scaffolding(self, level_grid, pre, srcmap_cache=None):
         """Static, resolution-only free-boundary scaffolding for one level.
@@ -1349,17 +1457,10 @@ class FinitenStability(_Objective):
         n_surf_src = n_theta_src * n_zeta_src
 
         if upscaled:
-            # Span the SAME angles as the eval grid, just sampled more finely.
-            zeta_eval = np.asarray(phi_pest_grid.nodes[:, 2])
-            zeta_span = (
-                n_zeta * float(np.diff(np.unique(zeta_eval))[0])
-                if n_zeta > 1
-                else 2 * np.pi / max(int(surf_grid_NFP), 1)
-            )
             src_pest_grid = LinearGrid(
                 rho=1.0,
-                theta=np.linspace(0.0, 2 * np.pi, n_theta_src, endpoint=False),
-                zeta=np.linspace(0.0, zeta_span, n_zeta_src, endpoint=False),
+                theta=n_theta_src,
+                zeta=n_zeta_src,
                 NFP=surf_grid_NFP,
                 sym=False,
             )
@@ -1368,21 +1469,6 @@ class FinitenStability(_Objective):
             src_pest_grid = phi_pest_grid
             setattr(self, f"_{pre}phi_src_pest_grid", None)
 
-        # One-time, EAGER, concrete build of the interpolator (picks (st, sz,
-        # q) itself via the default heuristic, since we have real geometry
-        # data to base it on here -- unlike inside a traced `_phi_matrix`
-        # call). Reused as-is by every later `_phi_matrix` call, at any
-        # params: see the docstring above for why that is exact, not an
-        # approximation of convenience.
-        #
-        # Built on the SOURCE grid, with the eval grid handed over as
-        # `potential_grid`. When the two differ, `_interpolator_pest` also
-        # rfft-interpolates the boundary geometry onto the eval grid and
-        # publishes it as `data["potential data"]`. Expect
-        # `singularities.py`'s "Frequency spectrum of FFT interpolation will be
-        # truncated" warning once N_eval < N_source//2 + 1: that is the
-        # intended regime here (the eval grid only ever needs its own
-        # resolution), not a defect.
         nodes0 = np.reshape(
             np.asarray(src_pest_grid.meshgrid_reshape(src_pest_grid.nodes, "rtz")),
             (n_surf_src, 3),
@@ -1417,57 +1503,29 @@ class FinitenStability(_Objective):
                 phi_pest_grid, src_pest_grid, {}, st=int(_st), sz=int(_sz), q=int(_q)
             )
         else:
-            # Mapped once per distinct source grid, not once per level -- see the
-            # cache comment in `build`. `np.array_equal` on (n_surf_src, 3) is
-            # microseconds against a 5832-node Newton solve, and it is exact, so a
-            # genuinely different source grid simply misses.
-            # (st, sz, q) is cached across LEVELS, not just the coordinate map.
-            # `_best_params` reads only the SOURCE grid, and `_best_ratio` only the
-            # geometry on it -- neither sees the eval grid. With
+            # Computed once per distinct source grid, not once per level.
+            # `_best_params` reads only the SOURCE grid, and `_phi_best_ratio` only the
+            # boundary surface -- neither sees the eval grid. With
             # `phi_n_theta`/`phi_n_zeta` given, both levels request the same source
             # grid, so the whole heuristic is level-independent. Confirmed in a real
             # run: coarse and fine both printed st=50 sz=30 q=38.
             #
-            # So the second level skips the Newton solve AND the geometry closure
-            # entirely, and only `get_interpolator` runs again -- it must, because the
-            # EVAL grid does differ per level (35x35 fine vs 19x7 coarse), but that
-            # part is two means and an object holding q**2 shift arrays.
+            # So the second level does no geometry at all, and only `get_interpolator`
+            # runs again -- it must, because the EVAL grid does differ per level
+            # (35x35 fine vs 19x7 coarse), but that part is two means and an object
+            # holding q**2 shift arrays.
             #
             # Keyed on `nodes0` rather than assumed: with `phi_n_theta`/`phi_n_zeta`
             # left None the source grid IS the level's own eval grid, the two differ,
-            # and this simply misses and recomputes.
+            # and this simply misses and recomputes. `np.array_equal` on
+            # (n_surf_src, 3) is microseconds, and it is exact, so a genuinely
+            # different source grid simply misses.
             _prev = None if srcmap_cache is None else srcmap_cache.get("params")
             if _prev is not None and np.array_equal(_prev[0], nodes0):
                 _st_h, _sz_h, _q_h = _prev[1]
             else:
-                rtz0 = np.asarray(
-                    eq.map_coordinates(
-                        nodes0,
-                        inbasis=("rho", "theta_PEST", "zeta"),
-                        outbasis=("rho", "theta", "zeta"),
-                        period=(np.inf, 2 * np.pi, np.inf),
-                        tol=1e-12,
-                        maxiter=50,
-                        params=eq.params_dict,
-                    )
-                )
-                surf_nodes0 = rtz0.reshape(n_theta_src, n_zeta_src, 3).transpose(
-                    1, 0, 2
-                )
-                surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
-                _d = eq.compute(
-                    ["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
-                    grid=surf_grid0,
-                    params=eq.params_dict,
-                )
-                _ratio = float(
-                    _best_ratio(
-                        {
-                            "e_theta": _d["e_theta_PEST"],
-                            "e_zeta": _d["e_phi|r,v"],
-                            "|e_theta x e_zeta|": _d["|e_theta_PEST x e_phi|r,v|"],
-                        }
-                    )
+                _ratio, _rshape = self._phi_best_ratio(
+                    eq, n_theta_src, n_zeta_src, surf_grid_NFP
                 )
                 _st_h, _sz_h, _q_h = (
                     int(_x) for _x in _best_params(src_pest_grid, _ratio)
@@ -1475,10 +1533,11 @@ class FinitenStability(_Objective):
                 if srcmap_cache is not None:
                     srcmap_cache["params"] = (nodes0, (_st_h, _sz_h, _q_h))
                 print(
-                    f"[phi] interpolator support  ratio={_ratio:.8f}  "
+                    f"[phi] interpolator support  ratio={_ratio:.8f}"
+                    f"  (ratio grid {_rshape[0]}x{_rshape[1]}"
+                    f" vs source {n_theta_src}x{n_zeta_src})  "
                     f"phi_st={_st_h} phi_sz={_sz_h} phi_q={_q_h}  "
-                    "-- pass these to skip this build entirely "
-                    "(scripts/phi_interp_params.py prints them without a solve)",
+                    "-- pass these to skip this step entirely",
                     flush=True,
                 )
             interp0 = get_interpolator(

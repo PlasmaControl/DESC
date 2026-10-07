@@ -182,7 +182,6 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     x_full = put(x0, cols, D * xp)
     f = np.asarray(constraint.compute_scaled_error(x_full))
     offset = 0
-    print(f"xp dtype : {xp.dtype}, eps : {jnp.finfo(xp.dtype).eps:.8e}")
     for con in constraint.objectives:
         # get portion of the error corresponding to this constraint
         dim = con.dim_f

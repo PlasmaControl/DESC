@@ -12,6 +12,8 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.utils import cross, dot, rpz2xyz_vec
 
+from .utils import EPS
+
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
 FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]
@@ -124,10 +126,12 @@ def test_surface_areas():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "S(r)", "S_r(r)", "S_rr(r)"], grid=grid)
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"])
+        4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"]), rtol=10 * EPS
     )
-    np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["S_r(r)"])
-    np.testing.assert_allclose(0, data["S_rr(r)"], atol=3e-12)
+    np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["S_r(r)"], rtol=10 * EPS)
+    np.testing.assert_allclose(
+        0, data["S_rr(r)"], atol=1e3 * EPS * np.abs(data["S_r(r)"]).max()
+    )
 
 
 @pytest.mark.unit

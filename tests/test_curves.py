@@ -14,6 +14,8 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 
+from .utils import EPS
+
 
 class TestFourierRZCurve:
     """Tests for FourierRZCurve class."""
@@ -29,7 +31,7 @@ class TestFourierRZCurve:
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [-3, 0, 4], atol=1e-15
+            c.compute("center", basis="xyz")["center"][0, :], [-3, 0, 4], atol=100 * EPS
         )
 
     @pytest.mark.unit
@@ -585,13 +587,13 @@ class TestFourierPlanarCurve:
         """Test torsion of circular curve."""
         c = FourierPlanarCurve()
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"], 0, atol=100 * EPS
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"], 0, atol=100 * EPS
         )
 
     @pytest.mark.unit
@@ -785,11 +787,15 @@ class TestFourierXYCurve:
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierXYCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=100 * EPS
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=100 * EPS
+        )
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -857,19 +863,19 @@ class TestFourierXYCurve:
 
         x_xyz = cxyz.compute("x")["x"]
         x_rpz = crpz.compute("x")["x"]
-        np.testing.assert_allclose(x_xyz, x_rpz)
+        np.testing.assert_allclose(x_xyz, x_rpz, rtol=100 * EPS)
 
         xs_xyz = cxyz.compute("x_s")["x_s"]
         xs_rpz = crpz.compute("x_s")["x_s"]
-        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=2e-15)
+        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=100 * EPS)
 
         xss_xyz = cxyz.compute("x_ss")["x_ss"]
         xss_rpz = crpz.compute("x_ss")["x_ss"]
-        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=2e-15)
+        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=100 * EPS)
 
         xsss_xyz = cxyz.compute("x_sss")["x_sss"]
         xsss_rpz = crpz.compute("x_sss")["x_sss"]
-        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=100 * EPS)
 
     @pytest.mark.unit
     def test_misc(self):

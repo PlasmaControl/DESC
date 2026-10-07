@@ -82,7 +82,7 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 
-from .utils import area_difference_desc, area_difference_vmec
+from .utils import EPS, area_difference_desc, area_difference_vmec
 
 
 @pytest.mark.regression
@@ -1838,7 +1838,8 @@ def test_second_stage_optimization():
     )
     np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
     np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
-    np.testing.assert_allclose(field[1].B0, 0, atol=1e-12)  # vertical field (vanishes)
+    # vertical field (vanishes)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e3 * EPS)
 
 
 @pytest.mark.unit

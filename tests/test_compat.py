@@ -14,6 +14,8 @@ from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.profiles import FourierZernikeProfile, SplineProfile
 
+from .utils import EPS
+
 
 @pytest.mark.unit
 def test_flip_helicity_axisym():
@@ -70,9 +72,9 @@ def test_flip_helicity_iota():
     data_flip = eq.compute(data_keys, grid=grid_flip)
 
     # check that basis vectors did not change
-    np.testing.assert_allclose(data_old["e_rho"], data_flip["e_rho"])
-    np.testing.assert_allclose(data_old["e_theta"], data_flip["e_theta"])
-    np.testing.assert_allclose(data_old["e^zeta"], data_flip["e^zeta"])
+    for key in ["e_rho", "e_theta", "e^zeta"]:
+        atol = 100 * EPS * np.abs(data_old[key]).max()
+        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol)
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
@@ -113,9 +115,9 @@ def test_flip_helicity_current():
     # note that now the QH helicity is reversed: (M, N) -> (-M, N)
 
     # check that basis vectors did not change
-    np.testing.assert_allclose(data_old["e_rho"], data_flip["e_rho"])
-    np.testing.assert_allclose(data_old["e_theta"], data_flip["e_theta"])
-    np.testing.assert_allclose(data_old["e^zeta"], data_flip["e^zeta"])
+    for key in ["e_rho", "e_theta", "e^zeta"]:
+        atol = 100 * EPS * np.abs(data_old[key]).max()
+        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol)
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))

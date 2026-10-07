@@ -17,6 +17,8 @@ from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
+from .utils import EPS
+
 
 class TestTransform:
     """Tests Transform classes."""
@@ -529,7 +531,7 @@ class TestTransform:
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
         x = transform.transform(c)
         c1 = transform.fit(x)
-        np.testing.assert_allclose(c, c1, atol=1e-12)
+        np.testing.assert_allclose(c, c1, atol=1e3 * EPS)
 
     @pytest.mark.unit
     def test_empty_grid(self):

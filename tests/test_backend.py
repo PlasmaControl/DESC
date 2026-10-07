@@ -17,6 +17,8 @@ from desc.backend import (
     vmap,
 )
 
+from .utils import EPS
+
 
 @pytest.mark.unit
 def test_put():
@@ -199,21 +201,23 @@ def test_qr_multiply(m, n, cond):
     Qtb_ref, R_ref = _qr_multiply_ref(A, b, mode="right")
     assert R.shape == (k, n)
     np.testing.assert_allclose(R, R_ref, rtol=1e-12, atol=1e-12 * np.abs(A).max())
-    np.testing.assert_allclose(Qtb, Qtb_ref, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(Qtb, Qtb_ref, rtol=1e3 * EPS, atol=1e3 * EPS)
 
     # mode="right" with 2D c is c@Q
     C = rng.standard_normal((3, m))
     CQ, _ = qr_multiply(A, C, mode="right")
-    np.testing.assert_allclose(CQ, _qr_multiply_ref(A, C, "right")[0], atol=1e-10)
+    np.testing.assert_allclose(CQ, _qr_multiply_ref(A, C, "right")[0], atol=1e3 * EPS)
 
     # mode="left" is Q@c, with c=I recovers Q
     Q, _ = qr_multiply(A, np.eye(k), mode="left")
-    np.testing.assert_allclose(Q, _qr_multiply_ref(A, np.eye(k), "left")[0], atol=1e-10)
-    np.testing.assert_allclose(Q.T @ Q, np.eye(k), atol=1e-10)
-    np.testing.assert_allclose(Q @ R, A, atol=1e-10 * np.abs(A).max())
+    np.testing.assert_allclose(
+        Q, _qr_multiply_ref(A, np.eye(k), "left")[0], atol=1e3 * EPS
+    )
+    np.testing.assert_allclose(Q.T @ Q, np.eye(k), atol=1e3 * EPS)
+    np.testing.assert_allclose(Q @ R, A, atol=1e3 * EPS * np.abs(A).max())
     y = rng.standard_normal(k)
     Qy, _ = qr_multiply(A, y, mode="left")
-    np.testing.assert_allclose(Qy, _qr_multiply_ref(A, y, "left")[0], atol=1e-10)
+    np.testing.assert_allclose(Qy, _qr_multiply_ref(A, y, "left")[0], atol=1e3 * EPS)
 
     # solve A@x = b
     if m >= n:
@@ -226,5 +230,7 @@ def test_qr_multiply(m, n, cond):
         x = Q1 @ solve_triangular(R1.T, b, lower=True)
         x_ref = Q1_ref @ solve_triangular(R1_ref.T, b, lower=True)
     x_np = np.linalg.lstsq(A, b, rcond=None)[0]
-    np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
-    np.testing.assert_allclose(x, x_np, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
+    # forward error of a least squares solve is bounded by eps * cond(A)
+    tol = 10 * EPS * np.linalg.cond(A)
+    np.testing.assert_allclose(x, x_ref, rtol=tol, atol=tol * np.abs(x_np).max())
+    np.testing.assert_allclose(x, x_np, rtol=tol, atol=tol * np.abs(x_np).max())

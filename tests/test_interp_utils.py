@@ -14,6 +14,8 @@ from desc.examples import get
 from desc.integrals import Bounce2D
 from desc.integrals._interp_utils import nufft1d2r, nufft2d2r, poly_val, polyroot_vec
 
+from .utils import EPS
+
 
 def _c_1d(x):
     """Test function for 1D FFT."""
@@ -99,7 +101,9 @@ class TestFastInterp:
 
         f = 2 * rfft(c, norm="forward")
         f = f.at[..., (0, -1) if (n % 2 == 0) else 0].divide(2)
-        np.testing.assert_allclose(nufft1d2r(xq, f, domain), func(xq))
+        # nufft accuracy, or the machine precision if that is worse
+        rtol = 1e-7 + 1e3 * EPS
+        np.testing.assert_allclose(nufft1d2r(xq, f, domain), func(xq), rtol=rtol)
 
         @grad
         def g(xq):
@@ -109,7 +113,7 @@ class TestFastInterp:
         def true_g(xq):
             return func(xq).sum()
 
-        np.testing.assert_allclose(g(xq), true_g(xq))
+        np.testing.assert_allclose(g(xq), true_g(xq), rtol=rtol)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, m, n, domain_x, domain_y", _test_inputs_2D)

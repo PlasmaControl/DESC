@@ -7,7 +7,7 @@ from numpy.random import default_rng
 from desc.backend import jnp
 from desc.derivatives import AutoDiffDerivative
 
-from .utils import FiniteDiffDerivative
+from .utils import EPS, FiniteDiffDerivative
 
 
 class TestDerivative:
@@ -168,15 +168,23 @@ class TestJVP:
         df = FiniteDiffDerivative.compute_jvp(
             self.fun, 0, self.dx, self.x, self.c1, self.c2
         )
-        np.testing.assert_allclose(df, np.array([1554.0, 4038.0, 6522.0, 9006.0]))
+        # finite differences are accurate to about sqrt(eps)
+        rtol = 10 * EPS**0.5
+        np.testing.assert_allclose(
+            df, np.array([1554.0, 4038.0, 6522.0, 9006.0]), rtol=rtol
+        )
         df = FiniteDiffDerivative.compute_jvp(
             self.fun, 1, self.dc1, self.x, self.c1, self.c2
         )
-        np.testing.assert_allclose(df, np.array([10296.0, 26658.0, 43020.0, 59382.0]))
+        np.testing.assert_allclose(
+            df, np.array([10296.0, 26658.0, 43020.0, 59382.0]), rtol=rtol
+        )
         df = FiniteDiffDerivative.compute_jvp(
             self.fun, (0, 2), (self.dx, self.dc2), self.x, self.c1, self.c2
         )
-        np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
+        np.testing.assert_allclose(
+            df, np.array([-342.0, -630.0, -918.0, -1206.0]), rtol=rtol
+        )
 
     @pytest.mark.unit
     def test_autodiff_jvp2(self):

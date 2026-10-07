@@ -58,6 +58,8 @@ from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
+from .utils import EPS
+
 
 class TestSurfaceIntegral:
     """Tests for non-singular surface integrals."""
@@ -874,8 +876,8 @@ class TestBouncePoints:
         ext_scipy = ext_scipy[B.derivative(2)(ext_scipy) >= 0]
         B_ext_scipy = B(ext_scipy)
         assert mins.size == ext_scipy.size
-        np.testing.assert_allclose(mins[idx], ext_scipy)
-        np.testing.assert_allclose(B_mins[idx], B_ext_scipy)
+        np.testing.assert_allclose(mins[idx], ext_scipy, rtol=100 * EPS)
+        np.testing.assert_allclose(B_mins[idx], B_ext_scipy, rtol=100 * EPS)
 
 
 class TestBounceQuadrature:

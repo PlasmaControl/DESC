@@ -42,6 +42,7 @@ from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
 from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 
+from .utils import EPS
 from .utils import FiniteDiffDerivative as Derivative
 
 
@@ -284,14 +285,14 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0]),
             correct_field(10.0, 0, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, np.pi / 4, 0]),
             correct_field(10.0, np.pi / 4, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
 
         potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi * 2
@@ -310,14 +311,14 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0]),
             correct_field(10.0, 0, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, np.pi / 4, 0]),
             correct_field(10.0, np.pi / 4, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
 
         field = CurrentPotentialField.from_surface(
@@ -330,14 +331,14 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0]),
             correct_field(10.0, 0, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, np.pi / 4, 0]),
             correct_field(10.0, np.pi / 4, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
 
         # add a ToroidalField and check passing in/not passing in
@@ -348,8 +349,8 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             sumfield.compute_magnetic_field([10.0, 0, 0]),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS,
+            rtol=100 * EPS,
         )
 
         np.testing.assert_allclose(
@@ -358,8 +359,8 @@ class TestMagneticFields:
                 source_grid=[None, LinearGrid(M=30, N=30, NFP=surface.NFP)],
             ),
             correct_field(10.0, 0, 0) + B_TF([10.0, 0, 0]),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS,
+            rtol=100 * EPS,
         )
 
         with pytest.raises(IOError):
@@ -505,16 +506,16 @@ class TestMagneticFields:
                 transforms=transforms,
             ),
             correct_field(10.0, 0, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field(
                 [10.0, np.pi / 4, 0], source_grid=surface_grid
             ),
             correct_field(10.0, np.pi / 4, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
 
         field.G = -2 * G
@@ -523,15 +524,15 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0) * 2,
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         # use default grid
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, np.pi / 4, 0], source_grid=None),
             correct_field(10.0, np.pi / 4, 0) * 2,
             atol=1e-12,
-            rtol=1e-8,
+            rtol=100 * EPS,
         )
 
         field = FourierCurrentPotentialField.from_surface(
@@ -545,28 +546,28 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field.compute_magnetic_field([10.0, 0, 0], source_grid=surface_grid),
             correct_field(10.0, 0, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field(
                 [10.0, np.pi / 4, 0], source_grid=surface_grid
             ),
             correct_field(10.0, np.pi / 4, 0),
-            atol=1e-16,
-            rtol=1e-8,
+            atol=10 * EPS * mu_0,
+            rtol=100 * EPS,
         )
 
         K_xyz = field.compute(["K", "x"], basis="xyz", grid=surface_grid)
         K_rpz = field.compute(["K", "x"], basis="rpz", grid=surface_grid)
 
         np.testing.assert_allclose(
-            K_xyz["K"], rpz2xyz_vec(K_rpz["K"], phi=K_rpz["x"][:, 1]), atol=1e-16
+            K_xyz["K"], rpz2xyz_vec(K_rpz["K"], phi=K_rpz["x"][:, 1]), atol=10 * EPS
         )
         np.testing.assert_allclose(
             K_rpz["K"],
             xyz2rpz_vec(K_xyz["K"], x=K_xyz["x"][:, 0], y=K_xyz["x"][:, 1]),
-            atol=1e-16,
+            atol=10 * EPS,
         )
 
     @pytest.mark.unit

@@ -25,7 +25,7 @@ from desc.profiles import (
     TwoPowerProfile,
 )
 
-from .utils import area_difference, compute_coords
+from .utils import EPS, area_difference, compute_coords
 
 
 class TestProfiles:
@@ -320,8 +320,8 @@ class TestProfiles:
         f_r = f(x) * _sum
         f_rr = f_r * _sum + f(x) * _sum_r
 
-        np.testing.assert_allclose(f_r, f(x, dr=1))
-        np.testing.assert_allclose(f_rr, f(x, dr=2))
+        np.testing.assert_allclose(f_r, f(x, dr=1), rtol=100 * EPS)
+        np.testing.assert_allclose(f_rr, f(x, dr=2), rtol=100 * EPS)
 
     @pytest.mark.unit
     def test_scaled_profiles(self):

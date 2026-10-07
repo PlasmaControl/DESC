@@ -34,6 +34,8 @@ from desc.magnetic_fields import (
 from desc.objectives import LinkingCurrentConsistency
 from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
+from .utils import EPS
+
 
 class TestCoil:
     """Tests for singular coil objects."""
@@ -548,7 +550,9 @@ class TestCoilSet:
         B_approx = coils.compute_magnetic_field(
             [0, 0, z[-1]], basis="xyz", source_grid=32
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=100 * EPS * np.abs(B_true).max()
+        )
 
     @pytest.mark.unit
     def test_linspaced_angular(self):
@@ -566,7 +570,9 @@ class TestCoilSet:
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=100 * EPS * np.abs(B_true).max()
+        )
 
         surf = FourierRZToroidalSurface(
             R_lmn=np.array([10, 0.1]),
@@ -576,7 +582,7 @@ class TestCoilSet:
         )
 
         B_normal, _ = coils.compute_Bnormal(surf)
-        np.testing.assert_allclose(B_normal, 0, atol=1e-9)
+        np.testing.assert_allclose(B_normal, 0, atol=100 * EPS * Bp_true)
 
     @pytest.mark.unit
     def test_from_symmetry(self):

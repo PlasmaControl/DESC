@@ -26,6 +26,8 @@ from desc.basis import (
 from desc.derivatives import Derivative
 from desc.grid import LinearGrid
 
+from .utils import EPS
+
 
 class TestBasis:
     """Test Basis class."""
@@ -225,8 +227,8 @@ class TestBasis:
         values = fourier(t[:, np.newaxis], m, dt=0)
         derivs = fourier(t[:, np.newaxis], m, dt=1)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+        np.testing.assert_allclose(values, correct_vals, atol=100 * EPS)
+        np.testing.assert_allclose(derivs, correct_ders, atol=100 * EPS)
 
     @pytest.mark.unit
     def test_power_series(self):

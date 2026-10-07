@@ -112,6 +112,8 @@ from desc.profiles import (
 from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
+from .utils import EPS
+
 
 class TestObjectiveFunction:
     """Test ObjectiveFunction classes."""
@@ -157,7 +159,7 @@ class TestObjectiveFunction:
             objective.build()
             R1 = objective.compute(*objective.xs(thing))
             R2 = thing.compute("R", grid=grid)["R"]
-            np.testing.assert_allclose(R1, R2)
+            np.testing.assert_allclose(R1, R2, rtol=10 * EPS)
 
         curve = FourierXYZCurve()
         grid = LinearGrid(0, 0, 5)
@@ -628,7 +630,7 @@ class TestObjectiveFunction:
             np.testing.assert_equal(
                 len(magnetic_well), obj._constants["transforms"]["grid"].num_rho
             )
-            np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
+            np.testing.assert_allclose(magnetic_well, 0, atol=10 * EPS)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         eq = Equilibrium(current=PowerSeriesProfile(0))
@@ -1036,7 +1038,7 @@ class TestObjectiveFunction:
             obj = CoilLength(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, 4 * np.pi, rtol=1e-8)
+            np.testing.assert_allclose(f, 4 * np.pi, rtol=100 * EPS)
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
@@ -1063,7 +1065,7 @@ class TestObjectiveFunction:
             obj = CoilCurrentLength(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, 4 * np.pi, rtol=1e-8)
+            np.testing.assert_allclose(f, 4 * np.pi, rtol=100 * EPS)
             assert f.shape == (obj.dim_f,)
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
@@ -1335,7 +1337,7 @@ class TestObjectiveFunction:
             else:
                 f = obj.compute(params_1=eq.params_dict, params_2=coils.params_dict)
             assert f.size == coils.num_coils
-            np.testing.assert_allclose(f, mindist)
+            np.testing.assert_allclose(f, mindist, rtol=100 * EPS)
             obj2 = PlasmaCoilSetMinDistance(
                 eq=eq,
                 coil=coils,
@@ -1875,7 +1877,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        np.testing.assert_allclose(d, a_s - a_p)
+        np.testing.assert_allclose(d, a_s - a_p, rtol=100 * EPS)
 
         # ensure that it works (dimension-wise) when compute_scaled is called
         _ = obj.compute_scaled(*obj.xs(eq, surface))
@@ -1899,7 +1901,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        np.testing.assert_allclose(d, a_s - a_p)
+        np.testing.assert_allclose(d, a_s - a_p, rtol=100 * EPS)
 
         # ensure it works with different sized grids (poloidal resolution different)
         grid = LinearGrid(M=5, N=6)
@@ -1913,7 +1915,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.max() - (-a_s)) < 100 * EPS * a_s
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
 
         # ensure it works with different sized grids (poloidal resolution different)
@@ -1932,7 +1934,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert obj.dim_f == d.size
-        assert abs(d.max() - (-a_s)) < 1e-14
+        assert abs(d.max() - (-a_s)) < 100 * EPS * a_s
         assert abs(d.min() - (-a_s)) < grid.spacing[0, 1] * a_s
         # test errors
         # differing grid zetas, same num_zeta

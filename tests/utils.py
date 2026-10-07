@@ -6,11 +6,14 @@ import warnings
 import numpy as np
 from shapely.geometry import Polygon
 
-from desc.backend import put
+from desc.backend import jnp, put
 from desc.derivatives import _Derivative
 from desc.grid import Grid, LinearGrid
 from desc.utils import ensure_tuple
 from desc.vmec import VMECIO
+
+# machine precision of the floats desc computes with, ie float32 unless x64 is enabled
+EPS = np.finfo(jnp.zeros(0).dtype).eps
 
 
 def compute_coords(equil, Nr=10, Nt=8, Nz=None):

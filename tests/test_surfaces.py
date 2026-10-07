@@ -13,6 +13,8 @@ from desc.geometry.surface import _constant_offset_surface
 from desc.grid import LinearGrid
 from desc.utils import rpz2xyz
 
+from .utils import EPS
+
 
 class TestFourierRZToroidalSurface:
     """Tests for FourierRZToroidalSurface class."""
@@ -40,10 +42,10 @@ class TestFourierRZToroidalSurface:
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
         N = s.compute("n_rho", grid=grid)["n_rho"]
-        np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
+        np.testing.assert_allclose(N[0], [0, 0, -1], atol=10 * EPS)
         grid = LinearGrid(theta=0.0, zeta=0.0)
         N = s.compute("n_rho", grid=grid)["n_rho"]
-        np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(N[0], [1, 0, 0], atol=10 * EPS)
 
     @pytest.mark.unit
     def test_misc(self):

@@ -1280,7 +1280,9 @@ class FinitenStability(_Objective):
         )
         return out.reshape(-1) if a.ndim == 1 else out
 
-    def _agni_transforms(self, keys, grid, cache, tag):
+    def _agni_transforms(
+        self, keys, grid, phi_matrix=None, coarse_phi_matrix=None, transforms=None
+    ):
         """``get_transforms`` for a mapped AGNI grid, using the ``pest`` method.
 
         The mapped grid is uniform in zeta but NOT a tensor product in (rho, theta) --
@@ -1298,18 +1300,27 @@ class FinitenStability(_Objective):
         holding, `Transform` falls back to ``direct1`` with a warning rather than being
         wrong.
 
-        Cached per ``tag`` so the fine and coarse levels each build once and then
-        reuse -- the matrices depend on the NODES, which move with ``params``, so this
-        cannot
-        be hoisted into ``build()``; it is per-call reuse across the several computes
-        that share one grid.
+        Built per call and passed explicitly to the compute that needs it, NOT cached.
+        Nothing here is reusable across the call sites: each uses a different grid, and
+        the coarse level's grid comes from ``stop_gradient(params)`` while the fine
+        level's does not, so handing one level's transforms to the other would leak
+        gradients into the coarse space that is deliberately frozen. ``transforms``
+        extends an already-populated dict for the one case where part of the set is
+        known -- see the ``phi_matrix_pest`` call, where ``Phi``/``Phi_PEST`` must stay
+        on ``direct1``.
         """
-        key = (tag, tuple(sorted(keys)) if not isinstance(keys, str) else keys)
-        if key not in cache:
-            cache[key] = get_transforms(
-                keys, obj=self.things[0], grid=grid, method="pest"
-            )
-        return cache[key]
+        return {
+            **get_transforms(
+                keys,
+                obj=self.things[0],
+                grid=grid,
+                method="pest",
+                transforms=transforms,
+            ),
+            "diffmat": self._diffmat,
+            "phi_matrix": phi_matrix,
+            "coarse_phi_matrix": coarse_phi_matrix,
+        }
 
     def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src):
         r"""``_best_ratio`` for the source grid, without mapping the source grid.
@@ -1710,7 +1721,7 @@ class FinitenStability(_Objective):
             phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta), (1, 0, 3, 2)
         ).reshape(n_surf, n_surf)
 
-    def _phi_matrix(self, params, grid, level="fine"):
+    def _phi_matrix(self, params, grid, level="fine", transforms=None):
         """Free-boundary vacuum-response operator, differentiable in params.
 
         Rebuilt fresh from the CURRENT boundary geometry on every call
@@ -1846,6 +1857,12 @@ class FinitenStability(_Objective):
             Phi_basis=getattr(self, f"_{pre}phi_basis"),
             data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
             params=params,
+            # Prebuilt transforms if the caller has them for THIS `surf_grid`; built
+            # here otherwise. Not shareable between the two levels: `surf_grid`'s nodes
+            # come from `map_coordinates(params=...)` and the coarse level passes
+            # `stop_gradient(params)`, so one level's matrices carry the other's
+            # gradients. Nor across a `compute_data` call, for the same reason.
+            transforms=transforms,
             # `surf_grid` is the mapped PEST source lattice -- uniform in zeta, NOT a
             # tensor product in (rho, theta) -- so the geometry behind
             # `phi_matrix_pest` was being evaluated with the full-width `direct1`
@@ -2029,10 +2046,6 @@ class FinitenStability(_Objective):
         from desc.compute._stability import _PhaseTimer
 
         _tmr = _PhaseTimer("setup ")
-        # Transform matrices for the mapped AGNI grids, built with the `pest` method
-        # and reused across every compute on the same grid. Keyed per level; see
-        # `_agni_transforms` for why this cannot live in `build()`.
-        _tf_cache = {}
 
         grid = self._mapped_grid(params, constants)
         _tmr.mark("mapped_grid fine", grid.nodes)
@@ -2080,7 +2093,7 @@ class FinitenStability(_Objective):
                 params=_pc,
                 data=_cflux,
                 override_grid=False,
-                transforms=self._agni_transforms(_ckeys, _grid_c, _tf_cache, "coarse"),
+                transforms=self._agni_transforms(_ckeys, _grid_c),
             )
             _tmr.mark("geometry coarse", *_cdata.values())
             _cg0 = self._coarse_grid
@@ -2186,6 +2199,7 @@ class FinitenStability(_Objective):
             # was the phi_matrix build hiding in the same interval.
             options["phi_matrix"] = self._phi_matrix(params, grid)
             _tmr.mark("phi_matrix fine", options["phi_matrix"])
+
         options.update(coarse_opts)
 
         _fflux = self._flux_data(params, constants, grid)
@@ -2194,12 +2208,14 @@ class FinitenStability(_Objective):
         data = eq.compute(
             "finite-n lambda3 rayleigh",
             grid=grid,
-            diffmat=self._diffmat,
             params=params,
             data=_fdata,
             override_grid=False,
             transforms=self._agni_transforms(
-                "finite-n lambda3 rayleigh", grid, _tf_cache, "fine"
+                "finite-n lambda3 rayleigh",
+                grid,
+                options.get("phi_matrix", None),
+                coarse_opts.get("coarse_phi_matrix", None),
             ),
             **options,
         )
@@ -2310,9 +2326,13 @@ class FinitenStability(_Objective):
             data = eq.compute(
                 "finite-n lambda3",
                 grid=grid,
-                diffmat=self._diffmat,
                 params=params,
-                transforms=self._agni_transforms("finite-n lambda3", grid, {}, "dense"),
+                transforms=self._agni_transforms(
+                    "finite-n lambda3",
+                    grid,
+                    options.get("phi_matrix", None),
+                    options.get("coarse_phi_matrix", None),
+                ),
                 **options,
             )
             lam = jnp.asarray(data["finite-n lambda3"]).reshape(-1)[0]

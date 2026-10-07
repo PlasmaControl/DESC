@@ -371,6 +371,7 @@ class ObjectiveFunction(IOAble):
         "_things_per_objective_idx",
         "_use_jit",
         "_static_attrs",
+        "_jac_precision",
     ]
 
     def __init__(
@@ -1292,6 +1293,7 @@ class _Objective(IOAble, ABC):
         "_scalar",
         "_units",
         "_static_attrs",
+        "_jac_precision",
     ]
 
     def __init__(

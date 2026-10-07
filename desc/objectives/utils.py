@@ -247,11 +247,14 @@ class _Recover(IOAble):
     def __call__(self, x_reduced):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(
-            jnp.zeros(objective.dim_x, dtype=x_reduced.dtype),
-            unfixed_idx,
-            jnp.astype(Z, x_reduced.dtype) @ jnp.astype(x_reduced, x_reduced.dtype),
+            jnp.zeros(self.dim_x, dtype=x_reduced.dtype),
+            self.unfixed_idx,
+            jnp.astype(self.Z, x_reduced.dtype)
+            @ jnp.astype(x_reduced, x_reduced.dtype),
         )
-        x_full = jnp.astype(self.D, x_reduced.dtype) * (jnp.astype(self.xp, x_reduced.dtype) + dx)
+        x_full = jnp.astype(self.D, x_reduced.dtype) * (
+            jnp.astype(self.xp, x_reduced.dtype) + dx
+        )
         return jnp.atleast_1d(jnp.squeeze(x_full))
 
 

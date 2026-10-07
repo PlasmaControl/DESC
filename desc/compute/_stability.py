@@ -1488,7 +1488,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # which is a TRACER under the vmap that builds all rings at once. numpy
     # cannot be indexed by a tracer.
     _bc_shell = rho_shell == 0
-    if True:  # phi_matrix is None:
+    if phi_matrix is None:
         _bc_shell = _bc_shell | (rho_shell == (n_rho_max - 1))
     boundary = _nodesel(jnp.asarray(_bc_shell))
 

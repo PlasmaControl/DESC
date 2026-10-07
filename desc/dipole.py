@@ -1655,31 +1655,58 @@ def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde, rho_tilde_clip=0.95):
         discreteness while leaving a usable gradient. Set to ``None`` to
         disable and use the raw imported value as before.
     '''
-    if rho_tilde_clip is not None:
-        rho_tilde = jnp.clip(rho_tilde, -rho_tilde_clip, rho_tilde_clip)
+    # if rho_tilde_clip is not None:
+    #     rho_tilde = jnp.clip(rho_tilde, -rho_tilde_clip, rho_tilde_clip)
     dip = _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, 
                    #rho=rho_tilde
                    )
     dip.rho_tilde = rho_tilde
     return dip
 
-def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
-    '''
-    Creates a DipoleSet object using data from a given CSV file containing
-    each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
+# def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
+#     '''
+#     Creates a DipoleSet object using data from a given CSV file containing
+#     each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
 
-    Parameters
-    ----------
-    rho_tilde_clip : float or None, optional
-        Passed through to ``create_dipole``; caps the starting |rho_tilde|
-        magnitude so a saturated CSV (e.g. the output of a prior
-        DipoleDiscreteness run) doesn't start every dipole with a
-        near-vanishing gradient. See ``create_dipole`` docstring. Default
-        0.95; pass ``None`` to use the raw imported values unclipped.
-    '''
+#     Parameters
+#     ----------
+#     rho_tilde_clip : float or None, optional
+#         Passed through to ``create_dipole``; caps the starting |rho_tilde|
+#         magnitude so a saturated CSV (e.g. the output of a prior
+#         DipoleDiscreteness run) doesn't start every dipole with a
+#         near-vanishing gradient. See ``create_dipole`` docstring. Default
+#         0.95; pass ``None`` to use the raw imported values unclipped.
+#     '''
+#     with open(filename, newline="") as f:
+#         reader = csv.DictReader(f)
+ 
+#         csv_data = [
+#             (
+#                 float(line["x (m)"]),
+#                 float(line["y (m)"]),
+#                 float(line["z (m)"]),
+#                 float(line["phi (rad)"]),
+#                 float(line["theta (rad)"]),
+#                 float(line["m0"]),
+#                 float(line["rho (unitless)"]),
+#                 float(line["Ic"]),
+#             )
+#             for line in reader
+#         ]
+#     dipole_set = DipoleSet(NFP=NFP, sym=sym)
+#     for line in csv_data:
+#         dipole_params, Ic = line[:-1], line[-1]
+#         if Ic != 0:
+#             dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=rho_tilde_clip))
+ 
+#     return dipole_set
+
+def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
- 
+        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+        has_Ic = "Ic" in reader.fieldnames
+
         csv_data = [
             (
                 float(line["x (m)"]),
@@ -1689,7 +1716,7 @@ def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
                 float(line["theta (rad)"]),
                 float(line["m0"]),
                 float(line["rho (unitless)"]),
-                float(line["Ic"]),
+                float(line["Ic"]) if has_Ic else 1.0,
             )
             for line in reader
         ]
@@ -1697,6 +1724,6 @@ def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
     for line in csv_data:
         dipole_params, Ic = line[:-1], line[-1]
         if Ic != 0:
-            dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=rho_tilde_clip))
- 
+            dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=0.95))
+
     return dipole_set

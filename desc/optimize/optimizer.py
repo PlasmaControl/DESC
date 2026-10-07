@@ -712,13 +712,21 @@ def get_combined_constraint_objectives(  # noqa: C901
     # wrap to handle linear constraints
     if linear_constraint is not None:
         linear_constraint_options = options.pop("linear_constraint_options", {})
+        if "x_scale" not in linear_constraint_options:
+            # scale by magnitude, with ESS for the zero modes, so that the null space
+            # doesn't mix modes of very different magnitudes, which loses the small
+            # high order modes in single precision
+            x = objective.x(*objective.things)
+            ess = [t.pack_params(t._get_ess_scale()) for t in objective.things]
+            ess = _project_x_scale(jnp.concatenate(ess), objective)
+            linear_constraint_options["x_scale"] = jnp.maximum(jnp.abs(x), ess)
         objective = LinearConstraintProjection(
             objective, linear_constraint, **linear_constraint_options
         )
         objective.build(verbose=verbose)
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
-                nonlinear_constraint, linear_constraint
+                nonlinear_constraint, linear_constraint, **linear_constraint_options
             )
             nonlinear_constraint.build(verbose=verbose)
 

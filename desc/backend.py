@@ -25,7 +25,7 @@ if use_jax:
             import jaxlib
             from jax import config as jax_config
 
-            jax_config.update("jax_enable_x64", True)
+            jax_config.update("jax_enable_x64", False)
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
             _device = jax.local_devices()[0]

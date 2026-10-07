@@ -638,12 +638,30 @@ def get_transforms(  # noqa: C901
     from desc.transform import Transform
 
     keys = [keys] if isinstance(keys, str) else keys
-    if jitable or kwargs.get("method") == "jitable":
+    _method = kwargs.get("method")
+    if _method is not None and _method not in ("auto", "jitable"):
+        # An EXPLICIT method from the caller wins. Previously only "jitable" was
+        # honored and anything else was silently replaced, so e.g. `method="pest"`
+        # looked like it applied and did not. "auto" still means "decide here".
+        method = _method
+    elif jitable or _method == "jitable":
         method = "jitable"
-    elif ("phi_matrix" in keys) or ("phi_matrix_pest" in keys):
-        method = "direct1"
     else:
         method = "auto"
+    # `_lsmr_compute_phi_matrix` reads `phi_transform.matrices["direct1"][0][0][0]`
+    # directly (desc/compute/_laplace.py), so the Phi transform has to be direct1 --
+    # but ONLY that one. This used to force direct1 for EVERY transform in the set,
+    # which on a large grid is the difference between one full-width Vandermonde and
+    # all of them.
+    force_direct1 = (
+        {"Phi", "Phi_PEST"}
+        if (("phi_matrix" in keys) or ("phi_matrix_pest" in keys))
+        else set()
+    )
+
+    def _method_for(c):
+        return "direct1" if c in force_direct1 else method
+
     has_axis = has_axis or (grid is not None and grid.axis.size)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
@@ -715,7 +733,7 @@ def get_transforms(  # noqa: C901
                         basis,
                         derivs=derivs[c],
                         build=False,
-                        method=method,
+                        method=_method_for(c),
                     )
             else:  # don't perform checks if jitable=True as they are not jit-safe
                 # Laplace transforms require pseudoinverse
@@ -733,7 +751,7 @@ def get_transforms(  # noqa: C901
                     derivs=derivs[c],
                     build=False,
                     build_pinv=build_pinv,
-                    method=method,
+                    method=_method_for(c),
                 )
             transforms[c] = c_transform
         elif c == "B":  # used for Boozer transform

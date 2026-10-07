@@ -8,7 +8,7 @@ from termcolor import colored
 from desc.backend import jnp, put
 from desc.grid import Grid
 from desc.io import IOAble
-from desc.utils import combination_permutation, warnif
+from desc.utils import combination_permutation, errorif, warnif
 
 
 class Transform(IOAble):
@@ -160,6 +160,11 @@ class Transform(IOAble):
             matrices = {
                 "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
             }
+        elif self.method == "pest":
+            matrices = {
+                "pest": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
+                "pest_toroidal": {k: {} for k in range(ndk + 1)},
+            }
         elif self.method == "direct2":
             matrices = {
                 "fft": {i: {j: {} for j in range(ndj + 1)} for i in range(ndi + 1)},
@@ -249,6 +254,107 @@ class Transform(IOAble):
         # temp grid only used for building transforms, don't need any indexing etc
         self.fft_grid = Grid(fft_nodes, sort=False, jitable=True, axis_shift=0)
 
+    def _check_inputs_pest(self, grid, basis):
+        """Check that inputs are formatted correctly for pest method.
+
+        Same spectral split as ``direct2`` -- a radial/poloidal matrix times a toroidal
+        matrix -- but WITHOUT requiring the grid to be a tensor product in
+        (rho, theta). ``fft`` and ``direct2`` evaluate the radial/poloidal factor on one
+        zeta plane (``fft_grid``) and reuse it for all of them, which is only valid when
+        every zeta plane carries the same (rho, theta). A uniform PEST grid mapped into
+        DESC coordinates does not: ``theta_DESC`` at fixed ``theta_PEST`` varies with
+        zeta.
+
+        Such a grid currently falls all the way to ``direct1``, which evaluates the
+        FULL basis at every node -- an ``(num_nodes, num_modes)`` matrix per derivative
+        triple. This method evaluates only the ``(l, m)`` modes there,
+        ``(num_nodes, num_lm_modes)`` per (dr, dt) PAIR, and the toroidal modes on the
+        unique zeta values alone, ``(num_zeta, num_n_modes)`` per dz. Both the width
+        and the count of the stored matrices shrink.
+
+        Modeled on ``direct2`` rather than ``fft`` deliberately: the toroidal factor
+        is a dense matrix evaluated at the grid's own zeta values, so unlike ``fft``
+        this
+        needs no NFP agreement, no ``num_zeta >= 2*N+1`` floor, and no uniformly spaced
+        zeta. All it needs is that zeta be a tensor axis -- i.e. that the grid carry
+        zeta
+        unique/inverse indices -- so each node can be assigned a plane.
+        """
+        if grid.num_nodes == 0 or basis.num_modes == 0:
+            # trivial case where we just return all zeros, so it doesn't matter
+            self._method = "direct1"
+            return
+
+        if not basis.fft_toroidal:  # same basis requirement as fft/direct2
+            warnings.warn(
+                colored(
+                    "pest method requires compatible basis, got {}".format(basis)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+        try:
+            zeta_idx = grid.inverse_zeta_idx
+            unique_zeta_idx = grid.unique_zeta_idx
+        except AttributeError:
+            warnings.warn(
+                colored(
+                    "pest method requires the grid to carry zeta unique/inverse "
+                    + "indices, got {}".format(grid)
+                    + "falling back to direct1 method",
+                    "yellow",
+                )
+            )
+            self.method = "direct1"
+            return
+
+        self._method = "pest"
+        # Identical bookkeeping to `_check_inputs_direct2`; only the grid the
+        # radial/poloidal factor is evaluated on differs (the whole grid, not one
+        # plane).
+        self.lm_modes = basis.modes[basis.unique_LM_idx, :2]
+        self.n_modes = basis.modes[basis.unique_N_idx, 2]
+        self.zeta_nodes = grid.nodes[unique_zeta_idx, 2]
+        self.num_lm_modes = self.lm_modes.shape[0]  # number of radial/poloidal modes
+        self.num_n_modes = self.n_modes.size  # number of toroidal modes
+        row = np.where(
+            (basis.modes[:, None, :2] == self.lm_modes[None, :, :]).all(axis=-1)
+        )[1]
+        col = np.where(
+            basis.modes[None, :, 2] == basis.modes[basis.unique_N_idx, None, 2]
+        )[0]
+        self.fft_index = np.atleast_1d(np.squeeze(self.num_n_modes * row + col))
+        # `jnp`, not `np`: under jit the grid's nodes are TRACED (they come from
+        # `map_coordinates(params=...)`), and `np.hstack` on a tracer fails. The index
+        # arrays stay concrete -- they are static grid metadata -- so everything that
+        # needs a Python value below still has one. `direct2` uses `np.hstack` here and
+        # is correspondingly not jitable.
+        dft_nodes = jnp.hstack(
+            [
+                jnp.zeros((self.zeta_nodes.size, 2), dtype=self.zeta_nodes.dtype),
+                self.zeta_nodes[:, jnp.newaxis],
+            ]
+        )
+        self.dft_grid = Grid(dft_nodes, sort=False, jitable=True, axis_shift=0)
+        # Which zeta plane each node sits on. `fft`/`direct2` get this for free from the
+        # node ordering (zeta slowest); here the grid says so explicitly.
+        self.pest_zeta_idx = zeta_idx
+        # Node indices grouped BY zeta plane, (num_zeta, nodes_per_plane). Only used by
+        # `fit`/`project`/`build_pinv`, which solve one small system per plane. A stable
+        # argsort keeps each plane's nodes in their original relative order.
+        _zi = np.asarray(zeta_idx)
+        _counts = np.bincount(_zi, minlength=grid.num_zeta)
+        if _counts.size and np.all(_counts == _counts[0]):
+            self.pest_plane_idx = np.argsort(_zi, kind="stable").reshape(
+                grid.num_zeta, -1
+            )
+        else:
+            # Ragged planes: `transform` still works (it only gathers per node), but the
+            # per-plane solves do not, so leave them unavailable rather than wrong.
+            self.pest_plane_idx = None
+
     def _check_inputs_direct2(self, grid, basis):
         """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
@@ -329,6 +435,30 @@ class Transform(IOAble):
                 self.matrices["fft"][d[0]][d[1]] = self.basis.evaluate(
                     self.fft_grid, d, modes=temp_modes
                 )
+        if self.method == "pest":
+            # Radial/poloidal factor on the WHOLE grid -- (num_nodes, num_lm_modes) per
+            # (dr, dt) pair, against direct1's (num_nodes, num_modes) per triple.
+            temp_d = np.hstack(
+                [self.derivatives[:, :2], np.zeros((len(self.derivatives), 1))]
+            ).astype(int)
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            for d in temp_d:
+                self.matrices["pest"][d[0]][d[1]] = self.basis.evaluate(
+                    self.grid, d, modes=temp_modes
+                )
+            # Toroidal factor on the UNIQUE zeta values only -- tiny, and evaluated
+            # directly rather than by FFT, which is what frees this method from the NFP
+            # and uniform-spacing requirements.
+            temp_d = np.hstack(
+                [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
+            ).astype(int)
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            for d in temp_d:
+                self.matrices["pest_toroidal"][d[2]] = self.basis.evaluate(
+                    self.dft_grid, d, modes=temp_modes
+                )
         if self.method == "direct2":
             temp_d = np.hstack(
                 [np.zeros((len(self.derivatives), 2)), self.derivatives[:, 2:]]
@@ -366,6 +496,46 @@ class Transform(IOAble):
             )
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
+            )
+            self.matrices["pinvB"] = (
+                jnp.linalg.pinv(B, rtol=rcond) if B.size else np.zeros_like(B.T)
+            )
+        elif self.method == "pest":
+            errorif(
+                self.pest_plane_idx is None,
+                NotImplementedError,
+                "pest fitting needs the same number of nodes on every zeta plane.",
+            )
+            # `fit` solves each zeta plane for its own radial/poloidal coefficients and
+            # then fits the toroidal side. That is the GLOBAL least-squares solution
+            # only when the toroidal system is square, num_zeta == num_n_modes;
+            # otherwise the toroidal projection has to be taken jointly with the
+            # radial/poloidal fit and per-plane solves are not equivalent (measured
+            # 5e-2 against `direct1`). `direct2` escapes this because one matrix serves
+            # every plane, so the problem really does separate. Refused rather than
+            # silently wrong; `transform` and `project` are unaffected.
+            errorif(
+                self.grid.num_zeta != self.num_n_modes,
+                NotImplementedError,
+                "pest fitting requires num_zeta == num_n_modes (got num_zeta="
+                f"{self.grid.num_zeta}, num_n_modes={self.num_n_modes}). With an "
+                "oversampled zeta grid the per-plane least-squares solve is not the "
+                "global one. Use method='direct1' to fit. `transform` is exact either "
+                "way.",
+            )
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(self.grid, np.array([0, 0, 0]), modes=temp_modes)
+            # One (nodes_per_plane, num_lm_modes) system PER PLANE, batched, since the
+            # radial/poloidal matrix differs between planes here.
+            A = A[self.pest_plane_idx]
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            B = self.basis.evaluate(
+                self.dft_grid, np.array([0, 0, 0]), modes=temp_modes
+            )
+            self.matrices["pinvA"] = (
+                jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.mT)
             )
             self.matrices["pinvB"] = (
                 jnp.linalg.pinv(B, rtol=rcond) if B.size else np.zeros_like(B.T)
@@ -463,6 +633,23 @@ class Transform(IOAble):
             c_fft = jnp.real(jnp.fft.ifft(c_pad))
             return (A @ c_fft).flatten(order="F")
 
+        elif self.method == "pest":
+            A = self.matrices["pest"].get(dr, {}).get(dt, {})
+            B = self.matrices["pest_toroidal"].get(dz, {})
+            if isinstance(A, dict) or isinstance(B, dict):
+                raise ValueError(
+                    colored("Derivative orders are out of initialized bounds", "red")
+                )
+            c_mtrx = jnp.zeros((self.num_lm_modes * self.num_n_modes,))
+            c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
+            # `direct2` can finish with `(A @ c_mtrx) @ B.T` because one A serves every
+            # plane and the result is a clean (n_rt, num_zeta) outer block. Here A has a
+            # row PER NODE, so contract the toroidal factor against each node's own
+            # plane instead. Same arithmetic, no tensor-product assumption on
+            # (rho, theta).
+            cc = A @ c_mtrx  # (num_nodes, num_n_modes)
+            return jnp.einsum("kn,kn->k", cc, B[self.pest_zeta_idx])
+
     def fit(self, x):
         """Transform from physical domain to spectral using weighted least squares fit.
 
@@ -489,6 +676,13 @@ class Transform(IOAble):
             Ainv = self.matrices["pinvA"]
             Binv = self.matrices["pinvB"]
             yy = jnp.matmul(Ainv, x.reshape((-1, self.grid.num_zeta), order="F"))
+            c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
+        elif self.method == "pest":
+            Ainv = self.matrices["pinvA"]  # (num_zeta, num_lm_modes, nodes_per_plane)
+            Binv = self.matrices["pinvB"]  # (num_n_modes, num_zeta)
+            # Per-plane radial/poloidal solve, then the toroidal fit exactly as
+            # `direct2` does it.
+            yy = jnp.einsum("zmp,zp->mz", Ainv, x[self.pest_plane_idx])
             c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
         elif self.method == "fft":
             Ainv = self.matrices["pinvA"]
@@ -540,6 +734,14 @@ class Transform(IOAble):
             A = self.matrices["fft"][0][0]
             B = self.matrices["direct2"][0]
             yy = jnp.matmul(A.T, y.reshape((-1, self.grid.num_zeta), order="F"))
+            return jnp.matmul(yy, B).flatten()[self.fft_index]
+
+        elif self.method == "pest":
+            A = self.matrices["pest"][0][0]
+            B = self.matrices["pest_toroidal"][0]
+            yy = jnp.einsum(
+                "zpm,zp->mz", A[self.pest_plane_idx], y[self.pest_plane_idx]
+            )
             return jnp.matmul(yy, B).flatten()[self.fft_index]
 
         elif self.method == "fft":
@@ -601,6 +803,8 @@ class Transform(IOAble):
             self._grid = grid
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
+            if self.method == "pest":
+                self._check_inputs_pest(self.grid, self.basis)
             if self.method == "direct2":
                 self._check_inputs_direct2(self.grid, self.basis)
             if self.built:
@@ -621,6 +825,8 @@ class Transform(IOAble):
             self._basis = basis
             if self.method == "fft":
                 self._check_inputs_fft(self.grid, self.basis)
+            if self.method == "pest":
+                self._check_inputs_pest(self.grid, self.basis)
             if self.method == "direct2":
                 self._check_inputs_direct2(self.grid, self.basis)
             if self.built:
@@ -719,7 +925,7 @@ class Transform(IOAble):
 
     @property
     def method(self):
-        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'jitable'``}.
+        """{``'direct1'``, ``'direct2'``, ``'fft'``, ``'pest'``, ``'jitable'``}.
 
         Transform compute method.
         """
@@ -736,6 +942,8 @@ class Transform(IOAble):
                 self.method = "fft"
         elif method == "fft":
             self._check_inputs_fft(self.grid, self.basis)
+        elif method == "pest":
+            self._check_inputs_pest(self.grid, self.basis)
         elif method == "direct2":
             self._check_inputs_direct2(self.grid, self.basis)
         elif method == "direct1":

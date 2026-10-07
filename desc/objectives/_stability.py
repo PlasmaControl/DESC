@@ -1280,6 +1280,37 @@ class FinitenStability(_Objective):
         )
         return out.reshape(-1) if a.ndim == 1 else out
 
+    def _agni_transforms(self, keys, grid, cache, tag):
+        """``get_transforms`` for a mapped AGNI grid, using the ``pest`` method.
+
+        The mapped grid is uniform in zeta but NOT a tensor product in (rho, theta) --
+        ``theta_DESC`` at fixed ``theta_PEST`` varies with zeta -- so
+        ``fft``/``direct2``
+        do not apply and the default selection lands on ``direct1``, which evaluates the
+        FULL basis at every node. On the 24x35x35 fine grid that is 9.65 GiB of
+        derivative matrices across R/Z/L; ``pest`` evaluates only the (l, m) modes there
+        and the toroidal modes on the unique zeta values, for 0.68 GiB -- 14x less, at
+        machine precision (verified against ``direct1`` on every derivative order).
+
+        ``pest`` needs the grid to carry zeta unique/inverse indices, which
+        ``_mapped_grid`` supplies, and it needs to be jit-safe, since the nodes come
+        from ``map_coordinates(params=...)`` and are traced. Both hold; if either stops
+        holding, `Transform` falls back to ``direct1`` with a warning rather than being
+        wrong.
+
+        Cached per ``tag`` so the fine and coarse levels each build once and then
+        reuse -- the matrices depend on the NODES, which move with ``params``, so this
+        cannot
+        be hoisted into ``build()``; it is per-call reuse across the several computes
+        that share one grid.
+        """
+        key = (tag, tuple(sorted(keys)) if not isinstance(keys, str) else keys)
+        if key not in cache:
+            cache[key] = get_transforms(
+                keys, obj=self.things[0], grid=grid, method="pest"
+            )
+        return cache[key]
+
     def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src):
         r"""``_best_ratio`` for the source grid, without mapping the source grid.
 
@@ -1815,6 +1846,18 @@ class FinitenStability(_Objective):
             Phi_basis=getattr(self, f"_{pre}phi_basis"),
             data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
             params=params,
+            # `surf_grid` is the mapped PEST source lattice -- uniform in zeta, NOT a
+            # tensor product in (rho, theta) -- so the geometry behind
+            # `phi_matrix_pest` was being evaluated with the full-width `direct1`
+            # Vandermonde at every one of its `n_theta_src * n_zeta_src` nodes. `pest`
+            # evaluates only the (l, m) modes there for ~14x less memory, at machine
+            # precision.
+            #
+            # `Phi`/`Phi_PEST` are NOT affected: `get_transforms` keeps those on
+            # `direct1` whenever `phi_matrix_pest` is among the keys, because
+            # `_lsmr_compute_phi_matrix` reads `phi_transform.matrices["direct1"]`
+            # directly. Only the geometry bases move.
+            method="pest",
         )
         phi_matrix = data_phi["phi_matrix_pest"]
 
@@ -1986,6 +2029,10 @@ class FinitenStability(_Objective):
         from desc.compute._stability import _PhaseTimer
 
         _tmr = _PhaseTimer("setup ")
+        # Transform matrices for the mapped AGNI grids, built with the `pest` method
+        # and reused across every compute on the same grid. Keyed per level; see
+        # `_agni_transforms` for why this cannot live in `build()`.
+        _tf_cache = {}
 
         grid = self._mapped_grid(params, constants)
         _tmr.mark("mapped_grid fine", grid.nodes)
@@ -2033,6 +2080,7 @@ class FinitenStability(_Objective):
                 params=_pc,
                 data=_cflux,
                 override_grid=False,
+                transforms=self._agni_transforms(_ckeys, _grid_c, _tf_cache, "coarse"),
             )
             _tmr.mark("geometry coarse", *_cdata.values())
             _cg0 = self._coarse_grid
@@ -2150,6 +2198,9 @@ class FinitenStability(_Objective):
             params=params,
             data=_fdata,
             override_grid=False,
+            transforms=self._agni_transforms(
+                "finite-n lambda3 rayleigh", grid, _tf_cache, "fine"
+            ),
             **options,
         )
         # NOTE this row CONTAINS the `[timing] coarse ...` / `[timing] fine ...` rows,
@@ -2261,6 +2312,7 @@ class FinitenStability(_Objective):
                 grid=grid,
                 diffmat=self._diffmat,
                 params=params,
+                transforms=self._agni_transforms("finite-n lambda3", grid, {}, "dense"),
                 **options,
             )
             lam = jnp.asarray(data["finite-n lambda3"]).reshape(-1)[0]

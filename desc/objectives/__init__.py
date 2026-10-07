@@ -2,13 +2,20 @@
 
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
+    CoilArclengthVariance,
     CoilCurrentLength,
     CoilCurvature,
+    CoilIntegratedCurvature,
     CoilLength,
+    CoilSetLinkingNumber,
     CoilSetMinDistance,
     CoilTorsion,
+    LinkingCurrentConsistency,
+    PlasmaCoilSetDistanceBound,
     PlasmaCoilSetMinDistance,
     QuadraticFlux,
+    SurfaceCurrentRegularization,
+    SurfaceQuadraticFlux,
     ToroidalFlux,
 )
 from ._equilibrium import (
@@ -19,18 +26,27 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._fast_ion import GammaC
 from ._free_boundary import BoundaryError, VacuumBoundaryError
-from ._generic import GenericObjective, LinearObjectiveFromUser, ObjectiveFromUser
+from ._generic import (
+    DeflationOperator,
+    ExternalObjective,
+    GenericObjective,
+    LinearObjectiveFromUser,
+    ObjectiveFromUser,
+)
 from ._geometry import (
     AspectRatio,
     BScaleLength,
     Elongation,
     GoodCoordinates,
     MeanCurvature,
+    MirrorRatio,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )
+from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,
     Omnigenity,
@@ -38,8 +54,9 @@ from ._omnigenity import (
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
 )
+from ._power_balance import FusionPower, HeatingPowerISS04
 from ._profiles import Pressure, RotationalTransform, Shear, ToroidalCurrent
-from ._stability import MagneticWell, MercierStability
+from ._stability import BallooningStability, MagneticWell, MercierStability
 from .getters import (
     get_equilibrium_objective,
     get_fixed_axis_constraints,
@@ -64,6 +81,7 @@ from .linear_objectives import (
     FixCurveShift,
     FixElectronDensity,
     FixElectronTemperature,
+    FixIonDensity,
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
@@ -85,5 +103,6 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

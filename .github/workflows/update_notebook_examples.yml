@@ -1,0 +1,75 @@
+name: Update Notebooks and Examples
+on:
+  schedule:
+    # runs on the first of every month at noon
+    - cron: '00 12 1 * *'
+
+jobs:
+  create_issue:
+    name: Create issues to update notebooks and examples
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create issue to update notebooks
+        run: |
+          if [[ $CLOSE_PREVIOUS == true ]]; then
+            previous_issue_number=$(gh issue list \
+              --label "$LABELS" \
+              --json number \
+              --jq '.[0].number')
+            if [[ -n $previous_issue_number ]]; then
+              gh issue close "$previous_issue_number"
+              gh issue unpin "$previous_issue_number"
+            fi
+          fi
+          new_issue_url=$(gh issue create \
+            --title "$TITLE" \
+            --assignee "$ASSIGNEES" \
+            --label "$LABELS" \
+            --body "$BODY")
+          if [[ $PINNED == true ]]; then
+            gh issue pin "$new_issue_url"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: Update Notebooks
+          ASSIGNEES: f0uriest,dpanici,ddudt,rahulgaur104,unalmis,YigitElma
+          LABELS: monthly_update_notebooks
+          BODY: |
+            Reminder to check that notebooks evaluate correctly, and to update
+            if necessary.
+          PINNED: false
+          CLOSE_PREVIOUS: true
+      - name: Create issue to update notebooks
+        run: |
+            if [[ $CLOSE_PREVIOUS == true ]]; then
+                previous_issue_number=$(gh issue list \
+                --label "$LABELS" \
+                --json number \
+                --jq '.[0].number')
+                if [[ -n $previous_issue_number ]]; then
+                gh issue close "$previous_issue_number"
+                gh issue unpin "$previous_issue_number"
+                fi
+            fi
+            new_issue_url=$(gh issue create \
+                --title "$TITLE" \
+                --assignee "$ASSIGNEES" \
+                --label "$LABELS" \
+                --body "$BODY")
+            if [[ $PINNED == true ]]; then
+                gh issue pin "$new_issue_url"
+            fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: Update Examples
+          ASSIGNEES: f0uriest,dpanici,ddudt,rahulgaur104,unalmis,YigitElma
+          LABELS: monthly_update_examples
+          BODY: |
+              Reminder to check that examples run correctly, and to update
+              if necessary.
+          PINNED: false
+          CLOSE_PREVIOUS: true

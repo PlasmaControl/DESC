@@ -1,10 +1,37 @@
-.wy-nav-side {
-    background: #4b006e
+.wy-nav-side, .wy-nav-side-scroll {
+    background: #4b006e;
 }
+/* Make content area wider */
 .wy-nav-content {
     max-width: 1200px !important;
 }
+.wy-nav-content-wrap {
+    background: #fcfcfc !important;
+}
+/* Code blocks to have rounded corners */
+.highlight-console, .highlight-sh, .highlight-python, .input_area {
+  border: 0px solid white !important;
 
+  .highlight {
+    background: #323232 !important;
+    color: rgb(255, 255, 255) !important;
+    border-radius: 8px !important;
+    border: 4px solid #4b006e !important;
+  }
+  pre {
+    padding: 12px !important;
+  }
+}
+/* Things like Attention, Tip, Warning */
+.admonition {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+/* Make code execution count invisible for notebooks*/
+div.nbinput.container div.prompt, div.nboutput.container div.prompt {
+    width: 0px !important;
+    overflow: hidden !important;
+}
 /* override table width restrictions */
 @media screen and (min-width: 767px) {
 
@@ -18,4 +45,10 @@
     overflow: visible !important;
   }
 
+}
+
+.publist li {
+    margin-bottom: 0.5em;   /* adjust spacing between items */
+    text-indent: -2em;      /* hanging indent effect */
+    padding-left: 2em;
 }

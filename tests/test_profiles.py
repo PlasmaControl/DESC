@@ -6,6 +6,7 @@ from scipy.constants import elementary_charge
 from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
@@ -15,8 +16,11 @@ from desc.objectives import (
 )
 from desc.profiles import (
     FourierZernikeProfile,
+    HermiteSplineProfile,
     MTanhProfile,
+    PowerProfile,
     PowerSeriesProfile,
+    ScaledProfile,
     SplineProfile,
     TwoPowerProfile,
 )
@@ -187,6 +191,7 @@ class TestProfiles:
         assert "SumProfile" in str(pp + zp)
         assert "ProductProfile" in str(pp * zp)
         assert "ScaledProfile" in str(2 * zp)
+        assert "PowerProfile" in str(zp**2)
 
     @pytest.mark.unit
     def test_get_set(self):
@@ -346,6 +351,47 @@ class TestProfiles:
         np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
 
     @pytest.mark.unit
+    def test_powered_profiles(self):
+        """Test raising profiles to a power."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+
+        f = pp**3
+        x = np.linspace(0, 1, 50)
+        np.testing.assert_allclose(f(x), (pp(x)) ** 3, atol=1e-3)
+
+        params = f.params
+        assert params[0] == 3
+        assert all(params[1:] == pp.params)
+
+        f.params = 2
+        np.testing.assert_allclose(f(x), (pp(x)) ** 2, atol=1e-3)
+
+        f.params = 0.5
+        np.testing.assert_allclose(f(x), np.sqrt(pp(x)), atol=1e-3)
+
+    @pytest.mark.unit
+    def test_powered_profiles_derivative(self):
+        """Test that powered profiles computes the derivative correctly."""
+        x = np.linspace(0, 1, 50)
+        p1 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 3, -2, 4]), sym="auto"
+        )
+        p2 = p1 * p1
+        p3 = p1 * p2
+
+        f3 = p1**3
+        np.testing.assert_allclose(f3(x, dr=0), p3(x, dr=0))
+        np.testing.assert_allclose(f3(x, dr=1), p3(x, dr=1))
+        np.testing.assert_allclose(f3(x, dr=2), p3(x, dr=2))
+
+        f2 = f3 ** (2 / 3)
+        np.testing.assert_allclose(f2(x, dr=0), p2(x, dr=0))
+        np.testing.assert_allclose(f2(x, dr=1), p2(x, dr=1))
+        np.testing.assert_allclose(f2(x, dr=2), p2(x, dr=2))
+
+    @pytest.mark.unit
     def test_profile_errors(self):
         """Test error checking when creating and working with profiles."""
         pp = PowerSeriesProfile(
@@ -381,6 +427,10 @@ class TestProfiles:
             tp.compute(grid, dr=3)
         with pytest.raises(NotImplementedError):
             mp.compute(grid, dr=3)
+        with pytest.raises(UserWarning):
+            tp.params = [1, 0.3, 0.7]
+        with pytest.raises(UserWarning):
+            a = sp**-1
 
     @pytest.mark.unit
     def test_default_profiles(self):
@@ -408,7 +458,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -461,7 +510,6 @@ class TestProfiles:
         Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure params:", pressure.params)
 
         LM_resolution = 6
         eq1 = Equilibrium(
@@ -507,3 +555,40 @@ class TestProfiles:
         assert np.all(data2["Te_r"] == data2["Ti_r"])
         np.testing.assert_allclose(data1["p"], data2["p"])
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])
+
+    @pytest.mark.unit
+    def test_hermite_spline_solve(self):
+        """Test that spline with double number of parameters is optimized."""
+        eq = get("DSHAPE")
+        rho = np.linspace(0, 1.0, 20, endpoint=True)
+        eq.pressure = HermiteSplineProfile(
+            eq.pressure(rho), eq.pressure(rho, dr=1), rho
+        )
+        eq.solve()
+        assert eq.is_nested()
+
+    @pytest.mark.unit
+    def test_double_scale_power(self):
+        """Test double scaled/powered profiles."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
+        pp2 = pp.copy() * 2
+        assert isinstance(pp2, ScaledProfile)
+        assert isinstance(pp2._profile, PowerSeriesProfile)
+        assert pp2._scale == 2
+
+        pp2 *= 3
+        assert isinstance(pp2, ScaledProfile)
+        assert isinstance(pp2._profile, PowerSeriesProfile)
+        assert pp2._scale == 6
+
+        pp3 = pp.copy() ** 2
+        assert isinstance(pp3, PowerProfile)
+        assert isinstance(pp3._profile, PowerSeriesProfile)
+        assert pp3._power == 2
+
+        pp3 = pp3**3
+        assert isinstance(pp3, PowerProfile)
+        assert isinstance(pp3._profile, PowerSeriesProfile)
+        assert pp3._power == 6

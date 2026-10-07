@@ -429,8 +429,7 @@ class TestInitialGuess:
         Zb = np.array([0.0, 0.16, -2])
         Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
         surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
-        with pytest.warns(UserWarning):
-            eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+        eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()
 
@@ -445,8 +444,7 @@ class TestInitialGuess:
         Zb = np.array([0.01, 0.2, -1.5, 0.2])
         Z_modes = np.array([[-3, -2], [2, -1], [-1, 0], [1, 1]])
         surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
-        with pytest.warns(UserWarning):
-            eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+        eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()
 
@@ -584,11 +582,16 @@ def test_kinetic_errors():
 
     params = np.ones((3, 4))
     profile = PowerSeriesProfile()
-    eqk.pressure = profile
-    eqp.electron_temperature = profile
-    eqp.electron_density = profile
-    eqp.ion_temperature = profile
-    eqp.atomic_number = profile
+    with pytest.warns(UserWarning, match="Pressure profile is being assigned"):
+        eqk.pressure = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.electron_temperature = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.electron_density = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.ion_temperature = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.atomic_number = profile
     with pytest.raises(TypeError):
         eqk.pressure = params
     with pytest.raises(TypeError):

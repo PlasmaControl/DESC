@@ -13,8 +13,9 @@ from scipy.constants import elementary_charge, mu_0
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
+from ..integrals.surface_integral import surface_averages_map
+from ..profiles import PowerSeriesProfile
 from .data_index import register_compute_fun
-from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -102,10 +103,12 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
 
     - rho: effective minor radius.
     - ne: electron density, in meters^{-3}.
+    - ni: ion density, in meters^{-3}.
     - Te: electron temperature, in eV.
     - Ti: ion temperature, in eV.
     - Zeff: effective atomic charge.
     - ne_r: derivative of electron density with respect to rho.
+    - ni_r: derivative of ion density with respect to rho.
     - Te_r: derivative of electron temperature with respect to rho.
     - Ti_r: derivative of ion temperature with respect to rho.
 
@@ -136,14 +139,13 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     # Set profiles:
     rho = profile_data["rho"]
     ne = profile_data["ne"]
+    ni = profile_data["ni"]
     Te = profile_data["Te"]
     Ti = profile_data["Ti"]
     # Since Zeff appears in the Redl formula via sqrt(Zeff - 1), when
     # Zeff = 1 the gradient can sometimes evaluate to NaN. This
     # problem is avoided by adding a tiny number here:
     Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
-    ni = ne / Zeff
-    pe = ne * Te
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
@@ -260,7 +262,8 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     dTeds_term = (
         -G
         * elementary_charge
-        * pe
+        * ne
+        * Te
         * (L31 + L32)
         * (d_Te_d_s / Te)
         / (psi_edge * (iota - helicity_N))
@@ -317,7 +320,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     dim=1,
     params=["Psi"],
     transforms={"grid": []},
-    profiles=["atomic_number"],
+    profiles=[],
     coordinates="r",
     data=[
         "trapped fraction",
@@ -328,6 +331,8 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         "effective r/R0",
         "ne",
         "ne_r",
+        "ni",
+        "ni_r",
         "Te",
         "Te_r",
         "Ti",
@@ -367,15 +372,14 @@ def _J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         "rho": grid.compress(data["rho"]),
         "ne": grid.compress(data["ne"]),
         "ne_r": grid.compress(data["ne_r"]),
+        "ni": grid.compress(data["ni"]),
+        "ni_r": grid.compress(data["ni_r"]),
         "Te": grid.compress(data["Te"]),
         "Te_r": grid.compress(data["Te_r"]),
         "Ti": grid.compress(data["Ti"]),
         "Ti_r": grid.compress(data["Ti_r"]),
     }
-    if profiles["atomic_number"] is None:
-        profile_data["Zeff"] = jnp.ones(grid.num_rho)
-    else:
-        profile_data["Zeff"] = grid.compress(data["Zeff"])
+    profile_data["Zeff"] = grid.compress(data["Zeff"])
 
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
@@ -421,20 +425,21 @@ def _current_Redl(params, transforms, profiles, data, **kwargs):
         * transforms["grid"].compress(data["<J*B> Redl"])
         / transforms["grid"].compress(data["<|B|^2>"])
     )
-    degree = kwargs.get(
-        "degree",
-        min(
-            (
-                profiles["current"].basis.L
-                if profiles["current"] is not None
-                else transforms["grid"].num_rho - 1
+    if isinstance(profiles["current"], PowerSeriesProfile):
+        degree = kwargs.get(
+            "degree",
+            min(
+                profiles["current"].basis.L,
+                transforms["grid"].num_rho - 1,
             ),
-            transforms["grid"].num_rho - 1,
-        ),
-    )
+        )
+    else:
+        degree = kwargs.get("degree", transforms["grid"].num_rho - 1)
+
     XX = jnp.vander(rho, degree + 1)[:, :-1]  # remove constant term
     c_l_r = jnp.pad(jnp.linalg.lstsq(XX, current_r)[0], (0, 1))  # manual polyfit
     c_l = jnp.polyint(c_l_r)
     current = jnp.polyval(c_l, rho)
+
     data["current Redl"] = transforms["grid"].expand(current)
     return data

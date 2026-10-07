@@ -3,26 +3,39 @@
 import pickle
 import warnings
 
+import jax_finufft
 import numpy as np
 import pytest
+from packaging.version import Version
 
-from desc.coils import FourierPlanarCoil, FourierRZCoil, FourierXYZCoil, SplineXYZCoil
-from desc.compute import data_index, xyz2rpz, xyz2rpz_vec
+from desc.coils import (
+    FourierPlanarCoil,
+    FourierRZCoil,
+    FourierXYCoil,
+    FourierXYZCoil,
+    SplineXYZCoil,
+)
+from desc.compute import data_index
+from desc.compute.utils import _grow_seeds
 from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
     FourierRZToroidalSurface,
+    FourierXYCurve,
     FourierXYZCurve,
     ZernikeRZToroidalSection,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
+from desc.integrals import Bounce2D
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
 )
-from desc.utils import ResolutionWarning, errorif
+from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
+
+OLD_FINUFFT = Version(jax_finufft.__version__) <= Version("1.2.0")
 
 
 def _compare_against_master(
@@ -31,13 +44,22 @@ def _compare_against_master(
 
     for name in data[p]:
         if p in master_data and name in master_data[p]:
+            if not np.isfinite(master_data[p][name]).all():
+                mean = 1.0
+            else:
+                mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
+                rtol = 1e-5 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                atol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
+                err_msg = f"Parameterization: {p}. Name: {name}."
+                assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-10,
-                    rtol=1e-10,
-                    err_msg=f"Parameterization: {p}. Name: {name}.",
+                    atol=atol,
+                    rtol=rtol,
+                    err_msg=err_msg,
                 )
             except AssertionError as e:
                 error = True
@@ -61,11 +83,13 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
+        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+        atol = 1e-8
         errorif(
             not np.all(
                 (
-                    np.isclose(res, 0, rtol=1e-8, atol=1e-8)
-                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=1e-8, atol=1e-8)[
+                    np.isclose(res, 0, rtol=rtol, atol=atol)
+                    | np.isclose(np.abs(res[:, 1]), 2 * np.pi, rtol=rtol, atol=atol)[
                         :, np.newaxis
                     ]
                 )
@@ -80,8 +104,21 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
 def test_compute_everything():
     """Test that the computations on this branch agree with those on master.
 
-    Also make sure we can compute everything without errors. Computed quantities
-    are both in "rpz" and "xyz" basis.
+    Also make sure we can compute everything without errors.
+
+    Notes
+    -----
+    This test will fail if the benchmark file has been updated on both
+    the local and upstream branches and git cannot resolve the merge
+    conflict. In that case, please regenerate the benchmark file.
+    Here are instructions for convenience.
+
+    1. Prepend true to the line near the end of this test.
+        ``if True or (not error_rpz and update_master_data_rpz):``
+    2. Run pytest -k test_compute_everything
+    3. Revert 1.
+    4. git add tests/inputs/master_compute_data_rpz.pkl
+
     """
     elliptic_cross_section_with_torsion = {
         "R_lmn": [10, 1, 0.2],
@@ -101,6 +138,9 @@ def test_compute_everything():
         ),
         "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(
             center=[10, 1, 3], normal=[1, 2, 3], r_n=[1, 2, 3], modes=[0, 1, 2]
+        ),
+        "desc.geometry.curve.FourierXYCurve": FourierXYCurve(
+            center=[10, 1, 3], normal=[1, 2, 3], X_n=[0, 2], Y_n=[-3, 1], modes=[-1, 1]
         ),
         "desc.geometry.curve.SplineXYZCurve": FourierXYZCurve(
             X_n=[5, 10, 2], Y_n=[1, 2, 3], Z_n=[-4, -5, -6]
@@ -150,6 +190,14 @@ def test_compute_everything():
             r_n=[1, 2, 3],
             modes=[0, 1, 2],
         ),
+        "desc.coils.FourierXYCoil": FourierXYCoil(
+            current=5,
+            center=[10, 1, 3],
+            normal=[1, 2, 3],
+            X_n=[0, 2],
+            Y_n=[-3, 1],
+            modes=[-1, 1],
+        ),
         "desc.coils.SplineXYZCoil": SplineXYZCoil(
             current=5, X=[5, 10, 2, 5], Y=[1, 2, 3, 1], Z=[-4, -5, -6, -4]
         ),
@@ -182,6 +230,7 @@ def test_compute_everything():
         "desc.geometry.curve.FourierXYZCurve": {"grid": curvegrid1},
         "desc.geometry.curve.FourierRZCurve": {"grid": curvegrid2},
         "desc.geometry.curve.FourierPlanarCurve": {"grid": curvegrid1},
+        "desc.geometry.curve.FourierXYCurve": {"grid": curvegrid1},
         "desc.geometry.curve.SplineXYZCurve": {"grid": curvegrid1},
         "desc.magnetic_fields._core.OmnigenousField": {"grid": fieldgrid},
     }
@@ -196,16 +245,22 @@ def test_compute_everything():
     no_xyz_things = ["desc.magnetic_fields._core.OmnigenousField"]
 
     with warnings.catch_warnings():
-        # Max resolution of master_compute_data.pkl limited by GitHub file
+        # Max resolution of master_compute_data_rpz.pkl limited by GitHub file
         # size cap at 100 mb, so can't hit suggested resolution for some things.
         warnings.filterwarnings("ignore", category=ResolutionWarning)
+        warnings.filterwarnings("ignore", category=UserWarning, message="Redl")
+
         for p in things:
-            names = {
-                name
-                for name in data_index[p]
-                # Skip these quantities as they should be covered in other tests.
-                if not data_index[p][name]["source_grid_requirement"]
-            }
+
+            names = set(data_index[p].keys())
+
+            def need_special(name):
+                return bool(data_index[p][name]["source_grid_requirement"]) or bool(
+                    data_index[p][name]["grid_requirement"]
+                )
+
+            names -= _grow_seeds(p, set(filter(need_special, names)), names)
+
             this_branch_data_rpz[p] = things[p].compute(
                 list(names), **grid.get(p, {}), basis="rpz"
             )
@@ -214,6 +269,11 @@ def test_compute_everything():
                 f"Parameterization: {p}. Can't compute "
                 + f"{names - this_branch_data_rpz[p].keys()}."
             )
+
+            # now we get the special grid data
+            this_branch_data_rpz[p].update(fft_grid_data(p))
+            this_branch_data_rpz[p].update(raz_grid_data(p))
+
             # compare data against master branch
             error_rpz, update_master_data_rpz = _compare_against_master(
                 p,
@@ -227,7 +287,8 @@ def test_compute_everything():
             if p in no_xyz_things:
                 continue
             # remove quantities that are not implemented in the XYZ basis
-            # TODO: generalize this instead of hard-coding for "grad(B)" & dependencies
+            # TODO (#1110): generalize this instead of hard-coding for
+            #  the quantities "grad(B)" & dependencies
             names_xyz = (
                 names - {"grad(B)", "|grad(B)|", "L_grad(B)"}
                 if "grad(B)" in names
@@ -249,4 +310,76 @@ def test_compute_everything():
         with open("tests/inputs/master_compute_data_rpz.pkl", "wb") as file:
             # remember to git commit this file
             pickle.dump(this_branch_data_rpz, file)
+
     assert not error_rpz
+
+
+def fft_grid_data(p):
+    """Compute fft grid quantities."""
+    if p != "desc.equilibrium.equilibrium.Equilibrium":
+        return {}
+
+    # TODO: can automate this later to add omnigeneity, boozer transform, etc.
+    fft_names = ["effective ripple", "Gamma_c", "Gamma_c Velasco"]
+
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
+
+    nufft_eps = 1e-10
+    kwargs = dict(
+        angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
+        Y_B=grid.num_zeta,
+        field_period_transits=25,
+        num_well=100,
+    )
+    data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)
+
+    # check vectorization too
+    d = data.copy()
+    del d["Gamma_c"]
+    d = eq.compute(
+        "Gamma_c", grid, data=d, surf_batch_size=2, nufft_eps=nufft_eps, **kwargs
+    )
+    np.testing.assert_allclose(
+        d["Gamma_c"],
+        data["Gamma_c"],
+        rtol=1e-9,
+        atol=1e-9,
+        err_msg="Gamma_c vectorization",
+    )
+    # check no nufft
+    del d["Gamma_c"]
+    data["Gamma_c no nufft"] = eq.compute(
+        "Gamma_c", grid, data=d, nufft_eps=0.0, **kwargs
+    )["Gamma_c"]
+    np.testing.assert_allclose(
+        data["Gamma_c"],
+        data["Gamma_c no nufft"],
+        rtol=5e-5,
+        err_msg="Gamma_c no nufft",
+    )
+
+    data = apply(data, grid.compress, fft_names + ["Gamma_c no nufft"])
+    return data
+
+
+def raz_grid_data(p):
+    """Compute field line grid quantities."""
+    if p != "desc.equilibrium.equilibrium.Equilibrium":
+        return {}
+
+    # TODO: can automate this later to add ballooning etc.
+    raz_names = ["old effective ripple", "old Gamma_c", "old Gamma_c Velasco"]
+
+    eq = get("W7-X")
+    num_transit = 2
+    Y_B = eq.N_grid * 2
+    rho = np.linspace(0, 1, 10)
+    alpha = np.array([0])
+    zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+
+    data = eq.compute(raz_names, grid, num_well=20 * num_transit, tol=1e-10)
+    data = apply(data, grid.compress, raz_names)
+    return data

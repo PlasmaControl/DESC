@@ -20,4 +20,15 @@ tests/benchmarks/.benchmarks/
 *.output
 *.pdf
 *.pyc
+*.swp
+*.swo
 .pymon
+
+# UV
+uv.lock
+
+# Environments
+.env
+.venv
+
+.vscode/

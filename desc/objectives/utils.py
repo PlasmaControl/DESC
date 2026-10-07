@@ -5,12 +5,13 @@ Functions in this module should not depend on any other submodules in desc.objec
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp, logsumexp, put
+from desc.backend import jit, jnp, put, softargmax
+from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
-def factorize_linear_constraints(objective, constraint):  # noqa: C901
-    """Compute and factorize A to get pseudoinverse and nullspace.
+def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
+    """Compute and factorize A to get particular solution and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
@@ -22,6 +23,12 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Objective function to optimize.
     constraint : ObjectiveFunction
         Objective function of linear constraints to enforce.
+    x_scale : array_like or ``'auto'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        If set to ``'auto'``, the scale is determined from the initial state vector.
+        This can be passed through optimizer options as
+        solve_options["linear_constraint_options"]["x_scale"].
 
     Returns
     -------
@@ -33,6 +40,8 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         Combined RHS vector.
     Z : ndarray
         Null space operator for full combined A such that A @ Z == 0.
+    D : ndarray
+        Scale of the full state vector x, as set by the parameter ``x_scale``.
     unfixed_idx : ndarray
         Indices of x that correspond to non-fixed values.
     project, recover : function
@@ -71,6 +80,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
 
     if isinstance(objective, ProximalProjection):
         # remove cols of A corresponding to ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # see desc.optimize._constraint_wrappers.ProximalProjection._set_eq_state_vector
         c = 0
         cols = np.array([], dtype=int)
         for t in objective.things:
@@ -83,92 +93,82 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                 cols = np.append(cols, np.arange(c, c + t.dim_x))
                 c += t.dim_x
         A = A[:, cols]
+    else:
+        cols = np.arange(constraint.dim_x)
     assert A.shape[1] == xp.size
 
-    # will store the global index of the unfixed rows, idx
-    indices_row = np.arange(A.shape[0])
-    indices_idx = np.arange(A.shape[1])
+    # check for degenerate rows and delete if necessary
+    # augment A with b so that it only deletes actual degenerate constraints
+    # which are duplicate rows of A that also have duplicate entries of b,
+    # if the entries of b aren't the same then the constraints are actually
+    # incompatible and so we will leave those to be caught later.
+    A_augmented = np.hstack([A, np.reshape(b, (A.shape[0], 1))])
 
-    # while loop has problems updating JAX arrays, convert them to numpy arrays
-    A = np.array(A)
-    b = np.array(b)
-    while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
-        # fixed just means there is a single element in A, so A_ij*x_j = b_i
-        fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
-        # indices of x that are fixed = cols of A where rows have 1 nonzero val.
-        _, fixed_idx = np.where(A[fixed_rows])
-        unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
-        unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
+    # Find unique rows of A_augmented
+    _, unique_indices = np.unique(A_augmented, axis=0, return_index=True)
 
-        # find the global index of the fixed variables of this iteration
-        global_fixed_idx = indices_idx[fixed_idx]
-        # find the global index of the unfixed variables by removing the fixed variables
-        # from the indices arrays.
-        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
-        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
+    # Sort the indices to preserve the order of appearance
+    unique_indices = np.sort(unique_indices)
+    # Find the indices of the degenerate rows
+    degenerate_idx = np.setdiff1d(np.arange(A_augmented.shape[0]), unique_indices)
 
-        if len(fixed_rows):
-            # something like 0.5 x1 = 2 is the same as x1 = 4
-            b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
-            A = put(
-                A,
-                Index[fixed_rows, :],
-                A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
-            )
-            xp = put(xp, global_fixed_idx, b[fixed_rows])
-            # Some values might be fixed, but they still show up in other constraints
-            # this is where the fixed cols have >1 nonzero val.
-            # For fixed variables, we delete that row and col of A, but that means
-            # we need to subtract the fixed value from b so that the equation is
-            # balanced.
-            # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
-            # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
-            b = put(
-                b,
-                unfixed_rows,
-                b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
-            )
-        A = A[unfixed_rows][:, unfixed_idx]
-        b = b[unfixed_rows]
-    unfixed_idx = indices_idx
+    # Extract the unique rows
+    A_augmented = A_augmented[unique_indices]
+    A = A_augmented[:, :-1]
+    b = np.atleast_1d(A_augmented[:, -1].squeeze())
+
+    A_nondegenerate = A.copy()
+
+    # remove fixed parameters from A and b
+    A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
+
+    # compute x_scale if not provided
+    # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
+    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
+    if x_scale == "auto":
+        x_scale = objective.x(*objective.things)
+    errorif(
+        x_scale.shape != xp.shape,
+        ValueError,
+        "x_scale must be the same size as the full state vector. "
+        + f"Got size {x_scale.size} for state vector of size {xp.size}.",
+    )
+    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+
+    # null space & particular solution
+    A = A * D[None, unfixed_idx]
     if A.size:
-        Ainv_full, Z = svd_inv_null(A)
+        A_inv, Z = svd_inv_null(A)
     else:
-        Ainv_full = A.T
+        A_inv = A.T
         Z = np.eye(A.shape[1])
-    Ainv_full = jnp.asarray(Ainv_full)
-    Z = jnp.asarray(Z)
-    b = jnp.asarray(b)
-    xp = put(xp, unfixed_idx, Ainv_full @ b)
+    xp = put(xp, unfixed_idx, A_inv @ b)
+    xp = put(xp, fixed_idx, ((1 / D) * xp)[fixed_idx])
+    # cast to jnp arrays
     xp = jnp.asarray(xp)
+    A = jnp.asarray(A)
+    b = jnp.asarray(b)
+    Z = jnp.asarray(Z)
+    D = jnp.asarray(D)
 
-    @jit
-    def project(x):
-        """Project a full state vector into the reduced optimization vector."""
-        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
-        return jnp.atleast_1d(jnp.squeeze(x_reduced))
-
-    @jit
-    def recover(x_reduced):
-        """Recover the full state vector from the reduced optimization vector."""
-        dx = put(
-            jnp.zeros(objective.dim_x, dtype=x_reduced.dtype),
-            unfixed_idx,
-            jnp.astype(Z, x_reduced.dtype) @ jnp.astype(x_reduced, x_reduced.dtype),
-        )
-        return jnp.atleast_1d(jnp.squeeze(jnp.astype(xp, x_reduced.dtype) + dx))
+    project = _Project(Z, D, xp, unfixed_idx)
+    recover = _Recover(Z, D, xp, unfixed_idx, objective.dim_x)
 
     # check that all constraints are actually satisfiable
-    params = objective.unpack_state(xp, False)
+    x_full = put(x0, cols, D * xp)
+    f = np.asarray(constraint.compute_scaled_error(x_full))
+    offset = 0
     for con in constraint.objectives:
-        xpi = [params[i] for i, t in enumerate(objective.things) if t in con.things]
-        y1 = con.compute_unscaled(*xpi)
+        # get portion of the error corresponding to this constraint
+        dim = con.dim_f
+        y1 = con._unshift(con._unscale(f[offset : offset + dim]))
         y2 = con.target
         y1, y2 = np.broadcast_arrays(y1, y2)
+        offset += dim
 
         # If the error is very large, likely want to error out as
         # it probably is due to a real mistake instead of just numerical
-        # roundoff errors.
+        # round-off errors.
         np.testing.assert_allclose(
             y1,
             y2,
@@ -179,7 +179,7 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
         )
 
         # else check with tighter tols and throw an error, these tolerances
-        # could be tripped due to just numerical roundoff or poor scaling between
+        # could be tripped due to just numerical round-off or poor scaling between
         # constraints, so don't want to error out but we do want to warn the user.
         atol = 3e-14
         rtol = 3e-14
@@ -201,19 +201,62 @@ def factorize_linear_constraints(objective, constraint):  # noqa: C901
                 "or be due to floating point error.",
             )
 
-    return xp, A, b, Z, unfixed_idx, project, recover
+    return (
+        xp,
+        A,
+        b,
+        Z,
+        D,
+        unfixed_idx,
+        project,
+        recover,
+        A_inv,
+        A_nondegenerate,
+        degenerate_idx,
+    )
 
 
-def softmax(arr, alpha):
+class _Project(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx"]
+
+    def __init__(self, Z, D, xp, unfixed_idx):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+
+    @jit
+    def __call__(self, x_full):
+        """Project a full state vector into the reduced optimization vector."""
+        x_reduced = self.Z.T @ ((1 / self.D) * x_full - self.xp)[self.unfixed_idx]
+        return jnp.atleast_1d(jnp.squeeze(x_reduced))
+
+
+class _Recover(IOAble):
+    _io_attrs_ = ["Z", "D", "xp", "unfixed_idx", "dim_x"]
+    _static_attrs = ["dim_x"]
+
+    def __init__(self, Z, D, xp, unfixed_idx, dim_x):
+        self.Z = Z
+        self.D = D
+        self.xp = xp
+        self.unfixed_idx = unfixed_idx
+        self.dim_x = dim_x
+
+    @jit
+    def __call__(self, x_reduced):
+        """Recover the full state vector from the reduced optimization vector."""
+        dx = put(
+            jnp.zeros(objective.dim_x, dtype=x_reduced.dtype),
+            unfixed_idx,
+            jnp.astype(Z, x_reduced.dtype) @ jnp.astype(x_reduced, x_reduced.dtype),
+        )
+        x_full = jnp.astype(self.D, x_reduced.dtype) * (jnp.astype(self.xp, x_reduced.dtype) + dx)
+        return jnp.atleast_1d(jnp.squeeze(x_full))
+
+
+def softmax(arr, alpha, axis=None):
     """JAX softmax implementation.
-
-    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
-    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
-
-    Will automatically multiply array values by 2 / min_val if the min_val of
-    the array is <1. This is to avoid inaccuracies that arise when values <1
-    are present in the softmax, which can cause inaccurate maxes or even incorrect
-    signs of the softmax versus the actual max.
 
     Parameters
     ----------
@@ -223,6 +266,9 @@ def softmax(arr, alpha):
         The parameter smoothly transitioning the function to a hardmax.
         as alpha increases, the value returned will come closer and closer to
         max(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -230,22 +276,16 @@ def softmax(arr, alpha):
         The soft-maximum of the array.
 
     """
-    arr_times_alpha = alpha * arr
-    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
-    return cond(
-        jnp.any(min_val < 1),
-        lambda arr_times_alpha: logsumexp(
-            arr_times_alpha / min_val * 2
-        )  # adjust to make vals>1
-        / alpha
-        * min_val
-        / 2,
-        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
-        arr_times_alpha,
-    )
+    if axis is None:
+        arr = arr.flatten()
+        arr_times_alpha = alpha * arr
+        return softargmax(arr_times_alpha).dot(arr)
+    else:
+        arr_times_alpha = alpha * arr
+        return jnp.sum(arr * softargmax(arr_times_alpha, axis=axis), axis=axis)
 
 
-def softmin(arr, alpha):
+def softmin(arr, alpha, axis=None):
     """JAX softmin implementation, by taking negative of softmax(-arr).
 
     Parameters
@@ -256,6 +296,9 @@ def softmin(arr, alpha):
         The parameter smoothly transitioning the function to a hardmin.
         as alpha increases, the value returned will come closer and closer to
         min(arr).
+    axis : int, optional
+        Axis along which the softmax is computed. The default is None, which
+        computes the softmax over the entire array.
 
     Returns
     -------
@@ -263,7 +306,7 @@ def softmin(arr, alpha):
         The soft-minimum of the array.
 
     """
-    return -softmax(-arr, alpha)
+    return -softmax(-arr, alpha, axis)
 
 
 def combine_args(*objectives):
@@ -374,3 +417,83 @@ def check_if_points_are_inside_perimeter(R, Z, Rcheck, Zcheck):
     #                 assign negative distance
     pt_sign = jnp.where(jnp.isclose(pt_sign, 0), 1, -1)
     return pt_sign
+
+
+def remove_fixed_parameters(A, b, xp):
+    """Remove fixed parameters from the linear constraint matrix and RHS vector.
+
+    Given a linear constraint matrix A and RHS vector b, remove fixed parameters from A
+    and b. Fixed parameters are those that have only a single nonzero value in A, so
+    that the equation is already balanced. This function will remove the fixed
+    parameters from A and b, will also update the correcponding sections of the
+    particular solution xp.
+
+    Parameters
+    ----------
+    A : ndarray
+        Constraint matrix.
+    b : ndarray
+        RHS vector.
+    xp : ndarray
+        Particular solution vector for the constraint Ax=b.
+
+    Returns
+    -------
+    A : ndarray
+        Constraint matrix with fixed parameters removed.
+    b : ndarray
+        RHS vector with fixed parameters removed.
+    xp : ndarray
+        Particular solution with fixed parameters updated.
+    unfixed_idx : ndarray
+        Indices of the unfixed parameters.
+    fixed_idx : ndarray
+        Indices of the fixed parameters
+    """
+    # will store the global index of the unfixed rows, idx
+    indices_row = np.arange(A.shape[0])
+    indices_idx = np.arange(A.shape[1])
+
+    while len(np.where(np.count_nonzero(A, axis=1) == 1)[0]):
+        # fixed just means there is a single element in A, so A_ij*x_j = b_i
+        fixed_rows = np.where(np.count_nonzero(A, axis=1) == 1)[0]
+        # indices of x that are fixed = cols of A where rows have 1 nonzero val.
+        _, fixed_idx = np.where(A[fixed_rows])
+        unfixed_rows = np.setdiff1d(np.arange(A.shape[0]), fixed_rows)
+        unfixed_idx = np.setdiff1d(np.arange(A.shape[1]), fixed_idx)
+
+        # find the global index of the fixed variables of this iteration
+        global_fixed_idx = indices_idx[fixed_idx]
+        # find the global index of the unfixed variables by removing the fixed variables
+        # from the indices arrays.
+        indices_idx = np.delete(indices_idx, fixed_idx)  # fixed indices are removed
+        indices_row = np.delete(indices_row, fixed_rows)  # fixed rows are removed
+
+        if len(fixed_rows):
+            # something like 0.5 x1 = 2 is the same as x1 = 4
+            b = put(b, fixed_rows, b[fixed_rows] / np.sum(A[fixed_rows], axis=1))
+            A = put(
+                A,
+                Index[fixed_rows, :],
+                A[fixed_rows] / np.sum(A[fixed_rows], axis=1)[:, None],
+            )
+            xp = put(xp, global_fixed_idx, b[fixed_rows])
+            # Some values might be fixed, but they still show up in other constraints
+            # this is where the fixed cols have >1 nonzero val.
+            # For fixed variables, we delete that row and col of A, but that means
+            # we need to subtract the fixed value from b so that the equation is
+            # balanced.
+            # e.g., 2 x1 + 3 x2 + 1 x3 = 4 ; 4 x1 = 2
+            # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
+            b = put(
+                b,
+                unfixed_rows,
+                b[unfixed_rows] - A[unfixed_rows][:, fixed_idx] @ b[fixed_rows],
+            )
+        A = A[unfixed_rows][:, unfixed_idx]
+        b = b[unfixed_rows]
+
+    unfixed_idx = indices_idx
+    fixed_idx = np.delete(np.arange(xp.size), unfixed_idx)
+
+    return A, b, xp, unfixed_idx, fixed_idx

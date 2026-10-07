@@ -28,6 +28,7 @@ This is different from the default radial coordinate in VMEC of the normalized t
 .. image:: _static/images/coordinates.png
   :width: 800
   :alt: Alternative text
+  :align: center
 
 The covariant basis vectors of the curvilinear coordinate system are
 

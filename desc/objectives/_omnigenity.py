@@ -3,51 +3,39 @@
 import warnings
 
 from desc.backend import jnp
+from desc.batching import vmap_chunked
 from desc.compute import get_profiles, get_transforms
+from desc.compute._omnigenity import _omnigenity_mapping
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective
+from .objective_funs import _Objective, collect_docs
 
 
 class QuasisymmetryBoozer(_Objective):
     """Quasi-symmetry Boozer harmonics error.
 
+    Quasi-symmetry of helicity (M, N) requires the field strength in Boozer
+    coordinates to depend on the angles only through Mϑ_B - Nζ_B, so the residuals
+    are the symmetry breaking harmonics on each surface:
+
+    f_B = {B_mn(ρ) | m/n ≠ M/N}  (T)
+
+    With ``scale_invariant`` these are divided by the norm of all the harmonics on
+    that surface, so that ||f̂_B(ρ)|| ∈ [0, 1]:
+
+    f̂_B = f_B / (Σ_mn B_mn(ρ)²)^½
+
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Must be a LinearGrid with a single flux surface and sym=False.
+        Must be a LinearGrid with sym=False.
         Defaults to ``LinearGrid(M=M_booz, N=N_booz)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
@@ -55,13 +43,30 @@ class QuasisymmetryBoozer(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    name : str, optional
-        Name of the objective function.
+    scale_invariant : bool, optional
+        The scale_invariant version divides each surface's harmonics by the
+        norm of all the harmonics on that surface, making the output
+        dimensionless and invariant to the magnetic field strength. Then
+        the norm of the residuals on a single surface lies in [0, 1]. Default
+        is False, no normalization. See Basic Optimization tutorial for details.
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _units = "(T)"
-    _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry Boozer error: "
+    _static_attrs = _Objective._static_attrs + [
+        "_helicity",
+        "_surf_batch_size",
+        "_scale_invariant",
+    ]
 
     def __init__(
         self,
@@ -77,7 +82,10 @@ class QuasisymmetryBoozer(_Objective):
         helicity=(1, 0),
         M_booz=None,
         N_booz=None,
+        scale_invariant=False,
         name="QS Boozer",
+        jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -85,6 +93,11 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
+        self._surf_batch_size = surf_batch_size
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -95,13 +108,11 @@ class QuasisymmetryBoozer(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) Boozer error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -125,12 +136,6 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         errorif(grid.sym, ValueError, "QuasisymmetryBoozer grid must be non-symmetric")
-        errorif(
-            grid.num_rho != 1,
-            ValueError,
-            "QuasisymmetryBoozer grid must be on a single surface. "
-            "To target multiple surfaces, use multiple objectives.",
-        )
         warnif(
             grid.num_theta < 2 * eq.M,
             RuntimeWarning,
@@ -144,7 +149,7 @@ class QuasisymmetryBoozer(_Objective):
             "resolution for surface averages",
         )
 
-        self._data_keys = ["|B|_mn"]
+        self._data_keys = ["f_B_normalized"] if self._scale_invariant else ["f_B"]
 
         timer = Timer()
         if verbose > 0:
@@ -159,7 +164,7 @@ class QuasisymmetryBoozer(_Objective):
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes, idx = ptolemy_linear_transform(
+        matrix, _, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes,
             helicity=self.helicity,
             NFP=transforms["B"].basis.NFP,
@@ -176,7 +181,7 @@ class QuasisymmetryBoozer(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._dim_f = idx.size
+        self._dim_f = idx.size * grid.num_rho
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -193,25 +198,28 @@ class QuasisymmetryBoozer(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Symmetry breaking harmonics of B (T), dimensionless for `scale_invariant`.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
             profiles=constants["profiles"],
+            matrix=constants["matrix"],
+            idx=constants["idx"],
+            surf_batch_size=self._surf_batch_size,
         )
-        B_mn = constants["matrix"] @ data["|B|_mn"]
-        return B_mn[constants["idx"]]
+        # output order = (rho, mn).flatten(), ie all the surfaces concatenated
+        # one after the other
+        return data[self._data_keys[0]].flatten()
 
     @property
     def helicity(self):
@@ -230,61 +238,47 @@ class QuasisymmetryBoozer(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
 class QuasisymmetryTwoTerm(_Objective):
     """Quasi-symmetry two-term error.
 
+    With B = ||𝐁||, ι the rotational transform, and G, I the Boozer currents:
+
+    f_C = [(M ι - N) (𝐁 × ∇ψ) - (M G + N I) 𝐁] ⋅ ∇B  (T³)
+
+    With ``scale_invariant`` this is divided by the local field strength cubed:
+
+    f̂_C = f_C / B³
+
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N).
-    name : str, optional
-        Name of the objective function.
+    scale_invariant : bool, optional
+        The scale_invariant version divides by the cube of the local field
+        strength, making the output dimensionless and invariant to the magnetic
+        field strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _coordinates = "rtz"
     _units = "(T^3)"
-    _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry two-term error: "
+    _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
     def __init__(
         self,
@@ -298,12 +292,18 @@ class QuasisymmetryTwoTerm(_Objective):
         deriv_mode="auto",
         grid=None,
         helicity=(1, 0),
+        scale_invariant=False,
         name="QS two-term",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
         self.helicity = helicity
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -314,13 +314,11 @@ class QuasisymmetryTwoTerm(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) two-term error: ".format(
-                self.helicity[0], self.helicity[1]
-            )
-            + "{:10.3e} "
+        self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
+            self.helicity[0], self.helicity[1]
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -354,7 +352,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_C"]
+        self._data_keys = ["f_C_normalized"] if self._scale_invariant else ["f_C"]
 
         timer = Timer()
         if verbose > 0:
@@ -388,16 +386,16 @@ class QuasisymmetryTwoTerm(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^3).
+            Quasi-symmetry flux function error at each node (T^3), dimensionless
+            for `scale_invariant`.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -406,7 +404,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=constants["profiles"],
             helicity=constants["helicity"],
         )
-        return data["f_C"]
+        return data[self._data_keys[0]]
 
     @property
     def helicity(self):
@@ -424,59 +422,46 @@ class QuasisymmetryTwoTerm(_Objective):
             self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T^3)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
+            self._print_value_fmt = "Quasi-symmetry ({},{}) error: ".format(
+                self.helicity[0], self.helicity[1]
             )
 
 
 class QuasisymmetryTripleProduct(_Objective):
     """Quasi-symmetry triple product error.
 
+    With B = ||𝐁||:
+
+    f_T = ∇ψ × ∇B ⋅ ∇(𝐁 ⋅ ∇B)  (T⁴/m²)
+
+    With ``scale_invariant`` this is made dimensionless with the local cylindrical
+    radius and field strength:
+
+    f̂_T = R² f_T / B⁴
+
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    name : str, optional
-        Name of the objective function.
+    scale_invariant : bool, optional
+        The scale_invariant version multiplies by R² and divides by the local B⁴,
+        making the output dimensionless and invariant to the magnetic field
+        strength. Default is False, no normalization. See Basic Optimization
+        tutorial for details.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _coordinates = "rtz"
     _units = "(T^4/m^2)"
-    _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
+    _print_value_fmt = "Quasi-symmetry error: "
+    _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
     def __init__(
         self,
@@ -489,11 +474,17 @@ class QuasisymmetryTripleProduct(_Objective):
         loss_function=None,
         deriv_mode="auto",
         grid=None,
+        scale_invariant=False,
         name="QS triple product",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
+        self._scale_invariant = scale_invariant
+        if scale_invariant:
+            normalize = False
+            self._units = "(dimensionless)"
         super().__init__(
             things=eq,
             target=target,
@@ -504,6 +495,7 @@ class QuasisymmetryTripleProduct(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -524,7 +516,7 @@ class QuasisymmetryTripleProduct(_Objective):
             grid = self._grid
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_T"]
+        self._data_keys = ["f_T_normalized"] if self._scale_invariant else ["f_T"]
 
         timer = Timer()
         if verbose > 0:
@@ -557,16 +549,16 @@ class QuasisymmetryTripleProduct(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
         f : ndarray
-            Quasi-symmetry flux function error at each node (T^4/m^2).
+            Quasi-symmetry flux function error at each node (T^4/m^2),
+            dimensionless for `scale_invariant`.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
@@ -574,7 +566,7 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=constants["transforms"],
             profiles=constants["profiles"],
         )
-        return data["f_T"]
+        return data[self._data_keys[0]]
 
 
 class Omnigenity(_Objective):
@@ -592,41 +584,15 @@ class Omnigenity(_Objective):
         Equilibrium to be optimized to satisfy the Objective.
     field : OmnigenousField
         Omnigenous magnetic field to be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     eq_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for equilibrium data.
         Defaults to a linearly space grid on the rho=1 surface.
-        Must be a single flux surface without stellarator symmetry.
+        Must be without stellarator symmetry.
     field_grid : Grid, optional
         Collocation grid containing the nodes to evaluate at for omnigenous field data.
         The grid nodes are given in the usual (ρ,θ,ζ) coordinates (with θ ∈ [0, 2π),
         ζ ∈ [0, 2π/NFP)), but θ is mapped to η and ζ is mapped to α. Defaults to a
-        linearly space grid on the rho=1 surface. Must be a single flux surface without
-        stellarator symmetry.
+        linearly space grid on the rho=1 surface. Must be without stellarator symmetry.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -638,23 +604,38 @@ class Omnigenity(_Objective):
     eq_fixed: bool, optional
         Whether the Equilibrium `eq` is fixed or not.
         If True, the equilibrium is fixed and its values are precomputed, which saves on
-        computation time during optimization and self.things = [field] only.
+        computation time during optimization and only ``field`` is allowed to change.
         If False, the equilibrium is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
     field_fixed: bool, optional
         Whether the OmnigenousField `field` is fixed or not.
         If True, the field is fixed and its values are precomputed, which saves on
-        computation time during optimization and self.things = [eq] only.
+        computation time during optimization and only ``eq`` is allowed to change.
         If False, the field is allowed to change during the optimization and its
         associated data are re-computed at every iteration (Default).
-    name : str
-        Name of the objective function.
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
+    _static_attrs = _Objective._static_attrs + [
+        "_eq_data_keys",
+        "_eq_fixed",
+        "_field_data_keys",
+        "_field_fixed",
+        "_helicity",
+        "_surf_batch_size",
+    ]
+
     _coordinates = "rtz"
     _units = "(T)"
-    _print_value_fmt = "Omnigenity error: {:10.3e} "
+    _print_value_fmt = "Omnigenity error: "
 
     def __init__(
         self,
@@ -675,6 +656,8 @@ class Omnigenity(_Objective):
         eq_fixed=False,
         field_fixed=False,
         name="omnigenity",
+        jac_chunk_size=None,
+        surf_batch_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -688,6 +671,7 @@ class Omnigenity(_Objective):
         self.eta_weight = eta_weight
         self._eq_fixed = eq_fixed
         self._field_fixed = field_fixed
+        self._surf_batch_size = surf_batch_size
         if not eq_fixed and not field_fixed:
             things = [eq, field]
         elif eq_fixed and not field_fixed:
@@ -706,6 +690,7 @@ class Omnigenity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -734,9 +719,9 @@ class Omnigenity(_Objective):
 
         # default grids
         if self._eq_grid is None and self._field_grid is not None:
-            rho = self._field_grid.nodes[0, 0]
+            rho = self._field_grid.nodes[self._field_grid.unique_rho_idx, 0]
         elif self._eq_grid is not None and self._field_grid is None:
-            rho = self._eq_grid.nodes[0, 0]
+            rho = self._eq_grid.nodes[self._eq_grid.unique_rho_idx, 0]
         elif self._eq_grid is None and self._field_grid is None:
             rho = 1.0
         if self._eq_grid is None:
@@ -753,7 +738,7 @@ class Omnigenity(_Objective):
             field_grid = self._field_grid
 
         self._dim_f = field_grid.num_nodes
-        self._eq_data_keys = ["|B|_mn"]
+        self._eq_data_keys = ["|B|_mn_B"]
         self._field_data_keys = ["|B|", "theta_B", "zeta_B"]
 
         errorif(
@@ -762,16 +747,17 @@ class Omnigenity(_Objective):
         )
         errorif(eq_grid.sym, msg="eq_grid must not be symmetric")
         errorif(field_grid.sym, msg="field_grid must not be symmetric")
-        errorif(eq_grid.num_rho != 1, msg="eq_grid must be a single surface")
-        errorif(field_grid.num_rho != 1, msg="field_grid must be a single surface")
+        field_rho = field_grid.nodes[field_grid.unique_rho_idx, 0]
+        eq_rho = eq_grid.nodes[eq_grid.unique_rho_idx, 0]
         errorif(
-            eq_grid.nodes[eq_grid.unique_rho_idx, 0]
-            != field_grid.nodes[field_grid.unique_rho_idx, 0],
-            msg="eq_grid and field_grid must be the same surface",
+            any(eq_rho != field_rho),
+            msg="eq_grid and field_grid must be the same surface(s), "
+            + f"eq_grid has surfaces {eq_rho}, "
+            + f"field_grid has surfaces {field_rho}",
         )
         errorif(
             jnp.any(field.B_lm[: field.M_B] < 0),
-            "|B| on axis must be positive! Check B_lm input.",
+            msg="|B| on axis must be positive! Check B_lm input.",
         )
 
         timer = Timer()
@@ -804,7 +790,6 @@ class Omnigenity(_Objective):
             "eq_transforms": eq_transforms,
             "field_transforms": field_transforms,
             "quad_weights": w,
-            "helicity": self.helicity,
         }
 
         if self._eq_fixed:
@@ -815,6 +800,7 @@ class Omnigenity(_Objective):
                 params=self._eq.params_dict,
                 transforms=self._constants["eq_transforms"],
                 profiles=self._constants["eq_profiles"],
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["eq_data"] = eq_data
         if self._field_fixed:
@@ -825,7 +811,8 @@ class Omnigenity(_Objective):
                 params=self._field.params_dict,
                 transforms=self._constants["field_transforms"],
                 profiles={},
-                helicity=self._constants["helicity"],
+                helicity=self.helicity,
+                surf_batch_size=self._surf_batch_size,
             )
             self._constants["field_data"] = field_data
 
@@ -853,7 +840,7 @@ class Omnigenity(_Objective):
             freedom, eg OmnigenousField.params_dict. Otherwise None.
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -861,8 +848,7 @@ class Omnigenity(_Objective):
             Omnigenity error at each node (T).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
 
         # sort parameters
         if self._eq_fixed:
@@ -872,6 +858,9 @@ class Omnigenity(_Objective):
         else:
             eq_params = params_1
             field_params = params_2
+
+        eq_grid = constants["eq_transforms"]["grid"]
+        field_grid = constants["field_transforms"]["grid"]
 
         # compute eq data
         if self._eq_fixed:
@@ -883,34 +872,23 @@ class Omnigenity(_Objective):
                 params=eq_params,
                 transforms=constants["eq_transforms"],
                 profiles=constants["eq_profiles"],
+                surf_batch_size=self._surf_batch_size,
             )
 
         # compute field data
         if self._field_fixed:
             field_data = constants["field_data"]
             # update theta_B and zeta_B with new iota from the equilibrium
-            M, N = constants["helicity"]
-            iota = jnp.mean(eq_data["iota"])
-            # see comment in desc.compute._omnigenity for the explanation of these
-            # wheres
-            mat_OP = jnp.array(
-                [[N, iota / jnp.where(N == 0, 1, N)], [0, 1 / jnp.where(N == 0, 1, N)]]
+            M, N = self.helicity
+            iota = eq_data["iota"][eq_grid.unique_rho_idx]
+            theta_B, zeta_B = _omnigenity_mapping(
+                M,
+                N,
+                iota,
+                field_data["alpha"],
+                field_data["h"],
+                field_grid,
             )
-            mat_OT = jnp.array([[0, -1], [M, -1 / jnp.where(iota == 0, 1.0, iota)]])
-            den = jnp.where((N - M * iota) == 0, 1.0, (N - M * iota))
-            mat_OH = jnp.array([[N, M * iota / den], [M, M / den]])
-            matrix = jnp.where(
-                M == 0,
-                mat_OP,
-                jnp.where(
-                    N == 0,
-                    mat_OT,
-                    mat_OH,
-                ),
-            )
-            booz = matrix @ jnp.vstack((field_data["alpha"], field_data["h"]))
-            theta_B = booz[0, :]
-            zeta_B = booz[1, :]
         else:
             field_data = compute_fun(
                 "desc.magnetic_fields._core.OmnigenousField",
@@ -918,23 +896,44 @@ class Omnigenity(_Objective):
                 params=field_params,
                 transforms=constants["field_transforms"],
                 profiles={},
-                helicity=constants["helicity"],
-                iota=jnp.mean(eq_data["iota"]),
+                helicity=self.helicity,
+                iota=eq_data["iota"][eq_grid.unique_rho_idx],
+                surf_batch_size=self._surf_batch_size,
             )
             theta_B = field_data["theta_B"]
             zeta_B = field_data["zeta_B"]
 
         # additional computations that cannot be part of the regular compute API
-        nodes = jnp.vstack(
-            (
-                jnp.zeros_like(theta_B),
-                theta_B,
-                zeta_B,
+
+        def _compute_B_eta_alpha(theta_B, zeta_B, B_mn):
+            nodes = jnp.vstack(
+                (
+                    jnp.zeros_like(theta_B),
+                    theta_B,
+                    zeta_B,
+                )
+            ).T
+            B_eta_alpha = jnp.matmul(
+                constants["eq_transforms"]["B"].basis.evaluate(nodes), B_mn
             )
-        ).T
-        B_eta_alpha = jnp.matmul(
-            constants["eq_transforms"]["B"].basis.evaluate(nodes), eq_data["|B|_mn"]
+            return B_eta_alpha
+
+        theta_B = field_grid.meshgrid_reshape(theta_B, "rtz").reshape(
+            (field_grid.num_rho, -1)
         )
+        zeta_B = field_grid.meshgrid_reshape(zeta_B, "rtz").reshape(
+            (field_grid.num_rho, -1)
+        )
+        B_mn = eq_data["|B|_mn_B"].reshape((eq_grid.num_rho, -1))
+        B_eta_alpha = vmap_chunked(
+            _compute_B_eta_alpha,
+            in_axes=(0, 0, 0),
+            chunk_size=self._surf_batch_size,
+        )(theta_B, zeta_B, B_mn)
+        B_eta_alpha = B_eta_alpha.reshape(
+            (field_grid.num_rho, field_grid.num_theta, field_grid.num_zeta)
+        )
+        B_eta_alpha = jnp.moveaxis(B_eta_alpha, 0, 1).flatten(order="F")
         omnigenity_error = B_eta_alpha - field_data["|B|"]
         weights = (self.eta_weight + 1) / 2 + (self.eta_weight - 1) / 2 * jnp.cos(
             field_data["eta"]
@@ -953,43 +952,19 @@ class Isodynamicity(_Objective):
     ----------
     eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
-    target : {float, ndarray}, optional
-        Target value(s) of the objective. Only used if bounds is None.
-        Must be broadcastable to Objective.dim_f. Defaults to ``target=0``.
-    bounds : tuple of {float, ndarray}, optional
-        Lower and upper bounds on the objective. Overrides target.
-        Both bounds must be broadcastable to to Objective.dim_f.
-        Defaults to ``target=0``.
-    weight : {float, ndarray}, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        Must be broadcastable to to Objective.dim_f
-    normalize : bool, optional
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool, optional
-        Whether target and bounds should be normalized before comparing to computed
-        values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True.
-        Has no effect for this objective.
-    loss_function : {None, 'mean', 'min', 'max'}, optional
-        Loss function to apply to the objective values once computed. This loss function
-        is called on the raw compute value, before any shifting, scaling, or
-        normalization.
-    deriv_mode : {"auto", "fwd", "rev"}
-        Specify how to compute jacobian matrix, either forward mode or reverse mode AD.
-        "auto" selects forward or reverse mode based on the size of the input and output
-        of the objective. Has no effect on self.grad or self.hess which always use
-        reverse mode and forward over reverse mode respectively.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         Defaults to ``LinearGrid(M=eq.M_grid, N=eq.N_grid)``.
-    name : str, optional
-        Name of the objective function.
 
     """
 
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=0``.", bounds_default="``target=0``."
+    )
+
     _coordinates = "rtz"
     _units = "(dimensionless)"
-    _print_value_fmt = "Isodynamicity error: {:10.3e} "
+    _print_value_fmt = "Isodynamicity error: "
 
     def __init__(
         self,
@@ -1003,6 +978,7 @@ class Isodynamicity(_Objective):
         deriv_mode="auto",
         grid=None,
         name="Isodynamicity",
+        jac_chunk_size=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -1017,6 +993,7 @@ class Isodynamicity(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1066,7 +1043,7 @@ class Isodynamicity(_Objective):
             Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
         constants : dict
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
-            self.constants
+            self.constants. (Deprecated)
 
         Returns
         -------
@@ -1074,8 +1051,7 @@ class Isodynamicity(_Objective):
             Isodynamicity error at each node (~).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,

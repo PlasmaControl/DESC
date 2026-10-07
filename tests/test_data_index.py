@@ -8,12 +8,12 @@ import pytest
 import desc.compute
 from desc.compute import data_index
 from desc.compute.data_index import _class_inheritance
-from desc.utils import errorif
+from desc.utils import errorif, getsource
 
 
 def _get_matches(fun, pattern, ignore_comments=True):
     """Return all matches of ``pattern`` in source code of function ``fun``."""
-    src = inspect.getsource(fun)
+    src = getsource(fun)
     if ignore_comments:
         # remove any decorator functions
         src = src.partition("def ")[2]
@@ -27,7 +27,7 @@ def _get_matches(fun, pattern, ignore_comments=True):
 def _get_parameterization(fun, default="desc.equilibrium.equilibrium.Equilibrium"):
     """Get parameterization of thing computed by function ``fun``."""
     pattern = re.compile(r'parameterization=(?:\[([^]]+)]|"([^"]+)")')
-    decorator = inspect.getsource(fun).partition("def ")[0]
+    decorator = getsource(fun).partition("def ")[0]
     matches = pattern.findall(decorator)
     # if list was found, split strings in list, else string was found so get that
     matches = [match[0].split(",") if match[0] else [match[1]] for match in matches]
@@ -75,8 +75,9 @@ def test_data_index_deps():
     for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
         if module_name[0] == "_":
             # JITed functions are not functions according to inspect,
-            # so just check if callable.
-            for _, fun in inspect.getmembers(module, callable):
+            # so just check if callable and in the right module
+            filt = lambda x: callable(x) and x.__module__ == module.__name__
+            for _, fun in inspect.getmembers(module, filt):
                 register_name = _get_matches(fun, pattern_name, ignore_comments=False)
                 if not register_name:
                     continue
@@ -128,7 +129,7 @@ def test_data_index_deps():
                 name not in queried_deps[p],
                 AssertionError,
                 "Did you reuse the function name (i.e. def_...) for"
-                f" '{name}' for some other quantity?",
+                f" '{name}' for some other quantity?" + "\n" + err_msg,
             )
             # assert correct dependencies are queried
             if not queried_deps[p][name]["ignore"]:

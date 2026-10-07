@@ -3,7 +3,442 @@ Changelog
 
 New Features
 
-- Add ``use_signed_distance`` flag to ``PlasmaVesselDistance`` which will use a signed distance as the target, which is positive when the plasma is inside of the vessel surface and negative if the plasma is outside of the vessel surface, to allow optimizer to distinguish if the equilbrium surface exits the vessel surface and guard against it by targeting a positive signed distance.
+- Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+
+Performance Improvements
+
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+- Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
+- Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
+- Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+
+Breaking Changes and Deprecations
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+
+Bug Fixes
+
+- Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
+- Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
+- Fixes bug in modified Cholesky factorization used by the trust-region
+  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
+  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
+  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
+  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
+- Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+
+
+
+v0.17.3
+-------
+
+New Features
+
+- Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
+- Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
+- Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
+
+Performance Improvements
+
+- Speeds up the ``"qr"`` trust-region subproblem and Newton-step solves in the least-squares optimizers by reusing the Jacobian QR factorization across the Levenberg-Marquardt parameter sweep, and by using ``qr_multiply`` to apply ``Q`` without forming it explicitly.
+- Adds a pure-JAX ``qr_multiply`` fallback (a blocked Householder / compact-WY implementation) for ``jax < 0.10.0``, so the above ``Q``-avoidance speedup is available on the currently pinned JAX with no jaxlib rebuild (~1.5-2x faster than forming ``Q`` on CPU for tall Jacobians, larger on GPU).
+- Adds ``surf_batch_size`` kwarg to Boozer and omnigenous field compute variables, to allow for tuning of the memory usage when computing these quantities by choosing how many surfaces to simultaneously compute.
+  - Also adds ``surf_batch_size`` as an additional kwarg to ``make_boozmn_output``, as well as the objectives ``Omnigenity`` and ``QuasisymmetryBoozer``
+
+Bug Fixes
+
+- Fixes bug that was always setting NFP=1 in ``to_FourierRZ`` methods.
+- Fixes the possible permission error in `from_input_file` method of `Equilibrium`, `FourierRZToroidalSurface` and `FourierRZCurve` classes when used with a VMEC input file. Now the automatically generated DESC input file is written to a temporary, in-memory buffer, not to disk. Note that invoking DESC from the command like ``python -m desc input.vmec`` retains the current behavior of writing an input file for the converted DESC input.
+- Fixes a bug in `_CoilObjective` for objectives which are computed per-grid node when at least one entry of `weight` is zero.
+- Fixes ``VMECIO.save`` metadata for current-density variables and corrects the
+  asymmetric ``currvmns`` magnetic-axis extrapolation.
+- Bug (#2120) in ``desc.magnetic_fields.OmnigenousField`` computing NaNs when the ``B_lm`` corresponded to flat magnetic wells fixed by ``interpax`` ``v0.3.14``, updated tests to exercise this.
+- Fixes bug in ``reactor_QA.py`` script where the current profile was allowed to have a nonzero rho^1 component, which resulted in an unphysical profile near-axis.
+    - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
+- Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
+
+Breaking Changes
+
+- Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
+
+
+v0.17.2
+-------
+
+New Features
+
+- Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
+- Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
+- Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
+- Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
+- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
+- Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
+- The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
+- Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number. Also adds compute functions for ``"ni_rr"`` and ``"Zeff_rr"``.
+- Modernizes dependencies to use [``nvidia-ml-py``](https://pypi.org/project/nvidia-ml-py/) in place of [``nvgpu``](https://github.com/rossumai/nvgpu).
+  If you are updating an existing software environment uninstall ``pynvml`` first and then reinstall the dependencies to correctly get ``nvidia-ml-py``.
+
+Bug Fixes
+
+- Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
+- Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
+- Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
+- `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.
+- Fixes a bug in `desc.magnetic_fields.field_integrate` when calling with an integer `bs_chunk_size`.
+
+Performance Improvements
+
+- Reduces import time of `desc` modules.
+    - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
+    - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
+- [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
+- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
+- Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
+- ``ObjectiveFunction.print_value`` can now use the previously computed ``compute_scaled_error`` values to print. For bounded objectives, we fall back to computing ``compute_unscaled``. Additionally, ``compute_scaled_error`` and array splitting are used in other parts of the code to prevent recompilation for one-time tasks, which makes initialization faster.
+
+Deprecations
+
+- `constants` argument of `compute`, `jvp`, `jac`, `grad` and `hess` methods (including all of their variants) to all objective classes (including `ObjectiveFunction` and wrappers) is deprecated and will be removed in a future release. This argument was not necessary, and the code will still work if user doesn't pass it. Users should update their custom objectives for this change. In addition, `constants` property of the `ObjectiveFunction` and all sub-classes of `_Objective` is deprecated.
+
+
+v0.17.1
+-------
+
+Bug Fixes
+
+- Fixes incorrect units in the documentation of some curvature variables.
+
+
+
+v0.17.0
+-------
+
+New Features
+
+- Adds particle tracing capabilities in ``desc.particles`` module.
+    - Particle tracing is done via ``desc.particles.trace_particles`` function.
+    - Particles can be initialized in couple different ways:
+        - ``ManualParticleInitializerLab`` : Initializes particles at given positions in lab coordinates.
+        - ``ManualParticleInitializerFlux`` : Initializes particles at given positions in flux coordinates.
+        - ``CurveParticleInitializer`` : Initializes N particles on a given curve.
+        - ``SurfaceParticleInitializer`` : Initializes N particles on a given surface.
+    - Implemented particle trajectory models are:
+        - ``VacuumGuidingCenterTrajectory`` : Integrates the particle motion by vacuum guiding center ODEs, conserving energy and mu.
+    - Particle trajectories can be plotted with ``desc.plotting.plot_particle_trajectories`` function.
+- Adds new option for ``loss_function``, ``"sum"``, which changes an objective to target the sum of the values computed.
+- Adds utility functions ``desc.external.paraview.export_surface_to_paraview``, ``desc.external.paraview.export_volume_to_paraview`` and ``desc.external.paraview.export_coils_to_paraview`` to export Paraview files for surfaces, volume and coils. These functions use an optional dependency ``pyvista`` which is not automatically installed.
+- The `x_scale` option for `eq.optimize` and related functions can now be given as a dictionary mapping individual parameter names to their relevant scales,
+or if multiple things are being optimized, `x_scale` can be a list of dict, one for each optimizable thing.
+- Adds new option `x_scale='ess'` to use exponential spectral scaling from (Jang 2025) which has been shown to improve performance and robustness as an alternative to fourier continuation methods.
+- Adds `x_scale='ess'` option for the ``OmigenousField`` class.
+- Adds ``"scipy-l-bfgs-b"`` optimizer option as a wrapper to scipy's ``"l-bfgs-b"`` method.
+- The ``x_scale`` parameter can now be used with stochastic gradient descent type optimizers.
+- Adds wrappers for ``optax`` optimizers. They can be used by prepending ``'optax-'`` to the name of the optimizer (i.e. ``optax-adam``). Additional arguments to the optimizer such as `learning_rate` can be pass via ``options = {'optax-options': {'learning_rate': 0.01}}``. Even a custom ``optax`` optimizer can be used by specifying the method as ``'optax-custom'`` and passing the ``optax`` optimizer via the ``'update-rule'`` key of `optax-options` in the `options` dictionary. See the docstring of the ``optax-custom`` for details.
+- Adds ``check_intersection`` flag to ``desc.magnetic_fields.FourierCurrentPotentialField.to_Coilset``, to allow the choice of checking the resulting coilset for intersections or not.
+- Changes the import paths for ``desc.external`` to require reference to the sub-modules.
+- Adds a differentiable utility for finding constant offset toroidal surfaces inside of optimizations. See [PR](https://github.com/PlasmaControl/DESC/pull/2016) for more details.
+- Add support for Python 3.14
+- Adds support for optimization targeting individual coils in a coilset.
+    - Coil objectives accept pytree inputs for `target`, `bounds`, and `weight`.
+    - Able to set weights to zero, excluding certain coils from the objective.
+
+Bug Fixes
+
+- No longer uses the full Hessian to compute the scale when ``x_scale="auto"`` and using a scipy optimizer that approximates the hessian (e.g. if using ``"scipy-bfgs"``, no longer attempts the Hessian computation to get the x_scale).
+- ``SplineMagneticField.from_field()`` correctly uses the ``NFP`` input when given. Also adds this as a similar input option to ``MagneticField.save_mgrid()``.
+- Fixes some bugs that hampered robustness of ``desc.geometry.FourierRZToroidalSurface.constant_offset_surface``, particularly when the given grid had stellarator symmetry or when NFP=1.
+- Fixes possible bug in computing normalizations when both kinetic and pressure profiles are assigned. Also adds warnings whenever an pressure is added to a kinetic-constrained equilibrium and vice-versa to alert user to ambiguous equilibrium setups.
+- Adds error in ``MercierStability`` to guard against situation where if a grid with a point at ``rho=0`` were used, NaN would be computed, as``MercierStability`` is undefined on-axis.
+
+Performance Improvements
+
+- `ProximalProjection.grad` uses a single VJP on the objective instead of multiple JVP followed by a manual VJP. This should be more efficient for expensive objectives.
+
+Deprecations
+
+- ``sgd`` optimizer is deprecated in favor of ``optax-sgd``, and will be removed in a future release. To achieve the same behavior with `optimizer = Optimizer('sgd')` and `options={'alpha': ..., 'beta': ...}` when the optimizer is removed, one can use `optimizer = Optimizer('optax-sgd')` and `options={'optax-options': {'learning_rate': alpha, 'momentum': beta, 'nesterov': True}}`.
+- Removes ``FiniteDiffDerivative`` from the public API. This class was no longer actually usable with the current versions of DESC's optimization framework, as JAX is now required for running any equilibrium or optimization solves.
+
+
+v0.16.0
+-------
+
+New Features
+
+- New basis vector and metric elements derivatives in PEST coordinates and quantities useful for a global MHD stability solver.
+- Adds ``desc.external.TERPSICHORE`` objective for computing linear ideal MHD stability growth rates. This objective subclasses from ``ExternalObjective`` and requires access to the TERPSICHORE code, which is not included with DESC or its dependencies.
+- Adds ``docs/dev_guids/external_objectives.rst`` as a tutorial for how to use external objectives, with TERPSICHORE as an example using parallel processing.
+- Adds keyword argument `normalize` to plot_1d, plot_3d. `normalize` is a string to use for normalization.
+- Adds new linear objective `ShareParameters` which can enforce that the chosen parameters of two or more objects of the same type remain identical during an optimization. Potentially useful for flexible stellarator optimization, where one has two coilsets with the same geometry but differing currents, and attempts to optimize for two different stellarator equilibria.
+- Changes related to ``field_line_integrate``, see #1839:
+    - `field_line_integrate` now returns `diffrax.diffeqsolve.stats` and `diffrax.diffeqsolve.result` if the flag `return_aux` is set to True.
+    - Renames `maxsteps` argument of `field_line_integrate` to `max_steps`. Now the argument has a consistent meaning with the `diffrax` package and specifies the maximum number of steps allowed for whole integration. Previously, it was used as maximum number of iterations between integration steps.
+    - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
+    - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
+    - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
+
+
+
+Bug Fixes
+
+- Fixes straight field line equilibrium conversion, see #1880
+- ``desc.compat.rescale`` will now return ``ScaledProfile`` instances for most of its profiles, to fix a bug where improper scaling could occur for certain profile types.
+- Now always use ``sym=False`` in the default grid for ``plot_fsa`` to ensure correct averages
+- Fixes bug that could lead extra compilation of jit-compiled functions that include `field_line_integrate`.
+- Fixes inaccurate normalizations scales that could be computed for certain equilibria which had m=1 n=0 R and m=-1 n=0 Z components much smaller than their actual average minor radius, see #1954
+- Fix bug in ``PlasmaCoilSetMinDistance`` that occured using a ``FourierRZToroidalSurface`` object without passing in an the evaluation grid, see #2013
+- Equilibrium profile assignments are now guaranteed to be consistent with the equilibrium resolution—automatically increasing lower-resolution profiles to match the equilibrium (while keeping higher-resolution profiles untouched)—meaning users who relied on lower-resolution profiles to implicitly restrict optimization must now explicitly use the `FixParameters` constraint.
+- Allow ``desc.vmec.VMECIO.load`` to load wout files that lack ``lrfp__logical__``, like those outputted by VMEC++. This change assumes that those output files don't have poloidal flux label.
+- Fixes a bug that had prevented passing the ``legend`` kwarg to ``desc.plotting.plot_surfaces``.
+
+Backend
+
+- When using any of the ``"proximal-"`` optimization methods, the equilbrium is now always solved before beginning optimization to the specified tolerance (as determined, for example, by ``options={"solve_options":{"ftol"...}}`` passed to the ``desc.optimize.Optimizer.optimize`` call). This ensures the assumptions of the proximal projection method are enforced starting from the first step of the optimization.
+- ``desc.continuation.solve_continuation_automatic`` now falls back to performing shape perturbations first and then pressure if the default pressure-then-shaping path fails, increasing robustness in arriving at the final equilibrium. To go directly to the path of applying shaping then pressure, pass the flag ``shaping_first=True``.
+- ``desc.equilibrium.Equilibrium.set_initial_guess`` now sets lambda to zero for most use cases, and the docstring has been updated to be more explicit on what is done in each case.
+- Minimum JAX version bumped up to ``0.5.0``
+
+Performance Improvements
+
+- Coordinate mapping uses partial summation, see #1826
+- Non-uniform FFTs (NUFFTS) are now used by default for computing bounce integrals, see #1834. NUFFT functionality is added through `jax-finufft` package. If the GPU installation fails, users can fall back to the older (much slower) implementation by setting `nufft_eps=0` in the computation of the related quantities.
+
+
+v0.15.0
+-------
+
+New Features
+
+- Multiple plotting related changes:
+    - Renames `norm_F` keyword argument to `normalize` and removes `norm_name`. `normalize` is a string to use for normalization. If you want to get the old behavior e.g. `plot_section(eq, "|F|", norm_F=True)`, use instead `plot_section(eq, "|F|", normalize="<|grad(|B|^2)|/2mu0>_vol")` or the new compute quantity `plot_section(eq, "|F|_normalized")`.
+    - `plot_basis` can now plot every basis type. It can also plot the derivatives, if the derivative is implemented.
+    - Renames `linecolor` keyword argument of `plot_1d` and `plot_fsa` to `color` for consistency among plotting functions.
+- Adds the classes ``FourierXYCurve`` and ``FourierXYCoil`` to represent planar curves/coils with Fourier series for X and Y instead of the radius.
+- Removes default objective and constraints for ``desc.equilibrium.Equilibrium.optimize``, so now user is required to pass in the constraints and objective when using this method.
+- Adds ``PlasmaCoilSetDistanceBound`` objective to allow a simultaneous constraint on minimum and maximum distance between the plasma and coils.
+- Adds `desc.plotting.plot_field_lines` function, which integrates and then plots magnetic field line trajectories in 3D.
+- `desc.magnetic_fields.field_line_integrate` now integrates the field line always in the given `phis` direction, and `phis` will always correspond to the physical toroidal angle (instead of time like coordinate previously). Previous implementation might have caused confusion about the output positions, especially when the magnetic field has negative toroidal component.
+- Adds ``grid.meshgrid_flatten`` for flattening 3d data to a 1d array in the correct order.
+- Ability to obtain the top eigenvalues and the corresponding eigenfunctions from the ``ideal ballooning lambda`` compute function by specifying the variable ``Neigvals``.
+- Parallelized ideal ballooning stability and Newcomb ballooning metrics and [other improvements](https://github.com/PlasmaControl/DESC/pull/1763).
+- Adds ``FourierXYCoil`` to compatible coils for ``CoilSetArclengthVariance`` objective.
+- Separated ``gamma_c`` calculation from ``Gamma_c``. User can also plot ``gamma_c`` using the ``plot_gammac`` function.
+
+Bug Fixes
+
+- Fixes issues with the ``desc.geometry.curve.FourierPlanarCurve`` that arose when the curve normal was parallel or anti-parallel to the +Z axis.
+- Fixes an issue in ``desc.objectives.BoundaryError`` where an equilibrium with kinetic profiles could result in undefined Jacobian values.
+- Fixes bugs in ideal ballooning stability and Newcomb ballooning metrics where the computation mixed data between field lines.
+- Fixes bug in ``desc.geometry.curve.FourierRZCurve.from_values`` when numpy array is passed in for the ``coords`` argument.
+
+Backend
+
+- Significant changes to how DESC handles static attributes during JIT compilation. Going forward if any class/object has attributes that should be treated as static by `jax.jit`, these should be declared at the class level like `_static_attrs = ["foo", "bar"]`. Generally, non-arraylike attributes such as functions, strings etc should be marked static, as well as any attributes used for control flow. Previously this was done automatically, but in a way that caused a lot of performance bugs and unnecessary recompilation. These changes have been implemented for all classes in the `desc` repository, but if you have custom objectives or other local objects that subclass from `desc` you may need to add this yourself. JAX error messages usually do a good job of alerting you to things that need to be static, and feel free to open an issue with `desc` if you have any questions.
+- No longer closes over the field in ``desc.magnetic_fields._core.field_line_integrate``, which can dramatically reduce compile times when the field being traced has large size attributes (for example, when using a ``desc.magnetic_fields._core.SplineMagneticField`` object).
+
+v0.14.2
+-------
+
+New Features
+
+- Updates ``Equilibrium`` initial guess to use geometric center as the axis. This will allow non-convex cross-sections to be initialized without having to solve to achieve nested surfaces.
+- Adds new regularization options to ``desc.objectives.SurfaceCurrentRegularization``.
+- Adds a new utility function ``desc.compat.contract_equilibrium`` which takes in an ``Equilibrium`` object and an argument ``inner_rho``, and returns a new ``Equilibrium`` with original ``Equilibrium``'s ``inner_rho`` flux surface as its boundary.
+Optionally can also contract the profiles of the original ``Equilibrium`` so that the new ``Equilibrium``'s profiles match the original's in real space.
+- Adds second-order NAE constraints, accessible by passing ``order=2`` to ``desc.objectives.get_NAE_constraints``.
+- `result` dictionary returned by `Optimizer.optimize` or `eq.optimize` now includes sub-dictionary `"Objective values"` containing summary info of objective values before and after optimization, the same info that is printed to the terminal by default.
+- Adds error for incorrect grids in ``desc.objectives.BootstrapRedlConsistency`` and when computing ``current Redl`` and ``<J*B> Redl`` compute quantities
+- Allows Redl compute quantities to use SplineProfile and updates Redl bootstrap current consistency tutorial to include a ``SplineProfile`` optimization
+- Adds automatically generated header file showing date the input file was created with `desc.vmec.VMECIO.write_vmec_input`
+- Adds ``source_grid`` argument to ``desc.magnetic_fields._MagneticField.save_mgrid function`` to allow user to control the discretization of the magnetic field object being used to construct the ``mgrid`` output.
+- Allows ``x_scale`` to be passed to ``factorize_linear_constraints`` in ``Optimizer.optimize`` through the new ``"linear_constraint_options"``.
+
+Performance Improvements
+
+- [Integrate on boundary to compute length scale quantities](https://github.com/PlasmaControl/DESC/pull/1094#issue-2387036357).
+- `ProximalProjection` uses jvp's for the derivative of the `ForceBalance` part instead of manually taking the matrix products. This reduces the jacobian time on CPU.
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+
+Bug Fixes
+
+- Some quantities require a grid that samples the full flux surface for correct computation. Attempts to compute these quantities on grids which lack sufficient coverage of the surface will now error.
+- Fixes bug where ``ObjectiveFunction`` was incorrectly using ``deriv_mode="batched"`` and the heuristic-set ``jac_chunk_size`` when ``jac_chunk_size`` is given to a sub-objective, where it should have instead defaulted to ``deriv_mode="blocked"``. See #1687
+- Fixes bug where `ProximalProjection` was using wrong `jac_chunk_size` internally and using more memory than one would expect given the `jac_chunk_size`. This fix gives separate `blocked` and `batched` methods to `ProximalProjection`.
+- Fixes issue in ``desc.geometry.curve.FourierPlanarCurve.from_values`` where the orientation of the fitted curve can be the reverse of the original curve, which can be problematic for coils (the current is not negated, so the resulting fitted coil would have field opposite of the initial).
+
+
+v0.14.1
+-------
+
+Bug Fixes
+
+- Fixes bug in ``desc.vmec.VMECIO.write_vmec_input`` for current-constrained equilibria, where DESC was incorrectly writing the ``s**0`` mode, where VMEC actually assumes it is zero and starts at the  ``s**1`` (which is different than the usual convention VMEC uses for its current profile when it uses the current derivative, where it starts with the ``s**0`` mode).
+- Fixes error that occurs when using the default grid for ``SplineXYZCoil`` in an optimization.
+- Fixes bug in ``desc.coils.CoilSet.save_in_makegrid_format`` for ``CoilSet`` objects with ``sym=True`` or ``NFP>1``
+- Adds missing `&END` to the input file created from `desc.vmec.VMECIO.write_vmec_input`
+
+
+v0.14.0
+-------
+
+New Features
+
+- Updates default parameters for partition support size in the singular surface integrals.
+- Enables tracking multiple field lines in ``Bounce2D``.
+- Adds Bounce integral methods with ``desc.integrals.Bounce2D``.
+- Adds Effective ripple ``desc.objectives.EffectiveRipple`` and Gamma_c ``desc.objectives.Gamma_c`` optimization objectives.
+- Adds new compute quantities for partial derivatives in different coordinate systems.
+- Adds a new profile class ``PowerProfile`` for raising profiles to a power.
+- Adds ``desc.objectives.LinkingCurrentConsistency`` for ensuring that coils in a stage 2 or single stage optimization provide the required linking current for a given equilibrium.
+- Adds an option ``scaled_termination`` (defaults to True) to all the desc optimizers to measure the norms for ``xtol`` and ``gtol`` in the scaled norm provided by ``x_scale`` (which defaults to using an adaptive scaling based on the Jacobian or Hessian). This should make things more robust when optimizing parameters with widely different magnitudes. The old behavior can be recovered by passing ``options={"scaled_termination": False}``.
+- ``desc.objectives.Omnigenity`` is now vectorized and able to optimize multiple surfaces at the same time. Previously it was required to use a different objective for each surface.
+- Adds a new objective ``desc.objectives.MirrorRatio`` for targeting a particular mirror ratio on each flux surface, for either an ``Equilibrium`` or ``OmnigenousField``.
+- Adds the output quantities ``wb`` and ``wp`` to ``VMECIO.save``.
+- Changes implementation of Dommaschk potentials to use recursive algorithm and symbolic integration.
+- Adds an option to ``VMECIO.save`` to specify the grid resolution in real space.
+- Adds a new objective ``desc.objectives.CoilIntegratedCurvature`` for targeting convex coils.
+- `eq.solve` and `eq.perturb` now accept `LinearConstraintProjection` as objective. This option must be used without any constraints.
+- Adds the example "reactor_QA", which is similar to "precise_QA" but with self-consistent bootstrap current at finite beta.
+- Allows non-proximal optimizers to  handle optimizing more than one ``Equilibrium`` object simultaneously.
+- ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now include the option to use a softmin which can give smoother gradients.
+- Adds a new function ``desc.coils.initialize_helical_coils`` for creating an initial guess for stage 2 helical coil optimization.
+- Adds ``desc.vmec_utils.make_boozmn_output `` for writing boozmn.nc style output files
+for compatibility with other codes which expect such files from the Booz_Xform code.
+- Renames compute quantity ``sqrt(g)_B`` to ``sqrt(g)_Boozer_DESC`` to more accurately reflect what the quantiy is (the jacobian from (rho,theta_B,zeta_B) to (rho,theta,zeta)), and adds a new function to compute ``sqrt(g)_Boozer`` which is the jacobian from (rho,theta_B,zeta_B) to (R,phi,Z).
+- Allows specification of Nyquist spectrum maximum modenumbers when using ``VMECIO.save`` to save a DESC .h5 file as a VMEC-format wout file
+- Adds a new objective ``desc.objectives.ExternalObjective`` for wrapping external codes with finite differences.
+- DESC/JAX version and device info is no longer printed by default, but can be accessed with the function `desc.backend.print_backend_info()`.
+
+Performance Improvements
+
+- A number of minor improvements to basis function evaluation and spectral transforms to improve speed. These will also enable future improvements for larger gains.
+- `proximal-` optimizers use a single `LinearConstraintProjection` and this makes the optimization faster for high resolution cases where taking the SVD (for null-space and inverse) of constraint matrix takes significant time.
+- Chunking/batching can now be used in more places. Note that this might change the default behavior and you might get OOM (out of memory) errors.
+    - Adds batching feature to parallelize singular integrals used in free boundary solves.
+    - Adds ``chunk_size`` option to compute magnetic field methods to increase performance. Users may need to update their scripts to pass in ``bs_chunk_size=20`` or some other reasonable number if out of memory occurs as the default attempts to perform the entire computation at once.
+    - ``desc.objectives.CoilSetMinDistance`` and ``desc.objectives.PlasmaCoilSetMinDistance`` now have a ``dist_chunk_size`` option to break up the distance calculation into smaller pieces to save memory.
+    - Changes hessian computation to use chunked ``jacfwd`` and ``jacrev``, allowing ``jac_chunk_size`` to now reduce hessian memory usage as well.
+
+Bug Fixes
+
+- Small bug fix to use the correct normalization length ``a`` in the BallooningStability objective.
+- Fixes I/O bug when saving/loading ``_Profile`` classes that do not have a ``_params`` attribute.
+- Minor bugs described in [#1323](https://github.com/PlasmaControl/DESC/pull/1323).
+- Corrects basis vectors computations made on surface objects [#1175](https://github.com/PlasmaControl/DESC/pull/1175).
+- Allows keyword arguments to be passed to ``GenericObjective`` and ``ObjectiveFromUser``.
+- Fixes bug where ``save_in_makegrid_format`` function did not correctly account for ``CoilSet`` objects with NFP>1 or sym=True attributes, and so would not save all the coils.
+- Fixes issue with interpolator for singular integrals [#1522](https://github.com/PlasmaControl/DESC/issues/1522) and additional checks [1519](https://github.com/PlasmaControl/DESC/issues/1519).
+- Fixes the coil currents in ``desc.coils.initialize_modular_coils`` to now give the correct expected linking current.
+- ``desc.objectives.PlasmaVesselDistance`` now correctly accounts for multiple field periods on both the equilibrium and the vessel surface. Previously it only considered distances within a single field period.
+- Sets ``os.environ["JAX_PLATFORMS"] = "cpu"`` instead of ``os.environ["JAX_PLATFORM_NAME"] = "cpu"`` when doing ``set_device("cpu")``.
+- Fixes bug in ``desc.input_reader.desc_output_to_input`` utility function for asymmetric equilibria profiles, where the full profile resolution was not being saved.
+- Fixes bug when passing only `sym` into `.change_resolution` for ``FourierRZToroidalSurface``, ``ZernikeRZToroidalSection`` and ``FourierRZCurve``.
+- Fixes bug that was setting ``ObjectiveFunction._things_per_objective_idx`` incorrectly. Now each ``_Objective`` can define a unique order that it expects to use parameters for multiple "things".
+- Fixes bug that occurs when an NAE solution used with NAE constraints is asymmetric, but has a symmetric axis.
+- Fixes bug in ``FourierCurrentPotentialField.change_Phi_resolution`` where ``N_Phi`` would be changed to ``M_Phi`` if ``N`` is not explicitly passed into the method.
+- Fixes bug when setting current for a ``MixedCoilSet`` with an arbitrary tree structure.
+- Corrects Cholesky factorized least-squares solve for wide matrices used in root finding.
+- Fixes bug in the formula for computing ``"P_fusion"``.
+
+Breaking Changes
+
+- Adds support for Python 3.13 and removes support for 3.9 since new JAX versions require minimum Python 3.10.
+
+
+
+v0.13.0
+-------
+
+New Features
+
+- Adds ``from_input_file`` method to ``Equilibrium`` class to generate an ``Equilibrium`` object with boundary, profiles, resolution and flux specified in a given DESC or VMEC input file
+- Adds function ``solve_regularized_surface_current`` to ``desc.magnetic_fields`` module that implements the REGCOIL algorithm (Landreman, (2017)) for surface current normal field optimization
+    * Can specify the tuple ``current_helicity=(M_coil, N_coil)`` to determine if resulting contours correspond to helical topology (both ``(M_coil, N_coil)`` not equal to 0), modular (``N_coil`` equal to 0 and ``M_coil`` nonzero) or windowpane/saddle (``M_coil`` and ``N_coil`` both zero)
+    * ``M_coil`` is the number of poloidal transits a coil makes before returning to itself, while ``N_coil`` is the number of toroidal transits a coil makes before returning to itself (this is sort of like the QS ``helicity``)
+    * if multiple values of the regularization parameter are input, will return a family of surface current fields (as a list) corresponding to the solution at each regularization value
+- Adds method ``to_CoilSet`` to ``FourierCurrentPotentialField`` which implements a coil cutting algorithm to discretize the surface current into coils
+    * works for both modular and helical coils
+- Adds a new objective ``SurfaceCurrentRegularization`` (which minimizes ``w*|K|``, the regularization term from surface current in the REGCOIL algorithm, with `w` being the objective weight which act as the regularization parameter)
+    * use of both this and the ``QuadraticFlux`` objective allows for REGCOIL solutions to be obtained through the optimization framework, and combined with other objectives as well.
+- Changes local area weighting of Bn in QuadraticFlux objective to be the square root of the local area element (Note that any existing optimizations using this objective may need different weights to achieve the same result now.)
+- Adds a new tutorial showing how to use``REGCOIL`` features.
+- Adds an ``NFP`` attribute to ``ScalarPotentialField``, ``VectorPotentialField`` and ``DommaschkPotentialField``, to allow ``SplineMagneticField.from_field`` and ``MagneticField.save_mgrid`` to efficiently take advantage of the discrete toroidal symmetry of these fields, if present.
+- Adds ``SurfaceQuadraticFlux`` objective which minimizes the quadratic magnetic flux through a ``FourierRZToroidalSurface`` object, allowing for optimizing for Quadratic flux minimizing (QFM) surfaces.
+- Allows ``ToroidalFlux`` objective to accept ``FourierRZToroidalSurface`` so it can be used to specify the toroidal flux through a QFM surface.
+- Adds ``eq_fixed`` flag to ``ToroidalFlux`` to allow for the equilibrium/QFM surface to vary during optimization, useful for single-stage optimizations.
+- Adds tutorial notebook showcasing QFM surface capability.
+- Add ``desc.coils.initialize_modular_coils`` and ``desc.coils.initialize_saddle_coils`` for creating an initial guess for stage 2 optimization.
+- Adds ``rotate_zeta`` function to ``desc.compat`` to rotate an ``Equilibrium`` around Z axis.
+
+
+Bug Fixes
+
+- Fixes bug that occurs when taking the gradient of ``root`` and ``root_scalar`` with newer versions of JAX (>=0.4.34) and unpins the JAX version.
+- Changes ``FixLambdaGauge`` constraint to now enforce zero flux surface average for lambda, instead of enforcing lambda(rho,0,0)=0 as it was incorrectly doing before.
+- Fixes bug in ``softmin/softmax`` implementation.
+- Fixes bug that occured when using ``ProximalProjection`` with a scalar optimization algorithm.
+
+v0.12.3
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.2...v0.12.3)
+
+New Features
+
+- Add infinite-n ideal-ballooning stability solver implemented as a part of the ``BallooningStability`` Objective. DESC can use reverse-mode AD to now optimize equilibria against infinite-n ideal ballooning modes.
+- Add ``jac_chunk_size`` to ``ObjectiveFunction`` and ``_Objective`` to control the above chunk size for the ``fwd`` mode Jacobian calculation
+  - if ``None``, the chunk size is equal to ``dim_x``, so no chunking is done
+  - if an ``int``, this is the chunk size to be used.
+  - if ``"auto"`` for the ``ObjectiveFunction``, will use a heuristic for the maximum ``jac_chunk_size`` needed to fit the jacobian calculation on the available device memory, according to the formula: ``max_jac_chunk_size = (desc_config.get("avail_mem") / estimated_memory_usage - 0.22)  / 0.85  * self.dim_x`` with ``estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1``
+- the ``ObjectiveFunction`` ``jac_chunk_size`` is used if ``deriv_mode="batched"``, and the ``_Objective`` ``jac_chunk_size`` will be used if ``deriv_mode="blocked"``
+- Make naming of grids kwargs among free boundary objectives more uniform
+- Add kwarg options to plot 3d without any axis visible
+- Pin jax version temporarily to avoid JAX-related bug
+
+Bug Fixes
+
+- Fix error that can occur when `get_NAE_constraints` is called for only fixing the axis
+- Bug fix for `most_rational` with negative arguments
+- Fix bug in `FixOmniBMax`
+
+Deprecations
+
+- ``deriv_mode="looped"`` in ``ObjectiveFunction`` is deprecated and will be removed in a future version in favored of ``deriv_mode="batched"`` with ``jac_chunk_size=1``,
+
+
+
+
+v0.12.2
+-------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.12.1...v0.12.2)
+
+- Add Vector Potential Calculation to `Coil` classes and Most `MagneticField` Classes
+- Add automatic intersection checking to `CoilSet` objects, and a method `is_self_intersecting` which check if the coils in the `CoilSet` intersect one another.
+- Add `flip_theta` compatibility function to switch the zero-point of the poloidal angle between the inboard/outboard side of the plasma.
+- Change field line integration to use `diffrax` package instead of the deprecated `jax.experimental.odeint` function, allowing for specifying the integration method, the step-size used, and more. See the documentation of [`field_line_integrate`](https://desc-docs.readthedocs.io/en/latest/_api/magnetic_fields/desc.magnetic_fields.field_line_integrate.html#desc.magnetic_fields.field_line_integrate) and [`diffrax`](https://docs.kidger.site/diffrax/api/diffeqsolve/) for more details.
+- Add `use_signed_distance` keyword to `PlasmaVesselDistance` objective to allow for specifying the desired relative position of the plasma and surface.
+- Vectorize Boozer transform over multiple surfaces, to allow for calculation of Boozer-related quantities on grids that contain multiple radial surfaces.
+- Optimizer now automatically scales linearly-constrained optimization parameters to be of roughly the same magnitude, to improve optimization when parameter values range many orders of magnitude
+- Add `HermiteSplineProfile` class, which allows for profile derivative information to be specified along with profile value information.
+- Add installation instructions for RAVEN cluster at IPP to the docs
+- Change optimizer printed output to be easier to read
+- Add `HeatingPower` and `FusionPower` objectives
+- Reduce `QuadratureGrid` number of radial points to match its intended functionality
+- Fix some plotting issues that arose when NFP differs from 1 for objects, or when passed-in phi exceeds 2pi/nfp
+- Update `VMECIO` to allow specification of Nyquist spectrum and fix some bugs with asymmetric wout files
+- The code no longer mods non-periodic angles (such as the field line label $\alpha$) by $2\pi$, as in field-line-following contexts, functions may not be periodic in these angles.
+
 
 v0.12.1
 -------
@@ -209,7 +644,7 @@ optimization. Set to False by default.
 non-singular, non-degenerate) coordinate mappings for initial guesses. This is applied
 automatically when creating a new `Equilibrium` if the default initial guess of scaling
 the boundary surface produces self-intersecting surfaces. This can be disabled by
-passing `ensure_nested=False` when constructing the `Equilibrum`.
+passing `ensure_nested=False` when constructing the `Equilibrium`.
 - Adds `loss_function` argument to all `Objective`s for applying one of min/max/mean
 to objective function values (for targeting the average value of a profile, etc).
 - `Equilibrium.get_profile` now allows user to choose a profile type (power series, spline, etc)
@@ -361,7 +796,7 @@ Breaking changes
 - Renames ``theta_sfl`` to ``theta_PEST`` in compute functions to avoid confusion with
 other straight field line coordinate systems.
 - Makes plotting kwargs a bit more uniform. ``zeta``, ``nzeta``, ``nphi`` have all been
-superceded by ``phi`` which can be an integer for equally spaced angles or a float or
+superseded by ``phi`` which can be an integer for equally spaced angles or a float or
 array of float to specify angles manually.
 
 Bug fixes
@@ -431,7 +866,7 @@ the future all quantities should evaluate correctly at the magnetic axis. Note t
 evaluating quantities at the axis generally requires higher order derivatives and so
 can be much more expensive than evaluating at nonsingular points, so during optimization
 it is not recommended to include a grid point at the axis. Generally a small finite value
-such as ``rho = 1e-6`` will avoid the singuarlity with a negligible loss in accuracy for
+such as ``rho = 1e-6`` will avoid the singularity with a negligible loss in accuracy for
 analytic quantities.
 - Adds new optimizers ``fmin-auglag`` and ``lsq-auglag`` for performing constrained
 optimization using the augmented Lagrangian method. These generally perform much better
@@ -447,7 +882,7 @@ the existing methods ``compute_theta_coordinates`` and ``compute_flux_coordinate
 but allows mapping between arbitrary coordinates.
 - Adds calculation of $\nabla \mathbf{B}$ tensor and corresponding $L_{\nabla B}$ metric
 - Adds objective ``BScaleLength`` for penalizing strong magnetic field curvature.
-- Adds objective ``ObjectiveFromUser`` for wrapping an arbitary user defined function.
+- Adds objective ``ObjectiveFromUser`` for wrapping an arbitrary user defined function.
 - Adds utilities ``desc.grid.find_least_rational_surfaces`` and
 ``desc.grid.find_most_rational_surfaces`` for finding the least/most rational surfaces
 for a given rotational transform profile.
@@ -983,7 +1418,7 @@ New Features:
 -   Updates `Equilibrium` to make creating them more straightforward.
     -   Instead of a dictionary of arrays and values, init method now
         takes individual arguments. These can either be objects of the
-        correct type (ie `Surface` objects for boundary condiitons,
+        correct type (ie `Surface` objects for boundary conditions,
         `Profile` for pressure and iota etc,) or ndarrays which will get
         parsed into objects of the correct type (for backwards
         compatibility)
@@ -1267,7 +1702,7 @@ Major changes:
     indexing, where only M+1 points were used instead of the correct
     2\*M+1
 -   Rotated concentric grids by 2pi/3M to avoid symmetry plane at
-    theta=0,pi. Previously, for stellarator symmetic cases, the nodes at
+    theta=0,pi. Previously, for stellarator symmetric cases, the nodes at
     theta=0 did not contribute to helical force balance.
 -   Added [L\_grid]{.title-ref} parameter to specify radial resolution
     of grid nodes directly and making the API more consistent.
@@ -1433,7 +1868,7 @@ saved, and objectives getting compiled more often than necessary
 
 Major Changes:
 
--   Changes to Equilibium/EquilibriaFamily:
+-   Changes to Equilibrium/EquilibriaFamily:
     -   general switching to using properties rather than direct
         attributes when referencing things (ie, `eq.foo`, not
         `eq._foo`). This allows getter methods to have safeguards if

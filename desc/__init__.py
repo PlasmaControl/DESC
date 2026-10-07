@@ -2,7 +2,7 @@
 
 import importlib
 import os
-import re
+import sys
 import warnings
 
 import colorama
@@ -30,6 +30,7 @@ __all__ = [
     "magnetic_fields",
     "objectives",
     "optimize",
+    "particles",
     "perturbations",
     "plotting",
     "profiles",
@@ -61,81 +62,43 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
-def set_device(kind="cpu"):
+def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
-    If kind==``'gpu'``, checks available GPUs and selects the one with the most
-    available memory.
-    Respects environment variable CUDA_VISIBLE_DEVICES for selecting from multiple
-    available GPUs
+    Only affects JAX, the GPUs visible to non-JAX codes are not changed. Must be called
+    before importing JAX or anything else from DESC.
 
     Parameters
     ----------
-    kind : {``'cpu'``, ``'gpu'``}
-        whether to use CPU or GPU.
+    kind : {``'cpu'``, ``'gpu'``, ``'tpu'``}
+        Which device to use.
+    gpuid : int, optional
+        Index of the GPU to use among the visible ones. If ``None``, uses all visible
+        GPUs.
 
     """
+    if kind not in ["cpu", "gpu", "tpu"]:
+        raise ValueError(f"kind must be 'cpu', 'gpu' or 'tpu', got {kind}")
+    if "jax" in sys.modules and config["kind"] not in [None, kind]:
+        warnings.warn(
+            f"JAX has already been initialized on {config['kind']}, switching "
+            f"to {kind} will have no effect. Call set_device before importing "
+            "anything else from DESC."
+        )
+
     config["kind"] = kind
     if kind == "cpu":
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        import psutil
-
-        cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
-        config["device"] = "CPU"
-        config["avail_mem"] = cpu_mem
-
-    if kind == "gpu":
-        # Set CUDA_DEVICE_ORDER so the IDs assigned by CUDA match those from nvidia-smi
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-        import nvgpu
-
-        try:
-            devices = nvgpu.gpu_info()
-        except FileNotFoundError:
-            devices = []
-        if len(devices) == 0:
-            warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
-            set_device(kind="cpu")
-            return
-
-        maxmem = 0
-        selected_gpu = None
-        gpu_ids = [dev["index"] for dev in devices]
-        if "CUDA_VISIBLE_DEVICES" in os.environ:
-            cuda_ids = [
-                s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
-            ]
-            # check that the visible devices actually exist and are gpus
-            gpu_ids = [i for i in cuda_ids if i in gpu_ids]
-        if len(gpu_ids) == 0:
-            # cuda visible devices = '' -> don't use any gpu
-            warnings.warn(
-                colored(
-                    (
-                        "CUDA_VISIBLE_DEVICES={} ".format(
-                            os.environ["CUDA_VISIBLE_DEVICES"]
-                        )
-                        + "did not match any physical GPU "
-                        + "(id={}), falling back to CPU".format(
-                            [dev["index"] for dev in devices]
-                        )
-                    ),
-                    "yellow",
+        os.environ["JAX_PLATFORMS"] = "cpu"
+    else:
+        os.environ.pop("JAX_PLATFORMS", None)
+        if kind == "gpu" and gpuid is not None:
+            # so that the ids assigned by CUDA match those from nvidia-smi
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+            visible = [i for i in visible if i.strip()]
+            if visible and not 0 <= int(gpuid) < len(visible):
+                raise ValueError(
+                    f"gpuid {gpuid} is out of range for "
+                    f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']}"
                 )
-            )
-            set_device(kind="cpu")
-            return
-        devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        for dev in devices:
-            mem = dev["mem_total"] - dev["mem_used"]
-            if mem > maxmem:
-                maxmem = mem
-                selected_gpu = dev
-        config["device"] = selected_gpu["type"] + " (id={})".format(
-            selected_gpu["index"]
-        )
-        config["avail_mem"] = (
-            selected_gpu["mem_total"] - selected_gpu["mem_used"]
-        ) / 1024  # in GB
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
+            os.environ["JAX_CUDA_VISIBLE_DEVICES"] = str(int(gpuid))

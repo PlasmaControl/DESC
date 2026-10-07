@@ -1,45 +1,47 @@
-# This is the DESC input file for a fixed iota heliotron
+# DESC input file generated from the output file:
+# tests/inputs/iotest_HELIOTRON.h5
 
 # global parameters
 sym = 1
 NFP = 19
-Psi = 1.0
+Psi = 1.00000000E+00
 
 # spectral resolution
-L_rad  = 9
-M_pol  =  14
-N_tor  =   3
-
-# continuation parameters
-bdry_ratio = 1
-pres_ratio = 1
-pert_order = 2
+L_rad = 9
+M_pol = 14
+N_tor = 3
+L_grid = 28
+M_grid = 28
+N_grid = 6
 
 # solver tolerances
-ftol = 1e-3
-xtol = 1e-6
-gtol = 1e-6
-maxiter = 50
+ftol = 1.000E-02
+xtol = 1.000E-06
+gtol = 1.000E-06
+maxiter = 100
 
 # solver methods
-optimizer         = lsq-exact
-objective         = force
+optimizer = lsq-exact
+objective = force
 spectral_indexing = ansi
 
 # pressure and rotational transform/current profiles
-l:   0	p =   1E2    i = 0.5
-l:   1	p =   0      i = 0.1
-l:   2	p =   1E2    i = 0
-l:   4	p =   0      i = 0
-
-# magnetic axis initial guess
-n:   0  R0 =  1.0E+1  Z0 =  0.0E+0
+l:   0  p =  1.00000000E+02  i =  5.00000000E-01
+l:   1  p =  1.00000000E-05  i =  1.00000000E-01
+l:   2  p =  1.00000000E+02  i =  0.00000000E+00
+l:   3  p =  0.00000000E+00  i =  0.00000000E+00
+l:   4  p =  0.00000000E+00  i =  0.00000000E+00
+l:   5  p =  0.00000000E+00  i =  0.00000000E+00
+l:   6  p =  0.00000000E+00  i =  0.00000000E+00
+l:   7  p =  0.00000000E+00  i =  0.00000000E+00
+l:   8  p =  0.00000000E+00  i =  0.00000000E+00
+l:   9  p =  0.00000000E+00  i =  0.00000000E+00
 
 # fixed-boundary surface shape
-m:   0  n:   0  R1 =  1.0E+1
-m:   1  n:   0  R1 = -1.0E+0
-m:   1  n:   1  R1 = -3.0E-1
-m:  -1  n:  -1  R1 =  3.0E-1
-m:  -1  n:   0  Z1 =  1.0E+0
-m:  -1  n:   1  Z1 = -3.0E-1
-m:   1  n:  -1  Z1 = -3.0E-1
+l:   0  m:  -1  n:  -1  R1 =  3.00000000E-01  Z1 =  0.00000000E+00
+l:   0  m:   0  n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
+l:   0  m:   1  n:   0  R1 = -1.00000000E+00  Z1 =  0.00000000E+00
+l:   0  m:   1  n:   1  R1 = -3.00000000E-01  Z1 =  0.00000000E+00
+l:   0  m:   1  n:  -1  R1 =  0.00000000E+00  Z1 = -3.00000000E-01
+l:   0  m:  -1  n:   0  R1 =  0.00000000E+00  Z1 =  1.00000000E+00
+l:   0  m:  -1  n:   1  R1 =  0.00000000E+00  Z1 = -3.00000000E-01

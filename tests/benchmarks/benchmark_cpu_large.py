@@ -1,4 +1,4 @@
-"""Benchmarks for timing comparison."""
+"""Benchmarks for timing comparison (these will not run on CI)."""
 
 import os
 

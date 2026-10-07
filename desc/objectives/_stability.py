@@ -727,12 +727,11 @@ class FinitenStability(_Objective):
         outright; passing only some is ignored.
     phi_ratio_n_theta, phi_ratio_n_zeta : int, optional
         Resolution of the grid ``_phi_best_ratio`` averages the boundary over to pick
-        ``(st, sz, q)``. Defaults to the boundary's own Nyquist rate
-        (``2*eq.M+1`` by ``2*eq.N*eq.NFP+1``, scaled to the source grid's toroidal
-        span and capped at the source resolution), which is already converged -- the
-        ratio changes in the 5th digit between that and the full source resolution.
-        Override only to check that claim. Ignored if ``phi_st``/``phi_sz``/``phi_q``
-        are given.
+        ``(st, sz, q)``. Defaults to the boundary's own Nyquist rate over one
+        equilibrium field period (``2*eq.M+1`` by ``2*eq.N+1``, capped at the source
+        resolution), which is already converged -- the ratio changes in the 5th digit
+        between that and the full source resolution. Override only to check that
+        claim. Ignored if ``phi_st``/``phi_sz``/``phi_q`` are given.
     phi_scale : float, optional
         DIAGNOSTIC, free boundary only. Multiply ``phi_matrix`` by this before it
         reaches the operator, scaling how stiffly the boundary displacement is
@@ -1270,7 +1269,7 @@ class FinitenStability(_Objective):
         )
         return out.reshape(-1) if a.ndim == 1 else out
 
-    def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src, NFP):
+    def _phi_best_ratio(self, eq, n_theta_src, n_zeta_src):
         r"""``_best_ratio`` for the source grid, without mapping the source grid.
 
         `_best_ratio` wants one scalar: the surface-area-weighted mean of
@@ -1316,28 +1315,31 @@ class FinitenStability(_Objective):
         what it sampled.
         """
         # Nyquist for the boundary surface: the coarsest grid that still resolves every
-        # mode `eq` carries. Toroidally that is over ONE FIELD PERIOD of ``NFP``, which
-        # need not be the equilibrium's own -- a full-torus solve has ``NFP == 1`` while
-        # the boundary still carries ``eq.N * eq.NFP`` toroidal modes across it, hence
-        # the ``eq.NFP / NFP`` factor.
+        # mode `eq` carries, which toroidally is ``2*eq.N+1`` over one of the
+        # EQUILIBRIUM's field periods.
         #
-        # Floored at 2 so a high ``NFP`` cannot round the toroidal count down to a
-        # single plane while the source grid has many, then capped at the source
-        # resolution -- in that order, so the cap wins. Asking for more points than the
-        # source grid has would make this cost more than the mapped path it replaces,
-        # and when the source IS one plane (axisymmetric, ``n_zeta_src == 1``) one
-        # plane is the right answer, not an under-resolution.
+        # `eq.NFP`, not the stability grid's NFP, precisely because this grid is only
+        # ever used for geometry -- the same reason the flux and quadrature grids above
+        # use it. The boundary is `eq.NFP`-periodic, so a surface mean over one
+        # equilibrium field period equals the mean over the full torus, at `eq.NFP`
+        # times fewer nodes. Nothing here is indexed against the stability DOFs, so the
+        # stability grid's own toroidal extent is irrelevant.
+        #
+        # Capped at the source resolution so this can never ask for more work than the
+        # mapped path it replaces: where the source grid is itself coarse, the old path
+        # was equally coarse, so the cap reproduces its accuracy rather than degrading
+        # anything. An axisymmetric source (``n_zeta_src == 1``) caps to one plane,
+        # which is also what ``2*eq.N+1`` gives for an axisymmetric equilibrium.
         n_theta_r = self._phi_ratio_n_theta
         n_zeta_r = self._phi_ratio_n_zeta
         if n_theta_r is None:
             n_theta_r = min(2 * int(eq.M) + 1, n_theta_src)
         if n_zeta_r is None:
-            _per_period = 2 * int(eq.N) * int(eq.NFP) / max(int(NFP), 1) + 1
-            n_zeta_r = min(max(int(np.ceil(_per_period)), 2), n_zeta_src)
+            n_zeta_r = min(2 * int(eq.N) + 1, n_zeta_src)
         n_theta_r, n_zeta_r = max(int(n_theta_r), 2), max(int(n_zeta_r), 1)
 
         ratio_grid = LinearGrid(
-            rho=1.0, theta=n_theta_r, zeta=n_zeta_r, NFP=NFP, sym=False
+            rho=1.0, theta=n_theta_r, zeta=n_zeta_r, NFP=eq.NFP, sym=False
         )
         _d = eq.compute(
             [
@@ -1506,9 +1508,7 @@ class FinitenStability(_Objective):
             if _prev is not None and np.array_equal(_prev[0], nodes0):
                 _st_h, _sz_h, _q_h = _prev[1]
             else:
-                _ratio, _rshape = self._phi_best_ratio(
-                    eq, n_theta_src, n_zeta_src, surf_grid_NFP
-                )
+                _ratio, _rshape = self._phi_best_ratio(eq, n_theta_src, n_zeta_src)
                 _st_h, _sz_h, _q_h = (
                     int(_x) for _x in _best_params(src_pest_grid, _ratio)
                 )

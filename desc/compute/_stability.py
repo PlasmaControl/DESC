@@ -72,10 +72,16 @@ def _mem_stats():
         v = st.get(k)
         return "    -" if v is None else f"{v / g:5.2f}"
 
+    # `pool` is what BFC has actually taken from CUDA; `limit` is only the cap it may
+    # grow to. `max_free` is the largest contiguous free block WITHIN the pool, so it
+    # reads ~0 whenever the pool is fully carved -- which says nothing about headroom
+    # unless pool is also near limit. Printing both is what makes either interpretable.
     return (
         f"  [mem in_use={_g('bytes_in_use')}G"
         f" peak={_g('peak_bytes_in_use')}G"
+        f" pool={_g('pool_bytes')}G"
         f" max_free={_g('largest_free_block_bytes')}G"
+        f" largest_alloc={_g('largest_alloc_size')}G"
         f" limit={_g('bytes_limit')}G"
         f" allocs={st.get('num_allocs', 0)}]"
     )

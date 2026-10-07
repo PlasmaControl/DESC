@@ -1500,7 +1500,7 @@ class FinitenStability(_Objective):
             # workaround. If it changes nothing, the cause is elsewhere and this comes
             # straight back out. Safe to try here either way: the scaffolding runs once
             # at build() time, before any solve has compiled anything worth keeping.
-            if os.environ.get("AGNI_PHI_CLEANUP", "0") not in ("0", "", "false"):
+            if os.environ.get("AGNI_PHI_CLEANUP", "1") not in ("0", "", "false"):
                 import gc
 
                 if srcmap_cache is not None:

@@ -1492,7 +1492,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         _bc_shell = _bc_shell | (rho_shell == (n_rho_max - 1))
     boundary = _nodesel(jnp.asarray(_bc_shell))
 
-    r"""# add vacuum energy contribution
+    # add vacuum energy contribution
     if phi_matrix is not None:
         # change to free-boundary when phi_matrix is provided)
         phi_matrix = phi_matrix / a_N
@@ -1595,7 +1595,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
             _B = _d1[:, None] * phi_matrix * _d2[None, :]
             vacuum_asym = jnp.linalg.norm(_B - _cT(_B)) / jnp.maximum(
                 jnp.linalg.norm(_B), 1e-300
-            )"""
+            )
 
     # purely stabilizing and doesn't change the marginal stability
     A = A.at[rho_idx, rho_idx].add(
@@ -1872,7 +1872,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     keep_2 = jnp.arange(n_total, 3 * n_total)
 
     # don't apply bc if phi_matrix is provided
-    if False:  # phi_matrix is not None:
+    if phi_matrix is not None:
         # only remove ρ=0
         keep_1 = jnp.arange(n_shell, n_total)
     else:
@@ -2335,7 +2335,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
 
     g_sup_rr = _reshape(data["g^rr"]) * a_N**2
 
-    """if phi_matrix is not None:
+    if phi_matrix is not None:
         # matches `_agni3_assemble`'s sqrtg_grad_rho, used by the vacuum-energy
         # (free-boundary) term added to Ar in `Ax_full` below.
         sqrtg_grad_rho = sqrtg * jnp.sqrt(g_sup_rr)
@@ -2355,7 +2355,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         # evaluated on the converged eigenfunction (see
         # `_agni3_store_rayleigh_mode_data`). Boundary shell only, so this is two
         # (n_theta*n_zeta,) vectors plus a reference to `phi_matrix`, not a copy.
-        vac_measures = (phi_matrix, _d1, _d2)"""
+        vac_measures = (phi_matrix, _d1, _d2)
 
     # Match _agni3_assemble's route to g^rv/g^rz exactly: build them from the PEST
     # lower metric via g¹² = (g₁₃g₂₃ - g₁₂g₃₃)/(√g)², rather than reading data["g^rv"].
@@ -2463,7 +2463,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
     # the mass blocks below) MUST match `keep`. It used to cover both shells
     # unconditionally, which removed the rho-upsilon and rho-zeta couplings from the
     # outer shell even in a free-boundary solve, where that xi^rho is a live DOF.
-    if False:  # phi_matrix is not None:
+    if phi_matrix is not None:
         # free boundary: only remove rho=0 (the axis); keep the outer shell
         keep_rho = jnp.arange(n_per_shell, n_total)
         boundary_idx = jnp.arange(n_per_shell)
@@ -2639,7 +2639,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
         Ar += (psi_r2 * W * sqrtg * J2) / g_sup_rr * xr
         Aur = (W * psi_r2 * sqrtg * F) * xr
 
-        """if phi_matrix is not None:
+        if phi_matrix is not None:
             # Vacuum energy contribution (free boundary): matrix-free form of
             # the rho-rho block `_agni3_assemble` adds from `phi_matrix`
             # (b_idx x b_idx), acting only on the outermost (boundary) rho
@@ -2671,7 +2671,7 @@ def _agni3_matfree_operator(params, transforms, profiles, data, **kwargs):
                 + d_dz(_cT(D_zeta0), y)
                 + d_dv(_cT(D_theta0), iota * y_t)
                 + d_dz(_cT(D_zeta0), y_t)
-            )"""
+            )
 
         # Compressibility terms
         gp = gamma * sqrtg * W * p0

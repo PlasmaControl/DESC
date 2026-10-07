@@ -1006,10 +1006,6 @@ class FinitenStability(_Objective):
         self._coarse_grid = coarse_grid
         self._coarse_diffmat = coarse_diffmat
         self._coarse_density = coarse_density
-        # Free boundary: compute phi_matrix (the vacuum-response operator) and
-        # forward it to "finite-n lambda3 rayleigh"/"finite-n lambda3". See
-        # `_build_phi_scaffolding`/`_phi_matrix`. The scaffolding attrs (and their
-        # coarse_ counterparts) are set in `build()`.
         self._free_boundary = free_boundary
         self._phi_chunk_size = phi_chunk_size
         self._phi_chunk_size_coarse = phi_chunk_size_coarse
@@ -1504,22 +1500,8 @@ class FinitenStability(_Objective):
             )
         else:
             # Computed once per distinct source grid, not once per level.
-            # `_best_params` reads only the SOURCE grid, and `_phi_best_ratio` only the
-            # boundary surface -- neither sees the eval grid. With
-            # `phi_n_theta`/`phi_n_zeta` given, both levels request the same source
-            # grid, so the whole heuristic is level-independent. Confirmed in a real
-            # run: coarse and fine both printed st=50 sz=30 q=38.
-            #
-            # So the second level does no geometry at all, and only `get_interpolator`
-            # runs again -- it must, because the EVAL grid does differ per level
-            # (35x35 fine vs 19x7 coarse), but that part is two means and an object
-            # holding q**2 shift arrays.
-            #
-            # Keyed on `nodes0` rather than assumed: with `phi_n_theta`/`phi_n_zeta`
-            # left None the source grid IS the level's own eval grid, the two differ,
-            # and this simply misses and recomputes. `np.array_equal` on
-            # (n_surf_src, 3) is microseconds, and it is exact, so a genuinely
-            # different source grid simply misses.
+            # _best_ratio is computed on a uniform grid in DESC coordinates
+            # since it's based entirely on geometry
             _prev = None if srcmap_cache is None else srcmap_cache.get("params")
             if _prev is not None and np.array_equal(_prev[0], nodes0):
                 _st_h, _sz_h, _q_h = _prev[1]
@@ -1931,11 +1913,9 @@ class FinitenStability(_Objective):
                 # phi_matrix too. Built at the stop_gradient'd _pc, like the
                 # rest of this branch: the coarse level is a solver aid and
                 # carries no derivative.
-                coarse_opts["coarse_phi_matrix"] = None  # np.random.random(10)
-                """self._phi_matrix(
+                coarse_opts["coarse_phi_matrix"] = self._phi_matrix(
                     _pc, _grid_c, level="coarse"
-                )"""
-                _tmr.mark("phi_matrix coarse", coarse_opts["coarse_phi_matrix"])
+                )
 
         options = {
             "axisym": self._axisym,
@@ -1999,24 +1979,12 @@ class FinitenStability(_Objective):
             # which made that row read 39.9 s free vs 2.5 s fixed and look like
             # `_flux_data` was boundary-condition dependent. It is not -- the difference
             # was the phi_matrix build hiding in the same interval.
-            options["phi_matrix"] = None  # np.random.random(
-            #    10
-            # )  # self._phi_matrix(params, grid)
+            options["phi_matrix"] = self._phi_matrix(params, grid)
             _tmr.mark("phi_matrix fine", options["phi_matrix"])
         options.update(coarse_opts)
 
         _fflux = self._flux_data(params, constants, grid)
         _tmr.mark("flux_data fine", *_fflux.values())
-
-        """_fdata = eq.compute(
-            _ckeys,
-            grid=grid,
-            diffmat=self._diffmat,
-            params=params,
-            data=_fflux,
-            override_grid=False,
-        )
-        _tmr.mark("geometry fine", *_fdata.values())"""
         _fdata = _fflux
         data = eq.compute(
             "finite-n lambda3 rayleigh",
@@ -2130,9 +2098,7 @@ class FinitenStability(_Objective):
                 # "finite-n lambda3 rayleigh" assembles in `compute_data`, or
                 # the cached eigenvector no longer matches the matrix being
                 # differentiated.
-                # noqa E800 options["phi_matrix"] = self._phi_matrix(params, grid)
-                # TEMPORARY: make phi_matrix small
-                options["phi_matrix"] = None  # np.random.random(10)
+                options["phi_matrix"] = self._phi_matrix(params, grid)
             data = eq.compute(
                 "finite-n lambda3",
                 grid=grid,

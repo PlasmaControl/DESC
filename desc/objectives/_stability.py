@@ -10,6 +10,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.integrals.quad_utils import _best_params, _best_ratio
 from desc.integrals.singularities import get_interpolator
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
@@ -1420,9 +1421,24 @@ class FinitenStability(_Objective):
             # cache comment in `build`. `np.array_equal` on (n_surf_src, 3) is
             # microseconds against a 5832-node Newton solve, and it is exact, so a
             # genuinely different source grid simply misses.
-            _prev = None if srcmap_cache is None else srcmap_cache.get("surf_grid0")
+            # (st, sz, q) is cached across LEVELS, not just the coordinate map.
+            # `_best_params` reads only the SOURCE grid, and `_best_ratio` only the
+            # geometry on it -- neither sees the eval grid. With
+            # `phi_n_theta`/`phi_n_zeta` given, both levels request the same source
+            # grid, so the whole heuristic is level-independent. Confirmed in a real
+            # run: coarse and fine both printed st=50 sz=30 q=38.
+            #
+            # So the second level skips the Newton solve AND the geometry closure
+            # entirely, and only `get_interpolator` runs again -- it must, because the
+            # EVAL grid does differ per level (35x35 fine vs 19x7 coarse), but that
+            # part is two means and an object holding q**2 shift arrays.
+            #
+            # Keyed on `nodes0` rather than assumed: with `phi_n_theta`/`phi_n_zeta`
+            # left None the source grid IS the level's own eval grid, the two differ,
+            # and this simply misses and recomputes.
+            _prev = None if srcmap_cache is None else srcmap_cache.get("params")
             if _prev is not None and np.array_equal(_prev[0], nodes0):
-                surf_grid0 = _prev[1]
+                _st_h, _sz_h, _q_h = _prev[1]
             else:
                 rtz0 = np.asarray(
                     eq.map_coordinates(
@@ -1439,79 +1455,35 @@ class FinitenStability(_Objective):
                     1, 0, 2
                 )
                 surf_grid0 = Grid(surf_nodes0.reshape(n_surf_src, 3), NFP=surf_grid_NFP)
+                _d = eq.compute(
+                    ["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
+                    grid=surf_grid0,
+                    params=eq.params_dict,
+                )
+                _ratio = float(
+                    _best_ratio(
+                        {
+                            "e_theta": _d["e_theta_PEST"],
+                            "e_zeta": _d["e_phi|r,v"],
+                            "|e_theta x e_zeta|": _d["|e_theta_PEST x e_phi|r,v|"],
+                        }
+                    )
+                )
+                _st_h, _sz_h, _q_h = (
+                    int(_x) for _x in _best_params(src_pest_grid, _ratio)
+                )
                 if srcmap_cache is not None:
-                    srcmap_cache["surf_grid0"] = (nodes0, surf_grid0)
-            # Inlined from `_interpolator_pest` (desc/compute/_laplace.py:431-444)
-            # rather than going through `eq.compute(["interpolator_pest"], ...)`:
-            # fetch the three geometry keys, then call `get_interpolator` here.
-            #
-            # Same inputs, same result -- that compute function does exactly this, and
-            # the renames below are its, verbatim. What it isolates is the `eq.compute`
-            # machinery AROUND a key whose value is a Python object rather than an
-            # array: `interpolator_pest` is registered with `dim=1` and returns a
-            # `_BIESTInterpolator` into the `data` dict, and it is also handed
-            # `pest_grid`/`potential_grid`/`problem`/`chunk_size` as kwargs, which DESC
-            # routes through its transforms/dependency resolution before the function
-            # body ever runs.
-            #
-            # `get_interpolator` itself is cheap (a heuristic over two means, then an
-            # object holding two grid references and q**2 shift arrays), so if building
-            # the interpolator this way is fast while the `eq.compute` route is not,
-            # the cost is in that machinery and not in the geometry.
-            _d = eq.compute(
-                ["|e_theta_PEST x e_phi|r,v|", "e_theta_PEST", "e_phi|r,v"],
-                grid=surf_grid0,
-                params=eq.params_dict,
-            )
-            interp0 = get_interpolator(
-                phi_pest_grid,
-                src_pest_grid,
-                {
-                    "e_theta": _d["e_theta_PEST"],
-                    "e_zeta": _d["e_phi|r,v"],
-                    "|e_theta x e_zeta|": _d["|e_theta_PEST x e_phi|r,v|"],
-                },
-            )
-            print(
-                f"[phi] interpolator support level={'coarse' if pre else 'fine'}  "
-                f"st={int(interp0.st)} sz={int(interp0.sz)} q={int(interp0.q)}  "
-                "-- pass as phi_st/phi_sz/phi_q to skip this build entirely",
-                flush=True,
-            )
-            # AGNI_PHI_CLEANUP=1: drop what this branch leaves in the process, then
-            # re-measure. TESTING A HYPOTHESIS, not a settled fix.
-            #
-            # What it is for: building the interpolator through `eq.compute` at the full
-            # source resolution makes EVERY later phase 2-13x slower, on code that never
-            # touches its result (cs_basis(11) vs (12)). Supplying st/sz/q skips that
-            # build and the run drops to 384.8 s -- faster than the fixed-boundary
-            # control. So something the build leaves behind is the cost, not the build.
-            #
-            # It is not capacity: the same run peaks at 4.83 GB against a 41.3 GB limit
-            # and 13742 allocations. And the device buffers here are freed by refcount
-            # when this frame exits anyway -- `surf_grid0` outlives it only via
-            # `srcmap_cache`, which `build` drops on return. That leaves the COMPILED
-            # EXECUTABLES as the thing that persists, which is what `clear_caches`
-            # targets: this branch compiles a geometry closure at (n_surf_src, ...)
-            # shapes that nothing downstream reuses.
-            #
-            # If clearing restores the fast path, the mechanism is cache/executable
-            # growth and the fix belongs in DESC rather than in a lower-resolution
-            # workaround. If it changes nothing, the cause is elsewhere and this comes
-            # straight back out. Safe to try here either way: the scaffolding runs once
-            # at build() time, before any solve has compiled anything worth keeping.
-            if os.environ.get("AGNI_PHI_CLEANUP", "1") not in ("0", "", "false"):
-                import gc
-
-                if srcmap_cache is not None:
-                    srcmap_cache.pop("surf_grid0", None)
-                gc.collect()
-                jax.clear_caches()
+                    srcmap_cache["params"] = (nodes0, (_st_h, _sz_h, _q_h))
                 print(
-                    "[phi] AGNI_PHI_CLEANUP: dropped scaffolding intermediates and "
-                    "cleared jax caches",
+                    f"[phi] interpolator support  ratio={_ratio:.8f}  "
+                    f"phi_st={_st_h} phi_sz={_sz_h} phi_q={_q_h}  "
+                    "-- pass these to skip this build entirely "
+                    "(scripts/phi_interp_params.py prints them without a solve)",
                     flush=True,
                 )
+            interp0 = get_interpolator(
+                phi_pest_grid, src_pest_grid, {}, st=_st_h, sz=_sz_h, q=_q_h
+            )
         setattr(self, f"_{pre}phi_interpolator", interp0)
 
     def _phi_matrix(self, params, grid, level="fine"):

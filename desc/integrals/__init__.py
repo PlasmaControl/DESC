@@ -5,6 +5,7 @@ from .bounce_integral import Bounce1D, Bounce2D
 from .singularities import (
     DFTInterpolator,
     FFTInterpolator,
+    PESTInterpolator,
     compute_B_plasma,
     get_interpolator,
     singular_integral,

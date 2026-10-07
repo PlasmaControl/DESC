@@ -11,7 +11,7 @@ from desc.compute.data_index import data_index
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.integrals.quad_utils import _best_params, _best_ratio
-from desc.integrals.singularities import get_interpolator
+from desc.integrals.singularities import PESTInterpolator, get_interpolator
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
@@ -876,6 +876,7 @@ class FinitenStability(_Objective):
         "_coarse_phi_chunk",
         "_phi_pest_grid",
         "_phi_interpolator",
+        "_phi_support",
         # Equilibrium's own Phi_basis, capped to what phi_pest_grid can
         # resolve (min(eq.Phi_basis.M, phi_pest_grid.M), same for N) and
         # passed to "phi_matrix_pest" as an explicit `Phi_basis=` override.
@@ -896,6 +897,7 @@ class FinitenStability(_Objective):
         # the scaffolding above.
         "_phi_n_theta",
         "_phi_n_zeta",
+        "_phi_source_coords",
         "_phi_st",
         "_phi_sz",
         "_phi_q",
@@ -909,6 +911,7 @@ class FinitenStability(_Objective):
         "_coarse_phi_src_nodes",
         "_coarse_phi_pest_grid",
         "_coarse_phi_interpolator",
+        "_coarse_phi_support",
         "_coarse_phi_basis",
     ]
 
@@ -964,6 +967,7 @@ class FinitenStability(_Objective):
         phi_chunk_size=None,
         phi_chunk_size_coarse=None,
         phi_n_theta=None,
+        phi_source_coords="pest",
         phi_n_zeta=None,
         phi_st=None,
         phi_sz=None,
@@ -1008,6 +1012,13 @@ class FinitenStability(_Objective):
         self._free_boundary = free_boundary
         self._phi_chunk_size = phi_chunk_size
         self._phi_chunk_size_coarse = phi_chunk_size_coarse
+        self._phi_source_coords = str(phi_source_coords).lower()
+        errorif(
+            self._phi_source_coords not in ("pest", "desc"),
+            ValueError,
+            "phi_source_coords must be 'pest' or 'desc', got "
+            f"{phi_source_coords!r}.",
+        )
         self._phi_n_theta = phi_n_theta
         self._phi_n_zeta = phi_n_zeta
         self._phi_st = phi_st
@@ -1467,6 +1478,29 @@ class FinitenStability(_Objective):
             src_pest_grid = phi_pest_grid
             setattr(self, f"_{pre}phi_src_pest_grid", None)
 
+        # `phi_source_coords="desc"`: the SOURCE grid is a uniform lattice in DESC
+        # angles rather than PEST ones, so there is no `map_coordinates` at all -- its
+        # nodes already sit where the geometry is evaluated. Legitimate because the
+        # singular integral only needs source and eval to share ONE angle coordinate,
+        # and both are then read in DESC; see `PESTInterpolator`.
+        #
+        # The eval grid stays the uniform-PEST AGNI lattice, mapped to DESC. It cannot
+        # move: `phi_matrix`'s rows and columns ARE the boundary xi^rho degrees of
+        # freedom. That makes it NON-separable in DESC theta, which is exactly what
+        # `PESTInterpolator` exists for -- and it means the eval grid's coordinates
+        # depend on `params`, so the interpolator can no longer be frozen here. It is
+        # rebuilt per call in `_phi_matrix` instead, which costs ~0.5 ms.
+        desc_src = self._phi_source_coords == "desc"
+        if desc_src:
+            src_pest_grid = LinearGrid(
+                rho=1.0,
+                theta=n_theta_src,
+                zeta=n_zeta_src,
+                NFP=surf_grid_NFP,
+                sym=False,
+            )
+            setattr(self, f"_{pre}phi_src_pest_grid", src_pest_grid)
+
         nodes0 = np.reshape(
             np.asarray(src_pest_grid.meshgrid_reshape(src_pest_grid.nodes, "rtz")),
             (n_surf_src, 3),
@@ -1497,8 +1531,13 @@ class FinitenStability(_Objective):
         # compute params if not supplied
         _st, _sz, _q = self._phi_st, self._phi_sz, self._phi_q
         if _st is not None and _sz is not None and _q is not None:
-            interp0 = get_interpolator(
-                phi_pest_grid, src_pest_grid, {}, st=int(_st), sz=int(_sz), q=int(_q)
+            _st_h, _sz_h, _q_h = int(_st), int(_sz), int(_q)
+            interp0 = (
+                None
+                if desc_src
+                else get_interpolator(
+                    phi_pest_grid, src_pest_grid, {}, st=_st_h, sz=_sz_h, q=_q_h
+                )
             )
         else:
             # Computed once per distinct source grid, not once per level.
@@ -1522,10 +1561,123 @@ class FinitenStability(_Objective):
                     "-- pass these to skip this step entirely",
                     flush=True,
                 )
-            interp0 = get_interpolator(
-                phi_pest_grid, src_pest_grid, {}, st=_st_h, sz=_sz_h, q=_q_h
+            interp0 = (
+                None
+                if desc_src
+                else get_interpolator(
+                    phi_pest_grid, src_pest_grid, {}, st=_st_h, sz=_sz_h, q=_q_h
+                )
             )
+        # (st, sz, q) is kept either way. On the `desc` path the interpolator itself
+        # cannot be built here -- it needs the eval grid's DESC angles, which depend on
+        # `params` -- so `_phi_matrix` constructs a `PESTInterpolator` from these per
+        # call. `None` makes a stale frozen object impossible to use by accident.
+        setattr(self, f"_{pre}phi_support", (_st_h, _sz_h, _q_h))
         setattr(self, f"_{pre}phi_interpolator", interp0)
+
+    def _phi_matrix_desc_source(self, params, grid, pre, n_theta, n_zeta, n_surf):
+        """``phi_matrix`` with the SOURCE quadrature uniform in DESC angles.
+
+        No ``map_coordinates`` anywhere: the source grid already sits in the angles the
+        geometry is evaluated in, and the eval grid's DESC angles come free from
+        ``grid``, which the caller has already mapped. That removes the
+        ``n_theta_src * n_zeta_src``-node Newton solve the PEST path pays on every call.
+
+        The eval grid is still the uniform-PEST AGNI lattice -- it has to be, its nodes
+        index the boundary xi^rho degrees of freedom -- so in DESC angles it is
+        separable
+        in zeta (DESC zeta IS PEST phi) but NOT in theta. Hence
+        ``PESTInterpolator``,
+        built here rather than frozen in ``_build_phi_scaffolding`` because the eval
+        angles depend on ``params``. ``jitable=True`` because they are traced.
+        """
+        # Local import: `desc.magnetic_fields` imports objectives, so a module-scope
+        # import here would be circular.
+        from desc.magnetic_fields import SourceFreeField
+
+        eq = self.things[0]
+        src_grid = getattr(self, f"_{pre}phi_src_pest_grid")
+        basis = getattr(self, f"_{pre}phi_basis")
+        st, sz, q = getattr(self, f"_{pre}phi_support")
+
+        # EVAL grid: the rho=1 shell of the already-mapped AGNI grid, reordered to BIEST
+        # (zeta outer, theta fastest) to match the source.
+        bnd_nodes = grid.nodes[-n_surf:]  # AGNI order
+        eval_nodes = jnp.transpose(
+            bnd_nodes.reshape(n_theta, n_zeta, 3), (1, 0, 2)
+        ).reshape(n_surf, 3)
+        # Honest index arrays: every theta is its OWN unique value, because theta_DESC
+        # varies with zeta at fixed theta_PEST. Claiming `n_theta` unique thetas would
+        # interpolate at the wrong poloidal position on every zeta plane but one, and
+        # nothing downstream validates the claim. `is_meshgrid` is deliberately NOT set:
+        # `DoubleFourierSeries.evaluate` returns the separable outer product when it is,
+        # which is the node set only for a genuinely separable grid.
+        eval_grid = Grid(
+            nodes=eval_nodes,
+            jitable=True,
+            NFP=src_grid.NFP,
+            _unique_rho_idx=jnp.array([0]),
+            _unique_poloidal_idx=jnp.arange(n_surf),
+            _unique_zeta_idx=jnp.arange(n_zeta) * n_theta,
+            _inverse_rho_idx=jnp.zeros(n_surf, dtype=int),
+            _inverse_poloidal_idx=jnp.arange(n_surf),
+            _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta), n_theta),
+        )
+        interp = PESTInterpolator(eval_grid, src_grid, st, sz, q, jitable=True)
+
+        # `phi_matrix` (not `phi_matrix_pest`) is parameterized for
+        # FourierRZToroidalSurface, and the Phi transform needs a `Phi_basis` attribute,
+        # which only the SourceFreeField wrapper supplies.
+        surf = (
+            eq.surface
+            if hasattr(eq.surface, "Phi_basis")
+            else SourceFreeField(
+                eq.surface, M=basis.M, N=basis.N, NFP=basis.NFP, sym=basis.sym
+            )
+        )
+        # Prefilled, not interpolated: `_interp_to_potential_grid` rfft-resamples
+        # onto a uniform num_theta x num_zeta lattice, which cannot land on a
+        # non-separable eval grid. Reading the geometry at the eval nodes directly is
+        # both correct and more accurate.
+        # `phi_matrix` is a SURFACE quantity, so it takes the surface's own
+        # (R_lmn, Z_lmn) -- which are the equilibrium's boundary coefficients
+        # (`Rb_lmn`/`Zb_lmn`, verified identical to `eq.surface.R_lmn`/`Z_lmn`). Taken
+        # from `params` rather than `surf.params_dict` so the vacuum response stays
+        # differentiable in the boundary DOFs.
+        #
+        # CAVEAT, and a real difference from the PEST path: that path reads the boundary
+        # geometry off the equilibrium's INTERIOR solution evaluated at rho=1 (the full
+        # `R_lmn`), while this one reads the boundary surface coefficients. The two
+        # describe the same surface for a converged equilibrium but are different DOFs,
+        # so the gradient flows through different parameters.
+        surf_params = {"R_lmn": params["Rb_lmn"], "Z_lmn": params["Zb_lmn"]}
+        pd = surf.compute(["R", "Z", "phi"], grid=eval_grid, params=surf_params)
+        data_phi = surf.compute(
+            ["phi_matrix"],
+            grid=src_grid,
+            potential_grid=eval_grid,
+            problem="exterior Neumann",
+            chunk_size=getattr(self, f"_{pre}phi_chunk"),
+            Phi_basis=basis,
+            data={
+                "interpolator": interp,
+                "potential data": {
+                    "R": pd["R"],
+                    "Z": pd["Z"],
+                    "phi": pd["phi"],
+                    "theta": eval_grid.nodes[:, 1],
+                    "zeta": eval_grid.nodes[:, 2],
+                },
+            },
+            params=surf_params,
+        )
+        phi_matrix = data_phi["phi_matrix"]
+        if self._phi_scale is not None:
+            phi_matrix = self._phi_scale * phi_matrix
+        # BIEST -> AGNI on both axes, as the PEST path does.
+        return jnp.transpose(
+            phi_matrix.reshape(n_zeta, n_theta, n_zeta, n_theta), (1, 0, 3, 2)
+        ).reshape(n_surf, n_surf)
 
     def _phi_matrix(self, params, grid, level="fine"):
         """Free-boundary vacuum-response operator, differentiable in params.
@@ -1574,6 +1726,11 @@ class FinitenStability(_Objective):
 
         phi_pest_grid = getattr(self, f"_{pre}phi_pest_grid")
         upscaled = bool(getattr(self, f"_{pre}phi_upscaled", False))
+
+        if self._phi_source_coords == "desc":
+            return self._phi_matrix_desc_source(
+                params, grid, pre, n_theta, n_zeta, n_surf
+            )
 
         if upscaled:
             # The quadrature grid is finer than the stability boundary, so its

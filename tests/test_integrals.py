@@ -1,8 +1,10 @@
 """Test integration algorithms."""
 
+import warnings
 from functools import partial
 from itertools import product
 
+import jax
 import numpy as np
 import pytest
 from jax import grad
@@ -17,7 +19,7 @@ from tests.test_plotting import tol_1d
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.equilibrium.coords import get_rtz_grid
+from desc.equilibrium.coords import get_rtz_grid, map_coordinates
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.integrals import (
@@ -25,6 +27,8 @@ from desc.integrals import (
     Bounce2D,
     DFTInterpolator,
     FFTInterpolator,
+    PESTInterpolator,
+    get_interpolator,
     line_integrals,
     singular_integral,
     surface_averages,
@@ -583,7 +587,7 @@ class TestSingularities:
     @pytest.mark.parametrize(
         "interpolator, settings",
         product(
-            [FFTInterpolator, DFTInterpolator],
+            [FFTInterpolator, DFTInterpolator, PESTInterpolator],
             [
                 (_c_2d, *_c_2d_nyquist_freq(), 1),
                 (lambda x, y: np.cos(6 * x) ** 2 + np.sin(90 * y) + 1, 12, 3, 30),
@@ -613,6 +617,157 @@ class TestSingularities:
         _f = f(s_grid.nodes[:, 1], s_grid.nodes[:, 2])
         for i in range(dt.size):
             np.testing.assert_allclose(interp(_f, i), f(theta + dt[i], zeta + dz[i]))
+
+    @staticmethod
+    def _pest_eval_grid(eq, nt, nz):
+        """A uniform PEST lattice mapped into DESC coordinates, in BIEST node order.
+
+        Separable in zeta -- DESC zeta IS PEST phi -- but NOT in theta, since
+        ``theta_DESC`` at fixed ``theta_PEST`` varies with zeta. The unique/inverse
+        index arrays are supplied honestly: every theta is its own unique value, and
+        ``is_meshgrid`` is left unset so ``DoubleFourierSeries.evaluate`` pairs per node
+        rather than returning a separable outer product.
+        """
+        n = nt * nz
+        nfp = int(eq.NFP)
+        pest = LinearGrid(rho=1.0, theta=nt, zeta=nz, NFP=nfp, sym=False)
+        nodes = np.reshape(np.asarray(pest.meshgrid_reshape(pest.nodes, "rtz")), (n, 3))
+        rtz = np.asarray(
+            map_coordinates(
+                eq,
+                nodes,
+                inbasis=("rho", "theta_PEST", "zeta"),
+                outbasis=("rho", "theta", "zeta"),
+                period=(np.inf, 2 * np.pi, np.inf),
+                tol=1e-12,
+                maxiter=50,
+            )
+        )
+        eval_nodes = rtz.reshape(nt, nz, 3).transpose(1, 0, 2).reshape(n, 3)
+        return Grid(
+            nodes=jnp.asarray(eval_nodes),
+            jitable=True,
+            NFP=nfp,
+            _unique_rho_idx=jnp.array([0]),
+            _unique_poloidal_idx=jnp.arange(n),
+            _unique_zeta_idx=jnp.arange(nz) * nt,
+            _inverse_rho_idx=jnp.zeros(n, dtype=int),
+            _inverse_poloidal_idx=jnp.arange(n),
+            _inverse_zeta_idx=jnp.repeat(jnp.arange(nz), nt),
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("src", [(24, 16), (36, 24)])
+    def test_pest_interpolator_equals_dft(self, src):
+        """``PESTInterpolator`` must equal ``DFTInterpolator`` element-wise.
+
+        On an eval grid that is separable in zeta but not theta, both classes are valid
+        and must agree exactly -- ``PESTInterpolator`` only factors the Vandermonde that
+        ``DFTInterpolator`` materializes. Every polar node is checked, not just the
+        first: the failure mode this guards against (wrong unique/inverse index
+        bookkeeping) is uniform across nodes and would pass a single-node check.
+        """
+        eq = get("ARIES-CS")
+        nt, nz = 12, 8
+        eval_grid = self._pest_eval_grid(eq, nt, nz)
+        source_grid = LinearGrid(
+            rho=1.0, theta=src[0], zeta=src[1], NFP=int(eq.NFP), sym=False
+        )
+        data = eq.compute(["|e_theta x e_zeta|", "R", "Z"], grid=source_grid)
+        for st, sz, q in [(12, 7, 9), (20, 10, 13)]:
+            dft = DFTInterpolator(eval_grid, source_grid, st, sz, q)
+            pest = PESTInterpolator(eval_grid, source_grid, st, sz, q)
+            for key in ("|e_theta x e_zeta|", "R", "Z"):
+                f = data[key]
+                f_dft, f_pest = dft.fourier(f), pest.fourier(f)
+                for i in range(dft.shift_t.size):
+                    np.testing.assert_allclose(
+                        np.asarray(pest(f_pest, i, is_fourier=True)).ravel(),
+                        np.asarray(dft(f_dft, i, is_fourier=True)).ravel(),
+                        rtol=1e-12,
+                        atol=1e-12 * np.abs(np.asarray(f)).max(),
+                        err_msg=f"key={key} (st,sz,q)=({st},{sz},{q}) polar node {i}",
+                    )
+
+    @pytest.mark.unit
+    def test_biest_interpolators_jitable(self):
+        """``jitable=True`` allows traced grids; the default must still reject them.
+
+        An eval grid built from ``map_coordinates(params=...)`` holds traced nodes, and
+        the base class's surface-match check compares node values as a Python bool. The
+        flag exists to skip that; the default contract must not move.
+        """
+        eq = get("ARIES-CS")
+        nt, nz = 12, 8
+        n = nt * nz
+        nfp = int(eq.NFP)
+        eval_grid = self._pest_eval_grid(eq, nt, nz)
+        source_grid = LinearGrid(rho=1.0, theta=24, zeta=16, NFP=nfp, sym=False)
+        idx = {
+            "_unique_rho_idx": jnp.array([0]),
+            "_unique_poloidal_idx": jnp.arange(n),
+            "_unique_zeta_idx": jnp.arange(nz) * nt,
+            "_inverse_rho_idx": jnp.zeros(n, dtype=int),
+            "_inverse_poloidal_idx": jnp.arange(n),
+            "_inverse_zeta_idx": jnp.repeat(jnp.arange(nz), nt),
+        }
+
+        def build(nodes, cls, **kwargs):
+            grid = Grid(nodes=nodes, jitable=True, NFP=nfp, **idx)
+            return cls(grid, source_grid, 12, 7, 9, **kwargs).ht
+
+        nodes = eval_grid.nodes
+        for cls in (FFTInterpolator, DFTInterpolator, PESTInterpolator):
+            # jitable=True constructs under trace
+            ht = jax.jit(lambda x, c=cls: build(x, c, jitable=True))(nodes)
+            np.testing.assert_allclose(ht, 2 * np.pi / source_grid.num_theta)
+            # the default still refuses a traced grid
+            with pytest.raises(Exception):
+                jax.jit(lambda x, c=cls: build(x, c))(nodes)
+
+        # and still refuses grids on genuinely different surfaces when concrete
+        other = LinearGrid(rho=0.5, theta=24, zeta=16, NFP=nfp, sym=False)
+        with pytest.raises(AssertionError):
+            DFTInterpolator(other, source_grid, 12, 7, 9)
+        # ... but not when the caller takes responsibility
+        DFTInterpolator(other, source_grid, 12, 7, 9, jitable=True)
+
+    @pytest.mark.unit
+    def test_get_interpolator_selection(self):
+        """Auto-selection: FFT for separable grids, PEST for zeta-separable ones."""
+        eq = get("ARIES-CS")
+        nfp = int(eq.NFP)
+        source_grid = LinearGrid(rho=1.0, theta=24, zeta=16, NFP=nfp, sym=False)
+        data = eq.compute(["|e_theta x e_zeta|", "e_theta", "e_zeta"], grid=source_grid)
+        separable = LinearGrid(rho=1.0, theta=12, zeta=8, NFP=nfp, sym=False)
+        # `warn_fft=False` throughout: the eval grid is deliberately coarser than the
+        # source, so the (expected) truncation warning is not what is under test here.
+        assert isinstance(
+            get_interpolator(
+                separable, source_grid, data, st=12, sz=7, q=9, warn_fft=False
+            ),
+            FFTInterpolator,
+        )
+        # not can_fft2 (non-separable), but separable in zeta -> PEST, not DFT.
+        # Warnings suppressed rather than asserted: the fallback emits both its own
+        # "switching" notice and the #1599 dense-transform warning, and which text
+        # appears is not what this test pins down.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            interp = get_interpolator(
+                self._pest_eval_grid(eq, 12, 8),
+                source_grid,
+                data,
+                st=12,
+                sz=7,
+                q=9,
+            )
+        assert isinstance(interp, PESTInterpolator)
+        # auto-selection works by catching the asserts that jitable=True removes
+        with pytest.raises(ValueError, match="cannot auto-select"):
+            get_interpolator(
+                separable, source_grid, data, st=12, sz=7, q=9, jitable=True
+            )
 
     @pytest.mark.unit
     def test_singular_integral_greens_id(self):
@@ -678,7 +833,9 @@ class TestSingularities:
         np.testing.assert_array_less(np.abs(2 * np.pi + err), es)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("interpolator", [FFTInterpolator, DFTInterpolator])
+    @pytest.mark.parametrize(
+        "interpolator", [FFTInterpolator, DFTInterpolator, PESTInterpolator]
+    )
     def test_singular_integral_vac_estell(self, interpolator, vanilla=False):
         """Test calculating Bplasma for vacuum estell, which should be near 0."""
         eq = get("ESTELL")

@@ -1255,15 +1255,14 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     description="Full Cartesian control net with wrapping for stellarator symmetry",
     dim=1,
     params=[
-        "cs_end_r",
-        "cs_end_theta",
-        "cs_end_w",
+        "cs_start_r",
+        "cs_start_theta",
         "cs_interior_r",
         "cs_interior_theta",
-        "cs_interior_w",
         "cs_interior_phi",
+        "cs_interior_gangle",
     ],
-    transforms={"sym": [], "NFP": [], "n_points_per_cs": []},
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
     profiles=[],
     coordinates="",
     data=[
@@ -1274,74 +1273,138 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
     ],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
-def _full_control_net(params, transforms, profiles, data, **kwargs):
+def _full_control_net_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
     sym = transforms["sym"]
     nfp = transforms["NFP"]
     n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
 
-    n_half = n_points_per_cs // 2 + 1
+    # n_half = n_points_per_cs // 2 + 1
 
     # dofs
-    cs_end_r = params["cs_end_r"].reshape(2, n_half)
-    cs_end_theta = params["cs_end_theta"].reshape(2, n_half - 1)
-    cs_end_w = params["cs_end_w"].reshape(2, n_half)
-    cs_interior_r = params["cs_interior_r"].reshape(2, n_points_per_cs)
-    cs_interior_theta = params["cs_interior_theta"].reshape(2, n_points_per_cs)
-    cs_interior_w = params["cs_interior_w"].reshape(2, n_points_per_cs)
-    cs_interior_phi = params["cs_interior_phi"]
+    cs_start_r = params["cs_start_r"]
+    cs_start_theta = params["cs_start_theta"]
+    cs_interior_r = params["cs_interior_r"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_theta = params["cs_interior_theta"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_gangle = params["cs_interior_gangle"]
 
     if not sym:
         raise NotImplementedError
     else:
         # preprending theta=0 to end cross sections
-        cs_end_theta = jnp.append(jnp.zeros(2, 1), cs_end_theta, axis=1)
+        cs_start_theta = jnp.append(jnp.zeros(1, 1), cs_start_theta, axis=1)
 
-        # tiling end theta, r, w around
+        # tiling end theta, r around
         if n_points_per_cs % 2 == 1:
-            cs_end_theta = jnp.concatenate(
-                (cs_end_theta, 2 * jnp.pi - cs_end_theta[:0:-1])
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[:0:-1])
             )
-            cs_end_r = jnp.concatenate((cs_end_r, cs_end_r[:0:-1]))
-            cs_end_w = jnp.concatenate((cs_end_w, cs_end_w[:0:-1]))
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[:0:-1]))
         else:
-            cs_end_theta = jnp.concatenate(
-                (cs_end_theta, 2 * jnp.pi - cs_end_theta[-2:0:-1])
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[-2:0:-1])
             )
-            cs_end_r = jnp.concatenate((cs_end_r, cs_end_r[-2:0:-1]))
-            cs_end_w = jnp.concatenate((cs_end_w, cs_end_w[-2:0:-1]))
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[-2:0:-1]))
 
         # assert that all of these have the same length as the non-end cross sections
 
-        assert cs_end_r.shape[1] == cs_interior_r.shape[1]
-        assert cs_end_theta.shape[1] == cs_interior_theta.shape[1]
-        assert cs_end_w.shape[1] == cs_interior_w.shape[1]
+        assert cs_start_r.shape[1] == cs_interior_r.shape[1]
+        assert cs_start_theta.shape[1] == cs_interior_theta.shape[1]
 
-    cs_phi = jnp.append([0], cs_interior_phi)
-
-    # tiling all to 1fp
-    r_ctrl_half_fp = jnp.concatenate(
-        [cs_end_r[0, :], cs_interior_r, cs_end_r[1, :]], axis=0
-    )
+    cs_gangle = jnp.append([0], cs_interior_gangle)
+    # forming half fp
+    r_ctrl_half_fp = jnp.concatenate([cs_start_r[0, :], cs_interior_r], axis=0)
     theta_ctrl_half_fp = jnp.concatenate(
-        [cs_end_theta[0, :], cs_interior_theta, cs_end_theta[1, :]], axis=0
-    )
-    w_ctrl_half_fp = jnp.concatenate(
-        [cs_end_w[0, :], cs_interior_w, cs_end_w[1, :]], axis=0
+        [cs_start_theta[0, :], cs_interior_theta], axis=0
     )
 
-    r_ctrl_1fp = jnp.append(r_ctrl_half_fp, r_ctrl_half_fp[:0:-1])
-    theta_ctrl_1fp = jnp.append(theta_ctrl_half_fp, theta_ctrl_half_fp[:0:-1])
-    w_ctrl_1fp = jnp.append(w_ctrl_half_fp, w_ctrl_half_fp[:0:-1])
-    cs_phi_1fp = jnp.append(cs_phi, cs_phi[:0:-1])
+    # tiling to 1fp by flipping order of dofs
+    r_ctrl_1fp = jnp.append(
+        r_ctrl_half_fp,
+        jnp.insert(r_ctrl_half_fp[:0:-1], 0, r_ctrl_half_fp[0])[:0:-1],
+        axis=0,
+    )
+    theta_ctrl_1fp = jnp.append(
+        theta_ctrl_half_fp,
+        2 * jnp.pi
+        - jnp.insert(theta_ctrl_half_fp[:0:-1], 0, theta_ctrl_half_fp[0])[:0:-1],
+        axis=0,
+    )
+    cs_gangle_1fp = [
+        cs_gangle if (i // n_cs) == 0 else -angle
+        for i, angle in enumerate(jnp.append(cs_gangle, cs_gangle[:0:-1]))
+    ]
 
     # tiling to full device - necessary for proper spline definition
     r_ctrl_full = jnp.tile(r_ctrl_1fp, nfp)
     theta_ctrl_full = jnp.tile(theta_ctrl_1fp, nfp)
-    w_ctrl_full = jnp.tile(w_ctrl_1fp, nfp)
-    cs_phi_full = jnp.tile(cs_phi_1fp, nfp)
+
+    cs_gangle_full = jnp.tile(cs_gangle_1fp, nfp)
 
     # converting to cartesian finally
+    # e1, e2, axis_x are each (n_cs, 3): bishop normal/binormal and axis point
+    # per cross section, matching DESC's (num_points, 3) vector convention.
+    e1, e2 = data["axis_closed_bishop_N"], data["axis_closed_bishop_T"]
+    axis_x = data["axis_x"]
 
+    # r/theta/gangle_ctrl_full are (n_cs, n_points_per_cs); insert a trailing
+    # size-3 axis for cartesian components and a middle size-n_points_per_cs
+    # axis on the per-cross-section frame/axis data, then let them broadcast.
+    angle = theta_ctrl_full + cs_gangle_full
+    local_x = r_ctrl_full[..., None] * (
+        jnp.cos(angle)[..., None] * e1[:, None, :]
+        + jnp.sin(angle)[..., None] * e2[:, None, :]
+    )
+    control_net = axis_x[:, None, :] + local_x  # (n_cs, n_points_per_cs, 3)
+
+    data["full control net"] = control_net
+    return data
+
+
+@register_compute_fun(
+    name="full_weights",
+    label="w_{ij}",
+    units="~",
+    units_long="None",
+    description="Full NURBS weight grid, tiled to the full device",
+    dim=1,
+    params=["cs_start_w", "cs_interior_w"],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _full_weights_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
+
+    cs_start_w = params["cs_start_w"]
+    cs_interior_w = params["cs_interior_w"].reshape(n_cs - 1, n_points_per_cs)
+
+    if not sym:
+        raise NotImplementedError
+
+    # tiling end weights around, same wrap used for cs_start_r/cs_start_theta
+    if n_points_per_cs % 2 == 1:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[:0:-1]))
+    else:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[-2:0:-1]))
+
+    # forming half field period, then flipping to tile to a full field period
+    w_ctrl_half_fp = jnp.concatenate([cs_start_w[0, :], cs_interior_w], axis=0)
+    w_ctrl_1fp = jnp.append(
+        w_ctrl_half_fp,
+        jnp.insert(w_ctrl_half_fp[:0:-1], 0, w_ctrl_half_fp[0])[:0:-1],
+        axis=0,
+    )
+    # tiling to the full device
+    data["full_weights"] = jnp.tile(w_ctrl_1fp, nfp)
     return data
 
 

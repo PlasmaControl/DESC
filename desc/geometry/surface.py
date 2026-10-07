@@ -1210,9 +1210,9 @@ class NurbsRZToroidalSurface(Surface):
     """
 
     _io_attrs_ = Surface._io_attrs_ + [
-        "_cs_end_r",
-        "_cs_end_theta",
-        "_cs_end_w",
+        "_cs_start_r",
+        "_cs_start_theta",
+        "_cs_start_w",
         "_cs_interior_r",
         "_cs_interior_theta",
         "_cs_interior_w",
@@ -1230,13 +1230,14 @@ class NurbsRZToroidalSurface(Surface):
         interior_axis,
         n_cs,
         n_points_per_cs,
-        cs_end_r,
-        cs_end_theta,
-        cs_end_w,
+        cs_start_r,
+        cs_start_theta,
+        cs_start_w,
         cs_interior_r,
         cs_interior_theta,
         cs_interior_w,
         cs_interior_phi,
+        cs_interior_gangle,
         local_basis="cylindrical",
         NFP=2,
         M=None,
@@ -1277,17 +1278,18 @@ class NurbsRZToroidalSurface(Surface):
         self._NFP = check_posint(NFP, "NFP", False)
 
         if sym:
-            # first control point of each end cross section sits at theta=0, a
+            # first control point of each cross section sits at theta=0, a
             # fixed point of the stellarator-symmetric reflection, so it isn't a
-            # free DOF: cs_end_theta stores only the remaining n_half - 1 angles
+            # free DOF: cs_start_theta stores only the remaining n_half - 1 angles
             for name, arr in (
-                ("cs_end_r", cs_end_r),
-                ("cs_end_theta", cs_end_theta),
-                ("cs_end_w", cs_end_w),
+                ("cs_start_r", cs_start_r),
+                ("cs_start_theta", cs_start_theta),
+                ("cs_start_w", cs_start_w),
                 ("cs_interior_r", cs_interior_r),
                 ("cs_interior_theta", cs_interior_theta),
                 ("cs_interior_w", cs_interior_w),
                 ("cs_interior_phi", cs_interior_phi),
+                ("cs_interior_gangle", cs_interior_gangle),
             ):
                 setattr(self, name, arr)
         else:
@@ -1306,8 +1308,14 @@ class NurbsRZToroidalSurface(Surface):
         params = params or self.params_dict
         axis_params = params.get("axis", self.interior_axis.params_dict)
 
-        cs_phis_full = jnp.concatenate([0], self.cs_interior_phi, [jnp.pi / self.NFP])
-        axis_grid = LinearGrid(zeta=cs_phis_full, nfp=self.NFP, sym=self.sym)
+        cs_phi = jnp.append([0], self.cs_interior_phi)
+        cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / self.NFP) - cs_phi[:0:-1])
+
+        cs_phi_full = np.concatenate(
+            [cs_phi_1fp + n * (2 * np.pi / self.nfp) for n in range(self.nfp)]
+        )
+
+        axis_grid = LinearGrid(zeta=cs_phi_full, nfp=self.NFP, sym=self.sym)
 
         axis_data = self.interior_axis.compute(
             [
@@ -1328,64 +1336,64 @@ class NurbsRZToroidalSurface(Surface):
 
     @optimizable_parameter
     @property
-    def cs_end_r(self):
-        """ndarray: radial control points of the two symmetric end cross sections.
+    def cs_start_r(self):
+        """ndarray: radial control points of the two symmetric start cross section.
 
         Flattened from shape (2, n_points_per_cs//2 + 1).
         """
-        return self._cs_end_r
+        return self._cs_start_r
 
-    @cs_end_r.setter
-    def cs_end_r(self, new):
+    @cs_start_r.setter
+    def cs_start_r(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
         errorif(
-            new.size != 2 * n_half,
+            new.size != n_half,
             ValueError,
-            f"cs_end_r must have shape {(2, n_half)}, got {new.shape}",
+            f"cs_start_r must have shape {(2, n_half)}, got {new.shape}",
         )
-        self._cs_end_r = new.reshape(-1)
+        self._cs_start_r = new.reshape(-1)
 
     @optimizable_parameter
     @property
-    def cs_end_theta(self):
-        """ndarray: angular control points of the end cross sections.
+    def cs_start_theta(self):
+        """ndarray: angular control points of the start cross sections.
 
         Flattened from shape (2, n_points_per_cs//2), excluding the fixed theta=0
         point.
         """
-        return self._cs_end_theta
+        return self._cs_start_theta
 
-    @cs_end_theta.setter
-    def cs_end_theta(self, new):
+    @cs_start_theta.setter
+    def cs_start_theta(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
         errorif(
-            new.size != 2 * (n_half - 1),
+            new.size != n_half - 1,
             ValueError,
-            f"cs_end_theta must have shape {(2, n_half - 1)}, got {new.shape}",
+            f"cs_start_theta must have shape {(2, n_half - 1)}, got {new.shape}",
         )
-        self._cs_end_theta = new.reshape(-1)
+        self._cs_start_theta = new.reshape(-1)
 
     @optimizable_parameter
     @property
-    def cs_end_w(self):
-        """ndarray: NURBS weights of the two symmetric end cross sections.
+    def cs_start_w(self):
+        """ndarray: NURBS weights of the two symmetric start cross sections.
 
         Flattened from shape (2, n_points_per_cs//2 + 1).
         """
-        return self._cs_end_w
+        return self._cs_start_w
 
-    @cs_end_w.setter
-    def cs_end_w(self, new):
+    @cs_start_w.setter
+    def cs_start_w(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
         errorif(
-            new.size != 2 * n_half,
+            new.size != n_half,
             ValueError,
-            f"cs_end_w must have shape {(2, n_half)}, got {new.shape}",
+            f"cs_start_w must have shape {(2, n_half)}, got {new.shape}",
         )
-        self._cs_end_w = new.reshape(-1)
+        self._cs_start_w = new.reshape(-1)
 
     @optimizable_parameter
     @property
@@ -1398,7 +1406,7 @@ class NurbsRZToroidalSurface(Surface):
 
     @cs_interior_r.setter
     def cs_interior_r(self, new):
-        shape = (self._n_cs - 2, self._n_points_per_cs)
+        shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
         errorif(
             new.size != shape[0] * shape[1],
@@ -1418,7 +1426,7 @@ class NurbsRZToroidalSurface(Surface):
 
     @cs_interior_theta.setter
     def cs_interior_theta(self, new):
-        shape = (self._n_cs - 2, self._n_points_per_cs)
+        shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
         errorif(
             new.size != shape[0] * shape[1],
@@ -1438,7 +1446,7 @@ class NurbsRZToroidalSurface(Surface):
 
     @cs_interior_w.setter
     def cs_interior_w(self, new):
-        shape = (self._n_cs - 2, self._n_points_per_cs)
+        shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
         errorif(
             new.size != shape[0] * shape[1],
@@ -1455,7 +1463,7 @@ class NurbsRZToroidalSurface(Surface):
 
     @cs_interior_phi.setter
     def cs_interior_phi(self, new):
-        shape = self._n_cs - 2
+        shape = self._n_cs - 1
         new = jnp.asarray(new)
         errorif(
             new.size != shape,
@@ -1465,9 +1473,33 @@ class NurbsRZToroidalSurface(Surface):
         errorif(
             jnp.any(jnp.logical_or(new <= 0, new >= jnp.pi / self._NFP)),
             ValueError,
-            f"all cs_interior_phi must lie within (0,π/NFP), got {new.shape}",
+            f"all cs_interior_phi must lie within (0,π/NFP), got {new}",
         )
         self._cs_interior_phi = new
+
+    @optimizable_parameter
+    @property
+    def cs_interior_gangle(self):
+        """ndarray: (1, n_cs - 1) array of zeta values for the interior cross sections."""
+        return self._cs_interior_gangle
+
+    @cs_interior_gangle.setter
+    def cs_interior_gangle(self, new):
+        shape = self._n_cs - 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape,
+            ValueError,
+            f"cs_interior_gangle must have shape {shape}, got {new.shape}",
+        )
+        errorif(
+            jnp.any(
+                jnp.logical_or(new <= 0, new >= 2 * jnp.pi / self._n_points_per_cs)
+            ),
+            ValueError,
+            f"all cs_interior_gangle must lie within (0,2π/n_points_per_cs), got {new}",
+        )
+        self._cs_interior_gangle = new
 
     @property
     def interior_axis(self):

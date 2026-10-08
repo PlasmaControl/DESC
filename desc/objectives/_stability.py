@@ -2043,12 +2043,12 @@ class FinitenStability(_Objective):
         eq = self.things[0]
 
         # for debugging
-        from desc.compute._stability import _PhaseTimer
+        # from desc.compute._stability import _PhaseTimer  # noqa: E800
 
-        _tmr = _PhaseTimer("setup ")
+        # _tmr = _PhaseTimer("setup ")  # noqa: E800
 
         grid = self._mapped_grid(params, constants)
-        _tmr.mark("mapped_grid fine", grid.nodes)
+        # _tmr.mark("mapped_grid fine", grid.nodes)  # noqa: E800
 
         # COARSE-SPACE DEFLATION (AGNI_COARSE_DEFL=1 and a coarse_grid supplied).
         #
@@ -2074,7 +2074,7 @@ class FinitenStability(_Objective):
         ):
             _pc = jax.lax.stop_gradient(params)
             _grid_c = self._mapped_grid(_pc, constants, level="coarse")
-            _tmr.mark("mapped_grid coarse", _grid_c.nodes)
+            # _tmr.mark("mapped_grid coarse", _grid_c.nodes)  # noqa: E800
             # The coarse operator needs the same GEOMETRY quantities the fine one
             # does (`sqrt(g)_PEST`, the metric components, ...), evaluated on the
             # COARSE grid. `_flux_data` supplies only the 0-D and flux-function
@@ -2085,7 +2085,7 @@ class FinitenStability(_Objective):
                 "finite-n lambda3 rayleigh"
             ]["dependencies"]["data"]
             _cflux = self._flux_data(_pc, constants, _grid_c, "coarse")
-            _tmr.mark("flux_data coarse", *_cflux.values())
+            # _tmr.mark("flux_data coarse", *_cflux.values())  # noqa: E800
             _cdata = eq.compute(
                 _ckeys,
                 grid=_grid_c,
@@ -2095,7 +2095,7 @@ class FinitenStability(_Objective):
                 override_grid=False,
                 transforms=self._agni_transforms(_ckeys, _grid_c),
             )
-            _tmr.mark("geometry coarse", *_cdata.values())
+            # _tmr.mark("geometry coarse", *_cdata.values())  # noqa: E800
             _cg0 = self._coarse_grid
             coarse_opts = {
                 "coarse_grid": _grid_c,
@@ -2198,12 +2198,12 @@ class FinitenStability(_Objective):
             # `_flux_data` was boundary-condition dependent. It is not -- the difference
             # was the phi_matrix build hiding in the same interval.
             options["phi_matrix"] = self._phi_matrix(params, grid)
-            _tmr.mark("phi_matrix fine", options["phi_matrix"])
+            # _tmr.mark("phi_matrix fine", options["phi_matrix"])  # noqa: E800
 
         options.update(coarse_opts)
 
         _fflux = self._flux_data(params, constants, grid)
-        _tmr.mark("flux_data fine", *_fflux.values())
+        # _tmr.mark("flux_data fine", *_fflux.values())  # noqa: E800
         _fdata = _fflux
         data = eq.compute(
             "finite-n lambda3 rayleigh",
@@ -2223,8 +2223,11 @@ class FinitenStability(_Objective):
         # which `_AGNI3_rayleigh` prints from inside this same call. Do not add it to
         # them -- compare it against their sum to see what the eigensolve costs beyond
         # its own phases (mode-data storage, the Rayleigh quotient, deflation plumbing).
-        _tmr.mark("eq.compute total (incl. above)", data["finite-n lambda3 rayleigh"])
-        _tmr.total("compute_data")
+        # _tmr.mark(  # noqa: E800
+        #     "eq.compute total (incl. above)",  # noqa: E800
+        #     data["finite-n lambda3 rayleigh"],  # noqa: E800
+        # )  # noqa: E800
+        # _tmr.total("compute_data")  # noqa: E800
         if self._adapt and not self._use_v_fixed:
             jax.debug.callback(
                 self._store_guess,

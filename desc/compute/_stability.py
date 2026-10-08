@@ -915,7 +915,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # landmark in it -- so a coupled_rt run that spent 20 minutes somewhere in here
     # could only be reported as "hung after B_blocks". These four cover the whole body;
     # verification is that they sum to the enclosing `coarse dense assemble` mark.
-    _atm = _PhaseTimer("assemble ")
+    # _atm = _PhaseTimer("assemble ")  # noqa: E800
     D_rho0 = transforms["diffmat"].D_rho
     D_theta0 = transforms["diffmat"].D_theta
 
@@ -1159,7 +1159,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # Covers the branch above: under `coupled_rt` without `ring_nodes` that is five
     # full (n_total, n_total) Kronecker products, which is the first suspect for the
     # coarse dense assemble's cost.
-    _atm.mark("diffmats + metric", D_rho, D_theta, D_zeta, A, B)
+    # _atm.mark("diffmats + metric", D_rho, D_theta, D_zeta, A, B)  # noqa: E800
 
     C_rho = _diag_col(partial_r_log_sqrtg) + D_rho  # (n_total, n_total)
     C_theta = _diag_col(partial_v_log_sqrtg) + D_theta
@@ -1683,7 +1683,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
         #    flush=True,
         # )
 
-    _atm.mark("term accumulation", A, B)
+    # _atm.mark("term accumulation", A, B)  # noqa: E800
 
     A = A.at[ups_idx, rho_idx].set(_cT(A[rho_idx, ups_idx]))
     A = A.at[zeta_idx, rho_idx].set(_cT(A[rho_idx, zeta_idx]))
@@ -1795,7 +1795,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
 
     Linv = jax.lax.linalg.triangular_solve(L, I3, left_side=True, lower=True)  # (N,3,3)
     # Ends just past `[B_blocks cond]`, so that print keeps its meaning as a landmark.
-    _atm.mark("symmetrize + B_blocks + Cholesky", Linv, B_blocks)
+    # _atm.mark("symmetrize + B_blocks + Cholesky", Linv, B_blocks)  # noqa: E800
 
     def component_to_node_permutn(N: int) -> jnp.ndarray:
         """
@@ -1846,7 +1846,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     A = jnp.einsum("ikl,iljq,jbq->ikjb", Linv, A, Linv)
     # The L^-1 A L^-T congruence: O(n^3) like the accumulation above, and the other
     # place a dense assemble can disappear into.
-    _atm.mark("whitening congruence", A)
+    # _atm.mark("whitening congruence", A)  # noqa: E800
     node_idx = jnp.arange(n_total)
 
     # Add a constant shift to the diagonal of A (in the whitened L^-1 A L^-T
@@ -1885,8 +1885,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     # The tail -- drive diagonal, node/component permutation, keep-mask reduction. It
     # was outside the marks, which left ~0.8 s of a 2.7 s assemble unaccounted at a toy
     # size; the whole point of these marks is that they add up, so it gets its own.
-    _atm.mark("drive + permute + keep", A)
-    _atm.total("dense assemble body")
+    # _atm.mark("drive + permute + keep", A)  # noqa: E800
+    # _atm.total("dense assemble body")  # noqa: E800
 
     return {
         "A": A,
@@ -3067,7 +3067,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # vacuum measures, the keep mask and the mass-block stripping). That, not DESC's
     # dependency resolution, is what can carry a free-vs-fixed gap: the compute key's
     # dependency list is identical under both boundary conditions.
-    _btmr = _PhaseTimer("build ")
+    # _btmr = _PhaseTimer("build ")  # noqa: E800
     # FORCE THE UPSTREAM DEPENDENCIES FIRST, on their own mark.
     #
     # This is the first `block_until_ready` inside `_AGNI3_rayleigh`, and jax is async:
@@ -3080,14 +3080,14 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # Splitting them is the difference between "the operator build is slow" and "the
     # geometry DESC computed before we were called is slow", which want completely
     # different fixes.
-    _btmr.mark(
-        "DESC fine-grid deps (forced here)",
-        *[v for v in data.values() if hasattr(v, "shape")],
-    )
+    # _btmr.mark(  # noqa: E800
+    #     "DESC fine-grid deps (forced here)",  # noqa: E800
+    #     *[v for v in data.values() if hasattr(v, "shape")],  # noqa: E800
+    # )  # noqa: E800
     _op = _agni3_matfree_operator(params, transforms, profiles, data, **kwargs)
     n_keep = _op["n_keep"]
     _dtype = _op["Linv_DT"].dtype
-    _btmr.mark("fine operator 1/3 (rayleigh)", *_op_arrays(_op))
+    # _btmr.mark("fine operator 1/3 (rayleigh)", *_op_arrays(_op))  # noqa: E800
 
     sigma = kwargs.get("sigma", -1e-1)
     eigsh_tol = kwargs.get("eigsh_tol", 1e-8)
@@ -3491,13 +3491,13 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
 
         d_h = dict(_other_data)
         d_h.update(data_d)
-        _tmr = _PhaseTimer("fine ")
+        # _tmr = _PhaseTimer("fine ")  # noqa: E800
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
         # Block on every ARRAY LEAF, not just `keep` -- that is a cheap index array, so
         # it forced none of the metric or vacuum work and this phase read an
         # implausible 0.2-0.5 s. `_op_arrays` rather than a filter over `.values()`:
         # see its docstring for why the values view misses `vac_measures`.
-        _tmr.mark("operator setup", *_op_arrays(_opm))
+        # _tmr.mark("operator setup", *_op_arrays(_opm))  # noqa: E800
         _Ax = _opm["Ax"]
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
@@ -3546,7 +3546,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
         )
         _L, _ok, _ = _fbt(_bs)
-        _tmr.mark("ring blocks + Cholesky", _L)
+        # _tmr.mark("ring blocks + Cholesky", _L)  # noqa: E800
         if isinstance(_ok, jax.core.Tracer) or isinstance(sigma, jax.core.Tracer):
             jax.debug.print(
                 "[jd] ring blocks SPD={o} at sigma={s:.6e} "
@@ -3566,7 +3566,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # vmap traces the operator once regardless of k_defl.
             _HZ = jax.vmap(lambda x: _Ax(x) - sigma * x, in_axes=1, out_axes=1)(_Zj)
             _Y, _rk = _defl_Y(_Zj, _HZ)
-            _tmr.mark("deflation basis (k_defl matvecs)", _Y)
+            # _tmr.mark("deflation basis (k_defl matvecs)", _Y)  # noqa: E800
 
             # Hermitian outer product: Y is complex for axisym=True.
             def _Mdefl(r, _Y=_Y):
@@ -3710,8 +3710,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         _w, _Y = _ritz(_V, _AV, _j)
         _vv = _V @ _Y[:, 0]
         _vv = _vv / jnp.linalg.norm(_vv)
-        _tmr.mark("jacobi-davidson", _vv)
-        _tmr.total()
+        # _tmr.mark("jacobi-davidson", _vv)  # noqa: E800
+        # _tmr.total()  # noqa: E800
         if _xcheck:
             _rfin = jnp.linalg.norm(_AV @ _Y[:, 0] - _w[0] * (_V @ _Y[:, 0]))
             jax.debug.print(
@@ -3759,9 +3759,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
         # static ints -- it never touches `Ax` or the vacuum term. If this mark is
         # large, the fix is to pass the metadata down from the build at the top of
         # `_AGNI3_rayleigh` instead of rebuilding, which is a pure deletion.
-        _btmr2 = _PhaseTimer("build ")
+        # _btmr2 = _PhaseTimer("build ")  # noqa: E800
         _opm = _agni3_matfree_operator(params_d, transforms, profiles, d_h, **kwargs)
-        _btmr2.mark("fine operator 3/3 (coarse meta)", *_op_arrays(_opm))
+        # _btmr2.mark("fine operator 3/3 (coarse meta)", *_op_arrays(_opm))  # noqa: E800
         nA = int(_opm["n_keep"])
         n_rho = int(_opm["n_rho"])
         n_theta = int(_opm["n_theta"])
@@ -3813,9 +3813,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 "diffmat": _cdm,
                 "phi_matrix": transforms.get("coarse_phi_matrix"),
             }
-            _ctmr = _PhaseTimer("coarse ")
+            # _ctmr = _PhaseTimer("coarse ")  # noqa: E800
             _cop = _agni3_matfree_operator(_cpar, _ctr, profiles, _cdata, **_ckw)
-            _ctmr.mark("operator setup", *_op_arrays(_cop))
+            # _ctmr.mark("operator setup", *_op_arrays(_cop))  # noqa: E800
             _cmeta = _oparr(_cop)
             _nc = int(_cop["n_keep"])
             # Shift the diagonal only: a dense eye(_nc) and an explicit
@@ -3828,7 +3828,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # The dense n_c x n_c assemble. O(n_total**3) -- it multiplies full
             # (n_total x n_total) operators -- so it is the first thing to look at
             # when a solve stalls between [B_blocks cond] and [coarse_defl].
-            _ctmr.mark(f"dense assemble (n_c={_nc})", _cHc)
+            # _ctmr.mark(f"dense assemble (n_c={_nc})", _cHc)  # noqa: E800
             # Ring blocks of H_c, with the -sigma shift applied inside (traced
             # build, safe under jit).
             # Host-derived for the same reason as the fine level above: this
@@ -3861,7 +3861,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
                 sigma,
                 _solver_opt(kwargs, "ring_batch", "AGNI_RING_BATCH", 64, int),
             )
-            _ctmr.mark("ring blocks", _cblk)
+            # _ctmr.mark("ring blocks", _cblk)  # noqa: E800
             _cGn = _np.asarray(_cG)
             # Interpolation matrices: radial node positions only, no equilibrium.
             #
@@ -3916,8 +3916,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             # does `jnp.asarray(_Zin)` and reads `.shape` -- both fine for a
             # device array. The round-trip here moved k*nA doubles (50 x 81792 =
             # 33 MB at 48x48x12) to the host for nothing, and broke trace.
-            _ctmr.mark("generalized eigensolve", _Zc, _v0c)
-            _ctmr.total()
+            # _ctmr.mark("generalized eigensolve", _Zc, _v0c)  # noqa: E800
+            # _ctmr.total()  # noqa: E800
             _Z = _Zc
             _seed_v0 = _v0c
             if _xcheck:
@@ -4068,7 +4068,7 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # and arrives here as `_Zc_ext`/`_v0c_ext`, so the first mark below covers the FINE
     # solve only. It measured fine TOTAL + ~2 s in all three runs of the num_matvecs
     # sweep (91.1/89.1, 65.7/65.4, 79.7/77.9), which is what that mark should equal.
-    _atmr = _PhaseTimer("agni ")
+    # _atmr = _PhaseTimer("agni ")  # noqa: E800
 
     _v_fixed = kwargs.get("v_fixed", None)
     if _v_fixed is not None:
@@ -4081,12 +4081,12 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
             params, _array_data, _Zc_ext, _v0c_ext, jnp.asarray(sigma, dtype=float)
         )
 
-    _atmr.mark("fine eigensolve (coarse ran upstream)", v)
+    # _atmr.mark("fine eigensolve (coarse ran upstream)", v)  # noqa: E800
 
     Av = _op["Ax"](v)
     vv = jnp.vdot(v, v)
     lam_R = jnp.real(jnp.vdot(v, Av) / vv)
-    _atmr.mark("rayleigh quotient", lam_R)
+    # _atmr.mark("rayleigh quotient", lam_R)  # noqa: E800
 
     if _xcheck and _v_fixed is None:
         _den = jnp.maximum(jnp.abs(lam_mu), 1e-300)
@@ -4119,8 +4119,8 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     # with their three components each -- and, for free boundary ONLY, the vacuum
     # energy through phi_matrix. Untimed until now, and free-boundary-asymmetric by
     # construction, so a candidate for the free/fixed gap.
-    _atmr.mark("mode data + vacuum energy", data["finite-n xi rayleigh"])
-    _atmr.total("AGNI span (eq.compute minus DESC deps)")
+    # _atmr.mark("mode data + vacuum energy", data["finite-n xi rayleigh"])  # noqa: E800
+    # _atmr.total("AGNI span (eq.compute minus DESC deps)")  # noqa: E800
     return data
 
 

@@ -270,10 +270,15 @@ created and passed to the corresponding objective.
     :recursive:
     :template: class.rst
 
+    desc.grid.AbstractGridCurve
     desc.grid.CustomGridCurve
     desc.grid.LinearGridCurve
+
+    desc.grid.AbstractGridToroidalSurface
     desc.grid.CustomGridToroidalSurface
     desc.grid.LinearGridToroidalSurface
+
+    desc.grid.AbstractGridFlux
     desc.grid.CustomGridFlux
     desc.grid.LinearGridFlux
     desc.grid.QuadratureGridFlux

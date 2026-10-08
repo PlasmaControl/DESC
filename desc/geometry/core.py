@@ -133,7 +133,8 @@ class Curve(IOAble, Optimizable, ABC):
         warnif(
             not isinstance(grid, AbstractGridCurve),
             FutureWarning,
-            msg=f"Type {type(grid)} for argument grid is deprecated, "
+            msg=f"Type {type(grid)} for argument grid "
+            + "in Curve.compute is deprecated, "
             + "an AbstractGridCurve will be required in the future.",
         )
 
@@ -535,7 +536,8 @@ class Surface(IOAble, Optimizable, ABC):
             warnif(
                 not isinstance(grid, AbstractGridToroidalSurface),
                 FutureWarning,
-                msg=f"Type {type(grid)} for argument grid is deprecated, "
+                msg=f"Type {type(grid)} for argument grid "
+                + "in Surface.compute is deprecated, "
                 + "an AbstractGridToroidalSurface will be required in the future.",
             )
         elif hasattr(self, "zeta"):  # ZernikeRZToroidalSection

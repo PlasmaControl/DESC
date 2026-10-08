@@ -401,7 +401,7 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
     NFP : int
         Number of field periods (Default = 1).
     sort : bool
-        Whether to sort the nodes for use with FFT method.
+        Whether to sort the nodes.
     is_meshgrid : bool
         Whether this grid is a tensor-product grid.
         Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag

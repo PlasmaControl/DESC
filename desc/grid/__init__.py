@@ -1,5 +1,7 @@
 """Classes for representing collocation grids of coordinates."""
 
+import warnings
+
 from .core import AbstractGrid
 from .curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
 from .flux import (
@@ -26,8 +28,28 @@ from .utils import (
     periodic_spacing,
 )
 
-# backwards compatibility
-ConcentricGrid = ConcentricGridFlux
-Grid = CustomGridFlux
-LinearGrid = LinearGridFlux
-QuadratureGrid = QuadratureGridFlux
+
+def __getattr__(name):
+    """Get new classes for deprecated names."""
+    if name == "Grid":
+        warnings.warn(FutureWarning("Grid is deprecated, use CustomGridFlux instead."))
+        return CustomGridFlux
+    elif name == "LinearGrid":
+        warnings.warn(
+            FutureWarning("LinearGrid is deprecated, use LinearGridFlux instead.")
+        )
+        return LinearGridFlux
+    elif name == "ConcentricGrid":
+        warnings.warn(
+            FutureWarning(
+                "ConcentricGrid is deprecated, use ConcentricGridFlux instead."
+            )
+        )
+        return ConcentricGridFlux
+    elif name == "QuadratureGrid":
+        warnings.warn(
+            FutureWarning(
+                "QuadratureGrid is deprecated, use QuadratureGridFlux instead."
+            )
+        )
+        return QuadratureGridFlux

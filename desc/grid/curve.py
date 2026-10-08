@@ -18,6 +18,7 @@ class AbstractGridCurve(AbstractGrid):
 
     _L = 0
     _M = 0
+    _is_meshgrid = True
 
     def __repr__(self):
         """str: String form of the object."""
@@ -123,7 +124,6 @@ class LinearGridCurve(AbstractGridCurve):
         self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
         self._endpoint = bool(endpoint)
-        self._is_meshgrid = True
         # these are default values that may get overwritten in _create_nodes
         self._fft_x1 = False
         self._fft_x2 = False
@@ -253,12 +253,7 @@ class CustomGridCurve(AbstractGridCurve):
     NFP : int
         Number of field periods (Default = 1).
     sort : bool
-        Whether to sort the nodes for use with FFT method.
-    is_meshgrid : bool
-        Whether this grid is a tensor-product grid.
-        Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag
-        denotes whether any coordinate can be iterated over along the relevant axis of
-        the reshaped grid: nodes.reshape((num_x1, num_x0, num_x2, 3), order="F").
+        Whether to sort the nodes.
     jitable : bool
         Whether to skip certain checks and conditionals that don't work under jit.
         Allows grid to be created on the fly with custom nodes, but weights,
@@ -277,7 +272,6 @@ class CustomGridCurve(AbstractGridCurve):
         weights=None,
         NFP=1,
         sort=False,
-        is_meshgrid=False,
         jitable=False,
         **kwargs,
     ):
@@ -307,7 +301,6 @@ class CustomGridCurve(AbstractGridCurve):
         )
 
         self._NFP = check_posint(NFP, "NFP", False)
-        self._is_meshgrid = bool(is_meshgrid)
         if sort:
             self._sort_nodes()
 

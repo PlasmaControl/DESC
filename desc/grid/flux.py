@@ -439,9 +439,6 @@ class AbstractGridFlux(AbstractGrid):
 class LinearGridFlux(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
-    Useful for plotting and other analysis, though not very efficient for using as the
-    solution grid.
-
     Parameters
     ----------
     L : int, optional
@@ -858,8 +855,7 @@ class ConcentricGridFlux(AbstractGridFlux):
     """Grid in which the nodes are arranged in concentric circles.
 
     Nodes are arranged concentrically within each toroidal cross-section, with more
-    nodes per flux surface at larger radius. Typically used as the solution grid,
-    cannot be easily used for plotting due to non-uniform spacing.
+    nodes per flux surface at larger radii.
 
     Parameters
     ----------
@@ -898,17 +894,6 @@ class ConcentricGridFlux(AbstractGridFlux):
 
     _static_attrs = AbstractGridFlux._static_attrs + ["_node_pattern"]
 
-    def __repr__(self):
-        """str: String form of the object."""
-        return (
-            type(self).__name__
-            + " at "
-            + str(hex(id(self)))
-            + f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}, "
-            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid}, "
-            + f"node_pattern={self.node_pattern})"
-        )
-
     def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
@@ -934,6 +919,17 @@ class ConcentricGridFlux(AbstractGridFlux):
             self._inverse_x2_idx,
         ) = self._find_unique_inverse_nodes()
         self._weights = self._scale_weights()
+
+    def __repr__(self):
+        """str: String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + f" (coordinates={self.coordinates}, L={self.L}, M={self.M}, N={self.N}, "
+            + f"NFP={self.NFP}, sym={self.sym}, is_meshgrid={self.is_meshgrid}, "
+            + f"node_pattern={self.node_pattern})"
+        )
 
     def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """Create grid nodes and spacing.
@@ -1115,7 +1111,7 @@ class CustomGridFlux(AbstractGridFlux):
     source_grid : AbstractGridFlux
         Grid from which coordinates were mapped from.
     sort : bool
-        Whether to sort the nodes for use with FFT method.
+        Whether to sort the nodes.
     is_meshgrid : bool
         Whether this grid is a tensor-product grid.
         Let the tuple (x0,x1,x2) ∈ R³ denote a coordinate value. The is_meshgrid flag

@@ -8,7 +8,7 @@ import mpmath
 import numpy as np
 
 from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
-from desc.grid import Grid, _Grid
+from desc.grid import AbstractGrid, CustomGridFlux
 from desc.io import IOAble
 from desc.utils import check_nonnegint, check_posint, flatten_list
 
@@ -192,10 +192,10 @@ class _Basis(IOAble, ABC):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(3,)
-            order of derivatives to compute in (rho,theta,zeta)
+            order of derivatives to compute in (x0,x1,x2)
         modes : ndarray of in, shape(num_modes,3), optional
             basis modes to evaluate (if None, full basis is used)
 
@@ -212,17 +212,17 @@ class _Basis(IOAble, ABC):
 
     @property
     def L(self):
-        """int: Maximum radial resolution."""
+        """int: Maximum x0 resolution."""
         return self.__dict__.setdefault("_L", 0)
 
     @property
     def M(self):
-        """int:  Maximum poloidal resolution."""
+        """int:  Maximum x1 resolution."""
         return self.__dict__.setdefault("_M", 0)
 
     @property
     def N(self):
-        """int: Maximum toroidal resolution."""
+        """int: Maximum x2 resolution."""
         return self.__dict__.setdefault("_N", 0)
 
     @property
@@ -267,37 +267,37 @@ class _Basis(IOAble, ABC):
 
     @property
     def unique_L_idx(self):
-        """ndarray: Indices of unique radial modes."""
+        """ndarray: Indices of unique x0 modes."""
         return self._unique_L_idx
 
     @property
     def unique_M_idx(self):
-        """ndarray: Indices of unique poloidal modes."""
+        """ndarray: Indices of unique x1 modes."""
         return self._unique_M_idx
 
     @property
     def unique_N_idx(self):
-        """ndarray: Indices of unique toroidal modes."""
+        """ndarray: Indices of unique x2 modes."""
         return self._unique_N_idx
 
     @property
     def unique_LM_idx(self):
-        """ndarray: Indices of unique radial/poloidal mode pairs."""
+        """ndarray: Indices of unique x0/x1 mode pairs."""
         return self._unique_LM_idx
 
     @property
     def inverse_L_idx(self):
-        """ndarray: Indices of unique_L_idx that recover the radial modes."""
+        """ndarray: Indices of unique_L_idx that recover the x0 modes."""
         return self._inverse_L_idx
 
     @property
     def inverse_M_idx(self):
-        """ndarray: Indices of unique_M_idx that recover the poloidal modes."""
+        """ndarray: Indices of unique_M_idx that recover the x1 modes."""
         return self._inverse_M_idx
 
     @property
     def inverse_N_idx(self):
-        """ndarray: Indices of unique_N_idx that recover the toroidal modes."""
+        """ndarray: Indices of unique_N_idx that recover the x2 modes."""
         return self._inverse_N_idx
 
     @property
@@ -399,10 +399,10 @@ class PowerSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
 
@@ -412,8 +412,8 @@ class PowerSeries(_Basis):
             basis functions evaluated at nodes
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx
@@ -426,8 +426,8 @@ class PowerSeries(_Basis):
             return np.array([]).reshape((grid.num_nodes, 0))
 
         try:
-            ridx = grid.unique_rho_idx
-            routidx = grid.inverse_rho_idx
+            ridx = grid.unique_x0_idx
+            routidx = grid.inverse_x0_idx
         except AttributeError:
             ridx = routidx = np.arange(grid.num_nodes)
 
@@ -512,10 +512,10 @@ class FourierSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
@@ -528,8 +528,8 @@ class FourierSeries(_Basis):
             [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             nidx = self.unique_N_idx
@@ -542,8 +542,8 @@ class FourierSeries(_Basis):
             return np.array([]).reshape((grid.num_nodes, 0))
 
         try:
-            zidx = grid.unique_zeta_idx
-            zoutidx = grid.inverse_zeta_idx
+            zidx = grid.unique_x2_idx
+            zoutidx = grid.inverse_x2_idx
         except AttributeError:
             zidx = zoutidx = np.arange(grid.num_nodes)
 
@@ -640,10 +640,10 @@ class DoubleFourierSeries(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
@@ -658,8 +658,8 @@ class DoubleFourierSeries(_Basis):
             ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             midx = self.unique_M_idx
@@ -675,13 +675,13 @@ class DoubleFourierSeries(_Basis):
             return np.array([]).reshape((grid.num_nodes, 0))
 
         try:
-            zidx = grid.unique_zeta_idx
-            zoutidx = grid.inverse_zeta_idx
+            zidx = grid.unique_x2_idx
+            zoutidx = grid.inverse_x2_idx
         except AttributeError:
             zidx = zoutidx = np.arange(grid.num_nodes)
         try:
-            tidx = grid.unique_poloidal_idx
-            toutidx = grid.inverse_poloidal_idx
+            tidx = grid.unique_x1_idx
+            toutidx = grid.inverse_x1_idx
         except AttributeError:
             tidx = toutidx = np.arange(grid.num_nodes)
 
@@ -856,10 +856,10 @@ class ZernikePolynomial(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
@@ -869,8 +869,9 @@ class ZernikePolynomial(_Basis):
             Basis functions evaluated at nodes.
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
+
         if modes is None:
             modes = self.modes
             lmidx = self.unique_LM_idx
@@ -890,13 +891,13 @@ class ZernikePolynomial(_Basis):
         m = modes[:, 1]
 
         try:
-            ridx = grid.unique_rho_idx
-            routidx = grid.inverse_rho_idx
+            ridx = grid.unique_x0_idx
+            routidx = grid.inverse_x0_idx
         except AttributeError:
             ridx = routidx = np.arange(grid.num_nodes)
         try:
-            tidx = grid.unique_theta_idx
-            toutidx = grid.inverse_theta_idx
+            tidx = grid.unique_x1_idx
+            toutidx = grid.inverse_x1_idx
         except AttributeError:
             tidx = toutidx = np.arange(grid.num_nodes)
 
@@ -1009,10 +1010,10 @@ class ChebyshevDoubleFourierBasis(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
@@ -1028,8 +1029,8 @@ class ChebyshevDoubleFourierBasis(_Basis):
             ⊗ [sin(N𝛇), ..., sin(𝛇), 1, cos(𝛇), ..., cos(N𝛇)].
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx
@@ -1049,18 +1050,18 @@ class ChebyshevDoubleFourierBasis(_Basis):
         l, m, n = modes.T
 
         try:
-            ridx = grid.unique_rho_idx
-            routidx = grid.inverse_rho_idx
+            ridx = grid.unique_x0_idx
+            routidx = grid.inverse_x0_idx
         except AttributeError:
             ridx = routidx = np.arange(grid.num_nodes)
         try:
-            tidx = grid.unique_theta_idx
-            toutidx = grid.inverse_theta_idx
+            tidx = grid.unique_x1_idx
+            toutidx = grid.inverse_x1_idx
         except AttributeError:
             tidx = toutidx = np.arange(grid.num_nodes)
         try:
-            zidx = grid.unique_zeta_idx
-            zoutidx = grid.inverse_zeta_idx
+            zidx = grid.unique_x2_idx
+            zoutidx = grid.inverse_x2_idx
         except AttributeError:
             zidx = zoutidx = np.arange(grid.num_nodes)
 
@@ -1257,10 +1258,10 @@ class FourierZernikeBasis(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of int, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used).
 
@@ -1270,8 +1271,8 @@ class FourierZernikeBasis(_Basis):
             Basis functions evaluated at nodes.
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lmidx = self.unique_LM_idx
@@ -1292,18 +1293,18 @@ class FourierZernikeBasis(_Basis):
         lm = modes[:, :2]
 
         try:
-            ridx = grid.unique_rho_idx
-            routidx = grid.inverse_rho_idx
+            ridx = grid.unique_x0_idx
+            routidx = grid.inverse_x0_idx
         except AttributeError:
             ridx = routidx = np.arange(grid.num_nodes)
         try:
-            tidx = grid.unique_theta_idx
-            toutidx = grid.inverse_theta_idx
+            tidx = grid.unique_x1_idx
+            toutidx = grid.inverse_x1_idx
         except AttributeError:
             tidx = toutidx = np.arange(grid.num_nodes)
         try:
-            zidx = grid.unique_zeta_idx
-            zoutidx = grid.inverse_zeta_idx
+            zidx = grid.unique_x2_idx
+            zoutidx = grid.inverse_x2_idx
         except AttributeError:
             zidx = zoutidx = np.arange(grid.num_nodes)
 
@@ -1412,10 +1413,10 @@ class ChebyshevPolynomial(_Basis):
 
         Parameters
         ----------
-        grid : Grid or ndarray of float, size(num_nodes,3)
-            Node coordinates, in (rho,theta,zeta).
+        grid : AbstractGrid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (x0,x1,x2).
         derivatives : ndarray of int, shape(num_derivatives,3)
-            Order of derivatives to compute in (rho,theta,zeta).
+            Order of derivatives to compute in (x0,x1,x2).
         modes : ndarray of in, shape(num_modes,3), optional
             Basis modes to evaluate (if None, full basis is used)
         unique : bool, optional
@@ -1428,8 +1429,8 @@ class ChebyshevPolynomial(_Basis):
             basis functions evaluated at nodes
 
         """
-        if not isinstance(grid, _Grid):
-            grid = Grid(grid, sort=False, jitable=True)
+        if not isinstance(grid, AbstractGrid):
+            grid = CustomGridFlux(grid, sort=False, jitable=True)
         if modes is None:
             modes = self.modes
             lidx = self.unique_L_idx
@@ -1445,8 +1446,8 @@ class ChebyshevPolynomial(_Basis):
         l = modes[:, 0]
 
         try:
-            ridx = grid.unique_rho_idx
-            routidx = grid.inverse_rho_idx
+            ridx = grid.unique_x0_idx
+            routidx = grid.inverse_x0_idx
         except AttributeError:
             ridx = routidx = np.arange(grid.num_nodes)
 

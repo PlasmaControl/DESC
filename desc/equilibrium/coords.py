@@ -9,7 +9,12 @@ from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import (
+    ConcentricGridFlux,
+    CustomGridFlux,
+    LinearGridFlux,
+    QuadratureGridFlux,
+)
 from desc.transform import Transform
 from desc.utils import (
     ResolutionWarning,
@@ -166,7 +171,7 @@ def map_coordinates(  # noqa: C901
 
     @functools.partial(jit, static_argnums=1)
     def compute(y, basis):
-        grid = Grid(y, sort=False, jitable=True)
+        grid = CustomGridFlux(y, sort=False, jitable=True)
         data = {}
         if "iota" in deps:
             data["iota"] = profiles["iota"].compute(grid, params=params["i_l"])
@@ -270,7 +275,9 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
         alpha = coords[:, inbasis.index("alpha")]
         rho = jnp.atleast_1d(rho)
         zero = jnp.zeros_like(rho)
-        grid = Grid(nodes=jnp.column_stack([rho, zero, zero]), sort=False, jitable=True)
+        grid = CustomGridFlux(
+            nodes=jnp.column_stack([rho, zero, zero]), sort=False, jitable=True
+        )
         iota = profiles["iota"].compute(grid)
         theta = alpha + iota * zeta
 
@@ -280,7 +287,7 @@ def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):
 
 def _initial_guess_nn_search(coords, inbasis, eq, period, compute):
     # nearest neighbor search on dense grid
-    yg = ConcentricGrid(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
+    yg = ConcentricGridFlux(eq.L_grid, eq.M_grid, max(eq.N_grid, eq.M_grid)).nodes
     xg = compute(yg, inbasis)
     coords = jnp.asarray(coords)
 
@@ -427,7 +434,7 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
 
     """
     grid = lmbda.grid
-    errorif(not grid.fft_poloidal, NotImplementedError, msg="See note in docstring.")
+    errorif(not grid.fft_x1, NotImplementedError, msg="See note in docstring.")
     warnif(
         grid.M > lmbda.basis.M,
         ResolutionWarning,
@@ -587,9 +594,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     ----------
     eq : Equilibrium
         Equilibrium to use
-    grid  :  Grid, optional
+    grid : AbstractGridFlux, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
-        (Default to QuadratureGrid with eq's current grid resolutions)
+        Defaults to QuadratureGridFlux with eq's current grid resolutions.
     R_lmn, Z_lmn, L_lmn : ndarray, optional
         spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
     msg : {None, "auto", "manual"}
@@ -608,7 +615,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if L_lmn is None:
         L_lmn = eq.L_lmn
     if grid is None:
-        grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        grid = QuadratureGridFlux(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
     transforms = get_transforms("sqrt(g)_PEST", obj=eq, grid=grid)
     data = compute_fun(
@@ -704,22 +711,21 @@ def to_sfl(
     M_grid = M_grid or int(1.5 * M)
     N_grid = N_grid or int(N)
 
-    grid_PEST = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP)
-    grid_PEST_bdry = LinearGrid(M=M, N=N, rho=1.0, NFP=eq.NFP)
+    grid_PEST = ConcentricGridFlux(
+        L_grid, M_grid, N_grid, node_pattern="ocs", NFP=eq.NFP
+    )
+    grid_PEST_bdry = LinearGridFlux(M=M, N=N, rho=1.0, NFP=eq.NFP)
     data = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(
+        CustomGridFlux(
             eq.map_coordinates(
-                grid_PEST.nodes,
-                ("rho", "theta_PEST", "zeta"),
-                tol=tol,
-                maxiter=maxiter,
+                grid_PEST.nodes, ("rho", "theta_PEST", "zeta"), tol=tol, maxiter=maxiter
             )
         ),
     )
     data_bdry = eq.compute(
         ["R", "Z", "lambda"],
-        Grid(
+        CustomGridFlux(
             eq.map_coordinates(
                 grid_PEST_bdry.nodes,
                 ("rho", "theta_PEST", "zeta"),
@@ -803,9 +809,9 @@ def get_rtz_grid(
         Sorted unique toroidal coordinates.
     coordinates : str
         Input coordinates that are specified by the arguments, respectively.
+        rtz : rho, theta, zeta
         raz : rho, alpha, zeta
         rvp : rho, theta_PEST, phi
-        rtz : rho, theta, zeta
     period : tuple of float
         Assumed periodicity of the given coordinates.
         Use ``np.inf`` to denote no periodicity.
@@ -818,14 +824,13 @@ def get_rtz_grid(
 
     Returns
     -------
-    desc_grid : Grid
+    desc_grid : CustomGridFlux
         DESC coordinate grid for the given coordinates.
 
     """
-    grid = Grid.create_meshgrid(
+    grid = CustomGridFlux.create_meshgrid(
         [radial, poloidal, toroidal],
         coordinates=coordinates,
-        period=period,
         jitable=jitable,
     )
     if "iota" in kwargs:
@@ -850,9 +855,9 @@ def get_rtz_grid(
     if inbasis[coordinates[0]] == "rho":
         # Should work as long as inbasis radial coordinate is
         # single variable, monotonic increasing function of rho.
-        idx["_unique_rho_idx"] = grid.unique_rho_idx
-        idx["_inverse_rho_idx"] = grid.inverse_rho_idx
-    desc_grid = Grid(
+        idx["_unique_x0_idx"] = grid.unique_rho_idx
+        idx["_inverse_x0_idx"] = grid.inverse_rho_idx
+    desc_grid = CustomGridFlux(
         nodes=rtz_nodes,
         coordinates="rtz",
         source_grid=grid,

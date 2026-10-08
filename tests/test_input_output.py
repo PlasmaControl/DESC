@@ -12,7 +12,7 @@ import pytest
 import desc.examples
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGridFlux
 from desc.io import InputReader, hdf5Reader, hdf5Writer, load
 from desc.io.ascii_io import read_ascii, write_ascii
 from desc.magnetic_fields import (
@@ -640,7 +640,7 @@ def test_ascii_io(tmpdir_factory):
     rho = np.linspace(0, 1, 20)
     # this eq's iota is not well represented by an even PowerSeries
     np.testing.assert_allclose(
-        eq1.compute("iota", grid=LinearGrid(rho=rho))["iota"],
+        eq1.compute("iota", grid=LinearGridFlux(rho=rho))["iota"],
         eq2.iota(rho),
         rtol=8e-2,
         atol=1e-3,
@@ -648,7 +648,7 @@ def test_ascii_io(tmpdir_factory):
     # this eq's pressure is not well represented by power series at the edges
     rho = np.linspace(0.1, 0.9, 20)
     np.testing.assert_allclose(
-        eq1.compute("p", grid=LinearGrid(rho=rho))["p"],
+        eq1.compute("p", grid=LinearGridFlux(rho=rho))["p"],
         eq2.pressure(rho),
         rtol=2e-2,
         atol=1e-5,
@@ -674,7 +674,7 @@ def test_ascii_io_errors(tmpdir_factory):
 def test_copy():
     """Test thing.copy() method of IOAble objects."""
     basis = FourierZernikeBasis(2, 2, 2)
-    grid = LinearGrid(2, 2, 2)
+    grid = LinearGridFlux(2, 2, 2)
     transform1 = Transform(grid, basis, method="direct1")
     transform2 = transform1.copy(deepcopy=False)
 

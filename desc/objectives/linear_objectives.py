@@ -20,7 +20,7 @@ from desc.backend import (
     tree_structure,
 )
 from desc.basis import zernike_radial
-from desc.geometry import FourierRZCurve
+from desc.geometry import FourierRZCurve, Surface
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
@@ -853,6 +853,157 @@ class AxisZSelfConsistency(_Objective):
         """
         f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
         return f
+
+
+class SurfaceCurveConsistency(_Objective):
+    """Ensures a SurfaceCurve shares params with underlying Surface.
+
+    Objective is only needed when both the curve and surface objects
+    are both being optimized.
+
+    Parameters
+    ----------
+    source: FourierRZToroidalSurface or Equilibrium
+            Surface on which the curve input should lie. If Equilibrium is passed,
+            surface is set to the equilibrium's rho=1 surface.
+    curve: SurfaceCurve, FourierRZWindingCoil CoilSet
+            Curve or collection of curves carrying a copy of surface params.
+    name: str, optional
+            Name of the objective function.
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        overwrite={
+            "target": "",
+            "bounds": "",
+            "normalize": "",
+            "normalize_target": "",
+            "weight": "",
+        }
+    )
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "SurfaceCurve consistency error: "
+
+    _static_attrs = _Objective._static_attrs + ["_src_params"]
+
+    def __init__(
+        self,
+        source,
+        curve,
+        name="SurfaceCurve consistency",
+    ):
+        # local import to avoid circular dependency
+        from desc.equilibrium import Equilibrium
+
+        errorif(
+            not isinstance(source, (Surface, Equilibrium)),
+            ValueError,
+            "Source must be a surface or equilibrium.",
+        )
+
+        things = [source, curve]
+
+        super().__init__(
+            things=things,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        from desc.coils import CoilSet
+        from desc.equilibrium import Equilibrium
+
+        def _expand(curve):
+            if isinstance(curve, CoilSet):
+                return [c for coil in curve.coils for c in _expand(coil)]
+            return [curve]
+
+        # in case the curve is a coilset, expand to a list of all individual curves
+        curve_expanded = _expand(self.things[1])
+        source = self.things[0]
+
+        if isinstance(source, Equilibrium):
+            source_R_basis = source.surface.R_basis
+            source_Z_basis = source.surface.Z_basis
+            self._src_params = {"R": "Rb_lmn", "Z": "Zb_lmn"}
+        else:
+            source_R_basis = source.R_basis
+            source_Z_basis = source.Z_basis
+            self._src_params = {"R": "R_lmn", "Z": "Z_lmn"}
+
+        AR = []
+        AZ = []
+        for curve in curve_expanded:
+            nR = len(curve.surface.R_basis.modes)
+            nZ = len(curve.surface.Z_basis.modes)
+
+            # The curve carries a copy of the source surface, so the bases must agree.
+            errorif(
+                not np.array_equal(curve.R_basis.modes, source_R_basis.modes)
+                or not np.array_equal(curve.Z_basis.modes, source_Z_basis.modes),
+                ValueError,
+                "The curve's surface and the source must share the same R and Z bases.",
+            )
+            # The weights are just the identity matrices. If rho<1 surfaces
+            # are supported at any point, this will change.
+            AR.append(np.eye(nR))
+            AZ.append(np.eye(nZ))
+
+        self._dim_f = sum(a.shape[0] for a in AR) + sum(a.shape[0] for a in AZ)
+        self._A = {"R": AR, "Z": AZ}
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params_source, params_curve, constants=None):
+        """Compute SurfaceCurveConsistency error.
+
+        Measures the mismatch between the surface params attached to the curve,
+        and the params attached to the underlying surface (or equilibrium.surface).
+
+        Parameters
+        ----------
+        params_source: dict
+            Dictionary of surface degrees of freedom, or if surface=equilibrium.surface,
+            then the equilibrium degrees of freedom
+        params_curve : dict
+            Dictionary of curve (or coilset) degrees of freedom
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants. (Deprecated)
+
+        Returns
+        -------
+        f : ndarray
+            SurfaceCurveConsistency errors.
+        """
+        params_curve = tree_leaves(params_curve, is_leaf=lambda x: isinstance(x, dict))
+        return jnp.concatenate(
+            [
+                block
+                for i in range(len(params_curve))
+                for block in (
+                    jnp.dot(self._A["R"][i], params_source[self._src_params["R"]])
+                    - params_curve[i]["R_lmn"],
+                    jnp.dot(self._A["Z"][i], params_source[self._src_params["Z"]])
+                    - params_curve[i]["Z_lmn"],
+                )
+            ]
+        )
 
 
 class FixBoundaryR(FixParameters):

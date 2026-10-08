@@ -200,7 +200,10 @@ class _CoilObjective(_Objective):
         if grid is None:
             grid = []
             for c in coils:
-                grid.append(LinearGrid(N=2 * c.N * getattr(c, "NFP", 1) + 5))
+                # some coils (e.g. FourierRZSurfaceCoil) have a different
+                # resolution requirement than c.N
+                N = getattr(c, "N_effective", c.N * getattr(c, "NFP", 1))
+                grid.append(LinearGrid(N=2 * N + 5))
         if isinstance(grid, numbers.Integral):
             grid = LinearGrid(N=self._grid)
         if isinstance(grid, _Grid):

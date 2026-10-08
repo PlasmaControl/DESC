@@ -4,23 +4,40 @@ Changelog
 New Features
 
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- Adds classes ``SurfaceCurve``, ``FourierRZSurfaceCurve``, and ``FourierRZSurfaceCoil`` to describe curves and coils constrained to lie on given FourierRZToroidalSurface objects. A new objective ``SurfaceCurveConsistency`` facilitates joint optimization of the curve and underlying surface.
 
 Performance Improvements
 
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+- Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
-- Adds classes ``SurfaceCurve``, ``FourierRZSurfaceCurve``, and ``FourierRZSurfaceCoil`` to describe curves and coils constrained to lie on given FourierRZToroidalSurface objects. A new objective ``SurfaceCurveConsistency`` facilitates joint optimization of the curve and underlying surface.
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+
+Breaking Changes and Deprecations
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 
 Bug Fixes
 
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
+- Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero
   (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
   ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
+- Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+
 
 
 v0.17.3
@@ -51,10 +68,10 @@ Bug Fixes
     - Updates ``"reactor_QA"`` in ``desc.examples`` to fix this. Note that if using ``"reactor_QA"`` example from ``v0.16.0`` until this fix, the current profile in that example has this issue.
 - Fixes bug in `CoilSet.from_symmetry` that ignored the passed in `check_intersection` value. This caused redundant checks in various other functions such as `plot_coils`.
 
-
 Breaking Changes
 
 - Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
+
 
 v0.17.2
 -------

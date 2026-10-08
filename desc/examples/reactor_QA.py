@@ -55,15 +55,12 @@ eq, _ = eq.solve(verbose=3, copy=True)
 
 # scale to ARIES-CS reactor size
 eq = rescale(eq, L=("a", a), B=("<B>", B), scale_pressure=False, copy=True, verbose=1)
-# rescale makes the current a ScaledProfile, revert back to a PowerSeriesProfile
-# since we initially want just a zero-current PowerSeriesProfile for the next steps
-eq.current = PowerSeriesProfile(np.zeros(eq.L + 1), np.arange(eq.L + 1), sym=False)
 
 # optimize for self-consistent bootstrap current
 grid = LinearGrid(
     rho=np.linspace(1 / eq.L_grid, 1, eq.L_grid) - 1 / (2 * eq.L_grid),
     M=eq.M_grid,
-    N=(2 * eq.N_grid),
+    N=eq.N_grid,
     NFP=eq.NFP,
     sym=True,
 )

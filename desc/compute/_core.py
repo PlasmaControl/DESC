@@ -1,6 +1,6 @@
 """Core compute functions, for polar, flux, and cartesian coordinates."""
 
-from desc.backend import jnp
+from desc.backend import jnp, root_scalar, vmap
 from desc.utils import xyz2rpz
 
 from .data_index import register_compute_fun
@@ -3535,6 +3535,106 @@ def _zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="phi2v",
+    label="v(\\zeta)",
+    units="~",
+    units_long="None",
+    description=(
+        "NURBS surface parameter in the v (toroidal) direction corresponding "
+        "to the physical toroidal angle zeta"
+    ),
+    dim=1,
+    params=[],
+    transforms={"p_v": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["full control net", "zeta"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # compute v(phi) to evaluate nurbs surface properly
+    control_points_xyz = jnp.mean(data["full control net"], axis=1)  # (n_v, 3)
+    degree = transforms["p_v"]
+    phi_target = jnp.atleast_1d(data["zeta"])
+
+    p = degree
+    n = control_points_xyz.shape[0] - 1
+    knots = uniform_knots(n, p, domain=2 * jnp.pi)
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+
+    def _phi_and_dphi_dv(v):
+        b, b_v, _, _ = b_p_deriv3(jnp.atleast_1d(v), degree, knots)
+        x, y = (b @ padded[:, 0])[0], (b @ padded[:, 1])[0]
+        x_v, y_v = (b_v @ padded[:, 0])[0], (b_v @ padded[:, 1])[0]
+        phi = jnp.arctan2(y, x)  # wraps to (-pi, pi]
+        dphi_dv = (x * y_v - y * x_v) / (x**2 + y**2)
+        return phi, dphi_dv
+
+    def _residual(v, target):
+        phi, _ = _phi_and_dphi_dv(v)
+        return ((phi - target + jnp.pi) % (2 * jnp.pi)) - jnp.pi
+
+    def _jac(v, target):
+        _, dphi_dv = _phi_and_dphi_dv(v)
+        return dphi_dv
+
+    v0 = phi_target  # initial guess: v ~= zeta works for near-circular surfaces
+    v_sol = vmap(
+        lambda v0_i, target: root_scalar(_residual, v0_i, jac=_jac, args=(target,))
+    )(v0, phi_target)
+    data["v"] = jnp.mod(v_sol, 2 * jnp.pi)
+    dphi_dv_sol = vmap(lambda vi: _phi_and_dphi_dv(vi)[1])(v_sol)
+    data["dv_dzeta"] = 1.0 / dphi_dv_sol
+    return data
+
+
+@register_compute_fun(
+    name="v",
+    label="v",
+    units="~",
+    units_long="None",
+    description=(
+        "NURBS surface parameter in the v (toroidal) direction corresponding "
+        "to the physical toroidal angle zeta"
+    ),
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi2v"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["v"] already computed when computing "phi2v"
+    return data
+
+
+@register_compute_fun(
+    name="dv_dzeta",
+    label="\\partial v / \\partial \\zeta",
+    units="~",
+    units_long="None",
+    description="Derivative of the v (toroidal) NURBS surface parameter wrt zeta",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi2v"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _dv_dzeta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["dv_dzeta"] already computed when computing "phi2v"
+    return data
+
+
+@register_compute_fun(
     name="R",
     label="R",
     units="m",
@@ -3545,7 +3645,7 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     transforms={"p_u": [], "p_v": []},
     profiles=[],
     coordinates="rtz",
-    data=["full control net", "full_weights", "theta", "zeta"],
+    data=["full control net", "full_weights", "theta", "v", "dv_dzeta"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
@@ -3591,7 +3691,7 @@ def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     knots_v = uniform_knots(n_v, p_v, domain=2 * jnp.pi)
 
     bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
-    bv, bv_v, _, _ = b_p_deriv3(data["zeta"], p_v, knots_v)
+    bv, bv_v, _, _ = b_p_deriv3(data["v"], p_v, knots_v)
 
     pw = control_points_wrapped * weights_wrapped[..., None]
 
@@ -3605,7 +3705,9 @@ def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     xyz = num / den[:, None]
     # quotient rule
     xyz_t = (num_t * den[:, None] - num * den_t[:, None]) / den[:, None] ** 2
-    xyz_z = (num_z * den[:, None] - num * den_z[:, None]) / den[:, None] ** 2
+    xyz_v = (num_z * den[:, None] - num * den_z[:, None]) / den[:, None] ** 2
+    # chain rule: d/dzeta = d/dv * dv/dzeta
+    xyz_z = xyz_v * data["dv_dzeta"][:, None]
 
     rpz = xyz2rpz(xyz)
     R = rpz[:, 0]

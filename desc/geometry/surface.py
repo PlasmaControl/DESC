@@ -16,9 +16,11 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import data_index, get_transforms
+from desc.compute.utils import _parse_parameterization, get_data_deps
 from desc.geometry.curve import NurbsRPZCurve
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -1217,12 +1219,17 @@ class NurbsRZToroidalSurface(Surface):
         "_cs_interior_theta",
         "_cs_interior_w",
         "_NFP",
+        "_p_u",
+        "_p_v",
+        "_rho",
     ]
     _static_attrs = Surface._static_attrs + [
         "_NFP",
         "_n_cs",
         "_n_points_per_cs",
         "_local_basis",
+        "_p_u",
+        "_p_v",
     ]
 
     def __init__(
@@ -1238,11 +1245,14 @@ class NurbsRZToroidalSurface(Surface):
         cs_interior_w,
         cs_interior_phi,
         cs_interior_gangle,
+        p_u=3,
+        p_v=3,
         local_basis="cylindrical",
         NFP=2,
         M=None,
         N=None,
         sym=True,
+        rho=1,
         **kwargs,
     ):
 
@@ -1276,6 +1286,9 @@ class NurbsRZToroidalSurface(Surface):
         self._M = check_nonnegint(M, "M")
         self._N = check_nonnegint(N, "N")
         self._NFP = check_posint(NFP, "NFP", False)
+        self._p_u = check_posint(p_u, "p_u", False)
+        self._p_v = check_posint(p_v, "p_v", False)
+        self._rho = rho
 
         if sym:
             # first control point of each cross section sits at theta=0, a
@@ -1295,51 +1308,123 @@ class NurbsRZToroidalSurface(Surface):
         else:
             raise NotImplementedError
 
-    # NOTE: the six cs_* DOF arrays below are stored flattened (1D), because
-    # DESC's Optimizable.pack_params/unpack_params concatenate every
-    # optimizable_parameter along axis 0 and cannot handle arrays with
-    # differing shapes beyond that axis. Each getter returns the flat array;
-    # reshape to the documented 2D shape (C order) wherever the natural grid
-    # layout is needed, e.g. in compute functions.
-
     def compute(
-        self, names, grid=None, params=None, transforms=None, data=None, **kwargs
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
     ):
+        if isinstance(names, str):
+            names = [names]
+        m = self.M or 0
+        n = self.N or 0
+        if grid is None:
+            grid = LinearGrid(
+                # Nyquist + 5 margin
+                rho=self.rho,
+                M=2 * m + 5,
+                N=2 * n + 5,
+                NFP=self.NFP,
+                sym=self.sym,
+            )
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object, got type {type(grid)}",
+        )
+
         params = params or self.params_dict
         axis_params = params.get("axis", self.interior_axis.params_dict)
 
-        cs_phi = jnp.append([0], self.cs_interior_phi)
+        cs_phi = jnp.append(jnp.array([0.0]), self.cs_interior_phi)
         cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / self.NFP) - cs_phi[:0:-1])
 
-        cs_phi_full = np.concatenate(
-            [cs_phi_1fp + n * (2 * np.pi / self.nfp) for n in range(self.nfp)]
+        cs_phi_full = jnp.concatenate(
+            [cs_phi_1fp + n * (2 * jnp.pi / self.NFP) for n in range(self.NFP)]
         )
 
-        axis_grid = LinearGrid(zeta=cs_phi_full, nfp=self.NFP, sym=self.sym)
+        # evaluate s(phi)
+        s_values = self.interior_axis.compute(
+            ["phi2s"], grid=LinearGrid(), params=axis_params, phi=cs_phi_full
+        )["phi2s"]
 
+        s_values = jnp.mod(s_values, 2 * jnp.pi)
+
+        # LinearGrid sorts its zeta nodes internally, so track the
+        # permutation to restore axis_data's row order to match
+        # cs_phi_full's (every other array in this function assumes that
+        # order).
+        sort_idx = jnp.argsort(s_values)
+        unsort_idx = jnp.argsort(sort_idx)
+
+        axis_grid = LinearGrid(zeta=s_values, NFP=1, sym=self.sym)
+
+        axis_names = [
+            "x",
+            "closed_bishop_tangent",
+            "closed_bishop_normal",
+            "closed_bishop_binormal",
+        ]
         axis_data = self.interior_axis.compute(
-            [
-                "x",
-                "closed_bishop_T",
-                "closed_bishop_N",
-                "closed_bishop_B",
-            ],  # whatever axis quantities we need
-            grid=axis_grid,
-            params=axis_params,
+            axis_names, grid=axis_grid, params=axis_params
         )
+        axis_data = {k: axis_data[k][unsort_idx] for k in axis_names}
         data = data or {}
         data.update({f"axis_{k}": v for k, v in axis_data.items()})
 
-        return super().compute(
-            names, grid=grid, params=params, transforms=transforms, data=data, **kwargs
+        # TODO: check this out, copied logic from Surface.compute()
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        if (
+            calc0d
+            and (grid.N >= 2 * n + 5)
+            and (grid.M > 2 * m + 5)
+            and isinstance(grid, LinearGrid)
+        ):
+            calc0d = False
+        if calc0d and override_grid:
+            grid0d = LinearGrid(rho=self.rho, M=2 * m + 5, N=2 * n + 5, NFP=self.NFP)
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=data,
+                **kwargs,
+            )
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        return compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles={},
+            data=data,
+            **kwargs,
         )
 
     @optimizable_parameter
     @property
     def cs_start_r(self):
-        """ndarray: radial control points of the two symmetric start cross section.
+        """ndarray: radial control points of the start cross section.
 
-        Flattened from shape (2, n_points_per_cs//2 + 1).
+        Shape (n_points_per_cs//2 + 1,). The other end of the half field
+        period is obtained for free by the stellarator-symmetric reflection.
         """
         return self._cs_start_r
 
@@ -1350,17 +1435,16 @@ class NurbsRZToroidalSurface(Surface):
         errorif(
             new.size != n_half,
             ValueError,
-            f"cs_start_r must have shape {(2, n_half)}, got {new.shape}",
+            f"cs_start_r must have shape {(n_half,)}, got {new.shape}",
         )
         self._cs_start_r = new.reshape(-1)
 
     @optimizable_parameter
     @property
     def cs_start_theta(self):
-        """ndarray: angular control points of the start cross sections.
+        """ndarray: angular control points of the start cross section.
 
-        Flattened from shape (2, n_points_per_cs//2), excluding the fixed theta=0
-        point.
+        Shape (n_points_per_cs//2,), excluding the fixed theta=0 point.
         """
         return self._cs_start_theta
 
@@ -1371,16 +1455,16 @@ class NurbsRZToroidalSurface(Surface):
         errorif(
             new.size != n_half - 1,
             ValueError,
-            f"cs_start_theta must have shape {(2, n_half - 1)}, got {new.shape}",
+            f"cs_start_theta must have shape {(n_half - 1,)}, got {new.shape}",
         )
         self._cs_start_theta = new.reshape(-1)
 
     @optimizable_parameter
     @property
     def cs_start_w(self):
-        """ndarray: NURBS weights of the two symmetric start cross sections.
+        """ndarray: NURBS weights of the start cross section.
 
-        Flattened from shape (2, n_points_per_cs//2 + 1).
+        Shape (n_points_per_cs//2 + 1,).
         """
         return self._cs_start_w
 
@@ -1391,7 +1475,7 @@ class NurbsRZToroidalSurface(Surface):
         errorif(
             new.size != n_half,
             ValueError,
-            f"cs_start_w must have shape {(2, n_half)}, got {new.shape}",
+            f"cs_start_w must have shape {(n_half,)}, got {new.shape}",
         )
         self._cs_start_w = new.reshape(-1)
 
@@ -1480,7 +1564,7 @@ class NurbsRZToroidalSurface(Surface):
     @optimizable_parameter
     @property
     def cs_interior_gangle(self):
-        """ndarray: (1, n_cs - 1) array of zeta values for the interior cross sections."""
+        """ndarray: (1, n_cs - 1) array of global angles for interior cross sections."""
         return self._cs_interior_gangle
 
     @cs_interior_gangle.setter
@@ -1518,6 +1602,50 @@ class NurbsRZToroidalSurface(Surface):
             self.NFP == new.nfp
         ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
         self._interior_axis = new
+
+    def change_resolution(self, *args, **kwargs):
+        """Change the maximum poloidal and toroidal resolution.
+
+        TODO: placeholder only, to satisfy Surface's abstract method so this
+        class can be instantiated. Not yet implemented.
+        """
+        raise NotImplementedError
+
+    @property
+    def NFP(self):
+        """int: number of field periods."""
+        return self._NFP
+
+    @property
+    def p_u(self):
+        """int: degree of NURBS spline in u (poloidal) direction."""
+        return self._p_u
+
+    @property
+    def p_v(self):
+        """int: degree of NURBS spline in v (toroidal) direction."""
+        return self._p_v
+
+    @property
+    def n_cs(self):
+        """int: number of cross sections over a half field period."""
+        return self._n_cs
+
+    @property
+    def n_points_per_cs(self):
+        """int: number of control points per cross section."""
+        return self._n_points_per_cs
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
 
 
 def _constant_offset_surface(

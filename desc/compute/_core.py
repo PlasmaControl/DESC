@@ -1,8 +1,10 @@
 """Core compute functions, for polar, flux, and cartesian coordinates."""
 
 from desc.backend import jnp
+from desc.utils import xyz2rpz
 
 from .data_index import register_compute_fun
+from .spline_utils import b_p_deriv3, uniform_knots
 
 
 @register_compute_fun(
@@ -3529,4 +3531,206 @@ def _theta_PEST_ttz(params, transforms, profiles, data, **kwargs):
 )
 def _zeta(params, transforms, profiles, data, **kwargs):
     data["zeta"] = transforms["grid"].nodes[:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame",
+    dim=1,
+    params=[],
+    transforms={"p_u": [], "p_v": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["full control net", "full_weights", "theta", "zeta"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # recall shape of control_points_full is (n_cs, n_points_per_cs, 3)
+
+    control_points_full = data["full control net"]
+    weights_full = data["full_weights"]
+
+    p_u = transforms["p_u"]
+    p_v = transforms["p_v"]
+
+    # periodic padding by degree p_u on each side of the u/theta direction
+    control_points_wrapped = jnp.concatenate(
+        [
+            control_points_full[:, -p_u:, :],
+            control_points_full,
+            control_points_full[:, :p_u, :],
+        ],
+        axis=1,
+    )
+    weights_wrapped = jnp.concatenate(
+        [weights_full[:, -p_u:], weights_full, weights_full[:, :p_u]],
+        axis=1,
+    )
+
+    # wrapping control points for periodicity
+    control_points_wrapped = jnp.concatenate(
+        [
+            control_points_wrapped[-p_v:, :, :],
+            control_points_wrapped,
+            control_points_wrapped[:p_v, :, :],
+        ],
+        axis=0,
+    )
+    weights_wrapped = jnp.concatenate(
+        [weights_wrapped[-p_v:, :], weights_wrapped, weights_wrapped[:p_v, :]],
+        axis=0,
+    )
+
+    n_u = control_points_full.shape[1] - 1
+    n_v = control_points_full.shape[0] - 1
+    knots_u = uniform_knots(n_u, p_u, domain=2 * jnp.pi)
+    knots_v = uniform_knots(n_v, p_v, domain=2 * jnp.pi)
+
+    bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
+    bv, bv_v, _, _ = b_p_deriv3(data["zeta"], p_v, knots_v)
+
+    pw = control_points_wrapped * weights_wrapped[..., None]
+
+    num = jnp.einsum("ni,nj,jid->nd", bu, bv, pw)
+    num_t = jnp.einsum("ni,nj,jid->nd", bu_u, bv, pw)
+    num_z = jnp.einsum("ni,nj,jid->nd", bu, bv_v, pw)
+    den = jnp.einsum("ni,nj,ji->n", bu, bv, weights_wrapped)
+    den_t = jnp.einsum("ni,nj,ji->n", bu_u, bv, weights_wrapped)
+    den_z = jnp.einsum("ni,nj,ji->n", bu, bv_v, weights_wrapped)
+
+    xyz = num / den[:, None]
+    # quotient rule
+    xyz_t = (num_t * den[:, None] - num * den_t[:, None]) / den[:, None] ** 2
+    xyz_z = (num_z * den[:, None] - num * den_z[:, None]) / den[:, None] ** 2
+
+    rpz = xyz2rpz(xyz)
+    R = rpz[:, 0]
+    X, Y = xyz[:, 0], xyz[:, 1]
+
+    data["R"] = R
+    data["phi"] = rpz[:, 1]
+    data["Z"] = rpz[:, 2]
+    # R = hypot(X, Y); chain rule gives R_t/R_z, Z is the same in both bases
+    data["R_t"] = (X * xyz_t[:, 0] + Y * xyz_t[:, 1]) / R
+    data["Z_t"] = xyz_t[:, 2]
+    data["R_z"] = (X * xyz_z[:, 0] + Y * xyz_z[:, 1]) / R
+    data["Z_z"] = xyz_z[:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="phi",
+    label="\\phi",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _phi_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["phi"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="Z",
+    label="Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="R_t",
+    label="\\partial_{\\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_t_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_t"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="Z_t",
+    label="\\partial_{\\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, first poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_t_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_t"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="R_z",
+    label="\\partial_{\\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_z_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_z"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="Z_z",
+    label="\\partial_{\\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, first toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_z_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_z"] already computed when computing "R"
     return data

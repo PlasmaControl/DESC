@@ -1,6 +1,6 @@
 from interpax import interp1d
 
-from desc.backend import jnp, scan, sign, vmap
+from desc.backend import jnp, root_scalar, scan, sign, vmap
 from desc.compute.utils import compute as compute_fun
 from desc.grid import LinearGrid
 
@@ -1475,6 +1475,65 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # this is equivalent to jnp.trapz(T, s) for a closed curve
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
+    return data
+
+
+@register_compute_fun(
+    name="phi2s",
+    label="s(\\varphi)",
+    units="~",
+    units_long="None",
+    description="Curve parameter s corresponding to a "
+    + "given physical toroidal angle phi",
+    dim=0,
+    params=[],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="",
+    data=["full_control_net", "full_weights", "knots"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+    phi="ndarray: target phi value(s) to invert for s. Required.",
+)
+def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    phi_target = jnp.atleast_1d(kwargs["phi"])
+    degree = transforms["degree"]
+    knots = data["knots"]
+    control_points_xyz = data["full_control_net"]
+    weights = data["full_weights"]
+
+    p = degree
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    def _phi_and_dphi_ds(s):
+        b, b_s, _, _ = b_p_deriv3(jnp.atleast_1d(s), degree, knots)
+        pw = padded * padded_w[:, None]
+        num, num_s = b @ pw, b_s @ pw
+        den, den_s = b @ padded_w, b_s @ padded_w
+        xcart = num / den[:, None]
+        xcart_s = (num_s * den[:, None] - num * den_s[:, None]) / den[:, None] ** 2
+        x, y = xcart[0, 0], xcart[0, 1]
+        x_s, y_s = xcart_s[0, 0], xcart_s[0, 1]
+        phi = jnp.arctan2(y, x)  # wraps to (-pi, pi]
+        dphi_ds = (x * y_s - y * x_s) / (x**2 + y**2)
+        return phi, dphi_ds
+
+    def _residual(s, target):
+        phi, _ = _phi_and_dphi_ds(s)
+        return ((phi - target + jnp.pi) % (2 * jnp.pi)) - jnp.pi
+
+    def _jac(s, target):
+        _, dphi_ds = _phi_and_dphi_ds(s)
+        return dphi_ds
+
+    s0 = phi_target  # initial guess: s ~= phi works for near-circular axes
+    s_sol = vmap(
+        lambda s0_i, target: root_scalar(_residual, s0_i, jac=_jac, args=(target,))
+    )(s0, phi_target)
+    data["phi2s"] = s_sol
     return data
 
 

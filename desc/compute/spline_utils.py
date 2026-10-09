@@ -99,9 +99,13 @@ def b_p_deriv3(s, p, t):
             tt = jnp.outer(jnp.ones(len(ss)), tt)
             ss = jnp.expand_dims(ss, 0)
             b0 = ((ss.T >= tt[:, :-1]) & (ss.T < tt[:, 1:])).astype(tt.dtype)
-            b0 = b0.at[jnp.isclose(x1d, t1d[-1]), jnp.isclose(t1d[1:], t1d[-1])].set(
-                1.0
-            )
+            # clamp the right endpoint: s == last knot should activate the
+            # basis function whose upper knot is also the last knot. Written
+            # with jnp.where (not .at[bool, bool].set) so it stays traceable
+            # when s is a traced value, e.g. inside root_scalar's while_loop.
+            row_mask = jnp.isclose(x1d, t1d[-1])
+            col_mask = jnp.isclose(t1d[1:], t1d[-1])
+            b0 = jnp.where(row_mask[:, None] & col_mask[None, :], 1.0, b0)
             b.append(b0)
         else:
             l_term_n = ss.T - tt[:, : -deg - 1]

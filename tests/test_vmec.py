@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from netCDF4 import Dataset
+from netCDF4 import Dataset, chartostring
 
 import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
@@ -566,13 +566,10 @@ def test_load_then_save_current(TmpDir):
             False,
         )
     )
-    assert np.all(
-        np.char.compare_chararrays(
-            file1.variables["pcurr_type"][:],
-            file2.variables["pcurr_type"][:],
-            "==",
-            False,
-        )
+    # VMEC saved AC as the I'(s) power series, DESC saves AC as the I(s) power series
+    assert str(chartostring(file1.variables["pcurr_type"][:])).strip() == "power_series"
+    assert (
+        str(chartostring(file2.variables["pcurr_type"][:])).strip() == "power_series_I"
     )
     np.testing.assert_allclose(
         file1.variables["am"][:], file2.variables["am"][:], atol=1e-4
@@ -580,8 +577,14 @@ def test_load_then_save_current(TmpDir):
     np.testing.assert_allclose(
         file1.variables["ai"][:], file2.variables["ai"][:], atol=1e-8
     )
-    # we don't test AC because the .nc is the current derivative profile
-    # while ours is the current profile
+    # compare the I(s) profiles given by AC, with VMEC's normalized to CURTOR=ctor
+    s = np.linspace(0, 1, 11)
+    I_vmec = np.polyval(np.polyint(file1.variables["ac"][:].filled()[::-1]), s)
+    I_vmec *= file1.variables["ctor"][:] / I_vmec[-1]
+    I_desc = s * np.polyval(file2.variables["ac"][:].filled()[::-1], s)
+    np.testing.assert_allclose(
+        I_desc, I_vmec, rtol=1e-6, atol=1e-6 * np.max(np.abs(I_vmec))
+    )
     np.testing.assert_allclose(
         file1.variables["presf"][:], file2.variables["presf"][:], atol=2e-2
     )
@@ -794,6 +797,58 @@ def test_vmec_save_kinetic(TmpDir):
     VMECIO.save(eq, output_path, M_grid=8, N_grid=8)
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("match_VMEC_wout", [False, True])
+def test_vmec_save_negative_Psi(TmpDir, match_VMEC_wout):
+    """Tests the signs of saved quantities when Psi < 0.
+
+    Negating Psi and the toroidal current reverses B (B -> -B) while leaving the
+    flux surfaces and iota unchanged. Running VMEC with negated PHIEDGE and CURTOR
+    shows that every wout quantity linear in B or J then changes sign, and every
+    other quantity is unchanged, so the DESC wout should do the same.
+    """
+    eq = get("NCSX")  # current-constrained stellarator with finite pressure
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(L=6, M=6, N=4, L_grid=12, M_grid=12, N_grid=8)
+    eq_neg = eq.copy()
+    eq_neg.Psi = -eq.Psi
+    eq_neg.c_l = -eq.c_l
+
+    path_pos = str(TmpDir.join(f"wout_pos_{match_VMEC_wout}.nc"))
+    path_neg = str(TmpDir.join(f"wout_neg_{match_VMEC_wout}.nc"))
+    VMECIO.save(eq, path_pos, surfs=16, verbose=0, match_VMEC_wout=match_VMEC_wout)
+    VMECIO.save(eq_neg, path_neg, surfs=16, verbose=0, match_VMEC_wout=match_VMEC_wout)
+    pos = Dataset(path_pos, mode="r")
+    neg = Dataset(path_neg, mode="r")
+
+    flipped = [
+        "phi", "phipf", "phips", "chi", "chipf", "buco", "bvco", "ctor", "rbtor",
+        "rbtor0", "b0", "bdotgradv", "jcuru", "jcurv", "ac", "bsupumnc",
+        "bsupvmnc", "bsubumnc", "bsubvmnc", "bsubsmns", "currumnc", "currvmnc",
+    ]  # fmt: skip
+    same = [
+        "signgs", "iotaf", "iotas", "q_factor", "ai", "presf", "pres", "vp",
+        "over_r", "bdotb", "jdotb", "beta_vol", "wb", "wp", "volume_p",
+        "volavgB", "betatotal", "betapol", "betator", "betaxis", "DShear",
+        "DCurr", "DWell", "DGeod", "DMerc", "raxis_cc", "zaxis_cs", "rmnc",
+        "zmns", "lmns", "gmnc", "bmnc",
+    ]  # fmt: skip
+    for name in flipped + same:
+        x_pos = pos.variables[name][:].filled()
+        x_neg = neg.variables[name][:].filled()
+        sign = -1 if name in flipped else 1
+        assert np.all(np.isfinite(x_pos)), name
+        np.testing.assert_allclose(
+            x_neg,
+            sign * x_pos,
+            rtol=1e-6,
+            atol=1e-10 * np.max(np.abs(x_pos)),
+            err_msg=name,
+        )
+    pos.close()
+    neg.close()
+
+
 @pytest.mark.regression
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
@@ -923,47 +978,47 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["buco"][20:230], desc.variables["buco"][20:230], rtol=1e-5
+        vmec.variables["buco"][20:-1], desc.variables["buco"][20:-1], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["bvco"][20:230], desc.variables["bvco"][20:230], rtol=1e-5
+        vmec.variables["bvco"][20:-1], desc.variables["bvco"][20:-1], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["vp"][20:230], desc.variables["vp"][20:230], rtol=1e-6
+        vmec.variables["vp"][20:-1], desc.variables["vp"][20:-1], rtol=1e-6
     )
     np.testing.assert_allclose(
-        vmec.variables["over_r"][20:230], desc.variables["over_r"][20:230], rtol=1e-6
+        vmec.variables["over_r"][20:-1], desc.variables["over_r"][20:-1], rtol=1e-6
     )
     np.testing.assert_allclose(
         vmec.variables["over_r"][0], desc.variables["over_r"][0], rtol=1e-6
     )
     np.testing.assert_allclose(
-        vmec.variables["bdotb"][20:230], desc.variables["bdotb"][20:230], rtol=1e-6
+        vmec.variables["bdotb"][20:-1], desc.variables["bdotb"][20:-1], rtol=1e-6
     )
     np.testing.assert_allclose(
-        vmec.variables["jdotb"][20:230], desc.variables["jdotb"][20:230], rtol=1e-5
+        vmec.variables["jdotb"][20:-1], desc.variables["jdotb"][20:-1], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["jcuru"][20:230], desc.variables["jcuru"][20:230], rtol=1e-2
+        vmec.variables["jcuru"][20:-1], desc.variables["jcuru"][20:-1], rtol=1e-2
     )
     # TODO: we don't match bc VMEC not doing same FSA as us
     np.testing.assert_allclose(
-        vmec.variables["jcurv"][20:230], desc.variables["jcurv"][20:230], rtol=5e-2
+        vmec.variables["jcurv"][20:-1], desc.variables["jcurv"][20:-1], rtol=5e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DShear"][20:230], desc.variables["DShear"][20:230], rtol=1e-2
+        vmec.variables["DShear"][20:-1], desc.variables["DShear"][20:-1], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DCurr"][20:230], desc.variables["DCurr"][20:230], rtol=1e-2
+        vmec.variables["DCurr"][20:-1], desc.variables["DCurr"][20:-1], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DWell"][20:230], desc.variables["DWell"][20:230], rtol=1e-2
+        vmec.variables["DWell"][20:-1], desc.variables["DWell"][20:-1], rtol=1e-2
     )
     np.testing.assert_allclose(
-        vmec.variables["DGeod"][20:230], desc.variables["DGeod"][20:230], atol=1e-9
+        vmec.variables["DGeod"][20:-1], desc.variables["DGeod"][20:-1], atol=1e-9
     )
     np.testing.assert_allclose(
-        vmec.variables["DMerc"][20:230], desc.variables["DMerc"][20:230], rtol=5e-2
+        vmec.variables["DMerc"][20:-1], desc.variables["DMerc"][20:-1], rtol=5e-2
     )
     np.testing.assert_allclose(
         vmec.variables["raxis_cc"][:], desc.variables["raxis_cc"][:], rtol=5e-5
@@ -1037,13 +1092,10 @@ def test_vmec_save_1_LH_current(VMEC_save_LH_current):
             False,
         )
     )
-    assert np.all(
-        np.char.compare_chararrays(
-            vmec.variables["pcurr_type"][:],
-            desc.variables["pcurr_type"][:],
-            "==",
-            False,
-        )
+    # VMEC saved AC as the I'(s) power series, DESC saves AC as the I(s) power series
+    assert str(chartostring(vmec.variables["pcurr_type"][:])).strip() == "power_series"
+    assert (
+        str(chartostring(desc.variables["pcurr_type"][:])).strip() == "power_series_I"
     )
     np.testing.assert_allclose(
         vmec.variables["am"][:], desc.variables["am"][:], atol=1e-3, rtol=1e-6
@@ -1051,8 +1103,14 @@ def test_vmec_save_1_LH_current(VMEC_save_LH_current):
     np.testing.assert_allclose(
         vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-3
     )
-    # can't test AC because our saved AC is the current profile, not
-    # the current derivative profile
+    # compare the I(s) profiles given by AC, with VMEC's normalized to CURTOR=ctor
+    s = np.linspace(0, 1, 11)
+    I_vmec = np.polyval(np.polyint(vmec.variables["ac"][:].filled()[::-1]), s)
+    I_vmec *= vmec.variables["ctor"][:] / I_vmec[-1]
+    I_desc = s * np.polyval(desc.variables["ac"][:].filled()[::-1], s)
+    np.testing.assert_allclose(
+        I_desc, I_vmec, rtol=1e-6, atol=1e-6 * np.max(np.abs(I_vmec))
+    )
     np.testing.assert_allclose(
         vmec.variables["presf"][:], desc.variables["presf"][:], atol=2e-2
     )
@@ -1845,13 +1903,10 @@ def test_vmec_save_asym(VMEC_save_asym):
             False,
         )
     )
-    assert np.all(
-        np.char.compare_chararrays(
-            vmec.variables["pcurr_type"][:],
-            desc.variables["pcurr_type"][:],
-            "==",
-            False,
-        )
+    # VMEC saved AC as the I'(s) power series, DESC saves AC as the I(s) power series
+    assert str(chartostring(vmec.variables["pcurr_type"][:])).strip() == "power_series"
+    assert (
+        str(chartostring(desc.variables["pcurr_type"][:])).strip() == "power_series_I"
     )
     np.testing.assert_allclose(
         vmec.variables["am"][:], desc.variables["am"][:], atol=1e-5

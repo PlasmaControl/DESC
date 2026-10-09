@@ -3,7 +3,8 @@ Changelog
 
 New Features
 ------------
-- Adds``match_VMEC_wout`` flag to ``desc.vmec.VMECIO.save``, which changes the formula for the ``jdotb`` and ``jcurv`` variables to better match VMEC's wout files.
+- Adds ``match_VMEC_wout`` flag to ``desc.vmec.VMECIO.save``, which changes the formula for the ``jdotb``, ``jcuru`` and ``jcurv`` variables to better match VMEC's wout files.
+- ``desc.vmec.VMECIO.save`` now saves ``bdotgradv`` (previously hard-coded to zero).
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 
@@ -38,6 +39,10 @@ Bug Fixes
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- ``desc.vmec.VMECIO.save`` now saves ``b0`` with the sign of the toroidal field as VMEC does (``rbtor0`` divided by the axis major radius at ``phi=0``), instead of ``<|B|>`` on axis, which had the wrong sign for ``Psi < 0``.
+- ``desc.vmec.VMECIO.save`` now linearly extrapolates ``jdotb``, ``bdotb``, ``jcuru`` and ``jcurv`` to the magnetic axis as VMEC does, instead of saving ``NaN`` or zero there, and fixes the axis extrapolation of ``currumnc`` and ``currvmnc``.
+- ``desc.vmec.VMECIO.save`` now saves the current profile of current-constrained equilibria as ``ac`` coefficients of ``I(s)`` with ``pcurr_type='power_series_I'``, instead of labelling the ``I(s)`` coefficients as VMEC's default ``'power_series'``, which is a power series of ``I'(s)``.
+- The VMEC input file reader now reads ``AC`` as the ``I(s)`` power series when ``PCURR_TYPE='power_series_I'`` (such as in VMEC input files written by ``desc.vmec.VMECIO.write_vmec_input``), instead of warning and treating it as the ``I'(s)`` power series.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
 
 

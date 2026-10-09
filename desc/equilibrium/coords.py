@@ -218,7 +218,7 @@ def map_coordinates(  # noqa: C901
                 fixup=fixup,
                 tol=tol,
                 maxiter=maxiter,
-                full_output=full_output,
+                full_output=True,
                 **kwargs,
             )
         )
@@ -226,12 +226,10 @@ def map_coordinates(  # noqa: C901
     # See description here
     # https://github.com/PlasmaControl/DESC/pull/504#discussion_r1194172532
     # except we make sure properly handle periodic coordinates.
-    if full_output:
-        yk, (res, niter) = vecroot(yk, coords)
-    else:
-        yk = vecroot(yk, coords)
+    yk, (res, niter) = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
+    out = jnp.where((res <= tol)[:, None], out, jnp.nan)
     if full_output:
         return out, (res, niter)
     return out

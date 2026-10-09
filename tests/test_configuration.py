@@ -595,13 +595,20 @@ class TestInitialGuess:
         )
 
     @pytest.mark.unit
-    def test_map2disc_method_raises_if_map2disc_jax_missing(self, monkeypatch):
-        """Raise ImportError when map2disc is requested without map2disc_jax."""
+    def test_map2disc_falls_back_if_map2disc_jax_missing(self, monkeypatch):
+        """Warn and use GoodCoordinates when map2disc is requested but not installed."""
         monkeypatch.setitem(sys.modules, "map2disc_jax", None)
         surf = _surface_where_heuristic_guess_is_unnested()
-        with pytest.warns(UserWarning, match="not nested"):
-            with pytest.raises(ImportError, match="map2disc_jax"):
-                Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+        eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq_raw.is_nested()
+
+        with pytest.warns(UserWarning, match="map2disc requested but") as record:
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+        assert any("not installed" in str(w.message) for w in record)
+        assert not np.allclose(eq.R_lmn, eq_raw.R_lmn) or not np.allclose(
+            eq.Z_lmn, eq_raw.Z_lmn
+        )
 
     @pytest.mark.unit
     def test_map2disc_preserves_boundary_and_right_handed_jacobian(self):

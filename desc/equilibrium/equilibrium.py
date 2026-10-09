@@ -161,8 +161,8 @@ class Equilibrium(IOAble, Optimizable):
         The method to use for refining the initial guess if not nested.
         "opt" (default) runs a small optimization using the GoodCoordinates
         objective. "map2disc" uses the ``map2disc_jax`` package to solve a
-        harmonic BVP for a nested mapping. ``map2disc_jax`` must be installed
-        to use that method.
+        harmonic BVP for a nested mapping. If ``map2disc_jax`` is not
+        installed, fall back to the GoodCoordinates optimization and warn.
 
     """
 
@@ -547,8 +547,8 @@ class Equilibrium(IOAble, Optimizable):
             The method to use for refining the initial guess if not nested.
             "opt" (default) runs a small optimization using the GoodCoordinates
             objective. "map2disc" uses the ``map2disc_jax`` package to solve a
-            harmonic BVP for a nested mapping. ``map2disc_jax`` must be installed
-            to use that method.
+            harmonic BVP for a nested mapping. If ``map2disc_jax`` is not
+            installed, fall back to the GoodCoordinates optimization and warn.
 
         Examples
         --------

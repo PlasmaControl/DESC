@@ -57,8 +57,8 @@ def set_initial_guess(  # noqa: C901
         a small optimization problem using the GoodCoordinates objective.
         "map2disc" will use the ``map2disc_jax`` package to solve a harmonic BVP to
         find a nested initial mapping, using the equilibrium surface or the
-        passed-in surface as the boundary. Note that the `map2disc_jax` package must
-        be installed to use this method.
+        passed-in surface as the boundary. If ``map2disc_jax`` is not installed,
+        fall back to the GoodCoordinates optimization and warn.
 
     Examples
     --------
@@ -255,12 +255,6 @@ def set_initial_guess(  # noqa: C901
         if ensure_nested_method == "map2disc":
             try:
                 import map2disc_jax  # noqa: F401
-            except ImportError:
-                raise ImportError(
-                    "The map2disc_jax package is not installed. Please install it "
-                    + "to use the 'map2disc' method for refining the initial guess."
-                )
-            try:
                 Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
 
                 eq.R_lmn = Rlmn
@@ -282,6 +276,12 @@ def set_initial_guess(  # noqa: C901
                     0
                 ]
                 eq.params_dict = args
+            except ImportError:
+                warnings.warn(
+                    "map2disc requested but map2disc_jax is not installed. "
+                    "Falling back to the GoodCoordinates optimization."
+                )
+                fallback_to_goodcoordinates = True
             except (
                 Exception
             ) as e:  # if Babin init fails, just try to refine the existing guess

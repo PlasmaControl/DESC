@@ -44,7 +44,7 @@ Bug Fixes
 - ``desc.vmec.VMECIO.save`` now saves the current profile of current-constrained equilibria as ``ac`` coefficients of ``I(s)`` with ``pcurr_type='power_series_I'``, instead of labelling the ``I(s)`` coefficients as VMEC's default ``'power_series'``, which is a power series of ``I'(s)``.
 - The VMEC input file reader now reads ``AC`` as the ``I(s)`` power series when ``PCURR_TYPE='power_series_I'`` (such as in VMEC input files written by ``desc.vmec.VMECIO.write_vmec_input``), instead of warning and treating it as the ``I'(s)`` power series.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
-
+- Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 
 
 v0.17.3

@@ -255,7 +255,7 @@ def set_initial_guess(  # noqa: C901
         if ensure_nested_method == "map2disc":
             try:
                 import map2disc_jax  # noqa: F401
-                
+
                 Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
                 eq.R_lmn = Rlmn
                 eq.Z_lmn = Zlmn

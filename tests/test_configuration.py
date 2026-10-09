@@ -602,7 +602,7 @@ class TestInitialGuess:
         eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
         assert not eq_raw.is_nested()
 
-        with pytest.warns(UserWarning, match="map2disc requested but") as record:
+        with pytest.warns(UserWarning, match="map2disc requested but"):
             eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
 
         assert any("not installed" in str(w.message) for w in record)

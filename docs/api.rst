@@ -65,7 +65,7 @@ Continuation
 
 Derivatives
 ***********
-Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
+Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative``.
 
 .. autosummary::
     :toctree: _api/derivatives
@@ -73,7 +73,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     :template: class.rst
 
     desc.derivatives.AutoDiffDerivative
-    desc.derivatives.FiniteDiffDerivative
 
 Equilibrium
 ***********
@@ -105,10 +104,10 @@ of the external code. Please see the README of the `desc.external` for more deta
     :toctree: _api/external
     :recursive:
 
-    desc.external.export_coils_to_paraview
-    desc.external.export_surface_to_paraview
-    desc.external.export_volume_to_paraview
-    desc.external.TERPSICHORE
+    desc.external.paraview.export_coils_to_paraview
+    desc.external.paraview.export_surface_to_paraview
+    desc.external.paraview.export_volume_to_paraview
+    desc.external.terpsichore.TERPSICHORE
 
 
 Geometry

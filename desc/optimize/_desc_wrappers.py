@@ -1,6 +1,7 @@
 from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
+from desc.utils import warnif
 
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
@@ -8,6 +9,77 @@ from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
 from .stochastic import sgd
+
+# List of all optax optimizers to register
+# You may use the following test to update the list accordingly
+# https://github.com/PlasmaControl/DESC/pull/2041#issuecomment-3813092445
+_all_optax_optimizers = [
+    "adabelief",
+    "adadelta",
+    "adafactor",
+    "adagrad",
+    "adam",
+    "adamax",
+    "adamaxw",
+    "adamw",
+    "adan",
+    "amsgrad",
+    "fromage",
+    "lamb",
+    "lars",
+    "lbfgs",
+    "lion",
+    "nadam",
+    "nadamw",
+    "noisy_sgd",
+    "novograd",
+    "optimistic_adam_v2",
+    "optimistic_gradient_descent",
+    "polyak_sgd",
+    "radam",
+    "rmsprop",
+    "rprop",
+    "sgd",
+    "sign_sgd",
+    "sm3",
+    "yogi",
+]
+
+
+def _warn_if_bounds(objective, constraint, x0, options):
+    """Warn if bounds on sub-objectives can make the Jacobian rank-deficient.
+
+    A sub-objective with bounds contributes zero residuals, and hence zero Jacobian
+    rows, whenever it is inside its bounds. The full rank of the (m, n) Jacobian is
+    min(m, n), so those rows can only cost rank if the ones that always remain are
+    fewer than that. Only ``"svd"`` handles the deficient case reliably, so warn if
+    the user picked a different method and use ``"svd"`` if they didn't specify one.
+    """
+    sub = objective
+    while hasattr(sub, "_objective"):  # unwrap Proximal/LinearConstraintProjection
+        sub = sub._objective
+    bounded = [obj for obj in sub.objectives if obj.bounds is not None]
+    dim_f_bounded = sum(obj.dim_f for obj in bounded)
+    # constraint rows never vanish, bounds there become slack variables instead
+    m = objective.dim_f + (0 if constraint is None else constraint.dim_f)
+    n = x0.size
+    if m - dim_f_bounded < min(m, n):
+        # we only want to warn if the user supplied a method that is not svd
+        # if user didn't supply, the default qr will be switched to svd
+        tr_method = options.get("tr_method", "svd")
+        warnif(
+            tr_method != "svd",
+            UserWarning,
+            f"Objectives {[obj.name for obj in bounded]} use bounds instead of target, "
+            + f"so they can zero out {dim_f_bounded} of the {m} rows of the ({m}, {n}) "
+            + f"Jacobian and drop its rank below {min(m, n)}. The trust region method "
+            + f"{tr_method} may then fail to solve the subproblem, it is safer to use "
+            + "options={'tr_method': 'svd'}.",
+        )
+        # if not set by user, use SVD to avoid rank-deficiency issues
+        if not hasattr(options, "tr_method"):
+            options["tr_method"] = "svd"
+    return options
 
 
 @register_optimizer(
@@ -77,15 +149,15 @@ def _optimize_desc_aug_lagrangian(
         options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
     # local lambdas to handle constants from both objective and constraint
-    hess = (lambda x, *c: objective.hess(x, c[0])) if "bfgs" not in method else "bfgs"
+    hess = (lambda x, *c: objective.hess(x)) if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            lambda x, *c: constraint.compute_scaled(x, c[1]),
+            lambda x, *c: constraint.compute_scaled(x),
             lb,
             ub,
-            lambda x, *c: constraint.jac_scaled(x, c[1]),
+            lambda x, *c: constraint.jac_scaled(x),
         )
         # TODO (#1394): can't pass constants dict into vjp for now
         constraint_wrapped.vjp = lambda v, x, *args: constraint.vjp_scaled(v, x)
@@ -93,13 +165,13 @@ def _optimize_desc_aug_lagrangian(
         constraint_wrapped = None
 
     result = fmin_auglag(
-        lambda x, *c: objective.compute_scalar(x, c[0]),
+        objective.compute_scalar,
         x0=x0,
-        grad=lambda x, *c: objective.grad(x, c[0]),
+        grad=objective.grad,
         hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(objective.constants, constraint.constants if constraint else None),
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -171,26 +243,27 @@ def _optimize_desc_aug_lagrangian_least_squares(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
         constraint_wrapped = NonlinearConstraint(
-            lambda x, *c: constraint.compute_scaled(x, c[1]),
+            lambda x, *c: constraint.compute_scaled(x),
             lb,
             ub,
-            lambda x, *c: constraint.jac_scaled(x, c[1]),
+            lambda x, *c: constraint.jac_scaled(x),
         )
     else:
         constraint_wrapped = None
 
     result = lsq_auglag(
-        lambda x, *c: objective.compute_scaled_error(x, c[0]),
+        objective.compute_scaled_error,
         x0=x0,
-        jac=lambda x, *c: objective.jac_scaled_error(x, c[0]),
+        jac=objective.jac_scaled_error,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
-        args=(objective.constants, constraint.constants if constraint else None),
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -265,13 +338,14 @@ def _optimize_desc_least_squares(
         options.setdefault("max_trust_radius", 1.0)
     elif options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
+    options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 
     result = lsqtr(
         objective.compute_scaled_error,
         x0=x0,
         jac=objective.jac_scaled_error,
-        args=(objective.constants,),
+        args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -376,9 +450,18 @@ def _optimize_desc_fmin_scalar(
 
 
 @register_optimizer(
-    name="sgd",
-    description="Stochastic gradient descent with Nesterov momentum"
-    + "See https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    name=["sgd", "optax-custom"] + ["optax-" + opt for opt in _all_optax_optimizers],
+    description=[
+        "Stochastic gradient descent with Nesterov momentum. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+        "Wrapper for custom ``optax`` optimizer. See "
+        + "https://desc-docs.readthedocs.io/en/stable/_api/optimize/desc.optimize.sgd.html",  # noqa: E501
+    ]
+    + [
+        f"``optax`` wrapper for {opt}. See "
+        + f"https://optax.readthedocs.io/en/latest/api/optimizers.html#optax.{opt}"  # noqa: E501
+        for opt in _all_optax_optimizers
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
@@ -400,15 +483,20 @@ def _optimize_desc_stochastic(
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use.
-    x_scale : array_like or ‘jac’, optional
+        Name of the method to use. Available options are `'sgd'`.
+        Additionally, ``optax`` optimizers can be used by specifying the method as
+        ``'optax-<optimizer_name>'``, where ``<optimizer_name>`` is any valid ``optax``
+        optimizer. Hyperparameters for the ``optax`` optimizer must be passed via the
+        ``'optax-options'`` key of ``options`` dictionary. A custom ``optax``
+        optimizer can be used by specifying the method as ``'optax-custom'`` and
+        passing the ``optax`` optimizer via the ``'update-rule'`` key of
+        ``'optax-options'`` in the ``options`` dictionary.
+    x_scale : array_like or 'auto', optional
         Characteristic scale of each variable. Setting x_scale is equivalent to
-        reformulating the problem in scaled variables xs = x / x_scale. An alternative
-        view is that the size of a trust region along jth dimension is proportional to
-        x_scale[j]. Improved convergence may be achieved by setting x_scale such that
-        a step of a given size along any of the scaled variables has a similar effect
-        on the cost function. If set to ‘jac’, the scale is iteratively updated using
-        the inverse norms of the columns of the Jacobian matrix.
+        reformulating the problem in scaled variables xs = x / x_scale. Improved
+        convergence may be achieved by setting x_scale such that a step of a given
+        size along any of the scaled variables has a similar effect on the cost
+        function. Defaults to 'auto', meaning no scaling.
     verbose : int
         * 0  : work silently.
         * 1 : display a termination report.
@@ -436,8 +524,9 @@ def _optimize_desc_stochastic(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        args=(objective.constants,),
+        args=(),
         method=method,
+        x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],

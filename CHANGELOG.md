@@ -22,6 +22,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- ``Equilibrium.map_coordinates`` now returns NaN for points whose coordinate inversion does not converge (for example points outside the last closed flux surface), as documented, instead of finite coordinates clipped to the boundary.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.

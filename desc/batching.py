@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from jax._src import core
+from adv_jax_math import batch_map  # noqa: F401
 from jax._src.api import (
     _check_input_dtype_jacfwd,
     _check_input_dtype_jacrev,
@@ -10,21 +10,16 @@ from jax._src.api import (
     _check_output_dtype_jacrev,
     _jacfwd_unravel,
     _jacrev_unravel,
-    _jvp,
     _std_basis,
-    _vjp,
 )
-from jax._src.api_util import _ensure_index, argnums_partial, check_callable
+from jax._src.api_util import _ensure_index, check_callable
 from jax._src.numpy.vectorize import (
     _apply_excluded,
     _check_output_dims,
     _parse_gufunc_signature,
     _parse_input_dimensions,
 )
-from jax._src.pjit import auto_axes
-from jax._src.sharding_impls import canonicalize_sharding
-from jax._src.util import unzip2, wraps
-from jax.sharding import PartitionSpec
+from jax._src.util import wraps
 from jax.tree_util import (
     tree_flatten,
     tree_leaves,
@@ -34,102 +29,38 @@ from jax.tree_util import (
 )
 
 from desc.backend import jax, jnp, scan, vmap
-from desc.utils import errorif
+from desc.utils import errorif, identity
 
-if jax.__version_info__ >= (0, 4, 16):
-    from jax.extend import linear_util as lu
-else:
-    from jax import linear_util as lu
+try:
+    from jax._src.lax.control_flow.loops import _batch_and_remainder
 
+except ImportError:
+    # The old version of JAX doesn't have the required functions and will throw
+    # an ImportError. We use a simpler version of _batch_and_remainder from an older JAX
+    # version.
+    def _batch_and_remainder(x, batch_size: int):
+        """Taken from JAX 0.5.0.
 
-def _scan_leaf(leaf, batch_elems, num_batches, batch_size):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
+        Function is the same down to JAX 0.4.31.
+        """
+        leaves, treedef = tree_flatten(x)
 
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
+        scan_leaves = []
+        remainder_leaves = []
 
-    def f(l):
-        return l[:batch_elems].reshape(num_batches, batch_size, *leaf.shape[1:])
-
-    aval = core.typeof(leaf)
-    if aval.sharding.spec[0] is not None:
-        raise ValueError(
-            "0th dimension of leaf passed to `jax.lax.map` should be replicated."
-            f" Got {aval.str_short(True, True)}"
-        )
-
-    out_s = aval.sharding.update(
-        spec=PartitionSpec(None, None, *aval.sharding.spec[1:])
-    )
-    out_s = canonicalize_sharding(out_s, "lax.map")
-    if out_s is not None and out_s.mesh._any_axis_explicit:
-        return auto_axes(f, out_sharding=out_s, axes=out_s.mesh.explicit_axes)(leaf)
-    return f(leaf)
-
-
-def _remainder_leaf(leaf, batch_elems):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
-
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
-
-    def f(l):
-        return l[batch_elems:]
-
-    sharding = canonicalize_sharding(core.typeof(leaf).sharding, "lax.map")
-    if sharding is not None and sharding.mesh._any_axis_explicit:
-        return auto_axes(f, out_sharding=sharding, axes=sharding.mesh.explicit_axes)(
-            leaf
-        )
-    return f(leaf)
-
-
-def _batch_and_remainder(x, batch_size: int):
-    """https://github.com/jax-ml/jax/blob/main/jax/_src/lax/control_flow/loops.py.
-
-    References
-    ----------
-    The original copyright notice is as follows
-    Copyright 2018 The JAX Authors.
-    Licensed under the Apache License, Version 2.0 (the "License");
-    """
-    leaves, treedef = tree_flatten(x)
-    if not leaves:
-        return x, None
-    num_batches, remainder = divmod(leaves[0].shape[0], batch_size)
-    batch_elems = num_batches * batch_size
-    if num_batches == 0:
-        remainder_leaves = [_remainder_leaf(leaf, batch_elems) for leaf in leaves]
-        return None, treedef.unflatten(remainder_leaves)
-    elif remainder:
-        scan_leaves, remainder_leaves = unzip2(
-            [
-                (
-                    _scan_leaf(leaf, batch_elems, num_batches, batch_size),
-                    _remainder_leaf(leaf, batch_elems),
+        for leaf in leaves:
+            num_batches = leaf.shape[0] // batch_size
+            total_batch_elems = num_batches * batch_size
+            scan_leaves.append(
+                leaf[:total_batch_elems].reshape(
+                    num_batches, batch_size, *leaf.shape[1:]
                 )
-                for leaf in leaves
-            ]
-        )
-        return treedef.unflatten(scan_leaves), treedef.unflatten(remainder_leaves)
-    else:
-        scan_leaves = tuple(
-            _scan_leaf(leaf, batch_elems, num_batches, batch_size) for leaf in leaves
-        )
-        return treedef.unflatten(scan_leaves), None
+            )
+            remainder_leaves.append(leaf[total_batch_elems:])
 
-
-def _identity(y):
-    """Returns the input."""
-    return y
+        scan_tree = treedef.unflatten(scan_leaves)
+        remainder_tree = treedef.unflatten(remainder_leaves)
+        return scan_tree, remainder_tree
 
 
 _unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
@@ -163,7 +94,21 @@ def _scan_reduce(
     return result
 
 
-def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
+def _argnums_partial(fun, argnums, args, kwargs):
+    """Bind all arguments of ``fun`` except those in ``argnums``."""
+    argnums = (argnums,) if isinstance(argnums, int) else tuple(argnums)
+    dyn_args = tuple(args[i] for i in argnums)
+
+    def f_partial(*dyn):
+        full_args = list(args)
+        for i, a in zip(argnums, dyn):
+            full_args[i] = a
+        return fun(*full_args, **kwargs)
+
+    return f_partial, dyn_args
+
+
+def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     """A helper function to wrap f with a scan_fun.
 
     Refrences
@@ -178,14 +123,9 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=_identity):
     scan_fun = _scan_append if reduction is None else _scan_reduce
 
     def f_(*args, **kwargs):
-        f_partial, dyn_args = argnums_partial(
-            lu.wrap_init(fun, kwargs),
-            argnums,
-            args,
-            require_static_args_hashable=False,
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         return scan_fun(
-            lambda x: chunk_reduction(f_partial.call_wrapped(*x)),
+            lambda x: chunk_reduction(f_partial(*x)),
             dyn_args,
             reduction,
         )
@@ -198,7 +138,7 @@ def _evaluate_in_chunks(
     chunk_size,
     argnums,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
     *args,
     **kwargs,
 ):
@@ -249,9 +189,31 @@ def vmap_chunked(
     *,
     chunk_size=None,
     reduction=None,
-    chunk_reduction=_identity,
+    chunk_reduction=identity,
 ):
     """Behaves like ``vmap`` but uses scan to chunk the computations in smaller chunks.
+
+    Warnings
+    --------
+    - https://github.com/PlasmaControl/DESC/issues/1599
+    - https://github.com/jax-ml/jax/issues/26689
+    - https://github.com/jax-ml/jax/issues/27591
+    - https://github.com/jax-ml/jax/issues/31919
+    - Due to an actively worked on issue in JAX,
+      https://docs.jax.dev/en/latest/jep/
+      2026-custom-derivatives.html#main-problem-descriptions,
+      this function can simply ignore custom derivative rules
+      of the function in wraps if ``chunk_size`` is not ``None``,
+      and therefore can damp the effeciency gains of ``sparse_pullback``.
+      Use ``batch_map`` instead to avoid this,
+      or try to make a hack with jax.custom_transforms to bypass this.
+    - Only out axes = 0 is supported.
+
+    See Also
+    --------
+    batch_map
+        If the function supports native vectorization, use ``batch_map`` instead
+        for the reasons discussed the docstring.
 
     Parameters
     ----------
@@ -277,57 +239,11 @@ def vmap_chunked(
 
     """
     in_axes, argnums = _parse_in_axes(in_axes)
-    if isinstance(argnums, int):
-        argnums = (argnums,)
-
     f = vmap(f, in_axes=in_axes)
     if chunk_size is None:
         return lambda *args, **kwargs: chunk_reduction(f(*args, **kwargs))
     return partial(
         _evaluate_in_chunks, f, chunk_size, argnums, reduction, chunk_reduction
-    )
-
-
-def batch_map(
-    fun, fun_input, /, batch_size=None, *, reduction=None, chunk_reduction=_identity
-):
-    """Compute ``chunk_reduction(fun(fun_input))`` in batches.
-
-    This utility is like ``vmap_chunked`` except that ``fun`` is assumed to be
-    vectorized natively. No JAX vectorization such as ``vmap`` is applied to the
-    supplied function. This makes compilation faster and avoids the weaknesses of
-    applying JAX vectorization, such as executing all branches of code conditioned on
-    dynamic values. For example, this function would be useful for GitHub issue #1303
-
-    Parameters
-    ----------
-    fun : callable
-        Natively vectorized function.
-    fun_input : pytree
-        Data to split into batches to feed to ``fun``.
-    batch_size : int or None
-        Size of batches. If no batching should be done or the batch size is the
-        full input then supply ``None``.
-    reduction : callable or None
-        Binary reduction operation.
-        Should take two arguments and return one output, e.g. ``jnp.add``.
-    chunk_reduction : callable
-        Chunk-wise reduction operation.
-        Should typically apply ``reduction`` along the mapped axis,
-        e.g. ``jnp.add.reduce``.
-
-    Returns
-    -------
-    fun_output
-        Returns ``chunk_reduction(fun(fun_input))``.
-
-    """
-    return (
-        chunk_reduction(fun(fun_input))
-        if batch_size is None
-        else _evaluate_in_chunks(
-            fun, batch_size, (0,), reduction, chunk_reduction, fun_input
-        )
     )
 
 
@@ -521,18 +437,17 @@ def jacfwd_chunked(
 
     @wraps(fun, docstr=docstr, argnums=argnums)
     def jacfun(*args, **kwargs):
-        f = lu.wrap_init(fun, kwargs)
-        f_partial, dyn_args = argnums_partial(
-            f, argnums, args, require_static_args_hashable=False
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
         if not has_aux:
-            pushfwd = partial(_jvp, f_partial, dyn_args)
+            pushfwd = lambda tangents: jax.jvp(f_partial, dyn_args, tangents)
             y, jac = vmap_chunked(pushfwd, chunk_size=chunk_size)(_std_basis(dyn_args))
             y = tree_map(lambda x: x[0], y)
             jac = tree_map(lambda x: jnp.moveaxis(x, 0, -1), jac)
         else:
-            pushfwd = partial(_jvp, f_partial, dyn_args, has_aux=True)
+            pushfwd = lambda tangents: jax.jvp(
+                f_partial, dyn_args, tangents, has_aux=True
+            )
             y, jac, aux = vmap_chunked(pushfwd, chunk_size=chunk_size)(
                 _std_basis(dyn_args)
             )
@@ -608,15 +523,12 @@ def jacrev_chunked(
 
     @wraps(fun, docstr=docstr, argnums=argnums)
     def jacfun(*args, **kwargs):
-        f = lu.wrap_init(fun, kwargs)
-        f_partial, dyn_args = argnums_partial(
-            f, argnums, args, require_static_args_hashable=False
-        )
+        f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
         tree_map(partial(_check_input_dtype_jacrev, holomorphic, allow_int), dyn_args)
         if not has_aux:
-            y, pullback = _vjp(f_partial, *dyn_args)
+            y, pullback = jax.vjp(f_partial, *dyn_args)
         else:
-            y, pullback, aux = _vjp(f_partial, *dyn_args, has_aux=True)
+            y, pullback, aux = jax.vjp(f_partial, *dyn_args, has_aux=True)
         tree_map(partial(_check_output_dtype_jacrev, holomorphic), y)
         jac = vmap_chunked(pullback, chunk_size=chunk_size)(_std_basis(y))
         jac = jac[0] if isinstance(argnums, int) else jac

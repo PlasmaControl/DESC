@@ -7,9 +7,10 @@ from collections.abc import MutableSequence
 
 import numpy as np
 from diffrax import (
-    DiscreteTerminatingEvent,
+    Event,
     ODETerm,
     PIDController,
+    RecursiveCheckpointAdjoint,
     SaveAt,
     Tsit5,
     diffeqsolve,
@@ -18,13 +19,14 @@ from interpax import approx_df, interp1d, interp2d, interp3d
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
-from desc.backend import jit, jnp, sign
+from desc import config as desc_config
+from desc.backend import jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
 )
-from desc.batching import batch_map
+from desc.batching import batch_map, vmap_chunked
 from desc.compute import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.derivatives import Derivative
@@ -39,6 +41,7 @@ from desc.utils import (
     dot,
     errorif,
     flatten_list,
+    get_ess_scale,
     rpz2xyz,
     rpz2xyz_vec,
     safediv,
@@ -56,16 +59,16 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -75,22 +78,43 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Returns
     -------
     B : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic field in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic field in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # We want sum_M (rs-re) x JdV / |rs-re|^3, where rs, JdV are (M x 3) and re
+    # is (N x 3). Forming (rs-re) x JdV gives an (N x M x 3) array, which is
+    # very large. Instead we split it as rs x JdV - re x JdV, so that
+    # K = rs x JdV is only (M x 3). Then, with w = 1/|rs-re|^3 of shape
+    # (N x M), the contractions w @ K and w @ JdV sum over the sources directly
+    # and give (N x 3); only the latter is crossed with re. This way dr is the
+    # only (N x M x 3) array, and it is immediately reduced to (N x M) by the
+    # norm, which XLA can handle easily.
+    # Note that for AD, this approach removes multiple intermediate arrays.
+    # This trick was first suggested by Claude Fable 5, then implemented by Yigit
+    K = jnp.cross(rs, JdV, axis=-1)
+    # The split adds a bit of rounding error for points very close to a source,
+    # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,
+    # so for a 1e-3m distance, error is ~1e-11 in a 20m device. This kernel is never
+    # used for singular or near-singular integrals, so we should be fine.
 
     def biot(re):
-        dr = rs - re
-        num = jnp.cross(dr, JdV, axis=-1)
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True) ** 3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1) ** 3)
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            w = w[..., jnp.newaxis]
+            B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
+        else:
+            B = w @ K - jnp.cross(re, w @ JdV, axis=-1)
+        return B * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def biot_savart_general_vector_potential(
@@ -101,16 +125,16 @@ def biot_savart_general_vector_potential(
     Parameters
     ----------
     re : ndarray
-        Shape (n_eval_pts, 3).
+        Shape (N, 3).
         Evaluation points to evaluate B at, in cartesian.
     rs : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Source points for current density J, in cartesian.
     J : ndarray
-        Shape (n_src_pts, 3).
+        Shape (M, 3).
         Current density vector at source points, in cartesian.
     dV : ndarray
-        Shape (n_src_pts, ).
+        Shape (M, ).
         Volume element at source points
     chunk_size : int or None
         Size to split computation into chunks of evaluation points.
@@ -120,8 +144,8 @@ def biot_savart_general_vector_potential(
     Returns
     -------
     A : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic vector potential in cartesian components at specified points.
+        Shape(N, 3).
+        Magnetic vector potential in cartesian components at evaluation points.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -129,12 +153,18 @@ def biot_savart_general_vector_potential(
     assert JdV.shape == rs.shape
 
     def biot(re):
-        dr = rs - re
-        den = jnp.linalg.norm(dr, axis=-1, keepdims=True)
-        return safediv(JdV, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        dr = rs - re[..., jnp.newaxis, :]
+        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1))
+        # this operation compiles very differently on CPU and GPU
+        # we aim to use the best by conditionals
+        if desc_config.get("kind") == "gpu":
+            A = (w[..., jnp.newaxis] * JdV).sum(axis=-2)
+        else:
+            A = w @ JdV
+        return A * mu_0 / (4 * jnp.pi)
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    return batch_map(biot, re, chunk_size)
 
 
 def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
@@ -566,6 +596,7 @@ class _MagneticField(IOAble, ABC):
         nR=101,
         nZ=101,
         nphi=90,
+        NFP=None,
         save_vector_potential=True,
         chunk_size=None,
         source_grid=None,
@@ -590,6 +621,9 @@ class _MagneticField(IOAble, ABC):
             Number of grid points in the Z coordinate (default = 101).
         nphi : int, optional
             Number of grid points in the toroidal angle (default = 90).
+        NFP : int, optional
+            Number of toroidal field periods. If not provided, will default to 1 or
+            the field's NFP, if it has that attribute.
         save_vector_potential : bool, optional
             Whether to save the magnetic vector potential to the mgrid
             file, in addition to the magnetic field. Defaults to True.
@@ -611,7 +645,9 @@ class _MagneticField(IOAble, ABC):
         """
         path = os.path.expanduser(path)
         # cylindrical coordinates grid
-        NFP = self.NFP if hasattr(self, "_NFP") else 1
+        NFP = getattr(self, "_NFP", 1) if NFP is None else NFP
+        if hasattr(self, "_NFP"):
+            warnif(NFP != self.NFP, UserWarning, "NFP input is not equal to field.NFP.")
         R = np.linspace(Rmin, Rmax, nR)
         Z = np.linspace(Zmin, Zmax, nZ)
         phi = np.linspace(0, 2 * np.pi / NFP, nphi, endpoint=False)
@@ -830,6 +866,8 @@ class MagneticFieldFromUser(_MagneticField, Optimizable):
         coords = jnp.atleast_2d(jnp.asarray(coords))
         if params is None:
             params = self.params
+        elif isinstance(params, dict):
+            params = params["params"]
         if basis == "xyz":
             coords = xyz2rpz(coords)
 
@@ -893,7 +931,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, scale, field):
-        scale = float(np.squeeze(scale))
+        scale = jnp.float64(float(np.squeeze(scale)))
         assert isinstance(
             field, _MagneticField
         ), "field should be a subclass of MagneticField, got type {}".format(
@@ -913,7 +951,7 @@ class ScaledMagneticField(_MagneticField, Optimizable):
 
     @scale.setter
     def scale(self, new):
-        self._scale = float(np.squeeze(new))
+        self._scale = jnp.float64(float(np.squeeze(new)))
 
     # want this class to pretend like its the underlying field
     def __getattr__(self, attr):
@@ -1246,8 +1284,8 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
     _static_attrs = _MagneticField._static_attrs + Optimizable._static_attrs
 
     def __init__(self, B0, R0):
-        self.B0 = float(np.squeeze(B0))
-        self.R0 = float(np.squeeze(R0))
+        self.B0 = jnp.float64(float(np.squeeze(B0)))
+        self.R0 = jnp.float64(float(np.squeeze(R0)))
 
     @optimizable_parameter
     @property
@@ -1257,7 +1295,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1267,7 +1305,7 @@ class ToroidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1401,7 +1439,7 @@ class VerticalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -1550,7 +1588,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @R0.setter
     def R0(self, new):
-        self._R0 = float(np.squeeze(new))
+        self._R0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1560,7 +1598,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @B0.setter
     def B0(self, new):
-        self._B0 = float(np.squeeze(new))
+        self._B0 = jnp.float64(float(np.squeeze(new)))
 
     @optimizable_parameter
     @property
@@ -1570,7 +1608,7 @@ class PoloidalMagneticField(_MagneticField, Optimizable):
 
     @iota.setter
     def iota(self, new):
-        self._iota = float(np.squeeze(new))
+        self._iota = jnp.float64(float(np.squeeze(new)))
 
     def compute_magnetic_field(
         self,
@@ -2201,7 +2239,7 @@ class SplineMagneticField(_MagneticField, Optimizable):
         extrap : bool
             whether to extrapolate splines beyond specified R,phi,Z
         NFP : int, optional
-            Number of toroidal field periods.  If not provided, will default to 1 or
+            Number of toroidal field periods. If not provided, will default to 1 or
             the provided field's NFP, if it has that attribute.
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
@@ -2209,7 +2247,6 @@ class SplineMagneticField(_MagneticField, Optimizable):
             then supply ``None``. Default is ``None``.
         source_grid : Grid, optional
             Grid used to discretize field. Defaults to the default grid for given field.
-
 
         """
         R, phi, Z = map(np.asarray, (R, phi, Z))
@@ -2219,7 +2256,11 @@ class SplineMagneticField(_MagneticField, Optimizable):
         BR, BP, BZ = field.compute_magnetic_field(
             coords, params, basis="rpz", chunk_size=chunk_size, source_grid=source_grid
         ).T
-        NFP = getattr(field, "_NFP", 1)
+        NFP = getattr(field, "_NFP", 1) if NFP is None else NFP
+        if hasattr(field, "_NFP"):
+            warnif(
+                NFP != field.NFP, UserWarning, "NFP input is not equal to field.NFP."
+            )
         try:
             AR, AP, AZ = field.compute_magnetic_vector_potential(
                 coords,
@@ -2579,13 +2620,16 @@ def field_line_integrate(
     source_grid=None,
     rtol=1e-8,
     atol=1e-8,
-    maxstep=1000,
+    max_steps=None,
     min_step_size=1e-8,
     solver=Tsit5(),
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
+    use_precomputed_source=True,
     chunk_size=None,
-    **kwargs,
+    bs_chunk_size=None,
+    options=None,
+    return_aux=False,
 ):
     """Trace field lines by integration, using diffrax package.
 
@@ -2603,9 +2647,11 @@ def field_line_integrate(
     source_grid : Grid, optional
         Collocation points used to discretize source field.
     rtol, atol : float
-        relative and absolute tolerances for ode integration
-    maxstep : int
-        maximum number of steps between different phis
+        relative and absolute tolerances for PID stepsize controller. Not used if
+        ``stepsize_controller`` is provided.
+    max_steps : int
+        maximum number of steps for the integration. Defaults to
+        abs((phis[-1] - phis[0]) * 1000)
     min_step_size: float
         minimum step size (in phi) that the integration can take. default is 1e-8
     solver: diffrax.Solver
@@ -2614,17 +2660,30 @@ def field_line_integrate(
     bounds_R : tuple of (float,float), optional
         R bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
-        Defaults to (0,np.inf)
+        Defaults to (0, np.inf)
     bounds_Z : tuple of (float,float), optional
         Z bounds for field line integration bounding box. Trajectories that leave this
         box will be stopped, and NaN returned for points outside the box.
-        Defaults to (-np.inf,np.inf)
+        Defaults to (-np.inf, np.inf)
+    use_precomputed_source : bool, optional
+        Precompute the Biot-Savart source data (positions, tangents and currents)
+        once before the integration, so that each ODE step only evaluates the
+        Biot-Savart kernel from the merged sources instead of recomputing the constant
+        geometry information. This is usually much faster. Set to False to evaluate
+        the field the standard way. Only used if underlying field implements
+        the precomputation via `_as_precomputed_source` method. Default is True.
     chunk_size : int or None
-        Size to split computation into chunks of evaluation points.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``. Default is ``None``.
-    kwargs: dict
-        keyword arguments to be passed into the ``diffrax.diffeqsolve``
+        Chunk of field lines to trace at once. If None, traces all at once.
+        Defaults to None.
+    bs_chunk_size: int or None
+        Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
+        evaluates all the source grid points at once. Defaults to None.
+    options : dict, optional
+        Additional arguments to pass to the diffrax diffeqsolve.
+    return_aux : bool, optional
+        Whether to return auxiliary information from the integrator. If True, will
+        return a tuple (r, z, aux) where aux consists ``stats`` and ``result`` from
+        ``diffrax.diffeqsolve``. Defaults to False.
 
     Returns
     -------
@@ -2632,78 +2691,191 @@ def field_line_integrate(
         arrays of r and z coordinates of the field line, corresponding to the
         input phis
     """
+    if options is None:
+        options = {}
+
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+
+    min_step_size = jnp.where(
+        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
+    )
+    max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
+
+    # diffrax parameters
+    def default_terminating_event(t, y, args, **kwargs):
+        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
+        return jnp.logical_or(R_out, Z_out)
+
+    saveat = options.pop("saveat", SaveAt(ts=phis))
+    event = options.pop("event", Event(default_terminating_event))
+    adjoint = options.pop("adjoint", RecursiveCheckpointAdjoint())
+    stepsize_controller = options.pop(
+        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
+    )
+    return _field_line_integrate(
+        r0=r0,
+        z0=z0,
+        phis=phis,
+        field=field,
+        params=params,
+        source_grid=source_grid,
+        solver=solver,
+        max_steps=max_steps,
+        min_step_size=min_step_size,
+        saveat=saveat,
+        stepsize_controller=stepsize_controller,
+        event=event,
+        adjoint=adjoint,
+        use_precomputed_source=use_precomputed_source,
+        chunk_size=chunk_size,
+        bs_chunk_size=bs_chunk_size,
+        options=options,
+        return_aux=return_aux,
+    )
+
+
+def _field_line_integrate(
+    r0,
+    z0,
+    phis,
+    field,
+    params,
+    source_grid,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    options,
+    use_precomputed_source=True,
+    chunk_size=None,
+    bs_chunk_size=None,
+    return_aux=False,
+):
+    """JIT/AD friendly field line integrator.
+
+    This function gives more control over the integration and is also JIT and AD
+    friendly. One can use this function inside an objective. All arguments must
+    have a value. For description of the full set of arguments, see
+    ``field_line_integrate``. There won't be any checks on the arguments here,
+    so make sure they are valid before using this function.
+
+    Parameters
+    ----------
+    stepsize_controller : diffrax.StepsizeController
+        Stepsize controller to use for the integration.
+    saveat : diffrax.SaveAt
+        SaveAt object to specify when to save the solution.
+    event : diffrax.Event
+        Event object to specify when to stop the integration.
+    adjoint : diffrax.AbstractAdjoint
+        How to take derivatives of the trajectories. ``RecursiveCheckpointAdjoint``
+        supports reverse mode AD and tends to be the most efficient. For forward mode AD
+        use ``diffrax.ForwardMode()``.
+    """
+    # For supported fields, precompute the Biot-Savart source data once, so that
+    # the ODE right hand side only evaluates the Biot-Savart kernel instead of
+    # recomputing, i.e. the coil geometry (which is independent of the evaluation
+    # points) at every step of every field line.
+    if use_precomputed_source and hasattr(field, "_as_precomputed_source"):
+        field = field._as_precomputed_source(source_grid, params)
+        params = None
+        source_grid = None
+
     rshape = r0.shape
     r0 = r0.flatten()
     z0 = z0.flatten()
     x0 = jnp.array([r0, phis[0] * jnp.ones_like(r0), z0]).T
-
     # scale to make toroidal field (bp) positive
     scale = jnp.sign(field.compute_magnetic_field(x0)[0, 1])
-    min_step_size = jnp.where(
-        phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)
-    )
-
-    @jit
-    def odefun(s, rpz, args):
-        rpz = rpz.reshape((3, -1)).T
-        field = args[0]
-        r = rpz[:, 0]
-        br, bp, bz = (
-            scale
-            * field.compute_magnetic_field(
-                rpz, params, basis="rpz", source_grid=source_grid, chunk_size=chunk_size
-            ).T
-        )
-        return jnp.array(
-            [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
-        ).squeeze()
-
-    # diffrax parameters
-
-    def default_terminating_event_fxn(state, **kwargs):
-        R_out = jnp.logical_or(state.y[0] < bounds_R[0], state.y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(state.y[2] < bounds_Z[0], state.y[2] > bounds_Z[1])
-        return jnp.logical_or(R_out, Z_out)
-
-    kwargs.setdefault(
-        "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)
-    )
-    kwargs.setdefault(
-        "discrete_terminating_event",
-        DiscreteTerminatingEvent(default_terminating_event_fxn),
-    )
-
-    term = ODETerm(odefun)
-    saveat = SaveAt(ts=phis)
-
-    intfun = lambda x: diffeqsolve(
-        term,
-        solver,
-        y0=x,
-        t0=phis[0],
-        t1=phis[-1],
-        saveat=saveat,
-        max_steps=maxstep * len(phis),
-        dt0=min_step_size,
-        args=(field,),
-        **kwargs,
-    ).ys
 
     # suppress warnings till its fixed upstream:
     # https://github.com/patrick-kidger/diffrax/issues/445
-    # also ignore deprecation warning for now until we actually need to deal with it
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="unhashable type")
-        warnings.filterwarnings("ignore", message="`diffrax.*discrete_terminating")
-        x = jnp.vectorize(intfun, signature="(k)->(n,k)")(x0)
+        out = vmap_chunked(
+            _intfun_wrapper, in_axes=(0,) + 14 * (None,), chunk_size=chunk_size
+        )(
+            x0,
+            field,
+            params,
+            source_grid,
+            phis,
+            scale,
+            solver,
+            max_steps,
+            min_step_size,
+            saveat,
+            stepsize_controller,
+            event,
+            adjoint,
+            bs_chunk_size,
+            options,
+        )
 
+    x = out.ys
     x = jnp.where(jnp.isinf(x), jnp.nan, x)
     r = x[:, :, 0].squeeze().T.reshape((phis.size, *rshape))
     z = x[:, :, 2].squeeze().T.reshape((phis.size, *rshape))
 
-    return r, z
+    if return_aux:
+        return r, z, (out.stats, out.result)
+    else:
+        return r, z
+
+
+def _intfun_wrapper(
+    x,
+    field,
+    params,
+    source_grid,
+    phis,
+    scale,
+    solver,
+    max_steps,
+    min_step_size,
+    saveat,
+    stepsize_controller,
+    event,
+    adjoint,
+    bs_chunk_size,
+    options,
+):
+    """Wrapper for field line integration."""
+    return diffeqsolve(
+        terms=ODETerm(_odefun),
+        solver=solver,
+        y0=x,
+        t0=phis[0],
+        t1=phis[-1],
+        saveat=saveat,
+        max_steps=max_steps,
+        dt0=min_step_size,
+        stepsize_controller=stepsize_controller,
+        args=[field, params, scale, source_grid, bs_chunk_size],
+        event=event,
+        adjoint=adjoint,
+        **options,
+    )
+
+
+def _odefun(s, rpz, args):
+    # Note: this function is already jitted by diffeqsolve
+    field, params, scale, source_grid, bs_chunk_size = args
+    r = rpz[0]
+    br, bp, bz = (
+        scale
+        * field.compute_magnetic_field(
+            rpz, params, basis="rpz", source_grid=source_grid, chunk_size=bs_chunk_size
+        ).squeeze()
+    )
+    return jnp.array(
+        [r * br / bp * jnp.sign(bp), jnp.sign(bp), r * bz / bp * jnp.sign(bp)]
+    ).squeeze()
 
 
 class OmnigenousField(Optimizable, IOAble):
@@ -2867,15 +3039,15 @@ class OmnigenousField(Optimizable, IOAble):
         self._N_x = setdefault(N_x, self.N_x)
 
         # change well parameters and basis
-        rho = (  # Chebyshev-Gauss-Lobatto nodes
-            1 - np.cos(np.arange(old_L_B // 2, old_L_B + 1, 1) * np.pi / old_L_B)
-        ) / 2
+        # Chebyshev-Gauss-Lobatto nodes for radial interpolation
+        rho = (1 - np.cos(np.arange(old_L_B + 1) * np.pi / old_L_B)) / 2
         nodes = np.array([rho, np.zeros_like(rho), np.zeros_like(rho)]).T
 
         transform_fwd = self.B_basis.evaluate(nodes)
         transform_rev = jnp.linalg.pinv(transform_fwd)
         B_old = transform_fwd @ self.B_lm.reshape((old_L_B + 1, -1))
 
+        # linearly spaced nodes for eta interpolation
         eta_old = np.linspace(0, jnp.pi / 2, num=B_old.shape[-1])
         eta_new = np.linspace(0, jnp.pi / 2, num=self.M_B)
 
@@ -2980,6 +3152,37 @@ class OmnigenousField(Optimizable, IOAble):
             **kwargs,
         )
         return data
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale using exponential spectral scaling.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Decay rate of the scaling. Default is 1.2
+        order : int, optional
+            Order of norm to use for multi-index mode numbers. Options are:
+            - 1: Diamond pattern using |l| + |m| + |n|
+            - 2: Circular pattern using sqrt(l² + m² + n²)
+            - np.inf : Square pattern using max(|l|,|m|,|n|)
+            Default is 'np.inf'
+        min_value : float, optional
+            Minimum allowed scale value. Default is 1e-7
+
+        Returns
+        -------
+        dict of ndarray
+            Array of scale values for each parameter
+        """
+        # this is the base class scale:
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        # we use ESS for the following:
+        modes = {"B_lm": self.B_basis.modes, "x_lmn": self.x_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+        # B_lm has spectral radial scaling repeated for each spline knot
+        scales["B_lm"] = np.repeat(scales["B_lm"], self.M_B).flatten()
+
+        return scales
 
     @property
     def NFP(self):

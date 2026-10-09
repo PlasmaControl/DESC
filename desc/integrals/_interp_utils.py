@@ -1,497 +1,189 @@
-"""Fast interpolation utilities.
+"""Interpolation utilities."""
 
-Notes
------
-These utilities are chosen for performance on gpu among
-methods that have the best (asymptotic) algorithmic complexity.
-For example, we prefer to not use Horner's method.
-"""
-
+import warnings
 from functools import partial
 
 import numpy as np
 from interpax import interp1d
-from orthax.chebyshev import chebroots
 
-from desc.backend import dct, jnp, rfft, rfft2, take
-from desc.integrals.quad_utils import bijection_from_disc
-from desc.utils import Index, errorif, safediv
+try:
+    from jax_finufft import nufft2, options
 
-# TODO (#1154):
-#  We use the spline method to compute roots right now, but with the following
-#  algorithm, the Chebyshev method will be more efficient except when NFP is high.
-#  1. Boyd's method 𝒪(n²) instead of Chebyshev companion matrix 𝒪(n³).
-#  John P. Boyd, Computing real roots of a polynomial in Chebyshev series
-#  form through subdivision. https://doi.org/10.1016/j.apnum.2005.09.007.
-#  Use that once to find extrema of |B| if Y_B > 64.
-#  2. Then to find roots of bounce points use the closed formula in Boyd's
-#  spectral methods section 19.6. Can isolate interval to search for root by
-#  observing whether B - 1/pitch changes sign at extrema. Only need to do
-#  evaluate Chebyshev series at quadrature points once, and can use that to
-#  compute the integral for every pitch. The integral will converge rapidly
-#  since a low order polynomial approximates |B| well in between adjacent
-#  extrema. This is cheaper and non-iterative, so jax and gpu will like it.
-#  Implementing 1 and 2 will remove all eigenvalue solves from computation.
-#  2 is a larger improvement than 1.
-chebroots_vec = jnp.vectorize(chebroots, signature="(m)->(n)")
-
-
-def cheb_pts(n, domain=(-1, 1), lobatto=False):
-    """Get ``n`` Chebyshev points mapped to given domain.
-
-    Warnings
-    --------
-    This is a common definition of the Chebyshev points (see Boyd, Chebyshev and
-    Fourier Spectral Methods p. 498). These are the points demanded by discrete
-    cosine transformations to interpolate Chebyshev series because the cosine
-    basis for the DCT is defined on [0, π]. They differ in ordering from the
-    points returned by ``numpy.polynomial.chebyshev.chebpts1`` and
-    ``numpy.polynomial.chebyshev.chebpts2``.
-
-    Parameters
-    ----------
-    n : int
-        Number of points.
-    domain : tuple[float]
-        Domain for points.
-    lobatto : bool
-        Whether to return the Gauss-Lobatto (extrema-plus-endpoint)
-        instead of the interior roots for Chebyshev points.
-
-    Returns
-    -------
-    pts : jnp.ndarray
-        Shape (n, ).
-        Chebyshev points mapped to given domain.
-
-    """
-    N = jnp.arange(n)
-    if lobatto:
-        y = jnp.cos(jnp.pi * N / (n - 1))
+except (ImportError, ModuleNotFoundError):
+    warnings.warn(
+        "jax_finufft is not installed. NUFFT functions will not be available.",
+        UserWarning,
+    )
+except Exception as e:
+    error_str = str(e)
+    # This error will probably happen pretty often, we skip it to prevent breaking
+    # codes that doesn't use jax_finufft but still want to use desc
+    if "XLA FFI handler registration" in error_str:
+        warnings.warn(
+            "jax_finufft XLA FFI handler registration failed. "
+            "This is likely due to a mismatch between the JAX version and the "
+            "jax_finufft version. Change package versions to resolve this issue. "
+            "NUFFT functions will not be available.",
+            UserWarning,
+        )
+    # If we face any other specific error related to jax_finufft, we can catch it
+    # in an elif block and provide a more specific warning.
     else:
-        y = jnp.cos(jnp.pi * (2 * N + 1) / (2 * n))
-    return bijection_from_disc(y, domain[0], domain[-1])
+        warnings.warn(
+            "Unknown error occurred while importing jax_finufft. NUFFT functions "
+            f"will not be available: {e}",
+            UserWarning,
+        )
+
+from desc.backend import jax, jnp
+
+_JF_BUG = True
+"""https://github.com/flatironinstitute/jax-finufft/issues/158.
+
+   Wait for jax-finufft to merge
+   https://github.com/flatironinstitute/jax-finufft/pull/216
+   then bump min version and set this to False.
+"""
 
 
-def fourier_pts(n):
-    """Get ``n`` Fourier points in [0, 2π)."""
-    # [0, 2π) instead of [-π, π) required to match our definition of α.
-    return 2 * jnp.pi * jnp.arange(n) / n
+def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
+    """Non-uniform 1D real fast Fourier transform of second type.
 
-
-# TODO (#1294): For inverse transforms, use non-uniform fast transforms (NFFT).
-#   https://github.com/flatironinstitute/jax-finufft.
-#   Let spectral resolution be F, (e.g. F = M N for 2D transform),
-#   and number of points (non-uniform) to evaluate be Q. A non-uniform
-#   fast transform cost is 𝒪([F+Q] log[F] log[1/ε]) where ε is the
-#   interpolation error term (depending on implementation how ε appears
-#   may change, but it is always logarithmic). Direct evaluation is 𝒪(F Q).
-#   Note that for the inverse Chebyshev transforms, we can also use fast
-#   multipoint methods Chapter 10, https://doi.org/10.1017/CBO9781139856065.
-#   Unlike NFFTs, multipoint methods are exact and reduce to using FFTs.
-#   The cost is 𝒪([F+Q] log²[F + Q]). This might be useful to evaluating
-#   |B|, since the integrands are not smooth functions of |B|, which we know
-#   as a Chebyshev series, and the nodes are packed more tightly near the
-#   singular regions.
-
-
-def interp_rfft(xq, f, domain=(0, 2 * jnp.pi), axis=-1):
-    """Interpolate real-valued ``f`` to ``xq`` with FFT.
-
-    Parameters
-    ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(f.shape,axis)``.
-    f : jnp.ndarray
-        Real function values on uniform grid over an open period to interpolate.
-    domain : tuple[float]
-        Domain over which samples were taken.
-    axis : int
-        Axis along which to transform.
-
-    Returns
-    -------
-    fq : jnp.ndarray
-        Real function value at query points.
-
-    """
-    return irfft_non_uniform(
-        xq, rfft(f, axis=axis, norm="forward"), f.shape[axis], domain, axis
-    )
-
-
-def irfft_non_uniform(xq, a, n, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
-    """Evaluate Fourier coefficients ``a`` at ``xq``.
-
-    Parameters
-    ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
-    a : jnp.ndarray
-        Fourier coefficients ``a=rfft(f,axis=axis,norm="forward")``.
-    n : int
-        Spectral resolution of ``a``.
-    domain : tuple[float]
-        Domain over which samples were taken.
-    axis : int
-        Axis along which to transform.
-    _modes : jnp.ndarray
-        If supplied, just builds the Vandermonde array and computes the dot product.
-        Assumes the Fourier coefficients have the correct factors for the DC and
-        Nyquist frequency. Assumes ``axis=-1``.
-
-    Returns
-    -------
-    fq : jnp.ndarray
-        Real function value at query points.
-
-    """
-    if _modes is None:
-        _modes = jnp.fft.rfftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-        if (n % 2) == 0:
-            i = (0, -1)
-        else:
-            i = 0
-        a = jnp.moveaxis(a, axis, -1).at[..., i].divide(2) * 2
-    vander = jnp.exp(1j * _modes * (xq - domain[0])[..., jnp.newaxis])
-    return (vander * a).real.sum(axis=-1)
-
-
-def ifft_non_uniform(xq, a, domain=(0, 2 * jnp.pi), axis=-1, _modes=None):
-    """Evaluate Fourier coefficients ``a`` at ``xq``.
-
-    Parameters
-    ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with arrays of shape ``np.delete(a.shape,axis)``.
-    a : jnp.ndarray
-        Fourier coefficients ``a=fft(f,axis=axis,norm="forward")``.
-    domain : tuple[float]
-        Domain over which samples were taken.
-    axis : int
-        Axis along which to transform.
-    _modes : jnp.ndarray
-        Supply to avoid computing the modes.
-
-    Returns
-    -------
-    fq : jnp.ndarray
-        Function value at query points.
-
-    """
-    if _modes is None:
-        n = a.shape[axis]
-        _modes = jnp.fft.fftfreq(n, (domain[1] - domain[0]) / (2 * jnp.pi * n))
-    a = jnp.moveaxis(a, axis, -1)
-    vander = jnp.exp(-1j * _modes * (xq - domain[0])[..., jnp.newaxis])
-    return jnp.linalg.vecdot(vander, a)
-
-
-def interp_rfft2(
-    xq0, xq1, f, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
-):
-    """Interpolate real-valued ``f`` to coordinates ``(xq0,xq1)`` with FFT.
-
-    Parameters
-    ----------
-    xq0 : jnp.ndarray
-        Real query points of coordinate in ``domain0`` where interpolation is desired.
-        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
-        The coordinates stored here must be the same coordinate enumerated
-        across axis ``min(axes)`` of the function values ``f``.
-    xq1 : jnp.ndarray
-        Real query points of coordinate in ``domain1`` where interpolation is desired.
-        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
-        The coordinates stored here must be the same coordinate enumerated
-        across axis ``max(axes)`` of the function values ``f``.
-    f : jnp.ndarray
-        Shape (..., f.shape[-2], f.shape[-1]).
-        Real function values on uniform tensor-product grid over an open period.
-    domain0 : tuple[float]
-        Domain of coordinate specified by ``xq0`` over which samples were taken.
-    domain1 : tuple[float]
-        Domain of coordinate specified by ``xq1`` over which samples were taken.
-    axes : tuple[int]
-        Axes along which to transform.
-        The real transform is done along ``axes[1]``, so it will be more
-        efficient for that to denote the smaller size axis in ``axes``.
-
-    Returns
-    -------
-    fq : jnp.ndarray
-        Real function value at query points.
-
-    """
-    if (f.shape[axes[1]] % 2) == 0:
-        i = (0, -1)
-    else:
-        i = 0
-    a = rfft2(f, axes=axes, norm="forward")
-    a = jnp.moveaxis(a, axes, (-2, -1)).at[..., i].divide(2) * 2
-    n0, n1 = sorted(axes)
-    return _irfft2_non_uniform(
-        xq0,
-        xq1,
-        a,
-        f.shape[n0],
-        f.shape[n1],
-        domain0,
-        domain1,
-        axes,
-    )
-
-
-def _irfft2_non_uniform(
-    xq0, xq1, a, n0, n1, domain0=(0, 2 * jnp.pi), domain1=(0, 2 * jnp.pi), axes=(-2, -1)
-):
-    """Evaluate Fourier coefficients ``a`` at coordinates ``(xq0,xq1)``.
-
-    Parameters
-    ----------
-    xq0 : jnp.ndarray
-        Real query points of coordinate in ``domain0`` where interpolation is desired.
-        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
-        The coordinates stored here must be the same coordinate enumerated
-        across axis ``min(axes)`` of the Fourier coefficients ``a``.
-    xq1 : jnp.ndarray
-        Real query points of coordinate in ``domain1`` where interpolation is desired.
-        Shape must broadcast with shape ``np.delete(a.shape,axes)``.
-        The coordinates stored here must be the same coordinate enumerated
-        across axis ``max(axes)`` of the Fourier coefficients ``a``.
-    a : jnp.ndarray
-        Shape (..., a.shape[-2], a.shape[-1]).
-        Fourier coefficients.
-        ``f=rfft2(f,axes=axes,norm="forward")``
-        ``a=jnp.moveaxis(f,axes,(-2,-1)).at[...,i].divide(2)*2``.
-    n0 : int
-        Spectral resolution of ``a`` for ``domain0``.
-    n1 : int
-        Spectral resolution of ``a`` for ``domain1``.
-    domain0 : tuple[float]
-        Domain of coordinate specified by ``xq0`` over which samples were taken.
-    domain1 : tuple[float]
-        Domain of coordinate specified by ``xq1`` over which samples were taken.
-    axes : tuple[int]
-        Axes along which to transform.
-
-    Returns
-    -------
-    fq : jnp.ndarray
-        Real function value at query points.
-
-    """
-    xq = (xq0, xq1)
-    n = (n0, n1)
-    d = (domain0, domain1)
-    f, r = np.argsort(axes)
-    modes_f, modes_r = rfft2_modes(n[f], n[r], d[f], d[r])
-    vander = rfft2_vander(xq[f], xq[r], modes_f, modes_r, d[f][0], d[r][0])
-    return (vander * a).real.sum(axis=(-2, -1))
-
-
-def rfft2_vander(
-    x_fft,
-    x_rfft,
-    modes_fft,
-    modes_rfft,
-    x_fft0=0,
-    x_rfft0=0,
-    inverse_idx_fft=None,
-    inverse_idx_rfft=None,
-):
-    """Return Vandermonde matrix for complex Fourier modes.
-
-    Warnings
+    Examples
     --------
-    It is vital to not perform any operations on Vandermonde array and immediately
-    reduce it. For example, to transform from spectral to real space do
-      ``a=jnp.fft.rfft2(f).at[...,i].divide(2)*2``
+    [Tutorial](https://finufft.readthedocs.io/en/latest/tutorial/realinterp1d.html#id1).
+    Also see the tests in the following directory.
 
-      ``(vander*a).real.sum(axis=(-2,-1))``
-
-    Performing the scaling on the Vandermonde array would triple the memory consumption.
-    Perhaps this is required for the compiler to fuse operations.
-
-    Notes
-    -----
-    When the Vandermonde matrix is large, care needs to be taken to ensure the compiler
-    fuses the operation to transform from spectral to real space. For JAX, this is up
-    to the JIT compiler's whim, and it helps to make the code as suggestive as possible
-    for that. Basically do not do anything besides the relevant matmuls after making
-    the Vandermonde; even things like adding a new axis to the coefficient array or
-    creating local variables after the Vandermonde array is made can prevent this.
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft2_vec``
 
     Parameters
     ----------
-    x_fft : jnp.ndarray
-        Real query points of coordinate in ``domain_fft`` where interpolation is
-        desired.
-    x_rfft : jnp.ndarray
-        Real query points of coordinate in ``domain_rfft`` where interpolation is
-        desired.
-    modes_fft : jnp.ndarray
-        FFT Fourier modes.
-    modes_rfft : jnp.ndarray
-        Real FFT Fourier modes.
-    x_fft0 : float
-        Left boundary of domain of coordinate specified by ``x_fft`` over which
-        samples were taken.
-    x_rfft0 : float
-        Left boundary of domain of coordinate specified by ``x_rfft`` over which
-        samples were taken.
-    inverse_idx_fft : jnp.ndarray
-        Optional. Inverse idx along axis 0 to ensure query points broadcast.
-    inverse_idx_rfft : jnp.ndarray
-        Optional. Inverse idx along axis 0 to ensure query points broadcast.
-
-    Returns
-    -------
-    vander : jnp.ndarray
-        Shape (..., modes_fft.size, modes_rfft.size).
-        Vandermonde matrix to evaluate complex Fourier series.
-
-    """
-    vf = jnp.exp(1j * modes_fft * (x_fft - x_fft0)[..., jnp.newaxis])
-    vr = jnp.exp(1j * modes_rfft * (x_rfft - x_rfft0)[..., jnp.newaxis])
-    if inverse_idx_fft is not None:
-        vf = vf[inverse_idx_fft]
-    if inverse_idx_rfft is not None:
-        vr = vr[inverse_idx_rfft]
-    return vf[..., jnp.newaxis] * vr[..., jnp.newaxis, :]
-
-
-def rfft2_modes(n_fft, n_rfft, domain_fft=(0, 2 * jnp.pi), domain_rfft=(0, 2 * jnp.pi)):
-    """Modes for complex exponential basis for real Fourier transform.
-
-    Parameters
-    ----------
-    n_fft : int
-        Spectral resolution for ``domain_fft``.
-    n_rfft : int
-        Spectral resolution for ``domain_rfft``.
-    domain_fft : tuple[float]
-        Domain of coordinate over which samples are taken.
-    domain_rfft : tuple[float]
-        Domain of coordinate over which samples are taken.
-
-    Returns
-    -------
-    modes_fft : jnp.ndarray
-        Shape (n_fft, ).
-        FFT Fourier modes.
-    modes_rfft : jnp.ndarray
-        Shape (n_rfft // 2 + 1, ).
-        Real FFT Fourier modes.
-
-    """
-    modes_fft = jnp.fft.fftfreq(
-        n_fft, (domain_fft[1] - domain_fft[0]) / (2 * jnp.pi * n_fft)
-    )
-    modes_rfft = jnp.fft.rfftfreq(
-        n_rfft, (domain_rfft[1] - domain_rfft[0]) / (2 * jnp.pi * n_rfft)
-    )
-    return modes_fft, modes_rfft
-
-
-def cheb_from_dct(a, axis=-1):
-    """Get discrete Chebyshev transform from discrete cosine transform.
-
-    Parameters
-    ----------
-    a : jnp.ndarray
-        Discrete cosine transform coefficients, e.g.
-        ``a=dct(f,type=2,axis=axis,norm="forward")``.
-    axis : int
-        Axis along which to transform.
-
-    Returns
-    -------
-    cheb : jnp.ndarray
-        Chebyshev coefficients along ``axis``.
-
-    """
-    return a.at[Index.get(0, axis, a.ndim)].divide(2)
-
-
-def dct_from_cheb(cheb, axis=-1):
-    """Get discrete cosine transform from discrete Chebyshev transform.
-
-    Parameters
-    ----------
-    cheb : jnp.ndarray
-        Discrete Chebyshev transform coefficients, e.g.``cheb_from_dct(a)``.
-    axis : int
-        Axis along which to transform.
-
-    Returns
-    -------
-    a : jnp.ndarray
-        Chebyshev coefficients along ``axis``.
-
-    """
-    return cheb.at[Index.get(0, axis, cheb.ndim)].multiply(2)
-
-
-def interp_dct(xq, f, lobatto=False, axis=-1):
-    """Interpolate ``f`` to ``xq`` with discrete Chebyshev transform.
-
-    Parameters
-    ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with shape ``np.delete(f.shape,axis)``.
+    x : jnp.ndarray
+        Real query points of coordinate in ``domain`` where interpolation is desired.
+        The coordinates stored here must be the same coordinate enumerated across
+        axis ``-1`` of ``f``.
     f : jnp.ndarray
-        Real function values on Chebyshev points to interpolate.
-    lobatto : bool
-        Whether ``f`` was sampled on the Gauss-Lobatto (extrema-plus-endpoint)
-        or interior roots grid for Chebyshev points.
-    axis : int
-        Axis along which to transform.
+        Fourier coefficients fₙ of the map x ↦ c(x) such that c(x) = ∑ₙ fₙ exp(i n x)
+        where n >= 0.
+    domain : tuple[float]
+        Domain of coordinate specified by x over which samples were taken.
+    vec : bool
+        If set to ``True``, then it is assumed that multiple Fourier series are
+        to be evaluated at the same non-uniform points. In that case, this flag
+        must be set to retain the function signature for vectorization
+        of ``(x),(b,f)->(b,x)``.
+    eps : float
+        Precision requested. Default is ``1e-6``.
 
     Returns
     -------
-    fq : jnp.ndarray
+    c(x) : jnp.ndarray
         Real function value at query points.
 
     """
-    errorif(lobatto, NotImplementedError, "JAX has not implemented type 1 DCT.")
-    return idct_non_uniform(
-        xq,
-        cheb_from_dct(dct(f, type=2 - lobatto, axis=axis), axis)
-        / (f.shape[axis] - lobatto),
-        f.shape[axis],
-        axis,
-    )
+    # This is optimized away under JIT if the operation is an identity.
+    s = 2 * jnp.pi / (domain[1] - domain[0])
+    x = (x - domain[0]) * s
+
+    s = f.shape[-1] // 2
+    s = jnp.exp(1j * s * x)
+    s = s[..., jnp.newaxis, :] if vec else s
+
+    opts = options.Opts(modeord=0)
+    return (nufft2(f, x, iflag=1, eps=eps, opts=opts) * s).real
 
 
-def idct_non_uniform(xq, a, n, axis=-1):
-    """Evaluate discrete Chebyshev transform coefficients ``a`` at ``xq`` ∈ [-1, 1].
+def nufft2d2r(
+    x0,
+    x1,
+    f,
+    domain0=(0, 2 * jnp.pi),
+    domain1=(0, 2 * jnp.pi),
+    rfft_axis=-1,
+    vec=False,
+    eps=1e-6,
+    mask=None,
+    fill_value=None,
+):
+    """Non-uniform 2D real fast Fourier transform of second type.
+
+    Examples
+    --------
+    [Tutorial](https://finufft.readthedocs.io/en/latest/tutorial/realinterp1d.html#id1).
+    Also see the tests in the following directory.
+
+     - ``tests/test_interp_utils.py::TestFastInterp::test_non_uniform_real_FFT_2D``
+     - ``tests/test_interp_utils.py::TestFastInterp::test_nufft2_vec``
 
     Parameters
     ----------
-    xq : jnp.ndarray
-        Real query points where interpolation is desired.
-        Shape of ``xq`` must broadcast with shape ``np.delete(a.shape,axis)``.
-    a : jnp.ndarray
-        Discrete Chebyshev transform coefficients.
-    n : int
-        Spectral resolution of ``a``.
-    axis : int
-        Axis along which to transform.
+    x0 : jnp.ndarray
+        Real query points of coordinate in ``domain0`` where interpolation is desired.
+        The coordinates stored here must be the same coordinate
+        enumerated across axis ``-2`` of ``f``.
+    x1 : jnp.ndarray
+        Real query points of coordinate in ``domain1`` where interpolation is desired.
+        The coordinates stored here must be the same coordinate
+        enumerated across axis ``-1`` of ``f``.
+    f : jnp.ndarray
+        Fourier coefficients fₘₙ of the map x₀,x₁ ↦ c(x₀,x₁) such that
+        c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁).
+    domain0 : tuple[float]
+        Domain of coordinate specified by x₀ over which samples were taken.
+    domain1 : tuple[float]
+        Domain of coordinate specified by x₁ over which samples were taken.
+    rfft_axis : int
+        Axis along which real FFT was performed.
+        If -1 (-2), assumes c(x₀,x₁) = ∑ₘₙ fₘₙ exp(i m x₀) exp(i n x₁) where
+            n ( m) >= 0, respectively.
+    vec : bool
+        If set to ``True``, then it is assumed that multiple Fourier series are
+        to be evaluated at the same non-uniform points. In that case, this flag
+        must be set to retain the function signature for vectorization
+        of ``(x),(x),(b,f0,f1)->(b,x)``.
+    eps : float
+        Precision requested. Default is ``1e-6``.
+    mask : jnp.ndarray, optional
+        Boolean mask of points to interpolate to. Should have same shape as ``x0``
+        and ``x1``. This does nothing until the merge of
+        https://github.com/flatironinstitute/jax-finufft/pull/216.
+    fill_value : float
+        Value to pad array where the mask is false.
+        Default is 0.0.
 
     Returns
     -------
-    fq : jnp.ndarray
+    c(x₀,x₁) : jnp.ndarray
         Real function value at query points.
 
     """
-    n = jnp.arange(n)
-    a = jnp.moveaxis(a, axis, -1)
-    # Same as Clenshaw recursion ``chebval(xq,a,tensor=False)`` but better on GPU.
-    return jnp.linalg.vecdot(jnp.cos(n * jnp.arccos(xq)[..., jnp.newaxis]), a)
+    # This is optimized away under JIT if the operation is an identity.
+    s0 = 2 * jnp.pi / (domain0[1] - domain0[0])
+    s1 = 2 * jnp.pi / (domain1[1] - domain1[0])
+    x0 = (x0 - domain0[0]) * s0
+    x1 = (x1 - domain1[0]) * s1
+
+    if rfft_axis is None:
+        s = 1
+    elif rfft_axis != -1 and rfft_axis != -2:
+        raise NotImplementedError(f"rfft_axis must be -1 or -2, but got {rfft_axis}.")
+    else:
+        s = f.shape[rfft_axis] // 2
+        s = jnp.exp(1j * s * (x1 if rfft_axis == -1 else x0))
+        s = s[..., jnp.newaxis, :] if vec else s
+        f = jnp.fft.ifftshift(f, rfft_axis)
+
+    if _JF_BUG:
+        opts = options.Opts(modeord=0)
+        f = jnp.fft.fftshift(f, (-2, -1))
+        return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
+
+    opts = options.Opts(modeord=1)
+    f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    if mask is not None and fill_value is not None:
+        f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, fill_value)
+    return f
 
 
 # Warning: method must be specified as keyword argument.
@@ -506,29 +198,8 @@ def interp1d_Hermite_vec(xq, x, f, fx, /):
     return interp1d(xq, x, f, method="cubic", fx=fx)
 
 
-def polyder_vec(c):
-    """Coefficients for the derivatives of the given set of polynomials.
-
-    Parameters
-    ----------
-    c : jnp.ndarray
-        Last axis should store coefficients of a polynomial. For a polynomial given by
-        ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
-        ``c[...,n-i]``.
-
-    Returns
-    -------
-    poly : jnp.ndarray
-        Coefficients of polynomial derivative, ignoring the arbitrary constant. That is,
-        ``poly[...,i]`` stores the coefficient of the monomial xⁿ⁻ⁱ⁻¹,  where n is
-        ``c.shape[-1]-1``.
-
-    """
-    return c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
-
-
-def polyval_vec(*, x, c):
-    """Evaluate the set of polynomials ``c`` at the points ``x``.
+def poly_val(x, *, c, der=0):
+    """Evaluate polynomial ``c`` at the points ``x``.
 
     Parameters
     ----------
@@ -538,6 +209,8 @@ def polyval_vec(*, x, c):
         Last axis should store coefficients of a polynomial. For a polynomial given by
         ∑ᵢⁿ cᵢ xⁱ, where n is ``c.shape[-1]-1``, coefficient cᵢ should be stored at
         ``c[...,n-i]``.
+    der : int
+        Derivative to evaluate.
 
     Returns
     -------
@@ -549,42 +222,40 @@ def polyval_vec(*, x, c):
     .. code-block:: python
 
         np.testing.assert_allclose(
-            polyval_vec(x=x, c=c),
+            cubic_val(x=x, c=c),
             np.sum(polyvander(x, c.shape[-1] - 1) * c[..., ::-1], axis=-1),
         )
 
     """
-    # Better than Horner's method as we expect to evaluate low order polynomials.
-    # No need to use fast multipoint evaluation techniques for the same reason.
-    return jnp.sum(
-        c * x[..., jnp.newaxis] ** jnp.arange(c.shape[-1] - 1, -1, -1),
-        axis=-1,
-    )
+    if c.shape[-1] == 4:
+        if der == 0:
+            return ((c[..., 0] * x + c[..., 1]) * x + c[..., 2]) * x + c[..., 3]
+        if der == 1:
+            return (3 * c[..., 0] * x + 2 * c[..., 1]) * x + c[..., 2]
+        if der == 2:
+            return 6 * c[..., 0] * x + 2 * c[..., 1]
 
+    if c.shape[-1] == 3:
+        if der == 0:
+            return (c[..., 0] * x + c[..., 1]) * x + c[..., 2]
+        if der == 1:
+            return 2 * c[..., 0] * x + c[..., 1]
+        if der == 2:
+            return 2 * c[..., 0]
 
-# TODO (#1388): Move this stuff into interpax.
+    assert 0 <= der <= 2
+    if der >= 1:
+        c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
+    if der >= 2:
+        c = c[..., :-1] * jnp.arange(c.shape[-1] - 1, 0, -1)
 
-
-def _subtract_first(c, k):
-    """Subtract ``k`` from first index of last axis of ``c``.
-
-    Semantically same as ``return c.at[...,0].add(-k)``,
-    but allows dimension to increase.
-    """
-    c_0 = c[..., 0] - k
-    return jnp.concatenate(
-        [
-            c_0[..., jnp.newaxis],
-            jnp.broadcast_to(c[..., 1:], (*c_0.shape, c.shape[-1] - 1)),
-        ],
-        axis=-1,
-    )
+    return jnp.sum(c * x[..., None] ** jnp.arange(c.shape[-1] - 1, -1, -1), axis=-1)
 
 
 def _subtract_last(c, k):
     """Subtract ``k`` from last index of last axis of ``c``.
 
-    Semantically same as ``return c.at[...,-1].add(-k)``,
+    Semantically same as ``return c.at[...,-1].subtract(k)``,
     but allows dimension to increase.
     """
     c_1 = c[..., -1] - k
@@ -597,28 +268,77 @@ def _subtract_last(c, k):
     )
 
 
-def _filter_distinct(r, sentinel, eps):
-    """Set all but one of matching adjacent elements in ``r``  to ``sentinel``."""
-    # eps needs to be low enough that close distinct roots do not get removed.
-    # Otherwise, algorithms relying on continuity will fail.
-    mask = jnp.isclose(jnp.diff(r, axis=-1, prepend=sentinel), 0, atol=eps)
-    return jnp.where(mask, sentinel, r)
-
-
-_polyroots_vec = jnp.vectorize(
+_root_companion = jnp.vectorize(
     partial(jnp.roots, strip_zeros=False), signature="(m)->(n)"
 )
-_eps = max(jnp.finfo(jnp.array(1.0).dtype).eps, 2.5e-12)
 
 
+def _root_eps():
+    # Safer to make this a callable since output depends on whether
+    # double precision is enabled before it is called.
+    return max(jnp.finfo(jnp.array(1.0).dtype).eps, 1e-11)
+
+
+def _distinct_roots(r, c, eps, keep_extrema=True):
+    """Returns the distinct roots given sorted roots.
+
+    When we return distinct roots we preserve continuity invariants.
+    For example, if we return an ordering of distinct roots where the
+    derivative is nonzero there and does not change sign between adjacent
+    roots, this violates the behavior implied by intermediate value theorem.
+    """
+    # Due to numerics and condition numbers, roots of multipliciy m > 1
+    # may not be at the same spot. To preserve above invariant, we discard
+    # duplicate roots that lie within ε of each other if the derivative at
+    # those points has the same sign.
+
+    p = jnp.sign(poly_val(r, c=c[..., None, :], der=1))
+
+    same_sign = p == jnp.roll(p, shift=1, axis=-1)
+    if keep_extrema:
+        same_sign &= p != 0
+    is_close = jnp.abs(jnp.diff(r, prepend=jnp.nan)) <= eps
+
+    bad_pair_right_member = same_sign & is_close
+    bad_pair_left__member = jnp.roll(bad_pair_right_member, shift=-1, axis=-1)
+    r = jnp.where(
+        bad_pair_left__member | bad_pair_right_member,
+        jnp.nan,
+        r,
+    )
+    return r
+
+
+def _correction_step(r, c, k, backward_stable, eps):
+    # Schröder first kind correction.
+    p0 = poly_val(r, c=c) - k
+    p1 = poly_val(r, c=c, der=1)
+    p2 = poly_val(r, c=c, der=2)
+    candidate = r - (p0 * p1) / (p1**2 - p0 * p2)
+
+    res_old = jnp.abs(p0)
+    res_new = jnp.abs(poly_val(candidate, c=c) - k)
+    r = jnp.where(res_new < res_old, candidate, r)
+
+    if not backward_stable:
+        r = jnp.where(
+            (res_old <= eps) | (res_new <= eps),
+            r,
+            jnp.nan,
+        )
+
+    return r
+
+
+@partial(jax.custom_jvp, nondiff_argnums=(4, 5, 6, 7))
 def polyroot_vec(
     c,
-    k=0,
+    k=0.0,
     a_min=None,
     a_max=None,
     sort=False,
     sentinel=jnp.nan,
-    eps=_eps,
+    eps=-1.0,
     distinct=False,
 ):
     """Roots of polynomial with given coefficients.
@@ -632,20 +352,14 @@ def polyroot_vec(
     k : jnp.ndarray
         Shape (..., *c.shape[:-1]).
         Specify to find solutions to ∑ᵢⁿ cᵢ xⁱ = ``k``.
-    a_min : jnp.ndarray
+    a_min, a_max : jnp.ndarray
         Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
-        If specified only real roots are returned, otherwise returns all complex roots.
-    a_max : jnp.ndarray
-        Shape (..., *c.shape[:-1]).
-        Minimum ``a_min`` and maximum ``a_max`` value to return roots between.
+        If given returns roots in the interval [``a_min``, ``a_max``).
         If specified only real roots are returned, otherwise returns all complex roots.
     sort : bool
         Whether to sort the roots.
     sentinel : float
         Value with which to pad array in place of filtered elements.
-        Anything less than ``a_min`` or greater than ``a_max`` plus some floating point
-        error buffer will work just like nan while avoiding ``nan`` gradient.
     eps : float
         Absolute tolerance with which to consider value as zero.
     distinct : bool
@@ -659,210 +373,190 @@ def polyroot_vec(
         The roots of the polynomial, iterated over the last axis.
 
     """
+    if eps < 0:
+        eps = _root_eps()
+
     get_only_real_roots = not (a_min is None and a_max is None)
-    num_coef = c.shape[-1]
-    c = _subtract_last(c, k)
-    func = {2: _root_linear, 3: _root_quadratic, 4: _root_cubic}
+    degree = c.shape[-1] - 1
 
-    if (
-        num_coef in func
-        and get_only_real_roots
-        and not (jnp.iscomplexobj(c) or jnp.iscomplexobj(k))
-    ):
-        # TODO: Differentiate through root alone with custom_linear_solve.
-        # Compute from analytic formula to avoid the issue of complex roots with small
-        # imaginary parts and to avoid nan in gradient. Also consumes less memory.
-        r = func[num_coef](C=c, sentinel=sentinel, eps=eps, distinct=distinct)
-        # We already filtered distinct roots for quadratics.
-        distinct = distinct and num_coef > 3
+    if degree <= 3 and get_only_real_roots and jnp.isrealobj(c) and jnp.isrealobj(k):
+        backward_stable = degree < 3
+        c = jnp.moveaxis(c, -1, 0)
+        r = {1: _root_linear, 2: _root_quadratic, 3: _root_cubic}[degree](
+            *c[:-1], c[-1] - k
+        )
+        r = jnp.moveaxis(r, 0, -1)
+        c = jnp.moveaxis(c, 0, -1)
     else:
-        # Compute from eigenvalues of polynomial companion matrix.
-        r = _polyroots_vec(c)
+        backward_stable = True
+        r = _root_companion(_subtract_last(c, k))
+    assert r.shape[-1] == degree
 
+    # If the complex part is too big, then these would not be real roots of
+    # a nearby perturbed problem, so we set to nan so that they are not
+    # classified as candidates after the correction step.
     if get_only_real_roots:
-        a_min = -jnp.inf if a_min is None else a_min[..., jnp.newaxis]
-        a_max = +jnp.inf if a_max is None else a_max[..., jnp.newaxis]
         r = jnp.where(
-            (jnp.abs(r.imag) <= eps) & (a_min <= r.real) & (r.real <= a_max),
+            jnp.abs(r.imag) <= eps**0.5,
             r.real,
-            sentinel,
+            jnp.nan,
+        )
+    if degree > 1:
+        r = _correction_step(
+            r,
+            c[..., None, :],
+            jnp.expand_dims(k, -1),
+            backward_stable,
+            eps**0.5,
+        )
+    if get_only_real_roots:
+        a_min = -jnp.inf if a_min is None else jnp.expand_dims(a_min, -1)
+        a_max = +jnp.inf if a_max is None else jnp.expand_dims(a_max, -1)
+        r = jnp.where(
+            (a_min <= r.real) & (r.real < a_max),
+            r.real,
+            jnp.nan,
         )
 
+    distinct = distinct and (degree > 1)
     if sort or distinct:
-        r = jnp.sort(r, axis=-1)
-    r = _filter_distinct(r, sentinel, eps) if distinct else r
-    assert r.shape[-1] == num_coef - 1
+        r = jnp.sort(r, stable=False)
+    if distinct:
+        r = _distinct_roots(r, c, eps)
+    if not np.isnan(sentinel):
+        r = jnp.where(jnp.isfinite(r), r, sentinel)
+
+    assert r.shape[-1] == degree
     return r
 
 
-def _root_cubic(C, sentinel, eps, distinct):
-    """Return real cubic root assuming real coefficients."""
-    # numerical.recipes/book.html, page 228
+@polyroot_vec.defjvp
+def _polyroot_vec_jvp(sort, sentinel, eps, distinct, primals, tangents):
+    """Implicit function theorem with regularization.
 
-    def irreducible(Q, R, b, mask):
-        # Three irrational real roots.
-        theta = R / jnp.sqrt(jnp.where(mask, Q**3, 1.0))
-        theta = jnp.arccos(jnp.where(jnp.abs(theta) < 1.0, theta, 0.0))
-        return jnp.moveaxis(
-            -2
-            * jnp.sqrt(Q)
-            * jnp.stack(
-                [
-                    jnp.cos(theta / 3),
-                    jnp.cos((theta + 2 * jnp.pi) / 3),
-                    jnp.cos((theta - 2 * jnp.pi) / 3),
-                ]
-            )
-            - b / 3,
-            source=0,
-            destination=-1,
+    Regularization used to smooth the discretized system so that it recognizes
+    any non-differentiable sample it has observed actually has zero measure in
+    the continuous system.
+
+    References
+    ----------
+    See supplementary information in DESC/publications/unalmis2025.
+
+    """
+    c, k, a_min, a_max = primals
+    dc, dk, _, _ = tangents
+
+    if eps < 0:
+        eps = _root_eps()
+    r = polyroot_vec(c, k, a_min, a_max, sort, sentinel, eps, distinct)
+
+    dc_dr = poly_val(r, c=c[..., None, :], der=1)
+    dc_dr = jnp.where(
+        jnp.abs(dc_dr) > eps,
+        dc_dr,
+        dc_dr + jnp.copysign(eps, dc_dr.real),
+    )
+    dr = jnp.where(
+        r == sentinel,
+        0.0,
+        (jnp.expand_dims(dk, -1) - poly_val(r, c=dc[..., None, :])) / dc_dr,
+    )
+    return r, dr
+
+
+def _irreducible(Q, R, b):
+    theta = jnp.arccos(R / jnp.sqrt(Q**3))
+    return (
+        -2
+        * jnp.sqrt(Q)
+        * jnp.stack(
+            [
+                jnp.cos(theta / 3),
+                jnp.cos((theta + 2 * jnp.pi) / 3),
+                jnp.cos((theta - 2 * jnp.pi) / 3),
+            ]
         )
-
-    def reducible(Q, R, b):
-        # One real and two complex roots.
-        A = -jnp.sign(R) * (jnp.abs(R) + jnp.sqrt(jnp.abs(R**2 - Q**3))) ** (1 / 3)
-        B = safediv(Q, A)
-        r1 = (A + B) - b / 3
-        return _concat_sentinel(r1[..., jnp.newaxis], sentinel, num=2)
-
-    def root(b, c, d):
-        b = safediv(b, a)
-        c = safediv(c, a)
-        d = safediv(d, a)
-        Q = (b**2 - 3 * c) / 9
-        R = (2 * b**3 - 9 * b * c + 27 * d) / 54
-        mask = R**2 < Q**3
-        return jnp.where(
-            mask[..., jnp.newaxis],
-            irreducible(jnp.abs(Q), R, b, mask),
-            reducible(Q, R, b),
-        )
-
-    a = C[..., 0]
-    b = C[..., 1]
-    c = C[..., 2]
-    d = C[..., 3]
-    return jnp.where(
-        # Tests catch failure here if eps < 1e-12 for 64 bit precision.
-        jnp.expand_dims(jnp.abs(a) <= eps, axis=-1),
-        _concat_sentinel(
-            _root_quadratic(
-                C=C[..., 1:], sentinel=sentinel, eps=eps, distinct=distinct
-            ),
-            sentinel,
-        ),
-        root(b, c, d),
+        - b / 3
     )
 
 
-def _root_quadratic(C, sentinel, eps, distinct):
+def _reducible(Q, R, b):
+    A = -jnp.sign(R) * jnp.cbrt(jnp.abs(R) + jnp.sqrt(R**2 - Q**3))
+    B = jnp.where(A == 0.0, 0.0, Q / A)
+    x = A + B
+    y = (0.5j * 3**0.5) * (A - B)
+    return jnp.stack(
+        [
+            x - b / 3,
+            # these can yield true real roots for A near B
+            -0.5 * x - b / 3 + y,
+            -0.5 * x - b / 3 - y,
+        ]
+    )
+
+
+def _cubic(a, b, c, d):
+    b = b / a
+    c = c / a
+    Q = (b**2 - 3 * c) / 9
+    R = (2 * b**3 - 9 * b * c) / 54 + d / (2 * a)
+    return jnp.where(R**2 < Q**3, _irreducible(Q, R, b), _reducible(Q, R, b))
+
+
+def _root_cubic(a, b, c, d):
+    """Return real cubic root assuming real coefficients.
+
+    Uses numerical.recipes/book.html, page 228, which is not backwards stable.
+    This can generate fake root with O(1) residual, so post-processing is needed.
+    Advantage is it is much more performant than eigenvalue solve, especially
+    when d is higher dimensional than a, b, c.
+    """
+    return jnp.where(
+        a == 0.0,
+        _concat_nan(_root_quadratic(b, c, d)),
+        _cubic(a, b, c, d),
+    )
+
+
+def _root_quadratic(a, b, c):
     """Return real quadratic root assuming real coefficients."""
     # numerical.recipes/book.html, page 227
-    a = C[..., 0]
-    b = C[..., 1]
-    c = C[..., 2]
-
-    discriminant = b**2 - 4 * a * c
-    q = -0.5 * (b + jnp.sign(b) * jnp.sqrt(jnp.abs(discriminant)))
-    r1 = jnp.where(
-        discriminant < 0,
-        sentinel,
-        safediv(q, a, _root_linear(C=C[..., 1:], sentinel=sentinel, eps=eps)),
-    )
-    r2 = jnp.where(
-        # more robust to remove repeated roots with discriminant
-        (discriminant < 0) | (distinct & (discriminant <= eps)),
-        sentinel,
-        safediv(c, q, sentinel),
-    )
-    return jnp.stack([r1, r2], axis=-1)
+    q = -0.5 * (b + jnp.where(b >= 0.0, 1.0, -1.0) * jnp.sqrt(b**2 - 4 * a * c))
+    # second branch generalizes linear root
+    return jnp.stack([q / a, c / q])
 
 
-def _root_linear(C, sentinel, eps, distinct=False):
+def _root_linear(a, b):
     """Return real linear root assuming real coefficients."""
-    a = C[..., 0]
-    b = C[..., 1]
-    return safediv(-b, a, jnp.where(jnp.abs(b) <= eps, 0, sentinel))
+    return (-b / a)[None]
 
 
-def _concat_sentinel(r, sentinel, num=1):
-    """Concatenate ``sentinel`` ``num`` times to ``r`` on last axis."""
-    sent = jnp.broadcast_to(sentinel, (*r.shape[:-1], num))
-    return jnp.append(r, sent, axis=-1)
+def _concat_nan(r, num=1):
+    """Concatenate nan ``num`` times to ``r`` on first axis."""
+    return jnp.concatenate((r, jnp.broadcast_to(jnp.nan, (num,) + r.shape[1:])))
 
 
-def rfft_to_trig(a, n, axis=-1):
-    """Spectral coefficients of the Nyquist trigonometric interpolant.
+# TODO: replace the inner loop in orthax with this
+def chebder(c, m=1, scl=1.0, axis=0, keepdims=False):
+    """Same as orthax.chebder but fast enough to use in optimization loop."""
+    assert m == 1
+    c = jnp.flip(c.swapaxes(axis, 0), 0)
 
-    Parameters
-    ----------
-    a : jnp.ndarray
-        Fourier coefficients ``a=rfft(f,norm="forward",axis=axis)``.
-    n : int
-        Spectral resolution of ``a``.
-    axis : int
-        Axis along which coefficients are stored.
+    N = c.shape[0]
+    n = jnp.arange(N - 1, -1, -1).reshape((N,) + (1,) * (c.ndim - 1))
+    w = (2 * scl) * n * c
 
-    Returns
-    -------
-    h : jnp.ndarray
-        Nyquist trigonometric interpolant coefficients.
-
-        Coefficients are ordered along ``axis`` of size ``n`` to match
-        Vandermonde matrix with order
-        [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
-        When ``n`` is even the sin(k𝐱) coefficient is zero and is excluded.
-
-    """
-    is_even = (n % 2) == 0
-    # sin(nx) coefficients
-    an = -2 * jnp.flip(
-        take(
-            a.imag,
-            jnp.arange(1, a.shape[axis] - is_even),
-            axis,
-            unique_indices=True,
-            indices_are_sorted=True,
-        ),
-        axis=axis,
+    dc = jnp.flip(
+        jnp.zeros(c.shape)
+        .at[1::2]
+        .set(jnp.cumsum(w[::2], 0)[: N // 2])
+        .at[2::2]
+        .set(jnp.cumsum(w[1::2], 0)[: (N - 1) // 2])
+        .at[-1]
+        .multiply(0.5),
+        0,
     )
-    if is_even:
-        i = (0, -1)
-    else:
-        i = 0
-    # cos(nx) coefficients
-    bn = a.real.at[Index.get(i, axis, a.ndim)].divide(2) * 2
-    h = jnp.concatenate([an, bn], axis=axis)
-    assert h.shape[axis] == n
-    return h
-
-
-def trig_vander(x, n, domain=(0, 2 * jnp.pi)):
-    """Nyquist trigonometric interpolant basis evaluated at ``x``.
-
-    Parameters
-    ----------
-    x : jnp.ndarray
-        Points at which to evaluate Vandermonde matrix.
-    n : int
-        Spectral resolution.
-    domain : tuple[float]
-        Domain over which samples will be taken.
-        This domain should span an open period of the function to interpolate.
-
-    Returns
-    -------
-    vander : jnp.ndarray
-        Shape (*x.shape, n).
-        Vandermonde matrix of degree ``n-1`` and sample points ``x``.
-        Last axis ordered as [sin(k𝐱), ..., sin(𝐱), 1, cos(𝐱), ..., cos(k𝐱)].
-        When ``n`` is even the sin(k𝐱) basis function is excluded.
-
-    """
-    is_even = (n % 2) == 0
-    n_rfft = jnp.fft.rfftfreq(n, d=(domain[-1] - domain[0]) / (2 * jnp.pi * n))
-    nx = n_rfft * (x - domain[0])[..., jnp.newaxis]
-    vander = jnp.concatenate(
-        [jnp.sin(nx[..., n_rfft.size - is_even - 1 : 0 : -1]), jnp.cos(nx)], axis=-1
-    )
-    return vander
+    if not keepdims:
+        dc = dc[:-1]
+    dc = dc.swapaxes(axis, 0)
+    return dc

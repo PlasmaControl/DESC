@@ -24,6 +24,7 @@ from .utils import (
     compute_hess_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
+    scale_columns,
 )
 
 
@@ -213,7 +214,7 @@ def fmintr(  # noqa: C901
         else:
             hess.initialize(N, "hess")
         bfgs = True
-        H = hess.get_matrix()
+        H = jnp.asarray(hess.get_matrix())
     errorif(
         not (isinstance(hess, BFGS) or callable(hess)),
         ValueError,
@@ -239,15 +240,12 @@ def fmintr(  # noqa: C901
     diag_h = g * dv * scale
 
     g_h = g * d
-    # we don't need unscaled H anymore this iteration, so we overwrite
-    # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized matrices
-    # in memory, which can be large
-    # TODO: place this function under JIT (#1669)
-    # doing operation H = d * H * d[:, None]
-    H *= d[:, None]
-    H *= d
-    H_h = H
+    # we don't need unscaled H anymore, so we overwrite it with H_h = d[:, None] * H * d
+    # to avoid carrying so many H-sized matrices in memory, which can be large. The
+    # buffer is donated so the scaling doesn't allocate a second copy of H.
+    H_h = scale_columns(H, d)
     del H
+    H_h = scale_columns(H_h, d[:, None])
 
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -303,6 +301,22 @@ def fmintr(  # noqa: C901
     step_norm = jnp.inf
     actual_reduction = jnp.inf
     reduction_ratio = 1
+
+    if verbose > 2:
+        print("Solver options:")
+        print("-" * 60)
+        print(f"{'Maximum Function Evaluations':<35}: {max_nfev}")
+        print(f"{'Maximum Allowed Total Δx Norm':<35}: {max_dx:.3e}")
+        print(f"{'Scaled Termination':<35}: {scaled_termination}")
+        print(f"{'Trust Region Method':<35}: {tr_method}")
+        print(f"{'Initial Trust Radius':<35}: {trust_radius:.3e}")
+        print(f"{'Maximum Trust Radius':<35}: {max_trust_radius:.3e}")
+        print(f"{'Minimum Trust Radius':<35}: {min_trust_radius:.3e}")
+        print(f"{'Trust Radius Increase Ratio':<35}: {tr_increase_ratio:.3e}")
+        print(f"{'Trust Radius Decrease Ratio':<35}: {tr_decrease_ratio:.3e}")
+        print(f"{'Trust Radius Increase Threshold':<35}: {tr_increase_threshold:.3e}")
+        print(f"{'Trust Radius Decrease Threshold':<35}: {tr_decrease_threshold:.3e}")
+        print("-" * 60, "\n")
 
     if verbose > 1:
         print_header_nonlinear()
@@ -406,9 +420,12 @@ def fmintr(  # noqa: C901
             g_old = g
             g = grad(x, *args)
             ngev += 1
+            # Delete old arrays before computing new one
+            # otherwise the peak is bigger by H-sized arrays
+            del H_h, H_a
             if bfgs:
                 hess.update(x - x_old, g - g_old)
-                H = hess.get_matrix()
+                H = jnp.asarray(hess.get_matrix())
             else:
                 H = hess(x, *args)
                 nhev += 1
@@ -423,14 +440,9 @@ def fmintr(  # noqa: C901
 
             g_h = g * d
 
-            # we don't need unscaled H anymore this iteration, so we overwrite
-            # it with H_h = d * H * d[:, None] to avoid carrying so many H-sized
-            # matrices in memory, which can be large
-            # doing operation H = d * H * d[:, None]
-            H *= d[:, None]
-            H *= d
-            H_h = H
+            H_h = scale_columns(H, d)
             del H
+            H_h = scale_columns(H_h, d[:, None])
 
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -460,13 +472,17 @@ def fmintr(  # noqa: C901
     if (iteration == maxiter) and success is None:
         success, message = False, STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
+    # after overwriting H_h with the scaled version, we have to revert back and
+    # store the unscaled one
+    H_h = scale_columns(H_h, 1 / d)
+    H_h = scale_columns(H_h, 1 / d[:, None])
     result = OptimizeResult(
         x=x,
         success=success,
         fun=f,
         grad=g,
         v=v,
-        hess=H_h / d[:, None] / d,  # unscale the hessian
+        hess=H_h,
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

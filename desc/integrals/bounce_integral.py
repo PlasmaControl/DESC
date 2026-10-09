@@ -1961,10 +1961,10 @@ class BounceOptions(NamedTuple):
         )
 
         if eta == 1:
-            nufft_eps = 1e-6 if (nufft_eps < 0) else nufft_eps
+            nufft_eps = 1e-8 if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 51)
         else:
-            nufft_eps = 1e-7 if (nufft_eps < 0) else nufft_eps
+            nufft_eps = 1e-8 if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 65)
         nufft_eps = float(nufft_eps)
 

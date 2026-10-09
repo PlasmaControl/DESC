@@ -5,6 +5,7 @@ New Features
 
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- NUFFTs are now computed with the pure JAX package [`nufftax`](https://github.com/GragasLab/nufftax) instead of `jax-finufft`, so no C++/CUDA build is needed for CPU or GPU support. `nufftax` requires Python >= 3.11. The default `nufft_eps` of `GammaC`, `EffectiveRipple` and the corresponding compute quantities is now `1e-8` (previously `1e-7` and `1e-6`), since `nufftax` needs a tighter tolerance than `jax-finufft` for accurate gradients.
 
 Performance Improvements
 
@@ -16,6 +17,7 @@ Performance Improvements
 
 Breaking Changes and Deprecations
 
+- Python 3.10 is no longer supported. DESC now requires Python >= 3.11, which is needed by `nufftax`.
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.

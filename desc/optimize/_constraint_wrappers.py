@@ -13,6 +13,7 @@ from desc.objectives import (
     maybe_add_self_consistency,
 )
 from desc.objectives.utils import (
+    _get_auto_x_scale,
     _Project,
     _Recover,
     factorize_linear_constraints,
@@ -45,9 +46,9 @@ class LinearConstraintProjection(ObjectiveFunction):
     x_scale : array_like or ``'auto'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
-        If set to ``'auto'``, the scale is determined from the initial state vector.
-        This can be passed through optimizer options as
-        solve_options["linear_constraint_options"]["x_scale"].
+        If set to ``'auto'``, or for any entries equal to 0, the scale is determined
+        from the initial state vector. When optimizing with ``Optimizer.optimize``
+        this is set by its ``x_scale`` argument.
     name : str
         Name of the objective function.
 
@@ -235,11 +236,16 @@ class LinearConstraintProjection(ObjectiveFunction):
         # does not change here, but still recompute it while updating others
         A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
-        # if user specified x_scale, don't dynamically change it
-        if self._x_scale == "auto":
-            x_scale = self._objective.x(*self._objective.things)
-            self._D = jnp.where(jnp.abs(x_scale) < 1e2, 1, jnp.abs(x_scale))
+        x_scale = self._x_scale
+        # D only depends on the state vector for the entries that are automatically
+        # scaled, so if there are none, D and everything computed from it is unchanged
+        if isinstance(x_scale, str) or np.any(x_scale == 0):
+            auto_x_scale = _get_auto_x_scale(self._objective.x(*self._objective.things))
 
+            if isinstance(x_scale, str) and x_scale == "auto":
+                x_scale = auto_x_scale
+
+            self._D = jnp.where(x_scale == 0, auto_x_scale, x_scale)
             # since D has changed, we need to update the ADinv
             # as mentioned above A does not change, so we can use the same Ainv
             # pinv(A) = Ainv, ADinv = pinv(A @ D) = Dinv @ Ainv, Dinv = 1 / D

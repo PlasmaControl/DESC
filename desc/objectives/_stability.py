@@ -1158,6 +1158,17 @@ class FinitenStability(_Objective):
         _, unique_rho_idx, inverse_rho_idx = np.unique(
             rho_PEST, return_index=True, return_inverse=True
         )
+        # zeta is likewise invariant (the map only moves theta), so its indices carry
+        # over too. Transform's `pest` method needs them; without them it falls back
+        # to `direct1` with a warning. theta indices are deliberately NOT supplied:
+        # theta_DESC varies with zeta at fixed theta_PEST, so theta is not a tensor
+        # axis of the mapped grid.
+        # NOTE: this assumes omega = 0 (zeta = phi). If omega != 0 the map also moves
+        # zeta, so these indices (and the `pest` transform built on them) are WRONG.
+        zeta_PEST = np.asarray(PEST_nodes[:, 2])
+        _, unique_zeta_idx, inverse_zeta_idx = np.unique(
+            zeta_PEST, return_index=True, return_inverse=True
+        )
         # 1D radial nodes for the prolongation operator, kept as a concrete
         # numpy array on `self`. They cannot be recovered inside `compute_data`:
         # the mapped grid's nodes are built from params, and `constants` cross
@@ -1206,6 +1217,9 @@ class FinitenStability(_Objective):
             )
             c_rho = np.asarray(c_nodes[:, 0])
             _, c_uidx, c_iidx = np.unique(c_rho, return_index=True, return_inverse=True)
+            _, c_uzidx, c_izidx = np.unique(
+                np.asarray(c_nodes[:, 2]), return_index=True, return_inverse=True
+            )
             self._coarse_rho1d = tuple(
                 float(_x) for _x in c_rho.reshape(cg.num_rho, -1)[:, 0]
             )
@@ -1219,6 +1233,8 @@ class FinitenStability(_Objective):
                 "coarse_PEST_nodes": c_nodes,
                 "coarse_unique_rho_idx": jnp.asarray(c_uidx),
                 "coarse_inverse_rho_idx": jnp.asarray(c_iidx),
+                "coarse_unique_zeta_idx": jnp.asarray(c_uzidx),
+                "coarse_inverse_zeta_idx": jnp.asarray(c_izidx),
                 "coarse_flux_transforms": get_transforms(
                     flux_keys, obj=eq, grid=c_flux_grid
                 ),
@@ -1235,6 +1251,8 @@ class FinitenStability(_Objective):
             "quad_profiles": quad_profiles,
             "unique_rho_idx": jnp.asarray(unique_rho_idx),
             "inverse_rho_idx": jnp.asarray(inverse_rho_idx),
+            "unique_zeta_idx": jnp.asarray(unique_zeta_idx),
+            "inverse_zeta_idx": jnp.asarray(inverse_zeta_idx),
             "quad_weights": 1.0,
             "lambda0": self._lambda0,
             "w0": self._w0,
@@ -1957,6 +1975,8 @@ class FinitenStability(_Objective):
             jitable=True,
             _unique_rho_idx=constants[pre + "unique_rho_idx"],
             _inverse_rho_idx=constants[pre + "inverse_rho_idx"],
+            _unique_zeta_idx=constants[pre + "unique_zeta_idx"],
+            _inverse_zeta_idx=constants[pre + "inverse_zeta_idx"],
         )
 
     def _flux_data(self, params, constants, grid, level="fine"):

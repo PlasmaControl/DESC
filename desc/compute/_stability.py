@@ -87,6 +87,61 @@ def _mem_stats():
     )
 
 
+def _report_nonfinite(data, nodes, label=""):
+    """Print which entries of ``data`` are non-finite, and where. ``AGNI_DIAG=0`` off.
+
+    Locates the bad nodes by their (rho, theta, zeta) so the pattern is readable
+    directly: one rho shell points at the axis or a surface, scattered nodes along a
+    theta/zeta line point at the PEST->DESC map. Skipped silently on traced input,
+    and never raises -- a diagnostic must not take the run down.
+    """
+    if os.environ.get("AGNI_DIAG", "1") == "0":
+        return
+    try:
+        leaves = [nodes, *data.values()]
+        if any(isinstance(v, jax.core.Tracer) for v in leaves):
+            return
+        nodes = np.asarray(nodes)
+        n = nodes.shape[0]
+        bad_node = ~np.isfinite(nodes).all(axis=1)
+        bad_keys = []
+        if bad_node.any():
+            bad_keys.append(f"grid nodes ({int(bad_node.sum())})")
+        n_checked = 0
+        for k, v in data.items():
+            if not hasattr(v, "shape") or not np.issubdtype(
+                np.dtype(v.dtype), np.number
+            ):
+                continue
+            n_checked += 1
+            fin = np.isfinite(np.asarray(v))
+            if fin.all():
+                continue
+            bad_keys.append(f"{k} ({int((~fin).sum())}/{fin.size})")
+            if fin.ndim and fin.shape[0] == n:
+                bad_node |= ~fin.reshape(n, -1).all(axis=1)
+        if not bad_keys:
+            print(
+                f"[nan-check] {label}: nodes + {n_checked} quantities all finite",
+                flush=True,
+            )
+            return
+        print(f"[nan-check] {label}: NON-FINITE in {', '.join(bad_keys)}", flush=True)
+        if bad_node.any():
+            # Nodes whose own coordinates are NaN show up as a `nan` rho key.
+            b = nodes[bad_node]
+            rho, cnt = np.unique(np.round(b[:, 0], 12), return_counts=True)
+            print(
+                f"[nan-check] {label}: {int(bad_node.sum())}/{n} bad nodes; "
+                f"per rho: {dict(zip(rho.tolist(), cnt.tolist()))}; "
+                f"theta in [{np.nanmin(b[:, 1]):.4f}, {np.nanmax(b[:, 1]):.4f}], "
+                f"zeta in [{np.nanmin(b[:, 2]):.4f}, {np.nanmax(b[:, 2]):.4f}]",
+                flush=True,
+            )
+    except Exception as _exc:  # noqa: BLE001 -- diagnostics never take a run down
+        print(f"[nan-check] {label}: UNAVAILABLE ({type(_exc).__name__}: {_exc})")
+
+
 class _PhaseTimer:
     """Wall-clock breakdown of the eigensolve's phases. Off with ``AGNI_TIMING=0``.
 
@@ -3055,6 +3110,9 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     _ = params["Psi"]
+    # Before anything consumes them: a NaN here otherwise surfaces much later as a
+    # "ring blocks not SPD" error that wrongly blames the shift.
+    _report_nonfinite(data, transforms["grid"].nodes, "fine geometry")
     # THREE fine-resolution operator builds happen per `compute_data` call, and only
     # the middle one was ever marked:
     #

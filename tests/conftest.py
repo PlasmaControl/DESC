@@ -20,12 +20,14 @@ from desc.coils import (
 )
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
+from desc.io import load
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     ToroidalMagneticField,
     solve_regularized_surface_current,
 )
+from desc.objectives import ForceBalance, ObjectiveFunction
 from desc.utils import rpz2xyz_vec
 from desc.vmec import VMECIO
 
@@ -72,6 +74,46 @@ def SOLOVEV(tmpdir_factory):
         "desc_nc_path": desc_nc_path,
         "vmec_nc_path": vmec_nc_path,
         "booz_nc_path": booz_nc_path,
+    }
+    return SOLOVEV_out
+
+
+@pytest.fixture(scope="session")
+def SOLOVEV_LH_current(tmpdir_factory):
+    """Run SOLOVEV example with left-handed boundary and current-constraint."""
+    input_path = ".//tests//inputs//input.GS_LH"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("SOLOVEV_out.h5")
+    desc_nc_path = output_dir.join("SOLOVEV_out.nc")
+    vmec_nc_path = "./tests/inputs/wout_GS_LH_ns256.nc"
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running SOLOVEV test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    with pytest.warns(UserWarning, match="Left handed coordinates"):
+        main(args)
+    # resolve to tighter tolerances
+    eqf = load(str(desc_h5_path))
+    grid = QuadratureGrid(M=eqf[-1].M, L=eqf[-1].L_grid, N=0)
+    eqf[-1].solve(
+        ftol=1e-6,
+        xtol=1e-8,
+        gtol=1e-10,
+        objective=ObjectiveFunction(ForceBalance(eqf[-1], grid=grid)),
+    )
+    eqf.save(str(desc_h5_path))
+
+    SOLOVEV_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
     }
     return SOLOVEV_out
 
@@ -342,6 +384,23 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
         eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
+    return vmec, desc
+
+
+@pytest.fixture(scope="session")
+def VMEC_save_LH_current(SOLOVEV_LH_current, tmpdir_factory):
+    """Save an equilibrium in VMEC netcdf format for comparison."""
+    # from an original vmec input with left-handed bdry and current-constraint
+    vmec = Dataset(str(SOLOVEV_LH_current["vmec_nc_path"]), mode="r")
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_LH_current["desc_h5_path"]))[-1]
+    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
+    VMECIO.save(
+        eq,
+        str(SOLOVEV_LH_current["desc_nc_path"]),
+        surfs=vmec.variables["ns"][:],
+        verbose=0,
+    )
+    desc = Dataset(str(SOLOVEV_LH_current["desc_nc_path"]), mode="r")
     return vmec, desc
 
 

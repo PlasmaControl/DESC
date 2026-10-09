@@ -1054,6 +1054,7 @@ class InputReader:
         iota_flag = True
         pres_scale = 1.0
         curr_tor = None
+        curr_type = "power_series"  # VMEC default, AC are coefficients of I'(s)
 
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
@@ -1289,8 +1290,12 @@ class InputReader:
                     inputs["iota"][k, 0] = l
 
             # current
-            if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
-                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
+            match = re.search(
+                r"\bPCURR_TYPE\s*=\s*['\"]?\s*(\w+)", command, re.IGNORECASE
+            )
+            if match:
+                curr_type = match.group(1).lower()
+                if curr_type not in ["power_series", "power_series_i"]:
                     warnings.warn(colored("Current is not a power series!", "yellow"))
             match = re.search(r"CURTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
@@ -1628,16 +1633,15 @@ class InputReader:
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
-        # integrate current profile wrt s=rho^2
-        inputs["current"] = np.pad(
-            np.vstack(
-                (
-                    inputs["current"][:, 0] + 2,
-                    inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
-                )
-            ).T,
-            ((1, 0), (0, 0)),
-        )
+        # VMEC current profiles are power series in s=rho^2 of either I'(s)
+        # (PCURR_TYPE='power_series') or I(s) starting from the s^1 term
+        # (PCURR_TYPE='power_series_I'), so shift the modes up by s^1 = rho^2
+        # and, for I'(s), integrate wrt s
+        modes = inputs["current"][:, 0] + 2
+        params = inputs["current"][:, 1]
+        if curr_type != "power_series_i":
+            params = params * 2 / modes
+        inputs["current"] = np.pad(np.vstack((modes, params)).T, ((1, 0), (0, 0)))
         # scale current profile
         if curr_tor is not None:
             inputs["current"][:, 1] *= curr_tor / (np.sum(inputs["current"][:, 1]) or 1)

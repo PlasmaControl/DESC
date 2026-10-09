@@ -30,6 +30,7 @@ from desc.profiles import (
 )
 from desc.transform import Transform
 from desc.utils import equals
+from desc.vmec import VMECIO
 
 
 @pytest.mark.unit
@@ -326,6 +327,33 @@ def test_vmec_input_surface_threshold():
         surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5
+
+
+@pytest.mark.unit
+def test_vmec_input_current_profile_types(tmp_path):
+    """Test reading VMEC current profiles given as I'(s) or I(s) power series."""
+    # I'(s) = 1 - s and I(s) = s - s^2/2 are the same profile, which is then
+    # scaled to I(1) = CURTOR = 2, so I(rho) = 4 rho^2 - 2 rho^4
+    header = (
+        "&INDATA\n  NFP = 1\n  MPOL = 2\n  NTOR = 0\n  PHIEDGE = 1.0\n"
+        + "  NCURR = 1\n  CURTOR = 2.0\n"
+        + "  RBC(0,0) = 10.0  RBC(0,1) = 1.0  ZBS(0,1) = 1.0\n"
+    )
+    for pcurr_type, ac in [
+        ("power_series", "1.0 -1.0"),
+        ("power_series_I", "1.0 -0.5"),
+    ]:
+        path = tmp_path / f"input.{pcurr_type}"
+        path.write_text(header + f"  PCURR_TYPE = '{pcurr_type}'\n  AC = {ac}\n/\n")
+        current = InputReader.parse_vmec_inputs(str(path))[-1]["current"]
+        np.testing.assert_allclose(current, [[0, 0], [2, 4], [4, -2]])
+
+    # VMEC input files written by DESC use PCURR_TYPE = 'power_series_I'
+    eq = Equilibrium(L=2, M=2, current=PowerSeriesProfile([0, 4, -2], modes=[0, 2, 4]))
+    path = tmp_path / "input.from_desc"
+    VMECIO.write_vmec_input(eq, str(path))
+    current = InputReader.parse_vmec_inputs(str(path))[-1]["current"]
+    np.testing.assert_allclose(current, [[0, 0], [2, 4], [4, -2]])
 
 
 class TestInputReader:

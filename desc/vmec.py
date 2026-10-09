@@ -213,6 +213,17 @@ class VMECIO:
             warnings.filterwarnings(
                 "ignore", message="Left handed coordinates detected"
             )
+            sign = np.sign(
+                eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+            )
+            if sign == -1 and profile == "current":
+                # because we get current from buco, which itself is the integral
+                # of B_theta dtheta, if the boundary is left-handed, then the actual
+                # toroidal current profile is negative of what the buco integral
+                # says it is (due to ampere's law and the integral being in the CCW
+                # direction if the boundary is left-handed)
+                eq.c_l *= -1
+
             eq = ensure_positive_jacobian(eq)
 
         return eq
@@ -229,8 +240,26 @@ class VMECIO:
         M_grid=None,
         N_grid=None,
         verbose=1,
+        match_VMEC_wout=False,
     ):
         """Save an Equilibrium as a netCDF file in the VMEC format.
+
+        NOTE: If the equilibrium is current-constrained, DESC will save for AC the
+        power series of the toroidal current I(s) profile (with PCURR_TYPE =
+        'power_series_I'), not the current derivative I'(s) profile (which is the
+        VMEC default PCURR_TYPE = 'power_series').
+        DESC will also save quantities in the VMEC left-handed convention, so
+        quantities like iota or the poloidal B field (bsupumns) will be opposite of
+        their sign in DESC.
+
+        NOTE: We do not claim to match every VMEC version, nor do we claim every
+        quantity is the same in the wout. Please see the source to see exactly how
+        DESC is computing each output quantity. The `match_VMEC_wout` flag changes
+        some of these computations to better match VMEC (which computes some quantities
+        with different assumption). This was done comparing against VMEC version 9.0
+        installed on the `portal` PPPL cluster as of March 2025.
+        If any of these quantities are in error or conflict, please submit an issue
+        detailing the quantity and what is different.
 
         Parameters
         ----------
@@ -252,6 +281,15 @@ class VMECIO:
             * 0: no output
             * 1: status of quantities computed
             * 2: as above plus timing information
+        match_VMEC_wout : bool
+            Whether or not to change some calculations to match what VMEC does.
+            There are some differences to how VMEC computes certain quantities, which
+            are not obvious/consistent with what the descriptions are
+            for the quantities. By default this is False, and DESC will compute
+            things faithful to what the quantity descriptions are. If True, some
+            calculations will be modified in order to match how the DESC developers
+            understand that VMEC computes them.
+            The affected quantities are `jdotb`, `jcuru` and `jcurv`.
 
         Returns
         -------
@@ -370,10 +408,17 @@ class VMECIO:
                 "J",
                 "J^theta*sqrt(g)",
                 "J^zeta",
+                "B^zeta",
                 "p",
                 "sqrt(g)",
                 "<|B|^2>",
                 "<J*B>",
+                "G_r",
+                "G",
+                "I_r",
+                "I",
+                "psi_r",
+                "sqrt(g)_Boozer",
             ],
             grid=grid_full,
         )
@@ -507,7 +552,16 @@ class VMECIO:
 
         pcurr_type = file.createVariable("pcurr_type", "S1", ("dim_00020",))
         pcurr_type.long_name = "parameterization of current density function"
-        pcurr_type[:] = power_series
+        if eq.current is not None:
+            # we save AC as the power series of I(s), not of I'(s)
+            pcurr_type[:] = stringtochar(
+                np.array(
+                    ["power_series_I" + " " * 6],
+                    "S" + str(file.dimensions["dim_00020"].size),
+                )
+            )
+        else:
+            pcurr_type[:] = power_series
 
         # scalars computed on a Quadrature grid
 
@@ -569,9 +623,11 @@ class VMECIO:
         rbtor0[:] = data_axis["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
-        b0.long_name = "average B_tor on axis"
+        b0.long_name = "<R*B_tor> on axis divided by R of axis at phi=0"
         b0.units = "T"
-        b0[:] = data_axis["<|B|>"][0]
+        # VMEC defines b0 = rbtor0 / R_axis(phi=0), so b0 has the sign of the
+        # toroidal field (i.e. of Psi). The first node of grid_axis is at zeta=0.
+        b0[:] = data_axis["G"][0] / data_axis["R"][0]
 
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis.long_name = "2 * mu_0 * pressure / <|B|^2> on the magnetic axis"
@@ -617,6 +673,7 @@ class VMECIO:
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I, on half mesh"
         buco.units = "T*m"
+
         buco[1:] = -grid_half.compress(data_half["I"])  # - for negative Jacobian
         buco[0] = 0
 
@@ -644,6 +701,27 @@ class VMECIO:
             8 * np.pi**2 * grid_half.compress(data_half["rho"])
         )
         vp[0] = 0
+
+        # over_r
+        over_r = file.createVariable("over_r", np.float64, ("radius",))
+        over_r.long_name = (
+            "average over each surface of sqrt(g)/R divided"
+            + " by dV/ds and then multiplied by 4*pi^2, on half mesh"
+        )
+        over_r[:] = (
+            np.insert(
+                surface_averages(
+                    grid_half,
+                    data_half["sqrt(g)"] / data_half["R"] / data_half["V_r(r)"],
+                    sqrt_g=1,  # set to 1 here to do a simple average
+                    expand_out=False,
+                ),
+                [0],
+                [0.0],
+            )
+            * 4
+            * np.pi**2
+        )  # divide by 4pi^2 bc the V' is normalized
 
         # full mesh quantities
 
@@ -703,47 +781,104 @@ class VMECIO:
             ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
-        ac.long_name = "normalized toroidal current density coefficients"
+        ac.long_name = (
+            "toroidal current coefficients, I(s) = sum_i ac[i] s^(i+1) "
+            + "(pcurr_type = power_series_I)"
+        )
+        ac.units = "A"
         ac[:] = np.zeros((file.dimensions["preset"].size,))
         if eq.current is not None:
-            # only using up to 10th order to avoid poor conditioning
-            ac[:11] = PowerSeriesProfile.from_values(
-                s_full, grid_full.compress(data_full["current"]), order=10, sym=False
-            ).params
+            # VMEC's power_series_I has no s^0 term, so fit I(s) with s^1 to s^10
+            # (only using up to 10th order to avoid poor conditioning)
+            ac[:10] = np.linalg.lstsq(
+                s_full[:, np.newaxis] ** np.arange(1, 11),
+                grid_full.compress(data_full["current"]),
+                rcond=None,
+            )[0]
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared, on full mesh"
         bdotb.units = "T^2"
-        bdotb[:] = grid_full.compress(data_full["<|B|^2>"])
-        bdotb[0] = 0
+        x = np.array(grid_full.compress(data_full["<|B|^2>"]))
+        x[0] = 2 * x[1] - x[2]  # VMEC linearly extrapolates to the magnetic axis
+        bdotb[:] = x
+
+        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
+        bdotgradv.long_name = "flux surface average of B dot grad(zeta), on full mesh"
+        bdotgradv.units = "T/m"
+        x = np.array(
+            surface_averages(
+                grid_full,
+                data_full["B^zeta"],
+                sqrt_g=data_full["sqrt(g)"],
+                expand_out=False,
+            )
+        )
+        x[0] = 2 * x[1] - x[2]  # VMEC linearly extrapolates to the magnetic axis
+        bdotgradv[:] = x
 
         jdotb = file.createVariable("jdotb", np.float64, ("radius",))
         jdotb.long_name = "flux surface average of J*B, on full mesh"
         jdotb.units = "N/m^3"
-        jdotb[:] = grid_full.compress(data_full["<J*B>"])
-        jdotb[0] = 0
+
+        if match_VMEC_wout:
+            # in VMEC, they use the form of parallel current from
+            # assuming Boozer coordinates, which is what we will also use here.
+            # this can differ a lot from our <J*B> quantity
+            JB = (
+                (
+                    data_full["G"] * data_full["I_r"] / data_full["psi_r"]
+                    - data_full["G_r"] * data_full["I"] / data_full["psi_r"]
+                )
+                / data_full["sqrt(g)_Boozer"]
+                * data_full["psi_r"]
+            )
+            JB = (
+                surface_averages(
+                    grid_full, JB, sqrt_g=data_full["sqrt(g)"], expand_out=False
+                )
+                / mu_0
+            )
+        else:
+            JB = grid_full.compress(data_full["<J*B>"])
+        # both forms are 0/0 at the magnetic axis, so extrapolate like VMEC does
+        JB = np.array(JB)
+        JB[0] = 2 * JB[1] - JB[2]
+        jdotb[:] = JB
+
+        # VMEC computes jcuru = dG/ds / mu_0 and jcurv = dI/ds / mu_0 (Ampere's law),
+        # which are the simple (not sqrt(g)-weighted) averages over the surface of
+        # sqrt(g)*J^theta and sqrt(g)*J^zeta, so to match that we set `sqrt_g=1`
+        # in the surface_averages calls
+        fsa_sqrt_g = 1 if match_VMEC_wout else data_full["sqrt(g)"]
 
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta, on full mesh"
         jcuru.units = "A/m^3"
-        jcuru[:] = -surface_averages(  # - for negative Jacobian
-            grid_full,
-            data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]),
-            sqrt_g=data_full["sqrt(g)"],
-            expand_out=False,
+        x = -np.array(  # - for negative Jacobian
+            surface_averages(
+                grid_full,
+                data_full["J^theta*sqrt(g)"] / (2 * data_full["rho"]),
+                sqrt_g=fsa_sqrt_g,
+                expand_out=False,
+            )
         )
-        jcuru[0] = 0
+        x[0] = 2 * x[1] - x[2]  # VMEC linearly extrapolates to the magnetic axis
+        jcuru[:] = x
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcurv.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
-        jcurv[:] = surface_averages(
-            grid_full,
-            data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
-            sqrt_g=data_full["sqrt(g)"],
-            expand_out=False,
+        x = np.array(
+            surface_averages(
+                grid_full,
+                data_full["sqrt(g)"] * data_full["J^zeta"] / (2 * data_full["rho"]),
+                sqrt_g=fsa_sqrt_g,
+                expand_out=False,
+            )
         )
-        jcurv[0] = 0
+        x[0] = 2 * x[1] - x[2]  # VMEC linearly extrapolates to the magnetic axis
+        jcurv[:] = x
 
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = (
@@ -1277,7 +1412,7 @@ class VMECIO:
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currumnc[:, :] = c
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
-            s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+            c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
@@ -1327,7 +1462,7 @@ class VMECIO:
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currvmnc[:, :] = -c  # negative sign for negative Jacobian
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
-            s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
+            c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
@@ -1340,10 +1475,6 @@ class VMECIO:
             timer.disp("J^zeta*sqrt(g)")
 
         # TODO (#1380): these output quantities need to be added
-        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
-        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-        bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
-        bdotgradv.units = "None"
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
@@ -1390,9 +1521,6 @@ class VMECIO:
 
         niter = file.createVariable("niter", np.int32)
         niter[:] = 1
-
-        over_r = file.createVariable("over_r", np.float64, ("radius",))
-        over_r[:] = np.zeros((file.dimensions["radius"].size,))
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))

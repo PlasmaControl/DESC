@@ -2386,15 +2386,14 @@ def test_make_boozmn_output_DESC_asym(TmpDir):
     surfs = 3
     # Use DESC to calculate the boozer harmonics and create a booz_xform style .nc file
     # on 2 surfaces (surfs-1 by convention) using boozer resolution of 40
-    with pytest.warns(UserWarning, match="numnc"):
-        make_boozmn_output(
-            eq,
-            output_path,
-            surfs=surfs,
-            verbose=2,
-            M_booz=boozer_res,
-            N_booz=boozer_res,
-        )
+    make_boozmn_output(
+        eq,
+        output_path,
+        surfs=surfs,
+        verbose=2,
+        M_booz=boozer_res,
+        N_booz=boozer_res,
+    )
     # load in the .nc file
     file = Dataset(output_path, mode="r")
 
@@ -2638,6 +2637,65 @@ def test_make_boozmn_output_against_hidden_symmetries_booz_xform(TmpDir):
     # test some misc quantities
     misc = ["mboz_b", "nboz_b", "ixm_b", "ixn_b"]
     for name in misc:
+        np.testing.assert_allclose(
+            file.variables[name][:].filled(), file_cpp.variables[name][:].filled()
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
+    """Test that asym booz_xform-style outputs compare well against C++ version."""
+    # testing against https://github.com/hiddenSymmetries/booz_xform/tree/main
+    # compare against a 50 surface Mboz=Nboz=20 run with the hidden symmetries C++
+    # booz_xform implementation, ran on the wout
+    # ./tests/inputs/wout_nae_asym_QA_ns_50_Mnyq_30_Nnyq_30.nc
+    # (also agrees to machine precision with booz_xform_jax v0.4.3)
+    eq = load("./tests/inputs/NAE_QA_asym_eq_output.h5")
+    output_path = str(TmpDir.join("boozmn_asym_out.nc"))
+    boozer_res = 20
+    Cpp_booz_output_path = "./tests/inputs/boozmn_50_surfs_QA_asym_sims_booz_20.nc"
+
+    # the 7 half-grid surfaces s=(i+1/2)/7 of surfs=8 are exactly
+    # the half-grid surfaces s=(j+1/2)/49 of ns=50 with j=7i+3
+    make_boozmn_output(
+        eq, output_path, surfs=8, verbose=0, M_booz=boozer_res, N_booz=boozer_res
+    )
+    surf_inds_cpp = 7 * np.arange(7) + 3
+
+    file = Dataset(output_path, mode="r")
+    file_cpp = Dataset(Cpp_booz_output_path, mode="r")
+
+    # booz_xform interpolates R, Z from the VMEC full grid to the half grid, and
+    # computes the Jacobian as (G + iota*I)/B^2, which only matches the geometric
+    # Jacobian DESC uses up to the force error of this equilibrium
+    atols = {
+        "rmnc_b": 1e-5,
+        "rmns_b": 1e-5,
+        "zmnc_b": 1e-5,
+        "zmns_b": 1e-5,
+        "bmnc_b": 1e-8,
+        "bmns_b": 1e-8,
+        "pmnc_b": 1e-8,
+        "pmns_b": 1e-8,
+        "gmn_b": 1e-3,
+        "gmns_b": 1e-3,
+    }
+    for name, atol in atols.items():
+        np.testing.assert_allclose(
+            file.variables[name][:].filled(),
+            file_cpp.variables[name][:].filled()[surf_inds_cpp],
+            atol=atol,
+            err_msg=name,
+        )
+    for name in ["iota_b", "buco_b", "bvco_b"]:
+        np.testing.assert_allclose(
+            file.variables[name][:].filled()[1:],
+            file_cpp.variables[name][:].filled()[surf_inds_cpp + 1],
+            atol=1e-7,
+            err_msg=name,
+        )
+    for name in ["mboz_b", "nboz_b", "ixm_b", "ixn_b"]:
         np.testing.assert_allclose(
             file.variables[name][:].filled(), file_cpp.variables[name][:].filled()
         )

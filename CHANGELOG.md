@@ -44,6 +44,7 @@ Bug Fixes
 - ``desc.vmec.VMECIO.save`` now saves the current profile of current-constrained equilibria as ``ac`` coefficients of ``I(s)`` with ``pcurr_type='power_series_I'``, instead of labelling the ``I(s)`` coefficients as VMEC's default ``'power_series'``, which is a power series of ``I'(s)``.
 - The VMEC input file reader now reads ``AC`` as the ``I(s)`` power series when ``PCURR_TYPE='power_series_I'`` (such as in VMEC input files written by ``desc.vmec.VMECIO.write_vmec_input``), instead of warning and treating it as the ``I'(s)`` power series.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 
 

@@ -334,7 +334,9 @@ def fmin_auglag(  # noqa: C901
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
-        x_scale = jnp.broadcast_to(x_scale, z.shape)
+        x_scale = jnp.broadcast_to(x_scale, x0.shape)
+        # add ones for slack variables
+        x_scale = jnp.concatenate([x_scale, jnp.ones(z0.size - x0.size)])
         scale, scale_inv = x_scale, 1 / x_scale
 
     v, dv = cl_scaling_vector(z, g, lb, ub)
@@ -382,12 +384,6 @@ def fmin_auglag(  # noqa: C901
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "exact")
 
-    errorif(
-        len(options) > 0,
-        ValueError,
-        "Unknown options: {}".format([key for key in options]),
-    )
-
     callback = setdefault(callback, lambda *args: False)
 
     methods = {
@@ -423,6 +419,12 @@ def fmin_auglag(  # noqa: C901
     alpha_eta = options.pop("alpha_eta", 0.1)
     beta_eta = options.pop("beta_eta", 0.9)
     tau = options.pop("tau", 10)
+
+    errorif(
+        len(options) > 0,
+        ValueError,
+        "Unknown options: {}".format([key for key in options]),
+    )
 
     gtolk = max(omega / jnp.mean(mu) ** alpha_omega, gtol)
     ctolk = max(eta / jnp.mean(mu) ** alpha_eta, ctol)

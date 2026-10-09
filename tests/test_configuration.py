@@ -582,11 +582,16 @@ def test_kinetic_errors():
 
     params = np.ones((3, 4))
     profile = PowerSeriesProfile()
-    eqk.pressure = profile
-    eqp.electron_temperature = profile
-    eqp.electron_density = profile
-    eqp.ion_temperature = profile
-    eqp.atomic_number = profile
+    with pytest.warns(UserWarning, match="Pressure profile is being assigned"):
+        eqk.pressure = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.electron_temperature = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.electron_density = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.ion_temperature = profile
+    with pytest.warns(UserWarning, match="profile is being assigned"):
+        eqp.atomic_number = profile
     with pytest.raises(TypeError):
         eqk.pressure = params
     with pytest.raises(TypeError):

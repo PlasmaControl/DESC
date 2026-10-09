@@ -1520,7 +1520,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[rho_idx, ups_idx].add(
         _fit(_diag_r((n0 * W * psi_r * sqrtg * g_rv).flatten()))
     )
-
+    assert np.isfinite(B).all(), "B has NaN or Inf entries"
     # typical in magnetic mirrors. `ismirror` is a TRACED bool (depends on iota), so a
     # Python `if ismirror` raises TracerBoolConversionError under jit (the assembly
     # runs concrete on the dense/callback paths but traced on the jax_lanczos path).
@@ -1547,6 +1547,8 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, zeta_idx].add(_fit(_diag_r(zz.flatten())))
     B = B.at[rho_idx, zeta_idx].add(_fit(_diag_r(rz.flatten())))
     B = B.at[ups_idx, zeta_idx].add(_fit(_diag_r(uz.flatten())))
+    assert not ismirror, "mirror equilibrium"
+    assert np.isfinite(B).all(), "B has NaN or Inf entries"
 
     ##A = np.where(np.abs(A) >= 1e-11, 1.0, 0.0)
     # from matplotlib import pyplot as plt
@@ -1786,6 +1788,7 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     au_diag = d[rho_idx] ** 2 * au_diag
     B = d[:, None] * B * d[None, :]
 
+    assert np.isfinite(B).all(), "B has NaN or Inf entries"
     # TODO: B_blocks will always be real for axisym=True, complex data type
     # is used to avoid trivial dtype-related errors. Fix later!
     if axisym:

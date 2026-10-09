@@ -5,6 +5,7 @@ New Features
 
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- VMEC input files are now parsed with [f90nml](https://github.com/marshallward/f90nml) (a new dependency), so standard Fortran namelist syntax in the ``&INDATA`` namelist is supported. This includes multi-line array inputs, indexed array elements (e.g. ``AM(0) = ...`` or ``RAXIS_CC(:) = ...``), and boundary coefficients given in any order or with gaps in the mode numbers. Other namelists in the same file (e.g. the STELLOPT ``&OPTIMUM`` namelist) are ignored. [#1816](https://github.com/PlasmaControl/DESC/pull/1816)
 
 Performance Improvements
 
@@ -19,6 +20,7 @@ Breaking Changes and Deprecations
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+- VMEC boundary coefficients given without explicit indices (e.g. ``RBC = 10.0, 1.0``) now raise an error, since their mode numbers cannot be determined. Previously these were silently ignored.
 
 Bug Fixes
 
@@ -36,6 +38,8 @@ Bug Fixes
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- VMEC input files with ``PCURR_TYPE = 'power_series_I'`` are now read correctly. Previously the ``AC`` coefficients were always treated as coefficients of the current derivative, so VMEC input files written by ``VMECIO.write_vmec_input`` were not read back correctly. [#1902](https://github.com/PlasmaControl/DESC/issues/1902)
+- Fixes several cases where the VMEC input reader silently misread inputs, such as ignoring indexed profile or axis coefficients like ``AM(0) = ...`` and ``RAXIS_CC(0) = ...``, or reading other variables ending in ``AC`` (such as ``RAC``) as the current profile.
 
 
 

@@ -1014,24 +1014,29 @@ class InputReader:
             Dictionary of inputs formatted for DESC.
 
         """
-        # f90nml fails if the input file has multiple
-        # end statements (specifically if it has / and then next line is &END)
-        # and some VMEC input files do have this, so it is safer to
-        # read the whole file as one string, replace all &END with /
-        # and then use f90nml.reads
         if not isinstance(vmec_fname, io.IOBase):
             vmec_file = open(vmec_fname)
         else:
             vmec_file = vmec_fname
         vmec_file.seek(0)
-        vmec_fullstring = vmec_file.read()
-        # https://stackoverflow.com/questions/919056/case-insensitive-replace
-        vmec_fullstring_no_END = re.sub(
-            "(?i)" + re.escape("&end"), lambda m: "/", vmec_fullstring
-        )
-        vmec_file.seek(0)
-
-        vmec_indata = f90nml.reads(vmec_fullstring_no_END)["indata"]
+        # f90nml fails if a namelist is terminated by both / and &END,
+        # which some VMEC input files have, so replace all &END with /
+        vmec_str = re.sub(r"(?i)[&$]end\b", "/", vmec_file.read())
+        vmec_file.close()
+        # only parse the INDATA namelist, since other namelists in the same file
+        # (such as the STELLOPT &OPTIMUM) may have inputs that f90nml cannot parse
+        start = re.search(r"(?im)^\s*[&$]indata\b", vmec_str)
+        if start is None:
+            raise ValueError(
+                colored(f"No &INDATA namelist found in {vmec_fname}!", "red")
+            )
+        end = re.compile(r"(?m)^\s*[&$]").search(vmec_str, start.end())
+        vmec_str = vmec_str[start.start() : end.start() if end else None] + "\n/\n"
+        _warn_duplicate_vmec_inputs(vmec_str)
+        parser = f90nml.Parser()
+        # VMEC 1D arrays (profiles and axis) are indexed starting from 0
+        parser.default_start_index = 0
+        vmec_indata = parser.reads(vmec_str)["indata"]
 
         # default values
         inputs = {
@@ -1073,7 +1078,7 @@ class InputReader:
                 colored(
                     "Detected free-boundary mode in VMEC input file!"
                     " DESC will run as fixed-boundary, use a python script"
-                    "to run DESC in free-boundary mode.",
+                    " to run DESC in free-boundary mode.",
                     "yellow",
                 )
             )
@@ -1112,7 +1117,7 @@ class InputReader:
             warnings.warn(
                 colored(
                     "Pressure is not a power series! DESC can only read power series"
-                    "profiles from input files. Use a python script to use other"
+                    " profiles from input files. Use a python script to use other"
                     " profile types.",
                     "yellow",
                 )
@@ -1122,7 +1127,7 @@ class InputReader:
             warnings.warn(
                 colored(
                     "iota is not a power series! DESC can only read power series"
-                    "profiles from input files. Use a python script to use other "
+                    " profiles from input files. Use a python script to use other "
                     "profile types.",
                     "yellow",
                 )
@@ -1132,405 +1137,105 @@ class InputReader:
             warnings.warn(
                 colored(
                     "current is not a power series! DESC can only read power series"
-                    "profiles from input files. Use a python script to use other"
+                    " profiles from input files. Use a python script to use other"
                     " profile types.",
                     "yellow",
                 )
             )
-        gamma = vmec_indata.get("gamma", 0.0)
-        if gamma > 0:
-            gamma = 0
+        if vmec_indata.get("GAMMA", 0.0) != 0:
             warnings.warn(
                 colored("GAMMA is not 0.0, DESC will set this to 0.0.", "yellow")
             )
-        if vmec_indata.get("bloat", 1.0) != 1:
+        if vmec_indata.get("BLOAT", 1.0) != 1:
             warnings.warn(colored("BLOAT is not 1.0", "yellow"))
         if vmec_indata.get("SPRES_PED", 1.0) != 1:
             warnings.warn(colored("SPRES_PED is not 1.0", "yellow"))
         # read pressure
         pres_scale = float(vmec_indata.get("PRES_SCALE", 1.0))
-        AM = np.atleast_1d(vmec_indata.get("AM", np.array([0.0]))).astype(float)
+        AM = _get_vmec_vector(vmec_indata, "AM", np.zeros(1))
         # VMEC profile coefs are in increasing order of s powers, s=rho**2
         ls = np.arange(0, AM.size) * 2
         inputs["pressure"] = np.vstack([ls, AM]).T
 
         # read iota
-        AI = np.atleast_1d(vmec_indata.get("AI", np.array([0.0]))).astype(float)
+        AI = _get_vmec_vector(vmec_indata, "AI", np.zeros(1))
         ls = np.arange(0, AI.size) * 2
         inputs["iota"] = np.vstack([ls, AI]).T
 
         # read current
         curr_tor = vmec_indata.get("CURTOR", None)
-        AC = np.atleast_1d(vmec_indata.get("AC", np.array([0.0]))).astype(float)
+        AC = _get_vmec_vector(vmec_indata, "AC", np.zeros(1))
+        # power_series is I'(s) = sum_i AC(i) s^i
+        # power_series_I is I(s) = sum_i AC(i) s^(i+1)
         ls = (
             np.arange(0, AC.size) * 2
-            if ctype.lower == "power_series"
+            if ctype.lower() == "power_series"
             else np.arange(1, AC.size + 1) * 2
         )
         inputs["current"] = np.vstack([ls, AC]).T
 
-        # axis
-        try:
-            RAXIS_CC = vmec_indata["RAXIS"]
-        except KeyError:
-            RAXIS_CC = vmec_indata.get("RAXIS_CC", None)
-        RAXIS_CS = vmec_indata.get("RAXIS_CS", None)
-        try:
-            ZAXIS_CS = vmec_indata["ZAXIS"]
-        except KeyError:
-            ZAXIS_CS = vmec_indata.get("ZAXIS_CS", None)
-        ZAXIS_CC = vmec_indata.get("ZAXIS_CC", None)
-        if RAXIS_CC is not None:
-            RAXIS_CC = np.atleast_1d(RAXIS_CC)
-            N_axis_R = len(RAXIS_CC) - 1
-            if RAXIS_CS is not None:
-                N_axis_R = max(N_axis_R, len(np.atleast_1d(RAXIS_CS)) - 1)
-            if ZAXIS_CS is not None:
-                N_axis_Z = len(np.atleast_1d(ZAXIS_CS)) - 1
-            else:
-                N_axis_Z = 0
-            if ZAXIS_CC is not None:
-                N_axis_Z = max(N_axis_Z, len(np.atleast_1d(ZAXIS_CC)) - 1)
-            N_axis = max(N_axis_R, N_axis_Z)
-            ns_axis = np.arange(-N_axis, N_axis + 1, 1)
-            # DESC input axis array is (k,3) array of [n, R, Z]
-            inputs["axis"] = np.zeros((ns_axis.size, 3))
-            inputs["axis"][:, 0] = ns_axis
-
-            idx = [
-                np.where(inputs["axis"][:, 0] == n)[0][0]
-                for n in np.arange(len(RAXIS_CC))
-            ]
-            inputs["axis"][idx, 1] = np.array(RAXIS_CC)
-            if RAXIS_CS is not None:
-                RAXIS_CS = np.atleast_1d(RAXIS_CS)
-                idx = [
-                    np.where(inputs["axis"][:, 0] == n)[0][0]
-                    for n in -np.arange(1, len(RAXIS_CS))
-                ]
-                # TODO: Why do we have to negate the sin modes here?
-                inputs["axis"][idx, 1] = -np.array(
-                    RAXIS_CS[1:]
-                )  # ignore n=0 for sin modes
-            if ZAXIS_CS is not None:
-                ZAXIS_CS = np.atleast_1d(ZAXIS_CS)
-                idx = [
-                    np.where(inputs["axis"][:, 0] == n)[0][0]
-                    for n in -np.arange(1, len(ZAXIS_CS))
-                ]
-                # TODO: Why do we have to negate the sin modes here?
-                inputs["axis"][idx, 2] = -np.array(
-                    ZAXIS_CS[1:]
-                )  # ignore n=0 for sin modes
-            if ZAXIS_CC is not None:
-                ZAXIS_CC = np.atleast_1d(ZAXIS_CC)
-                idx = [
-                    np.where(inputs["axis"][:, 0] == n)[0][0]
-                    for n in np.arange(len(ZAXIS_CC))
-                ]
-                inputs["axis"][idx, 2] = np.array(ZAXIS_CC)
-        # unfortunately for the boundary surface, it is not
-        # straightforward to deduce the modenumbers m,n from
-        # the lengths of the read-in RBC etc. (for example,
-        # if one m modenumber goes up to n=2 but another only
-        # up to n=1)
-        # find start of namelist (&INDATA)
-
-        num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
-        vmeclines = vmec_file.readlines()
-        for i, line in enumerate(vmeclines):
-            if line.upper().find("&INDATA") != -1:
-                start_ind = i
-                continue
-            elif line.find("&") != -1:  # only care about the INDATA section
-                end_ind = i
-                break
-            elif i == len(vmeclines) - 1:
-                end_ind = i
-        vmeclines = vmeclines[start_ind + 1 : end_ind]
-
-        # Loop which makes multi-line inputs a single line
-        vmeclines_no_multiline = []
-        for line in vmeclines:
-            comment = line.find("!")
-            line = (line.strip() + " ")[0:comment].strip()
-            equal_ind = line.find("=")
-
-            # ignore blank lines or leftover comment !'s
-            if line.isspace() or line == "" or line == r"!":
-                continue
-            if equal_ind != -1:
-                vmeclines_no_multiline.append(line)
-            else:  # is a multi-line input,append the line to the previous
-                vmeclines_no_multiline[-1] += " " + line
-
-        # remove duplicate lines
-        vmec_no_multiline_no_duplicates = []
-        already_read_names = []
-        already_read = False
-
-        # it is easiest to find first instances of something, but
-        # we want to keep only the last instance of each duplicate
-        # as that is the behavior VMEC has,
-        # so we will read through the lines reversed
-        vmeclines_no_multiline.reverse()
-
-        for line in vmeclines_no_multiline:
-            comment = line.find("!")
-            line = (line.strip() + " ")[0:comment].strip()
-            equal_ind = line.find("=")
-
-            # ignore blank lines or leftover comment !'s
-            if line.isspace() or line == "" or line == r"!":
-                continue
-            if equal_ind != -1:
-                # add name of variable to already_read_names
-                input_name = line[0:equal_ind].strip()
-                if input_name not in already_read_names:
-                    already_read_names.append(input_name)
-                    vmec_no_multiline_no_duplicates.append(line)
-                    already_read = False
-                else:
-                    warnings.warn(
-                        colored(
-                            f"Detected multiple inputs for {input_name}! "
-                            + "DESC will default to reading the last one.",
-                            "yellow",
-                        )
-                    )
-                    already_read = True
-            # make sure if it is a duplicate line,
-            # to skip the multi-line associated with it
-            elif not already_read:
-                # is a multi-line input,append the line to the previous
-                vmec_no_multiline_no_duplicates[-1] += " " + line
-
-        # undo the reverse so the file we write looks as expected
-        vmec_no_multiline_no_duplicates.reverse()
-
-        # read the boundary inputs for use in DESC
-        for line in vmec_no_multiline_no_duplicates:
-            comment = line.find("!")
-            command = (line.strip() + " ")[0:comment]
-
-            # boundary shape
-            # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)
-            match = re.search(
-                r"RBS\(\s*"
-                + num_form
-                + r"\s*,\s*"
-                + num_form
-                + r"\s*\)\s*=\s*"
-                + num_form,
-                command,
-                re.IGNORECASE,
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                n = int(numbers[0])
-                m = int(numbers[1])
-                m_sgn = np.sign(np.array([m]))[0]
-                n_sgn = np.sign(np.array([n]))[0]
-                n = abs(n)
-                if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
-                    m = abs(m)
-                RBS = numbers[2]
-                if m != 0:  # RBS*sin(m*t)*cos(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * RBS
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array([-m, n, m_sgn * RBS, 0.0])
-                if n != 0:  # -RBS*cos(m*t)*sin(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += -n_sgn * RBS
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array([m, -n, -n_sgn * RBS, 0.0])
-            # RBC*cos(m*t-n*p) = RBC*cos(m*t)*cos(n*p) + RBC*sin(m*t)*sin(n*p)
-            match = re.search(
-                r"RBC\(\s*"
-                + num_form
-                + r"\s*,\s*"
-                + num_form
-                + r"\s*\)\s*=\s*"
-                + num_form,
-                command,
-                re.IGNORECASE,
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                n = int(numbers[0])
-                m = int(numbers[1])
-                m_sgn = np.sign(np.array([m]))[0]
-                n_sgn = np.sign(np.array([n]))[0]
-                n = abs(n)
-                if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
-                    m = abs(m)
-                RBC = numbers[2]
-                # RBC*cos(m*t)*cos(n*p)  # noqa: E800
-                m_idx = np.where(inputs["surface"][:, 0] == m)[0]
-                n_idx = np.where(inputs["surface"][:, 1] == n)[0]
-                idx = np.where(np.isin(m_idx, n_idx))[0]
-                if np.size(idx):
-                    inputs["surface"][m_idx[idx[0]], 2] += RBC
-                else:
-                    inputs["surface"] = np.pad(
-                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                    )
-                    inputs["surface"][-1, :] = np.array([m, n, RBC, 0.0])
-                if m != 0 and n != 0:  # RBC*sin(m*t)*sin(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * n_sgn * RBC
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array(
-                            [-m, -n, m_sgn * n_sgn * RBC, 0.0]
-                        )
-            # ZBS*sin(m*t-n*p) = ZBS*sin(m*t)*cos(n*p) - ZBS*cos(m*t)*sin(n*p)
-            match = re.search(
-                r"ZBS\(\s*"
-                + num_form
-                + r"\s*,\s*"
-                + num_form
-                + r"\s*\)\s*=\s*"
-                + num_form,
-                command,
-                re.IGNORECASE,
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                n = int(numbers[0])
-                m = int(numbers[1])
-                m_sgn = np.sign(np.array([m]))[0]
-                n_sgn = np.sign(np.array([n]))[0]
-                n = abs(n)
-                if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
-                    m = abs(m)
-                ZBS = numbers[2]
-                if m != 0:  # ZBS*sin(m*t)*cos(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * ZBS
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array([-m, n, 0.0, m_sgn * ZBS])
-                if n != 0:  # -ZBS*cos(m*t)*sin(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += -n_sgn * ZBS
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array([m, -n, 0.0, -n_sgn * ZBS])
-            # ZBC*cos(m*t-n*p) = ZBC*cos(m*t)*cos(n*p) + ZBC*sin(m*t)*sin(n*p)
-            match = re.search(
-                r"ZBC\(\s*"
-                + num_form
-                + r"\s*,\s*"
-                + num_form
-                + r"\s*\)\s*=\s*"
-                + num_form,
-                command,
-                re.IGNORECASE,
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                n = int(numbers[0])
-                m = int(numbers[1])
-                m_sgn = np.sign(np.array([m]))[0]
-                n_sgn = np.sign(np.array([n]))[0]
-                n = abs(n)
-                if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
-                    m = abs(m)
-                ZBC = numbers[2]
-                # ZBC*cos(m*t)*cos(n*p)  # noqa: E800
-                m_idx = np.where(inputs["surface"][:, 0] == m)[0]
-                n_idx = np.where(inputs["surface"][:, 1] == n)[0]
-                idx = np.where(np.isin(m_idx, n_idx))[0]
-                if np.size(idx):
-                    inputs["surface"][m_idx[idx[0]], 3] += ZBC
-                else:
-                    inputs["surface"] = np.pad(
-                        inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                    )
-                    inputs["surface"][-1, :] = np.array([m, n, 0.0, ZBC])
-                if m != 0 and n != 0:  # ZBC*sin(m*t)*sin(n*p)
-                    m_idx = np.where(inputs["surface"][:, 0] == -m)[0]
-                    n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
-                    idx = np.where(np.isin(m_idx, n_idx))[0]
-                    if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * n_sgn * ZBC
-                    else:
-                        inputs["surface"] = np.pad(
-                            inputs["surface"], ((0, 1), (0, 0)), mode="constant"
-                        )
-                        inputs["surface"][-1, :] = np.array(
-                            [-m, -n, 0.0, m_sgn * n_sgn * ZBC]
-                        )
-
-            # catch multi-line inputs
-            match = re.search(r"=", command)
-            if not match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, command)
-                    if re.search(r"\d", x)
-                ]
-                if len(numbers) > 0:
-                    raise OSError(
-                        colored("Cannot handle multi-line VMEC inputs!", "red")
-                    )
-
-        # sort axis array
-        inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
-        # sort surface array
-        inputs["surface"] = inputs["surface"][inputs["surface"][:, 1].argsort()]
-        inputs["surface"] = inputs["surface"][
-            inputs["surface"][:, 0].argsort(kind="mergesort")
+        # magnetic axis, RAXIS and ZAXIS are old names for RAXIS_CC and ZAXIS_CS
+        RAXIS_CC = _get_vmec_vector(
+            vmec_indata, "RAXIS", _get_vmec_vector(vmec_indata, "RAXIS_CC")
+        )
+        RAXIS_CS = _get_vmec_vector(vmec_indata, "RAXIS_CS")
+        ZAXIS_CS = _get_vmec_vector(
+            vmec_indata, "ZAXIS", _get_vmec_vector(vmec_indata, "ZAXIS_CS")
+        )
+        ZAXIS_CC = _get_vmec_vector(vmec_indata, "ZAXIS_CC")
+        axis_coeffs = [
+            x for x in [RAXIS_CC, RAXIS_CS, ZAXIS_CS, ZAXIS_CC] if x is not None
         ]
+        if len(axis_coeffs):
+            N_axis = max(x.size for x in axis_coeffs) - 1
+            # DESC input axis array is (k,3) array of [n, R, Z],
+            # where the row index of mode n is N_axis + n
+            inputs["axis"] = np.zeros((2 * N_axis + 1, 3))
+            inputs["axis"][:, 0] = np.arange(-N_axis, N_axis + 1)
+            if RAXIS_CC is not None:
+                inputs["axis"][N_axis : N_axis + RAXIS_CC.size, 1] = RAXIS_CC
+            if ZAXIS_CC is not None:
+                inputs["axis"][N_axis : N_axis + ZAXIS_CC.size, 2] = ZAXIS_CC
+            # TODO: Why do we have to negate the sin modes here?
+            # (ignore n=0 for sin modes)
+            if RAXIS_CS is not None:
+                inputs["axis"][N_axis - np.arange(1, RAXIS_CS.size), 1] = -RAXIS_CS[1:]
+            if ZAXIS_CS is not None:
+                inputs["axis"][N_axis - np.arange(1, ZAXIS_CS.size), 2] = -ZAXIS_CS[1:]
+
+        # boundary surface
+        # VMEC uses a series in cos/sin(m*t-n*p), while DESC uses products of
+        # cos/sin(m*t) and cos/sin(n*p), with negative m,n denoting sin, so
+        # RBC*cos(m*t-n*p) = RBC*cos(m*t)*cos(n*p) + RBC*sin(m*t)*sin(n*p)
+        # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)
+        # and similarly for ZBC, ZBS
+        surface = {(0, 0): [0.0, 0.0]}  # {(m, n): [R, Z]}
+        for name in ["RBC", "RBS", "ZBC", "ZBS"]:
+            col = 0 if name[0] == "R" else 1
+            for (n, m), x in _get_vmec_boundary(vmec_indata, name).items():
+                m_sgn = np.sign(m)
+                n_sgn = np.sign(n)
+                if m_sgn < 0:
+                    warnings.warn(colored("m is negative!", "yellow"))
+                m = abs(m)
+                n = abs(n)
+                terms = []
+                if name[-1] == "C":
+                    terms.append((m, n, x))
+                    if m != 0 and n != 0:
+                        terms.append((-m, -n, m_sgn * n_sgn * x))
+                else:
+                    if m != 0:
+                        terms.append((-m, n, m_sgn * x))
+                    if n != 0:
+                        terms.append((m, -n, -n_sgn * x))
+                for mm, nn, xx in terms:
+                    surface.setdefault((mm, nn), [0.0, 0.0])[col] += xx
+        # DESC input surface array is (k,4) array of [m, n, R, Z] sorted by m then n
+        # (radial mode numbers are added below)
+        inputs["surface"] = np.array(
+            [[m, n, R, Z] for (m, n), (R, Z) in sorted(surface.items())]
+        )
         # delete surface modes below threshold magnitude
         inputs["surface"] = np.delete(
             inputs["surface"],
@@ -1542,7 +1247,7 @@ class InputReader:
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
         if not iota_flag:
-            if ctype == "power_series":
+            if ctype.lower() == "power_series":
                 # integrate current derivative profile wrt s=rho^2
                 inputs["current"] = np.pad(
                     np.vstack(
@@ -1563,8 +1268,6 @@ class InputReader:
             del inputs["current"]
         else:
             del inputs["iota"]
-
-        vmec_file.close()
 
         inputs_arr = [inputs]
 
@@ -1643,3 +1346,113 @@ def get_parser():
         + "Once to include timing, twice to also show individual iterations.",
     )
     return parser
+
+
+def _get_vmec_vector(indata, name, default=None):
+    """Get a 1D array from a VMEC namelist, indexed starting from 0.
+
+    Parameters
+    ----------
+    indata : f90nml.Namelist
+        INDATA namelist read with f90nml, using ``default_start_index=0``.
+    name : str
+        Name of the array, case insensitive.
+    default : ndarray, optional
+        Value to return if the array is not in the namelist.
+
+    Returns
+    -------
+    x : ndarray
+        Values of the array, where x[i] is the namelist element NAME(i).
+        Elements that are not specified are set to zero.
+
+    """
+    if name not in indata:
+        return default
+    values = indata[name]
+    if not isinstance(values, list):
+        values = [values]
+    start = indata.start_index.get(name.lower(), [0])[0]
+    if start is None:
+        # whole array, ie X(:) = ..., which f90nml places starting from index 1
+        # (padded with None) rather than from the VMEC lower bound of 0
+        if values[0] is None:
+            values = values[1:]
+        start = 0
+    x = np.zeros(start + len(values))
+    # f90nml fills unspecified elements with None
+    x[start:] = [0.0 if v is None else v for v in values]
+    return x
+
+
+def _get_vmec_boundary(indata, name):
+    """Get the boundary Fourier coefficients RBC, RBS, ZBC or ZBS from a VMEC namelist.
+
+    Parameters
+    ----------
+    indata : f90nml.Namelist
+        INDATA namelist read with f90nml.
+    name : str
+        Name of the boundary array, case insensitive.
+
+    Returns
+    -------
+    coeffs : dict
+        Dictionary of {(n, m): value} for each element NAME(n,m) that is specified.
+
+    """
+    if name not in indata:
+        return {}
+    values = indata[name]
+    start = indata.start_index.get(name.lower())
+    if (
+        start is None
+        or len(start) != 2
+        or None in start
+        or not all(isinstance(row, list) or row is None for row in values)
+    ):
+        raise ValueError(
+            colored(
+                f"Cannot read VMEC boundary {name}, each coefficient must be given "
+                + f"with explicit (n,m) indices, ie {name}(n,m) = value",
+                "red",
+            )
+        )
+    n0, m0 = start
+    coeffs = {}
+    # f90nml stores the Fortran array X(n,m) as (possibly ragged) nested lists
+    # X[m - m0][n - n0], where elements that are not specified are None
+    for i, row in enumerate(values):
+        for j, x in enumerate(row or []):
+            if x is not None:
+                coeffs[(n0 + j, m0 + i)] = float(x)
+    return coeffs
+
+
+def _warn_duplicate_vmec_inputs(namelist):
+    """Warn if any input in a VMEC namelist string is assigned more than once.
+
+    f90nml (like VMEC) silently uses the last value assigned to each element.
+    """
+    already_read_names = set()
+    warned_names = set()
+    for line in namelist.splitlines():
+        # remove strings, then comments, so only assignments are left
+        line = re.sub(r"'[^']*'|\"[^\"]*\"", "''", line).split("!")[0]
+        for match in re.finditer(r"([A-Za-z]\w*)\s*(?:\(([^)]*)\))?\s*=", line):
+            input_name = match.group(1).upper()
+            if match.group(2) is not None:
+                # normalize indices so that ie RBC(000, 001) is the same as RBC(0,1)
+                idx = [i.strip() for i in match.group(2).split(",")]
+                idx = [str(int(i)) if re.fullmatch(r"[-+]?\d+", i) else i for i in idx]
+                input_name += "(" + ",".join(idx) + ")"
+            if input_name in already_read_names and input_name not in warned_names:
+                warnings.warn(
+                    colored(
+                        f"Detected multiple inputs for {input_name}! "
+                        + "DESC will default to reading the last one.",
+                        "yellow",
+                    )
+                )
+                warned_names.add(input_name)
+            already_read_names.add(input_name)

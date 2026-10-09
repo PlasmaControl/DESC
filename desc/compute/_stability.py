@@ -87,89 +87,6 @@ def _mem_stats():
     )
 
 
-def _report_nonfinite(data, nodes, label=""):
-    """Print which entries of ``data`` are non-finite, and where. ``AGNI_DIAG=0`` off.
-
-    Locates the bad nodes by their (rho, theta, zeta) so the pattern is readable
-    directly: one rho shell points at the axis or a surface, scattered nodes along a
-    theta/zeta line point at the PEST->DESC map. Skipped silently on traced input,
-    and never raises -- a diagnostic must not take the run down.
-    """
-    if os.environ.get("AGNI_DIAG", "1") == "0":
-        return
-    try:
-        leaves = [nodes, *data.values()]
-        if any(isinstance(v, jax.core.Tracer) for v in leaves):
-            return
-        nodes = np.asarray(nodes)
-        n = nodes.shape[0]
-        bad_node = ~np.isfinite(nodes).all(axis=1)
-        bad_keys = []
-        if bad_node.any():
-            bad_keys.append(f"grid nodes ({int(bad_node.sum())})")
-        n_checked = 0
-        for k, v in data.items():
-            if not hasattr(v, "shape") or not np.issubdtype(
-                np.dtype(v.dtype), np.number
-            ):
-                continue
-            n_checked += 1
-            fin = np.isfinite(np.asarray(v))
-            if fin.all():
-                continue
-            bad_keys.append(f"{k} ({int((~fin).sum())}/{fin.size})")
-            if fin.ndim and fin.shape[0] == n:
-                bad_node |= ~fin.reshape(n, -1).all(axis=1)
-        # A FINITE but sign-flipped Jacobian is just as fatal: every diagonal entry of
-        # the mass matrix carries sqrt(g), so diag(B) < 0 there and the whitening
-        # `1/sqrt(diag(B))` turns that node's whole 3x3 block NaN downstream.
-        for k in ("sqrt(g)_PEST", "sqrt(g)"):
-            if k not in data:
-                continue
-            g = np.real(np.asarray(data[k])).reshape(-1)
-            if g.size != n:
-                continue
-            fin = np.isfinite(g)
-            # Compare against the majority sign, so a left-handed equilibrium
-            # (sqrt(g) < 0 everywhere) is not reported as all-bad.
-            s = np.sign(np.median(g[fin])) if fin.any() else 1.0
-            flip = fin & (s * g <= 0)
-            print(
-                f"[nan-check] {label}: {k} sign {'+' if s > 0 else '-'}, "
-                f"range [{np.nanmin(g):.3e}, {np.nanmax(g):.3e}], "
-                f"{int(flip.sum())}/{n} nodes with flipped/zero sign",
-                flush=True,
-            )
-            if flip.any():
-                b = nodes[flip]
-                rho, cnt = np.unique(np.round(b[:, 0], 12), return_counts=True)
-                print(
-                    f"[nan-check] {label}: {k} flipped per rho: "
-                    f"{dict(zip(rho.tolist(), cnt.tolist()))}",
-                    flush=True,
-                )
-        if not bad_keys:
-            print(
-                f"[nan-check] {label}: nodes + {n_checked} quantities all finite",
-                flush=True,
-            )
-            return
-        print(f"[nan-check] {label}: NON-FINITE in {', '.join(bad_keys)}", flush=True)
-        if bad_node.any():
-            # Nodes whose own coordinates are NaN show up as a `nan` rho key.
-            b = nodes[bad_node]
-            rho, cnt = np.unique(np.round(b[:, 0], 12), return_counts=True)
-            print(
-                f"[nan-check] {label}: {int(bad_node.sum())}/{n} bad nodes; "
-                f"per rho: {dict(zip(rho.tolist(), cnt.tolist()))}; "
-                f"theta in [{np.nanmin(b[:, 1]):.4f}, {np.nanmax(b[:, 1]):.4f}], "
-                f"zeta in [{np.nanmin(b[:, 2]):.4f}, {np.nanmax(b[:, 2]):.4f}]",
-                flush=True,
-            )
-    except Exception as _exc:  # noqa: BLE001 -- diagnostics never take a run down
-        print(f"[nan-check] {label}: UNAVAILABLE ({type(_exc).__name__}: {_exc})")
-
-
 class _PhaseTimer:
     """Wall-clock breakdown of the eigensolve's phases. Off with ``AGNI_TIMING=0``.
 
@@ -1520,7 +1437,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[rho_idx, ups_idx].add(
         _fit(_diag_r((n0 * W * psi_r * sqrtg * g_rv).flatten()))
     )
-    assert np.isfinite(B).all(), "B has NaN or Inf entries"
     # typical in magnetic mirrors. `ismirror` is a TRACED bool (depends on iota), so a
     # Python `if ismirror` raises TracerBoolConversionError under jit (the assembly
     # runs concrete on the dense/callback paths but traced on the jax_lanczos path).
@@ -1547,8 +1463,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, zeta_idx].add(_fit(_diag_r(zz.flatten())))
     B = B.at[rho_idx, zeta_idx].add(_fit(_diag_r(rz.flatten())))
     B = B.at[ups_idx, zeta_idx].add(_fit(_diag_r(uz.flatten())))
-    assert not ismirror, "mirror equilibrium"
-    assert np.isfinite(B).all(), "B has NaN or Inf entries"
 
     ##A = np.where(np.abs(A) >= 1e-11, 1.0, 0.0)
     # from matplotlib import pyplot as plt
@@ -1778,62 +1692,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, rho_idx].set(_cT(B[rho_idx, zeta_idx]))
     B = B.at[zeta_idx, ups_idx].set(_cT(B[ups_idx, zeta_idx]))
 
-    # Diagnostic: which mass-diagonal component is <= 0, where, and which factor of
-    # the product did it. `1/sqrt(diag(B))` below turns any such node's whole 3x3
-    # block NaN, which then surfaces as "ring blocks not SPD". Rebuilt node-wise
-    # from the same factors as the B assembly above (so it is independent of ring
-    # slicing); concrete runs only. Silent when AGNI_DIAG=0.
-    if os.environ.get("AGNI_DIAG", "1") != "0" and not any(
-        isinstance(_x, jax.core.Tracer) for _x in (sqrtg, W, n0, g_rr, iotainv)
-    ):
-        try:
-            _f = lambda x: np.real(np.asarray(x)).reshape(-1)  # noqa: E731
-            _common = {
-                "n0": _f(n0),
-                "W": _f(W),
-                "sqrtg": _f(sqrtg),
-            }
-            _comp = {
-                "rho": _f(n0 * W * psi_r2 * sqrtg * g_rr),
-                "ups": _f(n0 * W * sqrtg * g_vv),
-                "zeta": _f(
-                    n0 * W * sqrtg * (g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp)
-                ),
-            }
-            _metric = {
-                "psi_r2": _f(psi_r2 * jnp.ones_like(sqrtg)),
-                "g_rr": _f(g_rr),
-                "g_vv": _f(g_vv),
-                "g_vv+2/iota g_vp+1/iota^2 g_pp": _f(
-                    g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp
-                ),
-                "iota": _f(jnp.reciprocal(iotainv) * jnp.ones_like(sqrtg)),
-            }
-            _per_shell = n_theta_max * n_zeta_max
-            for _name, _v in _comp.items():
-                _bad = ~(_v > 0)  # catches <= 0 and NaN
-                if not _bad.any():
-                    continue
-                _idx = np.nonzero(_bad)[0]
-                _sh, _cnt = np.unique(_idx // _per_shell, return_counts=True)
-                _who = [
-                    f"{_k}<=0:{int(np.count_nonzero(~(_u[_bad] > 0)))}"
-                    for _k, _u in {**_common, **_metric}.items()
-                    if _k != "iota" and np.count_nonzero(~(_u[_bad] > 0))
-                ]
-                _io = _metric["iota"][_bad]
-                print(
-                    f"[B diag] {_name}: {_idx.size}/{_v.size} nodes <= 0 "
-                    f"(min {np.nanmin(_v):.3e}); rho shells "
-                    f"{dict(zip(_sh.tolist(), _cnt.tolist()))} of {n_rho_max}; "
-                    f"factors non-positive there: {_who or 'none'}; "
-                    f"|iota| there in [{np.nanmin(np.abs(_io)):.3e}, "
-                    f"{np.nanmax(np.abs(_io)):.3e}]",
-                    flush=True,
-                )
-        except Exception as _exc:  # noqa: BLE001 -- diagnostics never take a run down
-            print(f"[B diag] UNAVAILABLE ({type(_exc).__name__}: {_exc})", flush=True)
-
     d = 1 / jnp.sqrt(_diag_r(B))  # 1D array
 
     # MEMORY (Step 1): the A whitening is DEFERRED to after B_blocks is extracted and B
@@ -1844,7 +1702,6 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     au_diag = d[rho_idx] ** 2 * au_diag
     B = d[:, None] * B * d[None, :]
 
-    assert np.isfinite(B).all(), "B has NaN or Inf entries"
     # TODO: B_blocks will always be real for axisym=True, complex data type
     # is used to avoid trivial dtype-related errors. Fix later!
     if axisym:
@@ -3197,9 +3054,6 @@ def _AGNI3_rayleigh(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     _ = params["Psi"]
-    # Before anything consumes them: a NaN here otherwise surfaces much later as a
-    # "ring blocks not SPD" error that wrongly blames the shift.
-    _report_nonfinite(data, transforms["grid"].nodes, "fine geometry")
     # THREE fine-resolution operator builds happen per `compute_data` call, and only
     # the middle one was ever marked:
     #

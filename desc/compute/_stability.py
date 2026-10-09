@@ -1778,6 +1778,62 @@ def _agni3_assemble(params, transforms, profiles, data, **kwargs):
     B = B.at[zeta_idx, rho_idx].set(_cT(B[rho_idx, zeta_idx]))
     B = B.at[zeta_idx, ups_idx].set(_cT(B[ups_idx, zeta_idx]))
 
+    # Diagnostic: which mass-diagonal component is <= 0, where, and which factor of
+    # the product did it. `1/sqrt(diag(B))` below turns any such node's whole 3x3
+    # block NaN, which then surfaces as "ring blocks not SPD". Rebuilt node-wise
+    # from the same factors as the B assembly above (so it is independent of ring
+    # slicing); concrete runs only. Silent when AGNI_DIAG=0.
+    if os.environ.get("AGNI_DIAG", "1") != "0" and not any(
+        isinstance(_x, jax.core.Tracer) for _x in (sqrtg, W, n0, g_rr, iotainv)
+    ):
+        try:
+            _f = lambda x: np.real(np.asarray(x)).reshape(-1)  # noqa: E731
+            _common = {
+                "n0": _f(n0),
+                "W": _f(W),
+                "sqrtg": _f(sqrtg),
+            }
+            _comp = {
+                "rho": _f(n0 * W * psi_r2 * sqrtg * g_rr),
+                "ups": _f(n0 * W * sqrtg * g_vv),
+                "zeta": _f(
+                    n0 * W * sqrtg * (g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp)
+                ),
+            }
+            _metric = {
+                "psi_r2": _f(psi_r2 * jnp.ones_like(sqrtg)),
+                "g_rr": _f(g_rr),
+                "g_vv": _f(g_vv),
+                "g_vv+2/iota g_vp+1/iota^2 g_pp": _f(
+                    g_vv + 2 * iotainv * g_vp + iotainv**2 * g_pp
+                ),
+                "iota": _f(jnp.reciprocal(iotainv) * jnp.ones_like(sqrtg)),
+            }
+            _per_shell = n_theta_max * n_zeta_max
+            for _name, _v in _comp.items():
+                _bad = ~(_v > 0)  # catches <= 0 and NaN
+                if not _bad.any():
+                    continue
+                _idx = np.nonzero(_bad)[0]
+                _sh, _cnt = np.unique(_idx // _per_shell, return_counts=True)
+                _who = [
+                    f"{_k}<=0:{int(np.count_nonzero(~(_u[_bad] > 0)))}"
+                    for _k, _u in {**_common, **_metric}.items()
+                    if _k != "iota" and np.count_nonzero(~(_u[_bad] > 0))
+                ]
+                _io = _metric["iota"][_bad]
+                print(
+                    f"[B diag] {_name}: {_idx.size}/{_v.size} nodes <= 0 "
+                    f"(min {np.nanmin(_v):.3e}); rho shells "
+                    f"{dict(zip(_sh.tolist(), _cnt.tolist()))} of {n_rho_max}; "
+                    f"factors non-positive there: {_who or 'none'}; "
+                    f"|iota| there in [{np.nanmin(np.abs(_io)):.3e}, "
+                    f"{np.nanmax(np.abs(_io)):.3e}]",
+                    flush=True,
+                )
+        except Exception as _exc:  # noqa: BLE001 -- diagnostics never take a run down
+            print(f"[B diag] UNAVAILABLE ({type(_exc).__name__}: {_exc})", flush=True)
+
     d = 1 / jnp.sqrt(_diag_r(B))  # 1D array
 
     # MEMORY (Step 1): the A whitening is DEFERRED to after B_blocks is extracted and B

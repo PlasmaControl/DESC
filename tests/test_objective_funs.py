@@ -496,6 +496,77 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_qs_hat_modes(self):
+        """Test the dimensionless "hat" modes of the QS objectives."""
+        eq = get("HELIOTRON")
+        eq.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        helicity = (1, eq.NFP)
+        rho = np.array([0.6, 1.0])
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+
+        booz = {"helicity": helicity, "M_booz": eq.M, "N_booz": eq.N}
+        objs = {
+            "fb": QuasisymmetryBoozer(eq=eq, grid=grid, scale_invariant=False, **booz),
+            "fb_hat": QuasisymmetryBoozer(
+                eq=eq, grid=grid, scale_invariant=True, **booz
+            ),
+            "fc_hat": QuasisymmetryTwoTerm(
+                eq=eq, grid=grid, helicity=helicity, scale_invariant=True
+            ),
+            "ft_hat": QuasisymmetryTripleProduct(
+                eq=eq, grid=grid, scale_invariant=True
+            ),
+        }
+        f = {}
+        for mode, obj in objs.items():
+            obj.build()
+            if mode.endswith("_hat"):
+                assert obj._units == "(dimensionless)"
+                assert obj.normalization == 1
+            assert obj.compute_scaled_error(*obj.xs(eq)).size == obj.dim_f
+            f[mode] = obj.compute_unscaled(*obj.xs(eq))
+            assert np.all(np.isfinite(f[mode]))
+
+        # on each surface this is the ratio of the norm of the symmetry breaking
+        # harmonics to the norm of all the harmonics, so it is between 0 and 1
+        ratio = np.linalg.norm(f["fb_hat"].reshape((rho.size, -1)), axis=-1)
+        assert np.all(ratio > 0) and np.all(ratio < 1)
+
+    @pytest.mark.unit
+    def test_qs_hat_modes_field_strength_invariance(self):
+        """Test that the QS "hat" modes are invariant to the field strength."""
+        # has an iota profile, so |B| is proportional to Psi
+        eq1 = get("HELIOTRON")
+        eq1.change_resolution(M=6, M_grid=12, N=2, N_grid=4)
+        eq2 = eq1.copy()
+        eq2.Psi = 2 * eq1.Psi
+        helicity = (1, eq1.NFP)
+        grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, rho=np.array([0.6]))
+
+        def test(obj, mode, ratio, **kwargs):
+            obj1 = obj(
+                eq=eq1, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
+            obj2 = obj(
+                eq=eq2, grid=grid, scale_invariant=mode, normalize=False, **kwargs
+            )
+            obj1.build()
+            obj2.build()
+            f1 = ratio * obj1.compute_scaled_error(*obj1.xs(eq1))
+            f2 = obj2.compute_scaled_error(*obj2.xs(eq2))
+            atol = 1e-10 * np.max(np.abs(f1))
+            np.testing.assert_allclose(f2, f1, rtol=1e-10, atol=atol)
+
+        # scale variant quantities scale as |B|^n, others are invariant
+        booz = {"helicity": helicity, "M_booz": eq1.M, "N_booz": eq1.N}
+        test(QuasisymmetryBoozer, False, 2, **booz)
+        test(QuasisymmetryBoozer, True, 1, **booz)
+        test(QuasisymmetryTwoTerm, False, 2**3, helicity=helicity)
+        test(QuasisymmetryTwoTerm, True, 1, helicity=helicity)
+        test(QuasisymmetryTripleProduct, False, 2**4)
+        test(QuasisymmetryTripleProduct, True, 1)
+
+    @pytest.mark.unit
     def test_isodynamicity(self):
         """Test calculation of isodynamicity metric."""
 
@@ -1758,6 +1829,7 @@ class TestObjectiveFunction:
         # one way and half going the other way
         coilset = CoilSet.from_symmetry(coil, NFP=5, sym=True, check_intersection=False)
         coil2 = FourierRZCoil()
+
         # add a coil along the axis that links all the other coils
         coilset2 = MixedCoilSet(coilset, coil2, check_intersection=False)
 
@@ -1768,6 +1840,17 @@ class TestObjectiveFunction:
         # while the axis links all 10 modular coils
         expected = np.array([1] * 10 + [10])
         np.testing.assert_allclose(out, expected, rtol=1e-3)
+
+        # produce a coilset of non-planar coils with nonzero writhe
+        coil3 = FourierXYZCoil(
+            X_n=[0, 0.5, 5, 1, 0], Y_n=[0, 0, 0, 0, 0.5], Z_n=[0, -1, 0, 0, 1]
+        )
+        coilset3 = CoilSet.from_symmetry(coil3, NFP=5, check_intersection=False)
+        obj = CoilSetLinkingNumber(coilset3)
+        obj.build()
+        out = obj.compute_scaled_error(coilset3.params_dict)
+        expected = np.array([0] * 5)
+        np.testing.assert_allclose(out, expected, atol=1e-12)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -3783,11 +3866,15 @@ class TestComputeScalarResolution:
         f = np.zeros_like(self.res_array, dtype=float)
         for i, res in enumerate(self.res_array):
             obj = ObjectiveFunction(
-                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res))),
+                objective(coilset, grid=LinearGrid(N=int(5 + 3 * res)), target=1),
                 use_jit=False,
             )
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
+
+        # verify obj.compute_scalar is not zero, so the resolution test is meaningful
+        assert not np.isclose(f[-1], 0, atol=1e-8)
+
         np.testing.assert_allclose(f, f[-1], rtol=1e-2, atol=1e-12)
 
     @pytest.mark.unit

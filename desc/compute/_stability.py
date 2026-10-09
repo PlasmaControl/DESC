@@ -120,6 +120,34 @@ def _report_nonfinite(data, nodes, label=""):
             bad_keys.append(f"{k} ({int((~fin).sum())}/{fin.size})")
             if fin.ndim and fin.shape[0] == n:
                 bad_node |= ~fin.reshape(n, -1).all(axis=1)
+        # A FINITE but sign-flipped Jacobian is just as fatal: every diagonal entry of
+        # the mass matrix carries sqrt(g), so diag(B) < 0 there and the whitening
+        # `1/sqrt(diag(B))` turns that node's whole 3x3 block NaN downstream.
+        for k in ("sqrt(g)_PEST", "sqrt(g)"):
+            if k not in data:
+                continue
+            g = np.real(np.asarray(data[k])).reshape(-1)
+            if g.size != n:
+                continue
+            fin = np.isfinite(g)
+            # Compare against the majority sign, so a left-handed equilibrium
+            # (sqrt(g) < 0 everywhere) is not reported as all-bad.
+            s = np.sign(np.median(g[fin])) if fin.any() else 1.0
+            flip = fin & (s * g <= 0)
+            print(
+                f"[nan-check] {label}: {k} sign {'+' if s > 0 else '-'}, "
+                f"range [{np.nanmin(g):.3e}, {np.nanmax(g):.3e}], "
+                f"{int(flip.sum())}/{n} nodes with flipped/zero sign",
+                flush=True,
+            )
+            if flip.any():
+                b = nodes[flip]
+                rho, cnt = np.unique(np.round(b[:, 0], 12), return_counts=True)
+                print(
+                    f"[nan-check] {label}: {k} flipped per rho: "
+                    f"{dict(zip(rho.tolist(), cnt.tolist()))}",
+                    flush=True,
+                )
         if not bad_keys:
             print(
                 f"[nan-check] {label}: nodes + {n_checked} quantities all finite",

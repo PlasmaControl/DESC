@@ -1,5 +1,7 @@
 """Classes for Magnetic Fields."""
 
+from desc.compute._laplace import Options
+
 from ._core import (
     MagneticFieldFromUser,
     OmnigenousField,
@@ -21,3 +23,4 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
+from ._laplace import FreeSurfaceOuterField, SourceFreeField

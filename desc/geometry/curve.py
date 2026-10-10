@@ -1795,7 +1795,7 @@ class NurbsRPZCurve(Curve):
 
     @R.setter
     def R(self, new):
-        if len(new) == len(self._n_ctrl_points):
+        if len(new) == self._n_ctrl_points:
             self._R = jnp.asarray(new)
         else:
             raise ValueError(
@@ -1811,7 +1811,7 @@ class NurbsRPZCurve(Curve):
 
     @phi.setter
     def phi(self, new):
-        if len(new) == len(self._n_ctrl_points):
+        if len(new) == self._n_ctrl_points:
             self._phi = jnp.asarray(new)
         else:
             raise ValueError(
@@ -1827,7 +1827,7 @@ class NurbsRPZCurve(Curve):
 
     @Z.setter
     def Z(self, new):
-        if len(new) == len(self._n_ctrl_points):
+        if len(new) == self._n_ctrl_points:
             self._Z = jnp.asarray(new)
         else:
             raise ValueError(
@@ -1843,7 +1843,7 @@ class NurbsRPZCurve(Curve):
 
     @W.setter
     def W(self, new):
-        if len(new) == len(self._n_ctrl_points):
+        if len(new) == self._n_ctrl_points:
             self._W = jnp.asarray(new)
         else:
             raise ValueError(

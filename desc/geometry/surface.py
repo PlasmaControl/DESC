@@ -1338,7 +1338,13 @@ class NurbsRZToroidalSurface(Surface):
         )
 
         params = params or self.params_dict
-        axis_params = params.get("axis", self.interior_axis.params_dict)
+        axis_params = {
+            **self.interior_axis.params_dict,
+            "R": params["axis_R"],
+            "phi": params["axis_phi"],
+            "Z": params["axis_Z"],
+            "W": params["axis_W"],
+        }
 
         cs_phi = jnp.append(jnp.array([0.0]), self.cs_interior_phi)
         cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / self.NFP) - cs_phi[:0:-1])
@@ -1602,6 +1608,46 @@ class NurbsRZToroidalSurface(Surface):
             self.NFP == new.nfp
         ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
         self._interior_axis = new
+
+    @optimizable_parameter
+    @property
+    def axis_R(self):
+        """ndarray: R control points of the interior axis."""
+        return self.interior_axis.R
+
+    @axis_R.setter
+    def axis_R(self, new):
+        self.interior_axis.R = new
+
+    @optimizable_parameter
+    @property
+    def axis_phi(self):
+        """ndarray: phi control points of the interior axis."""
+        return self.interior_axis.phi
+
+    @axis_phi.setter
+    def axis_phi(self, new):
+        self.interior_axis.phi = new
+
+    @optimizable_parameter
+    @property
+    def axis_Z(self):
+        """ndarray: Z control points of the interior axis."""
+        return self.interior_axis.Z
+
+    @axis_Z.setter
+    def axis_Z(self, new):
+        self.interior_axis.Z = new
+
+    @optimizable_parameter
+    @property
+    def axis_W(self):
+        """ndarray: NURBS weights of the interior axis control points."""
+        return self.interior_axis.W
+
+    @axis_W.setter
+    def axis_W(self, new):
+        self.interior_axis.W = new
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution.

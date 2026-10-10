@@ -1478,6 +1478,65 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
     return data
 
 
+def _nurbs_curve_control_net(R, phi, Z, sym, nfp):
+    """Mirror and tile raw (R, phi, Z) control points to the full device, in xyz."""
+    if not sym:
+        raise NotImplementedError
+    r_ctrl_1fp = jnp.append(R, R[-2::-1])[:-1]
+    z_ctrl_1fp = jnp.append(Z, -Z[-2::-1])[:-1]
+    phi_ctrl_1fp = jnp.append(phi, (2 * jnp.pi / nfp) - phi[-2::-1])[:-1]
+    R = jnp.tile(r_ctrl_1fp, nfp)
+    Z = jnp.tile(z_ctrl_1fp, nfp)
+    phi = jnp.concatenate([phi_ctrl_1fp + n * 2 * jnp.pi / nfp for n in range(nfp)])
+    return rpz2xyz(jnp.stack([R, phi, Z], axis=1))
+
+
+def _nurbs_curve_weights(W, sym, nfp):
+    """Mirror and tile raw control point weights to the full device."""
+    if not sym:
+        raise NotImplementedError
+    return jnp.tile(jnp.append(W, W[-2::-1])[:-1], nfp)
+
+
+def _nurbs_curve_knots(control_points_xyz, degree, knot_parametrization):
+    """Periodic knot vector for the full control net."""
+    n = len(control_points_xyz) - 1
+    if knot_parametrization == "uniform":
+        return uniform_knots(n, degree, domain=2 * jnp.pi)
+    if knot_parametrization == "chord":
+        return chord_length_knots(control_points_xyz, degree, domain=2 * jnp.pi)
+
+
+def _nurbs_curve(control_points_xyz, weights, degree, basis):
+    """Periodic NURBS curve and its first three s-derivatives, in xyz.
+
+    ``basis`` is the (b, b_s, b_ss, b_sss) tuple returned by ``b_p_deriv3``.
+    """
+    p = degree
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+    pw = padded * padded_w[:, None]
+
+    b, b_s, b_ss, b_sss = basis
+    num, den = b @ pw, b @ padded_w
+    num_s, den_s = b_s @ pw, b_s @ padded_w
+    num_ss, den_ss = b_ss @ pw, b_ss @ padded_w
+    num_sss, den_sss = b_sss @ pw, b_sss @ padded_w
+
+    c = num / den[:, None]
+    c_s = (num_s - c * den_s[:, None]) / den[:, None]
+    c_ss = (num_ss - 2 * c_s * den_s[:, None] - c * den_ss[:, None]) / den[:, None]
+    c_sss = (
+        num_sss
+        - 3 * c_ss * den_s[:, None]
+        - 3 * c_s * den_ss[:, None]
+        - c * den_sss[:, None]
+    ) / den[:, None]
+    return c, c_s, c_ss, c_sss
+
+
 @register_compute_fun(
     name="phi2s",
     label="s(\\varphi)",
@@ -1502,19 +1561,9 @@ def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     control_points_xyz = data["full_control_net"]
     weights = data["full_weights"]
 
-    p = degree
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
-    )
-    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
-
     def _phi_and_dphi_ds(s):
-        b, b_s, _, _ = b_p_deriv3(jnp.atleast_1d(s), degree, knots)
-        pw = padded * padded_w[:, None]
-        num, num_s = b @ pw, b_s @ pw
-        den, den_s = b @ padded_w, b_s @ padded_w
-        xcart = num / den[:, None]
-        xcart_s = (num_s * den[:, None] - num * den_s[:, None]) / den[:, None] ** 2
+        basis = b_p_deriv3(jnp.atleast_1d(s), degree, knots)
+        xcart, xcart_s, _, _ = _nurbs_curve(control_points_xyz, weights, degree, basis)
         x, y = xcart[0, 0], xcart[0, 1]
         x_s, y_s = xcart_s[0, 0], xcart_s[0, 1]
         phi = jnp.arctan2(y, x)  # wraps to (-pi, pi]
@@ -1553,24 +1602,9 @@ def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     public=False,
 )
 def _full_control_net(params, transforms, profiles, data, **kwargs):
-    sym = transforms["sym"]
-    nfp = transforms["nfp"]
-    R = params["R"]
-    phi = params["phi"]
-    Z = params["Z"]
-    if sym:
-        r_ctrl_1fp = jnp.append(R, R[-2::-1])[:-1]
-        z_ctrl_1fp = jnp.append(Z, -Z[-2::-1])[:-1]
-        zeta_ctrl_1fp = jnp.append(
-            phi,
-            (2 * jnp.pi / nfp) - phi[-2::-1],
-        )[:-1]
-    else:
-        raise NotImplementedError
-    R = jnp.tile(r_ctrl_1fp, nfp)
-    Z = jnp.tile(z_ctrl_1fp, nfp)
-    phi = jnp.concatenate([zeta_ctrl_1fp + n * 2 * jnp.pi / nfp for n in range(nfp)])
-    data["full_control_net"] = rpz2xyz(jnp.stack([R, phi, Z], axis=1))
+    data["full_control_net"] = _nurbs_curve_control_net(
+        params["R"], params["phi"], params["Z"], transforms["sym"], transforms["nfp"]
+    )
     return data
 
 
@@ -1590,14 +1624,9 @@ def _full_control_net(params, transforms, profiles, data, **kwargs):
     public=False,
 )
 def _full_weights(params, transforms, profiles, data, **kwargs):
-    sym = transforms["sym"]
-    nfp = transforms["nfp"]
-    W = params["W"]
-    if sym:
-        w_ctrl_1fp = jnp.append(W, W[-2::-1])[:-1]
-    else:
-        raise NotImplementedError
-    data["full_weights"] = jnp.tile(w_ctrl_1fp, nfp)
+    data["full_weights"] = _nurbs_curve_weights(
+        params["W"], transforms["sym"], transforms["nfp"]
+    )
     return data
 
 
@@ -1617,15 +1646,11 @@ def _full_weights(params, transforms, profiles, data, **kwargs):
     public=False,
 )
 def _knots(params, transforms, profiles, data, **kwargs):
-    mode = transforms["knot_parametrization"]
-    p = transforms["degree"]
-    control_points_xyz = data["full_control_net"]
-
-    n = len(control_points_xyz) - 1
-    if mode == "uniform":
-        data["knots"] = uniform_knots(n, p, domain=2 * jnp.pi)
-    if mode == "chord":
-        data["knots"] = chord_length_knots(control_points_xyz, p, domain=2 * jnp.pi)
+    data["knots"] = _nurbs_curve_knots(
+        data["full_control_net"],
+        transforms["degree"],
+        transforms["knot_parametrization"],
+    )
     return data
 
 
@@ -1674,19 +1699,13 @@ def _spline_derivs_till_3(params, transforms, profiles, data, **kwargs):
 )
 def _x_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     # TODO: check if sq is within [0, 2pi]?
-    p = transforms["degree"]
-    weights = data["full_weights"]
-    control_points_xyz = data["full_control_net"]
-
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    c, _, _, _ = _nurbs_curve(
+        data["full_control_net"],
+        data["full_weights"],
+        transforms["degree"],
+        data["spline_derivs_till_3"],
     )
-    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
-
-    b, _, _, _ = data["spline_derivs_till_3"]
-    num = b @ (padded * padded_w[:, None])
-    den = b @ padded_w
-    data["x"] = xyz2rpz(num / den[:, None])
+    data["x"] = xyz2rpz(c)
     return data
 
 
@@ -1706,22 +1725,13 @@ def _x_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     # TODO: check if sq is within [0, 2pi]?
-    p = transforms["degree"]
-    weights = data["full_weights"]
-    control_points_xyz = data["full_control_net"]
-
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    _, c_s, _, _ = _nurbs_curve(
+        data["full_control_net"],
+        data["full_weights"],
+        transforms["degree"],
+        data["spline_derivs_till_3"],
     )
-    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
-
-    b, b_s, _, _ = data["spline_derivs_till_3"]
-    num = b @ (padded * padded_w[:, None])
-    den = b @ padded_w
-    num_s = b_s @ (padded * padded_w[:, None])
-    den_s = b_s @ padded_w
-    x_s = (den[:, None] * num_s - num * den_s[:, None]) / (den[:, None] ** 2)
-    data["x_s"] = xyz2rpz_vec(x_s, phi=data["phi"])
+    data["x_s"] = xyz2rpz_vec(c_s, phi=data["phi"])
     return data
 
 
@@ -1741,27 +1751,12 @@ def _x_s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_ss_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     # TODO: check if sq is within [0, 2pi]?
-    p = transforms["degree"]
-    weights = data["full_weights"]
-    control_points_xyz = data["full_control_net"]
-
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    _, _, c_ss, _ = _nurbs_curve(
+        data["full_control_net"],
+        data["full_weights"],
+        transforms["degree"],
+        data["spline_derivs_till_3"],
     )
-    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
-
-    b, b_s, b_ss, _ = data["spline_derivs_till_3"]
-    num = b @ (padded * padded_w[:, None])
-    den = b @ padded_w
-    num_s = b_s @ (padded * padded_w[:, None])
-    den_s = b_s @ padded_w
-    num_ss = b_ss @ (padded * padded_w[:, None])
-    den_ss = b_ss @ padded_w
-
-    c = num / den[:, None]
-    c_s = (num_s - c * den_s[:, None]) / den[:, None]
-    c_ss = (num_ss - 2 * c_s * den_s[:, None] - c * den_ss[:, None]) / den[:, None]
-
     data["x_ss"] = xyz2rpz_vec(c_ss, phi=data["phi"])
     return data
 
@@ -1782,35 +1777,12 @@ def _x_ss_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
 )
 def _x_sss_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
     # TODO: check if sq is within [0, 2pi]?
-    p = transforms["degree"]
-    weights = data["full_weights"]
-    control_points_xyz = data["full_control_net"]
-
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    _, _, _, c_sss = _nurbs_curve(
+        data["full_control_net"],
+        data["full_weights"],
+        transforms["degree"],
+        data["spline_derivs_till_3"],
     )
-    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
-
-    b, b_s, b_ss, b_sss = data["spline_derivs_till_3"]
-    num = b @ (padded * padded_w[:, None])
-    den = b @ padded_w
-    num_s = b_s @ (padded * padded_w[:, None])
-    den_s = b_s @ padded_w
-    num_ss = b_ss @ (padded * padded_w[:, None])
-    den_ss = b_ss @ padded_w
-    num_sss = b_sss @ (padded * padded_w[:, None])
-    den_sss = b_sss @ padded_w
-
-    c = num / den[:, None]
-    c_s = (num_s - c * den_s[:, None]) / den[:, None]
-    c_ss = (num_ss - 2 * c_s * den_s[:, None] - c * den_ss[:, None]) / den[:, None]
-    c_sss = (
-        num_sss
-        - 3 * c_ss * den_s[:, None]
-        - 3 * c_s * den_ss[:, None]
-        - c * den_sss[:, None]
-    ) / den[:, None]
-
     data["x_sss"] = xyz2rpz_vec(c_sss, phi=data["phi"])
     return data
 

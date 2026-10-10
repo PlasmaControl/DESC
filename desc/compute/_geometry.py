@@ -15,7 +15,7 @@ from desc.backend import jnp
 
 from ..grid import QuadratureGrid
 from ..integrals.surface_integral import line_integrals, surface_integrals
-from ..utils import cross, dot, safenorm
+from ..utils import cross, dot, rpz2xyz, rpz2xyz_vec, safenorm
 from .data_index import register_compute_fun
 
 
@@ -1244,4 +1244,178 @@ def _fieldline_length_over_volume(data, transforms, profiles, **kwargs):
             ).mean(axis=-1)
         )
     )
+    return data
+
+
+@register_compute_fun(
+    name="full control net",
+    label="\\bf{p}_{ij}",
+    units="m",
+    units_long="meters",
+    description="Full Cartesian control net with wrapping for stellarator symmetry",
+    dim=1,
+    params=[
+        "cs_start_r",
+        "cs_start_theta",
+        "cs_interior_r",
+        "cs_interior_theta",
+        "cs_interior_phi",
+        "cs_interior_gangle",
+    ],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _full_control_net_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
+
+    # dofs
+    cs_start_r = params["cs_start_r"]
+    cs_start_theta = params["cs_start_theta"]
+    cs_interior_r = params["cs_interior_r"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_theta = params["cs_interior_theta"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_gangle = params["cs_interior_gangle"]
+
+    if not sym:
+        raise NotImplementedError
+    else:
+        # prepending theta=0 to the start cross section
+        cs_start_theta = jnp.append(jnp.zeros(1), cs_start_theta)
+
+        # reflecting the start cross section's theta, r around to a full circle
+        if n_points_per_cs % 2 == 1:
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[:0:-1])
+            )
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[:0:-1]))
+        else:
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[-2:0:-1])
+            )
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[-2:0:-1]))
+
+        # assert these have the same length as the non-start cross sections
+        assert cs_start_r.shape[0] == cs_interior_r.shape[1]
+        assert cs_start_theta.shape[0] == cs_interior_theta.shape[1]
+
+    cs_gangle = jnp.append(jnp.zeros(1), cs_interior_gangle)
+    # forming half fp
+    r_ctrl_half_fp = jnp.concatenate([cs_start_r[None, :], cs_interior_r], axis=0)
+    theta_ctrl_half_fp = jnp.concatenate(
+        [cs_start_theta[None, :], cs_interior_theta], axis=0
+    )
+
+    # have to permute the indices for consistency across reflection
+    col_perm = (-jnp.arange(n_points_per_cs)) % n_points_per_cs
+    r_ctrl_1fp = jnp.concatenate(
+        [r_ctrl_half_fp, r_ctrl_half_fp[:0:-1][:, col_perm]], axis=0
+    )
+    theta_ctrl_1fp = jnp.concatenate(
+        [theta_ctrl_half_fp, (2 * jnp.pi - theta_ctrl_half_fp[:0:-1])[:, col_perm]],
+        axis=0,
+    )
+    cs_gangle_1fp = jnp.concatenate([cs_gangle, -cs_gangle[:0:-1]])
+
+    # tiling to full device - necessary for proper periodic spline definition
+    r_ctrl_full = jnp.tile(r_ctrl_1fp, (nfp, 1))
+    theta_ctrl_full = jnp.tile(theta_ctrl_1fp, (nfp, 1))
+
+    cs_gangle_full = jnp.tile(cs_gangle_1fp, nfp)
+
+    axis_phi = data["axis_x"][:, 1]
+    axis_x = rpz2xyz(data["axis_x"])
+    e1 = rpz2xyz_vec(data["axis_closed_bishop_normal"], phi=axis_phi)
+    e2 = rpz2xyz_vec(data["axis_closed_bishop_binormal"], phi=axis_phi)
+
+    # r/theta/gangle_ctrl_full are (n_cs, n_points_per_cs); insert a trailing
+    # size-3 axis for cartesian components and a middle size-n_points_per_cs
+    # axis on the per-cross-section frame/axis data, then let them broadcast.
+    angle = theta_ctrl_full + cs_gangle_full[:, None]
+    local_x = r_ctrl_full[..., None] * (
+        jnp.cos(angle)[..., None] * e1[:, None, :]
+        + jnp.sin(angle)[..., None] * e2[:, None, :]
+    )
+    control_net = axis_x[:, None, :] + local_x  # (n_cs, n_points_per_cs, 3)
+
+    data["full control net"] = control_net
+    return data
+
+
+@register_compute_fun(
+    name="full_weights",
+    label="w_{ij}",
+    units="~",
+    units_long="None",
+    description="Full NURBS weight grid, tiled to the full device",
+    dim=1,
+    params=["cs_start_w", "cs_interior_w"],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _full_weights_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
+
+    cs_start_w = params["cs_start_w"]
+    cs_interior_w = params["cs_interior_w"].reshape(n_cs - 1, n_points_per_cs)
+
+    if not sym:
+        raise NotImplementedError
+
+    # reflecting the start cross section's weights around, same wrap as
+    # cs_start_r/cs_start_theta
+    if n_points_per_cs % 2 == 1:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[:0:-1]))
+    else:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[-2:0:-1]))
+
+    # forming half field period, then mirroring to a full field period. The
+    # start row (zeta=0) is excluded from the mirror for the same reason as
+    # in full_control_net: its mirror image duplicates the next period's own
+    # start row. Column order is permuted by k -> (-k) % n to match
+    # full_control_net's fix for the winding-direction reversal introduced
+    # by the theta -> 2pi-theta reflection (weights must stay paired with
+    # the same point index as the corresponding r/theta there).
+    col_perm = (-jnp.arange(n_points_per_cs)) % n_points_per_cs
+    w_ctrl_half_fp = jnp.concatenate([cs_start_w[None, :], cs_interior_w], axis=0)
+    w_ctrl_1fp = jnp.concatenate(
+        [w_ctrl_half_fp, w_ctrl_half_fp[:0:-1][:, col_perm]], axis=0
+    )
+    # tiling to the full device
+    data["full_weights"] = jnp.tile(w_ctrl_1fp, (nfp, 1))
+    return data
+
+
+# TODO: placeholder only, to satisfy the generic Surface-level "a" quantity's
+# dependency on "A" so the package's dependency index can build at import
+# time. Replace with a real cross-sectional-area calculation.
+@register_compute_fun(
+    name="A",
+    label="A",
+    units="m^2",
+    units_long="square meters",
+    description="Area of the cross-sectional surface (not yet implemented)",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _A_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["A"] = jnp.array(0.0)
     return data

@@ -1,6 +1,8 @@
 from interpax import interp1d
 
-from desc.backend import jnp, sign
+from desc.backend import jnp, root_scalar, scan, sign, vmap
+from desc.compute.utils import compute as compute_fun
+from desc.grid import LinearGrid
 
 from ..utils import (
     cross,
@@ -14,6 +16,7 @@ from ..utils import (
     xyz2rpz_vec,
 )
 from .data_index import register_compute_fun
+from .spline_utils import b_p_deriv3, chord_length_knots, uniform_knots
 
 
 @register_compute_fun(
@@ -1136,6 +1139,242 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="double_reflection_rmf",
+    label="\\mathbf{T}_{\\mathrm{Bishop}}",
+    units="~",
+    units_long="None",
+    description="Tangent unit vector to curve in Bishop frame",
+    dim=3,
+    params=[],
+    transforms={"nfp": [], "sym": []},
+    profiles=[],
+    coordinates="s",
+    data=["x", "frenet_tangent", "phi"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _double_reflection_rmf(params, transforms, profiles, data, **kwargs):
+    # chord/reflection math below is only valid in true Cartesian coordinates,
+    # not rpz components -- convert in, and back out, explicitly
+    x = rpz2xyz(data["x"])
+    T = rpz2xyz_vec(data["frenet_tangent"], phi=data["phi"])
+
+    x0, y0 = x[0, 0], x[0, 1]
+    normal0 = jnp.array([x0, y0, 0.0])  # seed direction: R-hat at the first point
+    normal0 = normal0 - (normal0 @ T[0]) * T[0]  # project out the tangent component
+    normal0 = normal0 / jnp.linalg.norm(normal0)  # normalize the seed
+
+    def _step(N_i, step_in):
+        x_i, x_ip1, T_i, T_ip1 = step_in
+        v1 = x_ip1 - x_i  # chord to the next point
+        c1 = v1 @ v1
+        r_L = N_i - (2 / c1) * (v1 @ N_i) * v1  # reflect N through the chord's bisector
+        t_L = T_i - (2 / c1) * (v1 @ T_i) * v1  # reflect T the same way
+
+        v2 = T_ip1 - t_L  # mismatch between reflected and actual tangent
+        c2 = v2 @ v2
+        N_ip1 = jnp.where(
+            c2 > jnp.finfo(jnp.float64).eps,
+            r_L - (2 / c2) * (v2 @ r_L) * v2,  # second reflection corrects the mismatch
+            r_L,  # tangent already matches, skip the second reflection
+        )
+        N_ip1 = N_ip1 / jnp.linalg.norm(N_ip1)  # renormalize
+        return N_ip1, N_ip1
+
+    _, N_rest = scan(
+        _step, normal0, (x[:-1], x[1:], T[:-1], T[1:])
+    )  # propagate along the curve
+    N = jnp.concatenate([normal0[None], N_rest])  # prepend the seed vector
+    B = jnp.cross(T, N)  # complete the right-handed frame
+
+    data["double_reflection_rmf"] = (T, N, B)  # Cartesian; converted back by the caller
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_frame",
+    label="{\\mathbf{T}, \\mathbf{N}, \\mathbf{B}}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Closed Bishop/rotation minimizing frame",
+    dim=3,
+    params=[],
+    transforms={"nfp": [], "sym": []},
+    profiles=[],
+    coordinates="s",
+    data=["s", "phi", "frenet_tangent"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_frame(params, transforms, profiles, data, **kwargs):
+    # TODO: check this out again
+    nfp = transforms["nfp"]
+    sym = transforms["sym"]
+    quadpoints = data["s"]
+
+    period = 2 * jnp.pi / nfp
+    k = jnp.floor(quadpoints / period).astype(
+        int
+    )  # which field-period copy each point is in
+    s_local = quadpoints - k * period  # reduce each point into a single field period
+
+    eps = jnp.finfo(jnp.float64).eps
+    n_prop = 2000
+    s_dense_base = jnp.linspace(
+        eps, period - eps, n_prop
+    )  # base propagation grid, one period
+
+    snap_tol = 1e-9
+    s_req = jnp.unique(s_local)  # distinct reduced positions actually requested
+    j = jnp.clip(jnp.searchsorted(s_dense_base, s_req), 1, n_prop - 1)
+    d_grid = jnp.minimum(
+        jnp.abs(s_req - s_dense_base[j - 1]), jnp.abs(s_dense_base[j] - s_req)
+    )
+    t_extra = s_req[d_grid > snap_tol]  # requested points not already near a grid node
+    if len(t_extra) > 1:
+        t_extra = t_extra[
+            jnp.concatenate([jnp.array([True]), jnp.diff(t_extra) > snap_tol])
+        ]  # drop near-dupes
+    s_dense = jnp.sort(
+        jnp.concatenate([s_dense_base, t_extra])
+    )  # splice them in exactly
+
+    dense_grid = LinearGrid(
+        zeta=s_dense, NFP=nfp, sym=sym
+    )  # one period, with query points as nodes
+    # reuse every other static transform (degree, knot_parametrization, ...);
+    # only the grid actually changes between the outer and dense evaluation
+    dense_transforms = {**transforms, "grid": dense_grid}
+
+    dense_data = compute_fun(
+        "desc.geometry.curve.NurbsRPZCurve",
+        ["double_reflection_rmf"],
+        params=params,
+        transforms=dense_transforms,
+        profiles={},
+    )
+    _, bishop_N_dense, bishop_B_dense = dense_data[
+        "double_reflection_rmf"
+    ]  # propagated, one period
+
+    def _Rz(ang):
+        c, s = jnp.cos(ang), jnp.sin(ang)
+        return jnp.array(
+            [[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]]
+        )  # rotation about the axis
+
+    Rzp = _Rz(2 * jnp.pi / nfp)  # the rigid nfp-fold rotation between periods
+
+    # holonomy defect: angle between the propagated end frame and the rotated start
+    N_pred_end = Rzp @ bishop_N_dense[0]
+    B_pred_end = Rzp @ bishop_B_dense[0]
+    cos_defect = bishop_N_dense[-1] @ N_pred_end
+    sin_defect = bishop_N_dense[-1] @ B_pred_end
+    rot_defect = jnp.arctan2(sin_defect, cos_defect)
+
+    # linear-in-s correction that cancels the defect exactly (period = 2pi/nfp)
+    beta = -rot_defect * (nfp / (2 * jnp.pi)) * s_dense
+    cB, sB = jnp.cos(beta), jnp.sin(beta)
+    N_corr = (
+        cB[:, None] * bishop_N_dense + sB[:, None] * bishop_B_dense
+    )  # seamless one-period frame
+
+    j = jnp.clip(
+        jnp.searchsorted(s_dense, s_local), 1, len(s_dense) - 1
+    )  # locate each query's node
+    j = jnp.where(
+        jnp.abs(s_local - s_dense[j - 1]) < jnp.abs(s_dense[j] - s_local),
+        j - 1,
+        j,
+    )
+    N_local = N_corr[j]  # corrected normal at each query point's reduced position
+
+    angles = (
+        k * 2 * jnp.pi / nfp
+    )  # rotation to re-tile this point's own field-period copy
+    Rk = vmap(_Rz)(angles)  # one rotation matrix per query point
+    N_rot = jnp.einsum("nij,nj->ni", Rk, N_local)  # apply each point's own rotation
+
+    T = rpz2xyz_vec(
+        data["frenet_tangent"], phi=data["phi"]
+    )  # Cartesian, to match N_rot; tangent itself needs no field-period correction
+    N = (
+        N_rot - jnp.sum(N_rot * T, axis=1, keepdims=True) * T
+    )  # re-orthogonalize against exact T
+    N = N / jnp.linalg.norm(N, axis=1, keepdims=True)
+    B = jnp.cross(T, N)
+
+    # convert back to rpz components before storing, matching the usual convention
+    data["closed_bishop_frame"] = (
+        xyz2rpz_vec(T, phi=data["phi"]),
+        xyz2rpz_vec(N, phi=data["phi"]),
+        xyz2rpz_vec(B, phi=data["phi"]),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_tangent",
+    label="\\mathbf{T}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Tangent unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_tangent(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_tangent"] = data["closed_bishop_frame"][
+        0
+    ]  # T is the first element
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_normal",
+    label="\\mathbf{N}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Rotation-minimizing normal unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_normal(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_normal"] = data["closed_bishop_frame"][
+        1
+    ]  # N is the second element
+    return data
+
+
+@register_compute_fun(
+    name="closed_bishop_binormal",
+    label="\\mathbf{B}_{\\mathrm{Bishop, closed}}",
+    units="~",
+    units_long="None",
+    description="Binormal unit vector in the closed Bishop frame",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="s",
+    data=["closed_bishop_frame"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _closed_bishop_binormal(params, transforms, profiles, data, **kwargs):
+    data["closed_bishop_binormal"] = data["closed_bishop_frame"][
+        2
+    ]  # B is the third element
+    return data
+
+
+@register_compute_fun(
     name="curvature",
     label="\\kappa",
     units="m^{-1}",
@@ -1236,4 +1475,366 @@ def _length_SplineXYZCurve(params, transforms, profiles, data, **kwargs):
         # this is equivalent to jnp.trapz(T, s) for a closed curve
         # but also works if grid.endpoint is False
         data["length"] = jnp.sum(T * data["ds"])
+    return data
+
+
+@register_compute_fun(
+    name="phi2s",
+    label="s(\\varphi)",
+    units="~",
+    units_long="None",
+    description="Curve parameter s corresponding to a "
+    + "given physical toroidal angle phi",
+    dim=0,
+    params=[],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="",
+    data=["full_control_net", "full_weights", "knots"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+    phi="ndarray: target phi value(s) to invert for s. Required.",
+)
+def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    phi_target = jnp.atleast_1d(kwargs["phi"])
+    degree = transforms["degree"]
+    knots = data["knots"]
+    control_points_xyz = data["full_control_net"]
+    weights = data["full_weights"]
+
+    p = degree
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    def _phi_and_dphi_ds(s):
+        b, b_s, _, _ = b_p_deriv3(jnp.atleast_1d(s), degree, knots)
+        pw = padded * padded_w[:, None]
+        num, num_s = b @ pw, b_s @ pw
+        den, den_s = b @ padded_w, b_s @ padded_w
+        xcart = num / den[:, None]
+        xcart_s = (num_s * den[:, None] - num * den_s[:, None]) / den[:, None] ** 2
+        x, y = xcart[0, 0], xcart[0, 1]
+        x_s, y_s = xcart_s[0, 0], xcart_s[0, 1]
+        phi = jnp.arctan2(y, x)  # wraps to (-pi, pi]
+        dphi_ds = (x * y_s - y * x_s) / (x**2 + y**2)
+        return phi, dphi_ds
+
+    def _residual(s, target):
+        phi, _ = _phi_and_dphi_ds(s)
+        return ((phi - target + jnp.pi) % (2 * jnp.pi)) - jnp.pi
+
+    def _jac(s, target):
+        _, dphi_ds = _phi_and_dphi_ds(s)
+        return dphi_ds
+
+    s0 = phi_target  # initial guess: s ~= phi works for near-circular axes
+    s_sol = vmap(
+        lambda s0_i, target: root_scalar(_residual, s0_i, jac=_jac, args=(target,))
+    )(s0, phi_target)
+    data["phi2s"] = s_sol
+    return data
+
+
+@register_compute_fun(
+    name="full_control_net",
+    label="X_i, Y_i, Z_i",
+    units="m",
+    units_long="meters",
+    description=("Full Cartesian control net (with wrapping for stellarator symmetry)"),
+    dim=0,
+    params=["R", "phi", "Z"],
+    transforms={"degree": [], "sym": [], "nfp": [], "knot_parametrization": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+)
+def _full_control_net(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["nfp"]
+    R = params["R"]
+    phi = params["phi"]
+    Z = params["Z"]
+    if sym:
+        r_ctrl_1fp = jnp.append(R, R[-2::-1])[:-1]
+        z_ctrl_1fp = jnp.append(Z, -Z[-2::-1])[:-1]
+        zeta_ctrl_1fp = jnp.append(
+            phi,
+            (2 * jnp.pi / nfp) - phi[-2::-1],
+        )[:-1]
+    else:
+        raise NotImplementedError
+    R = jnp.tile(r_ctrl_1fp, nfp)
+    Z = jnp.tile(z_ctrl_1fp, nfp)
+    phi = jnp.concatenate([zeta_ctrl_1fp + n * 2 * jnp.pi / nfp for n in range(nfp)])
+    data["full_control_net"] = rpz2xyz(jnp.stack([R, phi, Z], axis=1))
+    return data
+
+
+@register_compute_fun(
+    name="full_weights",
+    label="w_i",
+    units="~",
+    units_long="not applicable",
+    description="Full NURBS weight vector (with wrapping for stellarator symmetry)",
+    dim=1,
+    params=["W"],
+    transforms={"sym": [], "nfp": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+)
+def _full_weights(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["nfp"]
+    W = params["W"]
+    if sym:
+        w_ctrl_1fp = jnp.append(W, W[-2::-1])[:-1]
+    else:
+        raise NotImplementedError
+    data["full_weights"] = jnp.tile(w_ctrl_1fp, nfp)
+    return data
+
+
+@register_compute_fun(
+    name="knots",
+    label="s_i",
+    units="~",
+    units_long="not applicable",
+    description="get knots for a nurbs curve",
+    dim=0,
+    params=[],
+    transforms={"degree": [], "knot_parametrization": []},
+    profiles=[],
+    coordinates="",
+    data=["full_control_net"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+)
+def _knots(params, transforms, profiles, data, **kwargs):
+    mode = transforms["knot_parametrization"]
+    p = transforms["degree"]
+    control_points_xyz = data["full_control_net"]
+
+    n = len(control_points_xyz) - 1
+    if mode == "uniform":
+        data["knots"] = uniform_knots(n, p, domain=2 * jnp.pi)
+    if mode == "chord":
+        data["knots"] = chord_length_knots(control_points_xyz, p, domain=2 * jnp.pi)
+    return data
+
+
+@register_compute_fun(
+    name="spline_derivs_till_3",
+    label="B_{i,p},B'_{i,p},B''_{i,p},B'''_{i,p}",
+    units="~",
+    units_long="not applicable",
+    description="helper function for nurbs derivatives",
+    dim=1,
+    params=[],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["s", "knots"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+    public=False,
+)
+def _spline_derivs_till_3(params, transforms, profiles, data, **kwargs):
+    # evaluate spline on native parameter grid
+    sq = data["s"]
+    degree = transforms["degree"]
+    knots = data["knots"]
+
+    b, b_s, b_ss, b_sss = b_p_deriv3(sq, degree, knots)
+
+    data["spline_derivs_till_3"] = (b, b_s, b_ss, b_sss)
+    return data
+
+
+@register_compute_fun(
+    name="x",
+    label="\\mathbf{x}",
+    units="~",
+    units_long="not applicable",
+    description="Coordinate triplet. "
+    "This is not a position vector unless basis is cartesian. "
+    "When basis is cartesian, the units are meters.",
+    dim=3,
+    params=["rotmat", "shift"],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["full_control_net", "full_weights", "spline_derivs_till_3"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _x_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    # TODO: check if sq is within [0, 2pi]?
+    p = transforms["degree"]
+    weights = data["full_weights"]
+    control_points_xyz = data["full_control_net"]
+
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    b, _, _, _ = data["spline_derivs_till_3"]
+    num = b @ (padded * padded_w[:, None])
+    den = b @ padded_w
+    data["x"] = xyz2rpz(num / den[:, None])
+    return data
+
+
+@register_compute_fun(
+    name="x_s",
+    label="\\partial_{s} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, first derivative",
+    dim=3,
+    params=["rotmat", "shift"],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["full_control_net", "full_weights", "spline_derivs_till_3", "phi"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _x_s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    # TODO: check if sq is within [0, 2pi]?
+    p = transforms["degree"]
+    weights = data["full_weights"]
+    control_points_xyz = data["full_control_net"]
+
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    b, b_s, _, _ = data["spline_derivs_till_3"]
+    num = b @ (padded * padded_w[:, None])
+    den = b @ padded_w
+    num_s = b_s @ (padded * padded_w[:, None])
+    den_s = b_s @ padded_w
+    x_s = (den[:, None] * num_s - num * den_s[:, None]) / (den[:, None] ** 2)
+    data["x_s"] = xyz2rpz_vec(x_s, phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="x_ss",
+    label="\\partial_{ss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, second derivative",
+    dim=3,
+    params=["rotmat", "shift"],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["full_control_net", "full_weights", "spline_derivs_till_3", "phi"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _x_ss_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    # TODO: check if sq is within [0, 2pi]?
+    p = transforms["degree"]
+    weights = data["full_weights"]
+    control_points_xyz = data["full_control_net"]
+
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    b, b_s, b_ss, _ = data["spline_derivs_till_3"]
+    num = b @ (padded * padded_w[:, None])
+    den = b @ padded_w
+    num_s = b_s @ (padded * padded_w[:, None])
+    den_s = b_s @ padded_w
+    num_ss = b_ss @ (padded * padded_w[:, None])
+    den_ss = b_ss @ padded_w
+
+    c = num / den[:, None]
+    c_s = (num_s - c * den_s[:, None]) / den[:, None]
+    c_ss = (num_ss - 2 * c_s * den_s[:, None] - c * den_ss[:, None]) / den[:, None]
+
+    data["x_ss"] = xyz2rpz_vec(c_ss, phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="x_sss",
+    label="\\partial_{sss} \\mathbf{x}",
+    units="m",
+    units_long="meters",
+    description="Position vector along curve, third derivative",
+    dim=3,
+    params=["rotmat", "shift"],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["full_control_net", "full_weights", "spline_derivs_till_3", "phi"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _x_sss_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    # TODO: check if sq is within [0, 2pi]?
+    p = transforms["degree"]
+    weights = data["full_weights"]
+    control_points_xyz = data["full_control_net"]
+
+    padded = jnp.concatenate(
+        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    )
+    padded_w = jnp.concatenate([weights[-p:], weights, weights[:p]])
+
+    b, b_s, b_ss, b_sss = data["spline_derivs_till_3"]
+    num = b @ (padded * padded_w[:, None])
+    den = b @ padded_w
+    num_s = b_s @ (padded * padded_w[:, None])
+    den_s = b_s @ padded_w
+    num_ss = b_ss @ (padded * padded_w[:, None])
+    den_ss = b_ss @ padded_w
+    num_sss = b_sss @ (padded * padded_w[:, None])
+    den_sss = b_sss @ padded_w
+
+    c = num / den[:, None]
+    c_s = (num_s - c * den_s[:, None]) / den[:, None]
+    c_ss = (num_ss - 2 * c_s * den_s[:, None] - c * den_ss[:, None]) / den[:, None]
+    c_sss = (
+        num_sss
+        - 3 * c_ss * den_s[:, None]
+        - 3 * c_s * den_ss[:, None]
+        - c * den_sss[:, None]
+    ) / den[:, None]
+
+    data["x_sss"] = xyz2rpz_vec(c_sss, phi=data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="center",
+    label="\\langle\\mathbf{x}\\rangle",
+    units="m",
+    units_long="meters",
+    description="Centroid of the curve",
+    dim=3,
+    params=["rotmat", "shift"],
+    transforms={"degree": []},
+    profiles=[],
+    coordinates="s",
+    data=["full_control_net", "spline_derivs_till_3", "x"],
+    parameterization="desc.geometry.curve.NurbsRPZCurve",
+)
+def _center_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
+    # center is average of xyz control points
+    xyz = data["full_control_net"]
+    center = jnp.mean(xyz, axis=0)
+    # displacement and rotation
+    center = jnp.matmul(center, params["rotmat"].reshape((3, 3)).T) + params["shift"]
+    # convert to rpz
+    data["center"] = xyz2rpz(center) * jnp.ones_like(data["x"])
     return data

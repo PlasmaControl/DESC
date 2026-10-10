@@ -288,7 +288,7 @@ def lsqtr(  # noqa: C901
     if g_norm < gtol:
         success, message = True, STATUS_MESSAGES["gtol"]
 
-    alpha = jnp.float64(0.0)  # "Levenberg-Marquardt" parameter
+    alpha = jnp.float64(1e-6)  # "Levenberg-Marquardt" parameter
 
     while iteration < maxiter and success is None:
 

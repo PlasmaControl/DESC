@@ -603,7 +603,7 @@ class TestInitialGuess:
         assert not eq_raw.is_nested()
 
         with pytest.warns(
-                UserWarning, match=r"map2disc requested but|not nested"
+            UserWarning, match=r"map2disc requested but|not nested"
         ) as record:
             eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
 
@@ -636,6 +636,60 @@ class TestInitialGuess:
         vol_grid = LinearGrid(rho=np.linspace(0.1, 1.0, 6), M=eq.M, N=eq.N, NFP=eq.NFP)
         g = np.asarray(eq.compute("sqrt(g)", grid=vol_grid)["sqrt(g)"])
         assert np.all(g > 0)
+
+    @pytest.mark.unit
+    def test_zernike_vs_zeta_fit_recovers_fourier_zernike_modes(self):
+        """1D toroidal fits of Zernike coefficients recover Fourier-Zernike modes."""
+        from desc.basis import FourierZernikeBasis, fourier
+        from desc.equilibrium.initial_guess import _zernike_coeffs_to_fourier_zernike
+
+        basis = FourierZernikeBasis(L=2, M=2, N=2, NFP=3)
+        zeta = np.linspace(0, 2 * np.pi / basis.NFP, 2 * basis.N + 1, endpoint=False)
+        lm = np.array([(l, m) for l in range(3) for m in range(-l, l + 1, 2)])
+        expected = {
+            (0, 0, 0): 1.5,
+            (1, 1, 1): -0.3,
+            (1, -1, -2): 0.2,
+            (2, 0, 2): 0.4,
+            (2, -2, 0): -0.1,
+        }
+        ns = np.arange(-basis.N, basis.N + 1)
+        c_vs_zeta = np.zeros((lm.shape[0], zeta.size))
+        for k, (l, m) in enumerate(lm):
+            for n in ns:
+                amp = expected.get((int(l), int(m), int(n)), 0.0)
+                if amp == 0.0:
+                    continue
+                c_vs_zeta[k] += (
+                    amp
+                    * np.asarray(fourier(zeta, np.array([n]), NFP=basis.NFP)).ravel()
+                )
+
+        c_lmn = _zernike_coeffs_to_fourier_zernike(c_vs_zeta, zeta, lm, basis)
+
+        for (l, m, n), amp in expected.items():
+            np.testing.assert_allclose(c_lmn[basis.get_idx(l, m, n)], amp, atol=1e-12)
+        np.testing.assert_allclose(c_lmn[basis.get_idx(2, 2, -1)], 0.0, atol=1e-12)
+
+        # Modes excluded by symmetry are omitted rather than written past the basis.
+        sym_basis = FourierZernikeBasis(L=2, M=2, N=1, NFP=1, sym="cos")
+        sym_zeta = np.linspace(
+            0, 2 * np.pi / sym_basis.NFP, 2 * sym_basis.N + 1, endpoint=False
+        )
+        sym_vs_zeta = np.zeros((lm.shape[0], sym_zeta.size))
+        sym_vs_zeta[0] = expected[(0, 0, 0)]
+        # (l, m, n) = (1, 1, -1) is excluded by cos(m*theta - n*zeta) symmetry.
+        sym_vs_zeta[lm.tolist().index([1, 1])] = np.asarray(
+            fourier(sym_zeta, np.array([-1]), NFP=sym_basis.NFP)
+        ).ravel()
+        sym_coeffs = _zernike_coeffs_to_fourier_zernike(
+            sym_vs_zeta, sym_zeta, lm, sym_basis
+        )
+        assert sym_coeffs.shape == (sym_basis.num_modes,)
+        np.testing.assert_allclose(
+            sym_coeffs[sym_basis.get_idx(0, 0, 0)], expected[(0, 0, 0)], atol=1e-12
+        )
+        assert sym_basis.get_idx(1, 1, -1, error=False).size == 0
 
 
 class TestGetSurfaces:

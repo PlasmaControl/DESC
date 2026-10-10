@@ -6,9 +6,9 @@ import warnings
 import numpy as np
 
 from desc.backend import fori_loop, jit, jnp, put
-from desc.basis import zernike_radial
+from desc.basis import fourier, zernike_radial
 from desc.geometry import FourierRZCurve, Surface
-from desc.grid import Grid, LinearGrid, _Grid
+from desc.grid import Grid, _Grid
 from desc.io import load
 from desc.objectives import (
     FixThetaSFL,
@@ -256,7 +256,7 @@ def set_initial_guess(  # noqa: C901
             try:
                 import map2disc_jax  # noqa: F401
 
-                Rlmn, Zlmn = _babin_init_Zernike_only(eq, eq.L)
+                Rlmn, Zlmn = _babin_init_Zernike_only(eq)
                 eq.R_lmn = Rlmn
                 eq.Z_lmn = Zlmn
                 eq.axis = eq.get_axis()
@@ -456,19 +456,76 @@ def _boundary_cut(surface, zeta):
     return curve
 
 
-def _babin_init_Zernike_only(eq, nrho):
+def _zernike_coeffs_to_fourier_zernike(c_vs_zeta, zeta, lm, basis):
+    """Fit Zernike coefficients versus toroidal angle onto a Fourier-Zernike basis.
+
+    Each row of ``c_vs_zeta`` is one Zernike coefficient sampled at ``zeta``.
+    A 1D Fourier fit in zeta gives the toroidal spectrum of that ``(l, m)``
+    mode. map2disc ANSI order is ``l = 0..M`` and ``m = -l, -l+2, ..., l``,
+    with positive ``m`` a cosine in theta and negative ``m`` a sine.
+
+    Parameters
+    ----------
+    c_vs_zeta : ndarray
+        Zernike coefficients, shape ``(num_zernike, num_zeta)``.
+    zeta : ndarray
+        Toroidal angles over one field period, shape ``(num_zeta,)``.
+        ``num_zeta`` must be ``2 * basis.N + 1``.
+    lm : ndarray
+        Zernike mode numbers, shape ``(num_zernike, 2)``, columns ``(l, m)``,
+        in the same order as the rows of ``c_vs_zeta``.
+    basis : FourierZernikeBasis
+        Basis the fitted coefficients are scattered into.
+
+    Returns
+    -------
+    c_lmn : ndarray
+        Fourier-Zernike coefficients in ``basis.modes`` order. Modes in
+        ``basis`` with no matching ``(l, m)`` are zero, and ``(l, m, n)``
+        absent from ``basis`` (for example by symmetry) are skipped.
+
+    """
+    from desc.backend import vmap
+
+    c_vs_zeta = np.asarray(c_vs_zeta)
+    lm = np.asarray(lm, dtype=int)
+    ns = np.arange(-basis.N, basis.N + 1)
+    if c_vs_zeta.shape != (lm.shape[0], ns.size):
+        raise ValueError(
+            "Expected Zernike coefficients of shape "
+            + f"({lm.shape[0]}, {ns.size}) for N={basis.N}, got {c_vs_zeta.shape}."
+        )
+    vandermonde = fourier(jnp.asarray(zeta)[:, None], ns, NFP=basis.NFP)
+
+    def fit_one(coeff_vs_zeta):
+        return jnp.linalg.solve(vandermonde, coeff_vs_zeta)
+
+    tor = np.asarray(vmap(fit_one)(jnp.asarray(c_vs_zeta)))
+    c_lmn = np.zeros(basis.num_modes)
+    index = {(int(l), int(m), int(n)): i for i, (l, m, n) in enumerate(basis.modes)}
+    for k, (l, m) in enumerate(lm):
+        for j, n in enumerate(ns):
+            idx = index.get((int(l), int(m), int(n)))
+            if idx is not None:
+                c_lmn[idx] = tor[k, j]
+    return c_lmn
+
+
+def _babin_init_Zernike_only(eq):
     """Use Babin's map2disc_jax package to get initially nested mapping.
 
     Assumes equilibrium is right-handed (positive jacobian),
     and returns R_lmn Z_lmn in the same right-handed convention.
 
+    The boundary-conforming map is solved at each toroidal plane, giving
+    Zernike coefficients of R and Z as functions of zeta. Those coefficients
+    are Fourier-fit in zeta to form the Fourier-Zernike spectrum.
+    map2disc_jax uses an ANSI Zernike basis with L = M.
+
     Parameters
     ----------
     eq : Equilibrium
         Equilibrium to initialize
-    nrho : int
-        Number of radial grid points to evaluate mapping at. These
-        will then be fit to form the output Fourier-Zernike coefficients
 
     Returns
     -------
@@ -483,57 +540,25 @@ def _babin_init_Zernike_only(eq, nrho):
     surface = eq.surface
     M = eq.M
     N = eq.N
-    rho1d_out = np.linspace(0, 1, nrho * 2)
-    N_out = N
-    zeta_cut = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N_out + 1, endpoint=False)
-
-    # solve BCM
-    MZernike = M
+    zeta_cut = np.linspace(0, 2 * np.pi / eq.NFP, 2 * N + 1, endpoint=False)
 
     all_bcm = {}
     for z, zeta in enumerate(zeta_cut):
         curve = _boundary_cut(surface, zeta)
-        bcm = BCM(curve, MZernike)
+        bcm = BCM(curve, M)
         bcm.solve("interpolate")
         all_bcm[z] = bcm
 
-    grid = LinearGrid(zeta=zeta_cut, NFP=eq.NFP)
-    all_cx = np.zeros((all_bcm[0].cx.shape[0], zeta_cut.size))
-    all_cy = np.zeros((all_bcm[0].cy.shape[0], zeta_cut.size))
-    for z, zeta in enumerate(zeta_cut):
+    # cx, cy rows follow map2disc ANSI Zernike order, (l, m).
+    lm = np.asarray(all_bcm[0].base.keys(), dtype=int)
+    all_cx = np.zeros((lm.shape[0], zeta_cut.size))
+    all_cy = np.zeros((lm.shape[0], zeta_cut.size))
+    for z in range(zeta_cut.size):
         all_cx[:, z] = np.asarray(all_bcm[z].cx)
         all_cy[:, z] = np.asarray(all_bcm[z].cy)
 
-    # simplest way to obtain the 3D Fourier-Zernike coeffs: just evaluate in real space
-    # and re-fit, that way no need to worry about mode orderings
-    grid = LinearGrid(rho=rho1d_out, M=M, zeta=zeta_cut, NFP=eq.NFP)
-    Rtransform_3d = Transform(grid=grid, basis=eq.R_basis, build_pinv=True)
-    Ztransform_3d = Transform(grid=grid, basis=eq.Z_basis, build_pinv=True)
-
-    Rout = np.zeros(grid.nodes.shape[0])
-    Zout = np.zeros(grid.nodes.shape[0])
-    Rout = grid.meshgrid_reshape(Rout, "rtz")
-    Zout = grid.meshgrid_reshape(Zout, "rtz")
-    rhos_grid = grid.meshgrid_reshape(grid.nodes[:, 0], "rtz")
-    thetas_grid = grid.meshgrid_reshape(grid.nodes[:, 1], "rtz")
-
-    curve = _boundary_cut(surface, 0.0)  # not used in evaluation of cx,cy
-    bcm = BCM(curve, MZernike)
-    for z, zeta in enumerate(zeta_cut):
-        bcm.cx = all_cx[:, z]
-        bcm.cy = all_cy[:, z]
-        r_rt, z_rt = bcm.eval_rt(
-            rhos_grid[:, :, z].squeeze(), thetas_grid[:, :, z].squeeze()
-        )
-        Rout[:, :, z] = np.asarray(r_rt)
-        Zout[:, :, z] = np.asarray(z_rt)
-    R_lmn = np.array(Rtransform_3d.fit(grid.meshgrid_flatten(Rout, "rtz")), copy=True)
-    Z_lmn = np.array(Ztransform_3d.fit(grid.meshgrid_flatten(Zout, "rtz")), copy=True)
-
-    # TODO: smarter way would be to take the existing Zernike coeffs as fxn of phi and
-    # fit those coefficients to immediately get the 3D FourierZernike coefficients.
-    # Need to know what the mode orderings are though for cx and cy to use this
-    # approach, which I've not dug into yet as the other method works fine.
+    R_lmn = _zernike_coeffs_to_fourier_zernike(all_cx, zeta_cut, lm, eq.R_basis)
+    Z_lmn = _zernike_coeffs_to_fourier_zernike(all_cy, zeta_cut, lm, eq.Z_basis)
 
     # map2disc_jax outputs in left-handed coordinates, so we need to flip
     # the sign of theta to get back to right-handed coords

@@ -2821,13 +2821,20 @@ class SurfaceCurrentRegularization(_Objective):
             has_axis=source_grid.axis.size,
         )
         if self._normalize:
+            Phi = np.mean(
+                np.abs(surface_current_field.compute("Phi", grid=source_grid)["Phi"])
+            )
+            current_norm = np.max([Phi, 1])
             if isinstance(surface_current_field, FourierCurrentPotentialField):
-                self._normalization = np.max(
-                    [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
-                )
-            else:  # it does not have I,G bc is CurrentPotentialField
-                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                self._normalization = np.max([np.mean(np.abs(Phi)), 1])
+                IG = abs(surface_current_field.I) + abs(surface_current_field.G)
+                current_norm = np.max([current_norm, IG])
+            scales = compute_scaling_factors(surface_current_field)
+            if self._regularization == "K":  # units = A
+                self._normalization = current_norm
+            elif self._regularization == "Phi":  # units = A*m
+                self._normalization = current_norm * scales["a"]
+            elif self._regularization == "sqrt(Phi)":  # units = sqrt(A)*m
+                self._normalization = np.sqrt(current_norm) * scales["a"]
 
         self._constants = {
             "surface_transforms": surface_transforms,

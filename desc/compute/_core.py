@@ -3,6 +3,13 @@
 from desc.backend import jnp, root_scalar, vmap
 from desc.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
+from ._curve import (
+    _nurbs_curve,
+    _nurbs_curve_control_net,
+    _nurbs_curve_knots,
+    _nurbs_curve_phi2s,
+    _nurbs_curve_weights,
+)
 from .data_index import register_compute_fun
 from .spline_utils import b_p_deriv3, uniform_knots
 
@@ -3535,6 +3542,142 @@ def _zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="axis_full_control_net",
+    label="X_i, Y_i, Z_i",
+    units="m",
+    units_long="meters",
+    description="Full Cartesian control net of the interior axis",
+    dim=1,
+    params=["axis_R", "axis_phi", "axis_Z"],
+    transforms={"sym": [], "NFP": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_full_control_net_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    data["axis_full_control_net"] = _nurbs_curve_control_net(
+        params["axis_R"],
+        params["axis_phi"],
+        params["axis_Z"],
+        transforms["sym"],
+        transforms["NFP"],
+    )
+    return data
+
+
+@register_compute_fun(
+    name="axis_full_weights",
+    label="w_i",
+    units="~",
+    units_long="None",
+    description="Full NURBS weight vector of the interior axis",
+    dim=1,
+    params=["axis_W"],
+    transforms={"sym": [], "NFP": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_full_weights_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    data["axis_full_weights"] = _nurbs_curve_weights(
+        params["axis_W"], transforms["sym"], transforms["NFP"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="axis_knots",
+    label="s_i",
+    units="~",
+    units_long="None",
+    description="Knot vector of the interior axis",
+    dim=1,
+    params=[],
+    transforms={"axis_degree": [], "axis_knot_parametrization": []},
+    profiles=[],
+    coordinates="",
+    data=["axis_full_control_net"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_knots_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["axis_knots"] = _nurbs_curve_knots(
+        data["axis_full_control_net"],
+        transforms["axis_degree"],
+        transforms["axis_knot_parametrization"],
+    )
+    return data
+
+
+@register_compute_fun(
+    name="axis_s",
+    label="s_k",
+    units="~",
+    units_long="None",
+    description="Interior axis parameter s at each cross section's toroidal angle",
+    dim=1,
+    params=["cs_interior_phi"],
+    transforms={"NFP": [], "axis_degree": []},
+    profiles=[],
+    coordinates="",
+    data=["axis_full_control_net", "axis_full_weights", "axis_knots"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_s_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    nfp = transforms["NFP"]
+    cs_phi = jnp.append(jnp.zeros(1), params["cs_interior_phi"])
+    cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / nfp) - cs_phi[:0:-1])
+    cs_phi_full = jnp.concatenate(
+        [cs_phi_1fp + n * (2 * jnp.pi / nfp) for n in range(nfp)]
+    )
+    s = _nurbs_curve_phi2s(
+        data["axis_full_control_net"],
+        data["axis_full_weights"],
+        transforms["axis_degree"],
+        data["axis_knots"],
+        cs_phi_full,
+    )
+    data["axis_s"] = jnp.mod(s, 2 * jnp.pi)
+    return data
+
+
+@register_compute_fun(
+    name="axis_x",
+    label="\\mathbf{x}_{\\mathrm{axis}}",
+    units="m",
+    units_long="meters",
+    description="Interior axis position at each cross section, in (R, phi, Z)",
+    dim=1,
+    params=[],
+    transforms={"axis_degree": []},
+    profiles=[],
+    coordinates="",
+    data=["axis_full_control_net", "axis_full_weights", "axis_knots", "axis_s"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_x_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    degree = transforms["axis_degree"]
+    c, _, _, _ = _nurbs_curve(
+        data["axis_full_control_net"],
+        data["axis_full_weights"],
+        degree,
+        b_p_deriv3(data["axis_s"], degree, data["axis_knots"]),
+    )
+    data["axis_x"] = xyz2rpz(c)
+    return data
+
+
+@register_compute_fun(
     name="full_control_net",
     label="\\bf{p}_{ij}",
     units="m",
@@ -3552,7 +3695,7 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
     profiles=[],
     coordinates="",
-    data=[],
+    data=["axis_x"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _full_control_net_NurbsRZToroidalSurface(

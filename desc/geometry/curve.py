@@ -1784,7 +1784,7 @@ class NurbsRPZCurve(Curve):
         self._nfp = nfp
         self._sym = sym
         self._n_ctrl_points = n_ctrl_points
-        self._knot_parametrization = knot_parametrization
+        self.knot_parametrization = knot_parametrization
         self._degree = degree
 
     @optimizable_parameter
@@ -1860,12 +1860,13 @@ class NurbsRPZCurve(Curve):
 
     @knot_parametrization.setter
     def knot_parametrization(self, new):
-        if new in ("uniform", "chord"):
-            self._knot_parametrization = new
-        else:
-            raise TypeError(
-                'Knot parametrization must be either "uniform" or "chord". '
+        if new == "chord":
+            raise DeprecationWarning(
+                'knot_parametrization="chord" is deprecated, use "uniform".'
             )
+        if new != "uniform":
+            raise TypeError('Knot parametrization must be "uniform".')
+        self._knot_parametrization = new
 
     @property
     def N(self):

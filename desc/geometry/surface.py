@@ -1346,7 +1346,7 @@ class NurbsRZToroidalSurface(Surface):
             "W": params["axis_W"],
         }
 
-        cs_phi = jnp.append(jnp.array([0.0]), self.cs_interior_phi)
+        cs_phi = jnp.append(jnp.array([0.0]), params["cs_interior_phi"])
         cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / self.NFP) - cs_phi[:0:-1])
 
         cs_phi_full = jnp.concatenate(
@@ -1370,7 +1370,6 @@ class NurbsRZToroidalSurface(Surface):
         axis_grid = LinearGrid(zeta=s_values, NFP=1, sym=self.sym)
 
         axis_names = [
-            "x",
             "closed_bishop_tangent",
             "closed_bishop_normal",
             "closed_bishop_binormal",
@@ -1648,6 +1647,16 @@ class NurbsRZToroidalSurface(Surface):
     @axis_W.setter
     def axis_W(self, new):
         self.interior_axis.W = new
+
+    @property
+    def axis_degree(self):
+        """int: degree of the interior axis spline."""
+        return self.interior_axis.degree
+
+    @property
+    def axis_knot_parametrization(self):
+        """str: knot parametrization of the interior axis spline."""
+        return self.interior_axis.knot_parametrization
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution.

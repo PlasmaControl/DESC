@@ -1555,11 +1555,18 @@ def _nurbs_curve(control_points_xyz, weights, degree, basis):
     phi="ndarray: target phi value(s) to invert for s. Required.",
 )
 def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
-    phi_target = jnp.atleast_1d(kwargs["phi"])
-    degree = transforms["degree"]
-    knots = data["knots"]
-    control_points_xyz = data["full_control_net"]
-    weights = data["full_weights"]
+    data["phi2s"] = _nurbs_curve_phi2s(
+        data["full_control_net"],
+        data["full_weights"],
+        transforms["degree"],
+        data["knots"],
+        jnp.atleast_1d(kwargs["phi"]),
+    )
+    return data
+
+
+def _nurbs_curve_phi2s(control_points_xyz, weights, degree, knots, phi_target):
+    """Curve parameter s at which the curve has toroidal angle phi_target."""
 
     def _phi_and_dphi_ds(s):
         basis = b_p_deriv3(jnp.atleast_1d(s), degree, knots)
@@ -1579,11 +1586,9 @@ def _phi2s_NurbsRPZCurve(params, transforms, profiles, data, **kwargs):
         return dphi_ds
 
     s0 = phi_target  # initial guess: s ~= phi works for near-circular axes
-    s_sol = vmap(
+    return vmap(
         lambda s0_i, target: root_scalar(_residual, s0_i, jac=_jac, args=(target,))
     )(s0, phi_target)
-    data["phi2s"] = s_sol
-    return data
 
 
 @register_compute_fun(

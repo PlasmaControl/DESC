@@ -7,7 +7,7 @@ from desc.backend import jnp
 from desc.compute._turbulence import _energy_quad
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
-from desc.integrals.bounce_integral import Options
+from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
@@ -46,7 +46,7 @@ class AvailableEnergy(_Objective):
     Every complete well in the traced interval is summed. The registered compute
     function does not infer a special axisymmetric domain. For k complete
     axisymmetric poloidal transits between global maxima of the magnetic-field
-    strength, choose ``alpha`` and ``num_field_periods`` accordingly, then pass the
+    strength, choose ``alpha`` and ``field_period_transits`` accordingly, then pass the
     magnitude of ι divided by k as ``fieldline_normalization``.
 
     The result uses the 3nT/2 thermal-energy normalization in Eqs. (2.44) and
@@ -89,7 +89,7 @@ class AvailableEnergy(_Objective):
     fieldline_normalization : float or ndarray, optional
         Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where 𝓛 is the sum of ∫dℓ/B over
         the retained complete field-line domain. The default
-        ``NFP / num_field_periods`` is the long-field-line estimate. For k
+        ``NFP / field_period_transits`` is the long-field-line estimate. For k
         complete axisymmetric poloidal transits, use the magnitude of ι divided by k.
     quad_atol : float
         Absolute tolerance for adaptive energy quadrature.
@@ -133,7 +133,7 @@ class AvailableEnergy(_Objective):
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         num_well=None,
         num_quad=32,
         num_pitch=65,
@@ -167,7 +167,7 @@ class AvailableEnergy(_Objective):
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -206,7 +206,7 @@ class AvailableEnergy(_Objective):
             Level of output.
 
         """
-        Options._build_objective(self, "available energy", eta=-1)
+        BounceOptions._build_objective(self, "available energy", eta=-1)
         if not self._hyperparam["quad_atol"]:
             self._constants["energy_quad"] = _energy_quad(32)
         super().build(use_jit=use_jit, verbose=verbose)
@@ -229,4 +229,6 @@ class AvailableEnergy(_Objective):
             Available energy as a function of the flux surface label.
 
         """
-        return Options._compute_objective(self, params, constants, "available energy")
+        return BounceOptions._compute_objective(
+            self, params, constants, "available energy"
+        )

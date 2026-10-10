@@ -227,6 +227,7 @@ class Bounce2D(_Bounce):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     References
     ----------
@@ -286,7 +287,7 @@ class Bounce2D(_Bounce):
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
         multiple field lines until the surface is covered sufficiently.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
         In axisymmetric configurations, integration along the field line for a
         single poloidal transit between two global maxima of B is sufficient for
@@ -333,7 +334,7 @@ class Bounce2D(_Bounce):
         angle,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         quad=None,
         *,
         automorphism=None,
@@ -345,12 +346,11 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        num_field_periods = kwargs.get("field_period_transits", num_field_periods)
-        if "num_transit" in kwargs and num_field_periods == 20:  # default value
-            num_field_periods = kwargs["num_transit"] * grid.NFP
+        if "num_transit" in kwargs and field_period_transits == 20:  # default value
+            field_period_transits = kwargs["num_transit"] * grid.NFP
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -386,13 +386,13 @@ class Bounce2D(_Bounce):
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
         iota, alpha = jnp.atleast_1d(iota, jnp.zeros(1) if alpha is None else alpha)
         self._theta = theta_on_fieldlines(
-            angle, iota, alpha, num_field_periods, grid.NFP
+            angle, iota, alpha, field_period_transits, grid.NFP
         )
 
         self._nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
         if spline:
             self._B, self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -760,8 +760,8 @@ class Bounce2D(_Bounce):
 
         """
         if num_well is None:
-            num_well = Options._guess_num_well(
-                num_field_periods=self._theta.X,
+            num_well = BounceOptions._guess_num_well(
+                field_period_transits=self._theta.X,
                 NFP=self._NFP,
                 mins_per_field_period=getattr(self._B, "Y", jnp.inf) // 2,
             )
@@ -1464,7 +1464,7 @@ class Bounce1D(_Bounce):
         assert grid.is_meshgrid
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -1907,7 +1907,7 @@ class Bounce1D(_Bounce):
         return plot_ppoly(PPoly(B.T, self._knots), **kwargs)
 
 
-class Options(NamedTuple):
+class BounceOptions(NamedTuple):
     """Parameter container for Bounce2D."""
 
     # TODO(#2152): Consider instead of having users pass in 10 kwargs
@@ -1946,7 +1946,7 @@ class Options(NamedTuple):
             Threshold for superbanana classification. Must be in (0,1).
             Default is 0.2.
             """,
-        "num_field_periods": """int :
+        "field_period_transits": """int :
             Number of field periods to follow field line.
             In axisymmetric configurations, integration along the field line for a
             single poloidal transit between two global maxima of B is sufficient for
@@ -2014,7 +2014,6 @@ class Options(NamedTuple):
 
     _static_argnames = (
         "nufft_eps",
-        "num_field_periods",
         "field_period_transits",
         "num_pitch",
         "num_quad",
@@ -2029,7 +2028,7 @@ class Options(NamedTuple):
     alpha: jnp.ndarray
     loop: bool
     nufft_eps: float
-    num_field_periods: int
+    field_period_transits: int
     num_well: int
     pitch_batch_size: int
     pitch_quad: tuple[jnp.ndarray]
@@ -2051,7 +2050,7 @@ class Options(NamedTuple):
         gamma_threshold=0.2,
         loop=False,
         nufft_eps=-1.0,
-        num_field_periods=20,
+        field_period_transits=20,
         num_pitch=None,
         num_quad=32,
         num_well=None,
@@ -2076,8 +2075,6 @@ class Options(NamedTuple):
             (θ, ζ) ∈ [0, 2π) × [0, 2π/NFP).
 
         """
-        num_field_periods = kwargs.get("field_period_transits", num_field_periods)
-
         errorif(
             (surf_batch_size is None or surf_batch_size > 1)
             and (pitch_batch_size is not None),
@@ -2093,11 +2090,11 @@ class Options(NamedTuple):
         nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
 
         if num_well is None:
-            num_well = Options._guess_num_well(
-                num_field_periods=num_field_periods,
+            num_well = BounceOptions._guess_num_well(
+                field_period_transits=field_period_transits,
                 NFP=grid.NFP,
                 mins_per_field_period=Y_B if spline else (Y_B // 2),
             )
@@ -2106,11 +2103,11 @@ class Options(NamedTuple):
             alpha=jnp.zeros(1) if alpha is None else alpha,
             loop=loop,
             nufft_eps=nufft_eps,
-            num_field_periods=num_field_periods,
+            field_period_transits=field_period_transits,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
             pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
-            quad=Options._quad(eta, num_quad) if quad is None else quad,
+            quad=BounceOptions._quad(eta, num_quad) if quad is None else quad,
             shard=shard,
             spline=spline,
             surf_batch_size=surf_batch_size,
@@ -2118,11 +2115,6 @@ class Options(NamedTuple):
             vander=kwargs.get("_vander", None),
             Y_B=Y_B,
         )
-
-    @property
-    def field_period_transits(self):
-        """Alias for the number of field periods followed along each field line."""
-        return self.num_field_periods
 
     def keys(self):
         """Names of elements in tuple."""
@@ -2146,12 +2138,12 @@ class Options(NamedTuple):
         return quad
 
     @staticmethod
-    def _guess_num_well(*, num_field_periods, NFP, mins_per_field_period=jnp.inf):
+    def _guess_num_well(*, field_period_transits, NFP, mins_per_field_period=jnp.inf):
         """Guess upper bound for number of wells based on spectrum.
 
         Parameters
         ----------
-        num_field_periods : int
+        field_period_transits : int
             Number of field periods to follow field line.
         NFP : int
             Number of field periods per toroidal transit.
@@ -2166,13 +2158,13 @@ class Options(NamedTuple):
             A guess for the max number of wells that exist for any pitch angle
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
-            ``num_field_periods*mins_per_field_period`` to enhance performance,
+            ``field_period_transits*mins_per_field_period`` to enhance performance,
             yet sill remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
-        num_well = round(num_field_periods * (1 + 20 / NFP))
-        return min(num_well, num_field_periods * mins_per_field_period)
+        num_well = round(field_period_transits * (1 + 20 / NFP))
+        return min(num_well, field_period_transits * mins_per_field_period)
 
     @staticmethod
     def _guess_Y_B(grid):
@@ -2224,10 +2216,10 @@ class Options(NamedTuple):
 
         Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            o._hyperparam["Y_B"] = Y_B = Options._guess_Y_B(o._grid)
+            o._hyperparam["Y_B"] = Y_B = BounceOptions._guess_Y_B(o._grid)
         if o._hyperparam["num_well"] is None:
-            o._hyperparam["num_well"] = Options._guess_num_well(
-                num_field_periods=o._hyperparam["num_field_periods"],
+            o._hyperparam["num_well"] = BounceOptions._guess_num_well(
+                field_period_transits=o._hyperparam["field_period_transits"],
                 NFP=eq.NFP,
                 mins_per_field_period=Y_B if o._hyperparam["spline"] else (Y_B // 2),
             )
@@ -2241,7 +2233,7 @@ class Options(NamedTuple):
             if o._hyperparam["spline"]
             else {}
         )
-        o._constants["quad"] = Options._quad(eta, o._hyperparam.pop("num_quad"))
+        o._constants["quad"] = BounceOptions._quad(eta, o._hyperparam.pop("num_quad"))
 
         rho = o._grid.compress(o._grid.nodes[:, 0])
         o._constants["lambda"] = get_transforms(
@@ -2261,7 +2253,7 @@ class Options(NamedTuple):
 
     @staticmethod
     def _compute_objective(o, params, constants, key):
-        """Compute an objective built with ``Options._build_objective``."""
+        """Compute an objective built with ``BounceOptions._build_objective``."""
         constants = o._get_deprecated_constants(constants)
         eq = o.things[0]
 
@@ -2296,7 +2288,5 @@ class Options(NamedTuple):
         return constants["transforms"]["grid"].compress(data[key])
 
 
-# Keep the option container and keyword names used by master available.
-Options._doc["field_period_transits"] = Options._doc["num_field_periods"]
-Options._doc["theta"] = ""
-BounceOptions = Options
+# Keep the deprecated angle keyword available.
+BounceOptions._doc["theta"] = ""

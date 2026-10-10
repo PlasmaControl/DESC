@@ -2209,11 +2209,11 @@ class TestObjectiveFunction:
         obj_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False)
         X = 16
         Y = 32
-        num_field_periods = 20
+        field_period_transits = 20
         opts = dict(
             Y_B=13,
-            num_field_periods=num_field_periods,
-            num_well=3 * num_field_periods,
+            field_period_transits=field_period_transits,
+            num_well=3 * field_period_transits,
             num_quad=16,
             num_pitch=10,
         )
@@ -2251,7 +2251,7 @@ class TestObjectiveFunction:
             np.testing.assert_allclose(
                 obj._constants["alpha"], GammaLoss._default_alpha(eq)
             )
-            assert obj._hyperparam["num_field_periods"] == eq.NFP + 2
+            assert obj._hyperparam["field_period_transits"] == eq.NFP + 2
             data = eq.compute(
                 name,
                 grid,
@@ -3455,14 +3455,14 @@ def _reduced_resolution_objective(eq, objective, **kwargs):
     if objective in {AvailableEnergy, EffectiveRipple, GammaC, GammaLoss}:
         kwargs["X"] = 16
         kwargs["Y"] = 24
-        kwargs["num_field_periods"] = 10
-        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
+        kwargs["field_period_transits"] = 10
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
         kwargs["num_pitch"] = 24
         kwargs["num_quad"] = 16
     if objective is GammaLoss:
-        kwargs["num_field_periods"] = eq.NFP + 2
+        kwargs["field_period_transits"] = eq.NFP + 2
         kwargs.setdefault("alpha", GammaLoss._default_alpha(eq))
-        kwargs["num_well"] = 15 * kwargs["num_field_periods"] // eq.NFP
+        kwargs["num_well"] = 15 * kwargs["field_period_transits"] // eq.NFP
     if objective is AvailableEnergy:
         kwargs.setdefault("Y_B", 16)
         kwargs.setdefault("quad_atol", 1e-3)

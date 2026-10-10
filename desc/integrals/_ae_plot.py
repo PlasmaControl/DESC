@@ -15,7 +15,7 @@ from desc.backend import jnp
 from desc.grid import LinearGrid
 from desc.utils import apply, errorif, safediv, setdefault
 
-from .bounce_integral import Bounce2D, Options
+from .bounce_integral import Bounce2D, BounceOptions
 
 
 @dataclass(frozen=True)
@@ -198,7 +198,7 @@ def _ae_well_data(
     num_zeta : int, optional
         Number of points used to plot the magnetic-field strength along the field line.
     **kwargs
-        Additional options forwarded to ``Options.guess`` and ``Bounce2D``.
+        Additional options forwarded to ``BounceOptions.guess`` and ``Bounce2D``.
 
     Returns
     -------
@@ -263,7 +263,7 @@ def _ae_well_data(
     if angle is None:
         angle = Bounce2D.angle(eq, X=X, Y=Y, rho=rho)
 
-    opts = Options.guess(-1, grid, alpha=alpha, **kwargs)
+    opts = BounceOptions.guess(-1, grid, alpha=alpha, **kwargs)
     compute_names = bounce_names + surface_names + tuple(Bounce2D.required_names)
     if data is None:
         data = eq.compute(list(dict.fromkeys(compute_names)), grid=grid)

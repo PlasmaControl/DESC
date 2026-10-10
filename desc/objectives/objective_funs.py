@@ -176,7 +176,7 @@ doc_bounce = """
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
         multiple field lines until the surface is covered sufficiently.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
         In axisymmetric configurations, integration along the field line for a
         single poloidal transit between two global maxima of B is sufficient for
@@ -258,8 +258,6 @@ def collect_docs(
     coil : bool, optional
         Whether the objective is a coil objective. If ``True``, updates docs
         of ``target``, ``weight``, ``bounds``, and ``loss_function``.
-    jac_chunk_size : bool
-        Whether to include the ``jac_chunk_size`` parameter in the docstring.
 
     Returns
     -------
@@ -271,8 +269,6 @@ def collect_docs(
 
     # Copy to allow for objective-specific updates to docs
     docs_obj = docs.copy()
-    if not jac_chunk_size:
-        del docs_obj["jac_chunk_size"]
 
     if coil:
         docs_obj["target"] = doc_target_coil

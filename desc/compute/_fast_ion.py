@@ -20,9 +20,9 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..integrals.quad_utils import _LossCone
-from ..utils import cross, dot, parse_argname_change, safediv
+from ..utils import cross, dot, safediv
 from ._drift import (
     _alpha_drift_wb_inverse,
     _radial_drift,
@@ -102,15 +102,16 @@ def _gamma_c(radial_drift, poloidal_drift, weight=1.0):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Equation 61 of [1]_.
 
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -124,11 +125,8 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = BounceOptions.guess(-2, grid, **kwargs)
 
     def foreach_surface(data):
 
@@ -162,13 +160,13 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=angle,
+        angle=kwargs["angle"],
         custom_data=_gamma_c_data(data),
         batch_size=opts.surf_batch_size,
         shard=opts.shard,
     )
     assert out.ndim == 1
-    scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.num_field_periods
+    scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.field_period_transits
     data["Gamma_c"] = grid.expand(out * scalar) / data["V_psi"]
     return data
 
@@ -201,9 +199,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Equation 50 of [1]_.
 
@@ -214,11 +212,8 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
-    angle = parse_argname_change(
-        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-    )
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, loop=True, **kwargs)
+    opts = BounceOptions.guess(-2, grid, loop=True, **kwargs)
 
     def foreach_surface(data):
         pitch_inv, _ = Bounce2D.pitch_quad(
@@ -242,7 +237,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=angle,
+        angle=kwargs["angle"],
         custom_data=_gamma_c_data(data),
         batch_size=1,
         sparse=False,  # don't know of any applications that differentiate anyway
@@ -310,15 +305,16 @@ def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, order=1):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Equation 20 of [2]_.
 
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     """
     # noqa: unused dependency
@@ -356,9 +352,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     """Equation 22 of [2]_."""
     # noqa: unused dependency
@@ -399,9 +395,9 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
     """Equation 25 of [2]_."""
     # noqa: unused dependency
@@ -413,7 +409,7 @@ def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
 
 def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
-    opts = Options.guess(-1, grid, **kwargs)
+    opts = BounceOptions.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
 
@@ -448,13 +444,11 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=parse_argname_change(
-            kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-        ),
+        angle=kwargs["angle"],
         names=names,
         batch_size=opts.surf_batch_size,
         shard=opts.shard,
     )
     assert out.ndim == 1
-    scalar = jnp.pi**3 / 16 * grid.NFP / opts.num_field_periods
+    scalar = jnp.pi**3 / 16 * grid.NFP / opts.field_period_transits
     return grid.expand(out * scalar) / data["V_psi"]

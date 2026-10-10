@@ -6,8 +6,8 @@ from packaging import version
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
-from desc.integrals.bounce_integral import Options
-from desc.utils import errorif
+from desc.integrals.bounce_integral import BounceOptions
+from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 
@@ -27,6 +27,7 @@ class EffectiveRipple(_Objective):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     References
     ----------
@@ -68,7 +69,7 @@ class EffectiveRipple(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="rev",
+        deriv_mode="rev",  # TODO: change to deriv_mode="auto" once jax>0.11.0
         jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
@@ -76,7 +77,7 @@ class EffectiveRipple(_Objective):
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         num_well=None,
         num_quad=32,
         num_pitch=51,
@@ -95,9 +96,20 @@ class EffectiveRipple(_Objective):
             "EffectiveRipple.",
         )
         nufft_eps = check_nufft(nufft_eps)
-        num_field_periods = kwargs.get("field_period_transits", num_field_periods)
+        warnif(
+            "use_bounce1d" in kwargs,
+            FutureWarning,
+            "Argument use_bounce1d has been deprecated and is no longer used.",
+        )
         if "num_transit" in kwargs:
-            num_field_periods = kwargs["num_transit"] * eq.NFP
+            warnif(
+                True,
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of "
+                "field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP",
+            )
+            field_period_transits = kwargs.pop("num_transit") * eq.NFP
 
         if target is None and bounds is None:
             target = 0.0
@@ -110,7 +122,7 @@ class EffectiveRipple(_Objective):
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -130,8 +142,8 @@ class EffectiveRipple(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
-            name=name,
             jac_chunk_size=jac_chunk_size,
+            name=name,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -145,7 +157,7 @@ class EffectiveRipple(_Objective):
             Level of output.
 
         """
-        Options._build_objective(self, "effective ripple", eta=1)
+        BounceOptions._build_objective(self, "effective ripple", eta=1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -166,4 +178,6 @@ class EffectiveRipple(_Objective):
             Effective ripple as a function of the flux surface label.
 
         """
-        return Options._compute_objective(self, params, constants, "effective ripple")
+        return BounceOptions._compute_objective(
+            self, params, constants, "effective ripple"
+        )

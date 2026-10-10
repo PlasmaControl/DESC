@@ -5,9 +5,9 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..integrals.surface_integral import surface_integrals
-from ..utils import parse_argname_change, safediv
+from ..utils import safediv
 from ._drift import _I_1, _I_2
 from .data_index import register_compute_fun
 
@@ -58,9 +58,9 @@ def _field_line_weight(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _epsilon_32(params, transforms, profiles, data, **kwargs):
     """Effective ripple modulation amplitude to 3/2 power.
 
@@ -77,12 +77,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     """
     # noqa: unused dependency
     # TODO: in future don't close over grid so that sharding works
     grid = transforms["grid"]
-    opts = Options.guess(1, grid, **kwargs)
+    opts = BounceOptions.guess(1, grid, **kwargs)
 
     def foreach_surface(data):
 
@@ -110,15 +111,13 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
 
     B0 = data["max_tz |B|"]
     scalar = (jnp.pi * data["R0"]) ** 2 / (
-        opts.num_field_periods / grid.NFP * 4 * 2**0.5
+        opts.field_period_transits / grid.NFP * 4 * 2**0.5
     )
     out = Bounce2D.batch(
         foreach_surface,
         data,
         grid,
-        angle=parse_argname_change(
-            kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
-        ),
+        angle=kwargs["angle"],
         names=("|grad(rho)|*kappa_g",),
         batch_size=opts.surf_batch_size,
         shard=opts.shard,

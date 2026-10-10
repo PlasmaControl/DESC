@@ -10,7 +10,7 @@ from desc.backend import jax, jnp
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce1D, Bounce2D
-from desc.integrals.bounce_integral import BounceOptions, Options
+from desc.integrals.bounce_integral import BounceOptions
 from desc.objectives import EffectiveRipple, GammaC
 
 
@@ -166,14 +166,21 @@ def test_bounce_batch_signatures(bounce, shard, sparse, batch_size):
 
 @pytest.mark.unit
 def test_bounce_master_option_names():
-    """Master's field-period spelling reaches the existing option container."""
-    assert BounceOptions is Options
+    """Bounce options and objectives use the field-period-transit setting."""
     grid = LinearGrid(rho=[0.5], M=1, N=1)
-    opts = Options.guess(-1, grid, field_period_transits=3)
-    assert opts.num_field_periods == opts.field_period_transits == 3
-    assert opts.num_well == Options.guess(-1, grid, num_field_periods=3).num_well
-    eq = Equilibrium()
+    opts = BounceOptions.guess(-1, grid, field_period_transits=3)
+    assert opts.field_period_transits == 3
+    eq = Equilibrium(NFP=3)
     for objective in (EffectiveRipple, GammaC):
         obj = objective(eq, field_period_transits=3, jac_chunk_size=2, nufft_eps=0)
-        assert obj._hyperparam["num_field_periods"] == 3
+        assert obj._hyperparam["field_period_transits"] == 3
         assert obj._jac_chunk_size == 2
+        with pytest.warns(
+            FutureWarning, match="Argument num_transit has been deprecated"
+        ):
+            obj = objective(eq, num_transit=2, nufft_eps=0)
+        assert obj._hyperparam["field_period_transits"] == 2 * eq.NFP
+        with pytest.warns(
+            FutureWarning, match="Argument use_bounce1d has been deprecated"
+        ):
+            objective(eq, use_bounce1d=True, nufft_eps=0)

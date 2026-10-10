@@ -1638,31 +1638,34 @@ class InterpolatedFieldFlux(IOAble):
             theta = jnp.where(flip, 2 * jnp.pi - theta, theta)
             zeta = jnp.where(flip, jnp.mod(-zeta, period), zeta)
             sign = jnp.where(flip, self._sym_parity, 1)
-        # position in node spacings from the first stored coefficient
-        u = jnp.array(
-            [
-                rho * (self.L - 0.5) + 1.5,
-                theta * self.M / jnp.pi + 1.5,
-                zeta * 2 * self.N / period + 2,
-            ]
+        n_theta, n_zeta, n = params["coeffs"].shape[1:]
+        # position in node spacings from the first stored coefficient; past ρ = 1
+        # the end cubic pieces are extended
+        u = (
+            rho * (self.L - 0.5) + 1.5,
+            theta * self.M / jnp.pi + 1.5,
+            zeta * 2 * self.N / period + 2,
         )
-        i = jnp.floor(u).astype(jnp.int32)
-        t = u - i
-        w = (
-            jnp.stack(
-                [
-                    (1 - t) ** 3,
-                    3 * t**3 - 6 * t**2 + 4,
-                    -3 * t**3 + 3 * t**2 + 3 * t + 1,
-                    t**3,
-                ]
+        bounds = ((1, self.L + 1), (1, n_theta - 3), (2, n_zeta - 3))
+        i = [jnp.clip(jnp.floor(x), *b).astype(int) for x, b in zip(u, bounds)]
+        w = [
+            (
+                (1 - t) ** 3,
+                3 * t**3 - 6 * t**2 + 4,
+                -3 * t**3 + 3 * t**2 + 3 * t + 1,
+                t**3,
             )
-            / 6
-        )
-        block = jax.lax.dynamic_slice(
-            params["coeffs"], (*(i - 1), jnp.int32(0)), (4, 4, 4, 7)
-        )
-        f = sign * jnp.einsum("i,j,k,ijkq->q", w[:, 0], w[:, 1], w[:, 2], block)
+            for t in (x - j for x, j in zip(u, i))
+        ]
+        # gather the 4×4×4 block by flat index and contract it by explicit sums, so
+        # that XLA fuses the evaluation into a few kernels without a reduce or gemm
+        a, b, c, q = np.ogrid[:4, :4, :4, :n]
+        corner = ((i[0] - 1) * n_theta + i[1] - 1) * n_zeta + i[2] - 1
+        block = params["coeffs"].reshape(-1)[
+            (corner + (a * n_theta + b) * n_zeta + c) * n + q
+        ]
+        dot = lambda v, w: sum(w[k] * v[k] for k in range(4)) / 6
+        f = sign * dot(dot(dot(block, w[0]), w[1]), w[2])
         return dict(zip(self._keys, f))
 
 
@@ -1865,40 +1868,45 @@ class InterpolatedFieldBoozer(IOAble):
             |B|, ∂_ρ|B|, ∂_θ|B|, ∂_ζ|B|, 1/H, ι/H, π G/(Ψ H) and π I/(Ψ H).
         """
         period = 2 * jnp.pi / self.NFP
-        u = jnp.array(
-            [
-                rho * (self.L - 0.5) + 1.5,
-                jnp.mod(theta, 2 * jnp.pi) * self.M / jnp.pi + 2,
-                jnp.mod(zeta, period) * 2 * self.N / period + 2,
-            ]
+        n_theta, n_zeta = params["B"].shape[1:]
+        # position in node spacings from the first stored coefficient; past ρ = 1 or
+        # below the first node, the end cubic pieces are extended
+        u = (
+            rho * (self.L - 0.5) + 1.5,
+            jnp.mod(theta, 2 * jnp.pi) * self.M / jnp.pi + 2,
+            jnp.mod(zeta, period) * 2 * self.N / period + 2,
         )
-        # past ρ = 1 or below the first node, extend the end cubic pieces
-        i = jnp.clip(
-            jnp.floor(u),
-            jnp.array([1, 2, 2]),
-            jnp.array([self.L + 1, 2 * self.M + 1, 2 * self.N + 1]),
-        ).astype(jnp.int32)
-        t = u - i
-        scale = jnp.array([self.L - 0.5, self.M / jnp.pi, 2 * self.N / period])
-        w = jnp.stack(
-            [
-                (1 - t) ** 3,
-                3 * t**3 - 6 * t**2 + 4,
-                -3 * t**3 + 3 * t**2 + 3 * t + 1,
-                t**3,
-            ]
-        )
-        dw = scale * jnp.stack(
-            [-3 * (1 - t) ** 2, 9 * t**2 - 12 * t, -9 * t**2 + 6 * t + 3, 3 * t**2]
-        )
-        w, dw = w / 6, dw / 6
-        # rows are the weights of |B|, ∂_ρ|B|, ∂_θ|B|, ∂_ζ|B| in each direction
-        wr = jnp.stack([w[:, 0], dw[:, 0], w[:, 0], w[:, 0]])
-        wt = jnp.stack([w[:, 1], w[:, 1], dw[:, 1], w[:, 1]])
-        wz = jnp.stack([w[:, 2], w[:, 2], w[:, 2], dw[:, 2]])
-        block = jax.lax.dynamic_slice(params["B"], i - 1, (4, 4, 4))
-        B = jnp.einsum("si,sj,sk,ijk->s", wr, wt, wz, block)
-        p = w[:, 0] @ jax.lax.dynamic_slice(
-            params["profiles"], (i[0] - 1, jnp.int32(0)), (4, 4)
-        )
-        return dict(zip(self._keys, jnp.concatenate([B, p])))
+        bounds = ((1, self.L + 1), (2, n_theta - 3), (2, n_zeta - 3))
+        i = [jnp.clip(jnp.floor(x), *b).astype(int) for x, b in zip(u, bounds)]
+        scale = (self.L - 0.5, self.M / jnp.pi, 2 * self.N / period)
+        w, dw = [], []
+        for x, j, s in zip(u, i, scale):
+            t = x - j
+            w.append(
+                (
+                    (1 - t) ** 3,
+                    3 * t**3 - 6 * t**2 + 4,
+                    -3 * t**3 + 3 * t**2 + 3 * t + 1,
+                    t**3,
+                )
+            )
+            dw.append(
+                (
+                    -3 * s * (1 - t) ** 2,
+                    s * (9 * t**2 - 12 * t),
+                    s * (-9 * t**2 + 6 * t + 3),
+                    3 * s * t**2,
+                )
+            )
+        # gather the 4×4×4 block by flat index and contract it one direction at a
+        # time by explicit sums, so that XLA fuses the evaluation into a few kernels
+        # without a reduce or gemm
+        a, b, c = np.ogrid[:4, :4, :4]
+        corner = ((i[0] - 1) * n_theta + i[1] - 1) * n_zeta + i[2] - 1
+        block = params["B"].reshape(-1)[corner + (a * n_theta + b) * n_zeta + c]
+        dot = lambda v, w: sum(w[k] * v[k] for k in range(4)) / 6
+        R, R_r = dot(block, w[0]), dot(block, dw[0])
+        RT, RT_t, R_rT = dot(R, w[1]), dot(R, dw[1]), dot(R_r, w[1])
+        B = (dot(RT, w[2]), dot(R_rT, w[2]), dot(RT_t, w[2]), dot(RT, dw[2]))
+        p = dot(params["profiles"][i[0] - 1 + np.arange(4)], w[0])
+        return dict(zip(self._keys, (*B, *p)))

@@ -1321,8 +1321,6 @@ class Equilibrium(IOAble, Optimizable):
             to rho=1 during the solve, returning finite boundary coordinates
             rather than NaN. To detect failed inversions, pass
             ``full_output=True`` and mask points whose residual exceeds ``tol``.
-            NaN is not returned by default because it would interfere with
-            optimization (see #2347).
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True.

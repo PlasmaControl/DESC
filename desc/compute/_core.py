@@ -1,7 +1,7 @@
 """Core compute functions, for polar, flux, and cartesian coordinates."""
 
 from desc.backend import jnp, root_scalar, vmap
-from desc.utils import xyz2rpz
+from desc.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
 
 from .data_index import register_compute_fun
 from .spline_utils import b_p_deriv3, uniform_knots
@@ -3535,59 +3535,245 @@ def _zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="full_control_net",
+    label="\\bf{p}_{ij}",
+    units="m",
+    units_long="meters",
+    description="Full Cartesian control net with wrapping for stellarator symmetry",
+    dim=1,
+    params=[
+        "cs_start_r",
+        "cs_start_theta",
+        "cs_interior_r",
+        "cs_interior_theta",
+        "cs_interior_phi",
+        "cs_interior_gangle",
+    ],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _full_control_net_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
+
+    # dofs
+    cs_start_r = params["cs_start_r"]
+    cs_start_theta = params["cs_start_theta"]
+    cs_interior_r = params["cs_interior_r"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_theta = params["cs_interior_theta"].reshape(n_cs - 1, n_points_per_cs)
+    cs_interior_gangle = params["cs_interior_gangle"]
+
+    if not sym:
+        raise NotImplementedError
+    else:
+        # prepending theta=0 to the start cross section
+        cs_start_theta = jnp.append(jnp.zeros(1), cs_start_theta)
+
+        # reflecting the start cross section's theta, r around to a full circle
+        if n_points_per_cs % 2 == 1:
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[:0:-1])
+            )
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[:0:-1]))
+        else:
+            cs_start_theta = jnp.concatenate(
+                (cs_start_theta, 2 * jnp.pi - cs_start_theta[-2:0:-1])
+            )
+            cs_start_r = jnp.concatenate((cs_start_r, cs_start_r[-2:0:-1]))
+
+        # assert these have the same length as the non-start cross sections
+        assert cs_start_r.shape[0] == cs_interior_r.shape[1]
+        assert cs_start_theta.shape[0] == cs_interior_theta.shape[1]
+
+    cs_gangle = jnp.append(jnp.zeros(1), cs_interior_gangle)
+    # forming half fp
+    r_ctrl_half_fp = jnp.concatenate([cs_start_r[None, :], cs_interior_r], axis=0)
+    theta_ctrl_half_fp = jnp.concatenate(
+        [cs_start_theta[None, :], cs_interior_theta], axis=0
+    )
+
+    # have to permute the indices for consistency across reflection
+    col_perm = (-jnp.arange(n_points_per_cs)) % n_points_per_cs
+    r_ctrl_1fp = jnp.concatenate(
+        [r_ctrl_half_fp, r_ctrl_half_fp[:0:-1][:, col_perm]], axis=0
+    )
+    theta_ctrl_1fp = jnp.concatenate(
+        [theta_ctrl_half_fp, (2 * jnp.pi - theta_ctrl_half_fp[:0:-1])[:, col_perm]],
+        axis=0,
+    )
+    cs_gangle_1fp = jnp.concatenate([cs_gangle, -cs_gangle[:0:-1]])
+
+    # tiling to full device - necessary for proper periodic spline definition
+    r_ctrl_full = jnp.tile(r_ctrl_1fp, (nfp, 1))
+    theta_ctrl_full = jnp.tile(theta_ctrl_1fp, (nfp, 1))
+
+    cs_gangle_full = jnp.tile(cs_gangle_1fp, nfp)
+
+    axis_phi = data["axis_x"][:, 1]
+    axis_x = rpz2xyz(data["axis_x"])
+    # e1, e2 = -N, -B, matching simsopt's _axis_local_basis
+    e1 = -rpz2xyz_vec(data["axis_closed_bishop_normal"], phi=axis_phi)
+    e2 = -rpz2xyz_vec(data["axis_closed_bishop_binormal"], phi=axis_phi)
+
+    angle = theta_ctrl_full + cs_gangle_full[:, None]
+    local_x = r_ctrl_full[..., None] * (
+        jnp.cos(angle)[..., None] * e1[:, None, :]
+        + jnp.sin(angle)[..., None] * e2[:, None, :]
+    )
+    control_net = axis_x[:, None, :] + local_x  # (n_cs, n_points_per_cs, 3)
+
+    data["full_control_net"] = control_net
+    return data
+
+
+@register_compute_fun(
+    name="full_weights",
+    label="w_{ij}",
+    units="~",
+    units_long="None",
+    description="Full NURBS weight grid, tiled to the full device",
+    dim=1,
+    params=["cs_start_w", "cs_interior_w"],
+    transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _full_weights_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    sym = transforms["sym"]
+    nfp = transforms["NFP"]
+    n_points_per_cs = transforms["n_points_per_cs"]
+    n_cs = transforms["n_cs"]
+
+    cs_start_w = params["cs_start_w"]
+    cs_interior_w = params["cs_interior_w"].reshape(n_cs - 1, n_points_per_cs)
+
+    if not sym:
+        raise NotImplementedError
+
+    if n_points_per_cs % 2 == 1:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[:0:-1]))
+    else:
+        cs_start_w = jnp.concatenate((cs_start_w, cs_start_w[-2:0:-1]))
+
+    col_perm = (-jnp.arange(n_points_per_cs)) % n_points_per_cs
+    w_ctrl_half_fp = jnp.concatenate([cs_start_w[None, :], cs_interior_w], axis=0)
+    w_ctrl_1fp = jnp.concatenate(
+        [w_ctrl_half_fp, w_ctrl_half_fp[:0:-1][:, col_perm]], axis=0
+    )
+    data["full_weights"] = jnp.tile(w_ctrl_1fp, (nfp, 1))
+    return data
+
+
+def _nurbs_surface_padded(control_points_full, weights_full, p_u, p_v):
+    """Periodically pad the control net/weights and build matching knots."""
+    cp = jnp.concatenate(
+        [
+            control_points_full[:, -p_u:],
+            control_points_full,
+            control_points_full[:, :p_u],
+        ],
+        axis=1,
+    )
+    w = jnp.concatenate(
+        [weights_full[:, -p_u:], weights_full, weights_full[:, :p_u]], axis=1
+    )
+    cp = jnp.concatenate([cp[-p_v:], cp, cp[:p_v]], axis=0)
+    w = jnp.concatenate([w[-p_v:], w, w[:p_v]], axis=0)
+    # n from the unpadded net: uniform_knots(n, p) gives n + 2p + 1 basis functions
+    knots_u = uniform_knots(control_points_full.shape[1] - 1, p_u, domain=2 * jnp.pi)
+    knots_v = uniform_knots(control_points_full.shape[0] - 1, p_v, domain=2 * jnp.pi)
+    return cp * w[..., None], w, knots_u, knots_v
+
+
+@register_compute_fun(
     name="phi2v",
-    label="v(\\zeta)",
+    label="v(\\theta, \\zeta)",
     units="~",
     units_long="None",
     description=(
-        "NURBS surface parameter in the v (toroidal) direction corresponding "
-        "to the physical toroidal angle zeta"
+        "NURBS surface parameter in the v (toroidal) direction at which the "
+        "surface point at (theta, v) sits at toroidal angle zeta"
     ),
     dim=1,
     params=[],
-    transforms={"p_v": []},
+    transforms={"p_u": [], "p_v": []},
     profiles=[],
     coordinates="rtz",
-    data=["full control net", "zeta"],
+    data=["full_control_net", "full_weights", "theta", "zeta"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
     public=False,
 )
 def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # compute v(phi) to evaluate nurbs surface properly
-    control_points_xyz = jnp.mean(data["full control net"], axis=1)  # (n_v, 3)
-    degree = transforms["p_v"]
-    phi_target = jnp.atleast_1d(data["zeta"])
-
-    p = degree
-    n = control_points_xyz.shape[0] - 1
-    knots = uniform_knots(n, p, domain=2 * jnp.pi)
-    padded = jnp.concatenate(
-        [control_points_xyz[-p:], control_points_xyz, control_points_xyz[:p]], axis=0
+    # per node: fix u = theta, solve for v so the surface point has phi = zeta
+    p_u = transforms["p_u"]
+    p_v = transforms["p_v"]
+    pw, ww, knots_u, knots_v = _nurbs_surface_padded(
+        data["full_control_net"], data["full_weights"], p_u, p_v
     )
+    phi_target = data["zeta"]
 
-    def _phi_and_dphi_dv(v):
-        b, b_v, _, _ = b_p_deriv3(jnp.atleast_1d(v), degree, knots)
-        x, y = (b @ padded[:, 0])[0], (b @ padded[:, 1])[0]
-        x_v, y_v = (b_v @ padded[:, 0])[0], (b_v @ padded[:, 1])[0]
+    bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
+    Q_pos = jnp.einsum("ni,jid->njd", bu, pw)  # (n_nodes, n_v_ext, 3)
+    Q_w = jnp.einsum("ni,ji->nj", bu, ww)  # (n_nodes, n_v_ext)
+
+    def _phi_and_dphi_dv(v, q_pos, q_w):
+        b, b_v, _, _ = b_p_deriv3(jnp.atleast_1d(v), p_v, knots_v)
+        b, b_v = b[0], b_v[0]
+        nx, ny, d = b @ q_pos[:, 0], b @ q_pos[:, 1], b @ q_w
+        nx_v, ny_v, d_v = b_v @ q_pos[:, 0], b_v @ q_pos[:, 1], b_v @ q_w
+        x, y = nx / d, ny / d
+        x_v = (nx_v * d - nx * d_v) / d**2
+        y_v = (ny_v * d - ny * d_v) / d**2
         phi = jnp.arctan2(y, x)  # wraps to (-pi, pi]
         dphi_dv = (x * y_v - y * x_v) / (x**2 + y**2)
         return phi, dphi_dv
 
-    def _residual(v, target):
-        phi, _ = _phi_and_dphi_dv(v)
+    def _residual(v, target, q_pos, q_w):
+        phi, _ = _phi_and_dphi_dv(v, q_pos, q_w)
         return ((phi - target + jnp.pi) % (2 * jnp.pi)) - jnp.pi
 
-    def _jac(v, target):
-        _, dphi_dv = _phi_and_dphi_dv(v)
+    def _jac(v, target, q_pos, q_w):
+        _, dphi_dv = _phi_and_dphi_dv(v, q_pos, q_w)
         return dphi_dv
 
     v0 = phi_target  # initial guess: v ~= zeta works for near-circular surfaces
     v_sol = vmap(
-        lambda v0_i, target: root_scalar(_residual, v0_i, jac=_jac, args=(target,))
-    )(v0, phi_target)
-    data["v"] = jnp.mod(v_sol, 2 * jnp.pi)
-    dphi_dv_sol = vmap(lambda vi: _phi_and_dphi_dv(vi)[1])(v_sol)
-    data["dv_dzeta"] = 1.0 / dphi_dv_sol
+        lambda v0_i, target, q_pos, q_w: root_scalar(
+            _residual, v0_i, jac=_jac, args=(target, q_pos, q_w)
+        )
+    )(v0, phi_target, Q_pos, Q_w)
+    v_sol = jnp.mod(v_sol, 2 * jnp.pi)
+    data["v"] = v_sol
+
+    # implicit derivatives of phi(theta, v) = zeta
+    bv, bv_v, _, _ = b_p_deriv3(v_sol, p_v, knots_v)
+    Q_pos_t = jnp.einsum("ni,jid->njd", bu_u, pw)
+    Q_w_t = jnp.einsum("ni,ji->nj", bu_u, ww)
+    n = jnp.einsum("nj,njd->nd", bv, Q_pos)
+    d = jnp.einsum("nj,nj->n", bv, Q_w)
+    n_t = jnp.einsum("nj,njd->nd", bv, Q_pos_t)
+    d_t = jnp.einsum("nj,nj->n", bv, Q_w_t)
+    n_v = jnp.einsum("nj,njd->nd", bv_v, Q_pos)
+    d_v = jnp.einsum("nj,nj->n", bv_v, Q_w)
+    xyz = n / d[:, None]
+    xyz_t = (n_t * d[:, None] - n * d_t[:, None]) / d[:, None] ** 2
+    xyz_v = (n_v * d[:, None] - n * d_v[:, None]) / d[:, None] ** 2
+    x, y = xyz[:, 0], xyz[:, 1]
+    rho2 = x**2 + y**2
+    phi_t = (x * xyz_t[:, 1] - y * xyz_t[:, 0]) / rho2
+    phi_v = (x * xyz_v[:, 1] - y * xyz_v[:, 0]) / rho2
+    data["dv_dzeta"] = 1.0 / phi_v
+    data["dv_dtheta"] = -phi_t / phi_v
     return data
 
 
@@ -3635,6 +3821,26 @@ def _dv_dzeta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwarg
 
 
 @register_compute_fun(
+    name="dv_dtheta",
+    label="\\partial v / \\partial \\theta",
+    units="~",
+    units_long="None",
+    description="Derivative of the v (toroidal) NURBS surface parameter wrt theta",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["phi2v"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _dv_dtheta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["dv_dtheta"] already computed when computing "phi2v"
+    return data
+
+
+@register_compute_fun(
     name="R",
     label="R",
     units="m",
@@ -3645,68 +3851,37 @@ def _dv_dzeta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwarg
     transforms={"p_u": [], "p_v": []},
     profiles=[],
     coordinates="rtz",
-    data=["full control net", "full_weights", "theta", "v", "dv_dzeta"],
+    data=[
+        "full_control_net",
+        "full_weights",
+        "theta",
+        "v",
+        "dv_dzeta",
+        "dv_dtheta",
+    ],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # recall shape of control_points_full is (n_cs, n_points_per_cs, 3)
-
-    control_points_full = data["full control net"]
-    weights_full = data["full_weights"]
-
     p_u = transforms["p_u"]
     p_v = transforms["p_v"]
-
-    # periodic padding by degree p_u on each side of the u/theta direction
-    control_points_wrapped = jnp.concatenate(
-        [
-            control_points_full[:, -p_u:, :],
-            control_points_full,
-            control_points_full[:, :p_u, :],
-        ],
-        axis=1,
+    pw, ww, knots_u, knots_v = _nurbs_surface_padded(
+        data["full_control_net"], data["full_weights"], p_u, p_v
     )
-    weights_wrapped = jnp.concatenate(
-        [weights_full[:, -p_u:], weights_full, weights_full[:, :p_u]],
-        axis=1,
-    )
-
-    # wrapping control points for periodicity
-    control_points_wrapped = jnp.concatenate(
-        [
-            control_points_wrapped[-p_v:, :, :],
-            control_points_wrapped,
-            control_points_wrapped[:p_v, :, :],
-        ],
-        axis=0,
-    )
-    weights_wrapped = jnp.concatenate(
-        [weights_wrapped[-p_v:, :], weights_wrapped, weights_wrapped[:p_v, :]],
-        axis=0,
-    )
-
-    n_u = control_points_full.shape[1] - 1
-    n_v = control_points_full.shape[0] - 1
-    knots_u = uniform_knots(n_u, p_u, domain=2 * jnp.pi)
-    knots_v = uniform_knots(n_v, p_v, domain=2 * jnp.pi)
 
     bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
     bv, bv_v, _, _ = b_p_deriv3(data["v"], p_v, knots_v)
 
-    pw = control_points_wrapped * weights_wrapped[..., None]
-
     num = jnp.einsum("ni,nj,jid->nd", bu, bv, pw)
-    num_t = jnp.einsum("ni,nj,jid->nd", bu_u, bv, pw)
-    num_z = jnp.einsum("ni,nj,jid->nd", bu, bv_v, pw)
-    den = jnp.einsum("ni,nj,ji->n", bu, bv, weights_wrapped)
-    den_t = jnp.einsum("ni,nj,ji->n", bu_u, bv, weights_wrapped)
-    den_z = jnp.einsum("ni,nj,ji->n", bu, bv_v, weights_wrapped)
+    num_u = jnp.einsum("ni,nj,jid->nd", bu_u, bv, pw)
+    num_v = jnp.einsum("ni,nj,jid->nd", bu, bv_v, pw)
+    den = jnp.einsum("ni,nj,ji->n", bu, bv, ww)
+    den_u = jnp.einsum("ni,nj,ji->n", bu_u, bv, ww)
+    den_v = jnp.einsum("ni,nj,ji->n", bu, bv_v, ww)
 
     xyz = num / den[:, None]
-    # quotient rule
-    xyz_t = (num_t * den[:, None] - num * den_t[:, None]) / den[:, None] ** 2
-    xyz_v = (num_z * den[:, None] - num * den_z[:, None]) / den[:, None] ** 2
-    # chain rule: d/dzeta = d/dv * dv/dzeta
+    xyz_u = (num_u * den[:, None] - num * den_u[:, None]) / den[:, None] ** 2
+    xyz_v = (num_v * den[:, None] - num * den_v[:, None]) / den[:, None] ** 2
+    xyz_t = xyz_u + xyz_v * data["dv_dtheta"][:, None]
     xyz_z = xyz_v * data["dv_dzeta"][:, None]
 
     rpz = xyz2rpz(xyz)

@@ -2,10 +2,9 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-from functools import partial
+from functools import partial, wraps
 from itertools import chain
-from typing import NamedTuple, Union
+from typing import NamedTuple
 
 import equinox as eqx
 from adv_jax_math import batch_map, sparse_pullback
@@ -83,7 +82,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -104,11 +103,11 @@ class _Bounce(eqx.Module, ABC):
         Returns
         -------
         pitch_inv, weight : tuple[jnp.ndarray]
-            Shape (min_B.shape, num pitch).
-            1/λ values and weights.
+            Shape (min_B.shape, num pitch). 1/λ values and weights.
 
         """
         if isinstance(num_pitch, int):
+            # by default, get pitch angles with Simpson's 1/3 rule
             simp = kwargs.get("simp", True)
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
 
@@ -121,7 +120,8 @@ class _Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
-    get_pitch_inv_quad = pitch_quad
+    # aliased for convenience
+    pitch_quad = get_pitch_inv_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
@@ -160,48 +160,64 @@ class _Bounce(eqx.Module, ABC):
         """Plot B and bounce points on the specified field line."""
 
 
-def _parse_batch_args(bounce, data, args, grid, angle, custom_data, batch_size, kwargs):
-    """Normalize current and legacy batch calls without modifying input data."""
-    batch_size = kwargs.pop("surf_batch_size", batch_size)
-    # These keywords were already unused in the legacy API.
-    kwargs.pop("num_pitch", None)
-    kwargs.pop("expand_out", None)
-    legacy = (
-        (bool(args) and isinstance(args[0], Mapping))
-        or "fun_data" in kwargs
-        or "desc_data" in kwargs
-    )
-    if legacy:
-        legacy_kwargs = {
-            key: kwargs.pop(key) for key in ("fun_data", "desc_data") if key in kwargs
-        }
-        if grid is not None:
-            legacy_kwargs["grid"] = grid
-        if bounce is Bounce2D:
-            if angle is not None:
-                legacy_kwargs["angle"] = angle
-            bind = lambda fun_data, desc_data, angle, grid: (
-                fun_data,
-                desc_data,
-                angle,
-                grid,
-            )
+def _support_deprecated_signature(batch, d=2):
+    """Wrapper to support the deprecated signature for Bounce.batch.
+
+    Parameters
+    ----------
+    d : int
+        2 to support Bounce2D's deprecated signature,
+        otherwise supports Bounce1D's deprecated signature.
+
+    """
+
+    @wraps(batch)
+    def wrapped(*args, **kwargs):
+        if (
+            # no deprecated positional arguments
+            (len(args) <= 2 or not isinstance(args[2], dict))
+            # and no deprecated keyword arguments
+            and "desc_data" not in kwargs
+        ):
+            return batch(*args, **kwargs)
+
+        # otherwise act according to the deprecated signature
+        warnings.warn(
+            "That old function signature for the batching method is deprecated.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        kwargs.pop("num_pitch", None)
+        kwargs.pop("expand_out", None)
+        kwargs.setdefault("batch_size", kwargs.pop("surf_batch_size", 1))
+
+        if d == 2:
+            argnames = ("fun", "fun_data", "desc_data", "angle", "grid")
+            required = Bounce2D.required_names
         else:
-            bind = lambda fun_data, desc_data, grid: (fun_data, desc_data, None, grid)
-        positional = (() if data is None else (data,)) + args
-        fun_data, data, angle, grid = bind(*positional, **legacy_kwargs)
-        # The legacy API took these quantities from desc_data, overriding fun_data.
-        reserved = (*bounce.required_names, "min_tz |B|", "max_tz |B|")
-        custom_data = {
-            **{key: value for key, value in fun_data.items() if key not in reserved},
-            **({} if custom_data is None else custom_data),
-        }
-    else:
-        bind = lambda data, grid: (data, grid)
-        data, grid = bind(data, *args, **({} if grid is None else {"grid": grid}))
-    if kwargs:
-        raise TypeError(f"Unexpected batch keyword arguments: {tuple(kwargs)}")
-    return data, grid, angle, custom_data, batch_size
+            argnames = ("fun", "fun_data", "desc_data", "grid")
+            required = Bounce1D.required_names
+
+        for i in range(min(len(args), len(argnames))):
+            name = argnames[i]
+            errorif(name in kwargs, TypeError, f"Multiple values for '{name}'.")
+            kwargs[name] = args[i]
+
+        # The deprecated API explicitly warns this dict will be modfied,
+        # and this modification is consistent with old behavior.
+        # github.com/PlasmaControl/DESC/blob/
+        # 1c77748b2d396a6234f97fff8b746f62e3fda66e/desc/integrals/
+        # bounce_integral.py#L411
+        # bounce_integral.py#L1444
+        custom_data = kwargs.pop("fun_data")
+        for name in required:
+            custom_data.pop(name, None)
+        custom_data.pop("min_tz |B|", None)
+        custom_data.pop("max_tz |B|", None)
+
+        return batch(data=kwargs.pop("desc_data"), custom_data=custom_data, **kwargs)
+
+    return wrapped
 
 
 class Bounce2D(_Bounce):
@@ -227,7 +243,7 @@ class Bounce2D(_Bounce):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
-    The reference 2 below refers to that implementation.
+    The reference below refers to that implementation.
 
     References
     ----------
@@ -302,8 +318,8 @@ class Bounce2D(_Bounce):
         a change of variable for the bounce integral. The choice made for the
         automorphism will affect the performance of the quadrature.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``. It can be preferable
@@ -324,7 +340,7 @@ class Bounce2D(_Bounce):
     _modes_t: jax.Array
     _c: dict[str, jax.Array]
     _theta: PiecewiseChebyshevSeries
-    _B: Union[jax.Array, PiecewiseChebyshevSeries]
+    _B: jax.Array | PiecewiseChebyshevSeries
     _nufft_eps: float = eqx.field(static=True)
 
     def __init__(
@@ -346,8 +362,15 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        if "num_transit" in kwargs and field_period_transits == 20:  # default value
-            field_period_transits = kwargs["num_transit"] * grid.NFP
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of"
+                " field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP.",
+            )
+            field_period_transits = kwargs.pop("num_transit") * grid.NFP
 
         if quad is None:
             quad = BounceOptions._quad(eta=-2, num_quad=32)
@@ -418,19 +441,19 @@ class Bounce2D(_Bounce):
             )
 
     @staticmethod
+    @partial(_support_deprecated_signature, d=2)
     def batch(
         fun,
-        data=None,
-        *args,
-        grid=None,
-        angle=None,
+        data,
+        grid,
+        *,
+        angle,
         names=(),
         custom_data=None,
         flux_data=None,
         batch_size=1,
         sparse=True,
         shard=False,
-        **kwargs,
     ):
         """Compute function ``fun`` batched over flux surfaces.
 
@@ -441,14 +464,6 @@ class Bounce2D(_Bounce):
           * ``desc/compute/_fast_ion.py``
           * ``desc/compute/_neoclassical.py``
           * ``desc/compute/_turbulence.py``
-
-        Notes
-        -----
-        The legacy call ``fun, fun_data, desc_data, angle, grid`` is also accepted,
-        positionally or by keyword. A dictionary in place of the grid identifies
-        positional legacy calls. ``surf_batch_size`` aliases ``batch_size``;
-        unused legacy ``num_pitch`` and ``expand_out`` keywords are ignored.
-        No deprecation warning is emitted.
 
         Parameters
         ----------
@@ -496,9 +511,6 @@ class Bounce2D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
-        data, grid, angle, custom_data, batch_size = _parse_batch_args(
-            Bounce2D, data, args, grid, angle, custom_data, batch_size, kwargs
-        )
         if isinstance(names, str):
             names = (names,)
 
@@ -594,7 +606,7 @@ class Bounce2D(_Bounce):
         eq,
         X=32,
         Y=32,
-        rho=jnp.array([1.0]),
+        rho=None,
         iota=None,
         params=None,
         profiles=None,
@@ -613,7 +625,7 @@ class Bounce2D(_Bounce):
         eq,
         X=32,
         Y=32,
-        rho=jnp.array([1.0]),
+        rho=None,
         iota=None,
         params=None,
         profiles=None,
@@ -663,6 +675,8 @@ class Bounce2D(_Bounce):
         from desc.compute.utils import get_transforms
 
         params = setdefault(params, eq.params_dict)
+        if rho is None:
+            rho = jnp.array([1.0])
 
         name = kwargs.pop("name", "delta")
         if name == "lambda":
@@ -1504,17 +1518,17 @@ class Bounce1D(_Bounce):
         )
 
     @staticmethod
+    @partial(_support_deprecated_signature, d=1)
     def batch(
         fun,
-        data=None,
-        *args,
-        grid=None,
+        data,
+        grid,
+        *,
         names=(),
         custom_data=None,
         flux_data=None,
         batch_size=1,
         sparse=True,
-        **kwargs,
     ):
         """Compute function ``fun`` batched over flux surfaces.
 
@@ -1523,14 +1537,6 @@ class Bounce1D(_Bounce):
         Examples
         --------
           * ``desc/compute/_old.py``
-
-        Notes
-        -----
-        The legacy call ``fun, fun_data, desc_data, grid`` is also accepted,
-        positionally or by keyword. A dictionary in place of the grid identifies
-        positional legacy calls. ``surf_batch_size`` aliases ``batch_size``;
-        unused legacy ``num_pitch`` and ``expand_out`` keywords are ignored.
-        No deprecation warning is emitted.
 
         Parameters
         ----------
@@ -1571,9 +1577,6 @@ class Bounce1D(_Bounce):
         The output ``fun(fun_data)``.
 
         """
-        data, grid, _, custom_data, batch_size = _parse_batch_args(
-            Bounce1D, data, args, grid, None, custom_data, batch_size, kwargs
-        )
         if isinstance(names, str):
             names = (names,)
 
@@ -2159,7 +2162,7 @@ class BounceOptions(NamedTuple):
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
             ``field_period_transits*mins_per_field_period`` to enhance performance,
-            yet sill remain loose enough that all wells are always detected.
+            yet still remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
@@ -2286,7 +2289,3 @@ class BounceOptions(NamedTuple):
             **o._hyperparam,
         )
         return constants["transforms"]["grid"].compress(data[key])
-
-
-# Keep the deprecated angle keyword available.
-BounceOptions._doc["theta"] = ""

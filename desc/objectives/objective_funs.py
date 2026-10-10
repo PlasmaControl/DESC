@@ -234,7 +234,6 @@ def collect_docs(
     normalize_target_detail=None,
     loss_detail=None,
     coil=False,
-    jac_chunk_size=True,
 ):
     """Collect default parameters for the docstring of Objective.
 

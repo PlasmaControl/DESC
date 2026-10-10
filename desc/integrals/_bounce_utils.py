@@ -149,7 +149,6 @@ def _halley(o, pitch_inv, z, mask, nufft_eps, diagnostic=0):
     nufft_eps : float
         Precision requested for interpolation with non-uniform fast Fourier transform
         (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
-
         Should satisfy ε < εᵢₙ² where εᵢₙ is the error of the input points.
     diagnostic : int
         Positive integer denoting iteration step to print.

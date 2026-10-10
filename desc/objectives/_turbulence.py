@@ -105,7 +105,6 @@ class AvailableEnergy(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
-            jac_chunk_size=False,
         )
     )
 
@@ -127,6 +126,7 @@ class AvailableEnergy(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        jac_chunk_size=None,
         name="Available energy",
         grid=None,
         X=32,
@@ -191,8 +191,8 @@ class AvailableEnergy(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
-            jac_chunk_size=None,
         )
 
     def build(self, use_jit=True, verbose=1):

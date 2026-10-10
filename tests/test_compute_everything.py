@@ -382,7 +382,7 @@ def raz_grid_data(p):
     eq = get("W7-X")
     num_transit = 2
     Y_B = eq.N_grid * 2
-    rho = np.linspace(0.1, 1, 10)
+    rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")

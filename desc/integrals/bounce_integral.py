@@ -3,6 +3,7 @@
 import warnings
 from abc import ABC, abstractmethod
 from functools import partial, wraps
+from inspect import signature
 from itertools import chain
 from typing import NamedTuple
 
@@ -160,16 +161,13 @@ class _Bounce(eqx.Module, ABC):
         """Plot B and bounce points on the specified field line."""
 
 
-def _support_deprecated_signature(batch, d=2):
-    """Wrapper to support the deprecated signature for Bounce.batch.
-
-    Parameters
-    ----------
-    d : int
-        2 to support Bounce2D's deprecated signature,
-        otherwise supports Bounce1D's deprecated signature.
-
-    """
+def _support_deprecated_signature(batch):
+    """Wrapper to support the deprecated signature for Bounce.batch."""
+    argnames = (
+        ("fun", "fun_data", "desc_data", "angle", "grid")
+        if "angle" in signature(batch).parameters
+        else ("fun", "fun_data", "desc_data", "grid")
+    )
 
     @wraps(batch)
     def wrapped(*args, **kwargs):
@@ -190,14 +188,6 @@ def _support_deprecated_signature(batch, d=2):
         kwargs.pop("num_pitch", None)
         kwargs.pop("expand_out", None)
         kwargs.setdefault("batch_size", kwargs.pop("surf_batch_size", 1))
-
-        if d == 2:
-            argnames = ("fun", "fun_data", "desc_data", "angle", "grid")
-            required = Bounce2D.required_names
-        else:
-            argnames = ("fun", "fun_data", "desc_data", "grid")
-            required = Bounce1D.required_names
-
         for i in range(min(len(args), len(argnames))):
             name = argnames[i]
             errorif(name in kwargs, TypeError, f"Multiple values for '{name}'.")
@@ -210,10 +200,9 @@ def _support_deprecated_signature(batch, d=2):
         # bounce_integral.py#L411
         # bounce_integral.py#L1444
         custom_data = kwargs.pop("fun_data")
-        for name in required:
-            custom_data.pop(name, None)
         custom_data.pop("min_tz |B|", None)
         custom_data.pop("max_tz |B|", None)
+        custom_data.pop("iota", None)
 
         return batch(data=kwargs.pop("desc_data"), custom_data=custom_data, **kwargs)
 
@@ -441,7 +430,7 @@ class Bounce2D(_Bounce):
             )
 
     @staticmethod
-    @partial(_support_deprecated_signature, d=2)
+    @_support_deprecated_signature
     def batch(
         fun,
         data,
@@ -1518,7 +1507,7 @@ class Bounce1D(_Bounce):
         )
 
     @staticmethod
-    @partial(_support_deprecated_signature, d=1)
+    @_support_deprecated_signature
     def batch(
         fun,
         data,

@@ -1,10 +1,11 @@
 """Core compute functions, for polar, flux, and cartesian coordinates."""
 
 from desc.backend import jnp, root_scalar, vmap
-from desc.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz
+from desc.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 from ._curve import (
     _nurbs_curve,
+    _nurbs_curve_closed_bishop_frame,
     _nurbs_curve_control_net,
     _nurbs_curve_knots,
     _nurbs_curve_phi2s,
@@ -3678,6 +3679,66 @@ def _axis_x_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs)
 
 
 @register_compute_fun(
+    name="axis_closed_bishop_normal",
+    label="\\mathbf{N}_{\\mathrm{axis}}",
+    units="~",
+    units_long="None",
+    description="Closed Bishop normal of the interior axis at each cross section",
+    dim=1,
+    params=[],
+    transforms={"axis_degree": [], "NFP": []},
+    profiles=[],
+    coordinates="",
+    data=[
+        "axis_full_control_net",
+        "axis_full_weights",
+        "axis_knots",
+        "axis_s",
+        "axis_x",
+    ],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_closed_bishop_normal_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    _, N, B = _nurbs_curve_closed_bishop_frame(
+        data["axis_full_control_net"],
+        data["axis_full_weights"],
+        transforms["axis_degree"],
+        data["axis_knots"],
+        transforms["NFP"],
+        data["axis_s"],
+    )
+    phi = data["axis_x"][:, 1]
+    data["axis_closed_bishop_normal"] = xyz2rpz_vec(N, phi=phi)
+    data["axis_closed_bishop_binormal"] = xyz2rpz_vec(B, phi=phi)
+    return data
+
+
+@register_compute_fun(
+    name="axis_closed_bishop_binormal",
+    label="\\mathbf{B}_{\\mathrm{axis}}",
+    units="~",
+    units_long="None",
+    description="Closed Bishop binormal of the interior axis at each cross section",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["axis_closed_bishop_normal"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+    public=False,
+)
+def _axis_closed_bishop_binormal_NurbsRZToroidalSurface(
+    params, transforms, profiles, data, **kwargs
+):
+    # data["axis_closed_bishop_binormal"] already computed with the normal
+    return data
+
+
+@register_compute_fun(
     name="full_control_net",
     label="\\bf{p}_{ij}",
     units="m",
@@ -3695,7 +3756,7 @@ def _axis_x_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs)
     transforms={"sym": [], "NFP": [], "n_points_per_cs": [], "n_cs": []},
     profiles=[],
     coordinates="",
-    data=["axis_x"],
+    data=["axis_x", "axis_closed_bishop_normal", "axis_closed_bishop_binormal"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _full_control_net_NurbsRZToroidalSurface(
@@ -3863,7 +3924,7 @@ def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     pw, ww, knots_u, knots_v = _nurbs_surface_padded(
         data["full_control_net"], data["full_weights"], p_u, p_v
     )
-    phi_target = data["zeta"]
+    phi_target = jnp.asarray(data["zeta"])
 
     bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
     Q_pos = jnp.einsum("ni,jid->njd", bu, pw)  # (n_nodes, n_v_ext, 3)
@@ -3892,7 +3953,7 @@ def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     v0 = phi_target  # initial guess: v ~= zeta works for near-circular surfaces
     v_sol = vmap(
         lambda v0_i, target, q_pos, q_w: root_scalar(
-            _residual, v0_i, jac=_jac, args=(target, q_pos, q_w)
+            _residual, v0_i, jac=_jac, args=(target, q_pos, q_w), tol=1e-12
         )
     )(v0, phi_target, Q_pos, Q_w)
     v_sol = jnp.mod(v_sol, 2 * jnp.pi)

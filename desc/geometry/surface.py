@@ -1338,48 +1338,7 @@ class NurbsRZToroidalSurface(Surface):
         )
 
         params = params or self.params_dict
-        axis_params = {
-            **self.interior_axis.params_dict,
-            "R": params["axis_R"],
-            "phi": params["axis_phi"],
-            "Z": params["axis_Z"],
-            "W": params["axis_W"],
-        }
-
-        cs_phi = jnp.append(jnp.array([0.0]), params["cs_interior_phi"])
-        cs_phi_1fp = jnp.append(cs_phi, (2 * jnp.pi / self.NFP) - cs_phi[:0:-1])
-
-        cs_phi_full = jnp.concatenate(
-            [cs_phi_1fp + n * (2 * jnp.pi / self.NFP) for n in range(self.NFP)]
-        )
-
-        # evaluate s(phi)
-        s_values = self.interior_axis.compute(
-            ["phi2s"], grid=LinearGrid(), params=axis_params, phi=cs_phi_full
-        )["phi2s"]
-
-        s_values = jnp.mod(s_values, 2 * jnp.pi)
-
-        # LinearGrid sorts its zeta nodes internally, so track the
-        # permutation to restore axis_data's row order to match
-        # cs_phi_full's (every other array in this function assumes that
-        # order).
-        sort_idx = jnp.argsort(s_values)
-        unsort_idx = jnp.argsort(sort_idx)
-
-        axis_grid = LinearGrid(zeta=s_values, NFP=1, sym=self.sym)
-
-        axis_names = [
-            "closed_bishop_tangent",
-            "closed_bishop_normal",
-            "closed_bishop_binormal",
-        ]
-        axis_data = self.interior_axis.compute(
-            axis_names, grid=axis_grid, params=axis_params
-        )
-        axis_data = {k: axis_data[k][unsort_idx] for k in axis_names}
         data = data or {}
-        data.update({f"axis_{k}": v for k, v in axis_data.items()})
 
         # TODO: check this out, copied logic from Surface.compute()
         p = _parse_parameterization(self)

@@ -196,6 +196,7 @@ Objective Functions
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.AvailableEnergy
     desc.objectives.BallooningStability
     desc.objectives.BootstrapRedlConsistency
     desc.objectives.BoundaryError
@@ -245,6 +246,7 @@ Objective Functions
     desc.objectives.ForceBalanceAnisotropic
     desc.objectives.FusionPower
     desc.objectives.GammaC
+    desc.objectives.GammaLoss
     desc.objectives.GenericObjective
     desc.objectives.get_equilibrium_objective
     desc.objectives.get_fixed_axis_constraints

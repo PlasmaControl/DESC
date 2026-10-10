@@ -118,17 +118,19 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
         Dictionary containing the data described above.
     profile_data : dict
         Dictionary containing the data described above.
-    helicity_N : int
+    helicity_N : int, optional
         Set to 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the
         collisionality and bootstrap current from the tokamak expressions to
-        quasi-helical symmetry.
+        quasi-helical symmetry. Defaults to 0.
 
     Returns
     -------
     J_dot_B_data : dict
         Dictionary containing the computed data listed above.
     """
+    helicity_N = 0 if helicity_N is None else helicity_N
+
     G = geom_data["G"]
     R = geom_data["R"]
     iota = geom_data["iota"]
@@ -147,6 +149,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     # problem is avoided by adding a tiny number here:
     Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
+    d_ni_d_s = profile_data["ni_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
 
@@ -254,9 +257,8 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     dnds_term = (
         -G
         * elementary_charge
-        * (ne * Te + ni * Ti)
         * L31
-        * (d_ne_d_s / ne)
+        * (Te * d_ne_d_s + Ti * d_ni_d_s)
         / (psi_edge * (iota - helicity_N))
     )
     dTeds_term = (
@@ -288,6 +290,7 @@ def compute_J_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     J_dot_B_data["Te"] = Te
     J_dot_B_data["Ti"] = Ti
     J_dot_B_data["d_ne_d_s"] = d_ne_d_s
+    J_dot_B_data["d_ni_d_s"] = d_ni_d_s
     J_dot_B_data["d_Te_d_s"] = d_Te_d_s
     J_dot_B_data["d_Ti_d_s"] = d_Ti_d_s
     J_dot_B_data["ln_Lambda_e"] = ln_Lambda_e

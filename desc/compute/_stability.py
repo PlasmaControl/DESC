@@ -375,7 +375,7 @@ def _g_balloon(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="ideal ballooning lambda",
-    label="\\lambda_{\\mathrm{ballooning}}=\\gamma^2",
+    label="\\lambda_{\\mathrm{ballooning}}=a^2\\gamma^2/v_A^2",
     units="~",
     units_long="None",
     description="Normalized squared ideal ballooning growth rate",

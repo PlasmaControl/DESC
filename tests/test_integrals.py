@@ -15,6 +15,7 @@ from tests.test_plotting import tol_1d
 
 from desc.backend import jnp, vmap
 from desc.basis import FourierZernikeBasis
+from desc.compute._drift import _binormal_drift
 from desc.equilibrium import Equilibrium
 from desc.equilibrium.coords import get_rtz_grid
 from desc.examples import get
@@ -1614,18 +1615,6 @@ class TestBounce2D:
         l, m = 1, 0
         _, _ = bounce.plot(l, m, pitch_inv[l], show=False)
 
-    @staticmethod
-    def drift_num_integrand(data, B, pitch):
-        """Integrand of numerator of bounce averaged binormal drift."""
-        g = jnp.sqrt(jnp.abs(1 - pitch * B))
-        cvdrift = (
-            data["cvdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
-        )
-        gbdrift = (
-            data["gbdrift (periodic)"] + data["gbdrift (secular)/phi"] * data["zeta"]
-        )
-        return (cvdrift * g) - (0.5 * g * gbdrift) + (0.5 * gbdrift / g)
-
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
     @pytest.mark.parametrize(
@@ -1664,7 +1653,7 @@ class TestBounce2D:
 
         data = {name: Bounce2D.reshape(grid, grid_data[name]) for name in names}
         drift_numerical_num, drift_numerical_den = bounce.integrate(
-            [TestBounce2D.drift_num_integrand, TestBounce.drift_den_integrand],
+            [_binormal_drift, TestBounce.drift_den_integrand],
             pitch_inv,
             data,
             points=points,
@@ -1680,9 +1669,7 @@ class TestBounce2D:
             drift_numerical, drift_analytical, atol=5e-3, rtol=5e-2
         )
 
-        TestBounce._test_bounce_autodiff(
-            bounce, TestBounce2D.drift_num_integrand, data, nufft_eps
-        )
+        TestBounce._test_bounce_autodiff(bounce, _binormal_drift, data, nufft_eps)
 
         fig, ax = plt.subplots()
         ax.plot(pitch_inv, drift_analytical)

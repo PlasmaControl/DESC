@@ -16,6 +16,7 @@ from desc.magnetic_fields import (
 from desc.particles import (
     CurveParticleInitializer,
     InterpolatedFieldFlux,
+    ManualParticleInitializerBoozer,
     ManualParticleInitializerFlux,
     ManualParticleInitializerLab,
     SurfaceParticleInitializer,
@@ -478,11 +479,11 @@ def test_InterpolatedFieldFlux_model_vf():
     iota = eq.get_profile("iota")
     params = eq.params_dict
     params["i_l"] = iota.params
-    field = InterpolatedFieldFlux(L=32, M=32, N=16)
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    field = InterpolatedFieldFlux(model, L=32, M=32, N=16)
     field.build(eq)
     coef = field.fit(params, {"current": None, "iota": iota})
 
-    model = VacuumGuidingCenterTrajectory(frame="flux")
     rng = np.random.default_rng(0)
     n = 64
     # full theta range for the stellarator symmetry fold, and both radial ends
@@ -532,6 +533,47 @@ def test_InterpolatedFieldFlux_trace():
         options={"iota": iota},
     )
     x_eq, v_eq = trace_particles(**kwargs)
-    x_int, v_int = trace_particles(use_interpolation=(32, 32, 16), **kwargs)
+    x_int, v_int = trace_particles(use_interpolation=("flux", 32, 32, 16), **kwargs)
     np.testing.assert_allclose(x_int, x_eq, atol=5e-5)
     np.testing.assert_allclose(v_int, v_eq, atol=1e-6 * np.abs(v_eq).max())
+
+
+@pytest.mark.unit
+def test_InterpolatedFieldBoozer_trace():
+    """Test tracing in Boozer coordinates against tracing the Equilibrium."""
+    eq = get("precise_QA")
+    iota = eq.get_profile("iota")
+    params = eq.params_dict
+    params["i_l"] = iota.params
+    # start points on a meshgrid, where the Boozer angles can be computed
+    grid = LinearGrid(rho=[0.3, 0.5, 0.7], M=4 * eq.M, N=4 * eq.N, NFP=eq.NFP)
+    data = eq.compute(["theta_B", "zeta_B"], grid=grid)
+    idx = np.array([5, grid.num_nodes // 2 + 7, grid.num_nodes - 11])
+    rho, theta, zeta = grid.nodes[idx].T
+    xi0 = [0.9, 0.3, -0.6]
+
+    model = VacuumGuidingCenterTrajectory(frame="flux")
+    kwargs = dict(
+        field=eq,
+        model=model,
+        ts=np.linspace(0, 1e-5, 11),
+        params=params,
+        rtol=1e-8,
+        atol=1e-8,
+        max_steps=20000,
+        min_step_size=1e-10,
+        options={"iota": iota},
+    )
+    particles = ManualParticleInitializerFlux(rho, theta, zeta, xi0, E=1e4)
+    x_eq, v_eq = trace_particles(initializer=particles, **kwargs)
+    particles = ManualParticleInitializerBoozer(
+        rho, data["theta_B"][idx], data["zeta_B"][idx], xi0, E=1e4
+    )
+    x_b, v_b = trace_particles(
+        initializer=particles, use_interpolation=("boozer", 32, 16, 16), **kwargs
+    )
+    np.testing.assert_allclose(x_b[:, :, 0], x_eq[:, :, 0], atol=5e-6)
+    np.testing.assert_allclose(v_b, v_eq, atol=2e-6 * np.abs(v_eq).max())
+    # output stays in Boozer coordinates
+    angles = np.column_stack([data["theta_B"][idx] % (2 * np.pi), data["zeta_B"][idx]])
+    np.testing.assert_allclose(x_b[:, 0, 1:], angles, atol=1e-12)

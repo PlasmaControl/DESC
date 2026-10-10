@@ -1256,6 +1256,7 @@ class _Objective(IOAble, ABC):
     _coordinates = ""
     _units = "(Unknown)"
     _equilibrium = False
+    _free_boundary = False
     _io_attrs_ = [
         "_bounds",
         "_deriv_mode",

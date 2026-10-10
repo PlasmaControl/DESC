@@ -37,7 +37,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.optimize import LinearConstraintProjection, Optimizer, ProximalProjection
+from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
 from desc.profiles import HermiteSplineProfile, SplineProfile
 from desc.transform import Transform
@@ -2534,17 +2534,16 @@ class Equilibrium(IOAble, Optimizable):
         """
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
-        if constraints is not None and not isinstance(objective, ProximalProjection):
-            if not isinstance(constraints, (list, tuple)):
-                constraints = tuple([constraints])
-            warnif(
-                not any([con._equilibrium for con in constraints]),
-                UserWarning,
-                "Detected no equilibrium constraints passed, equilibrium optimization "
-                "problems usually require equilibrium constraints in order to produce "
-                "meaningful, physical results. Consider adding `ForceBalance` as a "
-                "constraint.",
-            )
+        if not isinstance(constraints, (list, tuple)):
+            constraints = tuple([constraints])
+        warnif(
+            not any([con._equilibrium for con in constraints]),
+            UserWarning,
+            "Detected no equilibrium constraints passed, equilibrium optimization "
+            "problems usually require equilibrium constraints in order to produce "
+            "meaningful, physical results. Consider adding `ForceBalance` as a "
+            "constraint.",
+        )
 
         things, result = optimizer.optimize(
             self,

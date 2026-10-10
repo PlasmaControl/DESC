@@ -29,9 +29,9 @@ from desc.utils import (
 )
 
 from ._constraint_wrappers import (
-    FiniteDifferenceSingleStage,
     LinearConstraintProjection,
     ProximalProjection,
+    ProximalProjectionFreeBoundary,
 )
 
 
@@ -54,7 +54,7 @@ class Optimizer(IOAble):
     """
 
     _io_attrs_ = ["_method"]
-    _wrappers = [None, "prox", "proximal", "findif"]
+    _wrappers = [None, "prox", "proximal"]
 
     def __init__(self, method):
         self.method = method
@@ -165,6 +165,10 @@ class Optimizer(IOAble):
               ``ProximalProjection`` as its ``perturb_options``.
             - ``"solve_options"`` : Dictionary of keyword arguments to pass to
               ``ProximalProjection`` as its ``solve_options``.
+            - ``"free_boundary_options"`` : Dictionary of keyword arguments to pass
+              to ``ProximalProjectionFreeBoundary`` as its ``free_boundary_options``.
+              Only used if a free boundary constraint (``BoundaryError`` or
+              ``VacuumBoundaryError``) is passed with a proximal method.
 
             - ``"ess_alpha"`` : float, optional
               Decay rate of the scaling. Default is 1.2.
@@ -335,10 +339,7 @@ class Optimizer(IOAble):
             result["allx"] = [objective.recover(x) for x in result["allx"]]
             objective = objective._objective
 
-        if isinstance(
-            objective,
-            (ProximalProjection, FiniteDifferenceSingleStage),
-        ):
+        if isinstance(objective, ProximalProjection):
             # reset eq params to initial
             if eq is not None:
                 eq.params_dict = eq_params_init
@@ -464,12 +465,11 @@ def _project_x_scale(x_scale, objective):
         )
         # Split x_scale by things to handle multiple things (eq + coils, etc.)
         x_scale = jnp.split(x_scale, np.cumsum(prox_obj._dimx_per_thing)[:-1])
-        # Project equilibrium part: remove excluded parameters
-        excluded_params = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        # Project equilibrium part: keep only the optimization variables, ie. remove
+        # R_lmn, Z_lmn etc. and for free boundary also the boundary
         included_idx = []
-        for arg in prox_obj._eq.optimizable_params:
-            if arg not in excluded_params:
-                included_idx.extend(prox_obj._eq.x_idx[arg])
+        for arg in prox_obj._args:
+            included_idx.extend(prox_obj._eq.x_idx[arg])
         x_scale[prox_obj._eq_idx] = x_scale[prox_obj._eq_idx][jnp.array(included_idx)]
         x_scale = jnp.concatenate(x_scale)
 
@@ -605,43 +605,26 @@ def _maybe_wrap_nonlinear_constraints(
                 into an unconstrained one.
                 """))
         wrapper = "proximal"
-    if wrapper is not None and wrapper.lower() in ["prox", "proximal", "findif"]:
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
-        free_boundary_options = options.pop("free_boundary_options", {})
-        if np.any([hasattr(c, "_free_boundary") for c in nonlinear_constraints]):
-            # finite difference wrapper around free boundary solves
-            for i in range(len(nonlinear_constraints)):
-                if hasattr(nonlinear_constraints[i], "_equilibrium"):
-                    if nonlinear_constraints[i]._equilibrium:
-                        eq_obj = nonlinear_constraints[i]
-
-                if hasattr(nonlinear_constraints[i], "_free_boundary"):
-                    if nonlinear_constraints[i]._free_boundary:
-                        eq_free_bdry_obj = nonlinear_constraints[i]
-            nonlinear_constraints = list(nonlinear_constraints)
-            nonlinear_constraints.remove(eq_free_bdry_obj)
-            nonlinear_constraints.remove(eq_obj)  # TODO: should also handle this
-            nonlinear_constraints = tuple(nonlinear_constraints)
-
-            errorif(
-                len(nonlinear_constraints),
-                ValueError,
-                "FiniteDifferenceSingleStage can only handle Equilibrium and "
-                f" Free Boundary objectives, got {nonlinear_constraints}",
-            )
-
-            objective = objective = FiniteDifferenceSingleStage(
+        free_boundary_options = options.pop("free_boundary_options", None)
+        if any(con._free_boundary for con in nonlinear_constraints):
+            objective = ProximalProjectionFreeBoundary(
                 objective,
-                constraint=_combine_constraints((eq_obj,)),
-                constraint_fb=_combine_constraints((eq_free_bdry_obj,)),
+                constraint=_combine_constraints(nonlinear_constraints),
                 perturb_options=perturb_options,
                 solve_options=solve_options,
                 free_boundary_options=free_boundary_options,
                 eq=eq,
             )
-
-        else:  # usual proximal projection for _equilibrium type constraint
+        else:
+            warnif(
+                free_boundary_options is not None,
+                UserWarning,
+                "free_boundary_options were given but no free boundary constraint "
+                "was found, they will be ignored.",
+            )
             objective = ProximalProjection(
                 objective,
                 constraint=_combine_constraints(nonlinear_constraints),
@@ -675,13 +658,13 @@ def get_combined_constraint_objectives(  # noqa: C901
     objective, nonlinear_constraints = _maybe_wrap_nonlinear_constraints(
         eq, objective, nonlinear_constraints, opt_method, options
     )
-    is_prox = isinstance(
-        objective,
-        (
-            ProximalProjection,
-            FiniteDifferenceSingleStage,
-        ),
-    )
+    if isinstance(objective, ProximalProjectionFreeBoundary):
+        # the boundary isn't an optimization variable for free boundary, so
+        # constraints on it are enforced when solving the free boundary problem
+        linear_constraints = objective._separate_free_boundary_constraints(
+            linear_constraints
+        )
+    is_prox = isinstance(objective, ProximalProjection)
     for t in things:
         if isinstance(t, Equilibrium) and is_prox:
             # don't add Equilibrium self-consistency if proximal is used
@@ -759,19 +742,10 @@ def get_combined_constraint_objectives(  # noqa: C901
     # wrap to handle linear constraints
     if linear_constraint is not None:
         linear_constraint_options = options.pop("linear_constraint_options", {})
-        is_findif = isinstance(objective, FiniteDifferenceSingleStage)
-
         objective = LinearConstraintProjection(
             objective, linear_constraint, **linear_constraint_options
         )
         objective.build(verbose=verbose)
-        # use set the recover/project stuff here
-        # TODO: Not completely sure if this is necessary
-        if is_findif:
-            objective._set_proj_recover(
-                objective.recover, objective.project, objective._Z, objective._A
-            )
-
         if nonlinear_constraint is not None:
             nonlinear_constraint = LinearConstraintProjection(
                 nonlinear_constraint, linear_constraint

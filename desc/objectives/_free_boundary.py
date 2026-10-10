@@ -1038,7 +1038,6 @@ class BoundaryErrorNESTOR(_Objective):
     _print_value_fmt = "Boundary magnetic pressure error: "
     _units = "(T^2*m^2)"
     _coordinates = "rtz"
-    _free_boundary = True
 
     def __init__(
         self,

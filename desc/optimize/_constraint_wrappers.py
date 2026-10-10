@@ -5,6 +5,7 @@ import functools
 import numpy as np
 
 from desc.backend import jit, jnp, put
+from desc.grid import LinearGrid
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -1453,8 +1454,19 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
           being dominated by poorly determined directions of dB/db. Default 0.1.
         - ``"rcond"`` : float, relative cutoff for small singular values when
           inverting dB/db. Defaults to machine precision times the largest dimension.
+        - ``"boundary_tol"`` : float, also stop the free boundary solve when an accepted
+          step moves the boundary by less than this times the minor radius (rms over
+          the boundary of the motion normal to it, so changes of the poloidal angle
+          parameterization don't count). Close to its residual floor the free boundary
+          problem converges slowly in poorly determined directions that barely move the
+          boundary, and trial steps get rejected against the noise of the fixed
+          boundary solves, so this can save many evaluations, eg. with ``3e-4``. With
+          slow convergence the distance left to the converged boundary can be several
+          times ``boundary_tol``. Only the boundary shape is checked, not the sheet
+          current. Default None (off).
         - ``"maxiter"``, ``"ftol"``, ``"xtol"``, ``"gtol"``, ``"x_scale"``,
-          ``"verbose"``, ``"options"`` : passed to ``desc.optimize.lsqtr`` when solving
+          ``"verbose"``, ``"options"``, ``"callback"`` : passed to
+          ``desc.optimize.lsqtr`` when solving
           the free boundary problem. Defaults are ``maxiter=20``, ``ftol=1e-2``,
           ``xtol=1e-6``, ``gtol=1e-8``, ``x_scale="jac"``, ``verbose=0``. The free
           boundary problem is warm started from the previous solution and the
@@ -1529,6 +1541,7 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         self._fb_predict = free_boundary_options.pop("predict", True)
         self._fb_predict_order = free_boundary_options.pop("predict_order", 1)
         self._fb_predict_tr_ratio = free_boundary_options.pop("predict_tr_ratio", 0.1)
+        self._fb_boundary_tol = free_boundary_options.pop("boundary_tol", None)
         errorif(
             self._fb_predict_order not in [1, 2],
             ValueError,
@@ -1727,6 +1740,17 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
 
         self._set_eq_state_vector()
         self._set_free_boundary_constraints()
+        if self._fb_boundary_tol is not None:
+            # boundary R, Z on a grid are linear in Rb_lmn, Zb_lmn
+            surf = eq.surface
+            grid = LinearGrid(
+                rho=np.array([1.0]), M=2 * surf.M, N=2 * surf.N, NFP=surf.NFP, sym=False
+            )
+            self._fb_motion = {
+                "grid": grid,
+                "A_R": surf.R_basis.evaluate(grid.nodes),
+                "A_Z": surf.Z_basis.evaluate(grid.nodes),
+            }
 
         # full state vector of each thing
         self._dimx_per_thing = [t.dim_x for t in self.things]
@@ -1873,6 +1897,32 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
                 out.append(tangents_per_thing[i])
         return jnp.concatenate(out, axis=-1)
 
+    def _boundary_normals(self):
+        """Unit normal (R, phi, Z) of the current boundary on the motion grid."""
+        return self._eq.surface.compute("n_rho", grid=self._fb_motion["grid"])["n_rho"]
+
+    def _boundary_normal_motion(self, db, n):
+        """Root mean square over the boundary of its normal motion from a change db.
+
+        To first order, a change of the poloidal angle parameterization moves the
+        boundary tangentially, so it doesn't count.
+
+        Parameters
+        ----------
+        db : ndarray
+            Change in the free boundary unknowns.
+        n : ndarray
+            Unit normal of the boundary before the change, from _boundary_normals.
+
+        """
+        d = self._split_b(db)
+        # the toroidal angle of the boundary parameterization is phi, so a point of the
+        # boundary only moves in R and Z
+        dn = n[:, 0] * (self._fb_motion["A_R"] @ d["Rb_lmn"]) + n[:, 2] * (
+            self._fb_motion["A_Z"] @ d["Zb_lmn"]
+        )
+        return jnp.sqrt(jnp.mean(dn**2))
+
     def _solve_free_boundary(self, x_list):
         """Solve the free boundary problem with the external field etc. fixed.
 
@@ -1932,7 +1982,31 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         options = self._fb_solve_options.copy()
         options["options"] = options["options"].copy()
         y0 = Z.T @ (self._get_b() - bp)
+        user_callback = options.pop("callback", None)
+        stopped = {"boundary": False}
+        if self._fb_boundary_tol is not None:
+            tol = self._fb_boundary_tol * eq.compute("a")["a"]
+            last = {"b": bp + Z @ y0, "n": self._boundary_normals()}
+
+            def callback(y, *args):
+                # lsqtr calls this after the jacobian at y, so the equilibrium is at y
+                b = bp + Z @ y
+                motion = self._boundary_normal_motion(b - last["b"], last["n"])
+                last["b"], last["n"] = b, self._boundary_normals()
+                stopped["boundary"] = bool(motion < tol)
+                user_stop = user_callback(y, *args) if user_callback else False
+                return stopped["boundary"] or bool(user_stop)
+
+            options["callback"] = callback
+        elif user_callback is not None:
+            options["callback"] = user_callback
         result = lsqtr(fun, y0, jac, **options)
+        if stopped["boundary"]:
+            result["success"] = True
+            result["message"] = (
+                "Boundary moved less than boundary_tol "
+                + f"({self._fb_boundary_tol:.1e} x minor radius)."
+            )
         goto(result["x"])
         self._fb_result = result
         return result

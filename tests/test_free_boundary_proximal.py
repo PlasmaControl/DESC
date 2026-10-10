@@ -6,6 +6,7 @@ import pytest
 from desc.coils import initialize_modular_coils
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     FourierCurrentPotentialField,
     SplineMagneticField,
@@ -73,6 +74,28 @@ def _sheet_current_tokamak():
         [ToroidalMagneticField(0.93, 3.0), VerticalMagneticField(-0.02)]
     )
     return eq, field
+
+
+def _lcfs_distance(eq1, eq2, n=300):
+    """Rms distance between the LCFS of eq1 and eq2 in a few toroidal planes."""
+    ds = []
+    for phi in np.linspace(0, np.pi / eq1.NFP, 4):
+        grid = LinearGrid(
+            rho=np.array([1.0]),
+            theta=np.linspace(0, 2 * np.pi, n),
+            zeta=np.array([phi]),
+            NFP=eq1.NFP,
+        )
+        c1, c2 = (
+            np.c_[d["R"], d["Z"]]
+            for d in (
+                eq1.compute(["R", "Z"], grid=grid),
+                eq2.compute(["R", "Z"], grid=grid),
+            )
+        )
+        for p, q in [(c1, c2), (c2, c1)]:
+            ds.append(np.min(np.linalg.norm(p[:, None] - q[None], axis=-1), axis=1))
+    return np.sqrt(np.mean(np.concatenate(ds) ** 2))
 
 
 def _reference_jacobian(prox, gobjs, bobjs, eq):
@@ -240,6 +263,46 @@ def test_free_boundary_jacobian_sheet_current():
 
 
 @pytest.mark.unit
+def test_free_boundary_normal_motion():
+    """Boundary motion for boundary_tol counts normal but not tangential motion."""
+    eq, field = _vacuum_stellarator(M=3)
+    prox = ProximalProjectionFreeBoundary(
+        ObjectiveFunction(AspectRatio(eq)),
+        ObjectiveFunction(
+            (ForceBalance(eq), VacuumBoundaryError(eq, field, field_fixed=False))
+        ),
+        eq,
+        solve_options={"solve_during_proximal_build": False},
+        free_boundary_options={"boundary_tol": 3e-4},
+    )
+    prox.build(verbose=0)
+    n = prox._boundary_normals()
+    A_R, A_Z = prox._fb_motion["A_R"], prox._fb_motion["A_Z"]
+    dim_b = prox._x_idx_fb.size
+    eps = 1e-3
+    # changing R00 moves every point of the boundary by eps in R
+    db = np.zeros(dim_b)
+    db[eq.surface.R_basis.get_idx(M=0, N=0)] = eps
+    np.testing.assert_allclose(
+        prox._boundary_normal_motion(db, n),
+        eps * np.sqrt(np.mean(n[:, 0] ** 2)),
+        rtol=1e-10,
+    )
+    # changing the poloidal angle parameterization theta -> theta + eps sin(m theta)
+    # moves points along the boundary, which shouldn't count (to first order and up to
+    # truncation of the boundary representation)
+    data = eq.surface.compute(["R_t", "Z_t"], grid=prox._fb_motion["grid"])
+    theta = prox._fb_motion["grid"].nodes[:, 1]
+    for m in [1, 2]:
+        f = eps * np.sin(m * theta)
+        dR = np.linalg.lstsq(A_R, f * data["R_t"], rcond=None)[0]
+        dZ = np.linalg.lstsq(A_Z, f * data["Z_t"], rcond=None)[0]
+        db = np.concatenate([dR, dZ, np.zeros(dim_b - dR.size - dZ.size)])
+        motion = np.sqrt(np.mean((A_R @ dR) ** 2 + (A_Z @ dZ) ** 2))
+        assert prox._boundary_normal_motion(db, n) < 0.1 * motion
+
+
+@pytest.mark.unit
 def test_free_boundary_errors():
     """Test errors for things ProximalProjectionFreeBoundary can't handle."""
     eq = Equilibrium(M=2, N=0)
@@ -350,3 +413,31 @@ def test_free_boundary_single_stage_stellarator():
     # and the boundary did change from the initial one
     rho_err, _ = area_difference_desc(eq, eq0)
     assert np.max(rho_err[:, -1]) > 1e-2
+
+
+@pytest.mark.regression
+@pytest.mark.slow
+def test_free_boundary_boundary_tol():
+    """Stopping the free boundary solve on boundary motion saves evaluations."""
+    eq0, field = _vacuum_stellarator(M=3)
+    tight = {"ftol": 1e-10, "xtol": 1e-12, "gtol": 1e-12, "maxiter": 40}
+    results = {}
+    for tol in [None, 3e-4]:
+        eq = eq0.copy()
+        prox = ProximalProjectionFreeBoundary(
+            ObjectiveFunction(AspectRatio(eq)),
+            ObjectiveFunction(
+                (ForceBalance(eq), VacuumBoundaryError(eq, field, field_fixed=False))
+            ),
+            eq,
+            free_boundary_options={**tight, "boundary_tol": tol},
+        )
+        # building solves the free boundary problem
+        prox.build(verbose=0)
+        results[tol] = (eq, prox._fb_result)
+    eq_tight, result_tight = results[None]
+    eq_tol, result_tol = results[3e-4]
+    assert "boundary_tol" in result_tol["message"]
+    assert result_tol["nfev"] < result_tight["nfev"]
+    a = eq_tight.compute("a")["a"]
+    assert _lcfs_distance(eq_tight, eq_tol) < 3e-3 * a

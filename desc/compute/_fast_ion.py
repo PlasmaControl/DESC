@@ -22,7 +22,7 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.quad_utils import _LossCone
-from ..utils import cross, dot, safediv
+from ..utils import cross, dot, parse_argname_change, safediv
 from ._drift import (
     _alpha_drift_wb_inverse,
     _radial_drift,
@@ -124,6 +124,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     have high energy with collisionless orbits, so it is assumed to be zero.
     """
     # noqa: unused dependency
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
     grid = transforms["grid"]
     opts = Options.guess(-2, grid, **kwargs)
 
@@ -159,7 +162,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=kwargs["angle"],
+        angle=angle,
         custom_data=_gamma_c_data(data),
         batch_size=opts.surf_batch_size,
         shard=opts.shard,
@@ -211,6 +214,9 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
 
     """
     # noqa: unused dependency
+    angle = parse_argname_change(
+        kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+    )
     grid = transforms["grid"]
     opts = Options.guess(-2, grid, loop=True, **kwargs)
 
@@ -236,7 +242,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=kwargs["angle"],
+        angle=angle,
         custom_data=_gamma_c_data(data),
         batch_size=1,
         sparse=False,  # don't know of any applications that differentiate anyway
@@ -442,7 +448,9 @@ def _Gamma(reduction, params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=kwargs["angle"],
+        angle=parse_argname_change(
+            kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+        ),
         names=names,
         batch_size=opts.surf_batch_size,
         shard=opts.shard,

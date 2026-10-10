@@ -48,7 +48,6 @@ class EffectiveRipple(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
-            jac_chunk_size=False,
         )
     )
 
@@ -70,6 +69,7 @@ class EffectiveRipple(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="rev",
+        jac_chunk_size=None,
         name="Effective ripple",
         grid=None,
         X=32,
@@ -95,6 +95,9 @@ class EffectiveRipple(_Objective):
             "EffectiveRipple.",
         )
         nufft_eps = check_nufft(nufft_eps)
+        num_field_periods = kwargs.get("field_period_transits", num_field_periods)
+        if "num_transit" in kwargs:
+            num_field_periods = kwargs["num_transit"] * eq.NFP
 
         if target is None and bounds is None:
             target = 0.0
@@ -128,7 +131,7 @@ class EffectiveRipple(_Objective):
             loss_function=loss_function,
             deriv_mode=deriv_mode,
             name=name,
-            jac_chunk_size=None,
+            jac_chunk_size=jac_chunk_size,
         )
 
     def build(self, use_jit=True, verbose=1):

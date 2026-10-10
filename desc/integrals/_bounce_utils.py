@@ -984,8 +984,8 @@ def fast_cubic_spline(
     modes_z : jnp.ndarray
         FFT Fourier modes in toroidal direction.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     vander_t : jnp.ndarray
         Precomputed transform matrix.
     vander_z : jnp.ndarray

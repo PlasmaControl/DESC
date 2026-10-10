@@ -212,8 +212,8 @@ doc_bounce = """
         Whether to shard batched input data across devices before applying chunked
         batching. Default is ``False``.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``. It can be preferable
@@ -442,7 +442,7 @@ class ObjectiveFunction(IOAble):
                 pass
 
     @execute_on_cpu
-    def build(self, use_jit=None, verbose=1):
+    def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
@@ -518,6 +518,19 @@ class ObjectiveFunction(IOAble):
             else:
                 self._deriv_mode = "blocked"
 
+        rev_objs = [o.name for o in self.objectives if o._deriv_mode == "rev"]
+        warnif(
+            len(rev_objs) > 0 and self._deriv_mode == "batched",
+            UserWarning,
+            "'batched' deriv_mode differentiates the whole ObjectiveFunction in "
+            "forward mode, but these sub-objectives are set to use reverse mode "
+            "(either automatically, from their input/output sizes, or by user): "
+            f"{rev_objs}. \n"
+            "In forward mode these may under-perform, or they may not "
+            "support forward mode. Consider 'blocked' deriv_mode. See the "
+            "sub-objective docstrings for details.",
+        )
+
         errorif(
             isposint(self._jac_chunk_size) and self._deriv_mode in ["blocked"],
             ValueError,
@@ -553,6 +566,12 @@ class ObjectiveFunction(IOAble):
 
         timer.stop("Objective build")
         if verbose > 1:
+            print(f"{self.name} deriv_mode : {self._deriv_mode}")
+            if self._deriv_mode == "batched":
+                print(f"{self.name} jac_chunk_size: {self._jac_chunk_size}")
+            else:
+                for o in self.objectives:
+                    print(f"{o.name} jac_chunk_size: {o._jac_chunk_size}")
             timer.disp("Objective build")
 
     def _set_things(self, things=None):

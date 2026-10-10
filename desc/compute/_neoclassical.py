@@ -7,7 +7,7 @@ from desc.backend import jit, jnp
 from ..batching import batch_map
 from ..integrals.bounce_integral import Bounce2D, Options
 from ..integrals.surface_integral import surface_integrals
-from ..utils import safediv
+from ..utils import parse_argname_change, safediv
 from ._drift import _I_1, _I_2
 from .data_index import register_compute_fun
 
@@ -116,7 +116,9 @@ def _epsilon_32(params, transforms, profiles, data, **kwargs):
         foreach_surface,
         data,
         grid,
-        angle=kwargs["angle"],
+        angle=parse_argname_change(
+            kwargs.get("angle", kwargs.get("theta", None)), kwargs, "theta", "angle"
+        ),
         names=("|grad(rho)|*kappa_g",),
         batch_size=opts.surf_batch_size,
         shard=opts.shard,

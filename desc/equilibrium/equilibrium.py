@@ -1304,7 +1304,9 @@ class Equilibrium(IOAble, Optimizable):
             Maximum number of Newton iterations.
         full_output : bool, optional
             If True, also return a tuple where the first element is the residual from
-            the root finding and the second is the number of iterations.
+            the root finding and the second is the number of iterations. The
+            residual identifies failed inversions, which are returned as computed
+            (see Returns).
         kwargs : dict, optional
             Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
             ``alpha``.
@@ -1313,9 +1315,14 @@ class Equilibrium(IOAble, Optimizable):
         -------
         out : jnp.ndarray
             Shape (k, 3).
-            Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
-            returned for coordinates where root finding did not succeed, possibly
-            because the coordinate is not in the plasma volume.
+            Coordinates mapped from ``inbasis`` to ``outbasis``. Root finding is
+            not guaranteed to succeed for all inputs: unconverged points are
+            returned as computed, and points outside the plasma volume are clipped
+            to rho=1 during the solve, returning finite boundary coordinates
+            rather than NaN. To detect failed inversions, pass
+            ``full_output=True`` and mask points whose residual exceeds ``tol``.
+            NaN is not returned by default because it would interfere with
+            optimization (see #2347).
         info : tuple
             2 element tuple containing residuals and number of iterations
             for each point. Only returned if ``full_output`` is True.

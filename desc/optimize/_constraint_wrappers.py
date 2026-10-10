@@ -21,6 +21,7 @@ from desc.objectives.utils import (
 from desc.utils import Timer, errorif, get_instance, setdefault, svd_inv_null, warnif
 
 from .least_squares import lsqtr
+from .tr_subproblems import trust_region_step_exact_svd
 from .utils import f_where_x
 
 
@@ -1442,9 +1443,14 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
           unknowns, eg. ``FixBoundaryR(eq, modes=...)`` to only allow some boundary
           modes to change. These are found automatically when passed as constraints
           to ``Optimizer.optimize``.
-        - ``"predict"`` : bool, whether to use a first order prediction of the
-          boundary change as the initial guess for the free boundary solve. Default
-          True.
+        - ``"predict"`` : bool, whether to predict the boundary change from the
+          derivatives as the initial guess for the free boundary solve. Default True.
+        - ``"predict_order"`` : int, 1 or 2, order of the boundary prediction. The
+          second order term needs a few second order JVPs along the step, but no new
+          factorizations. Default 1.
+        - ``"predict_tr_ratio"`` : float, the second order term is found with a trust
+          region of this size relative to the first order term, which keeps it from
+          being dominated by poorly determined directions of dB/db. Default 0.1.
         - ``"rcond"`` : float, relative cutoff for small singular values when
           inverting dB/db. Defaults to machine precision times the largest dimension.
         - ``"maxiter"``, ``"ftol"``, ``"xtol"``, ``"gtol"``, ``"x_scale"``,
@@ -1521,6 +1527,13 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         fb_constraints = free_boundary_options.pop("constraints", ())
         self._fb_linear_constraints = tuple(fb_constraints)
         self._fb_predict = free_boundary_options.pop("predict", True)
+        self._fb_predict_order = free_boundary_options.pop("predict_order", 1)
+        self._fb_predict_tr_ratio = free_boundary_options.pop("predict_tr_ratio", 0.1)
+        errorif(
+            self._fb_predict_order not in [1, 2],
+            ValueError,
+            f"predict_order should be 1 or 2, got {self._fb_predict_order}",
+        )
         self._fb_rcond = free_boundary_options.pop("rcond", None)
         free_boundary_options.setdefault("maxiter", 20)
         free_boundary_options.setdefault("ftol", 1e-2)
@@ -1727,8 +1740,9 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
 
         # derivatives of the free boundary problem at the most recent state
         self._linearization = None
-        # (x, v, db) from the last jvp, where db is the boundary change for each
-        # direction v in the optimization variables, for predicting the new boundary
+        # (x, v, db, linearization) from the last jvp, where db is the boundary change
+        # for each direction v in the optimization variables, for predicting the new
+        # boundary
         self._dbdv = None
 
         if self._solve_during_proximal_build:
@@ -1805,28 +1819,36 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
             the fixed boundary problem, ``"J_Bb"``, the derivative of the free boundary
             error wrt the free boundary unknowns, and ``"P"``, the pseudo-inverse of
             ``J_Bb @ Z`` where Z is the null space of the linear constraints on the
-            free boundary unknowns.
+            free boundary unknowns, ``"JZ_svd"``, the SVD (u, s, vt) of ``J_Bb @ Z``,
+            and ``"F_factors"``, the SVD (u, 1/s, vt) of dF/dx in the reduced
+            equilibrium coordinates.
 
         """
         lin = self._linearization
         if lin is not None and np.array_equal(lin["x"], xopt):
             return lin
         xeq = jnp.split(xopt, np.cumsum(self._dimx_per_thing)[:-1])[self._eq_idx]
-        # this is dx/dc = dxdc - (dF/dx)⁺ dF/dc as rows, for all c at once
-        T_c = _proximal_eq_tangents(
+        # this is dx/dc = dxdc - (dF/dx)⁺ dF/dc as rows, for all c at once, and the
+        # SVD of dF/dx in the reduced eq coordinates for the second order prediction
+        T_c, F_factors = _fb_eq_tangents(
             self._constraint,
             xeq,
-            None,
             self._eq_solve_objective._feasible_tangents,
             self._dxdc.T,
-            "scaled",
         )
         T_b = T_c[self._c_idx_fb]
         J_Bb = self._constraint_fb.jvp_scaled(
             self._fb_tangents(T_b), self._fb_x(xopt)
         ).T
-        P = _pinv(J_Bb @ self._fb_Z, self._fb_rcond)
-        self._linearization = {"x": xopt, "T_c": T_c, "J_Bb": J_Bb, "P": P}
+        P, JZ_svd = _pinv(J_Bb @ self._fb_Z, self._fb_rcond)
+        self._linearization = {
+            "x": xopt,
+            "T_c": T_c,
+            "J_Bb": J_Bb,
+            "P": P,
+            "JZ_svd": JZ_svd,
+            "F_factors": F_factors,
+        }
         return self._linearization
 
     def _fb_tangents(self, eq_tangents, tangents_per_thing=None):
@@ -1915,6 +1937,78 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         self._fb_result = result
         return result
 
+    def _predict_boundary(self, x):
+        """Predict the change in the free boundary unknowns from x_old to x.
+
+        Uses the derivatives from the last jvp at x_old, which are known in the
+        directions v of that jvp (usually the full space, or the null space of the
+        linear constraints which contains x - x_old).
+
+        Returns
+        -------
+        db : ndarray or None
+            Predicted change in the free boundary unknowns, or None if no prediction
+            is available.
+
+        """
+        if (
+            not self._fb_predict
+            or self._dbdv is None
+            or not np.array_equal(self._dbdv[0], self._x_old)
+        ):
+            return None
+        _, v, db, lin = self._dbdv
+        dq = np.asarray(x - self._x_old)
+        a = np.linalg.lstsq(v.T, dq, rcond=None)[0]
+        b1 = db.T @ a
+        if self._fb_predict_order == 1:
+            return b1
+        return b1 + self._second_order_boundary(dq, b1, lin)
+
+    def _second_order_boundary(self, dq, b1, lin):
+        """Second order term of the boundary change along the step dq.
+
+        With t the first order change of the full state (force balance and free
+        boundary conditions maintained), the fixed boundary second order state change
+        is x2 = -(dF/dx)⁺ ½ F''[t, t], and the second order boundary change solves
+        dB/db b2 = -(½ B''[t, t] + B' x2) in the least squares sense, with
+        |b2| <= predict_tr_ratio |b1|. Without the trust region, components of b1 in
+        poorly determined directions of dB/db get amplified again and b2 can be larger
+        than b1, which makes the prediction worse.
+
+        Parameters
+        ----------
+        dq : ndarray
+            Step in the optimization variables.
+        b1 : ndarray
+            First order change in the free boundary unknowns for dq.
+        lin : dict
+            Linearization at the start of the step, from self._linearize.
+
+        """
+        T_c, (uf, sfi, vtf), xopt = lin["T_c"], lin["F_factors"], lin["x"]
+        splits = np.cumsum(self._dimx_per_thing)[:-1]
+        t = jnp.split(jnp.asarray(dq), np.cumsum(self._dimc_per_thing)[:-1])
+        t[self._eq_idx] = (
+            t[self._eq_idx] @ T_c[self._c_idx_q] + b1 @ T_c[self._c_idx_fb]
+        )
+        t_eq = t[self._eq_idx]
+        xeq = jnp.split(xopt, splits)[self._eq_idx]
+        F2 = self._constraint.jvp_scaled((t_eq, t_eq), xeq)
+        x2 = -self._eq_solve_objective._feasible_tangents @ (
+            vtf.T @ (sfi * (uf.T @ (F2 / 2)))
+        )
+        xB = self._fb_x(xopt)
+        tB = self._fb_tangents(t_eq[None], [ti[None] for ti in t])[0]
+        B2 = self._constraint_fb.jvp_scaled((tB, tB), xB)
+        Bx2 = self._constraint_fb.jvp_scaled(self._fb_tangents(x2[None])[0], xB)
+        u, s, vt = lin["JZ_svd"]
+        y1 = self._fb_Z.T @ b1
+        y2, _, _ = trust_region_step_exact_svd(
+            B2 / 2 + Bx2, u, s, vt.T, self._fb_predict_tr_ratio * jnp.linalg.norm(y1)
+        )
+        return self._fb_Z @ y2
+
     def _update_equilibrium(self, x, store=False):
         """Update the internal equilibrium with new field, profiles etc.
 
@@ -1943,17 +2037,9 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
             xeq_dict = x_list[self._eq_idx]
             xeq_dict_old = x_list_old[self._eq_idx]
             deltas = {arg: xeq_dict[arg] - xeq_dict_old[arg] for arg in self._args}
-            if (
-                self._fb_predict
-                and self._dbdv is not None
-                and np.array_equal(self._dbdv[0], self._x_old)
-            ):
-                # first order prediction of the new boundary. The derivatives are known
-                # in the directions v of the last jvp (usually the full space, or the
-                # null space of the linear constraints which contains x - x_old).
-                _, v, db = self._dbdv
-                a = np.linalg.lstsq(v.T, np.asarray(x - self._x_old), rcond=None)[0]
-                deltas.update(self._split_b(db.T @ a))
+            db = self._predict_boundary(x)
+            if db is not None:
+                deltas.update(self._split_b(db))
             self._eq.perturb(
                 objective=self._eq_solve_objective,
                 constraints=None,
@@ -2021,7 +2107,7 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         db = -(jnp.atleast_2d(dB) @ P.T) @ Z.T
         tangents[self._eq_idx] = tangents[self._eq_idx] + db @ T_c[self._c_idx_fb]
         if v.ndim == 2:
-            self._dbdv = (np.asarray(x), np.asarray(v), np.asarray(db))
+            self._dbdv = (np.asarray(x), np.asarray(v), np.asarray(db), lin)
         tangents = jnp.concatenate(tangents, axis=-1)
         return tangents if v.ndim == 2 else tangents[0]
 
@@ -2081,10 +2167,28 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         ]
 
 
+@jit_if_possible(static_argnames=())
+def _fb_eq_tangents(constraint, xf, eq_feasible_tangents, dxdcv):
+    """Same as _proximal_eq_tangents but also returns the SVD of dF/dx."""
+    dim_x_reduced = eq_feasible_tangents.shape[-1]
+    tangents = jnp.concatenate([eq_feasible_tangents.T, dxdcv], axis=0)
+    J = constraint.jvp_scaled(tangents, xf)
+    Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
+    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+    sf += sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
+    return dxdcv - (eq_feasible_tangents @ dfdc).T, (uf, sfi, vtf)
+
+
 @jit
 def _pinv(A, rcond=None):
-    """Pseudo-inverse of A, ignoring singular values below rcond * largest one."""
+    """Pseudo-inverse of A, ignoring singular values below rcond * largest one.
+
+    Also returns the SVD (u, s, vt) of A.
+    """
     u, s, vt = jnp.linalg.svd(A, full_matrices=False)
     rcond = setdefault(rcond, jnp.finfo(A.dtype).eps * max(A.shape))
     sinv = jnp.where(s > rcond * s[0], 1 / s, 0)
-    return (vt.T * sinv) @ u.T
+    return (vt.T * sinv) @ u.T, (u, s, vt)

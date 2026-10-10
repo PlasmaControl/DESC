@@ -168,6 +168,20 @@ def test_free_boundary_jacobian_stellarator():
     f = prox.compute_scaled_error(x)
     np.testing.assert_allclose(prox.grad(x), f @ J, rtol=1e-10, atol=1e-12)
 
+    # boundary prediction for a step, from the derivatives stored by the jacobian
+    prox._x_old = x
+    dx = 1e-3 * v * np.abs(x).max()
+    b1 = np.asarray(prox._predict_boundary(x + dx))
+    np.testing.assert_allclose(b1, prox._dbdv[2].T @ dx, rtol=1e-8, atol=1e-14)
+    # predictions stay in the null space of the constraints on the boundary
+    Z = np.asarray(prox._fb_Z)
+    np.testing.assert_allclose(Z @ (Z.T @ b1), b1, atol=1e-12)
+    prox._fb_predict_order = 2
+    b2 = np.asarray(prox._predict_boundary(x + dx)) - b1
+    assert np.all(np.isfinite(b2))
+    assert np.linalg.norm(b2) <= 1.01 * prox._fb_predict_tr_ratio * np.linalg.norm(b1)
+    np.testing.assert_allclose(Z @ (Z.T @ b2), b2, atol=1e-12)
+
 
 @pytest.mark.unit
 def test_free_boundary_jacobian_stellarator_coils():

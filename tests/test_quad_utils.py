@@ -62,7 +62,9 @@ def test_fold_wells_to_alpha_midpoint_mapping():
     """Test long-field-line wells fold to midpoint effective alpha labels."""
     nfp = 2
     period = 2 * jnp.pi / nfp
-    opts = SimpleNamespace(alpha=jnp.array([0.0, 1.0]), num_field_periods=3, thresh=0.2)
+    opts = SimpleNamespace(
+        alpha=jnp.array([0.0, 1.0]), field_period_transits=3, thresh=0.2
+    )
     z1 = jnp.array([[[0.1, 0.5, period + 0.1]], [[0.2, 0.6, period + 0.2]]])
     z2 = z1 + 0.1
     values = [jnp.ones_like(z1)]

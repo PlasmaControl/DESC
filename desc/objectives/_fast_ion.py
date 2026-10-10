@@ -6,8 +6,8 @@ from packaging import version
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
 from desc.integrals._interp_utils import check_nufft
-from desc.integrals.bounce_integral import Options
-from desc.utils import errorif
+from desc.integrals.bounce_integral import BounceOptions
+from desc.utils import errorif, warnif
 
 from .objective_funs import _Objective, collect_docs, doc_bounce
 
@@ -32,6 +32,7 @@ class GammaC(_Objective):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 3 below refers to that implementation.
 
     References
     ----------
@@ -67,7 +68,6 @@ class GammaC(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
-            jac_chunk_size=False,
         )
     )
 
@@ -88,14 +88,15 @@ class GammaC(_Objective):
         normalize=True,
         normalize_target=True,
         loss_function=None,
-        deriv_mode="rev",
+        deriv_mode="rev",  # TODO: change to deriv_mode="auto" once jax>0.11.0
+        jac_chunk_size=None,
         name="Gamma_c",
         grid=None,
         X=32,
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         num_well=None,
         num_quad=32,
         num_pitch=65,
@@ -114,6 +115,20 @@ class GammaC(_Objective):
             "JAX version >= 0.11.0 required for fwd deriv mode for objective: GammaC.",
         )
         nufft_eps = check_nufft(nufft_eps)
+        warnif(
+            "use_bounce1d" in kwargs,
+            FutureWarning,
+            "Argument use_bounce1d has been deprecated and is no longer used.",
+        )
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of "
+                "field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP",
+            )
+            field_period_transits = kwargs.pop("num_transit") * eq.NFP
 
         if target is None and bounds is None:
             target = 0.0
@@ -126,7 +141,7 @@ class GammaC(_Objective):
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -147,8 +162,8 @@ class GammaC(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
-            jac_chunk_size=None,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -162,7 +177,7 @@ class GammaC(_Objective):
             Level of output.
 
         """
-        Options._build_objective(
+        BounceOptions._build_objective(
             self, self._key, eta={"Gamma_c": -2, "Gamma_c Velasco": -1}[self._key]
         )
         super().build(use_jit=use_jit, verbose=verbose)
@@ -185,7 +200,7 @@ class GammaC(_Objective):
             Γ_c as a function of the flux surface label.
 
         """
-        return Options._compute_objective(self, params, constants, self._key)
+        return BounceOptions._compute_objective(self, params, constants, self._key)
 
 
 class GammaLoss(_Objective):
@@ -239,7 +254,6 @@ class GammaLoss(_Objective):
             bounds_default="``target=0``.",
             normalize_detail=" Note: Has no effect for this objective.",
             normalize_target_detail=" Note: Has no effect for this objective.",
-            jac_chunk_size=False,
         )
     )
 
@@ -267,13 +281,14 @@ class GammaLoss(_Objective):
         normalize_target=True,
         loss_function=None,
         deriv_mode="auto",
+        jac_chunk_size=None,
         name=None,
         grid=None,
         X=32,
         Y=32,
         Y_B=None,
         alpha=None,
-        num_field_periods=None,
+        field_period_transits=None,
         num_well=None,
         num_quad=32,
         num_pitch=65,
@@ -303,14 +318,14 @@ class GammaLoss(_Objective):
         self._grid = grid
         if alpha is None:
             alpha = GammaLoss._default_alpha(eq)
-        if num_field_periods is None:
-            num_field_periods = eq.NFP + 2
+        if field_period_transits is None:
+            field_period_transits = eq.NFP + 2
         self._constants = {"quad_weights": 1.0, "alpha": alpha}
         self._hyperparam = {
             "X": X,
             "Y": Y,
             "Y_B": Y_B,
-            "num_field_periods": num_field_periods,
+            "field_period_transits": field_period_transits,
             "num_well": num_well,
             "num_quad": num_quad,
             "num_pitch": num_pitch,
@@ -334,8 +349,8 @@ class GammaLoss(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,
             name=name,
-            jac_chunk_size=None,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -349,7 +364,7 @@ class GammaLoss(_Objective):
             Level of output.
 
         """
-        Options._build_objective(self, self._key, eta=-1)
+        BounceOptions._build_objective(self, self._key, eta=-1)
         super().build(use_jit=use_jit, verbose=verbose)
 
     def compute(self, params, constants=None):
@@ -370,4 +385,4 @@ class GammaLoss(_Objective):
             Γ_δ or Γ_α as a function of the flux surface label.
 
         """
-        return Options._compute_objective(self, params, constants, self._key)
+        return BounceOptions._compute_objective(self, params, constants, self._key)

@@ -20,7 +20,7 @@ from functools import partial
 from desc.backend import jit, jnp
 
 from ..batching import batch_map
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..integrals.quad_utils import _LossCone, _periodic_voronoi_widths
 from ..utils import cross, dot, safediv
 from ._drift import (
@@ -102,15 +102,16 @@ def _gamma_c(radial_drift, poloidal_drift, weight=1.0):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """Equation 61 of [1]_.
 
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     A 3D stellarator magnetic field admits ripple wells that lead to enhanced
     radial drift of trapped particles. The energetic particle confinement
@@ -125,7 +126,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, **kwargs)
+    opts = BounceOptions.guess(-2, grid, **kwargs)
 
     def foreach_surface(data):
 
@@ -165,7 +166,7 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
         shard=opts.shard,
     )
     assert out.ndim == 1
-    scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.num_field_periods
+    scalar = jnp.pi**2 / 2**2.5 * grid.NFP / opts.field_period_transits
     data["Gamma_c"] = grid.expand(out * scalar) / data["V_psi"]
     return data
 
@@ -198,9 +199,9 @@ def _Gamma_c(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """Equation 50 of [1]_.
 
@@ -212,7 +213,7 @@ def _little_gamma_c_Nemov(params, transforms, profiles, data, **kwargs):
     """
     # noqa: unused dependency
     grid = transforms["grid"]
-    opts = Options.guess(-2, grid, loop=True, **kwargs)
+    opts = BounceOptions.guess(-2, grid, loop=True, **kwargs)
 
     def foreach_surface(data):
         pitch_inv, _ = Bounce2D.pitch_quad(
@@ -283,8 +284,8 @@ def _fold_wells_to_alpha(values, points, opts, iota, NFP):
     num_alpha, num_pitch, num_well = z1.shape[-3:]
     prefix = z1.shape[:-3]
 
-    field_period_index = jnp.arange(opts.num_field_periods).reshape(
-        (1, opts.num_field_periods, 1, 1, 1)
+    field_period_index = jnp.arange(opts.field_period_transits).reshape(
+        (1, opts.field_period_transits, 1, 1, 1)
     )
     local_well_slot = jnp.arange(num_well).reshape((1, 1, 1, 1, num_well))
     # Axes: prefix, base alpha, field period, pitch, original well, local well.
@@ -297,18 +298,18 @@ def _fold_wells_to_alpha(values, points, opts, iota, NFP):
     def fold(value):
         value = jnp.where(well_to_alpha, value[..., :, None, :, :, None], 0.0).sum(-2)
         return value.reshape(
-            prefix + (num_alpha * opts.num_field_periods, num_pitch, num_well)
+            prefix + (num_alpha * opts.field_period_transits, num_pitch, num_well)
         )
 
     alpha = opts.alpha.reshape((1,) * len(prefix) + (num_alpha, 1))
     alpha = alpha + _reshape_iota(iota, 2) * (2 * jnp.pi / NFP) * jnp.arange(
-        opts.num_field_periods
+        opts.field_period_transits
     )
     alpha = (alpha % (2 * jnp.pi)).reshape(
-        prefix + (num_alpha * opts.num_field_periods, 1, 1)
+        prefix + (num_alpha * opts.field_period_transits, 1, 1)
     )
     mask = well_to_alpha.any(-2).reshape(
-        prefix + (num_alpha * opts.num_field_periods, num_pitch, num_well)
+        prefix + (num_alpha * opts.field_period_transits, num_pitch, num_well)
     )
     return (*[fold(value) for value in values], alpha, mask)
 
@@ -379,15 +380,16 @@ def _reduction_gamma_alpha(v_tau, radial, poloidal, opts, alpha, mask, order=1):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     """Equation 20 of [2]_.
 
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference 2 below refers to that implementation.
 
     """
     # noqa: unused dependency
@@ -425,9 +427,9 @@ def _Gamma_c_Velasco(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     """Equation 22 of [2]_."""
     # noqa: unused dependency
@@ -474,9 +476,9 @@ def _Gamma_delta(params, transforms, profiles, data, **kwargs):
     + Bounce2D.required_names,
     resolution_requirement="tz",
     grid_requirement={"can_fft2": True},
-    **Options._doc,
+    **BounceOptions._doc,
 )
-@partial(jit, static_argnames=Options._static_argnames)
+@partial(jit, static_argnames=BounceOptions._static_argnames)
 def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
     """Equation 25 of [2]_."""
     # noqa: unused dependency
@@ -494,7 +496,7 @@ def _Gamma_alpha(params, transforms, profiles, data, **kwargs):
 
 def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kwargs):
     grid = transforms["grid"]
-    opts = Options.guess(-1, grid, **kwargs)
+    opts = BounceOptions.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
 
@@ -540,7 +542,7 @@ def _Gamma(reduction, params, transforms, profiles, data, fold_alpha=False, **kw
         shard=opts.shard,
     )
     assert out.ndim == 1
-    scalar = jnp.pi**3 / 16 * grid.NFP / opts.num_field_periods
+    scalar = jnp.pi**3 / 16 * grid.NFP / opts.field_period_transits
     if fold_alpha:
-        scalar *= opts.num_field_periods
+        scalar *= opts.field_period_transits
     return grid.expand(out * scalar) / data["V_psi"]

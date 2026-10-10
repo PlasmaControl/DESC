@@ -3,6 +3,51 @@ Changelog
 
 New Features
 
+- Adds Velasco et. al.'s Gamma_alpha and Gamma_delta metrics related to radially outward drifting superbananas.
+- Adds Available Energy for nonlinear measure of turbelent transport [#2215](https://github.com/PlasmaControl/DESC/pull/2215) and local potential well plotting utitlity for analysis.
+- Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
+- Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+
+Performance Improvements
+
+- Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
+- Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
+- Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
+- Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+
+Breaking Changes and Deprecations
+
+- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
+- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
+- Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+- We have changed our definition of ``Gamma_c Velasco`` from equation 16 of their paper to equation 20. This redefinition simply scales the old one by a factor of pi/(2 root 2).
+
+Bug Fixes
+
+- Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
+- Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
+- Fixes bug in modified Cholesky factorization used by the trust-region
+  subproblems when the Gershgorin lower bound of the Hessian was exactly zero
+  (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
+  ``fmin-auglag`` with the default ``tr_method="exact"``, and in
+  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
+- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
+- Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
+- Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
+- Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
+- Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
+
+
+v0.17.3
+-------
+
+New Features
+
 - Adds ``eq_fixed`` argument to ``BoundaryError`` to remove the equilibrium from the optimization. This can be used instead of adding a ``FixParameter(eq)`` constraint.
 - Adds `check_intersection` argument to `initialize_modular_coils`, `initialize_helical_coils` and `initialize_saddle_coils`
 - Default value of `check_intersection` for coil related functions now defaults to False (no check). Previously, the default was True, and this was causing redundant checks.
@@ -30,18 +75,17 @@ Breaking Changes
 
 - Name change in `_CoilObjective` replacing `coilset_mask` with `objective_mask`. Custom subclasses with `_broadcast_input="node"` that previously used `coilset_mask` should switch to `objective_mask`.
 
+
 v0.17.2
 -------
 
 New Features
 
-- Adds utility methods ``Bounce*D.batch`` to compute bounce integrals over each surface in batches with sparsity preserving pullbacks.
-- Adds Velasco et. al.'s Gamma_alpha and Gamma_delta metrics related to radially outward drifting superbananas.
-- Adds Available Energy for nonlinear measure of turbelent transport [#2215](https://github.com/PlasmaControl/DESC/pull/2215) and local potential well plotting utitlity for analysis.
 - Adds ``desc.objectives.DeflationOperator``, a new objective class which can be used to apply deflation techniques to equilibrium and optimization problems to find multiple local minima or multiple solutions from a single initial point, either by wrapping an existing ``desc.objectives._Objective`` object or by including as an additional penalty or constraint. Also adds a tutorial showing this functionality.
 - Sub-objectives of an `ObjectiveFunction` can now have different `use_jit` values than the `ObjectiveFunction`. These objectives have to be built before building the `ObjectiveFunction`.
 - Adds ``num_neighbors`` parameter to ``CoilSetMinDistance`` that limits the pairwise distance computation to the nearest neighbors per coil, reducing memory useage for large coilsets.
 - Method to plot frequency spectrum of inverse stream map in field line coordinates ``Bounce2D.plot_angle_spectrum``.
+- Method to compute bounce integrals in batches is now added to the public API ``Bounce2D.batch``.
 - Initiated deprecation of ``Bounce2D.compute_fieldline_length`` in favor of ``eq.compute("V_psi")``.
 - The quadrature resolution in ``Bounce2D.compute_fieldline_length`` now corresponds to the resolution over a single field period instead of the resolution over a toroidal transit.
 - Adds an optional attribute `ion_density` to the `Equilibrium` class, to allow the ion density profile to be set independently of the electron density and effective atomic number. Also adds compute functions for ``"ni_rr"`` and ``"Zeff_rr"``.
@@ -51,7 +95,6 @@ New Features
 Bug Fixes
 
 - Fixes SyntaxError thrown when loading hdf5 data from file-like objects.
-- Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Fixes a bug in `OmnigenousField.change_resolution` when changing `L_B`.
 - Scaling a `ScaledProfile` or taking power of a `PowerProfile` now only updates the `scale`/`power` attributes instead of nesting the `ScaledProfile`/`PowerProfile`s.
 - `jax.Array`s in `_static_attrs` will be automatically converted to `np.ndarray` to prevent stalling code. In general, jax arrays should be omitted in `_static_attrs`.
@@ -59,23 +102,13 @@ Bug Fixes
 
 Performance Improvements
 
-- Sparse reverse-mode differentiation was introduced to DESC
-  to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170).
-  Plumbing to use this method was added to DESC that
-  will be progressively taken advantage of in the future.
 - Reduces import time of `desc` modules.
     - Now, `desc.compute._build_data_index` uses depth-first search algorithm to construct the dependency tree.
     - Some of the default value computations at import time are removed (i.e. `desc.integrals.bounce_integral.default_quad`)
-- Significantly improves convergence of bounce point computations. Now lower ``Y_B`` can be used.
 - [Significantly improves convergence of inverse stream maps](https://github.com/PlasmaControl/DESC/pull/1919).
+- Check-pointing to bounce integrals to improve speed and reduce memory of reverse mode differentiation.
 - Resolves a JAX memory regression in bounce integrals by avoiding materialization of a large tensor in memory. Previously, we had closed the issue by adding nuffts as a workaround. This update actually solves the issue for the case when a user specifies to not use nuffts as well.
 - ``ObjectiveFunction.print_value`` can now use the previously computed ``compute_scaled_error`` values to print. For bounded objectives, we fall back to computing ``compute_unscaled``. Additionally, ``compute_scaled_error`` and array splitting are used in other parts of the code to prevent recompilation for one-time tasks, which makes initialization faster.
-
-Breaking Changes
-
-- The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``num_field_periods``. This should make using a consistent resolution across different equilibria easier. ``num_transit`` may still be used but note the equivalence ``num_field_periods = num_transit * grid.NFP``.
-- The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
-- We have changed the our implementation of of ``Gamma_c Velasco`` from equation 16 of his paper to equation 20. The new quantity is simply scaled by a factor of pi/(2 root 2).
 
 Deprecations
 

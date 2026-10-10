@@ -1076,7 +1076,7 @@ def test_plot_available_energy():
         density_gradient=-3.0,
         temperature_gradient=0.0,
         num_quad=16,
-        num_field_periods=10,
+        field_period_transits=10,
     )
     return fig
 

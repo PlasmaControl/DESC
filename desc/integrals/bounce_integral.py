@@ -2,9 +2,9 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from functools import partial
+from functools import partial, wraps
 from itertools import chain
-from typing import NamedTuple, Union
+from typing import NamedTuple
 
 import equinox as eqx
 from adv_jax_math import batch_map, sparse_pullback
@@ -82,7 +82,7 @@ class _Bounce(eqx.Module, ABC):
     """Abstract class for bounce integrals."""
 
     @staticmethod
-    def pitch_quad(min_B, max_B, num_pitch, **kwargs):
+    def get_pitch_inv_quad(min_B, max_B, num_pitch, **kwargs):
         """Return 1/λ values and weights for quadrature between ``min_B`` and ``max_B``.
 
         Parameters
@@ -103,11 +103,11 @@ class _Bounce(eqx.Module, ABC):
         Returns
         -------
         pitch_inv, weight : tuple[jnp.ndarray]
-            Shape (min_B.shape, num pitch).
-            1/λ values and weights.
+            Shape (min_B.shape, num pitch). 1/λ values and weights.
 
         """
         if isinstance(num_pitch, int):
+            # by default, get pitch angles with Simpson's 1/3 rule
             simp = kwargs.get("simp", True)
             num_pitch = simpson2(num_pitch) if simp else uniform(num_pitch)
 
@@ -120,7 +120,8 @@ class _Bounce(eqx.Module, ABC):
         w = w * grad_bijection_from_disc(min_B, max_B)
         return x, w
 
-    get_pitch_inv_quad = pitch_quad
+    # aliased for convenience
+    pitch_quad = get_pitch_inv_quad
 
     @abstractmethod
     def points(self, pitch_inv, num_well=-1):
@@ -159,6 +160,66 @@ class _Bounce(eqx.Module, ABC):
         """Plot B and bounce points on the specified field line."""
 
 
+def _support_deprecated_signature(batch, d=2):
+    """Wrapper to support the deprecated signature for Bounce.batch.
+
+    Parameters
+    ----------
+    d : int
+        2 to support Bounce2D's deprecated signature,
+        otherwise supports Bounce1D's deprecated signature.
+
+    """
+
+    @wraps(batch)
+    def wrapped(*args, **kwargs):
+        if (
+            # no deprecated positional arguments
+            (len(args) <= 2 or not isinstance(args[2], dict))
+            # and no deprecated keyword arguments
+            and "desc_data" not in kwargs
+        ):
+            return batch(*args, **kwargs)
+
+        # otherwise act according to the deprecated signature
+        warnings.warn(
+            "That old function signature for the batching method is deprecated.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        kwargs.pop("num_pitch", None)
+        kwargs.pop("expand_out", None)
+        kwargs.setdefault("batch_size", kwargs.pop("surf_batch_size", 1))
+
+        if d == 2:
+            argnames = ("fun", "fun_data", "desc_data", "angle", "grid")
+            required = Bounce2D.required_names
+        else:
+            argnames = ("fun", "fun_data", "desc_data", "grid")
+            required = Bounce1D.required_names
+
+        for i in range(min(len(args), len(argnames))):
+            name = argnames[i]
+            errorif(name in kwargs, TypeError, f"Multiple values for '{name}'.")
+            kwargs[name] = args[i]
+
+        # The deprecated API explicitly warns this dict will be modfied,
+        # and this modification is consistent with old behavior.
+        # github.com/PlasmaControl/DESC/blob/
+        # 1c77748b2d396a6234f97fff8b746f62e3fda66e/desc/integrals/
+        # bounce_integral.py#L411
+        # bounce_integral.py#L1444
+        custom_data = kwargs.pop("fun_data")
+        for name in required:
+            custom_data.pop(name, None)
+        custom_data.pop("min_tz |B|", None)
+        custom_data.pop("max_tz |B|", None)
+
+        return batch(data=kwargs.pop("desc_data"), custom_data=custom_data, **kwargs)
+
+    return wrapped
+
+
 class Bounce2D(_Bounce):
     """Computes bounce integrals using pseudo-spectral methods.
 
@@ -182,6 +243,7 @@ class Bounce2D(_Bounce):
     Notes
     -----
     A much more performant version is available at https://github.com/unalmis/DESC.
+    The reference below refers to that implementation.
 
     References
     ----------
@@ -241,7 +303,7 @@ class Bounce2D(_Bounce):
         single field line. On a rational or near-rational surface in
         non-axisymmetric configurations, it is necessary to integrate along
         multiple field lines until the surface is covered sufficiently.
-    num_field_periods : int
+    field_period_transits : int
         Number of field periods to follow field line.
         In axisymmetric configurations, integration along the field line for a
         single poloidal transit between two global maxima of B is sufficient for
@@ -256,8 +318,8 @@ class Bounce2D(_Bounce):
         a change of variable for the bounce integral. The choice made for the
         automorphism will affect the performance of the quadrature.
     nufft_eps : float
-        Precision requested for interpolation with non-uniform fast Fourier
-        transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Precision requested for interpolation with non-uniform fast Fourier transform
+        (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``. It can be preferable
@@ -278,7 +340,7 @@ class Bounce2D(_Bounce):
     _modes_t: jax.Array
     _c: dict[str, jax.Array]
     _theta: PiecewiseChebyshevSeries
-    _B: Union[jax.Array, PiecewiseChebyshevSeries]
+    _B: jax.Array | PiecewiseChebyshevSeries
     _nufft_eps: float = eqx.field(static=True)
 
     def __init__(
@@ -288,7 +350,7 @@ class Bounce2D(_Bounce):
         angle,
         Y_B=None,
         alpha=None,
-        num_field_periods=20,
+        field_period_transits=20,
         quad=None,
         *,
         automorphism=None,
@@ -300,11 +362,18 @@ class Bounce2D(_Bounce):
     ):
         """Returns an object to compute bounce integrals."""
         assert grid.can_fft2
-        if "num_transit" in kwargs and num_field_periods == 20:  # default value
-            num_field_periods = kwargs["num_transit"] * grid.NFP
+        if "num_transit" in kwargs:
+            warnif(
+                True,
+                FutureWarning,
+                "Argument num_transit has been deprecated in favor of"
+                " field_period_transits, converting to"
+                " field_period_transits = num_transit*eq.NFP.",
+            )
+            field_period_transits = kwargs.pop("num_transit") * grid.NFP
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -340,13 +409,13 @@ class Bounce2D(_Bounce):
         iota = data["iota"] if is_reshaped else grid.compress(data["iota"])
         iota, alpha = jnp.atleast_1d(iota, jnp.zeros(1) if alpha is None else alpha)
         self._theta = theta_on_fieldlines(
-            angle, iota, alpha, num_field_periods, grid.NFP
+            angle, iota, alpha, field_period_transits, grid.NFP
         )
 
         self._nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
         if spline:
             self._B, self._c["knots"] = fast_cubic_spline(
                 self._theta,
@@ -372,6 +441,7 @@ class Bounce2D(_Bounce):
             )
 
     @staticmethod
+    @partial(_support_deprecated_signature, d=2)
     def batch(
         fun,
         data,
@@ -536,7 +606,7 @@ class Bounce2D(_Bounce):
         eq,
         X=32,
         Y=32,
-        rho=jnp.array([1.0]),
+        rho=None,
         iota=None,
         params=None,
         profiles=None,
@@ -555,7 +625,7 @@ class Bounce2D(_Bounce):
         eq,
         X=32,
         Y=32,
-        rho=jnp.array([1.0]),
+        rho=None,
         iota=None,
         params=None,
         profiles=None,
@@ -605,6 +675,8 @@ class Bounce2D(_Bounce):
         from desc.compute.utils import get_transforms
 
         params = setdefault(params, eq.params_dict)
+        if rho is None:
+            rho = jnp.array([1.0])
 
         name = kwargs.pop("name", "delta")
         if name == "lambda":
@@ -702,8 +774,8 @@ class Bounce2D(_Bounce):
 
         """
         if num_well is None:
-            num_well = Options._guess_num_well(
-                num_field_periods=self._theta.X,
+            num_well = BounceOptions._guess_num_well(
+                field_period_transits=self._theta.X,
                 NFP=self._NFP,
                 mins_per_field_period=getattr(self._B, "Y", jnp.inf) // 2,
             )
@@ -1220,6 +1292,7 @@ class Bounce2D(_Bounce):
         norm=LogNorm(1e-7),
         h_ax_numticks=None,
         v_ax_numticks=None,
+        truncate=0,
         **kwargs,
     ):
         """Plot frequency spectrum of the given inverse stream map.
@@ -1239,6 +1312,10 @@ class Bounce2D(_Bounce):
             If given, labels at most ``h_ax_numticks`` marks on the horizontal axis.
         v_ax_numticks : int
             If given, labels at most ``v_ax_numticks`` marks on the vertical axis.
+        truncate : int
+            Index at which to truncate any Chebyshev series. This will remove aliasing
+            error at the shortest wavelengths where the signal to noise ratio is lowest.
+            The default value is zero which is interpreted as no truncation.
         kwargs
             Keyword arguments to pass to ``matplotlib``.
 
@@ -1267,9 +1344,7 @@ class Bounce2D(_Bounce):
                 rf"on $\rho_{{l={l}}}$",
             )
 
-            c = FourierChebyshevSeries(
-                angle, (jnp.nan, jnp.nan), truncate=kwargs.get("truncate", 0)
-            )._c
+            c = FourierChebyshevSeries(angle, (jnp.nan, jnp.nan), truncate=truncate)._c
             c = cheb_from_dct(
                 c.at[..., (0, -1) if (X % 2 == 0) else 0, :].divide(2) * 2
             )
@@ -1403,7 +1478,7 @@ class Bounce1D(_Bounce):
         assert grid.is_meshgrid
 
         if quad is None:
-            quad = Options._quad(eta=-2, num_quad=32)
+            quad = BounceOptions._quad(eta=-2, num_quad=32)
         else:
             quad = get_quadrature(quad, automorphism)
         self._quad = quad
@@ -1443,6 +1518,7 @@ class Bounce1D(_Bounce):
         )
 
     @staticmethod
+    @partial(_support_deprecated_signature, d=1)
     def batch(
         fun,
         data,
@@ -1834,7 +1910,7 @@ class Bounce1D(_Bounce):
         return plot_ppoly(PPoly(B.T, self._knots), **kwargs)
 
 
-class Options(NamedTuple):
+class BounceOptions(NamedTuple):
     """Parameter container for Bounce2D."""
 
     # TODO(#2152): Consider instead of having users pass in 10 kwargs
@@ -1873,7 +1949,7 @@ class Options(NamedTuple):
             Threshold for superbanana classification. Must be in (0,1).
             Default is 0.2.
             """,
-        "num_field_periods": """int :
+        "field_period_transits": """int :
             Number of field periods to follow field line.
             In axisymmetric configurations, integration along the field line for a
             single poloidal transit between two global maxima of B is sufficient for
@@ -1941,7 +2017,7 @@ class Options(NamedTuple):
 
     _static_argnames = (
         "nufft_eps",
-        "num_field_periods",
+        "field_period_transits",
         "num_pitch",
         "num_quad",
         "num_well",
@@ -1955,7 +2031,7 @@ class Options(NamedTuple):
     alpha: jnp.ndarray
     loop: bool
     nufft_eps: float
-    num_field_periods: int
+    field_period_transits: int
     num_well: int
     pitch_batch_size: int
     pitch_quad: tuple[jnp.ndarray]
@@ -1977,7 +2053,7 @@ class Options(NamedTuple):
         gamma_threshold=0.2,
         loop=False,
         nufft_eps=-1.0,
-        num_field_periods=20,
+        field_period_transits=20,
         num_pitch=None,
         num_quad=32,
         num_well=None,
@@ -2017,11 +2093,11 @@ class Options(NamedTuple):
         nufft_eps = float(nufft_eps)
 
         if Y_B is None:
-            Y_B = Options._guess_Y_B(grid)
+            Y_B = BounceOptions._guess_Y_B(grid)
 
         if num_well is None:
-            num_well = Options._guess_num_well(
-                num_field_periods=num_field_periods,
+            num_well = BounceOptions._guess_num_well(
+                field_period_transits=field_period_transits,
                 NFP=grid.NFP,
                 mins_per_field_period=Y_B if spline else (Y_B // 2),
             )
@@ -2030,11 +2106,11 @@ class Options(NamedTuple):
             alpha=jnp.zeros(1) if alpha is None else alpha,
             loop=loop,
             nufft_eps=nufft_eps,
-            num_field_periods=num_field_periods,
+            field_period_transits=field_period_transits,
             num_well=num_well,
             pitch_batch_size=pitch_batch_size,
             pitch_quad=jax.lax.stop_gradient(simpson2(num_pitch)),
-            quad=Options._quad(eta, num_quad) if quad is None else quad,
+            quad=BounceOptions._quad(eta, num_quad) if quad is None else quad,
             shard=shard,
             spline=spline,
             surf_batch_size=surf_batch_size,
@@ -2065,12 +2141,12 @@ class Options(NamedTuple):
         return quad
 
     @staticmethod
-    def _guess_num_well(*, num_field_periods, NFP, mins_per_field_period=jnp.inf):
+    def _guess_num_well(*, field_period_transits, NFP, mins_per_field_period=jnp.inf):
         """Guess upper bound for number of wells based on spectrum.
 
         Parameters
         ----------
-        num_field_periods : int
+        field_period_transits : int
             Number of field periods to follow field line.
         NFP : int
             Number of field periods per toroidal transit.
@@ -2085,13 +2161,13 @@ class Options(NamedTuple):
             A guess for the max number of wells that exist for any pitch angle
             or field line after following it for the specified length.
             The guess will ideally be more conservative than
-            ``num_field_periods*mins_per_field_period`` to enhance performance,
-            yet sill remain loose enough that all wells are always detected.
+            ``field_period_transits*mins_per_field_period`` to enhance performance,
+            yet still remain loose enough that all wells are always detected.
 
         """
         # e.g. heliotron with nfp 19 needs num field periods * 2
-        num_well = round(num_field_periods * (1 + 20 / NFP))
-        return min(num_well, num_field_periods * mins_per_field_period)
+        num_well = round(field_period_transits * (1 + 20 / NFP))
+        return min(num_well, field_period_transits * mins_per_field_period)
 
     @staticmethod
     def _guess_Y_B(grid):
@@ -2143,10 +2219,10 @@ class Options(NamedTuple):
 
         Y_B = o._hyperparam["Y_B"]
         if Y_B is None:
-            o._hyperparam["Y_B"] = Y_B = Options._guess_Y_B(o._grid)
+            o._hyperparam["Y_B"] = Y_B = BounceOptions._guess_Y_B(o._grid)
         if o._hyperparam["num_well"] is None:
-            o._hyperparam["num_well"] = Options._guess_num_well(
-                num_field_periods=o._hyperparam["num_field_periods"],
+            o._hyperparam["num_well"] = BounceOptions._guess_num_well(
+                field_period_transits=o._hyperparam["field_period_transits"],
                 NFP=eq.NFP,
                 mins_per_field_period=Y_B if o._hyperparam["spline"] else (Y_B // 2),
             )
@@ -2160,7 +2236,7 @@ class Options(NamedTuple):
             if o._hyperparam["spline"]
             else {}
         )
-        o._constants["quad"] = Options._quad(eta, o._hyperparam.pop("num_quad"))
+        o._constants["quad"] = BounceOptions._quad(eta, o._hyperparam.pop("num_quad"))
 
         rho = o._grid.compress(o._grid.nodes[:, 0])
         o._constants["lambda"] = get_transforms(
@@ -2180,7 +2256,7 @@ class Options(NamedTuple):
 
     @staticmethod
     def _compute_objective(o, params, constants, key):
-        """Compute an objective built with ``Options._build_objective``."""
+        """Compute an objective built with ``BounceOptions._build_objective``."""
         constants = o._get_deprecated_constants(constants)
         eq = o.things[0]
 

@@ -300,11 +300,11 @@ def test_available_energy_from_optimized_near_axis_tokamak():
         rtol=1e-12,
     )
 
-    num_field_periods = math.ceil(eq.NFP / abs(iota))
-    assert num_field_periods == 1
-    num_complete_transits = math.floor(num_field_periods * abs(iota) / eq.NFP)
+    field_period_transits = math.ceil(eq.NFP / abs(iota))
+    assert field_period_transits == 1
+    num_complete_transits = math.floor(field_period_transits * abs(iota) / eq.NFP)
     assert num_complete_transits == 1
-    domain_length = num_field_periods * 2 * np.pi / eq.NFP
+    domain_length = field_period_transits * 2 * np.pi / eq.NFP
     transit_length = 2 * np.pi / abs(iota)
     zeta_first_max = (domain_length - transit_length) / 2
 
@@ -339,7 +339,7 @@ def test_available_energy_from_optimized_near_axis_tokamak():
         "binormal_scale": 1.0,
         # The caller selects and normalizes the retained complete poloidal domain.
         "fieldline_normalization": abs(iota) / num_complete_transits,
-        "num_field_periods": num_field_periods,
+        "field_period_transits": field_period_transits,
         "num_well": 2,
         "num_quad": 32,
         "Y_B": 256,
@@ -395,19 +395,22 @@ def test_available_energy_from_optimized_near_axis_tokamak():
 
     # A longer integer toroidal window retains two complete poloidal transits.
     # Normalize by the number of transits, while still summing every well in each.
-    repeated_num_field_periods = 2
-    repeated_num_transits = math.floor(repeated_num_field_periods * abs(iota) / eq.NFP)
+    repeated_field_period_transits = 2
+    repeated_num_transits = math.floor(
+        repeated_field_period_transits * abs(iota) / eq.NFP
+    )
     assert repeated_num_transits == 2
     repeated = eq.compute(
         "available energy",
-        num_field_periods=repeated_num_field_periods,
+        field_period_transits=repeated_field_period_transits,
         num_well=3,
         num_pitch=513,
         fieldline_normalization=abs(iota) / repeated_num_transits,
         **{
             key: value
             for key, value in common.items()
-            if key not in ("fieldline_normalization", "num_field_periods", "num_well")
+            if key
+            not in ("fieldline_normalization", "field_period_transits", "num_well")
         },
     )
     np.testing.assert_allclose(

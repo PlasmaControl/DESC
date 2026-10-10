@@ -49,16 +49,15 @@ def _compare_against_master(
             else:
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
-                if "Gamma_c" in name or "Gamma_delta" in name:
-                    rtol = 2e-5
-                else:
-                    rtol = 1e-8
+                rtol = 1e-5 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                atol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg
                 np.testing.assert_allclose(
                     actual=data[p][name],
                     desired=master_data[p][name],
-                    atol=1e-8 * mean + 1e-9,  # add 1e-9 for basically-zero things
+                    atol=atol,
                     rtol=rtol,
                     err_msg=err_msg,
                 )
@@ -338,7 +337,7 @@ def fft_grid_data(p):
     kwargs = dict(
         angle=Bounce2D.angle(eq, X=32, Y=48, rho=rho, tol=1e-10),
         Y_B=grid.num_zeta,
-        num_field_periods=25,
+        field_period_transits=25,
         num_well=100,
     )
     data = eq.compute(fft_names, grid, nufft_eps=nufft_eps, **kwargs)
@@ -383,7 +382,7 @@ def raz_grid_data(p):
     eq = get("W7-X")
     num_transit = 2
     Y_B = eq.N_grid * 2
-    rho = np.linspace(0.1, 1, 10)
+    rho = np.linspace(0, 1, 10)
     alpha = np.array([0])
     zeta = np.linspace(0, num_transit * 2 * np.pi, num_transit * Y_B * eq.NFP)
     grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")

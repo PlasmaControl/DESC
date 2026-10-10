@@ -25,7 +25,7 @@ from quadax import quadgk
 
 from desc.backend import jit, jnp
 
-from ..integrals.bounce_integral import Bounce2D, Options
+from ..integrals.bounce_integral import Bounce2D, BounceOptions
 from ..utils import safediv
 from ._drift import (
     _energy_normalized_binormal_drift,
@@ -197,7 +197,7 @@ def _energy_quad(num_energy):
     fieldline_normalization=(
         "float or ndarray : Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where "
         "𝓛 is the sum of ∫dℓ/B over the retained complete field-line domain. "
-        "The default NFP/num_field_periods is the long-field-line estimate. "
+        "The default NFP/field_period_transits is the long-field-line estimate. "
         "For k complete axisymmetric poloidal transits, use the magnitude of ι "
         "divided by k."
     ),
@@ -209,11 +209,11 @@ def _energy_quad(num_energy):
     ),
     quad_rtol="float : Relative tolerance for adaptive energy quadrature.",
     energy_quad="tuple : Optional nodes and weights for fixed energy quadrature.",
-    **Options._doc,
+    **BounceOptions._doc,
 )
 @partial(
     jit,
-    static_argnames=Options._static_argnames + ("quad_atol", "quad_rtol"),
+    static_argnames=BounceOptions._static_argnames + ("quad_atol", "quad_rtol"),
 )
 def _available_energy(params, transforms, profiles, data, **kwargs):
     """Dimensionless available energy of trapped electrons [2]_.
@@ -240,7 +240,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     fieldline_normalization : float or ndarray, optional
         Field-line factor 𝒩ₗ = Vψ/(2π𝓛), where 𝓛 is the sum of ∫dℓ/B over
         the retained complete field-line domain. The default
-        ``NFP / num_field_periods`` is the long-field-line estimate. For k
+        ``NFP / field_period_transits`` is the long-field-line estimate. For k
         complete axisymmetric poloidal transits, use the magnitude of ι divided by k.
     quad_atol, quad_rtol : float
         Tolerances for the adaptive energy quadrature.
@@ -268,7 +268,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     All complete wells in the traced interval are summed, as in Eq. (2.45) of [2]_.
     The compute function does not infer a special axisymmetric domain. To use k
     complete poloidal transits between global maxima of the magnetic-field strength,
-    choose ``alpha`` and ``num_field_periods`` so the traced interval contains those
+    choose ``alpha`` and ``field_period_transits`` so the traced interval contains those
     transits, then pass the magnitude of ι divided by k as
     ``fieldline_normalization``.
 
@@ -288,7 +288,7 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
         energy_quad = _energy_quad(32)
 
     grid = transforms["grid"]
-    opts = Options.guess(-1, grid, **kwargs)
+    opts = BounceOptions.guess(-1, grid, **kwargs)
 
     def foreach_surface(data):
         pitch_inv, weight = Bounce2D.pitch_quad(
@@ -346,8 +346,8 @@ def _available_energy(params, transforms, profiles, data, **kwargs):
     assert out.ndim == 1
 
     if fieldline_normalization is None:
-        # Long-field-line limit: 𝓛 → num_field_periods Vψ/(2π NFP).
-        fieldline_normalization = grid.NFP / opts.num_field_periods
+        # Long-field-line limit: 𝓛 → field_period_transits Vψ/(2π NFP).
+        fieldline_normalization = grid.NFP / opts.field_period_transits
     scalar = jnp.sqrt(jnp.pi) * jnp.asarray(fieldline_normalization) / 3
     data["available energy"] = grid.expand(scalar * out) / data["V_psi"]
     return data

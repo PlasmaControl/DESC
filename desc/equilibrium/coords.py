@@ -785,7 +785,7 @@ def get_rtz_grid(
     period=(np.inf, np.inf, np.inf),
     jitable=True,
     **kwargs,
-):
+) -> Grid:
     """Return DESC grid in (rho, theta, zeta) coordinates from given coordinates.
 
     Create a tensor-product grid from the given coordinates, and return the same

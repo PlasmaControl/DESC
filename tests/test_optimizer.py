@@ -30,9 +30,15 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
 from desc.io import load
-from desc.magnetic_fields import FourierCurrentPotentialField
+from desc.magnetic_fields import (
+    FourierCurrentPotentialField,
+    SumMagneticField,
+    ToroidalMagneticField,
+    VerticalMagneticField,
+)
 from desc.objectives import (
     AspectRatio,
+    BoundaryError,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     CoilLength,
@@ -60,6 +66,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
     LinearConstraintProjection,
@@ -74,6 +81,7 @@ from desc.optimize import (
 )
 from desc.optimize.optimizer import _parse_x_scale
 from desc.optimize.utils import chol, gershgorin_bounds
+from desc.profiles import PowerSeriesProfile
 from desc.utils import get_all_instances
 
 
@@ -1859,6 +1867,49 @@ def test_ess_scaling_without_proximal():
 
 
 @pytest.mark.unit
+@pytest.mark.optimize
+def test_ess_scaling_sheet_current():
+    """Test that ESS lets a sheet current on the boundary grow from zero."""
+    surf = FourierRZToroidalSurface(
+        R_lmn=[3.0, 1.0], modes_R=[[0, 0], [1, 0]], Z_lmn=[-1.0], modes_Z=[[-1, 0]]
+    )
+    p_edge = 3e3
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=0,
+        Psi=3.0,
+        surface=surf,
+        pressure=PowerSeriesProfile([1e4, 0, p_edge - 1e4]),
+        current=PowerSeriesProfile([0, 0, 2e6, 0, -1e6]),
+    )
+    eq.solve(verbose=0)
+    eq.surface = FourierCurrentPotentialField.from_surface(eq.surface, M_Phi=2, N_Phi=0)
+    B0, R0 = 0.93, 3.0
+    # vertical field from the Shafranov formula for this current and pressure
+    field = SumMagneticField(
+        [ToroidalMagneticField(B0, R0), VerticalMagneticField(-0.082)]
+    )
+    objective = ObjectiveFunction(
+        (ForceBalance(eq), BoundaryError(eq, field, field_fixed=True))
+    )
+    constraints = (FixPressure(eq), FixCurrent(eq), FixPsi(eq))
+    with pytest.warns(UserWarning, match="no equilibrium constraints"):
+        eq.optimize(
+            objective,
+            constraints,
+            optimizer="lsq-exact",
+            x_scale="ess",
+            maxiter=10,
+            verbose=0,
+        )
+    # with an ESS scale of 1 the sheet current stayed ~0 and the boundary moved
+    # instead. The edge pressure needs a diamagnetic poloidal sheet current of
+    # G ~ 2 pi R0 p_edge / B
+    np.testing.assert_allclose(eq.G, 2 * np.pi * R0 * p_edge / B0, rtol=0.5)
+
+
+@pytest.mark.unit
 def test_parse_x_scale(DummyCoilSet):
     """Test for parsing dict/list of scales into single array."""
     eq = Equilibrium()
@@ -2080,10 +2131,16 @@ def test_get_ess_scale():  # noqa: C901
     eq2.surface.change_Phi_resolution(3, 4)
     eq2_scale = eq2._get_ess_scale(alpha, order)
     assert eq2_scale.keys() == set(eq_scale.keys()).union({"I", "G", "Phi_mn"})
+    # sheet current is scaled by the current that changes B at the boundary by ~B
+    norms = compute_scaling_factors(eq2)
+    I0 = norms["B"] * norms["a"] / mu_0
     np.testing.assert_allclose(
         eq2_scale["Phi_mn"],
-        np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
+        I0
+        * np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
         / np.exp(-alpha),
     )
-    np.testing.assert_allclose(eq2_scale["I"], 1)
-    np.testing.assert_allclose(eq2_scale["G"], 1)
+    np.testing.assert_allclose(eq2_scale["I"], 2 * np.pi * I0)
+    np.testing.assert_allclose(
+        eq2_scale["G"], 2 * np.pi * I0 * norms["R0"] / norms["a"]
+    )

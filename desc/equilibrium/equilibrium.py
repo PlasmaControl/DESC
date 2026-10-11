@@ -36,6 +36,7 @@ from desc.objectives import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
+from desc.objectives.normalization import compute_scaling_factors
 from desc.optimizable import Optimizable, optimizable_parameter
 from desc.optimize import LinearConstraintProjection, Optimizer
 from desc.perturbations import perturb
@@ -2684,7 +2685,16 @@ class Equilibrium(IOAble, Optimizable):
         scales["Rb_lmn"] = bdry_scale["R_lmn"]
         scales["Zb_lmn"] = bdry_scale["Z_lmn"]
         if hasattr(self.surface, "Phi_mn"):
-            scales["Phi_mn"] = bdry_scale["Phi_mn"]
+            # the sheet current is in Amps and is often initialized to zero, so scale
+            # it by the current that changes B at the boundary by ~B, ie.
+            # mu_0 |grad(Phi)| ~ mu_0 Phi / a ~ B. Otherwise it is ~1e5 times too small
+            # compared to the boundary shape and barely changes during optimization.
+            norms = compute_scaling_factors(self)
+            I0 = norms["B"] * norms["a"] / mu_0
+            scales["Phi_mn"] = bdry_scale["Phi_mn"] * I0
+            # net currents give K ~ I / (2 pi a) and K ~ G / (2 pi R0)
+            scales["I"] = bdry_scale["I"] * 2 * np.pi * I0
+            scales["G"] = bdry_scale["G"] * 2 * np.pi * I0 * norms["R0"] / norms["a"]
         return scales
 
 

@@ -1784,7 +1784,6 @@ def test_load_lambda_half_mesh():
     file = Dataset(path, mode="r")
     ns = int(file.variables["ns"][:])
     xm = file.variables["xm"][:].filled()
-    rmnc = file.variables["rmnc"][:].filled()
     lmns = file.variables["lmns"][:].filled()
     file.close()
 
@@ -1794,17 +1793,10 @@ def test_load_lambda_half_mesh():
     t, j = np.meshgrid(theta, idx, indexing="ij")
     t, j = t.ravel(), j.ravel()
     lam_vmec = np.sum(lmns[j] * np.sin(xm * t[:, None]), axis=1)
-    # R from the neighbouring full mesh row, only used to detect a theta flip
-    R_vmec = np.sum(rmnc[j] * np.cos(xm * t[:, None]), axis=1)
 
+    # VMEC wouts are left-handed; load flips theta -> -theta, lambda -> -lambda
     rho = np.sqrt(s_half[j - 1])
-    grid_p = Grid(np.array([rho, t, np.zeros_like(t)]).T, sort=False)
-    grid_m = Grid(np.array([rho, -t, np.zeros_like(t)]).T, sort=False)
-    data_p = eq.compute(["R", "lambda"], grid=grid_p)
-    data_m = eq.compute(["R", "lambda"], grid=grid_m)
-    if np.max(np.abs(data_m["R"] - R_vmec)) < np.max(np.abs(data_p["R"] - R_vmec)):
-        lam_desc = -data_m["lambda"]  # theta -> -theta implies lambda -> -lambda
-    else:
-        lam_desc = data_p["lambda"]
+    grid = Grid(np.array([rho, -t, np.zeros_like(t)]).T, sort=False)
+    lam_desc = -eq.compute("lambda", grid=grid)["lambda"]
     # half mesh fit gives ~2.5e-4, fitting on the full mesh gave ~6e-3
     np.testing.assert_allclose(lam_desc, lam_vmec, atol=1e-3)

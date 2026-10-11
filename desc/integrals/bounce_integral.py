@@ -180,11 +180,11 @@ def _support_deprecated_signature(batch):
             return batch(*args, **kwargs)
 
         # otherwise act according to the deprecated signature
-        warnings.warn(
-            "That old function signature for the batching method is deprecated.",
-            FutureWarning,
-            stacklevel=2,
-        )
+        # warnings.warn(  # noqa: F401
+        #     "That signature for the batching method is deprecated.",  # noqa: F401
+        #     FutureWarning,  # noqa: F401
+        #     stacklevel=2,  # noqa: F401
+        # )  # noqa: F401
         kwargs.pop("num_pitch", None)
         kwargs.pop("expand_out", None)
         kwargs.setdefault("batch_size", kwargs.pop("surf_batch_size", 1))

@@ -181,7 +181,7 @@ def _support_deprecated_signature(batch):
 
         # otherwise act according to the deprecated signature
         warnings.warn(
-            "That old function signature for the batching method is deprecated.",
+            "That signature for the batching method is deprecated.",
             FutureWarning,
             stacklevel=2,
         )

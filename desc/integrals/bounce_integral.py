@@ -2002,6 +2002,7 @@ class BounceOptions(NamedTuple):
             This private parameter is intended to be used only by
             developers for objectives.
             """,
+        "theta": "",
     }
 
     _static_argnames = (
@@ -2242,39 +2243,3 @@ class BounceOptions(NamedTuple):
         o._constants["transforms"] = get_transforms(names, eq, grid=o._grid)
         o._dim_f = o._grid.num_rho
         o._target, o._bounds = _parse_callable_target_bounds(o._target, o._bounds, rho)
-
-    @staticmethod
-    def _compute_objective(o, params, constants, key):
-        """Compute an objective built with ``BounceOptions._build_objective``."""
-        constants = o._get_deprecated_constants(constants)
-        eq = o.things[0]
-
-        data = o._compute_fun(
-            eq, "iota", params, constants["transforms"], constants["profiles"]
-        )
-        delta = eq._map_poloidal_coordinates(
-            constants["transforms"]["grid"].compress(data["iota"]),
-            constants["x"],
-            constants["y"],
-            params["L_lmn"],
-            constants["lambda"],
-            outbasis="delta",
-            # TODO (#1034): Use old theta values as initial guess.
-            tol=1e-8,
-        )[..., ::-1]
-
-        data = o._compute_fun(
-            eq,
-            key,
-            params,
-            constants["transforms"],
-            constants["profiles"],
-            data,
-            angle=delta,
-            alpha=constants["alpha"],
-            quad=constants["quad"],
-            energy_quad=constants.get("energy_quad", None),
-            _vander=constants["_vander"],
-            **o._hyperparam,
-        )
-        return constants["transforms"]["grid"].compress(data[key])

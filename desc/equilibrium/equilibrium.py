@@ -1554,7 +1554,7 @@ class Equilibrium(IOAble, Optimizable):
         )
 
     @property
-    def surface(self) -> FourierRZToroidalSurface | ZernikeRZToroidalSection:
+    def surface(self) -> FourierRZToroidalSurface:
         """Surface: Geometric surface defining boundary conditions."""
         return self._surface
 

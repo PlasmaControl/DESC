@@ -916,8 +916,8 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
 
         """
-        # We are looking for the gradient of L = 0.5 * G.T @ G
-        # Then, the gradient is ∇L = G.T @ J_of_G
+        # We are looking for the gradient of L = 0.5 * Gᵀ @ G
+        # Then, the gradient is ∇L = Gᵀ @ J_of_G
         # where J_of_G is the Jacobian of G with respect to the optimization variables
         # This is a vjp with G serving as the cotangents.
         constants = setdefault(constants, [None, None])
@@ -1061,12 +1061,12 @@ class ProximalProjection(ObjectiveFunction):
         # equilibrium such that
         # F(x+dx, c+dc) = 0 = F(x, c) + dF/dx * dx + dF/dc * dc
         # so that we can set F(x, c) = 0, from here we can solve for dx and get
-        # dx = - (dF/dx)^-1 * dF/dc * dc     # noqa : E800
+        # dx = - (dF/dx)⁻¹ * dF/dc * dc     # noqa : E800
         # We can then compute the Jacobian of the objective function with respect to c
         # G(x+dx, c+dc) = G(x, c) + dG/dx * dx + dG/dc * dc
         # substituting in dx we get
-        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)^-1 * dF/dc ]* dc
-        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)^-1 * dF/dc
+        # G(x+dx, c+dc) = G(x, c) + [ dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc ] * dc
+        # and the Jacobian we want is dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
 
         # Note: This Jacobian can be obtained using JVPs in proper tangent directions.
         # First we will compute the tangent direction (see _proximal_get_tangents

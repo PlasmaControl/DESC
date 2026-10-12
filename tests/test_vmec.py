@@ -25,6 +25,8 @@ from desc.vmec_utils import (
 
 from .utils import area_difference_desc
 
+jac32 = True
+
 
 class TestVMECIO:
     """Tests VMECIO class."""

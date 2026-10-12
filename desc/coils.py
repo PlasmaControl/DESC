@@ -1675,10 +1675,10 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence[_CoilT]):
         name="",
         check_intersection=False,
     ):
-        coils_list = cast(list[_CoilT], flatten_list(coils, flatten_tuple=True))
-        assert all([isinstance(coil, (_Coil)) for coil in coils_list])
-        [_check_type(coil, coils_list[0]) for coil in coils_list]
-        self._coils = list(coils_list)
+        coils = cast(tuple[_CoilT], flatten_list(coils, flatten_tuple=True))
+        assert all([isinstance(coil, (_Coil)) for coil in coils])
+        [_check_type(coil, coils[0]) for coil in coils]
+        self._coils = list(coils)
         self._NFP = int(NFP)
         self._sym = bool(sym)
         self._name = str(name)

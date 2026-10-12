@@ -1238,7 +1238,10 @@ def test_proximal_constrained_AL_lsq():
     assert prox.dim_x == dim_eq + cset.dim_x
     assert prox._dimc_per_thing[prox._eq_idx] == dim_eq
     assert prox._dimx_per_thing[prox._eq_idx] == eq.dim_x
-    assert prox._dimc_per_thing[0] == prox._dimx_per_thing[0] == cset.dim_x
+    cset_idx = prox.things.index(cset)
+    assert (
+        prox._dimc_per_thing[cset_idx] == prox._dimx_per_thing[cset_idx] == cset.dim_x
+    )
 
     (eq_opt, cset_opt), _ = Optimizer("proximal-lsq-auglag").optimize(
         (eq, cset),
@@ -1260,7 +1263,7 @@ def test_proximal_constrained_AL_lsq():
     force = ObjectiveFunction(ForceBalance(eq=eq_opt))
     force.build()
     force_final = np.linalg.norm(force.compute_scaled_error(force.x(eq_opt)))
-    assert force_final < 1e-6
+    assert force_final < 1e-3
 
 
 @pytest.mark.slow

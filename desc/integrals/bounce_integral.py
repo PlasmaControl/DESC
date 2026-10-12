@@ -1934,10 +1934,6 @@ class BounceOptions(NamedTuple):
             non-axisymmetric configurations, it is necessary to integrate along
             multiple field lines until the surface is covered sufficiently.
             """,
-        "gamma_threshold": """float :
-            Threshold for superbanana classification. Must be in (0,1).
-            Default is 0.2.
-            """,
         "field_period_transits": """int :
             Number of field periods to follow field line.
             In axisymmetric configurations, integration along the field line for a
@@ -2029,7 +2025,6 @@ class BounceOptions(NamedTuple):
     shard: bool
     spline: bool
     surf_batch_size: int
-    thresh: float
     vander: tuple[jnp.ndarray]
     Y_B: int
 
@@ -2040,7 +2035,6 @@ class BounceOptions(NamedTuple):
         grid,
         *,
         alpha=None,
-        gamma_threshold=0.2,
         loop=False,
         nufft_eps=-1.0,
         field_period_transits=20,
@@ -2104,7 +2098,6 @@ class BounceOptions(NamedTuple):
             shard=shard,
             spline=spline,
             surf_batch_size=surf_batch_size,
-            thresh=jnp.tan(jnp.pi / 2 * gamma_threshold),
             vander=kwargs.get("_vander", None),
             Y_B=Y_B,
         )

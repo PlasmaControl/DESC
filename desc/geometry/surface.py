@@ -36,12 +36,12 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
-from .core import Surface
+from .core import Surface, ToroidalSurface
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
 
-class FourierRZToroidalSurface(Surface):
+class FourierRZToroidalSurface(ToroidalSurface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
     Parameters
@@ -1181,7 +1181,7 @@ class ZernikeRZToroidalSection(Surface):
         return scales
 
 
-class NurbsRZToroidalSurface(Surface):
+class NurbsRZToroidalSurface(ToroidalSurface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
     Parameters

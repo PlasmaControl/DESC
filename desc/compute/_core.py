@@ -2703,7 +2703,7 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
@@ -2726,7 +2726,7 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
@@ -2749,7 +2749,7 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_tzz(params, transforms, profiles, data, **kwargs):
@@ -2771,7 +2771,7 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
@@ -2793,7 +2793,7 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
@@ -2815,7 +2815,7 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     data=["0"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
@@ -3048,7 +3048,7 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     data=["omega_ttz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_ttz(params, transforms, profiles, data, **kwargs):
@@ -3071,7 +3071,7 @@ def _phi_ttz(params, transforms, profiles, data, **kwargs):
     data=["omega_tz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_tz(params, transforms, profiles, data, **kwargs):
@@ -3094,7 +3094,7 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     data=["omega_tzz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_tzz(params, transforms, profiles, data, **kwargs):
@@ -3116,7 +3116,7 @@ def _phi_tzz(params, transforms, profiles, data, **kwargs):
     data=["omega_z"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
@@ -3139,7 +3139,7 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     data=["omega_zz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
@@ -3162,7 +3162,7 @@ def _phi_zz(params, transforms, profiles, data, **kwargs):
     data=["omega_zzz"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _phi_zzz(params, transforms, profiles, data, **kwargs):
@@ -3899,8 +3899,203 @@ def _nurbs_surface_padded(control_points_full, weights_full, p_u, p_v):
     return cp * w[..., None], w, knots_u, knots_v
 
 
+def _nurbs_surface_RZ_partials(data, transforms, order):
+    """R, phi, Z and the (theta, zeta) partials of R, Z up to ``order``."""
+    p_u = transforms["p_u"]
+    p_v = transforms["p_v"]
+    pw, ww, knots_u, knots_v = _nurbs_surface_padded(
+        data["full_control_net"], data["full_weights"], p_u, p_v
+    )
+    bu, bu_u, bu_uu, bu_uuu = b_p_deriv3(data["theta"], p_u, knots_u)
+    bv, bv_v, bv_vv, bv_vvv = b_p_deriv3(data["v"], p_v, knots_v)
+    c = jnp.cos(data["zeta"])[:, None]
+    s = jnp.sin(data["zeta"])[:, None]
+
+    def surf(b_u, b_v):
+        N = jnp.einsum("ni,nj,jid->nd", b_u, b_v, pw)
+        D = jnp.einsum("ni,nj,ji->n", b_u, b_v, ww)[:, None]
+        return N, D
+
+    # radial and toroidal components in the plane at phi = zeta
+    def rad(S):
+        return S[:, 0:1] * c + S[:, 1:2] * s
+
+    def tor(S):
+        return S[:, 1:2] * c - S[:, 0:1] * s
+
+    # rational surface partials (Piegl & Tiller, The NURBS Book)
+    N, D = surf(bu, bv)
+    N_u, D_u = surf(bu_u, bv)
+    N_v, D_v = surf(bu, bv_v)
+    S = N / D
+    S_u = (N_u - S * D_u) / D
+    S_v = (N_v - S * D_v) / D
+
+    # partials of phi = atan2(Y, X) = Im log(X + iY)
+    R = rad(S)
+    r_u, r_v, q_u, q_v = rad(S_u), rad(S_v), tor(S_u), tor(S_v)
+    phi_u = q_u / R
+    phi_v = q_v / R
+
+    # implicit derivatives of v from phi(theta, v(theta, zeta)) = zeta
+    v_t = -phi_u / phi_v
+    v_z = 1 / phi_v
+
+    S_t = S_u + S_v * v_t
+    S_z = S_v * v_z
+
+    out = {
+        "R": R[:, 0],
+        "phi": jnp.mod(data["zeta"], 2 * jnp.pi),
+        "Z": S[:, 2],
+        "R_t": rad(S_t)[:, 0],
+        "Z_t": S_t[:, 2],
+        "R_z": (rad(S_z) + tor(S))[:, 0],
+        "Z_z": S_z[:, 2],
+    }
+    if order < 2:
+        return out
+
+    N_uu, D_uu = surf(bu_uu, bv)
+    N_uv, D_uv = surf(bu_u, bv_v)
+    N_vv, D_vv = surf(bu, bv_vv)
+    S_uu = (N_uu - 2 * S_u * D_u - S * D_uu) / D
+    S_uv = (N_uv - S_u * D_v - S_v * D_u - S * D_uv) / D
+    S_vv = (N_vv - 2 * S_v * D_v - S * D_vv) / D
+
+    r_uu, r_uv, r_vv = rad(S_uu), rad(S_uv), rad(S_vv)
+    q_uu, q_uv, q_vv = tor(S_uu), tor(S_uv), tor(S_vv)
+    phi_uu = q_uu / R - 2 * r_u * phi_u / R
+    phi_uv = q_uv / R - (r_u * phi_v + r_v * phi_u) / R
+    phi_vv = q_vv / R - 2 * r_v * phi_v / R
+
+    v_tt = -(phi_uu + 2 * phi_uv * v_t + phi_vv * v_t**2) / phi_v
+    v_tz = -(phi_uv * v_z + phi_vv * v_t * v_z) / phi_v
+    v_zz = -phi_vv * v_z**2 / phi_v
+
+    S_tt = S_uu + 2 * S_uv * v_t + S_vv * v_t**2 + S_v * v_tt
+    S_tz = S_uv * v_z + S_vv * v_t * v_z + S_v * v_tz
+    S_zz = S_vv * v_z**2 + S_v * v_zz
+
+    out["R_tt"] = rad(S_tt)[:, 0]
+    out["Z_tt"] = S_tt[:, 2]
+    out["R_tz"] = (rad(S_tz) + tor(S_t))[:, 0]
+    out["Z_tz"] = S_tz[:, 2]
+    out["R_zz"] = (rad(S_zz) + 2 * tor(S_z) - rad(S))[:, 0]
+    out["Z_zz"] = S_zz[:, 2]
+    if order < 3:
+        return out
+
+    N_uuu, D_uuu = surf(bu_uuu, bv)
+    N_uuv, D_uuv = surf(bu_uu, bv_v)
+    N_uvv, D_uvv = surf(bu_u, bv_vv)
+    N_vvv, D_vvv = surf(bu, bv_vvv)
+    S_uuu = (N_uuu - 3 * S_uu * D_u - 3 * S_u * D_uu - S * D_uuu) / D
+    S_uuv = (
+        N_uuv - S_uu * D_v - 2 * S_uv * D_u - 2 * S_u * D_uv - S_v * D_uu - S * D_uuv
+    ) / D
+    S_uvv = (
+        N_uvv - S_vv * D_u - 2 * S_uv * D_v - 2 * S_v * D_uv - S_u * D_vv - S * D_uvv
+    ) / D
+    S_vvv = (N_vvv - 3 * S_vv * D_v - 3 * S_v * D_vv - S * D_vvv) / D
+
+    q_uuu, q_uuv, q_uvv, q_vvv = tor(S_uuu), tor(S_uuv), tor(S_uvv), tor(S_vvv)
+    phi_uuu = (
+        q_uuu / R
+        - 3 * (r_uu * q_u + q_uu * r_u) / R**2
+        + 2 * (3 * q_u * r_u**2 - q_u**3) / R**3
+    )
+    phi_uuv = (
+        q_uuv / R
+        - (r_uu * q_v + q_uu * r_v + 2 * r_uv * q_u + 2 * q_uv * r_u) / R**2
+        + 2 * (2 * q_u * r_u * r_v + r_u**2 * q_v - q_u**2 * q_v) / R**3
+    )
+    phi_uvv = (
+        q_uvv / R
+        - (r_vv * q_u + q_vv * r_u + 2 * r_uv * q_v + 2 * q_uv * r_v) / R**2
+        + 2 * (2 * q_v * r_v * r_u + r_v**2 * q_u - q_v**2 * q_u) / R**3
+    )
+    phi_vvv = (
+        q_vvv / R
+        - 3 * (r_vv * q_v + q_vv * r_v) / R**2
+        + 2 * (3 * q_v * r_v**2 - q_v**3) / R**3
+    )
+
+    v_ttt = (
+        -(
+            phi_uuu
+            + 3 * phi_uuv * v_t
+            + 3 * phi_uvv * v_t**2
+            + phi_vvv * v_t**3
+            + 3 * phi_uv * v_tt
+            + 3 * phi_vv * v_t * v_tt
+        )
+        / phi_v
+    )
+    v_ttz = (
+        -(
+            phi_uuv * v_z
+            + 2 * phi_uvv * v_t * v_z
+            + phi_vvv * v_t**2 * v_z
+            + 2 * phi_uv * v_tz
+            + 2 * phi_vv * v_t * v_tz
+            + phi_vv * v_z * v_tt
+        )
+        / phi_v
+    )
+    v_tzz = (
+        -(
+            phi_uvv * v_z**2
+            + phi_vvv * v_t * v_z**2
+            + phi_uv * v_zz
+            + 2 * phi_vv * v_z * v_tz
+            + phi_vv * v_t * v_zz
+        )
+        / phi_v
+    )
+    v_zzz = -(phi_vvv * v_z**3 + 3 * phi_vv * v_z * v_zz) / phi_v
+
+    S_ttt = (
+        S_uuu
+        + 3 * S_uuv * v_t
+        + 3 * S_uvv * v_t**2
+        + S_vvv * v_t**3
+        + 3 * S_uv * v_tt
+        + 3 * S_vv * v_t * v_tt
+        + S_v * v_ttt
+    )
+    S_ttz = (
+        S_uuv * v_z
+        + 2 * S_uvv * v_t * v_z
+        + S_vvv * v_t**2 * v_z
+        + 2 * S_uv * v_tz
+        + 2 * S_vv * v_t * v_tz
+        + S_vv * v_z * v_tt
+        + S_v * v_ttz
+    )
+    S_tzz = (
+        S_uvv * v_z**2
+        + S_vvv * v_t * v_z**2
+        + S_uv * v_zz
+        + 2 * S_vv * v_z * v_tz
+        + S_vv * v_t * v_zz
+        + S_v * v_tzz
+    )
+    S_zzz = S_vvv * v_z**3 + 3 * S_vv * v_z * v_zz + S_v * v_zzz
+
+    out["R_ttt"] = rad(S_ttt)[:, 0]
+    out["Z_ttt"] = S_ttt[:, 2]
+    out["R_ttz"] = (rad(S_ttz) + tor(S_tt))[:, 0]
+    out["Z_ttz"] = S_ttz[:, 2]
+    out["R_tzz"] = (rad(S_tzz) + 2 * tor(S_tz) - rad(S_t))[:, 0]
+    out["Z_tzz"] = S_tzz[:, 2]
+    out["R_zzz"] = (rad(S_zzz) + 3 * tor(S_zz) - 3 * rad(S_z) - tor(S))[:, 0]
+    out["Z_zzz"] = S_zzz[:, 2]
+    return out
+
+
 @register_compute_fun(
-    name="phi2v",
+    name="v",
     label="v(\\theta, \\zeta)",
     units="~",
     units_long="None",
@@ -3917,7 +4112,7 @@ def _nurbs_surface_padded(control_points_full, weights_full, p_u, p_v):
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
     public=False,
 )
-def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+def _v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # per node: fix u = theta, solve for v so the surface point has phi = zeta
     p_u = transforms["p_u"]
     p_v = transforms["p_v"]
@@ -3982,29 +4177,6 @@ def _phi2v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="v",
-    label="v",
-    units="~",
-    units_long="None",
-    description=(
-        "NURBS surface parameter in the v (toroidal) direction corresponding "
-        "to the physical toroidal angle zeta"
-    ),
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["phi2v"],
-    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
-    public=False,
-)
-def _v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # data["v"] already computed when computing "phi2v"
-    return data
-
-
-@register_compute_fun(
     name="dv_dzeta",
     label="\\partial v / \\partial \\zeta",
     units="~",
@@ -4015,12 +4187,12 @@ def _v_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["phi2v"],
+    data=["v"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
     public=False,
 )
 def _dv_dzeta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # data["dv_dzeta"] already computed when computing "phi2v"
+    # data["dv_dzeta"] already computed when computing "v"
     return data
 
 
@@ -4035,12 +4207,12 @@ def _dv_dzeta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwarg
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["phi2v"],
+    data=["v"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
     public=False,
 )
 def _dv_dtheta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    # data["dv_dtheta"] already computed when computing "phi2v"
+    # data["dv_dtheta"] already computed when computing "v"
     return data
 
 
@@ -4055,51 +4227,11 @@ def _dv_dtheta_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwar
     transforms={"p_u": [], "p_v": []},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "full_control_net",
-        "full_weights",
-        "theta",
-        "v",
-        "dv_dzeta",
-        "dv_dtheta",
-    ],
+    data=["full_control_net", "full_weights", "theta", "v"],
     parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
 )
 def _R_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
-    p_u = transforms["p_u"]
-    p_v = transforms["p_v"]
-    pw, ww, knots_u, knots_v = _nurbs_surface_padded(
-        data["full_control_net"], data["full_weights"], p_u, p_v
-    )
-
-    bu, bu_u, _, _ = b_p_deriv3(data["theta"], p_u, knots_u)
-    bv, bv_v, _, _ = b_p_deriv3(data["v"], p_v, knots_v)
-
-    num = jnp.einsum("ni,nj,jid->nd", bu, bv, pw)
-    num_u = jnp.einsum("ni,nj,jid->nd", bu_u, bv, pw)
-    num_v = jnp.einsum("ni,nj,jid->nd", bu, bv_v, pw)
-    den = jnp.einsum("ni,nj,ji->n", bu, bv, ww)
-    den_u = jnp.einsum("ni,nj,ji->n", bu_u, bv, ww)
-    den_v = jnp.einsum("ni,nj,ji->n", bu, bv_v, ww)
-
-    xyz = num / den[:, None]
-    xyz_u = (num_u * den[:, None] - num * den_u[:, None]) / den[:, None] ** 2
-    xyz_v = (num_v * den[:, None] - num * den_v[:, None]) / den[:, None] ** 2
-    xyz_t = xyz_u + xyz_v * data["dv_dtheta"][:, None]
-    xyz_z = xyz_v * data["dv_dzeta"][:, None]
-
-    rpz = xyz2rpz(xyz)
-    R = rpz[:, 0]
-    X, Y = xyz[:, 0], xyz[:, 1]
-
-    data["R"] = R
-    data["phi"] = rpz[:, 1]
-    data["Z"] = rpz[:, 2]
-    # R = hypot(X, Y); chain rule gives R_t/R_z, Z is the same in both bases
-    data["R_t"] = (X * xyz_t[:, 0] + Y * xyz_t[:, 1]) / R
-    data["Z_t"] = xyz_t[:, 2]
-    data["R_z"] = (X * xyz_z[:, 0] + Y * xyz_z[:, 1]) / R
-    data["Z_z"] = xyz_z[:, 2]
+    data.update(_nurbs_surface_RZ_partials(data, transforms, order=1))
     return data
 
 
@@ -4214,4 +4346,276 @@ def _R_z_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
 )
 def _Z_z_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # data["Z_z"] already computed when computing "R"
+    return data
+
+
+@register_compute_fun(
+    name="R_tt",
+    label="\\partial_{\\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={"p_u": [], "p_v": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["full_control_net", "full_weights", "theta", "v"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_tt_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data.update(_nurbs_surface_RZ_partials(data, transforms, order=2))
+    return data
+
+
+@register_compute_fun(
+    name="R_tz",
+    label="\\partial_{\\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, "
+    "second derivative wrt poloidal and toroidal angles",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_tt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_tz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_tz"] already computed when computing "R_tt"
+    return data
+
+
+@register_compute_fun(
+    name="R_zz",
+    label="\\partial_{\\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_tt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_zz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_zz"] already computed when computing "R_tt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_tt",
+    label="\\partial_{\\theta \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, second poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_tt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_tt_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_tt"] already computed when computing "R_tt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_tz",
+    label="\\partial_{\\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, "
+    "second derivative wrt poloidal and toroidal angles",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_tt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_tz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_tz"] already computed when computing "R_tt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_zz",
+    label="\\partial_{\\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, second toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_tt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_zz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_zz"] already computed when computing "R_tt"
+    return data
+
+
+@register_compute_fun(
+    name="R_ttt",
+    label="\\partial_{\\theta \\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={"p_u": [], "p_v": []},
+    profiles=[],
+    coordinates="rtz",
+    data=["full_control_net", "full_weights", "theta", "v"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_ttt_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data.update(_nurbs_surface_RZ_partials(data, transforms, order=3))
+    return data
+
+
+@register_compute_fun(
+    name="R_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, "
+    "third derivative wrt poloidal angle twice and toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_ttz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_ttz"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="R_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, "
+    "third derivative wrt poloidal angle and toroidal angle twice",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_tzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_tzz"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="R_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _R_zzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["R_zzz"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_ttt",
+    label="\\partial_{\\theta \\theta \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, third poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_ttt_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_ttt"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, "
+    "third derivative wrt poloidal angle twice and toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_ttz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_ttz"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, "
+    "third derivative wrt poloidal angle and toroidal angle twice",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_tzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_tzz"] already computed when computing "R_ttt"
+    return data
+
+
+@register_compute_fun(
+    name="Z_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical position in lab frame, third toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["R_ttt"],
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Z_zzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # data["Z_zzz"] already computed when computing "R_ttt"
     return data

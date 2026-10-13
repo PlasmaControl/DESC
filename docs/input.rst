@@ -403,7 +403,7 @@ See the example DESC input files on the github repository to see typical choices
 
 .. attention::
             DESC assumes some things about the VMEC input file, including but not limited to:
-            - if ``NCURR=1``, indicating a current profile is being used in the VMEC input file, DESC assumes the current profile provided is the default for VMEC, which is the current *derivative* profile, ``I'(s)``. DESC does not currently check if the profile provided is ``I(s)`` as is not the default in VMEC.
+            - if ``NCURR=1``, indicating a current profile is being used in the VMEC input file, DESC reads ``AC`` as the power series of the current *derivative* profile ``I'(s)`` if ``PCURR_TYPE='power_series'`` (the VMEC default), or of the current profile ``I(s)`` if ``PCURR_TYPE='power_series_I'``.
             - DESC can only correctly handle the power series profile types in VMEC, it currently does not support reading in any of the other types such as splines or two-power profiles. If these are needed, it is recommended to convert them manually using DESC's own profile functions.
             - DESC assumes the input file is for a fixed-boundary equilibrium solve. DESC free-boundary cannot be run from an input file.
             - DESC does not handle non-standard ways of providing the boundary coefficients, such as ``RBC(0:4,2)= x,x,x,x``

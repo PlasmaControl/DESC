@@ -12,6 +12,14 @@ from desc.utils import errorif, setdefault, warnif
 def ensure_positive_jacobian(eq):
     """Convert an Equilibrium to have a positive coordinate Jacobian.
 
+    This will be done while also preserving the physical quantities of the
+    Equilibrium, such as iota magnitude, B magnitude and direction in real
+    space, net toroidal current, toroidal magnetic flux Psi, etc.
+
+    This means that if the Equilibrium is iota-constrained and the boundary
+    orientation is flipped, the iota profile will be negated to preserve
+    the direction of B.
+
     Parameters
     ----------
     eq : Equilibrium or iterable of Equilibrium
@@ -41,11 +49,10 @@ def ensure_positive_jacobian(eq):
             + " To avoid this warning in the future, switch the sign of all"
             + " modes with m<0 and iota/current profile."
         )
-
         if eq.iota is not None:
+            # reverse sign of iota to maintain physical  B direction, since
+            # we have reversed the poloidal angle direction.
             eq.i_l *= -1
-        else:
-            eq.c_l *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1

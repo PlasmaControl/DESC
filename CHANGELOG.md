@@ -3,6 +3,8 @@ Changelog
 
 New Features
 
+- Adds Velasco et. al.'s Gamma_alpha and Gamma_delta metrics related to radially outward drifting superbananas.
+- Adds Available Energy for nonlinear measure of turbelent transport [#2215](https://github.com/PlasmaControl/DESC/pull/2215) and local potential well plotting utitlity for analysis.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 
@@ -19,6 +21,7 @@ Breaking Changes and Deprecations
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+- We have changed our definition of ``Gamma_c Velasco`` from equation 16 of their paper to equation 20. This redefinition simply scales the old one by a factor of pi/(2 root 2).
 
 Bug Fixes
 

@@ -43,6 +43,7 @@ Fast ion confinement
     :template: class.rst
 
     desc.objectives.GammaC
+    desc.objectives.GammaLoss
 
 
 Geometry
@@ -71,6 +72,16 @@ Neoclassical
     :template: class.rst
 
     desc.objectives.EffectiveRipple
+
+
+Turbulence
+----------
+.. autosummary::
+    :toctree: _api/objectives
+    :recursive:
+    :template: class.rst
+
+    desc.objectives.AvailableEnergy
 
 
 Omnigenity

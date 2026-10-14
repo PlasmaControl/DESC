@@ -590,10 +590,15 @@ def _p_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _p_t(params, transforms, profiles, data, **kwargs):
-    data["p_t"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dt=1)
+    if profiles["pressure"] is not None:
+        data["p_t"] = profiles["pressure"].compute(
+            transforms["grid"], params["p_l"], dt=1
+        )
+    else:
+        data["p_t"] = data["0"]
     return data
 
 
@@ -608,10 +613,15 @@ def _p_t(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["pressure"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _p_z(params, transforms, profiles, data, **kwargs):
-    data["p_z"] = profiles["pressure"].compute(transforms["grid"], params["p_l"], dz=1)
+    if profiles["pressure"] is not None:
+        data["p_z"] = profiles["pressure"].compute(
+            transforms["grid"], params["p_l"], dz=1
+        )
+    else:
+        data["p_z"] = data["0"]
     return data
 
 
@@ -805,7 +815,7 @@ def _beta_a_z(params, transforms, profiles, data, **kwargs):
 def _gradbeta_a(params, transforms, profiles, data, **kwargs):
     data["grad(beta_a)"] = (
         data["beta_a_r"] * data["e^rho"].T
-        + data["beta_a_t"] * data["e^theta"].T
+        + data["beta_a_t"] * jnp.where(data["beta_a_t"] == 0, 0, data["e^theta"].T)
         + data["beta_a_z"] * data["e^zeta"].T
     ).T
     return data
@@ -1296,7 +1306,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
                     * data["sqrt(g)_rr"]
                     * (
                         2 * data["g_tz_r"] * data["lambda_rt"]
-                        - data["g_tt_rr"] * data["lambda_t"]
+                        - data["g_tt_rr"] * data["lambda_z"]
                         + data["g_tz_rr"] * (1 + data["lambda_t"])
                     )
                     + 2 * data["sqrt(g)_rrr"] * data["g_tz_r"] * (1 + data["lambda_t"])

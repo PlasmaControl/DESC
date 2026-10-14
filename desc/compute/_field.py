@@ -3485,7 +3485,7 @@ def _B_dot_grad_B_mag_vol(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B*grad(|B|)",
-    label="\\mathbf{B} \\cdot \\nabla B",
+    label="\\mathbf{B} \\cdot \\nabla |\\mathbf{B}|",
     units="T^2 \\cdot m^{-1}",
     units_long="Tesla squared / meters",
     description="",
@@ -3505,7 +3505,7 @@ def _B_dot_gradB(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(B*grad(|B|))_r",
-    label="\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla B)",
+    label="\\partial_{\\rho} (\\mathbf{B} \\cdot \\nabla |\\mathbf{B}|)",
     units="T^2 \\cdot m^{-1}",
     units_long="Tesla squared / meters",
     description="",
@@ -3537,7 +3537,7 @@ def _B_dot_gradB_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(B*grad(|B|))_t",
-    label="\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla B)",
+    label="\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla |\\mathbf{B}|)",
     units="T^2 \\cdot m^{-1}",
     units_long="Tesla squared / meters",
     description="",
@@ -3569,7 +3569,7 @@ def _B_dot_gradB_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="(B*grad(|B|))_z",
-    label="\\partial_{\\zeta} (\\mathbf{B} \\cdot \\nabla B)",
+    label="\\partial_{\\zeta} (\\mathbf{B} \\cdot \\nabla |\\mathbf{B}|)",
     units="T^2 \\cdot m^{-1}",
     units_long="Tesla squared / meters",
     description="",

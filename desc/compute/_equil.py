@@ -205,7 +205,7 @@ def _J_sup_zeta_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^zeta_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\phi} J^{\\zeta}",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} J^{\\zeta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant PEST toroidal component of plasma current density"
@@ -253,7 +253,7 @@ def _J_sup_theta_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="J^theta_z",
-    label="\\partial_{\\theta} J^{\\theta}",
+    label="\\partial_{\\zeta} J^{\\theta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Derivative of Contravariant poloidal component of plasma current"

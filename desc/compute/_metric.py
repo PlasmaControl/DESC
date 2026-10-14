@@ -1422,7 +1422,7 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rr_r",
     label="\\partial_{\\rho} g^{\\rho \\rho}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1441,7 +1441,7 @@ def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rr_t",
     label="\\partial_{\\theta} g^{\\rho \\rho}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1460,7 +1460,7 @@ def _g_sup_rr_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rr_z",
     label="\\partial_{\\zeta} g^{\\rho \\rho}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Radial element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1479,7 +1479,7 @@ def _g_sup_rr_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rt_r",
     label="\\partial_{\\rho} g^{\\rho \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1500,7 +1500,7 @@ def _g_sup_rt_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rz_r",
     label="\\partial_{\\rho} g^{\\rho \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1521,7 +1521,7 @@ def _g_sup_rz_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tt_r",
     label="\\partial_{\\rho} g^{\\theta \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1540,7 +1540,7 @@ def _g_sup_tt_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tz_r",
     label="\\partial_{\\rho} g^{\\theta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1561,7 +1561,7 @@ def _g_sup_tz_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^zz_r",
     label="\\partial_{\\rho} g^{\\zeta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
     + "first radial derivative",
@@ -1580,7 +1580,7 @@ def _g_sup_zz_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rt_t",
     label="\\partial_{\\theta} g^{\\rho \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1601,7 +1601,7 @@ def _g_sup_rt_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rz_t",
     label="\\partial_{\\theta} g^{\\rho \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1622,7 +1622,7 @@ def _g_sup_rz_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tt_t",
     label="\\partial_{\\theta} g^{\\theta \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1641,7 +1641,7 @@ def _g_sup_tt_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tz_t",
     label="\\partial_{\\theta} g^{\\theta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1662,7 +1662,7 @@ def _g_sup_tz_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^zz_t",
     label="\\partial_{\\theta} g^{\\zeta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
     + "first poloidal derivative",
@@ -1681,7 +1681,7 @@ def _g_sup_zz_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rt_z",
     label="\\partial_{\\zeta} g^{\\rho \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Poloidal element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1702,7 +1702,7 @@ def _g_sup_rt_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^rz_z",
     label="\\partial_{\\zeta} g^{\\rho \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Radial/Toroidal element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1723,7 +1723,7 @@ def _g_sup_rz_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tt_z",
     label="\\partial_{\\zeta} g^{\\theta \\theta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Poloidal element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1742,7 +1742,7 @@ def _g_sup_tt_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^tz_z",
     label="\\partial_{\\zeta} g^{\\theta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Poloidal/Toroidal element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1763,7 +1763,7 @@ def _g_sup_tz_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="g^zz_z",
     label="\\partial_{\\zeta} g^{\\zeta \\zeta}",
-    units="m^-2",
+    units="m^{-2}",
     units_long="inverse square meters",
     description="Toroidal/Toroidal element of contravariant metric tensor, "
     + "first toroidal derivative",
@@ -1794,6 +1794,24 @@ def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
     data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    return data
+
+
+@register_compute_fun(
+    name="|grad(rho)|*kappa_g",
+    label="|\\nabla\\rho| \\kappa_g",
+    units="m^{-2}",
+    units_long="Inverse square meters",
+    description="Radial coordinate gradient magnitude times geodesic curvature.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(rho)|", "kappa_g"],
+)
+def _gradrho_mag_times_kappa_g(params, transforms, profiles, data, **kwargs):
+    data["|grad(rho)|*kappa_g"] = data["|grad(rho)|"] * data["kappa_g"]
     return data
 
 
@@ -1838,6 +1856,24 @@ def _gradrho_norm_fsa(params, transforms, profiles, data, **kwargs):
 )
 def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+    return data
+
+
+@register_compute_fun(
+    name="|grad(psi)|*kappa_g",
+    label="|\\nabla\\psi| \\kappa_g",
+    units="T",
+    units_long="Tesla",
+    description="Toroidal flux gradient magnitude times geodesic curvature.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(psi)|", "kappa_g"],
+)
+def _gradpsi_mag_times_kappa_g(params, transforms, profiles, data, **kwargs):
+    data["|grad(psi)|*kappa_g"] = data["|grad(psi)|"] * data["kappa_g"]
     return data
 
 

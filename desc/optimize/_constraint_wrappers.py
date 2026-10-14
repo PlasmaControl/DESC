@@ -4,7 +4,7 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jit, jnp, put, qr_multiply
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -20,7 +20,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
-from .utils import f_where_x
+from .utils import estimate_singular_value, f_where_x, solve_triangular_regularized
 
 
 class LinearConstraintProjection(ObjectiveFunction):
@@ -571,6 +571,15 @@ class ProximalProjection(ObjectiveFunction):
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+    inv_method : str
+        Method to use for computing the pseudo-inverse of the constraint Jacobian.
+        Options are:
+
+        - ``'qr'`` (default): QR factorization with a small Levenberg-Marquardt
+          style Tikhonov regularization, scaled by an estimate of the smallest
+          singular value to closely match ``'svd'`` at a fraction of the cost.
+        - ``'svd'``: SVD pseudo-inverse with the singular values shifted by
+          the smallest one (the behavior of previous DESC versions).
     name : str
         Name of the objective function.
     """
@@ -582,14 +591,19 @@ class ProximalProjection(ObjectiveFunction):
         eq,
         perturb_options=None,
         solve_options=None,
+        inv_method="qr",
         name="ProximalProjection",
     ):
-        assert isinstance(objective, ObjectiveFunction), (
-            "objective should be instance of ObjectiveFunction." ""
-        )
-        assert isinstance(constraint, ObjectiveFunction), (
-            "constraint should be instance of ObjectiveFunction." ""
-        )
+        assert isinstance(
+            objective, ObjectiveFunction
+        ), "objective should be instance of ObjectiveFunction."
+        assert isinstance(
+            constraint, ObjectiveFunction
+        ), "constraint should be instance of ObjectiveFunction."
+        assert inv_method in [
+            "svd",
+            "qr",
+        ], f"inv_method should be either 'svd' or 'qr', got {inv_method}."
         for con in constraint.objectives:
             errorif(
                 not con._equilibrium,
@@ -617,6 +631,7 @@ class ProximalProjection(ObjectiveFunction):
         solve_options.setdefault("verbose", 0)
         self._perturb_options = perturb_options
         self._solve_options = solve_options
+        self._inv_method = inv_method
         self._built = False
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
@@ -1054,6 +1069,7 @@ class ProximalProjection(ObjectiveFunction):
             self._dimc_per_thing,
             self._eq_idx,
             "scaled_error",
+            self._inv_method,
         )
         g = self._objective.compute_scaled_error(xg, constants[0])
         g_vjp = self._objective.vjp_scaled_error(g, xg, constants[0])
@@ -1220,6 +1236,7 @@ class ProximalProjection(ObjectiveFunction):
             self._dimc_per_thing,
             self._eq_idx,
             op,
+            self._inv_method,
         )
 
         if self._objective._deriv_mode == "batched":
@@ -1276,7 +1293,7 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
     return wrapper
 
 
-@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
+@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op", "inv_method"))
 def _proximal_get_tangents(
     constraint,
     xf,
@@ -1287,6 +1304,7 @@ def _proximal_get_tangents(
     dimc_per_thing,
     eq_idx,
     op="scaled_error",
+    inv_method="svd",
 ):
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
     # where G is the objective function. Since DESC stores x and c in the same
@@ -1309,21 +1327,33 @@ def _proximal_get_tangents(
     # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
     if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
         eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
+            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op, inv_method
         )
     else:
         dxdcv = vs[eq_idx] @ dxdc.T
         # atleast_2d and reshape are to also handle a single (1D) direction
         eq_tangents = _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
+            constraint,
+            xf,
+            constants,
+            eq_feasible_tangents,
+            jnp.atleast_2d(dxdcv),
+            op,
+            inv_method,
         )
         eq_tangents = eq_tangents.reshape(dxdcv.shape)
     return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
 
 
-@jit_if_possible
+@jit_if_possible(static_argnames=("op", "inv_method"))
 def _proximal_eq_tangents(
-    constraint, xf, constants, eq_feasible_tangents, dxdcv, op="scaled_error"
+    constraint,
+    xf,
+    constants,
+    eq_feasible_tangents,
+    dxdcv,
+    op="scaled_error",
+    inv_method="svd",
 ):
     # Note: dxdcv holds the directions in c, mapped to the full eq state vector, as
     # rows. It is either dxdc.T or v @ dxdc.T, the return has the same shape.
@@ -1341,12 +1371,26 @@ def _proximal_eq_tangents(
     tangents = jnp.concatenate([eq_feasible_tangents.T, dxdcv], axis=0)
     J = getattr(constraint, "jvp_" + op)(tangents, xf, constants)
     Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
-    cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-    uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-    # this is (dF/dx)⁻¹ @ dF/dc for all the directions at once  # noqa : E800
-    dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
+    if inv_method == "svd":
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        dfdc = vtf.T @ (sfi * (uf.T @ Fc))
+    elif inv_method == "qr":
+        Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
+        # Levenberg-Marquardt regularization with alpha=smin² is similar to
+        # above regularization. Use power iteration to estimate smin/smax
+        smin = estimate_singular_value(R, mode="min")
+        smax = estimate_singular_value(R, mode="max")
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        sqrt_alpha = jnp.maximum(smin, cutoff * smax)
+        n = R.shape[1]
+        # solve the regularized system
+        stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
+        rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
+        Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
+        dfdc = solve_triangular_regularized(Rs, Qst_rhs)
     # feasible_tangents maps the reduced eq state vector back to the full one
     return dxdcv - (eq_feasible_tangents @ dfdc).T
 

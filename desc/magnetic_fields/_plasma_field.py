@@ -101,6 +101,35 @@ class PlasmaField(_MagneticField):
         self._R_bounds = R_bounds
         self._Z_bounds = Z_bounds
 
+    def _out_transform(self, coords, derivs):
+        """Transform from the A basis to the points ``coords`` in [R,phi,Z]."""
+        # Normalize the coordinates
+        nodes = (coords - self._shifts) / self._scales
+        if coords.shape[0] == 1:
+            # A single point is a 1x1x1 meshgrid, so directrpz can contract the
+            # coefficients one dimension at a time instead of forming the dense
+            # (1, num_modes) direct1 matrices.
+            idx = {
+                f"_{kind}_{dim}_idx": [0]
+                for kind in ["unique", "inverse"]
+                for dim in ["rho", "poloidal", "zeta"]
+            }
+            out_grid = Grid(
+                nodes, coordinates="rpz", is_meshgrid=True, jitable=True, **idx
+            )
+            method = "directrpz"
+        else:
+            out_grid = Grid(nodes, jitable=True)
+            method = "auto"
+        return Transform(
+            out_grid,
+            self._basis,
+            build_pinv=False,
+            build=True,
+            derivs=derivs,
+            method=method,
+        )
+
     def compute_magnetic_field(
         self,
         coords,
@@ -139,27 +168,21 @@ class PlasmaField(_MagneticField):
             Magnetic field at specified points
 
         """
-        shifts = self._shifts
         scales = self._scales
-        basis_obj = self._basis
 
         # Convert to RPZ if necessary
         coords = jnp.atleast_2d(coords)
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
         def _compute_B(coords):
-            # Normalize the coordinates
-            out_grid = Grid((coords - shifts) / scales, jitable=True)
-            out_transform = Transform(
-                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
-            )
+            out_transform = self._out_transform(coords, derivs=1)
             # Calculate B as the curl of A
             return _curl_cylindrical(
                 self._A_coeff, self._RA_phi_coeff, coords[:, 0], out_transform, scales
             )
 
-        # The transform matrices scale as (num_points, num_modes), so evaluate the
-        # points in batches to bound memory.
+        # The direct1 transform matrices scale as (num_points, num_modes), so evaluate
+        # the points in batches to bound memory.
         B = batch_map(_compute_B, coords, chunk_size)
 
         # Convert back to XYZ if necessary
@@ -266,20 +289,12 @@ class PlasmaField(_MagneticField):
             magnetic vector potential at specified points
 
         """
-        shifts = self._shifts
-        scales = self._scales
-        basis_obj = self._basis
-
         # Convert to RPZ if necessary
         coords = jnp.atleast_2d(coords)
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
         def _compute_A(coords):
-            # Normalize the coordinates
-            out_grid = Grid((coords - shifts) / scales, jitable=True)
-            out_transform = Transform(
-                out_grid, basis_obj, build_pinv=False, build=True, derivs=0
-            )
+            out_transform = self._out_transform(coords, derivs=0)
             # Interpolate the A grid
             return jnp.stack(
                 [

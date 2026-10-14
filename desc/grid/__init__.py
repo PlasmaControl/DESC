@@ -4,6 +4,11 @@ import warnings
 
 from .core import AbstractGrid
 from .curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
+from .cylindrical import (
+    AbstractGridCylindrical,
+    CustomGridCylindrical,
+    QuadratureGridCylindrical,
+)
 from .flux import (
     AbstractGridFlux,
     ConcentricGridFlux,

@@ -8,6 +8,7 @@ differentiation.
 
 from desc.backend import jnp
 from desc.basis import DoubleChebyshevFourierBasis
+from desc.batching import batch_map
 from desc.compute.nabla import _curl_cylindrical
 from desc.grid import CylindricalGrid, Grid, QuadratureGrid
 from desc.magnetic_fields import _MagneticField
@@ -128,7 +129,9 @@ class PlasmaField(_MagneticField):
         transforms : dict of Transform
             Not used for this subclass.
         chunk_size : int or None
-            Not used for this subclass.
+            Size to split computation into chunks of evaluation points.
+            If no chunking should be done or the chunk size is the full input
+            then supply ``None``. Default is ``None``.
 
         Returns
         -------
@@ -144,19 +147,23 @@ class PlasmaField(_MagneticField):
         coords = jnp.atleast_2d(coords)
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
-        # Normalize the coordinates
-        out_grid = Grid((coords - shifts) / scales, jitable=True)
-        out_transform = Transform(
-            out_grid, basis_obj, build_pinv=False, build=True, derivs=1
-        )
+        def _compute_B(coords):
+            # Normalize the coordinates
+            out_grid = Grid((coords - shifts) / scales, jitable=True)
+            out_transform = Transform(
+                out_grid, basis_obj, build_pinv=False, build=True, derivs=1
+            )
+            # Calculate B as the curl of A
+            return _curl_cylindrical(
+                self._A_coeff, self._RA_phi_coeff, coords[:, 0], out_transform, scales
+            )
 
-        # Calculate B as the curl of A
-        B = _curl_cylindrical(
-            self._A_coeff, self._RA_phi_coeff, coords[:, 0], out_transform, scales
-        )
+        # The transform matrices scale as (num_points, num_modes), so evaluate the
+        # points in batches to bound memory.
+        B = batch_map(_compute_B, coords, chunk_size)
 
         # Convert back to XYZ if necessary
-        if basis.lower == "xyz":
+        if basis.lower() == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
 
         return B
@@ -267,23 +274,25 @@ class PlasmaField(_MagneticField):
         coords = jnp.atleast_2d(coords)
         coords = xyz2rpz(coords) if basis.lower() == "xyz" else coords
 
-        # Normalize the coordinates
-        out_grid = Grid((coords - shifts) / scales)
-        out_transform = Transform(
-            out_grid, basis_obj, build_pinv=False, build=True, derivs=0
-        )
+        def _compute_A(coords):
+            # Normalize the coordinates
+            out_grid = Grid((coords - shifts) / scales, jitable=True)
+            out_transform = Transform(
+                out_grid, basis_obj, build_pinv=False, build=True, derivs=0
+            )
+            # Interpolate the A grid
+            return jnp.stack(
+                [
+                    out_transform.transform(self._A_coeff[:, 0]),
+                    out_transform.transform(self._A_coeff[:, 1]),
+                    out_transform.transform(self._A_coeff[:, 2]),
+                ],
+                axis=-1,
+            )
 
-        # Interpolate the A grid
-        A = jnp.stack(
-            [
-                out_transform.transform(self._A_coeff[:, 0]),
-                out_transform.transform(self._A_coeff[:, 1]),
-                out_transform.transform(self._A_coeff[:, 2]),
-            ],
-            axis=-1,
-        )
+        A = batch_map(_compute_A, coords, chunk_size)
 
-        if basis.lower == "xyz":
+        if basis.lower() == "xyz":
             A = rpz2xyz_vec(A, phi=coords[:, 1])
 
         return A

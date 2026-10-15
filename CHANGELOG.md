@@ -23,6 +23,7 @@ Breaking Changes and Deprecations
 Bug Fixes
 
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
+- Fixes ``SplineMagneticField`` with a single toroidal plane (axisymmetric mgrid): the cubic 2D interpolation now uses the Z derivatives instead of the zero phi derivatives, so its error between nodes falls from about 1e-3 to the expected cubic level [#2357](https://github.com/PlasmaControl/DESC/pull/2357).
 - Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.

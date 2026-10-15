@@ -42,6 +42,7 @@ from desc.magnetic_fields import (
     VerticalMagneticField,
 )
 from desc.objectives import (
+    AgniStability,
     AspectRatio,
     BallooningStability,
     BootstrapRedlConsistency,
@@ -3391,6 +3392,7 @@ class TestComputeScalarResolution:
     ]
     specials = [
         # these require special logic
+        AgniStability,
         BootstrapRedlConsistency,
         BoundaryError,
         CoilArclengthVariance,
@@ -3913,6 +3915,7 @@ class TestObjectiveNaNGrad:
     ]
     specials = [
         # these require special logic
+        AgniStability,
         BallooningStability,
         BootstrapRedlConsistency,
         BoundaryError,

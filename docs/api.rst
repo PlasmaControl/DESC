@@ -195,6 +195,7 @@ Objective Functions
     :recursive:
     :template: class.rst
 
+    desc.objectives.AgniStability
     desc.objectives.AspectRatio
     desc.objectives.BallooningStability
     desc.objectives.BootstrapRedlConsistency

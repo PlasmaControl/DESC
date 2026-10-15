@@ -9,7 +9,7 @@ For information on using conda, see `here <https://conda.io/projects/conda/en/la
 
 .. attention::
 
-    DESC requires ``python>=3.10``. If you have ``python2`` also locally installed, replace all ``pip`` commands with ``pip3`` and all ``python`` commands with ``python3`` to ensure the correct python version is used.
+    DESC requires ``python>=3.11``. If you have ``python2`` also locally installed, replace all ``pip`` commands with ``pip3`` and all ``python`` commands with ``python3`` to ensure the correct python version is used.
 
 .. attention::
 
@@ -48,7 +48,7 @@ On Your Local Machine
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.14'
+                conda create --name desc-env 'python>=3.11, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 
@@ -109,7 +109,7 @@ On Your Local Machine
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env 'python>=3.10, <=3.14'
+            conda create --name desc-env 'python>=3.11, <=3.14'
             conda activate desc-env
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
             pip install --editable .
@@ -129,7 +129,7 @@ On Your Local Machine
 
             git clone https://github.com/PlasmaControl/DESC.git
             cd DESC
-            conda create --name desc-env -c conda-forge 'python>=3.10, <=3.14' 'fftw' 'gxx<12'
+            conda create --name desc-env -c conda-forge 'python>=3.11, <=3.14' 'fftw' 'gxx<12'
             conda activate desc-env
 
             sed -i '1 s/^jax/jax[cuda12]/' requirements.txt
@@ -175,7 +175,7 @@ On Most Linux Computing Clusters
 
                 git clone https://github.com/PlasmaControl/DESC.git
                 cd DESC
-                conda create --name desc-env 'python>=3.10, <=3.14'
+                conda create --name desc-env 'python>=3.11, <=3.14'
                 conda activate desc-env
                 pip install --editable .
 

@@ -41,7 +41,7 @@ updates:
           - "interpax_fft"
           - "orthax"
           - "quadax"
-          - "jax-finufft"
+          - "nufftax"
           - "adv-jax-math"
   - package-ecosystem: "github-actions"
     directory: "/"

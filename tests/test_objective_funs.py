@@ -2215,13 +2215,13 @@ class TestObjectiveFunction:
         grid = obj_grid
 
         data = eq.compute(names, grid, angle=angle, **opts)
-        obj = EffectiveRipple(eq, grid=obj_grid, nufft_eps=1e-6, X=X, Y=Y, **opts)
+        obj = EffectiveRipple(eq, grid=obj_grid, nufft_eps=1e-8, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
             obj.compute(eq.params_dict), grid.compress(data[names[0]])
         )
-        obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
+        obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-8, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(

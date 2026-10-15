@@ -7,43 +7,18 @@ import numpy as np
 from interpax import interp1d
 
 try:
-    from jax_finufft import nufft2, options
+    from nufftax import nufft1d2, nufft2d2
 
 except (ImportError, ModuleNotFoundError):
     warnings.warn(
-        "jax_finufft is not installed. NUFFT functions will not be available.",
+        "nufftax is not installed. NUFFT functions will not be available.",
         UserWarning,
     )
-except Exception as e:
-    error_str = str(e)
-    # This error will probably happen pretty often, we skip it to prevent breaking
-    # codes that doesn't use jax_finufft but still want to use desc
-    if "XLA FFI handler registration" in error_str:
-        warnings.warn(
-            "jax_finufft XLA FFI handler registration failed. "
-            "This is likely due to a mismatch between the JAX version and the "
-            "jax_finufft version. Change package versions to resolve this issue. "
-            "NUFFT functions will not be available.",
-            UserWarning,
-        )
-    # If we face any other specific error related to jax_finufft, we can catch it
-    # in an elif block and provide a more specific warning.
-    else:
-        warnings.warn(
-            "Unknown error occurred while importing jax_finufft. NUFFT functions "
-            f"will not be available: {e}",
-            UserWarning,
-        )
 
 from desc.backend import jax, jnp
 
 _JF_BUG = True
-"""https://github.com/flatironinstitute/jax-finufft/issues/158.
-
-   Wait for jax-finufft to merge
-   https://github.com/flatironinstitute/jax-finufft/pull/216
-   then bump min version and set this to False.
-"""
+"""``nufftax`` does not support masking points, so masks are applied afterwards."""
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
@@ -90,8 +65,7 @@ def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
     s = jnp.exp(1j * s * x)
     s = s[..., jnp.newaxis, :] if vec else s
 
-    opts = options.Opts(modeord=0)
-    return (nufft2(f, x, iflag=1, eps=eps, opts=opts) * s).real
+    return (_nufft1d2(x, f, eps, vec) * s).real
 
 
 def nufft2d2r(
@@ -174,16 +148,28 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    if _JF_BUG:
-        opts = options.Opts(modeord=0)
-        f = jnp.fft.fftshift(f, (-2, -1))
-        return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
+    f = jnp.fft.fftshift(f, (-2, -1))
+    f = (_nufft2d2(x0, x1, f, eps, vec) * s).real
 
-    opts = options.Opts(modeord=1)
-    f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
     if mask is not None and fill_value is not None:
         f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, fill_value)
     return f
+
+
+def _nufft1d2(x, f, eps, vec):
+    signature = "(m),(b,n)->(b,m)" if vec else "(m),(n)->(m)"
+    return jnp.vectorize(
+        lambda x, f: nufft1d2(x, f, eps=eps, isign=1), signature=signature
+    )(x, f)
+
+
+def _nufft2d2(x0, x1, f, eps, vec):
+    signature = "(m),(m),(b,n0,n1)->(b,m)" if vec else "(m),(m),(n0,n1)->(m)"
+    return jnp.vectorize(
+        # nufftax expects coordinate of last axis of f first.
+        lambda x0, x1, f: nufft2d2(x1, x0, f, eps=eps, isign=1),
+        signature=signature,
+    )(x0, x1, f)
 
 
 # Warning: method must be specified as keyword argument.

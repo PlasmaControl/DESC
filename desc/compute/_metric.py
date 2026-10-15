@@ -95,7 +95,7 @@ def _sqrtg_clebsch(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
@@ -191,7 +191,7 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_theta_z", "e_zeta", "e_zeta_z", "|e_theta x e_zeta|"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _e_theta_x_e_zeta_z(params, transforms, profiles, data, **kwargs):
@@ -1091,7 +1091,7 @@ def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     data=["e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _g_sub_zz(params, transforms, profiles, data, **kwargs):
@@ -1156,7 +1156,7 @@ def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     data=["e_theta", "e_zeta"],
     parameterization=[
         "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
     ],
 )
 def _g_sub_tz(params, transforms, profiles, data, **kwargs):

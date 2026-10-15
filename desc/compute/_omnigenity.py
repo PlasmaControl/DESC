@@ -115,11 +115,14 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     mask_t = (Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0)
     mask_z = (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
 
-    num_t = (mask_t @ sign(wn)) * data["B_theta_mn"].reshape(
+    # d/dθ cos(|m|θ) = -|m| sin(|m|θ) and d/dθ sin(|m|θ) = |m| cos(|m|θ),
+    # so w_mn = -sign(m) B_θ_{-m,n} / |m|, and likewise in ζ for the m=0 modes.
+    # (For sin-symmetric w, -sign(wm) == sign(wn), but that is not true in general.)
+    num_t = (mask_t @ -sign(wm)) * data["B_theta_mn"].reshape(
         (transforms["grid"].num_rho, -1)
     )
     den_t = mask_t @ jnp.abs(wm)
-    num_z = (mask_z @ sign(wm)) * data["B_phi_mn"].reshape(
+    num_z = (mask_z @ -sign(wn)) * data["B_phi_mn"].reshape(
         (transforms["grid"].num_rho, -1)
     )
     den_z = mask_z @ jnp.abs(NFP * wn)

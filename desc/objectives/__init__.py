@@ -104,5 +104,6 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
     ShareParameters,
+    SurfaceCurveConsistency,
 )
 from .objective_funs import ObjectiveFunction

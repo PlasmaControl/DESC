@@ -96,6 +96,7 @@ classes, can also use the same ``Curve`` conversion methods to convert between c
     :template: class.rst
 
     desc.coils.FourierRZCoil
+    desc.coils.FourierRZSurfaceCoil
     desc.coils.FourierXYZCoil
     desc.coils.FourierPlanarCoil
     desc.coils.FourierXYCoil

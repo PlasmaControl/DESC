@@ -7,6 +7,8 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZSurfaceCurve,
+    FourierRZToroidalSurface,
     FourierXYCurve,
     FourierXYZCurve,
     SplineXYZCurve,
@@ -1270,3 +1272,244 @@ class TestSplineXYZCurve:
         c = SplineXYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
         with pytest.raises(TypeError):
             c.compute("length", grid=np.linspace(0, 1, 10))
+
+
+class TestFourierRZSurfaceCurve:
+    """Tests for FourierRZSurfaceCurve class."""
+
+    @pytest.mark.unit
+    def test_center(self):
+        """Test center of curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+            zeta_n=np.array([2]),
+            modes_zeta=np.array([0]),
+        )
+
+        # Default surface has major radius 10
+        np.testing.assert_allclose(
+            c.compute("center")["center"][0], [10, 2, 0], atol=1e-12
+        )
+
+    @pytest.mark.unit
+    def test_length(self):
+        """Test length of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+
+        # Default surface has minor radius 1
+        np.testing.assert_allclose(c.compute("length")["length"], 2 * np.pi)
+
+        # Next, test a curve closing toroidally
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=0,
+            secular_zeta=1,
+        )
+
+        # Curve lies on the outboard midplane, tracing out a
+        # circle with radius 11
+        np.testing.assert_allclose(c.compute("length")["length"], 2 * np.pi * 11)
+
+    @pytest.mark.unit
+    def test_coords(self):
+        """Test lab frame coordinates of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        # curve closing after 2 toroidal turns
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=2,
+        )
+        grid = LinearGrid(zeta=np.array([0, np.pi / 2, np.pi, 2 * np.pi]))
+        xyz = c.compute("x", grid=grid, basis="xyz")["x"]
+
+        np.testing.assert_allclose(xyz[0], [11, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(xyz[1], [-10, 0, -1], atol=1e-12)
+        np.testing.assert_allclose(xyz[2], [9, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(xyz[3], [11, 0, 0], atol=1e-12)
+
+    @pytest.mark.unit
+    def test_curvature(self):
+        """Test curvature of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+
+        np.testing.assert_allclose(c.compute("curvature")["curvature"], 1)
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=0,
+            theta_n=[np.pi / 2],
+            secular_zeta=1,
+        )
+
+        np.testing.assert_allclose(c.compute("curvature")["curvature"], 1 / 10)
+
+    @pytest.mark.unit
+    def test_torsion(self):
+        """Test torsion of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+        np.testing.assert_allclose(c.compute("torsion")["torsion"], 0)
+
+    @pytest.mark.unit
+    def test_frenet(self):
+        """Test frenet-serret frame of circular curve."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=0,
+            secular_zeta=1,
+        )
+        data = c.compute(
+            ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
+        )
+        T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
+        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
+        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_to_FourierXYZCurve(self):
+        """Test converting FourierRZSurfaceCurve to FourierXYZCurve object."""
+        surf = FourierRZToroidalSurface()
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=1,
+            secular_zeta=0,
+        )
+        c2 = c.to_FourierXYZ()
+        np.testing.assert_allclose(
+            c.compute("length")["length"], c2.compute("length")["length"]
+        )
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=0,
+            secular_zeta=1,
+        )
+        c2 = c.to_FourierXYZ()
+        np.testing.assert_allclose(
+            c.compute("length")["length"], c2.compute("length")["length"]
+        )
+
+    @pytest.mark.unit
+    def test_asserts_and_errors(self):
+        """Test asserts and errors of FourierRZSurfaceCurve."""
+        surf = FourierRZToroidalSurface(NFP=8)
+        with pytest.raises(ValueError):
+            _ = FourierRZSurfaceCurve(surface=surf, secular_theta=2, secular_zeta=4)
+        with pytest.raises(ValueError):
+            _ = FourierRZSurfaceCurve(
+                surface=surf, secular_theta=2, secular_zeta=3, NFP=4
+            )
+        with pytest.raises(ValueError):
+            _ = FourierRZSurfaceCurve(
+                surface=surf, secular_theta=2, secular_zeta=3, NFP=5
+            )
+        with pytest.raises(ValueError):
+            _ = FourierRZSurfaceCurve(surface=surf, theta_n=[0, 1, 2], sym_theta="sin")
+
+    @pytest.mark.unit
+    def test_modes(self):
+        """Test bases, mode numbering, and resolution for FourierRZSurfaceCurve."""
+        surf = FourierRZToroidalSurface()
+        c = FourierRZSurfaceCurve(
+            surface=surf, secular_theta=2, secular_zeta=3, theta_n=[2, -1, 3, 0, 5]
+        )
+
+        assert c.N == 2
+        assert c.theta_basis.N == 2
+        assert c.zeta_basis.N == 0
+
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=2,
+            secular_zeta=3,
+            theta_n=[2, -1, 3, 0, 5],
+            modes_theta=[-8, -6, -4, -3, -2],
+            sym_theta="sin",
+        )
+        assert c.sym_theta == "sin"
+        assert c.N == 8
+
+        np.testing.assert_allclose(c.theta_basis.modes[:, 2], np.arange(-8, 0))
+        np.testing.assert_allclose(c.get_coeffs([-6, -5])[0], [-1, 0])
+        c.change_resolution(N_theta=12)
+        c.set_coeffs(-9, theta_n=3)
+        assert c.N == 12
+        np.testing.assert_allclose(c.theta_basis.modes[:, 2], np.arange(-12, 0))
+        np.testing.assert_allclose(c.get_coeffs([-9, -8, -7])[0], [3, 2, 0])
+
+    @pytest.mark.unit
+    def test_from_values(self):
+        """Test fitting FourierRZSurfaceCurve from values."""
+        surf = FourierRZToroidalSurface(NFP=4)
+        c = FourierRZSurfaceCurve(
+            surface=surf,
+            secular_theta=2,
+            secular_zeta=3,
+            theta_n=[2, -1, 3, 0, 5],
+            modes_theta=[-8, -6, -4, -3, -2],
+            zeta_n=[0, 2, 4],
+            sym_theta="sin",
+            NFP=2,
+        )
+        grid = LinearGrid(zeta=np.linspace(0, 2 * np.pi, 201, endpoint=True))
+        curve_data = c.compute(names=["s", "theta", "zeta"], grid=grid)
+        s, theta, zeta = curve_data["s"], curve_data["theta"], curve_data["zeta"]
+        coords = np.vstack([s, theta, zeta]).T
+
+        with pytest.warns(
+            UserWarning, match="Unequal number of field periods for grid 1 and basis 2"
+        ):
+            c2 = FourierRZSurfaceCurve.from_values(
+                coords=coords,
+                surface=surf,
+                N_theta=c.N_theta,
+                N_zeta=c.N_zeta,
+                sym_theta=c.sym_theta,
+                sym_zeta=c.sym_zeta,
+                NFP=c.NFP,
+            )
+
+        assert c2.secular_theta == c.secular_theta
+        assert c2.secular_zeta == c.secular_zeta
+        np.testing.assert_allclose(c.theta_n, c2.theta_n, atol=1e-12)
+        np.testing.assert_allclose(c.zeta_n, c2.zeta_n, atol=1e-12)

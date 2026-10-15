@@ -250,6 +250,33 @@ def biot_savart_vector_potential_quad(
     )
 
 
+def _ints_to_grids(source_grid):
+    """Replace integer source grids (possibly nested in lists) by LinearGrid(N=int).
+
+    Same as Curve.compute, and needed before jit, which would make the int a tracer.
+    """
+    if isinstance(source_grid, numbers.Integral):
+        return LinearGrid(N=source_grid)
+    if isinstance(source_grid, (list, tuple)):
+        return [_ints_to_grids(grid) for grid in source_grid]
+    return source_grid
+
+
+@partial(jit, static_argnames=["basis", "compute_A_or_B", "chunk_size"])
+def _coilset_A_or_B(
+    coils, coords, params, source_grid, basis, compute_A_or_B, chunk_size
+):
+    """Field or vector potential of all coils of a (Mixed)CoilSet in one kernel call.
+
+    Jitted as a whole since otherwise the coil geometry is computed op by op, which
+    is slow the first time.
+    """
+    source = coils._as_precomputed_source(source_grid=source_grid, params=params)
+    return source._compute_A_or_B(
+        coords, basis=basis, compute_A_or_B=compute_A_or_B, chunk_size=chunk_size
+    )
+
+
 class _PrecomputedBiotSavartField(_MagneticField):
     """Wrapper for fast evaluation of Biot-Savart by precomputing source data.
 
@@ -1955,9 +1982,14 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
         )
-        source = self._as_precomputed_source(source_grid=source_grid, params=params)
-        return source._compute_A_or_B(
-            coords, basis=basis, compute_A_or_B=compute_A_or_B, chunk_size=chunk_size
+        return _coilset_A_or_B(
+            self,
+            jnp.asarray(coords),
+            params,
+            _ints_to_grids(source_grid),
+            basis,
+            compute_A_or_B,
+            chunk_size,
         )
 
     def _as_precomputed_source(self, source_grid=None, params=None):
@@ -3040,6 +3072,13 @@ class MixedCoilSet(CoilSet):
             magnetic field or vector potential at specified points, in either rpz
             or xyz coordinates
 
+        Notes
+        -----
+        Unless ``transforms`` are given, all coils are discretized together and
+        their field is summed in a single vectorized Biot-Savart kernel call
+        (Hanson-Hirshman segments for ``SplineXYZCoil``), rather than computing
+        the field of each member separately.
+
         """
         errorif(
             compute_A_or_B not in ["A", "B"],
@@ -3049,6 +3088,19 @@ class MixedCoilSet(CoilSet):
         params = self._make_arraylike(params)
         source_grid = self._make_arraylike(source_grid)
         transforms = self._make_arraylike(transforms)
+
+        # the vectorized path builds the coil geometry from source_grid, so fall
+        # back to evaluating each member if transforms were given
+        if all(tr is None for tr in transforms):
+            return _coilset_A_or_B(
+                self,
+                jnp.asarray(coords),
+                params,
+                _ints_to_grids(source_grid),
+                basis,
+                compute_A_or_B,
+                chunk_size,
+            )
 
         AB = 0
         if compute_A_or_B == "B":

@@ -2087,3 +2087,35 @@ def test_get_ess_scale():  # noqa: C901
     )
     np.testing.assert_allclose(eq2_scale["I"], 1)
     np.testing.assert_allclose(eq2_scale["G"], 1)
+
+
+@pytest.mark.unit
+def test_value_and_grad_and_array_x_scale():
+    """Test value_and_grad against compute_scalar and grad, and array x_scale."""
+    eq = desc.examples.get("SOLOVEV")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(3, 3, 0, 6, 6, 0)
+    obj = ObjectiveFunction(Energy(eq=eq))
+    con = ObjectiveFunction(get_fixed_boundary_constraints(eq=eq))
+    obj.build(verbose=0)
+    con.build(verbose=0)
+
+    x = obj.x(eq)
+    f, g = obj.value_and_grad(x)
+    np.testing.assert_allclose(f, obj.compute_scalar(x))
+    np.testing.assert_allclose(g, obj.grad(x))
+
+    lcp = LinearConstraintProjection(obj, con)
+    lcp.build(verbose=0)
+    xr = lcp.x(eq)
+    f, g = lcp.value_and_grad(xr)
+    np.testing.assert_allclose(f, lcp.compute_scalar(xr))
+    np.testing.assert_allclose(g, lcp.grad(xr))
+
+    # an array x_scale equal to the full state vector is what "auto" does
+    lcp_x = LinearConstraintProjection(obj, con, x_scale=np.asarray(x))
+    lcp_x.build(verbose=0)
+    np.testing.assert_allclose(lcp_x._D, lcp._D)
+    lcp_1 = LinearConstraintProjection(obj, con, x_scale=np.ones(obj.dim_x))
+    lcp_1.build(verbose=0)
+    np.testing.assert_allclose(lcp_1._D, 1)

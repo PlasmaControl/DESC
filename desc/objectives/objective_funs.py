@@ -859,6 +859,17 @@ class ObjectiveFunction(IOAble):
         )
 
     @jit
+    def value_and_grad(self, x, constants=None):
+        """Compute self.compute_scalar and its gradient wrt x in a single pass.
+
+        This is cheaper than calling ``compute_scalar`` and ``grad`` separately,
+        since the forward pass is shared.
+        """
+        constants = self._get_deprecated_constants(constants)
+        f, g = Derivative(self.compute_scalar, mode="value_and_grad")(x, constants)
+        return f, jnp.atleast_1d(g.squeeze())
+
+    @jit
     def hess(self, x, constants=None):
         """Compute Hessian matrix of self.compute_scalar wrt x."""
         constants = self._get_deprecated_constants(constants)

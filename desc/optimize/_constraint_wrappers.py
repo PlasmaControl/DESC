@@ -358,6 +358,28 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.grad(x, constants)
         return df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
 
+    def value_and_grad(self, x_reduced, constants=None):
+        """Compute self.compute_scalar and its gradient in a single pass.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
+        Returns
+        -------
+        f : float
+            Objective function value.
+        g : ndarray
+            gradient vector.
+
+        """
+        x = self.recover(x_reduced)
+        f, df = self._objective.value_and_grad(x, constants)
+        return f, df[self._unfixed_idx] @ (self._Z * self._D[self._unfixed_idx, None])
+
     def hess(self, x_reduced, constants=None):
         """Compute Hessian of self.compute_scalar.
 

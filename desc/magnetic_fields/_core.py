@@ -4,6 +4,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import MutableSequence
+from functools import partial
 
 import numpy as np
 from diffrax import (
@@ -20,7 +21,7 @@ from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
 from desc import config as desc_config
-from desc.backend import custom_jvp, jnp, sign
+from desc.backend import custom_jvp, jit, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -53,6 +54,7 @@ from desc.utils import (
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
+@partial(jit, static_argnames=["chunk_size"])
 def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     """Biot-Savart law for arbitrary sources.
 
@@ -86,7 +88,9 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(lambda re: _biot_savart_kernel(re, rs, JdV), re, chunk_size)
+    # The batching has to be outside of the custom_jvp, since JAX cannot reverse
+    # mode differentiate a jvp rule that contains a scan.
+    return batch_map(lambda re: _biot_savart(re, rs, JdV), re, chunk_size)
 
 
 def _contract(w, Q):
@@ -99,10 +103,10 @@ def _contract(w, Q):
 
 
 @custom_jvp
-def _biot_savart_kernel(re, rs, JdV):
-    """Biot-Savart kernel, B = mu_0/4pi sum_j JdV_j x (re - rs_j) / |re - rs_j|^3.
+def _biot_savart(re, rs, JdV):
+    """B = mu_0/4pi sum_j JdV_j x (re - rs_j) / |re - rs_j|^3, see biot_savart_general.
 
-    The derivative rule is hand-written, see _biot_savart_kernel_jvp.
+    The derivative rule is hand-written, see _biot_savart_jvp.
     """
     # We want sum_M (rs-re) x JdV / |rs-re|^3, where rs, JdV are (M x 3) and re
     # is (N x 3). Forming (rs-re) x JdV gives an (N x M x 3) array, which is
@@ -117,15 +121,15 @@ def _biot_savart_kernel(re, rs, JdV):
     # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,
     # so for a 1e-3m distance, error is ~1e-11 in a 20m device. This kernel is never
     # used for singular or near-singular integrals, so we should be fine.
-    K = jnp.cross(rs, JdV, axis=-1)
+    Q = jnp.concatenate([jnp.cross(rs, JdV, axis=-1), JdV], axis=-1)
     w = safediv(1.0, jnp.linalg.norm(rs - re[..., jnp.newaxis, :], axis=-1) ** 3)
-    B = _contract(w, K) - jnp.cross(re, _contract(w, JdV), axis=-1)
-    return B * mu_0 / (4 * jnp.pi)
+    wQ = _contract(w, Q)
+    return (wQ[..., :3] - jnp.cross(re, wQ[..., 3:], axis=-1)) * mu_0 / (4 * jnp.pi)
 
 
-@_biot_savart_kernel.defjvp
-def _biot_savart_kernel_jvp(primals, tangents):
-    """Forward mode derivative of _biot_savart_kernel, transposed by JAX for reverse.
+@_biot_savart.defjvp
+def _biot_savart_jvp(primals, tangents):
+    """Forward mode derivative of _biot_savart, transposed by JAX for reverse mode.
 
     JAX's AD of the kernel stores and differentiates (N x M x 3) intermediates, which
     makes gradients ~10x the cost of the field itself. With d = re - rs,
@@ -146,28 +150,29 @@ def _biot_savart_kernel_jvp(primals, tangents):
     So jacfwd turns the batch of tangents into one large matrix product rather than
     a batch of (N x M) arrays, and since the rule is linear in the tangents, JAX can
     transpose it for reverse mode, with all sums over sources or evaluation points
-    again matrix products of (N x M) arrays with thin matrices.
+    again matrix products of (N x M) arrays with thin matrices. Those (M x k)
+    tangent matrices are rebuilt for every batch of evaluation points though, so
+    very small batches (``chunk_size``) are inefficient.
     """
     re, rs, JdV = primals
     dre, drs, dJdV = tangents
+    shape = (*re.shape[:-1], 3, 6)
     r = jnp.linalg.norm(rs - re[..., jnp.newaxis, :], axis=-1)
     w = safediv(1.0, r**3)
     w5 = safediv(1.0, r**5)
-    K = jnp.cross(rs, JdV, axis=-1)
-    wJdV = _contract(w, JdV)
-    B = _contract(w, K) - jnp.cross(re, wJdV, axis=-1)
+    Q = jnp.concatenate([jnp.cross(rs, JdV, axis=-1), JdV], axis=-1)
+    wQ = _contract(w, Q)
+    B = wQ[..., :3] - jnp.cross(re, wQ[..., 3:], axis=-1)
 
-    Q = jnp.concatenate([K, JdV], axis=-1)
     # primal only
-    w5_Q_rsQ = _contract(
+    w5P = _contract(
         w5,
         jnp.concatenate(
             [Q, (rs[:, :, jnp.newaxis] * Q[:, jnp.newaxis, :]).reshape(-1, 18)], axis=-1
         ),
     )
-    w5_Q, w5_rsQ = w5_Q_rsQ[..., :6], w5_Q_rsQ[..., 6:].reshape(*re.shape[:-1], 3, 6)
     # linear in tangents
-    w5_drsQ_sQ = _contract(
+    w5T = _contract(
         w5,
         jnp.concatenate(
             [
@@ -177,26 +182,29 @@ def _biot_savart_kernel_jvp(primals, tangents):
             axis=-1,
         ),
     )
-    w5_drsQ = w5_drsQ_sQ[..., :18].reshape(*re.shape[:-1], 3, 6)
-    w5_sQ = w5_drsQ_sQ[..., 18:]
     # dw @ Q = -3 sum_j w5_ij (d_ij . dd_ij) Q_j
     dw_Q = -3 * (
-        dot(re, dre)[..., jnp.newaxis] * w5_Q
-        - jnp.einsum("...a,...ak->...k", re, w5_drsQ)
-        - jnp.einsum("...a,...ak->...k", dre, w5_rsQ)
-        + w5_sQ
+        dot(re, dre)[..., jnp.newaxis] * w5P[..., :6]
+        - jnp.einsum("...a,...ak->...k", re, w5T[..., :18].reshape(shape))
+        - jnp.einsum("...a,...ak->...k", dre, w5P[..., 6:].reshape(shape))
+        + w5T[..., 18:]
     )
-    dK = jnp.cross(drs, JdV, axis=-1) + jnp.cross(rs, dJdV, axis=-1)
-    w_dQ = _contract(w, jnp.concatenate([dK, dJdV], axis=-1))
+    w_dQ = _contract(
+        w,
+        jnp.concatenate(
+            [jnp.cross(drs, JdV, axis=-1) + jnp.cross(rs, dJdV, axis=-1), dJdV], axis=-1
+        ),
+    )
     dB = (
         dw_Q[..., :3]
         + w_dQ[..., :3]
-        - jnp.cross(dre, wJdV, axis=-1)
+        - jnp.cross(dre, wQ[..., 3:], axis=-1)
         - jnp.cross(re, dw_Q[..., 3:] + w_dQ[..., 3:], axis=-1)
     )
     return B * mu_0 / (4 * jnp.pi), dB * mu_0 / (4 * jnp.pi)
 
 
+@partial(jit, static_argnames=["chunk_size"])
 def biot_savart_general_vector_potential(
     re, rs, J, dV=jnp.array([1.0]), chunk_size=None
 ):

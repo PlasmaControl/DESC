@@ -115,6 +115,7 @@ class AutoDiffDerivative(_Derivative):
         Automatic differentiation mode.
         One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
+        ``'value_and_grad'`` (value and gradient of a scalar function),
         ``'hess'`` (Hessian of a scalar function),
         or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
@@ -318,7 +319,7 @@ class AutoDiffDerivative(_Derivative):
         return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
     def _set_mode(self, mode) -> None:
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
+        if mode not in ["fwd", "rev", "grad", "value_and_grad", "hess", "jvp"]:
             raise ValueError("invalid mode option for automatic differentiation")
 
         self._mode = mode
@@ -332,6 +333,8 @@ class AutoDiffDerivative(_Derivative):
             )
         elif self._mode == "grad":
             self._compute = jax.grad(self._fun, self._argnum)
+        elif self._mode == "value_and_grad":
+            self._compute = jax.value_and_grad(self._fun, self._argnum)
         elif self._mode == "hess":
             self._compute = jacfwd_chunked(
                 jacrev_chunked(self._fun, self._argnum, chunk_size=self._chunk_size),

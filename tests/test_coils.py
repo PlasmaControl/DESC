@@ -1748,3 +1748,62 @@ def test_coilset_field_matches_individual_coils():
         rtol=1e-10,
         atol=1e-14,
     )
+
+
+@pytest.mark.unit
+def test_mixedcoilset_field_matches_members():
+    """Test the vectorized MixedCoilSet field against summing each member's field."""
+    coilset = CoilSet(
+        FourierPlanarCoil(
+            current=1e6, center=[10, 1, 0.5], normal=[0, 1, 0.2], r_n=1.5
+        ),
+        NFP=3,
+        sym=True,
+        check_intersection=False,
+    )
+    xyz_coil = FourierXYZCoil(current=2e5)
+    s = np.linspace(0, 2 * np.pi, 40, endpoint=False)
+    spline_coil = SplineXYZCoil(
+        current=3e5, X=10 + 2 * np.cos(s), Y=np.zeros_like(s), Z=2 * np.sin(s)
+    )
+    mixed = MixedCoilSet(coilset, xyz_coil, spline_coil, check_intersection=False)
+
+    rng = np.random.default_rng(0)
+    pts = np.column_stack(
+        [rng.uniform(9, 11, 20), rng.uniform(0, 2 * np.pi, 20), rng.uniform(-1, 1, 20)]
+    )
+    grids = [20, LinearGrid(N=15), None]
+    for basis in ["rpz", "xyz"]:
+        x = pts if basis == "rpz" else rpz2xyz(pts)
+        B = mixed.compute_magnetic_field(x, basis=basis, source_grid=grids)
+        A = mixed.compute_magnetic_vector_potential(
+            x, basis=basis, source_grid=grids, chunk_size=7
+        )
+        B_ref = sum(
+            c.compute_magnetic_field(x, basis=basis, source_grid=g)
+            for c, g in zip(mixed, grids)
+        )
+        A_ref = sum(
+            c.compute_magnetic_vector_potential(x, basis=basis, source_grid=g)
+            for c, g in zip(mixed, grids)
+        )
+        np.testing.assert_allclose(B, B_ref, rtol=1e-10, atol=1e-14)
+        np.testing.assert_allclose(A, A_ref, rtol=1e-10, atol=1e-14)
+
+    # with transforms, each member is evaluated separately, which should agree
+    params = mixed.params_dict
+    grid = LinearGrid(N=15)
+    transforms = get_transforms(["x", "x_s", "ds"], obj=xyz_coil, grid=grid)
+    np.testing.assert_allclose(
+        mixed.compute_magnetic_field(
+            pts,
+            params=params,
+            source_grid=[None, grid, None],
+            transforms=[None, transforms, None],
+        ),
+        mixed.compute_magnetic_field(
+            pts, params=params, source_grid=[None, grid, None]
+        ),
+        rtol=1e-10,
+        atol=1e-14,
+    )

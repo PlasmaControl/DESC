@@ -557,18 +557,22 @@ def f_where_x(x, xs, fs, dim=0):
     Returns
     -------
     f : float or ndarray
-        value of fs[i] where x==xs[i]
+        value of fs[i] where x==xs[i], or an empty array if x is not in xs
 
     """
-    x, xs, fs = map(np.asarray, (x, xs, fs))
+    x = np.asarray(x)
     assert len(xs) == len(fs)
-    assert len(xs) == 0 or x.shape == xs[0].shape
-    eps = np.finfo(x.dtype).eps
-    i = np.where(np.all(np.isclose(x, xs, rtol=eps, atol=eps), axis=1))[0]
-    # sometimes two things are within eps of x, we want the most recent one
-    if len(i) > 1:
-        i = i[-1]
-    f = fs[i].squeeze()
+    i = []
+    if len(xs):
+        xs = np.asarray(xs)
+        assert x.shape == xs[0].shape
+        eps = np.finfo(x.dtype).eps
+        i = np.where(np.all(np.isclose(x, xs, rtol=eps, atol=eps), axis=1))[0]
+    if len(i) == 0:
+        return np.zeros((0, x.size)) if dim == 2 else np.array([])
+    # sometimes two things are within eps of x, we want the most recent one.
+    # only that entry is converted, since fs may be a long list of jax arrays
+    f = np.asarray(fs[i[-1]]).squeeze()
     if dim == 1:
         f = np.atleast_1d(f)
     if dim == 2:

@@ -121,54 +121,50 @@ def _optimize_scipy_minimize(  # noqa: C901
         options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
         options.setdefault("max_trust_radius", np.inf)
     # need to use some "global" variables here
-    allx = [x0]
-    func_allx = []
-    func_allf = []
-    grad_allx = []
-    grad_allf = []
-    hess_allx = []
-    hess_allf = []
+    # x0 / scale * scale can differ from x0 in the last bit, so store the value that
+    # is actually evaluated, so that it is found in the cache below
+    x0s = np.asarray(x0) / scale
+    allx = [x0s * scale]
+    # every evaluation is cached by the bytes of x, so looking one up doesn't get
+    # slower with more iterations, and stored as numpy so it leaves the device once
+    fs, gs, Hs = {}, {}, {}
     message = [""]
     success = [None]
+    # evaluating f and its gradient together shares the forward pass
+    value_and_grad = getattr(objective, "value_and_grad", None)
+
+    def _key(x):
+        return np.asarray(x).tobytes()
+
+    def _eval(x, need_grad=True):
+        # make sure f (and grad if need_grad) at x are in the cache, return the key
+        k = _key(x)
+        if need_grad and k not in gs and value_and_grad is not None:
+            f, g = value_and_grad(x)
+            fs[k], gs[k] = np.asarray(f), np.asarray(g)
+        else:
+            if k not in fs:
+                fs[k] = np.asarray(fun(x))
+            if need_grad and k not in gs:
+                gs[k] = np.asarray(grad(x))
+        return k
+
+    def fun_and_grad_wrapped(xs):
+        k = _eval(xs * scale)
+        return fs[k], gs[k] * scale
 
     def fun_wrapped(xs):
-        # record all the x and fs we see
-        x = xs * scale
-        if len(func_allx):
-            f = f_where_x(x, func_allx, func_allf, dim=0)
-        else:
-            f = np.array([])
-        if not f.size:
-            func_allx.append(x)
-            f = fun(x)
-            func_allf.append(f)
-        return f
+        return fs[_eval(xs * scale, need_grad=False)]
 
     def grad_wrapped(xs):
-        # record all the x and grad we see
-        x = xs * scale
-        if len(grad_allx):
-            g = f_where_x(x, grad_allx, grad_allf, dim=1)
-        else:
-            g = np.array([])
-        if not g.size:
-            grad_allx.append(x)
-            g = grad(x)
-            grad_allf.append(g)
-        return g * scale
+        return gs[_eval(xs * scale)] * scale
 
     def hess_wrapped(xs):
-        # record all the x and hess we see
         x = xs * scale
-        if len(hess_allx):
-            H = f_where_x(x, hess_allx, hess_allf, dim=2)
-        else:
-            H = np.array([[]])
-        if not H.size:
-            hess_allx.append(x)
-            H = hess(x)
-            hess_allf.append(H)
-        return H * (np.atleast_2d(scale).T * np.atleast_2d(scale))
+        k = _key(x)
+        if k not in Hs:
+            Hs[k] = np.asarray(hess(x))
+        return Hs[k] * (np.atleast_2d(scale).T * np.atleast_2d(scale))
 
     hess_wrapped = None if not use_hessian else hess_wrapped
 
@@ -178,12 +174,8 @@ def _optimize_scipy_minimize(  # noqa: C901
         eps = np.finfo(x1.dtype).eps
         if np.all(np.isclose(x1, allx[-1], rtol=eps, atol=eps)):
             return
-        f1 = f_where_x(x1, func_allx, func_allf, dim=0)
-        if not f1.size:
-            f1 = fun_wrapped(xs)
-        g1 = f_where_x(x1, grad_allx, grad_allf, dim=1)
-        if not g1.size:
-            g1 = grad_wrapped(xs) / scale
+        k1 = _eval(x1)
+        f1, g1 = fs[k1], gs[k1]
         allx.append(x1)
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
@@ -194,16 +186,11 @@ def _optimize_scipy_minimize(  # noqa: C901
             reduction_ratio = 0
         else:
             x2 = allx[-2]
-            f2 = f_where_x(x2, func_allx, func_allf, dim=0)
+            f2 = fs[_eval(x2, need_grad=False)]
             df = f2 - f1
             dx = x1 - x2
-            dx_norm = jnp.linalg.norm(dx)
-            if len(hess_allx):
-                H1 = f_where_x(x1, hess_allx, hess_allf, dim=2)
-            else:
-                H1 = np.eye(x1.size) / dx_norm
-            if not H1.size:
-                H1 = np.eye(x1.size) / dx_norm
+            dx_norm = np.linalg.norm(dx)
+            H1 = Hs.get(k1, np.eye(x1.size) / dx_norm)
             predicted_reduction = -evaluate_quadratic_form_hess(H1, g1, dx)
             if predicted_reduction > 0:
                 reduction_ratio = df / predicted_reduction
@@ -213,9 +200,7 @@ def _optimize_scipy_minimize(  # noqa: C901
                 reduction_ratio = 0
 
         if verbose > 1:
-            print_iteration_nonlinear(
-                len(allx) - 1, len(func_allx), f1, df, dx_norm, g_norm
-            )
+            print_iteration_nonlinear(len(allx) - 1, len(fs), f1, df, dx_norm, g_norm)
 
         success[0], message[0] = check_termination(
             df,
@@ -229,7 +214,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             stoptol["gtol"],
             len(allx) - 1,
             stoptol["maxiter"],
-            len(func_allx),
+            len(fs),
             stoptol["max_nfev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
@@ -240,48 +225,43 @@ def _optimize_scipy_minimize(  # noqa: C901
 
     if verbose > 1:
         print_header_nonlinear()
-        f1 = fun_wrapped(x0 / scale)
-        g1 = grad_wrapped(x0 / scale) / scale
-        g_norm = np.linalg.norm(g1, ord=np.inf)
+        k0 = _eval(allx[0])
+        g_norm = np.linalg.norm(gs[k0], ord=np.inf)
         print_iteration_nonlinear(
-            len(allx) - 1, len(func_allx), f1, np.inf, np.inf, g_norm
+            len(allx) - 1, len(fs), fs[k0], np.inf, np.inf, g_norm
         )
 
     try:
         result = scipy.optimize.minimize(
-            fun_wrapped,
-            x0=x0 / scale,
+            fun_and_grad_wrapped if value_and_grad is not None else fun_wrapped,
+            x0=x0s,
             args=(),
             method=method.replace("scipy-", ""),
-            jac=grad_wrapped,
+            jac=True if value_and_grad is not None else grad_wrapped,
             hess=hess_wrapped,
             tol=stoptol["gtol"],
             options=options,
             callback=callback,
         )
         result["allx"] = allx
-        result["nfev"] = len(func_allx)
-        result["ngev"] = len(grad_allx)
-        result["nhev"] = len(hess_allx)
+        result["nfev"] = len(fs)
+        result["ngev"] = len(gs)
+        result["nhev"] = len(Hs)
         result["nit"] = len(allx) - 1
     except StopIteration:
         x = allx[-1]
-        f = f_where_x(x, func_allx, func_allf, dim=0)
-        g = f_where_x(x, grad_allx, grad_allf, dim=1)
-        if len(hess_allx):
-            H = f_where_x(x, hess_allx, hess_allf, dim=2)
-        else:
-            H = None
+        k = _key(x)
+        g = gs[k]
         result = OptimizeResult(
             x=x,
             success=success[0],
-            fun=f,
+            fun=fs[k],
             grad=g,
-            hess=H,
+            hess=Hs.get(k, None),
             optimality=np.linalg.norm(g, ord=np.inf),
-            nfev=len(func_allx),
-            ngev=len(grad_allx),
-            nhev=len(hess_allx),
+            nfev=len(fs),
+            ngev=len(gs),
+            nhev=len(Hs),
             nit=len(allx) - 1,
             message=message[0],
             allx=allx,

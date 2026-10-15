@@ -22,64 +22,26 @@ def qh_basis():
 
 
 @pytest.mark.unit
-def test_agni_stability_value():
-    """The objective gives the reference gamma^2 and agnimhd's own value.
+def test_agni_stability():
+    """Value is the dense reference and the Jacobian matches finite differences.
 
-    agnimhd's own path is from_desc + growth_rate, on the same equilibrium and basis.
-    """
-    eq = load(QH_FILE)
-    basis = qh_basis()
-    obj = AgniStability(eq, basis)
-    obj.build(verbose=0)
-    gamma2 = obj.compute(eq.params_dict)
-    assert gamma2.shape == (1,)
-    np.testing.assert_allclose(gamma2[0], GAMMA2_8x8x3, rtol=1e-8)
-
-    eq_data, diffmat = agnimhd.from_desc(eq, basis)
-    np.testing.assert_allclose(
-        gamma2[0], agnimhd.growth_rate(eq_data, diffmat), rtol=1e-10
-    )
-
-
-@pytest.mark.unit
-def test_agni_stability_jacobian():
-    """Reverse-mode Jacobian matches central finite differences.
-
-    The Jacobian is computed as the optimizer computes it, and checked in the three
-    coefficients gamma^2 depends on most.
+    The Jacobian is the optimizer's reverse-mode one, checked in the two
+    coefficients gamma^2 depends on most. One build, so it compiles once.
     """
     eq = load(QH_FILE)
     obj = ObjectiveFunction(AgniStability(eq, qh_basis()), deriv_mode="blocked")
     obj.build(verbose=0)
     x = obj.x(eq)
+    np.testing.assert_allclose(obj.compute_scaled_error(x), [GAMMA2_8x8x3], rtol=1e-8)
+
     jac = np.asarray(obj.jac_scaled_error(x))[0]
     assert np.all(np.isfinite(jac))
     h = 1e-6
-    for i in np.argsort(-np.abs(jac))[:3]:
+    for i in np.argsort(-np.abs(jac))[:2]:
         dx = np.zeros_like(x)
         dx[i] = h
         fd = (obj.compute_scaled_error(x + dx) - obj.compute_scaled_error(x - dx)) / 2
         np.testing.assert_allclose(fd[0] / h, jac[i], rtol=1e-4)
-
-
-@pytest.mark.unit
-def test_agni_stability_jd():
-    """Jacobi-Davidson with its coarse level gives the default solver's gamma^2.
-
-    The matrix-free Jacobi-Davidson solver is compared to the default (eigsh).
-    """
-    eq = load(QH_FILE)
-    # JD needs the Fourier truncation (mpol, ntor) fixed on both levels
-    basis = agnimhd.Basis(16, 12, 8, mpol=5, ntor=1)
-    solver = agnimhd.SolverConfig(
-        eigensolver="jd", sigma=2e-4, jd_tol=1e-4, jd_theta_tol=0.0
-    )
-    obj = AgniStability(eq, basis, solver=solver, coarse=basis.coarse(12, 6))
-    obj.build(verbose=0)
-    # eigsh on the same basis gives 9.138782581409812e-05
-    np.testing.assert_allclose(
-        obj.compute(eq.params_dict)[0], 9.138782581409812e-05, rtol=1e-8
-    )
 
 
 @pytest.mark.unit

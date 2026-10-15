@@ -608,8 +608,9 @@ class DipoleVolume(_DipoleObjective):
         #rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
         rho_raw = jnp.atleast_1d(p["rho"])
         rho_tilde = jnp.tanh(rho_raw)
-        eps = 1e-8
-        return jnp.sqrt(jnp.abs(rho_tilde) + eps)   # DipoleVolume specifically
+        eps=1e-6
+        #return jnp.sqrt(jnp.abs(rho_tilde)+1e-8)   # DipoleVolume specifically
+        return (rho_tilde**2 + eps**2)**0.25
 
 class DipoleTikhonov(_DipoleObjective):
     """L2 (Tikhonov / minimum-norm) regularization on dipole densities.

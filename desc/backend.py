@@ -28,6 +28,20 @@ else:
             import jaxlib
             from jax import config as jax_config
 
+            # YNNPACK reduce fusions on CPU is slow and wrong,
+            # see (https://github.com/jax-ml/jax/issues/41414).
+            # Triton GEMMs on GPU cause slow compilation without much
+            # performance gain. Keep user flags, update others if not set.
+            if Version(jax.__version__) >= Version("0.10.0"):
+                _xla_flags = os.environ.get("XLA_FLAGS", "")
+                for _flag in [
+                    "--xla_cpu_experimental_ynn_fusion_type=-reduce",
+                    "--xla_gpu_enable_triton_gemm=false",
+                ]:
+                    if _flag.split("=")[0] not in _xla_flags:
+                        _xla_flags += " " + _flag
+                os.environ["XLA_FLAGS"] = _xla_flags.strip()
+
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(

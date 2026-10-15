@@ -1,10 +1,13 @@
 """Module for getting precomputed example equilibria."""
 
 import os
+from typing import Literal, overload
 
 import desc.io
 from desc.backend import execute_on_cpu
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry.surface import FourierRZToroidalSurface
+from desc.profiles import _Profile
 
 
 def listall():
@@ -15,8 +18,21 @@ def listall():
     return names_stripped
 
 
+@overload
+def get(name: str, data: None = None) -> Equilibrium: ...
+@overload
+def get(name: str, data: Literal["all"]) -> EquilibriaFamily: ...
+@overload
+def get(name: str, data: Literal["boundary"]) -> FourierRZToroidalSurface: ...
+@overload
+def get(name: str, data: Literal["pressure", "iota", "current"]) -> _Profile: ...
+
+
 @execute_on_cpu
-def get(name, data=None):
+def get(
+    name: str,
+    data: None | Literal["all", "boundary", "pressure", "iota", "current"] = None,
+) -> Equilibrium | EquilibriaFamily | FourierRZToroidalSurface | _Profile:
     """Get example equilibria and data.
 
     Returns a solved equilibrium or selected attributes for one of several examples.

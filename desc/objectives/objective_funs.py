@@ -1,5 +1,7 @@
 """Base classes for objectives."""
 
+from __future__ import annotations
+
 import functools
 from abc import ABC, abstractmethod
 
@@ -1151,7 +1153,7 @@ class ObjectiveFunction(IOAble):
         return [obj.constants for obj in self.objectives]
 
     @property
-    def objectives(self):
+    def objectives(self) -> list[_Objective]:
         """list: List of objectives."""
         return self._objectives
 

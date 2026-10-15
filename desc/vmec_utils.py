@@ -9,7 +9,7 @@ from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, warnif
+from desc.utils import Timer
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
@@ -484,7 +484,7 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
 
 
 def make_boozmn_output(  # noqa: C901
-    eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0
+    eq, path, surfs=128, M_booz=None, N_booz=None, verbose=0, surf_batch_size=None
 ):
     """Create and save a booz_xform-style .nc output file.
 
@@ -512,6 +512,10 @@ def make_boozmn_output(  # noqa: C901
         * 0: no output
         * 1: status of quantities computed
         * 2: as above plus timing information
+    surf_batch_size: int
+        Number of flux surfaces to compute simultaneously. Defaults to
+        computing all flux surfaces simultaneously. Decrease to reduce
+        memory required for computation.
 
     Returns
     -------
@@ -520,14 +524,6 @@ def make_boozmn_output(  # noqa: C901
     """
     timer = Timer()
     timer.start("Total time")
-    warnif(
-        not eq.sym,
-        UserWarning,
-        "Equilibrium is asymmetric, note that the `numnc` saved with this DESC "
-        "function is opposite sign of the `numnc` saved from hidden symmetries"
-        " booz_xform and thus not verified, though every other quantity "
-        "is tested and agrees with the hidden symmetries booz_xform.",
-    )
     Psi = eq.Psi
     NFP = eq.NFP
     if M_booz is None:
@@ -615,7 +611,9 @@ def make_boozmn_output(  # noqa: C901
     data_keys = data_keys + ["Z_mn_B", "nu_B_mn"] if not eq.sym else data_keys
     data_keys_sin = ["Z_mn_B", "nu_B_mn"]
 
-    data = eq.compute(data_keys, grid=grid, transforms=transforms)
+    data = eq.compute(
+        data_keys, grid=grid, transforms=transforms, surf_batch_size=surf_batch_size
+    )
     # sin-symmetric data needs different transform symmetry than cos-symmetric, so
     # separate out the computation
     if eq.sym:
@@ -623,7 +621,11 @@ def make_boozmn_output(  # noqa: C901
         # so the sin-symmetric term can be correctly calculated
         data.pop("Boozer transform modes norm")
         data_sin = eq.compute(
-            data_keys_sin, grid=grid, transforms=transforms_sin, data=data
+            data_keys_sin,
+            grid=grid,
+            transforms=transforms_sin,
+            data=data,
+            surf_batch_size=surf_batch_size,
         )
     m_neg_inds = jnp.where(transforms["B"].basis.modes[:, 1] < 0)
 

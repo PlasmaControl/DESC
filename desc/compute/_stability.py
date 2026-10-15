@@ -16,7 +16,7 @@ from scipy.constants import mu_0
 from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
 
 from ..integrals.surface_integral import surface_integrals_map
-from ..utils import dot
+from ..utils import dot, safediv
 from .data_index import register_compute_fun
 
 
@@ -228,9 +228,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     # surface average(pressure) = thermal + surface average(magnetic)
     # The sign of sqrt(g) is enforced to be non-negative.
     data["magnetic well"] = transforms["grid"].replace_at_axis(
-        data["V(r)"]
-        * (2 * mu_0 * data["p_r"] + data["<|B|^2>_r"])
-        / (data["V_r(r)"] * data["<|B|^2>"]),
+        safediv(
+            data["V(r)"] * (2 * mu_0 * data["p_r"] + data["<|B|^2>_r"]),
+            (data["V_r(r)"] * data["<|B|^2>"]),
+        ),
         0,  # coefficient of limit is V_r / V_rr, rest is finite
     )
     return data

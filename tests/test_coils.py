@@ -1695,3 +1695,56 @@ def test_planar_coil_opposing_normals_fields():
 
     test(coil_r)
     test(coil_xy)
+
+
+@pytest.mark.unit
+def test_coilset_field_matches_individual_coils():
+    """Test the vectorized CoilSet field against summing single coil fields."""
+    coilset = CoilSet(
+        FourierPlanarCoil(
+            current=1e6, center=[10, 1, 0.5], normal=[0, 1, 0.2], r_n=1.5
+        ),
+        FourierPlanarCoil(current=-3e5, center=[10, 3, -0.3], normal=[0.1, 1, 0]),
+        NFP=3,
+        sym=True,
+        check_intersection=False,
+    )
+    # explicit copies of all virtual coils, evaluated one at a time below
+    coils = CoilSet.from_symmetry(coilset, NFP=3, sym=True)
+    assert len(coils) == 12
+
+    rng = np.random.default_rng(0)
+    pts = np.column_stack(
+        [rng.uniform(9, 11, 20), rng.uniform(0, 2 * np.pi, 20), rng.uniform(-1, 1, 20)]
+    )
+    for grid in [20, LinearGrid(N=20)]:
+        for basis in ["rpz", "xyz"]:
+            x = pts if basis == "rpz" else rpz2xyz(pts)
+            B = coilset.compute_magnetic_field(x, basis=basis, source_grid=grid)
+            A = coilset.compute_magnetic_vector_potential(
+                x, basis=basis, source_grid=grid, chunk_size=7
+            )
+            B_ref = sum(
+                c.compute_magnetic_field(x, basis=basis, source_grid=grid)
+                for c in coils
+            )
+            A_ref = sum(
+                c.compute_magnetic_vector_potential(x, basis=basis, source_grid=grid)
+                for c in coils
+            )
+            np.testing.assert_allclose(B, B_ref, rtol=1e-10, atol=1e-14)
+            np.testing.assert_allclose(A, A_ref, rtol=1e-10, atol=1e-14)
+
+    # params override the coil parameters, including the current
+    params = [coil.params_dict for coil in coilset]
+    params[0]["current"] = np.array([2e6])
+    params[1]["r_n"] = np.array([1.2])
+    coilset2 = coilset.copy()
+    coilset2[0].current = 2e6
+    coilset2[1].r_n = np.array([1.2])
+    np.testing.assert_allclose(
+        coilset.compute_magnetic_field(pts, params=params),
+        coilset2.compute_magnetic_field(pts),
+        rtol=1e-10,
+        atol=1e-14,
+    )

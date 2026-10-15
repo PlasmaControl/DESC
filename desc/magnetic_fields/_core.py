@@ -20,7 +20,7 @@ from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
 from desc import config as desc_config
-from desc.backend import jnp, sign
+from desc.backend import custom_jvp, jnp, sign
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
@@ -85,6 +85,25 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
     JdV = J * dV[:, jnp.newaxis]
     assert JdV.shape == rs.shape
+    # It is more efficient to sum over the sources in batches of evaluation points.
+    return batch_map(lambda re: _biot_savart_kernel(re, rs, JdV), re, chunk_size)
+
+
+def _contract(w, Q):
+    """Sum over sources, i.e. w @ Q for w of shape (..., M) and Q of shape (M, k)."""
+    # this operation compiles very differently on CPU and GPU
+    # we aim to use the best by conditionals
+    if desc_config.get("kind") == "gpu":
+        return (w[..., jnp.newaxis] * Q).sum(axis=-2)
+    return w @ Q
+
+
+@custom_jvp
+def _biot_savart_kernel(re, rs, JdV):
+    """Biot-Savart kernel, B = mu_0/4pi sum_j JdV_j x (re - rs_j) / |re - rs_j|^3.
+
+    The derivative rule is hand-written, see _biot_savart_kernel_jvp.
+    """
     # We want sum_M (rs-re) x JdV / |rs-re|^3, where rs, JdV are (M x 3) and re
     # is (N x 3). Forming (rs-re) x JdV gives an (N x M x 3) array, which is
     # very large. Instead we split it as rs x JdV - re x JdV, so that
@@ -93,28 +112,89 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     # and give (N x 3); only the latter is crossed with re. This way dr is the
     # only (N x M x 3) array, and it is immediately reduced to (N x M) by the
     # norm, which XLA can handle easily.
-    # Note that for AD, this approach removes multiple intermediate arrays.
     # This trick was first suggested by Claude Fable 5, then implemented by Yigit
-    K = jnp.cross(rs, JdV, axis=-1)
     # The split adds a bit of rounding error for points very close to a source,
     # which was already problematic. The relative error is ~ε*max(|rs|,|re|)/|rs-re|,
     # so for a 1e-3m distance, error is ~1e-11 in a 20m device. This kernel is never
     # used for singular or near-singular integrals, so we should be fine.
+    K = jnp.cross(rs, JdV, axis=-1)
+    w = safediv(1.0, jnp.linalg.norm(rs - re[..., jnp.newaxis, :], axis=-1) ** 3)
+    B = _contract(w, K) - jnp.cross(re, _contract(w, JdV), axis=-1)
+    return B * mu_0 / (4 * jnp.pi)
 
-    def biot(re):
-        dr = rs - re[..., jnp.newaxis, :]
-        w = safediv(1.0, jnp.linalg.norm(dr, axis=-1) ** 3)
-        # this operation compiles very differently on CPU and GPU
-        # we aim to use the best by conditionals
-        if desc_config.get("kind") == "gpu":
-            w = w[..., jnp.newaxis]
-            B = (w * K).sum(axis=-2) - jnp.cross(re, (w * JdV).sum(axis=-2), axis=-1)
-        else:
-            B = w @ K - jnp.cross(re, w @ JdV, axis=-1)
-        return B * mu_0 / (4 * jnp.pi)
 
-    # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re, chunk_size)
+@_biot_savart_kernel.defjvp
+def _biot_savart_kernel_jvp(primals, tangents):
+    """Forward mode derivative of _biot_savart_kernel, transposed by JAX for reverse.
+
+    JAX's AD of the kernel stores and differentiates (N x M x 3) intermediates, which
+    makes gradients ~10x the cost of the field itself. With d = re - rs,
+    w = |d|^-3, w5 = |d|^-5, K = rs x JdV and tangents (dre, drs, dJdV),
+
+        dB = dw @ K + w @ dK - dre x (w @ JdV) - re x (dw @ JdV + w @ dJdV),
+        dK = drs x JdV + rs x dJdV,   dw_ij = -3 w5_ij (d_ij . dd_ij).
+
+    Expanding d_ij . dd_ij = re_i.dre_i - re_i.drs_j - rs_j.dre_i + rs_j.drs_j, for
+    Q = [K, JdV] of shape (M x 6),
+
+        sum_j w5_ij (d_ij . dd_ij) Q_j = (re_i.dre_i) (w5 @ Q)_i
+            - sum_a re_ia (w5 @ (drs_a Q))_i - sum_a dre_ia (w5 @ (rs_a Q))_i
+            + (w5 @ ((rs . drs) Q))_i
+
+    where (a Q)_j = a_j Q_j. The only (N x M) arrays, w and w5, depend on primals
+    alone, and every tangent enters through an (M x k) matrix that they multiply.
+    So jacfwd turns the batch of tangents into one large matrix product rather than
+    a batch of (N x M) arrays, and since the rule is linear in the tangents, JAX can
+    transpose it for reverse mode, with all sums over sources or evaluation points
+    again matrix products of (N x M) arrays with thin matrices.
+    """
+    re, rs, JdV = primals
+    dre, drs, dJdV = tangents
+    r = jnp.linalg.norm(rs - re[..., jnp.newaxis, :], axis=-1)
+    w = safediv(1.0, r**3)
+    w5 = safediv(1.0, r**5)
+    K = jnp.cross(rs, JdV, axis=-1)
+    wJdV = _contract(w, JdV)
+    B = _contract(w, K) - jnp.cross(re, wJdV, axis=-1)
+
+    Q = jnp.concatenate([K, JdV], axis=-1)
+    # primal only
+    w5_Q_rsQ = _contract(
+        w5,
+        jnp.concatenate(
+            [Q, (rs[:, :, jnp.newaxis] * Q[:, jnp.newaxis, :]).reshape(-1, 18)], axis=-1
+        ),
+    )
+    w5_Q, w5_rsQ = w5_Q_rsQ[..., :6], w5_Q_rsQ[..., 6:].reshape(*re.shape[:-1], 3, 6)
+    # linear in tangents
+    w5_drsQ_sQ = _contract(
+        w5,
+        jnp.concatenate(
+            [
+                (drs[:, :, jnp.newaxis] * Q[:, jnp.newaxis, :]).reshape(-1, 18),
+                dot(rs, drs)[:, jnp.newaxis] * Q,
+            ],
+            axis=-1,
+        ),
+    )
+    w5_drsQ = w5_drsQ_sQ[..., :18].reshape(*re.shape[:-1], 3, 6)
+    w5_sQ = w5_drsQ_sQ[..., 18:]
+    # dw @ Q = -3 sum_j w5_ij (d_ij . dd_ij) Q_j
+    dw_Q = -3 * (
+        dot(re, dre)[..., jnp.newaxis] * w5_Q
+        - jnp.einsum("...a,...ak->...k", re, w5_drsQ)
+        - jnp.einsum("...a,...ak->...k", dre, w5_rsQ)
+        + w5_sQ
+    )
+    dK = jnp.cross(drs, JdV, axis=-1) + jnp.cross(rs, dJdV, axis=-1)
+    w_dQ = _contract(w, jnp.concatenate([dK, dJdV], axis=-1))
+    dB = (
+        dw_Q[..., :3]
+        + w_dQ[..., :3]
+        - jnp.cross(dre, wJdV, axis=-1)
+        - jnp.cross(re, dw_Q[..., 3:] + w_dQ[..., 3:], axis=-1)
+    )
+    return B * mu_0 / (4 * jnp.pi), dB * mu_0 / (4 * jnp.pi)
 
 
 def biot_savart_general_vector_potential(

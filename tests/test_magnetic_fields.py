@@ -1827,3 +1827,60 @@ def test_domm_W7AS():
         marker="d",
     )
     return fig
+
+
+@pytest.mark.unit
+def test_biot_savart_general_derivatives():
+    """Test the hand-written derivative rule of biot_savart_general against AD."""
+    from desc.magnetic_fields._core import biot_savart_general
+
+    def reference(re, rs, J, dV):
+        # direct sum, differentiated by JAX
+        d = re[:, jnp.newaxis, :] - rs[jnp.newaxis]
+        w = 1 / jnp.linalg.norm(d, axis=-1) ** 3
+        JdV = (J * dV[:, jnp.newaxis])[jnp.newaxis]
+        return mu_0 / (4 * jnp.pi) * jnp.sum(w[..., None] * jnp.cross(JdV, d), axis=1)
+
+    rng = np.random.default_rng(0)
+    s = np.linspace(0, 2 * np.pi, 30, endpoint=False)
+    rs = np.column_stack([2 + 0.5 * np.cos(s), 0.3 * np.sin(2 * s), 0.5 * np.sin(s)])
+    J = 1e5 * rng.standard_normal(rs.shape)
+    dV = rng.uniform(0.5, 1.5, s.size)
+    re = np.array([2.0, 0.0, 0.0]) + 0.1 * rng.standard_normal((20, 3))
+    args = (re, rs, J, dV)
+    tangents = tuple(rng.standard_normal(np.shape(a)) for a in args)
+    v = rng.standard_normal(re.shape)
+
+    def rel_err(a, b):
+        return np.max(np.abs(a - b)) / np.max(np.abs(b))
+
+    for chunk_size in [None, 7]:
+
+        def fun(*a):
+            return biot_savart_general(*a, chunk_size=chunk_size)
+
+        B, dB = jax.jvp(fun, args, tangents)
+        B_ref, dB_ref = jax.jvp(reference, args, tangents)
+        assert rel_err(B, B_ref) < 1e-12
+        assert rel_err(dB, dB_ref) < 1e-10
+        for argnum in range(4):
+            jac = jax.jacfwd(fun, argnums=argnum)(*args)
+            jac_ref = jax.jacfwd(reference, argnums=argnum)(*args)
+            assert rel_err(jac, jac_ref) < 1e-10
+
+        def scalar(f):
+            return lambda *a: jnp.sum(v * f(*a))
+
+        g = jax.grad(scalar(fun), argnums=(0, 1, 2, 3))(*args)
+        g_ref = jax.grad(scalar(reference), argnums=(0, 1, 2, 3))(*args)
+        for gi, gi_ref in zip(g, g_ref):
+            assert rel_err(gi, gi_ref) < 1e-10
+        # forward over reverse, as for Hessians
+        H = jax.jacfwd(jax.grad(scalar(fun), argnums=1), argnums=1)(*args)
+        H_ref = jax.jacfwd(jax.grad(scalar(reference), argnums=1), argnums=1)(*args)
+        assert rel_err(H, H_ref) < 1e-9
+
+    # an evaluation point on top of a source point is skipped, not NaN
+    re0 = np.vstack([re, rs[:1]])
+    g = jax.grad(lambda rs: jnp.sum(biot_savart_general(re0, rs, J, dV)))(rs)
+    assert np.all(np.isfinite(g))

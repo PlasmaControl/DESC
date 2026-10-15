@@ -10,10 +10,8 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import (
-    fori_loop,
     jit,
     jnp,
-    scan,
     tree_flatten,
     tree_leaves,
     tree_stack,
@@ -574,6 +572,9 @@ class _Coil(_MagneticField, Optimizable, ABC):
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
             source_grid = LinearGrid(N=2 * self.N * NFP + 5)
+        elif isinstance(source_grid, numbers.Integral):
+            # same as Curve.compute
+            source_grid = LinearGrid(N=source_grid)
         else:
             errorif(
                 getattr(source_grid, "NFP", 1) not in [1, NFP],
@@ -1940,82 +1941,24 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
             Magnetic field or vector potential at specified nodes, in [R,phi,Z]
             or [X,Y,Z] coordinates.
 
+        Notes
+        -----
+        All coils, including the virtual coils from field period and stellarator
+        symmetry, are discretized together and their field is summed in a single
+        vectorized Biot-Savart kernel call, rather than looping over coils and field
+        periods. Use ``chunk_size`` to limit memory use for large numbers of
+        evaluation points.
+
         """
         errorif(
             compute_A_or_B not in ["A", "B"],
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
         )
-        # NFP symmetry applies to coilset as a whole, not individual coils, so the grid
-        # should have NFP=1.
-        errorif(
-            getattr(source_grid, "NFP", 1) != 1,
-            ValueError,
-            "source_grid for CoilSet must have NFP=1",
+        source = self._as_precomputed_source(source_grid=source_grid, params=params)
+        return source._compute_A_or_B(
+            coords, basis=basis, compute_A_or_B=compute_A_or_B, chunk_size=chunk_size
         )
-        assert basis.lower() in ["rpz", "xyz"]
-        coords = jnp.atleast_2d(jnp.asarray(coords))
-        if params is None:
-            params = [
-                get_params(["x_s", "x", "s", "ds"], coil, basis=basis) for coil in self
-            ]
-            for par, coil in zip(params, self):
-                par["current"] = coil.current
-
-        # stellarator symmetry is easiest in [X,Y,Z] coordinates
-        if basis.lower() == "rpz":
-            coords_xyz = rpz2xyz(coords)
-        else:
-            coords_xyz = coords
-
-        # if stellarator symmetric, add reflected nodes from the other half field period
-        if self.sym:
-            normal = jnp.array(
-                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
-            )
-            coords_sym = (
-                coords_xyz
-                @ reflection_matrix(normal).T
-                @ reflection_matrix([0, 0, 1]).T
-            )
-            coords_xyz = jnp.vstack((coords_xyz, coords_sym))
-
-        # field period rotation is easiest in [R,phi,Z] coordinates
-        coords_rpz = xyz2rpz(coords_xyz)
-        op = {
-            "B": self[0].compute_magnetic_field,
-            "A": self[0].compute_magnetic_vector_potential,
-        }[compute_A_or_B]
-
-        # sum the magnetic fields from each field period
-        def nfp_loop(k, AB):
-            coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
-
-            def body(AB, x):
-                AB += op(
-                    coords_nfp,
-                    params=x,
-                    basis="rpz",
-                    source_grid=source_grid,
-                    chunk_size=chunk_size,
-                )
-                return AB, None
-
-            AB += scan(body, jnp.zeros(coords_nfp.shape), tree_stack(params))[0]
-            return AB
-
-        AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
-
-        # sum the magnetic field/potential from both halves of
-        # the symmetric field period
-        if self.sym:
-            AB = AB[: coords.shape[0], :] + AB[coords.shape[0] :, :] * jnp.array(
-                [-1, 1, 1]
-            )
-
-        if basis.lower() == "xyz":
-            AB = rpz2xyz_vec(AB, x=coords[:, 0], y=coords[:, 1])
-        return AB
 
     def _as_precomputed_source(self, source_grid=None, params=None):
         """Convert the coils into a _PrecomputedBiotSavartField.
@@ -2025,10 +1968,11 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
 
         Parameters
         ----------
-        source_grid : Grid or None, optional
+        source_grid : Grid, int or None, optional
             Grid used to discretize coils. The same grid is used for every coil,
             since all coils in a CoilSet have the same parametrization and
-            resolution. Use a MixedCoilSet for per-coil grids.
+            resolution. Use a MixedCoilSet for per-coil grids. If an integer, uses
+            ``LinearGrid(N=source_grid)``, as ``Curve.compute`` does.
         params : dict or array-like of dict, optional
             Parameters to pass to coils, either the same for all coils or one for
             each.
@@ -2047,6 +1991,9 @@ class CoilSet(OptimizableCollection, _Coil, MutableSequence):
         )
         if source_grid is None:
             source_grid = LinearGrid(N=2 * self[0].N * getattr(self[0], "NFP", 1) + 5)
+        elif isinstance(source_grid, numbers.Integral):
+            # same as Curve.compute
+            source_grid = LinearGrid(N=source_grid)
         assert isinstance(source_grid, _Grid)
         if params is None:
             current = self._all_currents()

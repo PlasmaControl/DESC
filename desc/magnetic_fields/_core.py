@@ -51,7 +51,9 @@ from desc.utils import (
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
-def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
+def biot_savart_general(
+    re, rs, J, dV=jnp.array([1.0]), chunk_size=None, return_rtz=False
+):
     """Biot-Savart law for arbitrary sources.
 
     Parameters
@@ -76,8 +78,10 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     Returns
     -------
     B : ndarray
-        Shape(n_eval_pts, 3).
-        Magnetic field in Cartesian components at specified points.
+        Shape(n_eval_pts, 3) or (n_eval_pts, 5).
+        Magnetic field in Cartesian components at specified points. If return_rtz,
+        then B[:,3] is the index in rs of the closest source grid point and B[:,4]
+        is the minimum value.
 
     """
     re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
@@ -87,16 +91,32 @@ def biot_savart_general(re, rs, J, dV=jnp.array([1.0]), chunk_size=None):
     def biot(re):
         dr = rs - re
         dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
+        dr_norm = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         num = jnp.cross(dr, JdV, axis=-1)
         den = dr_norm**3
-        return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        B = safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
+        if return_rtz:
+            idx = jnp.argmin(dr_norm, axis=-2)
+            min_dist = jnp.take_along_axis(dr_norm, idx[..., None, :], axis=-2)[
+                ..., 0, :
+            ]
+            return jnp.concatenate([B, idx.astype(B.dtype), min_dist], axis=-1)
+        return B
 
     # It is more efficient to sum over the sources in batches of evaluation points.
-    return batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+    B = batch_map(biot, re[..., jnp.newaxis, :], chunk_size)
+
+    if return_rtz:
+        return B[..., :3], B[..., 3].astype(jnp.int32), B[..., 4]
+    return B
 
 
 def biot_savart_general_vector_potential(
-    re, rs, J, dV=jnp.array([1.0]), chunk_size=None
+    re,
+    rs,
+    J,
+    dV=jnp.array([1.0]),
+    chunk_size=None,
 ):
     """Biot-Savart law for arbitrary sources for vector potential.
 
@@ -2615,6 +2635,7 @@ def field_line_integrate(
     bounds_R=(0, np.inf),
     bounds_Z=(-np.inf, np.inf),
     chunk_size=None,
+    method="virtual casing",
     bs_chunk_size=None,
     options=None,
     return_aux=False,

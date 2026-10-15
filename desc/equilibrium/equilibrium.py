@@ -68,6 +68,7 @@ from ..compute.data_index import is_0d_vol_grid, is_1dr_rad_grid, is_1dz_tor_gri
 from .coords import (
     _map_poloidal_coordinates,
     get_rtz_grid,
+    in_plasma,
     is_nested,
     map_coordinates,
     to_sfl,
@@ -1278,6 +1279,8 @@ class Equilibrium(Optimizable, _MagneticField):
         transforms=None,
         chunk_size=50,
         method="biot-savart",
+        return_data=False,
+        return_rtz=False,
     ):
         """Compute magnetic field at a set of points.
 
@@ -1287,7 +1290,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Nodes to evaluate field at in [R,phi,Z] or [X,Y,Z] coordinates.
         params : dict or array-like of dict, optional
             Dictionary of optimizable parameters, eg field.params_dict.
-        method: string
+        method : string
             "biot-savart" or "virtual casing". both methods calculate the magnetic
             field directly from the current density. if you wish to use the curl(A)
             method, create a desc.magnetic_fields.PlasmaField object.
@@ -1297,15 +1300,23 @@ class Equilibrium(Optimizable, _MagneticField):
             to the source grid points.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating B from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+        source_grid : Grid or None, optional
+            Grid used to discretize Equilibrium object. Should be a surface grid for
+            virtual casing method (i.e. rho=[1.0]) and a 3D grid for Biot-Savart method.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
             Size to split computation into chunks of evaluation points.
             If no chunking should be done or the chunk size is the full input
             then supply ``None``.
+        return_data : bool, optional
+            If True, also returns a dictionary of intermediary calculations
+            (e.g. current density) used to compute the magnetic field.
+        return_rtz : bool, optional
+            If True, also includes the rho, theta, zeta coordinates of
+            the nearest source grid point to each evaluation point.
+            Useful as an initial guess for coordinate mapping.
+            Automatically sets return_data=True.
 
         Returns
         -------
@@ -1313,6 +1324,7 @@ class Equilibrium(Optimizable, _MagneticField):
             Magnetic field at specified points
 
         """
+        return_data = return_data or return_rtz
         # Check that the method used is one of the allowed methods
         methods = ["biot-savart", "virtual casing"]
         method = method.lower().strip()
@@ -1353,6 +1365,7 @@ class Equilibrium(Optimizable, _MagneticField):
                 # New coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
                 source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
                 source_xyz = rpz2xyz(source_rpz)
+
                 J = rpz2xyz_vec(data["J"], phi=phi)
 
                 # Add the contribution from this field period to the total field
@@ -1362,11 +1375,35 @@ class Equilibrium(Optimizable, _MagneticField):
                     J=J,
                     dV=dV,
                     chunk_size=chunk_size,
+                    return_rtz=return_rtz,
                 )
-                f += fj
-                return f
+                if return_rtz:
+                    B, idx, dist = f
+                    Bj, idxj, distj = fj
+                    B += Bj
+                    # If return_rtz, biot_savart_general returns
+                    # the argmin and the min distance
+                    mask = distj < dist
+                    idx = jnp.where(mask, idxj, idx)
+                    dist = jnp.where(mask, distj, dist)
+                    return B, idx, dist
+                else:
+                    f += fj
+                    return f
 
-            B = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
+            if return_rtz:
+                f0 = (
+                    jnp.zeros_like(coords),
+                    jnp.zeros(coords.shape[0], dtype=jnp.int32),
+                    jnp.full(coords.shape[0], jnp.inf),
+                )
+            else:
+                f0 = jnp.zeros_like(coords)
+            B = fori_loop(0, source_grid.NFP, nfp_loop, f0)
+            if return_rtz:
+                B, idx, dist = B
+                data["src_rtz"] = source_grid.nodes[idx, :]
+                data["src_dist"] = dist
             if basis.lower() == "rpz":
                 B = xyz2rpz_vec(B, phi=coords[:, 1])
 
@@ -1389,7 +1426,7 @@ class Equilibrium(Optimizable, _MagneticField):
             kernel = _kernel_biot_savart
 
             # Compute the kernel data at the source points
-            source_data = self.compute(
+            data = self.compute(
                 kernel.keys,
                 grid=source_grid,
                 params=params,
@@ -1399,11 +1436,12 @@ class Equilibrium(Optimizable, _MagneticField):
 
             # Integrate the virtual casing integral over the plasma boundary
             B = integrate_surface(
-                eval_rpz, source_data, source_grid, kernel, chunk_size=chunk_size
+                eval_rpz, data, source_grid, kernel, chunk_size=chunk_size
             )
             if basis.lower == "xyz":
                 B = rpz2xyz_vec(B, phi=coords[:, 1])
-
+        if return_data:
+            return B, data
         return B
 
     def compute_magnetic_vector_potential(
@@ -1414,6 +1452,7 @@ class Equilibrium(Optimizable, _MagneticField):
         source_grid=None,
         transforms=None,
         chunk_size=None,
+        return_data=False,
     ):
         """Compute magnetic vector potential at a set of points.
 
@@ -1426,8 +1465,8 @@ class Equilibrium(Optimizable, _MagneticField):
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
         source_grid : Grid, int or None or array-like, optional
-            Grid used to discretize MagneticField object if calculating A from
-            Biot-Savart. Should NOT include endpoint at 2pi.
+            Grid used to discretize MagneticField object. Should NOT include
+            endpoint at 2pi.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
         chunk_size : int or None
@@ -1464,6 +1503,8 @@ class Equilibrium(Optimizable, _MagneticField):
             # new coords are just old R,Z at a new phi (bc of discrete NFP symmetry)
             source_rpz = jnp.vstack((data["x"][:, 0], phi, data["x"][:, 2])).T
             source_xyz = rpz2xyz(source_rpz)
+            if return_data:
+                data["xyz"] = source_xyz
             J = rpz2xyz_vec(data["J"], phi=phi)
             fj = biot_savart_general_vector_potential(
                 eval_xyz,
@@ -1478,7 +1519,10 @@ class Equilibrium(Optimizable, _MagneticField):
         A = fori_loop(0, source_grid.NFP, nfp_loop, jnp.zeros_like(coords))
         if basis.lower() == "rpz":
             A = xyz2rpz_vec(A, phi=coords[:, 1])
-        return A
+        if return_data:
+            return A, data
+        else:
+            return A
 
     def map_coordinates(
         self,
@@ -1757,6 +1801,27 @@ class Equilibrium(Optimizable, _MagneticField):
         return to_sfl(
             self, L, M, N, L_grid, M_grid, N_grid, rcond, copy, tol=tol, maxiter=maxiter
         )
+
+    def in_plasma(self, points, M=24):
+        """
+        Determine if an array of points in cylindrical coordinates is inside the plasma.
+
+        Will probably return False if the point is directly on the boundary, but will be
+        most sensitive to resolution at and near the boundary.
+
+        Parameters
+        ----------
+        points : array-like shape(n_r,n_phi,n_z,3)
+            R,phi,Z coords of evaluation points. points[:,idx,:,1] should be constant.
+        M : int
+            Poloidal resolution of eq grid on which the winding number is evaluated.
+
+        Returns
+        -------
+        out : array-like shape(n_r,n_phi,n_z)
+            Boolean array indicating whether each point is inside the plasma boundary.
+        """
+        return in_plasma(points, self, M)
 
     @property
     def surface(self):

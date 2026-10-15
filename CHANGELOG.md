@@ -22,6 +22,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- Fixes ``SplineMagneticField`` with a single toroidal plane (axisymmetric mgrid): the cubic 2D interpolation now uses the Z derivatives instead of the zero phi derivatives, so its error between nodes falls from about 1e-3 to the expected cubic level [#2357](https://github.com/PlasmaControl/DESC/pull/2357).
 - Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.

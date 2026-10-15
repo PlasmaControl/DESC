@@ -1,5 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
+import functools
 import os
 import warnings
 
@@ -19,7 +20,7 @@ from desc.basis import DoubleFourierSeries, ZernikePolynomial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import _parse_parameterization, get_data_deps
-from desc.geometry.curve import NurbsRPZCurve
+from desc.geometry.curve import FourierRZCurve, NurbsRPZCurve
 from desc.grid import Grid, LinearGrid, _Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
@@ -1181,6 +1182,17 @@ class ZernikeRZToroidalSection(Surface):
         return scales
 
 
+def _invalidates_fourier_fit(setter):
+    """Mark the stored Fourier fit R_lmn, Z_lmn stale after setting a NURBS param."""
+
+    @functools.wraps(setter)
+    def wrapper(self, new):
+        setter(self, new)
+        self._fourier_fit_stale = True
+
+    return wrapper
+
+
 class NurbsRZToroidalSurface(ToroidalSurface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
@@ -1222,14 +1234,19 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         "_p_u",
         "_p_v",
         "_rho",
+        "_R_basis",
+        "_Z_basis",
     ]
     _static_attrs = Surface._static_attrs + [
         "_NFP",
+        "_fourier_fit_stale",
         "_n_cs",
         "_n_points_per_cs",
         "_local_basis",
         "_p_u",
         "_p_v",
+        "_R_basis",
+        "_Z_basis",
     ]
 
     def __init__(
@@ -1249,8 +1266,8 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         p_v=3,
         local_basis="cylindrical",
         NFP=2,
-        M=None,
-        N=None,
+        M=6,
+        N=6,
         sym=True,
         rho=1,
         **kwargs,
@@ -1273,10 +1290,9 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         self._interior_axis = interior_axis
 
         errorif(
-            local_basis not in ("cylindrical", "frenet", "bishop"),
+            local_basis not in ("cylindrical", "bishop"),
             ValueError,
-            f'Local basis must be ("cylindrical", "frenet", "bishop"); '
-            f"got {local_basis}",
+            f'Local basis must be ("cylindrical", "bishop"); ' f"got {local_basis}",
         )
         self._local_basis = local_basis
 
@@ -1289,6 +1305,15 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         self._p_u = check_posint(p_u, "p_u", False)
         self._p_v = check_posint(p_v, "p_v", False)
         self._rho = rho
+        self._L = 0
+        self._R_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+        )
+        self._Z_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+        )
+        self._R_lmn = None
+        self._Z_lmn = None
 
         if sym:
             # first control point of each cross section sits at theta=0, a
@@ -1307,6 +1332,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
                 setattr(self, name, arr)
         else:
             raise NotImplementedError
+        self._update_fourier_fit()
 
     def compute(
         self,
@@ -1382,6 +1408,78 @@ class NurbsRZToroidalSurface(ToroidalSurface):
             **kwargs,
         )
 
+    @property
+    def R_basis(self):
+        """DoubleFourierSeries: Spectral basis for Rb_lmn."""
+        return self._R_basis
+
+    @property
+    def Z_basis(self):
+        """DoubleFourierSeries: Spectral basis for Zb_lmn."""
+        return self._Z_basis
+
+    def _update_fourier_fit(self):
+        grid = LinearGrid(
+            M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP, sym=self.sym
+        )
+        names = ["Rb_lmn", "Zb_lmn"]
+        transforms = get_transforms(names, obj=self, grid=grid)
+        data = jit(
+            lambda params: compute_fun(
+                self, names, params=params, transforms=transforms, profiles={}
+            )
+        )(self.params_dict)
+        self._R_lmn, self._Z_lmn = data["Rb_lmn"], data["Zb_lmn"]
+        self._fourier_fit_stale = False
+
+    def _check_fourier_fit(self):
+        if getattr(self, "_fourier_fit_stale", True):
+            self._update_fourier_fit()
+
+    @property
+    def R_lmn(self):
+        """ndarray: Fourier coefficients of R on R_basis, fit to the NURBS surface.
+
+        Not an optimizable parameter. Setting it stores the given values until the
+        NURBS params change, after which it is refit from the surface.
+        """
+        self._check_fourier_fit()
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        self._check_fourier_fit()
+        new = jnp.atleast_1d(jnp.asarray(new))
+        errorif(
+            new.size != self.R_basis.num_modes,
+            ValueError,
+            f"R_lmn should have the same size as R_basis, got {new.size} for basis "
+            + f"with {self.R_basis.num_modes} modes.",
+        )
+        self._R_lmn = new
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Fourier coefficients of Z on Z_basis, fit to the NURBS surface.
+
+        Not an optimizable parameter. Setting it stores the given values until the
+        NURBS params change, after which it is refit from the surface.
+        """
+        self._check_fourier_fit()
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        self._check_fourier_fit()
+        new = jnp.atleast_1d(jnp.asarray(new))
+        errorif(
+            new.size != self.Z_basis.num_modes,
+            ValueError,
+            f"Z_lmn should have the same size as Z_basis, got {new.size} for basis "
+            + f"with {self.Z_basis.num_modes} modes.",
+        )
+        self._Z_lmn = new
+
     @optimizable_parameter
     @property
     def cs_start_r(self):
@@ -1393,6 +1491,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_start_r
 
     @cs_start_r.setter
+    @_invalidates_fourier_fit
     def cs_start_r(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
@@ -1413,6 +1512,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_start_theta
 
     @cs_start_theta.setter
+    @_invalidates_fourier_fit
     def cs_start_theta(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
@@ -1433,6 +1533,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_start_w
 
     @cs_start_w.setter
+    @_invalidates_fourier_fit
     def cs_start_w(self, new):
         n_half = self._n_points_per_cs // 2 + 1
         new = jnp.asarray(new)
@@ -1453,6 +1554,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_interior_r
 
     @cs_interior_r.setter
+    @_invalidates_fourier_fit
     def cs_interior_r(self, new):
         shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
@@ -1473,6 +1575,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_interior_theta
 
     @cs_interior_theta.setter
+    @_invalidates_fourier_fit
     def cs_interior_theta(self, new):
         shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
@@ -1493,6 +1596,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_interior_w
 
     @cs_interior_w.setter
+    @_invalidates_fourier_fit
     def cs_interior_w(self, new):
         shape = (self._n_cs - 1, self._n_points_per_cs)
         new = jnp.asarray(new)
@@ -1510,6 +1614,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_interior_phi
 
     @cs_interior_phi.setter
+    @_invalidates_fourier_fit
     def cs_interior_phi(self, new):
         shape = self._n_cs - 1
         new = jnp.asarray(new)
@@ -1532,6 +1637,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self._cs_interior_gangle
 
     @cs_interior_gangle.setter
+    @_invalidates_fourier_fit
     def cs_interior_gangle(self, new):
         shape = self._n_cs - 1
         new = jnp.asarray(new)
@@ -1541,11 +1647,10 @@ class NurbsRZToroidalSurface(ToroidalSurface):
             f"cs_interior_gangle must have shape {shape}, got {new.shape}",
         )
         errorif(
-            jnp.any(
-                jnp.logical_or(new <= 0, new >= 2 * jnp.pi / self._n_points_per_cs)
-            ),
+            jnp.any(jnp.abs(new) >= 2 * jnp.pi / self._n_points_per_cs),
             ValueError,
-            f"all cs_interior_gangle must lie within (0,2π/n_points_per_cs), got {new}",
+            "all cs_interior_gangle must lie within (-2π/n_points_per_cs, "
+            + f"2π/n_points_per_cs), got {new}",
         )
         self._cs_interior_gangle = new
 
@@ -1574,6 +1679,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self.interior_axis.R
 
     @axis_R.setter
+    @_invalidates_fourier_fit
     def axis_R(self, new):
         self.interior_axis.R = new
 
@@ -1584,6 +1690,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self.interior_axis.phi
 
     @axis_phi.setter
+    @_invalidates_fourier_fit
     def axis_phi(self, new):
         self.interior_axis.phi = new
 
@@ -1594,6 +1701,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self.interior_axis.Z
 
     @axis_Z.setter
+    @_invalidates_fourier_fit
     def axis_Z(self, new):
         self.interior_axis.Z = new
 
@@ -1604,6 +1712,7 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self.interior_axis.W
 
     @axis_W.setter
+    @_invalidates_fourier_fit
     def axis_W(self, new):
         self.interior_axis.W = new
 
@@ -1618,12 +1727,69 @@ class NurbsRZToroidalSurface(ToroidalSurface):
         return self.interior_axis.knot_parametrization
 
     def change_resolution(self, *args, **kwargs):
-        """Change the maximum poloidal and toroidal resolution.
+        """Change the resolution of the Fourier fit R_lmn, Z_lmn.
 
-        TODO: placeholder only, to satisfy Surface's abstract method so this
-        class can be instantiated. Not yet implemented.
+        Takes (M, N) or (L, M, N) positionally, or keywords. L is ignored and the
+        NURBS control net is unchanged.
         """
-        raise NotImplementedError
+        kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
+        assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            _, M, N = args
+        errorif(
+            NFP is not None and NFP != self.NFP,
+            ValueError,
+            "Cannot change NFP of a NurbsRZToroidalSurface.",
+        )
+        errorif(
+            sym is not None and bool(sym) != self.sym,
+            ValueError,
+            "Cannot change sym of a NurbsRZToroidalSurface.",
+        )
+        M = int(setdefault(check_nonnegint(M, "M"), self.M))
+        N = int(setdefault(check_nonnegint(N, "N"), self.N))
+        if (M, N) != (self.M, self.N):
+            self._M, self._N = M, N
+            self._R_basis = DoubleFourierSeries(
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else False
+            )
+            self._Z_basis = DoubleFourierSeries(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else False
+            )
+            self._update_fourier_fit()
+
+    def get_axis(self):
+        """Get a FourierRZCurve fit to the interior axis of the surface.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        grid = LinearGrid(zeta=16 * self.NFP * (self.N + 1), NFP=1, endpoint=False)
+        x = self.interior_axis.compute("x", grid=grid)["x"]
+        phi = x[:, 1] % (2 * np.pi)
+        idx = jnp.argsort(phi)
+        return FourierRZCurve.from_values(
+            jnp.vstack([x[idx, 0], phi[idx], x[idx, 2]]).T,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self.sym,
+        )
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale, with exponential spectral scaling for R_lmn, Z_lmn."""
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+        return scales
 
     @property
     def NFP(self):

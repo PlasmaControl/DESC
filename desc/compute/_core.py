@@ -4619,3 +4619,92 @@ def _Z_tzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
 def _Z_zzz_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     # data["Z_zzz"] already computed when computing "R_ttt"
     return data
+
+
+@register_compute_fun(
+    name="Rb_lmn",
+    label="R_{b,mn}",
+    units="m",
+    units_long="meters",
+    description="Fourier coefficients of the major radius of the surface",
+    dim=1,
+    params=[],
+    transforms={"R": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="",
+    data=["R"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Rb_lmn_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["Rb_lmn"] = _fourier_project(data["R"], transforms["R"].basis, transforms)
+    return data
+
+
+@register_compute_fun(
+    name="Zb_lmn",
+    label="Z_{b,mn}",
+    units="m",
+    units_long="meters",
+    description="Fourier coefficients of the vertical position of the surface",
+    dim=1,
+    params=[],
+    transforms={"Z": [[0, 0, 0]], "grid": []},
+    profiles=[],
+    coordinates="",
+    data=["Z"],
+    resolution_requirement="tz",
+    grid_requirement={"is_meshgrid": True},
+    parameterization="desc.geometry.surface.NurbsRZToroidalSurface",
+)
+def _Zb_lmn_NurbsRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["Zb_lmn"] = _fourier_project(data["Z"], transforms["Z"].basis, transforms)
+    return data
+
+
+@register_compute_fun(
+    name="Rb_lmn",
+    label="R_{b,mn}",
+    units="m",
+    units_long="meters",
+    description="Fourier coefficients of the major radius of the surface",
+    dim=1,
+    params=["R_lmn"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+)
+def _Rb_lmn_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["Rb_lmn"] = params["R_lmn"]
+    return data
+
+
+@register_compute_fun(
+    name="Zb_lmn",
+    label="Z_{b,mn}",
+    units="m",
+    units_long="meters",
+    description="Fourier coefficients of the vertical position of the surface",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=[],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+)
+def _Zb_lmn_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    data["Zb_lmn"] = params["Z_lmn"]
+    return data
+
+
+def _fourier_project(f, basis, transforms):
+    """Project f onto a DoubleFourierSeries by orthogonality on a uniform grid."""
+    m, n = basis.modes[:, 1], basis.modes[:, 2]
+    norm = jnp.where(m == 0, 1, 2) * jnp.where(n == 0, 1, 2)
+    grid = transforms["grid"]
+    A = basis.evaluate(grid.nodes)
+    return norm * (A.T @ (grid.weights * f)) / jnp.sum(grid.weights)

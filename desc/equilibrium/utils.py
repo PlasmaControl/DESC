@@ -9,6 +9,7 @@ from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     Surface,
+    ToroidalSurface,
     ZernikeRZToroidalSection,
 )
 from desc.profiles import PowerSeriesProfile, _Profile
@@ -141,7 +142,7 @@ def parse_surface(surface, NFP=1, sym=True, spectral_indexing="ansi"):
     else:
         raise TypeError("Got unknown surface type {}".format(surface))
 
-    if isinstance(surface, FourierRZToroidalSurface):
+    if isinstance(surface, ToroidalSurface):
         bdry_mode = "lcfs"
     if isinstance(surface, ZernikeRZToroidalSection):
         bdry_mode = "poincare"
@@ -178,7 +179,7 @@ def parse_axis(axis, NFP=1, sym=True, surface=None):
             name="axis",
         )
     elif axis is None:  # use the center of surface
-        if isinstance(surface, FourierRZToroidalSurface):
+        if isinstance(surface, ToroidalSurface):
             axis = surface.get_axis()
         elif isinstance(surface, ZernikeRZToroidalSection):
             axis = surface.get_axis()

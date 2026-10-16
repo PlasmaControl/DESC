@@ -6,9 +6,8 @@ from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import errorif, setdefault
-
-from .objective_funs import _Objective, collect_docs
 
 # Flux functions are computed on a LinearGrid at the rho of the AGNI nodes (it
 # has the quadrature weights the AGNI nodes lack) and copied onto the nodes.
@@ -52,18 +51,22 @@ class AgniStability(_Objective):
     (the only term that can be negative) and n the normalized density (1 by
     default). The discrete problem A x = λ B x has A from δW and B from δK.
     This objective returns the squared growth rate γ² = −λ of the lowest
-    eigenvalue, in units of (v_A / a)² with the field normalized by
-    ``B_N = |Ψ| / (π a²)``, so
+    eigenvalue. γ² is dimensionless, in units of (v_A / a)² of the current
+    state: ``a`` and ``B_N = |Ψ| / (π a²)`` are recomputed from the parameters
+    at every call and v_A = B_N / √(μ₀ ρ₀). AGNI takes no mass density, so γ² in
+    s⁻² is γ² B_N² / (μ₀ ρ₀ a²) for the plasma's mass density ρ₀ (its maximum
+    with ``density=True``). The plasma boundary is held fixed (ξ·∇ρ = 0 there), so
+    the modes are global internal modes:
 
-    - γ² > 0: unstable to a global mode of the chosen toroidal family,
+    - γ² > 0: unstable to a global internal mode of the chosen toroidal family,
     - γ² ≤ 0: stable.
 
     The default target 0 asks for marginal stability. Unlike
     ``BallooningStability`` (infinite n, one field line at a time) the mode is
     global: it can couple all flux surfaces and poloidal harmonics.
 
-    The nodes are fixed in PEST coordinates (ρ, ϑ_PEST, ζ) by ``basis``. At every
-    call they are mapped to DESC's ϑ at the current parameters, so the value and
+    The nodes are fixed in PEST coordinates (ρ, ϑ, ζ) by ``basis``. At every
+    call they are mapped to DESC's θ at the current parameters, so the value and
     its gradient follow the equilibrium as it changes. The gradient is exact at a
     converged eigenvector (Hellmann-Feynman): no derivative of the eigensolver
     is taken.
@@ -127,7 +130,7 @@ class AgniStability(_Objective):
     ]
     _coordinates = ""
     _units = "(dimensionless)"
-    _print_value_fmt = "Finite-n gamma^2: "
+    _print_value_fmt = "Finite-n γ²: "
 
     def __init__(
         self,
@@ -305,9 +308,14 @@ class AgniStability(_Objective):
             data[key] = grid.copy_data_from_other(
                 flux[key], c["flux_grid"], surface_label="rho"
             )
-        keys = list(KEY_MAP) + ["ni"] * self._density
-        data = eq.compute(
-            keys, grid=grid, params=params, data=data, override_grid=False
+        keys = list(KEY_MAP) + (["ni"] if self._density else [])
+        data = compute_fun(
+            eq,
+            keys,
+            params,
+            get_transforms(keys, eq, grid, jitable=True),
+            get_profiles(keys, eq, grid),
+            data=data,
         )
         basis = self._coarse_basis if coarse else self._basis
         return agnimhd.EquilibriumData(

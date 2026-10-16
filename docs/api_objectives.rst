@@ -97,7 +97,6 @@ Stability
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
     desc.objectives.BallooningStability
-    desc.objectives.AgniStability
 
 
 Free boundary / Single stage optimization

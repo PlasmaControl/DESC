@@ -1,6 +1,5 @@
 """Classes defining objectives for equilibrium and optimization."""
 
-from ._agni import AgniStability
 from ._bootstrap import BootstrapRedlConsistency
 from ._coils import (
     CoilArclengthVariance,

@@ -144,9 +144,6 @@ def _optimize_desc_aug_lagrangian(
 
     """
     options = {} if options is None else options
-    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-        options.setdefault("initial_trust_ratio", 1e-3)
-        options.setdefault("max_trust_radius", 1.0)
     options["max_nfev"] = stoptol["max_nfev"]
     # local lambdas to handle constants from both objective and constraint
     hess = (lambda x, *c: objective.hess(x)) if "bfgs" not in method else "bfgs"
@@ -240,9 +237,6 @@ def _optimize_desc_aug_lagrangian_least_squares(
 
     """
     options = {} if options is None else options
-    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-        options.setdefault("initial_trust_radius", 1e-3)
-        options.setdefault("max_trust_radius", 1.0)
     options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
 
@@ -333,10 +327,7 @@ def _optimize_desc_least_squares(
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-        options.setdefault("initial_trust_radius", 1e-3)
-        options.setdefault("max_trust_radius", 1.0)
-    elif options.get("initial_trust_radius", "scipy") == "scipy":
+    if options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
@@ -424,10 +415,7 @@ def _optimize_desc_fmin_scalar(
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     hess = objective.hess if "bfgs" not in method else "bfgs"
-    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-        options.setdefault("initial_trust_ratio", 1e-3)
-        options.setdefault("max_trust_radius", 1.0)
-    elif options.get("initial_trust_radius", "scipy") == "scipy":
+    if options.get("initial_trust_radius", "scipy") == "scipy":
         options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
 

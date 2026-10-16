@@ -27,7 +27,7 @@ flake8-isort >= 5.0.0, <= 6.1.1
 pre-commit <= 4.6.2
 
 # testing and benchmarking
-agnimhd >= 0.1.0; python_version >= "3.12"
+agnimhd >= 0.2.0; python_version >= "3.12"
 nbmake <= 1.5.5
 pytest ~= 9.0
 pytest-benchmark < 5.4

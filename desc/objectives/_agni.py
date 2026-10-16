@@ -246,13 +246,13 @@ class AgniStability(_Objective):
         if self._coarse_basis is not None:
             eq_c = self._equilibrium_data(params, c, coarse=True)
             coarse = (eq_c, c["coarse_diffmat"], c["coarse_transfer"])
-        gamma2 = self._agnimhd.growth_rate_of(
+        gamma2 = self._agnimhd.growth_rate(
             params,
-            lambda p: self._equilibrium_data(p, c),
             c["diffmat"],
             self._assembly,
             self._solver,
             coarse=coarse,
+            equilibrium_map=lambda p: self._equilibrium_data(p, c),
         )
         return jnp.atleast_1d(gamma2)
 

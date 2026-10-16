@@ -4,6 +4,7 @@ import warnings
 from abc import ABC, abstractmethod
 
 import equinox as eqx
+import numpy as np
 from diffrax import (
     AbstractTerm,
     Event,
@@ -15,7 +16,7 @@ from diffrax import (
 )
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jnp, tree_map
+from desc.backend import jax, jit, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -116,6 +117,10 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         numerical issues with the rho = 0. Note that particle position doesn't have
         discontinuity due to this, only the magnetic field is computed at a different
         point.
+
+        In "flux" frame, the field can also be an InterpolatedFieldFlux, or an
+        InterpolatedFieldBoozer, in which case the coordinates are the Boozer
+        coordinates (rho, theta_B, zeta_B).
     """
 
     vcoords = ["vpar"]
@@ -159,12 +164,24 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         m, q, mu = model_args
         if self.frame == "flux":
             assert isinstance(
-                eq_or_field, Equilibrium
-            ), "Integration in flux coordinates requires an Equilibrium."
-
-            return self._compute_flux_coordinates(
-                x, eq_or_field, params, m, q, mu, **kwargs
+                eq_or_field,
+                (Equilibrium, InterpolatedFieldFlux, InterpolatedFieldBoozer),
+            ), (
+                "Integration in flux coordinates requires an Equilibrium, "
+                "InterpolatedFieldFlux or InterpolatedFieldBoozer."
             )
+            if isinstance(eq_or_field, InterpolatedFieldFlux):
+                return self._compute_flux_coordinates_interpolated(
+                    x, eq_or_field, params, m, q, mu
+                )
+            elif isinstance(eq_or_field, InterpolatedFieldBoozer):
+                return self._compute_boozer_coordinates_interpolated(
+                    x, eq_or_field, params, m, q, mu
+                )
+            else:
+                return self._compute_flux_coordinates(
+                    x, eq_or_field, params, m, q, mu, **kwargs
+                )
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
@@ -177,6 +194,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 x, eq_or_field, params, m, q, mu, **kwargs
             )
 
+    @jit
     def _compute_flux_coordinates(self, x, eq, params, m, q, mu, **kwargs):
         """ODE equation for vacuum guiding center in flux coordinates.
 
@@ -242,6 +260,64 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
+    @jit
+    def _compute_flux_coordinates_interpolated(self, x, field, params, m, q, mu):
+        """ODE equation for vacuum guiding center in flux coordinates from a table.
+
+        With the fields of InterpolatedFieldFlux, the flux coordinate velocities are
+        k̇ = v∥ 𝐛⋅∇k + (μ|B| + m v∥²)/q 𝐃⋅∇k for k = ρ, θ, ζ, with 𝐛⋅∇ρ = 0.
+        """
+        xp, yp, zeta, vpar = x
+        rho = jnp.sqrt(xp**2 + yp**2)
+        theta = jnp.arctan2(yp, xp)
+        rho = jnp.where(rho < 1e-6, 1e-6, rho)
+
+        data = field.evaluate(rho, theta, zeta, params)
+        c = (mu * data["|B|"] + m * vpar**2) / q
+        rhodot = c * data["D.e^rho"]
+        thetadot_x_rho = vpar * data["b.e^theta*rho"] + c * data["D.e^theta*rho"]
+        zetadot = vpar * data["b.e^zeta"] + c * data["D.e^zeta"]
+
+        xpdot = rhodot * jnp.cos(theta) - thetadot_x_rho * jnp.sin(theta)
+        ypdot = rhodot * jnp.sin(theta) + thetadot_x_rho * jnp.cos(theta)
+        vpardot = -mu / m * data["b.grad(|B|)"]
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
+
+    @jit
+    def _compute_boozer_coordinates_interpolated(self, x, field, params, m, q, mu):
+        """ODE equation for vacuum guiding center in Boozer coordinates from a table.
+
+        With B = I ∇θ_B + G ∇ζ_B, H = G + ι I and c = (μ|B| + m v∥²) / q,
+
+        ρ̇ = π c (I ∂_ζ B − G ∂_θ B) / (Ψ ρ B H)
+
+        θ̇ = v∥ ι B / H + π c G ∂_ρ B / (Ψ ρ B H)
+
+        ζ̇ = v∥ B / H − π c I ∂_ρ B / (Ψ ρ B H)
+
+        v̇∥ = −(μ / m) B (ι ∂_θ B + ∂_ζ B) / H
+        """
+        xp, yp, zeta, vpar = x
+        rho = jnp.maximum(jnp.sqrt(xp**2 + yp**2), 1e-6)
+        theta = jnp.arctan2(yp, xp)
+
+        data = field.evaluate(rho, theta, zeta, params)
+        B, B_r, B_t, B_z = data["|B|"], data["|B|_r"], data["|B|_t"], data["|B|_z"]
+        h, iota_h = data["1/H"], data["iota/H"]
+        g, i = data["pi*G/(Psi*H)"], data["pi*I/(Psi*H)"]
+        c = (mu * B + m * vpar**2) / (q * B)
+        rhodot = c * (i * B_z - g * B_t) / rho
+        thetadot_x_rho = vpar * rho * B * iota_h + c * g * B_r
+        zetadot = vpar * B * h - c * i * B_r / rho
+
+        xpdot = (rhodot * xp - thetadot_x_rho * yp) / rho
+        ypdot = (rhodot * yp + thetadot_x_rho * xp) / rho
+        vpardot = -mu / m * B * (iota_h * B_t + h * B_z)
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
+
+    @jit
     def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):
         """Compute the RHS of the ODE using MagneticField.
 
@@ -356,6 +432,10 @@ class AbstractParticleInitializer(IOAble, ABC):
 
 
 def _compute_modB(x, field, params, **kwargs):
+    if isinstance(field, InterpolatedFieldBoozer):
+        return vmap_chunked(
+            lambda y: field.evaluate(*y, params)["|B|"], chunk_size=1000
+        )(x)
     if isinstance(field, Equilibrium):
         grid = Grid(
             x,
@@ -513,6 +593,76 @@ class ManualParticleInitializerFlux(AbstractParticleInitializer):
             field=field,
             params=params,
             **kwargs,
+        )
+
+
+class ManualParticleInitializerBoozer(ManualParticleInitializerFlux):
+    """Manually specify particle starting positions and energy in Boozer coordinates.
+
+    For tracing in an InterpolatedFieldBoozer. The magnetic moment uses the |B| of
+    the given fit, so during an optimization the positions stay fixed in Boozer
+    coordinates while μ follows the field.
+
+    Parameters
+    ----------
+    rho0 : array-like
+        Initial radial coordinates
+    theta0 : array-like
+        Initial Boozer poloidal angle θ_B in radians
+    zeta0 : array-like
+        Initial Boozer toroidal angle ζ_B in radians
+    xi0 : array-like
+        Initial normalized parallel velocity, xi=vpar/v
+    E : array-like
+        Initial particle kinetic energy, in eV
+    m : array-like
+        Particle mass, in proton masses
+    q : array-like
+        Particle charge, in units of elementary charge.
+    """
+
+    def init_particles(self, model, field, params=None, **kwargs):
+        """Initialize particles for a given trajectory model.
+
+        Parameters
+        ----------
+        model : AbstractTrajectoryModel
+            Model to use for tracing particles, in "flux" frame.
+        field : InterpolatedFieldBoozer
+            Built Boozer field.
+        params : dict
+            Coefficients returned by ``field.fit``.
+
+        Returns
+        -------
+        x0 : jax.Array, shape(N,D)
+            Initial particle positions in Boozer coordinates (rho, theta_B, zeta_B)
+            and velocities, where D is the dimensionality of the trajectory model.
+        args : jax.Array, shape(N,M)
+            Additional arguments needed by the model, such as mass, charge, and
+            magnetic moment (mv⊥²/2|B|) of each particle. M is the number of arguments
+            requested by the model which is equal to len(model.args). N is the number
+            of particles.
+        """
+        errorif(
+            not isinstance(field, InterpolatedFieldBoozer) or params is None,
+            ValueError,
+            "ManualParticleInitializerBoozer requires an InterpolatedFieldBoozer and "
+            "its fit as params.",
+        )
+        errorif(
+            model.frame != "flux",
+            ValueError,
+            "Tracing in Boozer coordinates requires the model in flux frame.",
+        )
+        x = jnp.array([self.rho0, self.theta0, self.zeta0]).T
+        return self._return_particles(
+            x=x,
+            v=self.v0,
+            vpar=self.vpar0,
+            model=model,
+            field=field,
+            params=params,
         )
 
 
@@ -984,6 +1134,7 @@ def trace_particles(
     options=None,
     throw=True,
     return_aux=False,
+    use_interpolation=None,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1032,6 +1183,19 @@ def trace_particles(
         geometry information. This is usually much faster. Set to False to evaluate
         the field the standard way. Not used for tracing from Equilibrium field.
         Default is True.
+    use_interpolation : {None, "flux", "boozer"} or tuple, optional
+        Only for an Equilibrium. If given, particles are traced in an interpolated
+        field fitted to the Equilibrium, which is much faster than evaluating the
+        spectral representation at every step.
+
+        - "flux" : InterpolatedFieldFlux, in (rho, theta, zeta) coordinates.
+        - "boozer" : InterpolatedFieldBoozer, in Boozer coordinates
+          (rho, theta_B, zeta_B). The initializer must be a
+          ManualParticleInitializerBoozer and the output is in Boozer coordinates.
+
+        A tuple ("flux", L, M, N) or ("boozer", L, M_booz, N_booz) sets the
+        resolution, otherwise (6 L, 6 M, max(3 N, 2)) for "flux" and
+        (6 L, 2 M, 2 N) for "boozer" of the Equilibrium are used. Defaults to None.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1061,6 +1225,17 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
+    assert isinstance(field, (Equilibrium, _MagneticField)), (
+        f"field must be either Equilibrium or MagneticField object but {type(field)} "
+        "given. For an interpolated field, please use the _trace_particles "
+        "function, or pass the Equilibrium with use_interpolation."
+    )
+    is_eq = isinstance(field, Equilibrium)
+    errorif(
+        use_interpolation is not None and not is_eq,
+        ValueError,
+        "use_interpolation requires an Equilibrium.",
+    )
     if not params:
         params = field.params_dict
     if not options:
@@ -1068,11 +1243,11 @@ def trace_particles(
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
-        if isinstance(field, Equilibrium):
+        if is_eq:
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_event(t, y, args, **kwargs):
-        if isinstance(field, Equilibrium):
+        if is_eq:
             i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
             j = jnp.arctan2(y[1], y[0])
         else:
@@ -1088,7 +1263,38 @@ def trace_particles(
     )
     max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
 
-    y0, model_args = initializer.init_particles(model, field)
+    if use_interpolation is None:
+        y0, model_args = initializer.init_particles(model, field)
+    else:
+        if isinstance(use_interpolation, str):
+            use_interpolation = (use_interpolation,)
+        kind, *res = use_interpolation
+        L, M, N = field.L, field.M, field.N
+        if kind == "flux":
+            interpolated = InterpolatedFieldFlux(
+                model, *(res or (6 * L, 6 * M, max(3 * N, 2)))
+            )
+        elif kind == "boozer":
+            interpolated = InterpolatedFieldBoozer(model, *(res or (6 * L,)))
+        else:
+            raise ValueError(
+                f"use_interpolation must start with 'flux' or 'boozer', got {kind}."
+            )
+        is_boozer_init = isinstance(initializer, ManualParticleInitializerBoozer)
+        errorif(
+            (kind == "boozer") != is_boozer_init,
+            ValueError,
+            "use_interpolation='boozer' requires a ManualParticleInitializerBoozer, "
+            "and ManualParticleInitializerBoozer requires use_interpolation='boozer'.",
+        )
+        interpolated.build(field)
+        profiles = {"current": field.current, "iota": options.get("iota", field.iota)}
+        fit = interpolated.fit(params, profiles)
+        if kind == "boozer":
+            y0, model_args = initializer.init_particles(model, interpolated, fit)
+        else:
+            y0, model_args = initializer.init_particles(model, field)
+        field, params = interpolated, fit
     return _trace_particles(
         field=field,
         y0=y0,
@@ -1157,8 +1363,11 @@ def _trace_particles(
     event : diffrax.Event
         Custom event function to stop integration.
     """
+    is_flux = isinstance(
+        field, (Equilibrium, InterpolatedFieldFlux, InterpolatedFieldBoozer)
+    )
     # convert cartesian-like for integration in flux coordinates
-    if isinstance(field, Equilibrium):
+    if is_flux:
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
@@ -1204,7 +1413,7 @@ def _trace_particles(
     v = yt[:, :, 3:]
 
     # convert back to flux coordinates
-    if isinstance(field, Equilibrium):
+    if is_flux:
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
@@ -1254,3 +1463,450 @@ def _intfun_wrapper(
         event=event,
         throw=throw,
     )
+
+
+class InterpolatedFieldFlux(IOAble):
+    """Tabulated guiding center field of an Equilibrium for fast particle tracing.
+
+    The vacuum guiding center equations in flux coordinates only need seven scalar
+    fields: |B|, ρ 𝐛⋅∇θ, 𝐛⋅∇ζ, 𝐃⋅∇ρ, ρ 𝐃⋅∇θ, 𝐃⋅∇ζ and 𝐛⋅∇|B|, where
+    𝐃 = 𝐛 × ∇|B| / |B|² and 𝐛⋅∇ρ = 0. They are computed exactly on a uniform
+    ``LinearGrid`` and interpolated with a tensor-product cubic B-spline, so that an
+    evaluation reads a single 4×4×4 block of coefficients.
+
+    The table covers one field period in ζ and, for a stellarator symmetric
+    equilibrium, only θ ∈ [0, π]. Radial nodes start half a spacing off the axis and
+    end at ρ = 1, and the radial spline is closed by not-a-knot conditions at both
+    ends. Evaluations between the axis and the first node, or slightly past ρ = 1
+    (solver stages before a terminating event fires), extend the end cubic pieces.
+
+    Parameters
+    ----------
+    model : AbstractTrajectoryModel
+        Trajectory model to trace with, which defines the tabulated fields. Only
+        VacuumGuidingCenterTrajectory is supported.
+    L : int
+        Number of radial nodes, the last one at ρ = 1.
+    M : int
+        Poloidal resolution, the grid has 2M nodes in θ.
+    N : int
+        Toroidal resolution, the grid has 2N nodes per field period.
+    """
+
+    _static_attrs = ["L", "M", "N", "NFP", "sym", "data_keys"]
+    _keys = [
+        "|B|",
+        "b.e^theta*rho",
+        "b.e^zeta",
+        "D.e^rho",
+        "D.e^theta*rho",
+        "D.e^zeta",
+        "b.grad(|B|)",
+    ]
+    # sign of each field under stellarator symmetry (θ, ζ) -> (-θ, -ζ)
+    _sym_parity = np.array([1, 1, 1, -1, 1, 1, -1])
+
+    def __init__(self, model, L, M, N):
+        errorif(
+            not isinstance(model, VacuumGuidingCenterTrajectory),
+            NotImplementedError,
+            "InterpolatedFieldFlux only supports VacuumGuidingCenterTrajectory.",
+        )
+        self.data_keys = ["|B|", "b", "grad(|B|)", "e^rho", "e^theta", "e^zeta"]
+        self.L = L
+        self.M = M
+        self.N = N
+
+    def build(self, eq):
+        """Build the grid, transforms and B-spline prefilters.
+
+        During optimization, equilibrium field changes, however, the same transforms
+        can be used to get the fit faster. This method creates the grid and transforms
+        to be used during the fitting procedure.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to be used to get transforms.
+
+        """
+        self.NFP = eq.NFP
+        self.sym = eq.sym
+        # nodes half a spacing off ρ = 0, where e^theta is singular, the last at ρ = 1;
+        # θ is offset the same way so that sym=True keeps exactly the nodes in (0, π)
+        rho = (np.arange(self.L) + 0.5) / (self.L - 0.5)
+        theta = (np.arange(2 * self.M) + 0.5) * np.pi / self.M
+        self.grid = LinearGrid(
+            rho=rho, theta=theta, zeta=2 * self.N, NFP=eq.NFP, sym=eq.sym
+        )
+        self.transforms = get_transforms(self.data_keys, eq, self.grid)
+
+        self._prefilter_rho = _radial_prefilter(self.L)
+
+        # periodic prefilters, keeping 2 coefficients past each end of the stored
+        # range so the 4 wide stencil never wraps
+        def periodic(m, stored):
+            C = np.zeros((m, m))
+            j = np.arange(m)
+            C[j, j] = 4 / 6
+            C[j, (j + 1) % m] = C[j, (j - 1) % m] = 1 / 6
+            return jnp.asarray(np.linalg.inv(C)[np.arange(-2, stored + 2) % m])
+
+        self._prefilter_theta = periodic(2 * self.M, self.M if self.sym else 2 * self.M)
+        self._prefilter_zeta = periodic(2 * self.N, 2 * self.N)
+
+    @jit
+    def fit(self, eq_params, profiles):
+        """Compute the B-spline coefficients of the fields of an equilibrium.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Equilibriums `params_dict` which contains the parameters that define
+            the equiliubrium.
+        profiles : dict of Profiles
+            Profiles necessary to compute magnetic field. Either iota or current
+            profile must be given.
+
+        Returns
+        -------
+        params : dict
+            The coefficients as ``{"coeffs": array (L + 4, n_theta, 2N + 4, 7)}``, to be
+            passed as ``params`` to ``evaluate`` and to the tracing functions.
+
+        """
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.data_keys,
+            eq_params,
+            self.transforms,
+            profiles,
+        )
+        rho = self.grid.nodes[:, 0]
+        b, grad_B, modB = data["b"], data["grad(|B|)"], data["|B|"]
+        D = cross(b, grad_B) / modB[:, None] ** 2
+        f = jnp.stack(
+            [
+                modB,
+                rho * dot(b, data["e^theta"]),
+                dot(b, data["e^zeta"]),
+                dot(D, data["e^rho"]),
+                rho * dot(D, data["e^theta"]),
+                dot(D, data["e^zeta"]),
+                dot(b, grad_B),
+            ],
+            axis=-1,
+        )
+        # LinearGrid orders the nodes with θ fastest, then ρ, then ζ
+        f = jnp.moveaxis(f.reshape(2 * self.N, self.L, -1, 7), 0, 2)
+        if self.sym:
+            # θ ∈ (π, 2π) from (θ, ζ) -> (-θ, -ζ), the ζ nodes map as j -> -j mod 2N
+            f = jnp.concatenate(
+                [f, jnp.roll(f[:, ::-1, ::-1], 1, axis=2) * self._sym_parity], axis=1
+            )
+        coeffs = jnp.einsum(
+            "ai,bj,ck,ijkq->abcq",
+            self._prefilter_rho,
+            self._prefilter_theta,
+            self._prefilter_zeta,
+            f,
+        )
+        return {"coeffs": coeffs}
+
+    def evaluate(self, rho, theta, zeta, params):
+        """Evaluate the interpolated fields at a point.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float
+            Radial, poloidal and toroidal coordinates to evaluate, ρ in [0, 1].
+        params : dict
+            Coefficients returned by ``fit``.
+
+        Returns
+        -------
+        data : dict
+            |B|, b.e^theta*rho, b.e^zeta, D.e^rho, D.e^theta*rho, D.e^zeta and
+            b.∇|B|, with D = b × ∇|B| / |B|².
+        """
+        period = 2 * jnp.pi / self.NFP
+        theta = jnp.mod(theta, 2 * jnp.pi)
+        zeta = jnp.mod(zeta, period)
+        sign = 1.0
+        if self.sym:
+            flip = theta > jnp.pi
+            theta = jnp.where(flip, 2 * jnp.pi - theta, theta)
+            zeta = jnp.where(flip, jnp.mod(-zeta, period), zeta)
+            sign = jnp.where(flip, self._sym_parity, 1)
+        n_theta, n_zeta, n = params["coeffs"].shape[1:]
+        # position in node spacings from the first stored coefficient; past ρ = 1
+        # the end cubic pieces are extended
+        u = (
+            rho * (self.L - 0.5) + 1.5,
+            theta * self.M / jnp.pi + 1.5,
+            zeta * 2 * self.N / period + 2,
+        )
+        bounds = ((1, self.L + 1), (1, n_theta - 3), (2, n_zeta - 3))
+        i = [jnp.clip(jnp.floor(x), *b).astype(int) for x, b in zip(u, bounds)]
+        w = [
+            (
+                (1 - t) ** 3,
+                3 * t**3 - 6 * t**2 + 4,
+                -3 * t**3 + 3 * t**2 + 3 * t + 1,
+                t**3,
+            )
+            for t in (x - j for x, j in zip(u, i))
+        ]
+        # gather the 4×4×4 block by flat index and contract it by explicit sums, so
+        # that XLA fuses the evaluation into a few kernels without a reduce or gemm
+        a, b, c, q = np.ogrid[:4, :4, :4, :n]
+        corner = ((i[0] - 1) * n_theta + i[1] - 1) * n_zeta + i[2] - 1
+        block = params["coeffs"].reshape(-1)[
+            (corner + (a * n_theta + b) * n_zeta + c) * n + q
+        ]
+        dot = lambda v, w: sum(w[k] * v[k] for k in range(4)) / 6
+        f = sign * dot(dot(dot(block, w[0]), w[1]), w[2])
+        return dict(zip(self._keys, f))
+
+
+def _radial_prefilter(L):
+    """Cubic B-spline prefilter for L radial nodes, closed by not-a-knot conditions.
+
+    A c = f for coefficients at nodes -2, ..., L + 1; the last 4 rows are the
+    not-a-knot conditions at both ends.
+    """
+    A = np.zeros((L + 4, L + 4))
+    k = np.arange(L)
+    A[k, k + 1] = A[k, k + 3] = 1 / 6
+    A[k, k + 2] = 4 / 6
+    for row, col in enumerate([0, 1, L - 2, L - 1]):
+        A[L + row, col : col + 5] = [1, -4, 6, -4, 1]
+    return jnp.asarray(np.linalg.inv(A)[:, :L])
+
+
+class InterpolatedFieldBoozer(IOAble):
+    """|B| of an Equilibrium in Boozer coordinates for fast particle tracing.
+
+    In Boozer coordinates (ρ, θ_B, ζ_B), the vacuum guiding center equations only
+    need |B| and its gradient, and the profiles ι, G and I (the K ∇ψ term of the
+    covariant field is dropped). ``fit`` computes the Boozer angles on a uniform
+    DESC grid at the radial nodes, takes the Boozer harmonics of |B| up to
+    (M_booz, N_booz) and evaluates them, already prefiltered, as the coefficients of
+    a tensor-product cubic B-spline on a uniform (θ_B, ζ_B) grid. An evaluation reads
+    a single 4×4×4 block of coefficients for |B| and its derivatives. With
+    H = G + ι I, the profiles 1/H, ι/H, π G/(Ψ H) and π I/(Ψ H) are fit as cubic
+    splines on the same radial nodes as InterpolatedFieldFlux.
+
+    Parameters
+    ----------
+    model : AbstractTrajectoryModel
+        Trajectory model to trace with, which defines the tabulated fields. Only
+        VacuumGuidingCenterTrajectory is supported.
+    L : int
+        Number of radial nodes, the last one at ρ = 1.
+    M_booz, N_booz : int, optional
+        Boozer harmonics kept in the transform. Default 2 eq.M and 2 eq.N. The
+        spline grid has 6 M_booz nodes in θ_B and max(6 N_booz, 4) per field period
+        in ζ_B.
+    surf_batch_size : int, optional
+        Number of surfaces transformed at once, to limit memory. Default all.
+    """
+
+    _static_attrs = [
+        "L",
+        "M",
+        "N",
+        "NFP",
+        "M_booz",
+        "N_booz",
+        "surf_batch_size",
+        "data_keys",
+    ]
+    _keys = [
+        "|B|",
+        "|B|_r",
+        "|B|_t",
+        "|B|_z",
+        "1/H",
+        "iota/H",
+        "pi*G/(Psi*H)",
+        "pi*I/(Psi*H)",
+    ]
+
+    def __init__(self, model, L, M_booz=None, N_booz=None, surf_batch_size=None):
+        errorif(
+            not isinstance(model, VacuumGuidingCenterTrajectory),
+            NotImplementedError,
+            "InterpolatedFieldBoozer only supports VacuumGuidingCenterTrajectory.",
+        )
+        self.data_keys = [
+            "|B|",
+            "theta_B",
+            "zeta_B",
+            "sqrt(g)_Boozer_DESC",
+            "iota",
+            "G",
+            "I",
+        ]
+        self.L = L
+        self.M_booz = M_booz
+        self.N_booz = N_booz
+        self.surf_batch_size = surf_batch_size
+
+    def build(self, eq):
+        """Build the grid, transforms and B-spline prefilters.
+
+        During optimization, equilibrium field changes, however, the same transforms
+        can be used to get the fit faster. This method creates the grid and transforms
+        to be used during the fitting procedure.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to be used to get transforms.
+
+        """
+        self.NFP = eq.NFP
+        self.M_booz = setdefault(self.M_booz, 2 * eq.M)
+        self.N_booz = setdefault(self.N_booz, 2 * eq.N)
+        self.M = 3 * self.M_booz
+        self.N = max(3 * self.N_booz, 2)
+        rho = (np.arange(self.L) + 0.5) / (self.L - 0.5)
+        self.grid = LinearGrid(
+            rho=rho, M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
+        )
+        self.transforms = get_transforms(
+            self.data_keys, eq, self.grid, M_booz=self.M_booz, N_booz=self.N_booz
+        )
+        self._prefilter_rho = _radial_prefilter(self.L)
+
+        # a harmonic is an eigenvector of the periodic prefilter, so the spline
+        # coefficients at nodes -2, ..., n + 1 are the harmonic over its eigenvalue;
+        # stored as real and imaginary parts, diffrax warns on complex args
+        def harmonics(K, n, NFP):
+            k = np.arange(-K, K + 1)
+            x = np.arange(-2, n + 2) * 2 * np.pi / (n * NFP)
+            sigma = (4 + 2 * np.cos(2 * np.pi * k / n)) / 6
+            h = np.exp(1j * np.outer(x, k * NFP)) / sigma
+            return jnp.asarray(k * NFP), jnp.asarray(np.stack([h.real, h.imag]))
+
+        self._m, self._harmonics_theta = harmonics(self.M_booz, 2 * self.M, 1)
+        self._n, self._harmonics_zeta = harmonics(self.N_booz, 2 * self.N, self.NFP)
+
+    @jit
+    def fit(self, eq_params, profiles):
+        """Compute the B-spline coefficients of |B| and the profiles.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Equilibriums `params_dict` which contains the parameters that define
+            the equiliubrium.
+        profiles : dict of Profiles
+            Profiles necessary to compute magnetic field. Either iota or current
+            profile must be given.
+
+        Returns
+        -------
+        params : dict
+            The coefficients as ``{"B": array (L + 4, 2M + 4, 2N + 4),
+            "profiles": array (L + 4, 4)}``, to be passed as ``params`` to
+            ``evaluate`` and to the tracing functions.
+
+        """
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.data_keys,
+            eq_params,
+            self.transforms,
+            profiles,
+        )
+        grid = self.grid
+        theta_B, zeta_B, f = (
+            grid.meshgrid_reshape(x, "rtz").reshape(grid.num_rho, -1)
+            for x in (
+                data["theta_B"],
+                data["zeta_B"],
+                data["sqrt(g)_Boozer_DESC"] * data["|B|"],
+            )
+        )
+        h_theta = self._harmonics_theta[0] + 1j * self._harmonics_theta[1]
+        h_zeta = self._harmonics_zeta[0] + 1j * self._harmonics_zeta[1]
+
+        def transform(theta_B, zeta_B, f):
+            # Boozer harmonics on one surface, by quadrature over the DESC grid
+            B_mn = (
+                (f[:, None] * jnp.exp(-1j * theta_B[:, None] * self._m)).T
+                @ jnp.exp(-1j * zeta_B[:, None] * self._n)
+            ) / f.size
+            return jnp.real(h_theta @ B_mn @ h_zeta.T)
+
+        coeffs = vmap_chunked(transform, (0, 0, 0), chunk_size=self.surf_batch_size)(
+            theta_B, zeta_B, f
+        )
+        coeffs = jnp.einsum("ai,ijk->ajk", self._prefilter_rho, coeffs)
+
+        iota, G, I = (grid.compress(data[key]) for key in ("iota", "G", "I"))
+        H = G + iota * I
+        c = jnp.pi / eq_params["Psi"]
+        p = jnp.stack([1 / H, iota / H, c * G / H, c * I / H], axis=-1)
+        return {"B": coeffs, "profiles": self._prefilter_rho @ p}
+
+    def evaluate(self, rho, theta, zeta, params):
+        """Evaluate |B|, its gradient and the profiles at a point.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float
+            Radial coordinate and Boozer angles to evaluate, ρ in [0, 1].
+        params : dict
+            Coefficients returned by ``fit``.
+
+        Returns
+        -------
+        data : dict
+            |B|, ∂_ρ|B|, ∂_θ|B|, ∂_ζ|B|, 1/H, ι/H, π G/(Ψ H) and π I/(Ψ H).
+        """
+        period = 2 * jnp.pi / self.NFP
+        n_theta, n_zeta = params["B"].shape[1:]
+        # position in node spacings from the first stored coefficient; past ρ = 1 or
+        # below the first node, the end cubic pieces are extended
+        u = (
+            rho * (self.L - 0.5) + 1.5,
+            jnp.mod(theta, 2 * jnp.pi) * self.M / jnp.pi + 2,
+            jnp.mod(zeta, period) * 2 * self.N / period + 2,
+        )
+        bounds = ((1, self.L + 1), (2, n_theta - 3), (2, n_zeta - 3))
+        i = [jnp.clip(jnp.floor(x), *b).astype(int) for x, b in zip(u, bounds)]
+        scale = (self.L - 0.5, self.M / jnp.pi, 2 * self.N / period)
+        w, dw = [], []
+        for x, j, s in zip(u, i, scale):
+            t = x - j
+            w.append(
+                (
+                    (1 - t) ** 3,
+                    3 * t**3 - 6 * t**2 + 4,
+                    -3 * t**3 + 3 * t**2 + 3 * t + 1,
+                    t**3,
+                )
+            )
+            dw.append(
+                (
+                    -3 * s * (1 - t) ** 2,
+                    s * (9 * t**2 - 12 * t),
+                    s * (-9 * t**2 + 6 * t + 3),
+                    3 * s * t**2,
+                )
+            )
+        # gather the 4×4×4 block by flat index and contract it one direction at a
+        # time by explicit sums, so that XLA fuses the evaluation into a few kernels
+        # without a reduce or gemm
+        a, b, c = np.ogrid[:4, :4, :4]
+        corner = ((i[0] - 1) * n_theta + i[1] - 1) * n_zeta + i[2] - 1
+        block = params["B"].reshape(-1)[corner + (a * n_theta + b) * n_zeta + c]
+        dot = lambda v, w: sum(w[k] * v[k] for k in range(4)) / 6
+        R, R_r = dot(block, w[0]), dot(block, dw[0])
+        RT, RT_t, R_rT = dot(R, w[1]), dot(R, dw[1]), dot(R_r, w[1])
+        B = (dot(RT, w[2]), dot(R_rT, w[2]), dot(RT_t, w[2]), dot(RT, dw[2]))
+        p = dot(params["profiles"][i[0] - 1 + np.arange(4)], w[0])
+        return dict(zip(self._keys, (*B, *p)))

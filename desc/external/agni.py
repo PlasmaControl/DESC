@@ -50,13 +50,15 @@ class AgniStability(_Objective):
     C the field-line bending, Γ the adiabatic index, F the instability drive
     (the only term that can be negative) and n the normalized density (1 by
     default). The discrete problem A x = λ B x has A from δW and B from δK.
-    This objective returns the squared growth rate γ² = −λ of the lowest
-    eigenvalue. γ² is dimensionless, in units of (v_A / a)² of the current
-    state: ``a`` and ``B_N = |Ψ| / (π a²)`` are recomputed from the parameters
-    at every call and v_A = B_N / √(μ₀ ρ₀). AGNI takes no mass density, so γ² in
-    s⁻² is γ² B_N² / (μ₀ ρ₀ a²) for the plasma's mass density ρ₀ (its maximum
-    with ``density=True``). The plasma boundary is held fixed (ξ·∇ρ = 0 there), so
-    the modes are global internal modes:
+    This objective returns the normalized squared growth rate γ² = −λ of the
+    lowest eigenvalue. The unnormalized growth rate is γ (v_A / a) where
+    v_A = B_N/sqrt(mu_0 n M) is the Alfven speed. The normalizing scalars
+    ``a`` and ``B_N = |Ψ| / (π a²)`` are recomputed from the parameters at every
+    iteration. More information about the normalization in the preprint [1]_
+
+
+    The plasma boundary is held fixed (ξ·∇ρ = 0 there), so the modes are global
+    internal modes:
 
     - γ² > 0: unstable to a global internal mode of the chosen toroidal family,
     - γ² ≤ 0: stable.

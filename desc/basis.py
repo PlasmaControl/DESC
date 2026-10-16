@@ -2,20 +2,21 @@
 
 import functools
 from abc import ABC, abstractmethod
-from math import factorial
+from math import comb, factorial
 
 import mpmath
 import numpy as np
 
-from desc.backend import custom_jvp, fori_loop, jit, jnp, sign
+from desc.backend import custom_jvp, fori_loop, jax, jit, jnp, sign, vmap
 from desc.grid import Grid, _Grid
 from desc.io import IOAble
-from desc.utils import check_nonnegint, check_posint, flatten_list
+from desc.utils import check_nonnegint, check_posint, errorif, flatten_list
 
 __all__ = [
     "PowerSeries",
     "FourierSeries",
     "DoubleFourierSeries",
+    "DoubleFourierRidgeSeries",
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
@@ -727,6 +728,342 @@ class DoubleFourierSeries(_Basis):
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
+
+
+class _RidgeBasis(_Basis):
+    """Base class for ridge bases, made of a smooth and two sharp sub-bases.
+
+    A function is written as
+
+        X = A + Re(Q_γ) B_1 + Im(Q_γ) B_2,
+
+    where A, B_1 and B_2 are expanded in standard bases (the sub-bases) and Q_γ is the
+    ridge function (see ``ridge_function``) of the helical angle α_b = θ - ι_b ζ, with
+    ι_b = NFP n_b / m_b. Q_γ vanishes on the m_b ridges α_b = 2πk/m_b, where the
+    cross-sections have corners of angle γπ.
+
+    The modes are those of the sub-bases stacked in the order A, B_1, B_2, so every row
+    of ``modes`` is a standard [l,m,n] and ``blocks`` (0, 1 or 2) tells which sub-basis
+    it belongs to. As Re(Q_γ) is even and Im(Q_γ) is odd under stellarator symmetry,
+    A and B_1 take the symmetry ``sym`` and B_2 the opposite one.
+
+    """
+
+    _io_attrs_ = _Basis._io_attrs_ + [
+        "_smooth_basis",
+        "_sharp_bases",
+        "_m_b",
+        "_n_b",
+        "_gamma",
+    ]
+    _static_attrs = _Basis._static_attrs + [
+        "_smooth_basis",
+        "_sharp_bases",
+        "_m_b",
+        "_n_b",
+        "_gamma",
+    ]
+
+    def _check_ridge_inputs(self, m_b, n_b, gamma):
+        self._m_b = check_posint(m_b, "m_b", False)
+        errorif(
+            not np.isclose(n_b, np.round(n_b)),
+            ValueError,
+            f"n_b must be an integer, got {n_b}.",
+        )
+        self._n_b = int(np.round(n_b))
+        self._gamma = float(gamma)
+        errorif(
+            not (0 < self.gamma <= 1),
+            ValueError,
+            f"gamma must be in (0, 1], got {self.gamma}.",
+        )
+
+    @staticmethod
+    def _opposite_sym(sym):
+        """The symmetry of B_2, the opposite of that of A and B_1."""
+        return {"cos": "sin", "cosine": "sin", "sin": "cos", "sine": "cos"}.get(
+            sym, sym
+        )
+
+    @property
+    def _sub_bases(self):
+        return (self._smooth_basis, *self._sharp_bases)
+
+    def _get_modes(self):
+        """Get mode numbers: the modes of the sub-bases A, B_1, B_2 stacked.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        return np.vstack([basis.modes for basis in self._sub_bases])
+
+    def _set_up(self):
+        """Do things after loading or changing resolution."""
+        self._modes = self._get_modes()
+        self._blocks = np.concatenate(
+            [np.full(basis.num_modes, b) for b, basis in enumerate(self._sub_bases)]
+        )
+        super()._set_up()
+
+    def _enforce_symmetry(self):
+        """Symmetry is enforced by each of the sub-bases."""
+
+    def _sort_modes(self):
+        """Modes are kept in the order of the sub-bases."""
+
+    @property
+    def smooth_basis(self):
+        """_Basis: Sub-basis of the smooth block A."""
+        return self._smooth_basis
+
+    @property
+    def sharp_bases(self):
+        """tuple: Sub-bases of the sharp blocks B_1 and B_2."""
+        return self._sharp_bases
+
+    @property
+    def blocks(self):
+        """ndarray: Block (0 for A, 1 for B_1, 2 for B_2) of every mode."""
+        if not hasattr(self, "_blocks"):
+            self._set_up()
+        return self._blocks
+
+    @property
+    def M_b(self):
+        """int: Maximum poloidal resolution of the sharp blocks."""
+        return self._sharp_bases[0].M
+
+    @property
+    def N_b(self):
+        """int: Maximum toroidal resolution of the sharp blocks."""
+        return self._sharp_bases[0].N
+
+    @property
+    def m_b(self):
+        """int: Number of ridges."""
+        return self._m_b
+
+    @property
+    def n_b(self):
+        """int: Toroidal winding of the ridges, ι_b = NFP n_b / m_b."""
+        return self._n_b
+
+    @property
+    def iota_b(self):
+        """float: Rotational transform of the ridges, ι_b = NFP n_b / m_b."""
+        return self.NFP * self.n_b / self.m_b
+
+    @property
+    def gamma(self):
+        """float: Exponent of the ridge function."""
+        return self._gamma
+
+    def block_slice(self, block):
+        """slice: Indices of the modes of the given block."""
+        start = sum(basis.num_modes for basis in self._sub_bases[:block])
+        return slice(start, start + self._sub_bases[block].num_modes)
+
+    def get_idx(self, L=0, M=0, N=0, error=True, block=0):
+        """Get the index of the ``'modes'`` array corresponding to given mode numbers.
+
+        Parameters
+        ----------
+        L : int
+            Radial mode number.
+        M : int
+            Poloidal mode number.
+        N : int
+            Toroidal mode number.
+        error : bool
+            whether to raise exception if mode is not in basis, or return empty array
+        block : int
+            Block of the mode: 0 for A, 1 for B_1 and 2 for B_2.
+
+        Returns
+        -------
+        idx : ndarray of int
+            Index of given mode numbers.
+
+        """
+        idx = self._sub_bases[block].get_idx(L, M, N, error)
+        return idx + self.block_slice(block).start
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None, blocks=None):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        blocks : ndarray of int, shape(num_modes,), optional
+            Blocks of the modes. Defaults to the smooth block 0 when modes are given.
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+        if modes is None:
+            modes, blocks = self.modes, self.blocks
+        modes = np.atleast_2d(modes)
+        blocks = np.zeros(len(modes), dtype=int) if blocks is None else blocks
+        blocks = np.asarray(blocks)
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+        derivatives = np.asarray(derivatives).ravel()
+        dr, dt, dz = (int(d) for d in derivatives[:3])
+
+        α = grid.nodes[:, 1] - self.iota_b * grid.nodes[:, 2]
+        columns, order = [], []
+        for b, basis in enumerate(self._sub_bases):
+            idx = np.where(blocks == b)[0]
+            if not idx.size:
+                continue
+            if b == 0:
+                y = basis.evaluate(grid, derivatives, modes=modes[idx])
+            else:
+                ## Leibniz rule, where ∂_θ Q = ∂_α Q and ∂_ζ Q = -ι_b ∂_α Q
+                y = 0
+                part = "re" if b == 1 else "im"
+                for i in range(dt + 1):
+                    for j in range(dz + 1):
+                        Q = ridge_function(α, self.m_b, self.gamma, i + j, part)
+                        F = basis.evaluate(
+                            grid, np.array([dr, dt - i, dz - j]), modes=modes[idx]
+                        )
+                        coef = comb(dt, i) * comb(dz, j) * (-self.iota_b) ** j
+                        y = y + coef * Q[:, None] * F
+            columns.append(y)
+            order.append(idx)
+        return jnp.concatenate(columns, axis=1)[:, np.argsort(np.concatenate(order))]
+
+    def __repr__(self):
+        """Get the string form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + f" (L={self.L}, M={self.M}, N={self.N}, M_b={self.M_b}, N_b={self.N_b}, "
+            + f"NFP={self.NFP}, m_b={self.m_b}, n_b={self.n_b}, gamma={self.gamma}, "
+            + f"sym={self.sym})"
+        )
+
+    def __hash__(self):
+        """Get the hash of the object."""
+        return hash(
+            (super().__hash__(), *self._sub_bases, self._m_b, self._n_b, self._gamma)
+        )
+
+    def __eq__(self, other):
+        """Check if two basis objects are equal."""
+        return (
+            super().__eq__(other)
+            and all(a == b for a, b in zip(self._sub_bases, other._sub_bases))
+            and self.m_b == other.m_b
+            and self.n_b == other.n_b
+            and self.gamma == other.gamma
+        )
+
+
+class DoubleFourierRidgeSeries(_RidgeBasis):
+    """2D ridge basis set for use on a single flux surface with sharp corners.
+
+    Double Fourier series in the poloidal and toroidal coordinates for the smooth block
+    A and the sharp blocks B_1 and B_2, i.e. a ``FourierZernikeRidgeBasis`` on ρ = 1:
+
+        X(θ, ζ) = A(θ, ζ) + Re(Q_γ(α_b)) B_1(θ, ζ) + Im(Q_γ(α_b)) B_2(θ, ζ).
+
+    See ``_RidgeBasis``.
+
+    Parameters
+    ----------
+    M : int
+        Maximum poloidal resolution of the smooth block A.
+    N : int
+        Maximum toroidal resolution of the smooth block A.
+    M_b : int
+        Maximum poloidal resolution of the sharp blocks B_1 and B_2.
+    N_b : int
+        Maximum toroidal resolution of the sharp blocks B_1 and B_2. Defaults to N.
+    NFP : int
+        Number of field periods.
+    m_b : int
+        Number of ridges (corners on a cross-section).
+    n_b : int
+        Toroidal winding of the ridges, which have rotational transform
+        ι_b = NFP n_b / m_b.
+    gamma : float
+        Exponent γ of the ridge function, 0 < γ ≤ 1. γ = 1 has no corners.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+        A and B_1 take this symmetry and B_2 the opposite one.
+
+    """
+
+    def __init__(self, M, N, M_b, N_b=None, NFP=1, m_b=1, n_b=0, gamma=1.0, sym=False):
+        self._L = 0
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = "linear"
+        self._check_ridge_inputs(m_b, n_b, gamma)
+        M_b = check_nonnegint(M_b, "M_b", False)
+        N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        self._smooth_basis = DoubleFourierSeries(M, N, NFP, sym)
+        self._sharp_bases = (
+            DoubleFourierSeries(M_b, N_b, NFP, sym),
+            DoubleFourierSeries(M_b, N_b, NFP, self._opposite_sym(sym)),
+        )
+        self._set_up()
+
+    def change_resolution(self, M, N, M_b, N_b=None, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        M, N : int
+            Maximum poloidal and toroidal resolution of the smooth block.
+        M_b, N_b : int
+            Maximum poloidal and toroidal resolution of the sharp blocks.
+            N_b defaults to N.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = NFP if NFP is not None else self.NFP
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._sym = sym if sym is not None else self.sym
+        N_b = N_b if N_b is not None else N
+        self._smooth_basis.change_resolution(M, N, self.NFP, self.sym)
+        self._sharp_bases[0].change_resolution(M_b, N_b, self.NFP, self.sym)
+        self._sharp_bases[1].change_resolution(
+            M_b, N_b, self.NFP, self._opposite_sym(self.sym)
+        )
+        self._set_up()
 
 
 class ZernikePolynomial(_Basis):
@@ -1884,6 +2221,53 @@ def fourier(theta, m, NFP=1, dt=0):
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
     return m_abs**dt * jnp.sin(m_abs * theta + shift)
+
+
+def ridge_function(alpha, m_b, gamma, dt=0, part="re"):
+    """Ridge function Q_γ of the ridge basis on the surface ρ = 1.
+
+    Q_γ = (|P| / m_b) exp(iγ arg P),   P = 1 - exp(i m_b α).
+
+    Q_γ vanishes on the ridges α = 2πk/m_b, around which it maps an angle of π to an
+    angle of γπ. As Re(P) ≥ 0, arg(P) is the principal value, and with
+    v = (m_b α / 2) mod π this is
+
+    Q_γ = (2 / m_b) sin(v) exp(iγ(v - π/2)),
+
+    which is smooth in v. Its derivatives are found by automatic differentiation. They
+    are discontinuous on the ridges, where the limit from α > 2πk/m_b is returned.
+
+    Parameters
+    ----------
+    alpha : ndarray, shape(N,)
+        Helical angle α_b = θ - ι_b ζ to evaluate at.
+    m_b : int
+        Number of ridges.
+    gamma : float
+        Exponent on the argument of P, 0 < γ ≤ 1.
+    dt : int
+        Order of derivative in α (Default = 0).
+    part : {"re", "im"}
+        Whether to return the real or the imaginary part of Q_γ.
+
+    Returns
+    -------
+    y : ndarray, shape(N,)
+        Real or imaginary part of Q_γ (or its derivative) evaluated at alpha.
+
+    """
+
+    def Q(a):
+        v = jnp.mod(m_b * a / 2, jnp.pi)
+        mod = 2 * jnp.sin(v) / m_b
+        arg = gamma * (v - jnp.pi / 2)
+        return mod * (jnp.cos(arg) if part == "re" else jnp.sin(arg))
+
+    f = Q
+    for _ in range(dt):
+        f = jax.grad(f)
+    alpha = jnp.asarray(alpha, dtype=float)
+    return vmap(f)(alpha.ravel()).reshape(alpha.shape)
 
 
 def zernike_norm(l, m):

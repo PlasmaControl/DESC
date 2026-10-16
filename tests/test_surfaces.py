@@ -8,7 +8,11 @@ from desc.backend import jax, jit
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry import (
+    FourierRZToroidalRidgeSurface,
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+)
 from desc.geometry.surface import _constant_offset_surface
 from desc.grid import LinearGrid
 from desc.utils import rpz2xyz
@@ -439,6 +443,106 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(
             e, eq.compute("a_major/a_minor")["a_major/a_minor"], rtol=2e-2
         )
+
+
+class TestFourierRZToroidalRidgeSurface:
+    """Tests for FourierRZToroidalRidgeSurface class."""
+
+    @staticmethod
+    def _surface():
+        """A surface with five corners along ridges that rotate once per transit."""
+        return FourierRZToroidalRidgeSurface(
+            R_lmn=[6, 0.6, 0.1, 0.05, 0.02],
+            Z_lmn=[-0.6, -0.1, 0.03, 0.02],
+            modes_R=[[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 0, 1], [1, -1, 2]],
+            modes_Z=[[-1, 0, 0], [-1, 1, 0], [0, 0, 2], [1, -1, 1]],
+            NFP=5,
+            m_b=5,
+            n_b=-1,
+            gamma=0.75,
+            M=3,
+            N=2,
+            M_b=2,
+            N_b=2,
+        )
+
+    @pytest.mark.unit
+    def test_compute(self):
+        """Test that R, Z from compute match the basis, and that the area is finite."""
+        surf = self._surface()
+        grid = LinearGrid(M=10, N=10, NFP=5)
+        data = surf.compute(["R", "Z", "S"], grid=grid)
+        np.testing.assert_allclose(
+            data["R"], surf.R_basis.evaluate(grid.nodes) @ surf.R_lmn
+        )
+        np.testing.assert_allclose(
+            data["Z"], surf.Z_basis.evaluate(grid.nodes) @ surf.Z_lmn
+        )
+        assert np.isfinite(data["S"])
+        assert surf._compute_orientation() == 1
+
+    @pytest.mark.unit
+    def test_standard_modes(self):
+        """Test that [m,n] modes go in A and match a FourierRZToroidalSurface."""
+        kwargs = dict(
+            R_lmn=[10, 1, 0.2],
+            Z_lmn=[-2, -0.2],
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=2,
+        )
+        surf = FourierRZToroidalRidgeSurface(**kwargs, m_b=3, n_b=0, gamma=0.75, M_b=1)
+        grid = LinearGrid(M=6, N=6, NFP=2)
+        data = surf.compute(["R", "Z"], grid=grid)
+        data0 = FourierRZToroidalSurface(**kwargs).compute(["R", "Z"], grid=grid)
+        np.testing.assert_allclose(data["R"], data0["R"])
+        np.testing.assert_allclose(data["Z"], data0["Z"])
+        assert surf.get_coeffs(1, 0) == (1, 0)
+        surf.set_coeffs(1, 0, R=0.3, block=1)
+        assert surf.get_coeffs(1, 0, block=1) == (0.3, 0)
+
+    @pytest.mark.unit
+    def test_flip_orientation(self):
+        """Test that flipping θ (and ι_b) gives the same surface at -θ."""
+        surf = self._surface()
+        flipped = self._surface()
+        flipped._flip_orientation()
+        assert flipped.n_b == -surf.n_b
+        grid = LinearGrid(M=8, N=8, NFP=5)
+        nodes = grid.nodes.copy()
+        nodes[:, 1] *= -1
+        np.testing.assert_allclose(
+            flipped.R_basis.evaluate(nodes) @ flipped.R_lmn,
+            surf.R_basis.evaluate(grid.nodes) @ surf.R_lmn,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            flipped.Z_basis.evaluate(nodes) @ flipped.Z_lmn,
+            surf.Z_basis.evaluate(grid.nodes) @ surf.Z_lmn,
+            atol=1e-12,
+        )
+
+    @pytest.mark.unit
+    def test_from_values(self):
+        """Test that a fit to points of a surface recovers it, and the flat corners."""
+        surf = self._surface()
+        grid = LinearGrid(M=12, N=12, NFP=5)
+        data = surf.compute(["R", "Z"], grid=grid)
+        coords = np.array([data["R"], grid.nodes[:, 2], data["Z"]]).T
+        kwargs = dict(M=3, N=2, M_b=2, N_b=2, NFP=5, m_b=5, n_b=-1, gamma=0.75)
+        fit = FourierRZToroidalRidgeSurface.from_values(
+            coords, grid.nodes[:, 1], flat_corners=False, **kwargs
+        )
+        np.testing.assert_allclose(fit.R_lmn, surf.R_lmn, atol=1e-10)
+        np.testing.assert_allclose(fit.Z_lmn, surf.Z_lmn, atol=1e-10)
+
+        fit = FourierRZToroidalRidgeSurface.from_values(
+            coords, grid.nodes[:, 1], **kwargs
+        )
+        for basis, c in ((fit.R_basis, fit.R_lmn), (fit.Z_basis, fit.Z_lmn)):
+            C = fit.corner_constraint_matrix(basis)
+            assert C.shape[0] > 0
+            np.testing.assert_allclose(C @ c, 0, atol=1e-12)
 
 
 class TestZernikeRZToroidalSection:

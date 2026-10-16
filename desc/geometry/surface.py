@@ -15,7 +15,7 @@ from desc.backend import (
     sign,
     vmap,
 )
-from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.basis import DoubleFourierRidgeSeries, DoubleFourierSeries, ZernikePolynomial
 from desc.compute import get_transforms
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -35,7 +35,11 @@ from desc.utils import (
 
 from .core import Surface
 
-__all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
+__all__ = [
+    "FourierRZToroidalSurface",
+    "FourierRZToroidalRidgeSurface",
+    "ZernikeRZToroidalSection",
+]
 
 
 class FourierRZToroidalSurface(Surface):
@@ -836,6 +840,511 @@ class FourierRZToroidalSurface(Surface):
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales
+
+
+class FourierRZToroidalRidgeSurface(Surface):
+    """Toroidal surface with sharp corners represented by a double Fourier ridge series.
+
+    R and Z are each written as
+
+        X(θ, ζ) = A(θ, ζ) + Re(Q_γ(α_b)) B_1(θ, ζ) + Im(Q_γ(α_b)) B_2(θ, ζ),
+
+    where A, B_1, B_2 are double Fourier series, α_b = θ - ι_b ζ is the helical angle
+    with ι_b = NFP n_b / m_b, and Q_γ is the ridge function (see
+    ``desc.basis.ridge_function``). The surface has m_b ridges (e.g. X-lines) at
+    α_b = 2πk/m_b, where its cross-sections have corners of angle γπ. The coefficients
+    of the three blocks are stacked in R_lmn and Z_lmn (see
+    ``desc.basis.DoubleFourierRidgeSeries``).
+
+    Parameters
+    ----------
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Coefficients for R and Z in cylindrical coordinates.
+    modes_R : array-like, shape(k,2) or shape(k,3)
+        Poloidal and toroidal mode numbers [m,n] for R_lmn, and optionally the block
+        [m,n,b], with b = 0 for A and 1, 2 for B_1, B_2. Modes without a block are in A.
+    modes_Z : array-like, shape(k,2) or shape(k,3)
+        Mode numbers associated with Z_lmn, defaults to modes_R.
+    NFP : int
+        Number of field periods.
+    m_b : int
+        Number of ridges.
+    n_b : int
+        Toroidal winding of the ridges, which have rotational transform
+        ι_b = NFP n_b / m_b.
+    gamma : float
+        Exponent of the ridge function, 0 < γ ≤ 1. The corners have an angle γπ.
+    sym : bool
+        Whether to enforce stellarator symmetry. If True, non-symmetric modes will be
+        truncated.
+    M, N : int or None
+        Maximum poloidal and toroidal mode numbers of A. Defaults to maximum from the
+        modes of A in modes_R and modes_Z.
+    M_b, N_b : int or None
+        Maximum poloidal and toroidal mode numbers of B_1 and B_2. Defaults to maximum
+        from the modes of B_1 and B_2 in modes_R and modes_Z.
+    rho : float [0,1]
+        Flux surface label for the toroidal surface.
+    name : str
+        Name for this surface.
+    check_orientation : bool
+        Ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_R_lmn",
+        "_Z_lmn",
+        "_R_basis",
+        "_Z_basis",
+        "_NFP",
+        "_rho",
+    ]
+    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
+
+    @execute_on_cpu
+    def __init__(
+        self,
+        R_lmn=None,
+        Z_lmn=None,
+        modes_R=None,
+        modes_Z=None,
+        NFP=1,
+        m_b=1,
+        n_b=0,
+        gamma=1.0,
+        sym=True,
+        M=None,
+        N=None,
+        M_b=None,
+        N_b=None,
+        rho=1,
+        name="",
+        check_orientation=True,
+    ):
+        if R_lmn is None:
+            R_lmn = np.array([10, 1])
+            modes_R = np.array([[0, 0], [1, 0]])
+        if Z_lmn is None:
+            Z_lmn = np.array([0, -1])
+            modes_Z = np.array([[0, 0], [-1, 0]])
+        if modes_Z is None:
+            modes_Z = modes_R
+        R_lmn, Z_lmn = np.asarray(R_lmn), np.asarray(Z_lmn)
+        modes_R, modes_Z = _ridge_modes(modes_R), _ridge_modes(modes_Z)
+
+        assert (
+            R_lmn.size == modes_R.shape[0]
+        ), "R_lmn size and modes_R.shape[0] must be the same size!"
+        assert (
+            Z_lmn.size == modes_Z.shape[0]
+        ), "Z_lmn size and modes_Z.shape[0] must be the same size!"
+
+        def max_mode(sharp, col):
+            vals = [
+                np.abs(modes[(modes[:, 2] > 0) == sharp, col])
+                for modes in (modes_R, modes_Z)
+            ]
+            return int(max([np.max(v) if v.size else 0 for v in vals]))
+
+        self._L = 0
+        self._M = setdefault(check_nonnegint(M, "M"), max_mode(False, 0))
+        self._N = setdefault(check_nonnegint(N, "N"), max_mode(False, 1))
+        self._M_b = setdefault(check_nonnegint(M_b, "M_b"), max_mode(True, 0))
+        self._N_b = setdefault(check_nonnegint(N_b, "N_b"), max_mode(True, 1))
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym)
+        self._rho = rho
+
+        self._R_basis, self._Z_basis = self._make_bases(m_b, n_b, gamma)
+        self._R_lmn = _copy_ridge_coeffs(R_lmn, modes_R, self.R_basis)
+        self._Z_lmn = _copy_ridge_coeffs(Z_lmn, modes_Z, self.Z_basis)
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta and n_b."
+                + " To avoid this warning in the future, switch the sign of theta and"
+                + " n_b of the data."
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
+        self.name = name
+
+    def _make_bases(self, m_b, n_b, gamma):
+        """Bases for R and Z at the current resolution."""
+        kwargs = dict(
+            M=self.M,
+            N=self.N,
+            M_b=self.M_b,
+            N_b=self.N_b,
+            NFP=self.NFP,
+            m_b=m_b,
+            n_b=n_b,
+            gamma=gamma,
+        )
+        return (
+            DoubleFourierRidgeSeries(**kwargs, sym="cos" if self.sym else False),
+            DoubleFourierRidgeSeries(**kwargs, sym="sin" if self.sym else False),
+        )
+
+    def _compute_orientation(self):
+        """Handedness of coordinate system.
+
+        The flat corners can remove the m = ±1 modes of the smooth block that
+        ``Surface._compute_orientation`` uses, so the handedness is found from the
+        signed area of the cross-section ζ = 0 instead.
+
+        Returns
+        -------
+        orientation : float
+            +1 for right handed coordinate system (theta increasing CW),
+            -1 for left handed coordinates (theta increasing CCW),
+            or 0 for a singular coordinate system (no volume)
+        """
+        θ = np.linspace(0, 2 * np.pi, 4 * (self.M + self.M_b) + 64, endpoint=False)
+        nodes = np.array([np.ones_like(θ), θ, np.zeros_like(θ)]).T
+        R = np.asarray(self.R_basis.evaluate(nodes) @ self.R_lmn)
+        Z = np.asarray(self.Z_basis.evaluate(nodes) @ self.Z_lmn)
+        area = np.sum(R * np.roll(Z, -1) - np.roll(R, -1) * Z) / 2
+        return -np.sign(area)
+
+    def _flip_orientation(self):
+        """Flip the orientation of theta.
+
+        With θ -> -θ the helical angle becomes α_b -> -α_b if also n_b -> -n_b, and
+        Q_γ(-α_b) is the complex conjugate of Q_γ(α_b), so the sign of the m < 0 modes
+        and of the block B_2 flips.
+        """
+        for basis, name in ((self.R_basis, "_R_lmn"), (self.Z_basis, "_Z_lmn")):
+            one = np.where(basis.modes[:, 1] < 0, -1, 1)
+            one = one * np.where(basis.blocks == 2, -1, 1)
+            setattr(self, name, jnp.asarray(getattr(self, name) * one))
+        self._R_basis, self._Z_basis = self._make_bases(self.m_b, -self.n_b, self.gamma)
+
+    @property
+    def NFP(self):
+        """int: Number of (toroidal) field periods."""
+        return self._NFP
+
+    @property
+    def M_b(self):
+        """int: Maximum poloidal mode number of the sharp blocks."""
+        return self._M_b
+
+    @property
+    def N_b(self):
+        """int: Maximum toroidal mode number of the sharp blocks."""
+        return self._N_b
+
+    @property
+    def m_b(self):
+        """int: Number of ridges."""
+        return self.R_basis.m_b
+
+    @property
+    def n_b(self):
+        """int: Toroidal winding of the ridges."""
+        return self.R_basis.n_b
+
+    @property
+    def iota_b(self):
+        """float: Rotational transform of the ridges, ι_b = NFP n_b / m_b."""
+        return self.R_basis.iota_b
+
+    @property
+    def gamma(self):
+        """float: Exponent of the ridge function."""
+        return self.R_basis.gamma
+
+    @property
+    def R_basis(self):
+        """DoubleFourierRidgeSeries: Spectral basis for R."""
+        return self._R_basis
+
+    @property
+    def Z_basis(self):
+        """DoubleFourierRidgeSeries: Spectral basis for Z."""
+        return self._Z_basis
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
+
+    @execute_on_cpu
+    def change_resolution(self, M=None, N=None, M_b=None, N_b=None, sym=None):
+        """Change the maximum poloidal and toroidal resolution of the blocks."""
+        M = int(setdefault(check_nonnegint(M, "M"), self.M))
+        N = int(setdefault(check_nonnegint(N, "N"), self.N))
+        M_b = int(setdefault(check_nonnegint(M_b, "M_b"), self.M_b))
+        N_b = int(setdefault(check_nonnegint(N_b, "N_b"), self.N_b))
+        sym = self.sym if sym is None else bool(sym)
+        if (M, N, M_b, N_b, sym) != (self.M, self.N, self.M_b, self.N_b, self.sym):
+            R_modes_old = _ridge_modes(self.R_basis)
+            Z_modes_old = _ridge_modes(self.Z_basis)
+            self._M, self._N, self._M_b, self._N_b, self._sym = M, N, M_b, N_b, sym
+            self._R_basis, self._Z_basis = self._make_bases(
+                self.m_b, self.n_b, self.gamma
+            )
+            self._R_lmn = _copy_ridge_coeffs(self.R_lmn, R_modes_old, self.R_basis)
+            self._Z_lmn = _copy_ridge_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis)
+
+    @optimizable_parameter
+    @property
+    def R_lmn(self):
+        """ndarray: Spectral coefficients for R."""
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        if len(new) == self.R_basis.num_modes:
+            self._R_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
+            )
+
+    @optimizable_parameter
+    @property
+    def Z_lmn(self):
+        """ndarray: Spectral coefficients for Z."""
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        if len(new) == self.Z_basis.num_modes:
+            self._Z_lmn = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Z_basis.num_modes} modes."
+            )
+
+    def get_coeffs(self, m, n=0, block=0):
+        """Get Fourier coefficients for given mode number(s) of the given block(s)."""
+        m, n, block = np.broadcast_arrays(*map(np.atleast_1d, (m, n, block)))
+        R, Z = np.zeros(m.shape), np.zeros(m.shape)
+        for i, (mm, nn, bb) in enumerate(zip(m, n, block)):
+            idxR = self.R_basis.get_idx(0, mm, nn, False, block=bb)
+            idxZ = self.Z_basis.get_idx(0, mm, nn, False, block=bb)
+            R[i] = self.R_lmn[idxR] if np.size(idxR) else 0
+            Z[i] = self.Z_lmn[idxZ] if np.size(idxZ) else 0
+        return R, Z
+
+    def set_coeffs(self, m, n=0, R=None, Z=None, block=0):
+        """Set specific Fourier coefficients of the given block(s)."""
+        m, n, R, Z, block = np.broadcast_arrays(
+            *map(np.atleast_1d, (m, n, R, Z, block))
+        )
+        for mm, nn, RR, ZZ, bb in zip(m, n, R, Z, block):
+            if RR is not None:
+                idxR = self.R_basis.get_idx(0, mm, nn, block=bb)
+                self.R_lmn = put(self.R_lmn, idxR, RR)
+            if ZZ is not None:
+                idxZ = self.Z_basis.get_idx(0, mm, nn, block=bb)
+                self.Z_lmn = put(self.Z_lmn, idxZ, ZZ)
+
+    def corner_constraint_matrix(self, basis=None, rcond=1e-10):
+        """Rows that make the smooth block A flat at the corners.
+
+        The rows give ∂_θ A on the ridges α_b = 2πk/m_b, sampled finely enough in ζ
+        that C @ c = 0 holds on the whole ridges. The blocks B_1, B_2 are free.
+
+        Parameters
+        ----------
+        basis : DoubleFourierRidgeSeries, optional
+            Basis to give the rows for. Defaults to R_basis.
+        rcond : float
+            Relative singular value cutoff used to determine the rank of the rows.
+
+        Returns
+        -------
+        C : ndarray, shape(r, basis.num_modes)
+            Matrix with orthonormal rows such that ``C @ c == 0`` iff ∂_θ A = 0 on
+            every ridge.
+
+        """
+        basis = setdefault(basis, self.R_basis)
+        ## the restriction to a ridge is periodic in ζ with period 2π m_b / NFP, and
+        ## its largest frequency is |ι_b| M + NFP N
+        n_ζ = (
+            2
+            * int(
+                np.ceil(
+                    (abs(basis.iota_b) * basis.M + basis.NFP * basis.N)
+                    * basis.m_b
+                    / basis.NFP
+                )
+            )
+            + 2
+        )
+        ζ = np.linspace(0, 2 * np.pi * basis.m_b / basis.NFP, n_ζ, endpoint=False)
+        k = np.arange(basis.m_b)
+        θ = (2 * np.pi * k[:, None] / basis.m_b + basis.iota_b * ζ[None, :]).ravel()
+        ζ = np.tile(ζ, basis.m_b)
+        nodes = np.array([np.ones_like(θ), θ, ζ]).T
+        smooth = basis.block_slice(0)
+        rows = np.zeros((nodes.shape[0], basis.num_modes))
+        rows[:, smooth] = basis.smooth_basis.evaluate(nodes, np.array([0, 1, 0]))
+        if not rows.any():
+            return np.zeros((0, basis.num_modes))
+        _, s, Vt = np.linalg.svd(rows, full_matrices=False)
+        return Vt[: int(np.sum(s > rcond * s[0]))]
+
+    @classmethod
+    def from_values(
+        cls,
+        coords,
+        theta,
+        zeta=None,
+        M=6,
+        N=6,
+        M_b=6,
+        N_b=None,
+        NFP=1,
+        m_b=1,
+        n_b=0,
+        gamma=1.0,
+        sym=True,
+        flat_corners=True,
+        check_orientation=True,
+        rcond=None,
+        w=None,
+    ):
+        """Create a surface from given R,Z coordinates in real space.
+
+        R and Z are fit together by least squares. If ``flat_corners``, the fit is in
+        the null space of ``corner_constraint_matrix`` so that the smooth block A is
+        flat at the corners.
+
+        Parameters
+        ----------
+        coords : array-like shape(num_points,3)
+            cylindrical coordinates (R,phi,Z) to fit as a FourierRZToroidalRidgeSurface
+        theta : ndarray, shape(num_points,)
+            Locations in poloidal angle theta where real space coordinates are given.
+            Expects same number of angles as coords (num_points),
+            This determines the poloidal angle for the resulting surface.
+        zeta : ndarray, shape(num_points,)
+            Locations in toroidal angle zeta where real space coordinates are given.
+            if None, defaults to assuming the toroidal angle is the cylindrical phi
+            and so sets zeta = phi = coords[:,1]
+        M, N : int
+            Poloidal and toroidal resolution of the smooth block A.
+        M_b, N_b : int
+            Poloidal and toroidal resolution of the sharp blocks B_1, B_2. N_b defaults
+            to N.
+        NFP : int
+            number of toroidal field periods for surface
+        m_b : int
+            Number of ridges.
+        n_b : int
+            Toroidal winding of the ridges, ι_b = NFP n_b / m_b.
+        gamma : float
+            Exponent of the ridge function.
+        sym : bool
+            True if surface is stellarator-symmetric
+        flat_corners : bool
+            Whether to constrain ∂_θ A = 0 on the ridges.
+        check_orientation : bool
+            whether to check left-handedness of coordinates and flip if necessary.
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(num_points,)
+            Weights to apply to the sample coordinates. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        surface : FourierRZToroidalRidgeSurface
+            Surface with coefficients fitted from input coords.
+
+        """
+        coords = np.asarray(coords)
+        theta = np.asarray(theta)
+        assert (
+            coords.shape[0] == theta.size
+        ), "coords first dimension and theta must have same size"
+        if zeta is None:
+            zeta = coords[:, 1]
+        else:
+            raise NotImplementedError("zeta != phi not yet implemented")
+        N_b = setdefault(N_b, N)
+        nodes = np.vstack([np.ones_like(theta), theta, zeta]).T
+        R, Z = coords[:, 0], coords[:, 2]
+        w = np.ones_like(R) if w is None else np.asarray(w)
+        assert w.size == R.size, "w must same length as number of points being fit"
+
+        surf = cls(
+            NFP=NFP,
+            m_b=m_b,
+            n_b=n_b,
+            gamma=gamma,
+            sym=sym,
+            M=M,
+            N=N,
+            M_b=M_b,
+            N_b=N_b,
+            check_orientation=False,
+        )
+
+        ## the fit is in the null space V of the corner rows of each basis
+        A, V = [], []
+        for basis in (surf.R_basis, surf.Z_basis):
+            A.append(w[:, None] * np.asarray(basis.evaluate(nodes)))
+            if flat_corners:
+                C = surf.corner_constraint_matrix(basis)
+                _, s, Vt = np.linalg.svd(C, full_matrices=True)
+                V.append(Vt[int(np.sum(s > 1e-10 * s[0])) if s.size else 0 :].T)
+            else:
+                V.append(np.eye(basis.num_modes))
+        G = block_diag(A[0] @ V[0], A[1] @ V[1])
+        y = np.linalg.lstsq(G, np.concatenate([w * R, w * Z]), rcond=rcond)[0]
+        surf.R_lmn = V[0] @ y[: V[0].shape[1]]
+        surf.Z_lmn = V[1] @ y[V[0].shape[1] :]
+
+        if check_orientation and surf._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta and n_b."
+            )
+            surf._flip_orientation()
+        return surf
+
+
+def _ridge_modes(modes):
+    """Modes [m,n,b] of a ridge surface, from [m,n] (block 0), [m,n,b] or a basis."""
+    if isinstance(modes, DoubleFourierRidgeSeries):
+        return np.column_stack([modes.modes[:, 1:], modes.blocks])
+    modes = np.atleast_2d(np.asarray(modes))
+    assert issubclass(modes.dtype.type, np.integer)
+    if modes.shape[1] == 2:
+        modes = np.column_stack([modes, np.zeros(modes.shape[0], dtype=int)])
+    return modes
+
+
+def _copy_ridge_coeffs(c_old, modes_old, basis):
+    """Copy coefficients with modes [m,n,b] to a DoubleFourierRidgeSeries, by block."""
+    c_old = jnp.asarray(c_old)
+    c_new = jnp.zeros(basis.num_modes)
+    for b, sub in enumerate((basis.smooth_basis, *basis.sharp_bases)):
+        mask = modes_old[:, 2] == b
+        c_new = c_new.at[basis.block_slice(b)].set(
+            copy_coeffs(c_old[mask], modes_old[mask, :2], sub.modes[:, 1:])
+        )
+    return c_new
 
 
 class ZernikeRZToroidalSection(Surface):

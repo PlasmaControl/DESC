@@ -8,6 +8,7 @@ from desc.backend import jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
+    DoubleFourierRidgeSeries,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -19,6 +20,7 @@ from desc.basis import (
     polyder_vec,
     polyval_vec,
     powers,
+    ridge_function,
     zernike_radial,
     zernike_radial_coeffs,
     zernike_radial_poly,
@@ -401,6 +403,81 @@ class TestBasis:
             _ = ChebyshevDoubleFourierBasis(L=3, M=1, N=1, NFP=1.0)
 
     @pytest.mark.unit
+    def test_double_fourier_ridge_series(self):
+        """Test the ridge basis: ridges, derivatives and stellarator symmetry."""
+        m_b, n_b, γ = 5, -1, 0.75
+        ## Q_γ vanishes on the ridges, and Q_1 = P / m_b is smooth
+        α = 2 * np.pi * np.arange(m_b) / m_b
+        np.testing.assert_allclose(ridge_function(α, m_b, γ), 0, atol=1e-14)
+        α = np.linspace(0, 2 * np.pi, 50)
+        P = 1 - np.exp(1j * m_b * α)
+        np.testing.assert_allclose(
+            ridge_function(α, m_b, 1.0), P.real / m_b, atol=1e-14
+        )
+        np.testing.assert_allclose(
+            ridge_function(α, m_b, 1.0, part="im"), P.imag / m_b, atol=1e-14
+        )
+
+        basis = DoubleFourierRidgeSeries(
+            M=3, N=2, M_b=2, NFP=5, m_b=m_b, n_b=n_b, gamma=γ, sym="cos"
+        )
+        rng = np.random.default_rng(0)
+        nodes = np.c_[
+            np.ones(20), rng.uniform(0, 2 * np.pi, 20), rng.uniform(0, 2 * np.pi, 20)
+        ]
+        ## derivatives against finite differences
+        h = 1e-6
+        for d, k in (([0, 1, 0], 1), ([0, 0, 1], 2), ([0, 2, 0], 1), ([0, 1, 1], 2)):
+            d, e = np.array(d), np.zeros(3)
+            e[k] = h
+            lower = d.copy()
+            lower[k] -= 1
+            fd = (
+                basis.evaluate(nodes + e, lower) - basis.evaluate(nodes - e, lower)
+            ) / (2 * h)
+            np.testing.assert_allclose(basis.evaluate(nodes, d), fd, atol=1e-6)
+
+        ## R(-θ, -ζ) = R(θ, ζ) and Z(-θ, -ζ) = -Z(θ, ζ)
+        flipped = nodes.copy()
+        flipped[:, 1:] *= -1
+        for sym, sign in (("cos", 1), ("sin", -1)):
+            basis = DoubleFourierRidgeSeries(
+                M=3, N=2, M_b=2, NFP=5, m_b=m_b, n_b=n_b, gamma=γ, sym=sym
+            )
+            c = rng.normal(size=basis.num_modes)
+            np.testing.assert_allclose(
+                basis.evaluate(flipped) @ c,
+                sign * basis.evaluate(nodes) @ c,
+                atol=1e-12,
+            )
+
+        with pytest.raises(ValueError):
+            DoubleFourierRidgeSeries(M=1, N=1, M_b=1, NFP=5, m_b=5, n_b=0.5)
+
+        ## the blocks are standard sub-bases, with the opposite symmetry for B_2
+        basis = DoubleFourierRidgeSeries(
+            M=3, N=2, M_b=2, NFP=5, m_b=m_b, n_b=n_b, gamma=γ, sym="cos"
+        )
+        assert basis.iota_b == -1
+        assert basis.smooth_basis == DoubleFourierSeries(M=3, N=2, NFP=5, sym="cos")
+        assert basis.sharp_bases[0] == DoubleFourierSeries(M=2, N=2, NFP=5, sym="cos")
+        assert basis.sharp_bases[1] == DoubleFourierSeries(M=2, N=2, NFP=5, sym="sin")
+        for b, sub in enumerate((basis.smooth_basis, *basis.sharp_bases)):
+            np.testing.assert_array_equal(basis.modes[basis.block_slice(b)], sub.modes)
+            np.testing.assert_array_equal(basis.blocks[basis.block_slice(b)], b)
+            idx = basis.get_idx(0, sub.modes[-1, 1], sub.modes[-1, 2], block=b)
+            assert idx == basis.block_slice(b).stop - 1
+        np.testing.assert_allclose(
+            basis.evaluate(nodes)[:, basis.block_slice(0)],
+            basis.smooth_basis.evaluate(nodes),
+        )
+        np.testing.assert_allclose(
+            basis.evaluate(nodes)[:, basis.block_slice(2)],
+            ridge_function(nodes[:, 1] + nodes[:, 2], m_b, γ, part="im")[:, None]
+            * basis.sharp_bases[1].evaluate(nodes),
+        )
+
+    @pytest.mark.unit
     def test_basis_hash(self):
         """Test that all basis classes can be hashable."""
         all_bases = []
@@ -419,6 +496,12 @@ class TestBasis:
             ]
         )
         all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
+        all_bases.append(
+            [
+                DoubleFourierRidgeSeries(M=3, N=3, M_b=2, m_b=3, n_b=1, gamma=0.5),
+                DoubleFourierRidgeSeries(M=3, N=3, M_b=2, m_b=3, n_b=1, gamma=0.5),
+            ]
+        )
         for basis1, basis2 in all_bases:
             # check that hash is consistent
             assert hash(basis1) == hash(basis2)

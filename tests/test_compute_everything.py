@@ -21,6 +21,7 @@ from desc.examples import get
 from desc.geometry import (
     FourierPlanarCurve,
     FourierRZCurve,
+    FourierRZToroidalRidgeSurface,
     FourierRZToroidalSurface,
     FourierXYCurve,
     FourierXYZCurve,
@@ -151,6 +152,15 @@ def test_compute_everything():
         ),
         "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(
             **elliptic_cross_section_with_torsion
+        ),
+        "desc.geometry.surface.FourierRZToroidalRidgeSurface": FourierRZToroidalRidgeSurface(  # noqa:E501
+            R_lmn=[10, 1, 0.2, 0.1],
+            Z_lmn=[-2, -0.2, 0.1],
+            modes_R=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            modes_Z=[[-1, 0, 0], [0, -1, 0], [0, 0, 2]],
+            m_b=3,
+            n_b=1,
+            gamma=0.75,
         ),
         # magnetic fields
         "desc.magnetic_fields._current_potential.CurrentPotentialField": CurrentPotentialField(  # noqa:E501

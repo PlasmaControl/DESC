@@ -1,5 +1,7 @@
 """Tests for the AgniStability objective (finite-n ideal MHD stability by AGNI)."""
 
+import sys
+
 import numpy as np
 import pytest
 
@@ -15,10 +17,10 @@ QH_FILE = "./tests/inputs/AGNI_QH_lowres.h5"
 GAMMA2_8x8x3 = 2.278446950686394e-3
 
 
-def qh_basis():
+def qh_basis(**kwargs):
     """8 x 8 x 3 nodes, radial nodes clustered at rho = 0.65 by a staircase map."""
     staircase = dict(eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
-    return agnimhd.Basis(8, 8, 3, radial="lobatto", automorphism=staircase)
+    return agnimhd.Basis(8, 8, 3, radial="lobatto", automorphism=staircase, **kwargs)
 
 
 @pytest.mark.unit
@@ -53,3 +55,27 @@ def test_agni_stability_errors():
     with pytest.raises(ValueError, match="coarse"):
         jd = agnimhd.SolverConfig(eigensolver="jd")
         AgniStability(Equilibrium(), basis, solver=jd, coarse=agnimhd.Basis(6, 4, 3))
+
+
+@pytest.mark.unit
+def test_agni_stability_coarse_level():
+    """With JD, build evaluates the equilibrium on the coarse nodes like from_desc."""
+    eq = load(QH_FILE)
+    basis = qh_basis(mpol=2, ntor=1)  # JD keeps mpol, ntor on both levels
+    coarse = basis.coarse(6, 3)
+    jd = agnimhd.SolverConfig(eigensolver="jd", sigma=1e-4)
+    obj = AgniStability(eq, basis, solver=jd, coarse=coarse)
+    obj.build(verbose=0)
+    data = obj._equilibrium_data(eq.params_dict, obj._constants, coarse=True)
+    ref, _ = agnimhd.from_desc(eq, coarse)
+    assert data.resolution == ref.resolution == (8, 6, 3)
+    for key in ("g_rr", "g_vv", "sqrtg", "J_sup_zeta", "iota", "p", "J_cross_grad_rho"):
+        np.testing.assert_allclose(getattr(data, key), getattr(ref, key), rtol=1e-12)
+
+
+@pytest.mark.unit
+def test_agni_stability_needs_agnimhd(monkeypatch):
+    """Without agnimhd the objective says how to install it."""
+    monkeypatch.setitem(sys.modules, "agnimhd", None)
+    with pytest.raises(ImportError, match="pip install agnimhd"):
+        AgniStability(Equilibrium(), basis=None)

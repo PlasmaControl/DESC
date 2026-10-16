@@ -1,6 +1,8 @@
 {
     "tests/test_agni_stability.py::test_agni_stability": 70.6,
+    "tests/test_agni_stability.py::test_agni_stability_coarse_level": 28.9,
     "tests/test_agni_stability.py::test_agni_stability_errors": 6.9,
+    "tests/test_agni_stability.py::test_agni_stability_needs_agnimhd": 6.9,
     "tests/test_axis_limits.py::TestAxisLimits::test_axis_limit_api": 10.306883258999733,
     "tests/test_axis_limits.py::TestAxisLimits::test_limit_continuity": 27.196473163996416,
     "tests/test_axis_limits.py::TestAxisLimits::test_magnetic_field_is_physical": 6.181816910004272,

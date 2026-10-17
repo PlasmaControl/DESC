@@ -462,13 +462,13 @@ for l in range(L_requested):
     # only its own tower's continuation of the stack directly below it (that
     # neighbor is exactly one layer_thick away and is fine); the conflict is with
     # OTHER towers' candidates on this same layer.
-    # if len(idx) > 1:
-    #     ctree = cKDTree(cand)
-    #     pairs = ctree.query_pairs(r=collision_dist, output_type='ndarray')
-    #     if len(pairs) > 0:
-    #         # both members of each too-close candidate pair are rejected this layer
-    #         bad = np.unique(pairs.ravel())
-    #         ok[bad] = False
+    if len(idx) > 1:
+        ctree = cKDTree(cand)
+        pairs = ctree.query_pairs(r=collision_dist, output_type='ndarray')
+        if len(pairs) > 0:
+            # both members of each too-close candidate pair are rejected this layer
+            bad = np.unique(pairs.ravel())
+            ok[bad] = False
 
     place = idx[ok]                                   # towers that place layer l
     stop  = idx[~ok]                                  # towers frozen at layer l

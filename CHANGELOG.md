@@ -43,6 +43,7 @@ Bug Fixes
 - Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
+- Fixes ``x_scale="ess"`` for equilibria with a sheet current on the boundary (``eq.surface`` a ``FourierCurrentPotentialField``). ``Phi_mn``, ``I`` and ``G`` were given a scale of ~1 A, so the sheet current barely changed from its initial value (often zero) during free boundary solves and the boundary shape moved to compensate. They are now scaled by the current that changes the field on the boundary by ~B, ``B a / mu_0``.
 
 
 v0.17.3

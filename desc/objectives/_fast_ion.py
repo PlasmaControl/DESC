@@ -221,6 +221,8 @@ class GammaC(_Objective):
             outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-8,
+            W_lmn=params.get("W_lmn"),
+            omega=constants["omega"],
         )[..., ::-1]
 
         data = compute_fun(

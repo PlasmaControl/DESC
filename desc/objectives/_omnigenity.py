@@ -1113,7 +1113,6 @@ class SecondAdiabaticInvariantAlphaDerivative(_Objective):
         self._zeta_max = zeta_max
         self._softplus_sharpness = softplus_sharpness
         self._soft_extrema_tau = soft_extrema_tau
-        self._jac_chunk_size = jac_chunk_size
 
         super().__init__(
             things=eq,
@@ -1124,6 +1123,8 @@ class SecondAdiabaticInvariantAlphaDerivative(_Objective):
             normalize_target=normalize_target,
             loss_function=loss_function,
             deriv_mode=deriv_mode,
+            jac_chunk_size=jac_chunk_size,  # was set before super().__init__, which reset it to None:
+            # every jvp then took all tangents at once (70-76 GB at L22 M11 N22)
             name=name,
         )
 

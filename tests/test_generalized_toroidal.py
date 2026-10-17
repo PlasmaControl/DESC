@@ -463,18 +463,18 @@ class TestEquilibriumOmega:
 
     @pytest.mark.unit
     def test_axisymmetric_coordinate_invariance(self):
-        """Pure-zeta omega reparameterizes an axisymmetric equilibrium.
+        """Omega reparameterizes an axisymmetric equilibrium.
 
         For an axisymmetric equilibrium (R, Z, lambda independent of zeta),
-        the map zeta -> phi = zeta + omega(zeta) sweeps out the identical
-        physical field, with unchanged R_lmn, Z_lmn, L_lmn. All coordinate
-        invariants must match; |B|, pressure etc. depend only on (rho, theta)
-        so they may be compared at identical computational nodes.
+        the map zeta -> phi = zeta + omega(rho, theta, zeta) sweeps out the
+        identical physical field, with unchanged R_lmn, Z_lmn, L_lmn. All
+        coordinate invariants must match; |B|, pressure etc. depend only on
+        (rho, theta) so they may be compared at identical computational nodes.
         """
         eq0 = Equilibrium(L=4, M=4, N=0, sym=True)
         eq0.solve(verbose=0, maxiter=25, ftol=1e-6)
 
-        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, Lz=0, Mz=0, Nz=2)
+        eq1 = Equilibrium(L=4, M=4, N=2, sym=True, Lz=0, Mz=1, Nz=2)
         # copy the solved axisymmetric state (axisym modes only)
         from desc.utils import copy_coeffs
 
@@ -483,11 +483,11 @@ class TestEquilibriumOmega:
         eq1.L_lmn = copy_coeffs(eq0.L_lmn, eq0.L_basis.modes, eq1.L_basis.modes)
         eq1.pressure.params = eq0.pressure.params.copy()
         eq1.current.params = eq0.current.params.copy()
-        # omega = 0.1 sin(zeta) + 0.03 sin(2 zeta), a pure toroidal
-        # reparameterization (no rho or theta dependence)
+        # omega = 0.1 sin(zeta) + 0.03 sin(2 zeta) + 0.05 rho sin(theta) cos(zeta)
         W = np.zeros(eq1.W_basis.num_modes)
         W[eq1.W_basis.get_idx(0, 0, -1)] = 0.1
         W[eq1.W_basis.get_idx(0, 0, -2)] = 0.03
+        W[eq1.W_basis.get_idx(1, -1, 1)] = 0.05
         eq1.W_lmn = W
         eq1.surface = eq1.get_surface_at(rho=1.0)
         eq1.axis = eq1.get_axis()
@@ -520,6 +520,37 @@ class TestEquilibriumOmega:
         d0x = eq0.compute("x", grid=Grid(nodes0, sort=False), basis="xyz")
         np.testing.assert_allclose(d1x["x"], d0x["x"], atol=1e-10)
         assert eq1.is_nested()
+        # Boozer coordinates are physical: same |B| spectrum in either chart
+        grid = LinearGrid(rho=0.7, M=12, N=8, sym=False)
+        B0, B1 = (
+            e.compute("|B|_mn_B", grid=grid, M_booz=6, N_booz=4)["|B|_mn_B"]
+            for e in (eq0, eq1)
+        )
+        np.testing.assert_allclose(B1, B0, atol=1e-8)
+        # Bounce2D field lines satisfy alpha = theta_PEST - iota * phi
+        from desc.integrals import Bounce2D
+        from desc.integrals.bounce_integral import cheb_pts
+
+        alpha = np.linspace(0, 2 * np.pi, 8, endpoint=False)[:, None]
+        theta = alpha + Bounce2D.angle(eq1, X=8, Y=8, rho=np.array([0.7]))[0]
+        zeta = np.broadcast_to(cheb_pts(8, (0, 2 * np.pi)), theta.shape)
+        d = eq1.compute(
+            ["theta_PEST", "phi"],
+            grid=Grid(
+                np.column_stack([0.7 + 0 * zeta.ravel(), theta.ravel(), zeta.ravel()]),
+                sort=False,
+            ),
+        )
+        iota = eq1.compute("iota", grid=LinearGrid(rho=0.7, M=4, N=4))["iota"][0]
+        np.testing.assert_allclose(
+            np.angle(
+                np.exp(
+                    1j * (d["theta_PEST"] - iota * d["phi"] - alpha.ravel().repeat(8))
+                )
+            ),
+            0,
+            atol=1e-8,
+        )
 
     @pytest.mark.unit
     def test_solve_with_omega_fixed(self):

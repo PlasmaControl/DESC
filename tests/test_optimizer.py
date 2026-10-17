@@ -73,7 +73,7 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
-from desc.optimize.utils import chol, gershgorin_bounds
+from desc.optimize.utils import chol, f_where_x, gershgorin_bounds
 from desc.utils import get_all_instances
 
 
@@ -152,6 +152,26 @@ def test_chol_positive_definite_path_unchanged():
         rtol=1e-14,
         atol=1e-14,
     )
+
+
+@pytest.mark.unit
+def test_f_where_x():
+    """f_where_x returns the most recent match, or an empty array if none."""
+    eps = np.finfo(float).eps
+    xs = [np.array([1.0, 2.0]), np.array([3.0, 4.0]), np.array([1.0, 2.0 + eps])]
+    fs = [jnp.array(1.0), jnp.array(2.0), jnp.array(3.0)]
+    np.testing.assert_equal(f_where_x(np.array([1.0, 2.0]), xs, fs), 3.0)
+    np.testing.assert_equal(f_where_x(np.array([3.0, 4.0]), xs, fs, dim=1), [2.0])
+    assert f_where_x(np.array([5.0, 6.0]), xs, fs).size == 0
+    assert f_where_x(np.array([5.0, 6.0]), [], [], dim=1).size == 0
+    assert f_where_x(np.array([5.0, 6.0]), xs, fs, dim=2).shape == (0, 2)
+
+    # only the matching entry of fs is converted, so the history can be ragged
+    Js = [jnp.ones((3, 2)), jnp.ones((1, 2)), 2 * jnp.ones((3, 2))]
+    J = f_where_x(np.array([1.0, 2.0]), xs, Js, dim=2)
+    np.testing.assert_equal(J, 2 * np.ones((3, 2)))
+    J = f_where_x(np.array([3.0, 4.0]), xs, Js, dim=2)
+    np.testing.assert_equal(J, np.ones((1, 2)))
 
 
 @jit

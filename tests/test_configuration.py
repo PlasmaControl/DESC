@@ -1,5 +1,6 @@
 """Tests for _Configuration base class."""
 
+import sys
 import warnings
 
 import numpy as np
@@ -14,8 +15,53 @@ from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
+
+
+def _surface_where_heuristic_guess_is_unnested():
+    """Axisymmetric strongly shaped boundary whose scaled-down guess is not nested."""
+    ms = np.array([0, 1, 2, 3, 4, 5, -1, -2, -3, -4, -5], dtype=int)
+    R_fourier_coefficients = np.array(
+        [
+            1.3632016735662402,
+            -0.17920904751089126,
+            -0.09184049109234207,
+            -0.015015971365554322,
+            0.01785460188882407,
+            0.01127538964941767,
+            0.04685176357481472,
+            -0.03932003193401997,
+            0.008780113148483934,
+            -0.016567421786232828,
+            0.0005675447567040712,
+        ],
+        dtype=float,
+    )
+    Z_fourier_coefficients = np.array(
+        [
+            0.15014033588991132,
+            0.49764502850673253,
+            -0.25485561513463484,
+            -0.07126968315533386,
+            -0.05498667593364822,
+            0.009600095984420543,
+            0.19738445681518377,
+            0.01663894489889671,
+            0.07177657694273143,
+            0.01037613387581884,
+            0.029505162423974128,
+        ],
+        dtype=float,
+    )
+    modes_R = np.array([[m, 0] for m in ms])
+    modes_Z = np.array([[m, 0] for m in ms])
+    return FourierRZToroidalSurface(
+        R_lmn=R_fourier_coefficients.squeeze(),
+        modes_R=modes_R,
+        Z_lmn=Z_fourier_coefficients.squeeze(),
+        modes_Z=modes_Z,
+    )
 
 
 class TestConstructor:
@@ -447,6 +493,203 @@ class TestInitialGuess:
         eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
 
         assert eq.is_nested()
+
+    @pytest.mark.unit
+    def test_guess_when_heuristic_coordinate_mapping_fails(self):
+        """Test that we can still get nested initial mapping heuristics fail."""
+        pytest.importorskip("map2disc_jax")
+        # using an extremely shaped bounday where the heuristics fail,
+        # forcing a fallback to the map2disc method
+        # also is stellarator-asymmetric
+        ms = np.array([0, 1, 2, 3, 4, 5, -1, -2, -3, -4, -5], dtype=int)
+
+        R_fourier_coefficients = np.array(
+            [
+                1.3632016735662402,
+                -0.17920904751089126,
+                -0.09184049109234207,
+                -0.015015971365554322,
+                0.01785460188882407,
+                0.01127538964941767,
+                0.04685176357481472,
+                -0.03932003193401997,
+                0.008780113148483934,
+                -0.016567421786232828,
+                0.0005675447567040712,
+            ],
+            dtype=float,
+        )
+
+        Z_fourier_coefficients = np.array(
+            [
+                0.15014033588991132,
+                0.49764502850673253,
+                -0.25485561513463484,
+                -0.07126968315533386,
+                -0.05498667593364822,
+                0.009600095984420543,
+                0.19738445681518377,
+                0.01663894489889671,
+                0.07177657694273143,
+                0.01037613387581884,
+                0.029505162423974128,
+            ],
+            dtype=float,
+        )
+
+        # first check axisymmetric case
+
+        modes_R = np.array([[m, 0] for m in ms])
+        modes_Z = np.array([[m, 0] for m in ms])
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=R_fourier_coefficients.squeeze(),
+            modes_R=modes_R,
+            Z_lmn=Z_fourier_coefficients.squeeze(),
+            modes_Z=modes_Z,
+        )
+        with pytest.warns(
+            UserWarning, match="Surfaces from initial guess are not nested"
+        ):
+            eq_difficult_bdry = Equilibrium(
+                surface=surf, L=6, M=6, ensure_nested_method="map2disc"
+            )
+
+        assert eq_difficult_bdry.is_nested(), "Axisymmetric Case"
+        # then add an N=1 torsion to it
+
+        R_fourier_coefficients = np.concatenate([R_fourier_coefficients, [0.4]])
+        Z_fourier_coefficients = np.concatenate([Z_fourier_coefficients, [-0.4]])
+
+        modes_R = np.array([[m, 0] for m in ms] + [[0, 1]])
+        modes_Z = np.array([[m, 0] for m in ms] + [[0, -1]])
+
+        surf = FourierRZToroidalSurface(
+            R_lmn=R_fourier_coefficients.squeeze(),
+            modes_R=modes_R,
+            Z_lmn=Z_fourier_coefficients.squeeze(),
+            modes_Z=modes_Z,
+            NFP=2,
+        )
+        with pytest.warns(
+            UserWarning, match="Surfaces from initial guess are not nested"
+        ):
+            eq_difficult_bdry = Equilibrium(
+                surface=surf, L=6, M=6, N=1, N_grid=6, ensure_nested_method="map2disc"
+            )
+
+        assert eq_difficult_bdry.is_nested(), "Non-axisymmetric Case"
+
+    @pytest.mark.unit
+    def test_opt_method_refines_unnested_heuristic_guess(self):
+        """Refine an unnested heuristic guess using the opt method."""
+        surf = _surface_where_heuristic_guess_is_unnested()
+        eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq_raw.is_nested()
+
+        with pytest.warns(UserWarning, match="not nested"):
+            eq_opt = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="opt")
+
+        assert not np.allclose(eq_opt.R_lmn, eq_raw.R_lmn) or not np.allclose(
+            eq_opt.Z_lmn, eq_raw.Z_lmn
+        )
+
+    @pytest.mark.unit
+    def test_map2disc_falls_back_if_map2disc_jax_missing(self, monkeypatch):
+        """Warn and use GoodCoordinates when map2disc is requested but not installed."""
+        monkeypatch.setitem(sys.modules, "map2disc_jax", None)
+        surf = _surface_where_heuristic_guess_is_unnested()
+        eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq_raw.is_nested()
+
+        with pytest.warns(
+            UserWarning, match=r"map2disc requested but|not nested"
+        ) as record:
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+        assert any("not installed" in str(w.message) for w in record)
+        assert not np.allclose(eq.R_lmn, eq_raw.R_lmn) or not np.allclose(
+            eq.Z_lmn, eq_raw.Z_lmn
+        )
+
+    @pytest.mark.unit
+    def test_map2disc_preserves_boundary_and_right_handed_jacobian(self):
+        """Preserve the boundary and a positive Jacobian after map2disc init."""
+        pytest.importorskip("map2disc_jax")
+        surf = _surface_where_heuristic_guess_is_unnested()
+        bdry_grid = LinearGrid(rho=np.array([1.0]), M=12, N=0, NFP=surf.NFP)
+        R_bdry = np.array(surf.compute(["R"], grid=bdry_grid)["R"])
+        Z_bdry = np.array(surf.compute(["Z"], grid=bdry_grid)["Z"])
+
+        with pytest.warns(UserWarning, match="not nested"):
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+        assert eq.is_nested()
+        data = eq.compute(["R", "Z"], grid=bdry_grid)
+        np.testing.assert_allclose(data["R"], R_bdry, atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(data["Z"], Z_bdry, atol=1e-6, rtol=1e-6)
+
+        g_lcfs = eq.compute("sqrt(g)", grid=Grid(np.array([[1.0, 0.0, 0.0]])))[
+            "sqrt(g)"
+        ]
+        assert np.sign(np.asarray(g_lcfs).item()) == 1
+        vol_grid = LinearGrid(rho=np.linspace(0.1, 1.0, 6), M=eq.M, N=eq.N, NFP=eq.NFP)
+        g = np.asarray(eq.compute("sqrt(g)", grid=vol_grid)["sqrt(g)"])
+        assert np.all(g > 0)
+
+    @pytest.mark.unit
+    def test_zernike_vs_zeta_fit_recovers_fourier_zernike_modes(self):
+        """1D toroidal fits of Zernike coefficients recover Fourier-Zernike modes."""
+        from desc.basis import FourierZernikeBasis, fourier
+        from desc.equilibrium.initial_guess import _zernike_coeffs_to_fourier_zernike
+
+        basis = FourierZernikeBasis(L=2, M=2, N=2, NFP=3)
+        zeta = np.linspace(0, 2 * np.pi / basis.NFP, 2 * basis.N + 1, endpoint=False)
+        lm = np.array([(l, m) for l in range(3) for m in range(-l, l + 1, 2)])
+        expected = {
+            (0, 0, 0): 1.5,
+            (1, 1, 1): -0.3,
+            (1, -1, -2): 0.2,
+            (2, 0, 2): 0.4,
+            (2, -2, 0): -0.1,
+        }
+        ns = np.arange(-basis.N, basis.N + 1)
+        c_vs_zeta = np.zeros((lm.shape[0], zeta.size))
+        for k, (l, m) in enumerate(lm):
+            for n in ns:
+                amp = expected.get((int(l), int(m), int(n)), 0.0)
+                if amp == 0.0:
+                    continue
+                c_vs_zeta[k] += (
+                    amp
+                    * np.asarray(fourier(zeta, np.array([n]), NFP=basis.NFP)).ravel()
+                )
+
+        c_lmn = _zernike_coeffs_to_fourier_zernike(c_vs_zeta, zeta, lm, basis)
+
+        for (l, m, n), amp in expected.items():
+            np.testing.assert_allclose(c_lmn[basis.get_idx(l, m, n)], amp, atol=1e-12)
+        np.testing.assert_allclose(c_lmn[basis.get_idx(2, 2, -1)], 0.0, atol=1e-12)
+
+        # Modes excluded by symmetry are omitted rather than written past the basis.
+        sym_basis = FourierZernikeBasis(L=2, M=2, N=1, NFP=1, sym="cos")
+        sym_zeta = np.linspace(
+            0, 2 * np.pi / sym_basis.NFP, 2 * sym_basis.N + 1, endpoint=False
+        )
+        sym_vs_zeta = np.zeros((lm.shape[0], sym_zeta.size))
+        sym_vs_zeta[0] = expected[(0, 0, 0)]
+        # (l, m, n) = (1, 1, -1) is excluded by cos(m*theta - n*zeta) symmetry.
+        sym_vs_zeta[lm.tolist().index([1, 1])] = np.asarray(
+            fourier(sym_zeta, np.array([-1]), NFP=sym_basis.NFP)
+        ).ravel()
+        sym_coeffs = _zernike_coeffs_to_fourier_zernike(
+            sym_vs_zeta, sym_zeta, lm, sym_basis
+        )
+        assert sym_coeffs.shape == (sym_basis.num_modes,)
+        np.testing.assert_allclose(
+            sym_coeffs[sym_basis.get_idx(0, 0, 0)], expected[(0, 0, 0)], atol=1e-12
+        )
+        assert sym_basis.get_idx(1, 1, -1, error=False).size == 0
 
 
 class TestGetSurfaces:

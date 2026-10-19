@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-file_path = "muse-magnets.focus"
+file_path = "torsion_grid_circular.focus"
 data = np.genfromtxt(file_path, delimiter=",", skip_header=3)
 
 (
@@ -32,5 +32,5 @@ desc_df = pd.DataFrame({
     "Ic": Ic,
 })
 
-output_path = "muse_dipoles_desc.csv"
+output_path = "qipm_dipoles.csv"
 desc_df.to_csv(output_path, index=False)

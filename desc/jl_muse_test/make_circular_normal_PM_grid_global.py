@@ -205,7 +205,7 @@ wall_thick  = 0.001             # Wall thickness between adjacent cells, m, e.x:
 gap         = 0.000             # Radial gap from VV surface to first magnet face in case support structure is needed
 
 # Radial layers requested (each tower is capped at or below this)
-L_requested = 1
+L_requested = 15
 
 # --- Ports (optional) ---
 # theta_port  : poloidal angle of the port center (rad)
@@ -214,11 +214,14 @@ L_requested = 1
 #               0 -> phi_start, 1 -> phi_end. A port at 0 or 1 is a HALF port;
 #               it closes into a full port against its own image under symmetry.
 # port_radius : port radius on the VV surface (m)
-
+target_size = .305
+R0_before = eq.compute('R0')['R0']
+scale = target_size 
+print(scale)
 PORTS = [
-    {"theta_port": 0.0,   "s_port": 0.0, "port_radius": 0.1},     # outboard port at phi_start 
-    {"theta_port": np.pi, "s_port": 0.5, "port_radius": 0.1},     # inboard port, midway
-    {"theta_port": np.pi/2,   "s_port": 1.0, "port_radius": 0.1}, # top port at, at phi_end
+    # {"theta_port": 0.0,   "s_port": 0.0, "port_radius": 0.1*scale},     # outboard port at phi_start 
+    # {"theta_port": np.pi, "s_port": 0.5, "port_radius": 0.1*scale},     # inboard port, midway
+    # {"theta_port": np.pi/2,   "s_port": 1.0, "port_radius": 0.1*scale}, # top port at, at phi_end
 ]
 
 

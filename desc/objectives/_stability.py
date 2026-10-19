@@ -1245,6 +1245,12 @@ class FinitenStability(_Objective):
 
         self._constants = {
             "PEST_nodes": PEST_nodes,
+            # Profiles for the operator computes on the mapped AGNI grids (fine, coarse
+            # and the dense refresh), all handed to `compute_fun` directly. The mapped
+            # grids are `jitable`, so they never carry an axis node.
+            "profiles": get_profiles(
+                ["finite-n lambda3 rayleigh", "finite-n lambda3"], obj=eq
+            ),
             "flux_transforms": flux_transforms,
             "flux_profiles": flux_profiles,
             "quad_transforms": quad_transforms,
@@ -1412,15 +1418,18 @@ class FinitenStability(_Objective):
         ratio_grid = LinearGrid(
             rho=1.0, theta=n_theta_r, zeta=n_zeta_r, NFP=eq.NFP, sym=False
         )
-        _d = eq.compute(
-            [
-                "|e_theta_PEST x e_phi|r,v|",
-                "e_theta_PEST",
-                "e_phi|r,v",
-                "theta_PEST_t",
-            ],
-            grid=ratio_grid,
+        _keys = [
+            "|e_theta_PEST x e_phi|r,v|",
+            "e_theta_PEST",
+            "e_phi|r,v",
+            "theta_PEST_t",
+        ]
+        _d = compute_fun(
+            eq,
+            _keys,
             params=eq.params_dict,
+            transforms=get_transforms(_keys, obj=eq, grid=ratio_grid),
+            profiles=get_profiles(_keys, obj=eq, grid=ratio_grid),
         )
         # `abs` because only the magnitude of the measure matters; `theta_PEST_t` is
         # positive for any invertible angle map, so this is a guard, not a correction.
@@ -1711,14 +1720,32 @@ class FinitenStability(_Objective):
         # describe the same surface for a converged equilibrium but are different DOFs,
         # so the gradient flows through different parameters.
         surf_params = {"R_lmn": params["Rb_lmn"], "Z_lmn": params["Zb_lmn"]}
-        pd = surf.compute(["R", "Z", "phi"], grid=eval_grid, params=surf_params)
-        data_phi = surf.compute(
-            ["phi_matrix"],
-            grid=src_grid,
+        _rpz = ["R", "phi", "Z"]
+        pd = compute_fun(
+            surf,
+            _rpz,
+            params=surf_params,
+            transforms=get_transforms(_rpz, obj=surf, grid=eval_grid),
+            profiles={},
+        )
+        # What `SourceFreeField.compute` does for a non-surface key, spelled out:
+        # R/phi/Z on the source grid go in as both seed data and `RpZ_data`, and `B0`
+        # defaults to the field's own.
+        _kw = dict(
             potential_grid=eval_grid,
             problem="exterior Neumann",
             chunk_size=getattr(self, f"_{pre}phi_chunk"),
             Phi_basis=basis,
+            B0=surf._B0,
+        )
+        _keys = ["phi_matrix"]
+        src_transforms = get_transforms(_keys + _rpz, obj=surf, grid=src_grid, **_kw)
+        rpz_data = compute_fun(
+            surf,
+            _rpz,
+            params=surf_params,
+            transforms=src_transforms,
+            profiles={},
             data={
                 "interpolator": interp,
                 "potential data": {
@@ -1729,7 +1756,17 @@ class FinitenStability(_Objective):
                     "zeta": eval_grid.nodes[:, 2],
                 },
             },
+            **_kw,
+        )
+        data_phi = compute_fun(
+            surf,
+            _keys,
             params=surf_params,
+            transforms=src_transforms,
+            profiles={},
+            data=rpz_data,
+            RpZ_data=rpz_data,
+            **_kw,
         )
         phi_matrix = data_phi["phi_matrix"]
         if self._phi_scale is not None:
@@ -1861,9 +1898,8 @@ class FinitenStability(_Objective):
         #
         # The Phi basis resolution is NOT affected: `_{pre}phi_basis` was built from
         # `phi_pest_grid.M/N`, so `assert basis.M <= eval_grid.M` still holds.
-        data_phi = eq.compute(
-            ["phi_matrix_pest"],
-            grid=surf_grid,
+        _keys = ["phi_matrix_pest"]
+        _kw = dict(
             pest_grid=src_pest_grid,
             potential_grid=phi_pest_grid,
             problem="exterior Neumann",
@@ -1873,14 +1909,13 @@ class FinitenStability(_Objective):
             # would be the out-of-memory case all over again.
             chunk_size=getattr(self, f"_{pre}phi_chunk"),
             Phi_basis=getattr(self, f"_{pre}phi_basis"),
-            data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
-            params=params,
-            # Prebuilt transforms if the caller has them for THIS `surf_grid`; built
-            # here otherwise. Not shareable between the two levels: `surf_grid`'s nodes
-            # come from `map_coordinates(params=...)` and the coarse level passes
-            # `stop_gradient(params)`, so one level's matrices carry the other's
-            # gradients. Nor across a `compute_data` call, for the same reason.
-            transforms=transforms,
+        )
+        # Prebuilt transforms if the caller has them for THIS `surf_grid`; built
+        # here otherwise. Not shareable between the two levels: `surf_grid`'s nodes
+        # come from `map_coordinates(params=...)` and the coarse level passes
+        # `stop_gradient(params)`, so one level's matrices carry the other's
+        # gradients. Nor across a `compute_data` call, for the same reason.
+        if transforms is None:
             # `surf_grid` is the mapped PEST source lattice -- uniform in zeta, NOT a
             # tensor product in (rho, theta) -- so the geometry behind
             # `phi_matrix_pest` was being evaluated with the full-width `direct1`
@@ -1892,7 +1927,19 @@ class FinitenStability(_Objective):
             # `direct1` whenever `phi_matrix_pest` is among the keys, because
             # `_lsmr_compute_phi_matrix` reads `phi_transform.matrices["direct1"]`
             # directly. Only the geometry bases move.
-            method="pest",
+            transforms = get_transforms(
+                _keys, obj=eq, grid=surf_grid, method="pest", **_kw
+            )
+        # `phi_matrix_pest` has no 0-D or flux-function dependencies, so this is all
+        # `eq.compute` ever did here; going through `compute_fun` keeps it jit-safe.
+        data_phi = compute_fun(
+            eq,
+            _keys,
+            params=params,
+            transforms=transforms,
+            profiles=get_profiles(_keys, obj=eq, grid=surf_grid),
+            data={"interpolator_pest": getattr(self, f"_{pre}phi_interpolator")},
+            **_kw,
         )
         phi_matrix = data_phi["phi_matrix_pest"]
 
@@ -2106,14 +2153,14 @@ class FinitenStability(_Objective):
             ]["dependencies"]["data"]
             _cflux = self._flux_data(_pc, constants, _grid_c, "coarse")
             # _tmr.mark("flux_data coarse", *_cflux.values())  # noqa: E800
-            _cdata = eq.compute(
+            _cdata = compute_fun(
+                eq,
                 _ckeys,
-                grid=_grid_c,
-                diffmat=self._coarse_diffmat,
                 params=_pc,
-                data=_cflux,
-                override_grid=False,
                 transforms=self._agni_transforms(_ckeys, _grid_c),
+                profiles=constants["profiles"],
+                data=_cflux,
+                diffmat=self._coarse_diffmat,
             )
             # _tmr.mark("geometry coarse", *_cdata.values())  # noqa: E800
             _cg0 = self._coarse_grid
@@ -2225,12 +2272,12 @@ class FinitenStability(_Objective):
         _fflux = self._flux_data(params, constants, grid)
         # _tmr.mark("flux_data fine", *_fflux.values())  # noqa: E800
         _fdata = _fflux
-        data = eq.compute(
+        data = compute_fun(
+            eq,
             "finite-n lambda3 rayleigh",
-            grid=grid,
             params=params,
+            profiles=constants["profiles"],
             data=_fdata,
-            override_grid=False,
             transforms=self._agni_transforms(
                 "finite-n lambda3 rayleigh",
                 grid,
@@ -2346,10 +2393,11 @@ class FinitenStability(_Objective):
                 # the cached eigenvector no longer matches the matrix being
                 # differentiated.
                 options["phi_matrix"] = self._phi_matrix(params, grid)
-            data = eq.compute(
+            data = compute_fun(
+                eq,
                 "finite-n lambda3",
-                grid=grid,
                 params=params,
+                profiles=constants["profiles"],
                 transforms=self._agni_transforms(
                     "finite-n lambda3",
                     grid,

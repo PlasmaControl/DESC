@@ -834,18 +834,7 @@ class NeutronWallLoading(_Objective):
     constant distance in the surface-normal direction. If ``surface`` is provided, it
     is treated directly as the wall.
 
-    Notes
-    -----
-    - The conformal wall surface is recomputed every evaluation using
-      :func:`desc.geometry.surface._constant_offset_surface` so that the objective
-      remains differentiable with respect to the equilibrium degrees of freedom when
-      using the conformal-wall method.
-    - If ``surface`` is ``None``, the wall surface defaults to a constant-offset
-      surface of
-      ``eq.surface``. In that case the wall varies together with the equilibrium
-      boundary.
-    - The volume integral is performed on ``source_grid``. By default this uses a
-      :class:`~desc.grid.QuadratureGrid`, which is appropriate for volume integrals.
+    Methodology described in: https://doi.org/10.1088/1361-6587/aeb15b
 
     Parameters
     ----------
@@ -867,8 +856,7 @@ class NeutronWallLoading(_Objective):
     eq_fixed, surface_fixed : bool, optional
         Whether the eq/surface is fixed or not. If True, the corresponding source
         or wall-surface data are precomputed, which saves computation during
-        optimization. Both cannot be True. An explicit ``surface`` must be provided
-        unless using the free-eq conformal-wall method ``surface=None``.
+        optimization. Both cannot be True.
 
     """
 

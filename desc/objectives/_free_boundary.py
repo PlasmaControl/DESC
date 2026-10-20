@@ -141,9 +141,13 @@ class VacuumBoundaryError(_Objective):
         else:
             grid = self._eval_grid
 
-        data = eq.compute(["p", "current"])
+        data = eq.compute(["p", "current", "B_theta"])
         pres = np.max(np.abs(data["p"]))
         curr = np.max(np.abs(data["current"]))
+        # current is a surface average of B_theta, so it inherits its rounding
+        eps = np.finfo(data["current"].dtype).eps
+        B_theta = np.max(np.abs(data["B_theta"]))
+        curr_tol = max(1e-8, 2e3 * np.pi * eps * B_theta / mu_0)
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -156,7 +160,7 @@ class VacuumBoundaryError(_Objective):
             + "VacuumBoundaryError will be incorrect.",
         )
         warnif(
-            curr > 1e-8,
+            curr > curr_tol,
             UserWarning,
             f"Current is non-zero (max {curr} A), "
             + "VacuumBoundaryError will be incorrect.",

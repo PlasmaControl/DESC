@@ -106,7 +106,12 @@ def _optimize_scipy_minimize(  # noqa: C901
         # disp deprecated in scipy>=1.16.0 for this method and
         # has no effect anyways, so safe to remove
         options.pop("disp")
-    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+    # scipy works in float64, so cast everything that crosses into it
+    x0 = np.asarray(x0, dtype=np.float64)
+    fun, grad, hess = (
+        lambda x, f=f: np.asarray(f(x), dtype=np.float64)
+        for f in (objective.compute_scalar, objective.grad, objective.hess)
+    )
     # don't call hess if the method is approximating the hessian, since we probably
     # are avoiding it due to it being expensive
     use_hessian = method not in ["scipy-bfgs", "scipy-l-bfgs-b", "scipy-CG"]
@@ -117,6 +122,7 @@ def _optimize_scipy_minimize(  # noqa: C901
         scale = 1.0  # don't do any auto scaling if our optimizer does not use hessian
     else:
         scale = x_scale
+    scale = np.asarray(scale, dtype=np.float64)
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
         options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
         options.setdefault("max_trust_radius", np.inf)
@@ -365,7 +371,12 @@ def _optimize_scipy_least_squares(  # noqa: C901
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     x_scale = "jac" if x_scale == "auto" else x_scale
-    fun, jac = objective.compute_scaled_error, objective.jac_scaled_error
+    # scipy works in float64, so cast everything that crosses into it
+    x0 = np.asarray(x0, dtype=np.float64)
+    fun, jac = (
+        lambda x, f=f: np.asarray(f(x), dtype=np.float64)
+        for f in (objective.compute_scaled_error, objective.jac_scaled_error)
+    )
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []
@@ -377,7 +388,7 @@ def _optimize_scipy_least_squares(  # noqa: C901
     def fun_wrapped(x):
         # record all the xs and fs we see
         fun_allx.append(x)
-        f = jnp.atleast_1d(fun(x))
+        f = np.atleast_1d(fun(x))
         fun_allf.append(f)
         return f
 
@@ -568,13 +579,19 @@ def _optimize_scipy_constrained(  # noqa: C901
     options = {} if options is None else options
     options.setdefault("maxiter", stoptol["max_nfev"])
     options.setdefault("disp", False)
-    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+    # scipy works in float64, so cast everything that crosses into it
+    x0 = np.asarray(x0, dtype=np.float64)
+    fun, grad, hess = (
+        lambda x, f=f: np.asarray(f(x), dtype=np.float64)
+        for f in (objective.compute_scalar, objective.grad, objective.hess)
+    )
 
     if isinstance(x_scale, str) and x_scale == "auto":
         H = hess(x0)
         scale, _ = compute_hess_scale(H)
     else:
         scale = x_scale
+    scale = np.asarray(scale, dtype=np.float64)
 
     if constraint is not None:
         num_equality = np.count_nonzero(
@@ -589,7 +606,7 @@ def _optimize_scipy_constrained(  # noqa: C901
         if isinstance(x_scale, str) and x_scale == "auto":
             J = constraint.jac_scaled(x0)
             Jscale, _ = compute_jac_scale(J)
-            scale = jnp.sqrt(scale * Jscale)
+            scale = np.sqrt(scale * np.asarray(Jscale, dtype=np.float64))
 
         def cfun_wrapped(xs):
             # record all the x and fs we see
@@ -600,7 +617,7 @@ def _optimize_scipy_constrained(  # noqa: C901
                 f = np.array([])
             if not f.size:
                 cfun_allx.append(x)
-                f = constraint.compute_scaled(x)
+                f = np.asarray(constraint.compute_scaled(x), dtype=np.float64)
                 cfun_allf.append(f)
             return f
 
@@ -612,18 +629,18 @@ def _optimize_scipy_constrained(  # noqa: C901
                 J = np.array([[]])
             if not J.size:
                 cjac_allx.append(x)
-                J = constraint.jac_scaled(x)
+                J = np.asarray(constraint.jac_scaled(x), dtype=np.float64)
                 cjac_allf.append(J)
             return J * scale
 
-        lb, ub = constraint.bounds_scaled
+        lb, ub = (np.asarray(b, dtype=np.float64) for b in constraint.bounds_scaled)
     else:
 
         def cfun_wrapped(xs):
             return 0.0
 
         def cjac_wrapped(xs):
-            return jnp.zeros_like(xs)
+            return np.zeros_like(xs)
 
         lb, ub = 0, 0
 

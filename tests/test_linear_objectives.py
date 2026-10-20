@@ -61,6 +61,8 @@ from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import LinearConstraintProjection
 from desc.profiles import PowerSeriesProfile
 
+from .utils import EPS
+
 
 @pytest.mark.unit
 def test_LambdaGauge_sym(DummyStellarator):
@@ -170,7 +172,7 @@ def test_constrain_asserts():
     # if only slightly off, should raise only a warning
     with pytest.warns(UserWarning):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
-        con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l * (1 + max(1e-9, 1e4 * EPS)), eq=eqc)
         con = ObjectiveFunction((con1, con2))
         con.build()
         _ = factorize_linear_constraints(obj_c, con)

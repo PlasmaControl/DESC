@@ -925,8 +925,11 @@ class FourierPlanarCurve(Curve):
         )
         coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
+        # planar up to the rounding error of the computed coordinates
+        eps = jnp.finfo(jnp.array(1.0).dtype).eps
+        tol = max(1e-14, 100 * eps * np.max(np.abs(coords_rotated)))
         warnif(
-            np.max(np.abs(coords_rotated[:, 2])) > 1e-14,  # check Z=0 for all points
+            np.max(np.abs(coords_rotated[:, 2])) > tol,  # check Z=0 for all points
             UserWarning,
             "Curve values are not planar! "
             f"Max planarity violation of {np.max(np.abs(coords_rotated[:, 2])):1.2e} m."
@@ -1340,8 +1343,11 @@ class FourierXYCurve(Curve):
         X, Y, Z, closedX, closedY, closedZ, input_curve_was_closed = _unclose_curve(
             X, Y, Z
         )
+        # planar up to the rounding error of the computed coordinates
+        eps = jnp.finfo(jnp.array(1.0).dtype).eps
+        tol = max(1e-14, 100 * eps * np.max(np.abs(coords)))
         warnif(
-            np.max(np.abs(Z)) > 1e-14,  # check that Z=0 for all points
+            np.max(np.abs(Z)) > tol,  # check that Z=0 for all points
             UserWarning,
             "Curve values are not planar! "
             f"Max planarity violation of {np.max(np.abs(Z)):1.2e} m."

@@ -2620,8 +2620,8 @@ def field_line_integrate(
     field,
     params=None,
     source_grid=None,
-    rtol=1e-8,
-    atol=1e-8,
+    rtol=None,
+    atol=None,
     max_steps=None,
     min_step_size=1e-8,
     solver=Tsit5(),
@@ -2650,7 +2650,8 @@ def field_line_integrate(
         Collocation points used to discretize source field.
     rtol, atol : float
         relative and absolute tolerances for PID stepsize controller. Not used if
-        ``stepsize_controller`` is provided.
+        ``stepsize_controller`` is provided. Defaults to 1e-8, or 100 times the
+        machine precision if that is larger.
     max_steps : int
         maximum number of steps for the integration. Defaults to
         abs((phis[-1] - phis[0]) * 1000)
@@ -2698,6 +2699,8 @@ def field_line_integrate(
 
     r0, z0, phis = map(jnp.asarray, (r0, z0, phis))
     assert r0.shape == z0.shape, "r0 and z0 must have the same shape"
+    rtol = setdefault(rtol, max(1e-8, 100 * jnp.finfo(r0.dtype).eps))
+    atol = setdefault(atol, max(1e-8, 100 * jnp.finfo(r0.dtype).eps))
 
     min_step_size = jnp.where(
         phis[-1] > phis[0], min_step_size, -jnp.abs(min_step_size)

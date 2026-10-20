@@ -1373,8 +1373,13 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
 
     if vacuum:
         # check if vacuum flag should be True or not
-        pres = np.max(np.abs(eq.compute("p")["p"]))
-        curr = np.max(np.abs(eq.compute("current")["current"]))
+        data = eq.compute(["p", "current", "B_theta"])
+        pres = np.max(np.abs(data["p"]))
+        curr = np.max(np.abs(data["current"]))
+        # current is a surface average of B_theta, so it inherits its rounding
+        eps = np.finfo(data["current"].dtype).eps
+        B_theta = np.max(np.abs(data["B_theta"]))
+        curr_tol = max(1e-8, 2e3 * np.pi * eps * B_theta / mu_0)
         warnif(
             pres > 1e-8,
             UserWarning,
@@ -1382,7 +1387,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             + "vacuum flag should probably be set to False.",
         )
         warnif(
-            curr > 1e-8,
+            curr > curr_tol,
             UserWarning,
             f"Current appears to be non-zero (max {curr} A), "
             + "vacuum flag should probably be set to False.",

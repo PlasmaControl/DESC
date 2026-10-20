@@ -24,7 +24,7 @@ if use_jax:
             import jax.numpy as jnp
             import jaxlib
             from jax import config as jax_config
-            
+
             # YNNPACK reduce fusions on CPU is slow and wrong,
             # see (https://github.com/jax-ml/jax/issues/41414).
             # Triton GEMMs on GPU cause slow compilation without much

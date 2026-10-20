@@ -599,7 +599,7 @@ class ManualParticleInitializerLab(AbstractParticleInitializer):
             x_guess = jnp.zeros(x.shape)
             x_guess = x_guess.at[:, 2].set(self.phi0)
             x_guess = x_guess.at[:, 1].set(jnp.arctan2(self.Z0, self.R0))
-            tol = 1e-8
+            tol = max(1e-8, 100 * jnp.finfo(x_guess.dtype).eps)
             x, out = field.map_coordinates(
                 coords=x,
                 inbasis=("R", "phi", "Z"),
@@ -758,7 +758,7 @@ class CurveParticleInitializer(AbstractParticleInitializer):
             # implementation, we use rho=0, theta=0 as the guess
             x_guess = jnp.array([jnp.zeros(self.N), jnp.zeros(self.N), zeta]).T
             if not self.is_curve_magnetic_axis:
-                tol = 1e-8
+                tol = max(1e-8, 100 * jnp.finfo(x_guess.dtype).eps)
                 x, out = field.map_coordinates(
                     coords=x,
                     inbasis=("R", "phi", "Z"),
@@ -923,7 +923,7 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
             rho = self.surface.rho * jnp.ones_like(zeta)
             x_guess = jnp.array([rho, theta, zeta]).T
             if not self.is_surface_from_eq:
-                tol = 1e-8
+                tol = max(1e-8, 100 * jnp.finfo(x_guess.dtype).eps)
                 x, out = field.map_coordinates(
                     coords=x,
                     inbasis=("R", "phi", "Z"),

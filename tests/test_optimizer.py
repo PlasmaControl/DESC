@@ -125,6 +125,7 @@ def test_chol_zero_gershgorin_lower_bound(matrix):
 
 
 @pytest.mark.unit
+@pytest.mark.skipif(EPS > 1e-10, reason="1e-300 underflows in single precision")
 def test_chol_extreme_small_zero_gershgorin_lower_bound():
     """The zero-bound fallback remains positive below eps-scaled normal range."""
     matrix = np.diag(np.array([1e-300, 0.0], dtype=np.float64))

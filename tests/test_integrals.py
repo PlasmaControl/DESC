@@ -916,7 +916,7 @@ class TestBounceQuadrature:
 
         m = 1 - 1e-3
         # integral(integrand) = truth iff pitch_inv = 2
-        pitch_inv = 2 - 1e-12
+        pitch_inv = 2 - max(1e-12, 100 * EPS)
         k = pitch_inv * m  # m = k * pitch
         if is_strong:
             integrand = lambda data, B, pitch: 1 / jnp.sqrt(

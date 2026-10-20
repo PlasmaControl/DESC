@@ -2199,8 +2199,13 @@ class ToroidalFlux(_Objective):
             self._normalization = 1.0 if not hasattr(eq, "Psi") else eq.Psi
         if not isinstance(eq, FourierRZToroidalSurface):
             # ensure vacuum eq, as is unneeded for finite beta
-            pres = np.max(np.abs(eq.compute("p")["p"]))
-            curr = np.max(np.abs(eq.compute("current")["current"]))
+            data = eq.compute(["p", "current", "B_theta"])
+            pres = np.max(np.abs(data["p"]))
+            curr = np.max(np.abs(data["current"]))
+            # current is a surface average of B_theta, so it inherits its rounding
+            eps = np.finfo(data["current"].dtype).eps
+            B_theta = np.max(np.abs(data["B_theta"]))
+            curr_tol = max(1e-8, 2e3 * np.pi * eps * B_theta / mu_0)
             warnif(
                 pres > 1e-8,
                 UserWarning,
@@ -2208,7 +2213,7 @@ class ToroidalFlux(_Objective):
                 + "this objective is unneeded at finite beta.",
             )
             warnif(
-                curr > 1e-8,
+                curr > curr_tol,
                 UserWarning,
                 f"Current appears to be non-zero (max {curr} A), "
                 + "this objective is unneeded at finite beta.",

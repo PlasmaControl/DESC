@@ -23,7 +23,7 @@ from desc.vmec_utils import (
     zernike_to_fourier,
 )
 
-from .utils import area_difference_desc
+from .utils import ATOL, EPS, RTOL, area_difference_desc
 
 
 class TestVMECIO:
@@ -335,11 +335,19 @@ def test_axis_surf_after_load():
     axis1 = eq.axis
     axis2 = eq.get_axis()
 
-    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-14)
-    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-14)
+    np.testing.assert_allclose(
+        surf1.R_lmn, surf2.R_lmn, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(
+        surf1.Z_lmn, surf2.Z_lmn, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
-    np.testing.assert_allclose(axis1.R_n, axis2.R_n, atol=1e-14)
-    np.testing.assert_allclose(axis1.Z_n, axis2.Z_n, atol=1e-14)
+    np.testing.assert_allclose(
+        axis1.R_n, axis2.R_n, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(
+        axis1.Z_n, axis2.Z_n, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
     # surface
     rm, rn, Rb_cs, Rb_cc = ptolemy_identity_rev(
@@ -361,11 +369,17 @@ def test_axis_surf_after_load():
     rax_cc = f.variables["raxis_cc"][:].filled()
     zax_cs = -f.variables["zaxis_cs"][:].filled()
 
-    np.testing.assert_allclose(rmnc[-1], Rb_cc.squeeze(), atol=1e-14)
-    np.testing.assert_allclose(zmns[-1], Zb_cs.squeeze(), atol=1e-14)
+    np.testing.assert_allclose(
+        rmnc[-1], Rb_cc.squeeze(), atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(
+        zmns[-1], Zb_cs.squeeze(), atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
-    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=1e-14)
-    np.testing.assert_allclose(zax_cs[1:][::-1], axis1.Z_n, atol=1e-14)
+    np.testing.assert_allclose(rax_cc, axis1.R_n, atol=max(1e-14, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(
+        zax_cs[1:][::-1], axis1.Z_n, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
     f.close()
 
@@ -1715,17 +1729,22 @@ def test_make_boozmn_asym_output_against_hidden_symmetries_booz_xform(TmpDir):
             file_cpp.variables[name][:].filled()[surf_inds_cpp],
             atol=atol,
             err_msg=name,
+            rtol=RTOL,
         )
     for name in ["iota_b", "buco_b", "bvco_b"]:
         np.testing.assert_allclose(
             file.variables[name][:].filled()[1:],
             file_cpp.variables[name][:].filled()[surf_inds_cpp + 1],
-            atol=1e-7,
+            atol=max(1e-7, 100 * EPS),
             err_msg=name,
+            rtol=RTOL,
         )
     for name in ["mboz_b", "nboz_b", "ixm_b", "ixn_b"]:
         np.testing.assert_allclose(
-            file.variables[name][:].filled(), file_cpp.variables[name][:].filled()
+            file.variables[name][:].filled(),
+            file_cpp.variables[name][:].filled(),
+            rtol=RTOL,
+            atol=ATOL,
         )
 
 

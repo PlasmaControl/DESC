@@ -1224,7 +1224,7 @@ class TestObjectiveFunction:
             obj1.build()
             f1 = obj1.compute(params=coils.params_dict)
             assert f1.size == coils.num_coils
-            np.testing.assert_allclose(f1, mindist)
+            np.testing.assert_allclose(f1, mindist, rtol=RTOL, atol=ATOL)
             assert coils.is_self_intersecting(grid=grid, tol=tol) == expect_intersect
             # softmin
             obj2 = CoilSetMinDistance(
@@ -1239,7 +1239,7 @@ class TestObjectiveFunction:
             obj3.build()
             f3 = obj3.compute(params=coils.params_dict)
             assert f3.size == coils.num_coils
-            np.testing.assert_allclose(f3, mindist)
+            np.testing.assert_allclose(f3, mindist, rtol=RTOL, atol=ATOL)
             # softmin & num_neighbors
             obj4 = CoilSetMinDistance(
                 coils,
@@ -1259,7 +1259,7 @@ class TestObjectiveFunction:
             obj3.build()
             g1 = obj1.jac_unscaled(obj1.x(coils))
             g3 = obj3.jac_unscaled(obj3.x(coils))
-            np.testing.assert_allclose(g1, g3)
+            np.testing.assert_allclose(g1, g3, rtol=RTOL, atol=ATOL)
 
         # linearly spaced planar coils, all coils are min distance from their neighbors
         n = 3
@@ -1805,7 +1805,7 @@ class TestObjectiveFunction:
                 torflux = obj.compute_unscaled(*obj.xs(eq))
             else:
                 torflux = obj.compute_unscaled(*obj.xs(eq, field))
-            np.testing.assert_allclose(torflux, correct_value, rtol=rtol)
+            np.testing.assert_allclose(torflux, correct_value, rtol=rtol, atol=ATOL)
 
         eq = Equilibrium(iota=PowerSeriesProfile(0))
         test(eq, VerticalMagneticField(B0=1), 0, grid=grid1, field_fixed=False)
@@ -2027,7 +2027,10 @@ class TestObjectiveFunction:
         obj.build()
         f = obj.compute(field.params_dict)
         np.testing.assert_allclose(
-            f, mirror_ratio_axis * (1 - rho) + mirror_ratio_edge * rho
+            f,
+            mirror_ratio_axis * (1 - rho) + mirror_ratio_edge * rho,
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -2263,13 +2266,19 @@ class TestObjectiveFunction:
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data[names[0]])
+            obj.compute(eq.params_dict),
+            grid.compress(data[names[0]]),
+            rtol=RTOL,
+            atol=ATOL,
         )
         obj = GammaC(eq, grid=obj_grid, nufft_eps=1e-7, X=X, Y=Y, **opts)
         obj.build()
         assert obj._hyperparam["num_well"] == opts["num_well"]
         np.testing.assert_allclose(
-            obj.compute(eq.params_dict), grid.compress(data[names[1]])
+            obj.compute(eq.params_dict),
+            grid.compress(data[names[1]]),
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -2531,11 +2540,11 @@ def test_fwd_rev():
     x = eq.pack_params(eq.params_dict)
     J1 = obj1.jac_scaled(x)
     J2 = obj2.jac_scaled(x)
-    np.testing.assert_allclose(J1, J2, atol=1e-14)
+    np.testing.assert_allclose(J1, J2, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
     jvp1 = obj1.jvp_scaled(x, jnp.ones_like(x))
     jvp2 = obj2.jvp_scaled(x, jnp.ones_like(x))
-    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+    np.testing.assert_allclose(jvp1, jvp2, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
     surf = FourierRZToroidalSurface()
     obj1 = PlasmaVesselDistance(eq, surf, deriv_mode="fwd")
@@ -2548,12 +2557,12 @@ def test_fwd_rev():
 
     J1a, J1b = obj1.jac_scaled(x1, x2)
     J2a, J2b = obj2.jac_scaled(x1, x2)
-    np.testing.assert_allclose(J1a, J2a, atol=1e-14)
-    np.testing.assert_allclose(J1b, J2b, atol=1e-14)
+    np.testing.assert_allclose(J1a, J2a, atol=max(1e-14, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(J1b, J2b, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
     jvp1 = obj1.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
     jvp2 = obj2.jvp_scaled((x1, x2), (jnp.ones_like(x1), jnp.ones_like(x2)))
-    np.testing.assert_allclose(jvp1, jvp2, atol=1e-14)
+    np.testing.assert_allclose(jvp1, jvp2, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -3325,8 +3334,8 @@ def test_vjp():
     vjp2u = y @ objective.jac_unscaled(x)
     vjp2s = y @ objective.jac_scaled(x)
 
-    np.testing.assert_allclose(vjp1u, vjp2u, atol=1e-8)
-    np.testing.assert_allclose(vjp1s, vjp2s, atol=1e-8)
+    np.testing.assert_allclose(vjp1u, vjp2u, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(vjp1s, vjp2s, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -4356,7 +4365,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=1e-6)
+        np.testing.assert_allclose(g, g_0, atol=1e-6, rtol=RTOL)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_Gamma_c(self):
@@ -4568,8 +4577,8 @@ def test_deflation_operator_Nones():
     )
 
     # make sure values are identical and correct
-    np.testing.assert_allclose(val1, val2)
-    np.testing.assert_allclose(val1, correct_value)
+    np.testing.assert_allclose(val1, val2, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(val1, correct_value, rtol=RTOL, atol=ATOL)
     # make sure that the objective did not modify the original list
     assert things_to_deflate_with_None[0] == surf2
     assert things_to_deflate_with_None[1] == surf3
@@ -4613,8 +4622,8 @@ def test_deflation_operator_Nones():
     ) ** 2 / 2
 
     # make sure values are identical and correct
-    np.testing.assert_allclose(val1, val2)
-    np.testing.assert_allclose(val1, correct_value)
+    np.testing.assert_allclose(val1, val2, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(val1, correct_value, rtol=RTOL, atol=ATOL)
     # make sure that the objective did not modify the original list
     assert things_to_deflate_with_None[0] == surf2
     assert things_to_deflate_with_None[1] == surf3

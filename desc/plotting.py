@@ -932,13 +932,14 @@ def plot_2d(  # noqa : C901
     contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
+        data = np.where(data > 0, data, np.nan)  # exact zeros are common in float32
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if name == "|F|_normalized" or (
             name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
         ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
-            logdata = np.log10(data[data > 0])  # exact zeros are common in float32
+            logdata = np.log10(data)
             logmin = max(np.floor(np.nanmin(logdata)).astype(int), -16)
             logmax = np.ceil(np.nanmax(logdata)).astype(int)
             contourf_kwargs["levels"] = kwargs.pop(
@@ -1743,13 +1744,14 @@ def plot_section(
     contourf_kwargs = {}
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
+        data = np.where(data > 0, data, np.nan)  # exact zeros are common in float32
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if name == "|F|_normalized" or (
             name == "|F|" and normalize == "<|grad(|B|^2)|/2mu0>_vol"
         ):
             contourf_kwargs["levels"] = kwargs.pop("levels", np.logspace(-6, 0, 7))
         else:
-            logdata = np.log10(data[data > 0])  # exact zeros are common in float32
+            logdata = np.log10(data)
             logmin = max(np.floor(np.nanmin(logdata)).astype(int), -16)
             logmax = np.ceil(np.nanmax(logdata)).astype(int)
             contourf_kwargs["levels"] = kwargs.pop(

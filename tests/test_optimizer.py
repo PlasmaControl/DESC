@@ -119,9 +119,7 @@ def test_chol_zero_gershgorin_lower_bound(matrix):
 
     assert np.isfinite(factor).all()
     assert np.linalg.eigvalsh(reconstructed).min() > 0.0
-    assert np.linalg.norm(reconstructed - matrix, ord=2) < (
-        100 * np.finfo(matrix.dtype).eps * scale
-    )
+    assert np.linalg.norm(reconstructed - matrix, ord=2) < 100 * EPS * scale
 
 
 @pytest.mark.unit
@@ -1246,16 +1244,26 @@ def test_optimize_multiple_things_different_order():
     )
     # ensure surface changed correctly
     np.testing.assert_allclose(
-        surf1.R_lmn[surf1.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+        surf1.R_lmn[surf1.R_basis.get_idx(M=1, N=0)],
+        a_eq + target_dist,
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        surf1.Z_lmn[surf1.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+        surf1.Z_lmn[surf1.Z_basis.get_idx(M=-1, N=0)],
+        -a_eq - target_dist,
+        rtol=RTOL,
+        atol=ATOL,
     )
 
-    np.testing.assert_allclose(surf1.R_lmn[surf1.R_basis.get_idx(M=0, N=0)], R0)
+    np.testing.assert_allclose(
+        surf1.R_lmn[surf1.R_basis.get_idx(M=0, N=0)], R0, rtol=RTOL, atol=ATOL
+    )
     # ensure eq did not change
     for key in eq.params_dict.keys():
-        np.testing.assert_allclose(eq1.params_dict[key], eq.params_dict[key])
+        np.testing.assert_allclose(
+            eq1.params_dict[key], eq.params_dict[key], rtol=RTOL, atol=ATOL
+        )
 
     # fresh start
     constraints = (
@@ -1281,15 +1289,25 @@ def test_optimize_multiple_things_different_order():
 
     # ensure surface changed correctly
     np.testing.assert_allclose(
-        surf2.R_lmn[surf2.R_basis.get_idx(M=1, N=0)], a_eq + target_dist
+        surf2.R_lmn[surf2.R_basis.get_idx(M=1, N=0)],
+        a_eq + target_dist,
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        surf2.Z_lmn[surf2.Z_basis.get_idx(M=-1, N=0)], -a_eq - target_dist
+        surf2.Z_lmn[surf2.Z_basis.get_idx(M=-1, N=0)],
+        -a_eq - target_dist,
+        rtol=RTOL,
+        atol=ATOL,
     )
-    np.testing.assert_allclose(surf2.R_lmn[surf2.R_basis.get_idx(M=0, N=0)], R0)
+    np.testing.assert_allclose(
+        surf2.R_lmn[surf2.R_basis.get_idx(M=0, N=0)], R0, rtol=RTOL, atol=ATOL
+    )
     # ensure eq did not change
     for key in eq.params_dict.keys():
-        np.testing.assert_allclose(eq2.params_dict[key], eq.params_dict[key])
+        np.testing.assert_allclose(
+            eq2.params_dict[key], eq.params_dict[key], rtol=RTOL, atol=ATOL
+        )
 
 
 @pytest.mark.unit

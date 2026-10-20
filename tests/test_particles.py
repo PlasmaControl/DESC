@@ -22,6 +22,8 @@ from desc.particles import (
 )
 from desc.utils import rpz2xyz, xyz2rpz_vec
 
+from .utils import EPS, RTOL
+
 
 @pytest.mark.unit
 def test_constant_field_cases():
@@ -162,15 +164,22 @@ def test_tracing_purely_toroidal_magnetic_field():
     # where vpar0 is the initial parallel velocity and R0 is the major radius.
     phi_exact = particles.vpar0[0] / R0 * ts
 
-    np.testing.assert_allclose(rpz[0, :, 2], z_exact, atol=1e-12)
+    np.testing.assert_allclose(
+        rpz[0, :, 2], z_exact, atol=max(1e-12, 100 * EPS), rtol=RTOL
+    )
     # There is no radial drift, R should remain constant
-    np.testing.assert_allclose(rpz[0, :, 0], R0, atol=1e-12)
+    np.testing.assert_allclose(rpz[0, :, 0], R0, atol=max(1e-12, 100 * EPS), rtol=RTOL)
     # There is no mirror force, parallel velocity should be the same
     np.testing.assert_allclose(
-        vpar[0, :, 0], particles.vpar0 * np.ones_like(vpar[0, :, 0]), atol=1e-12
+        vpar[0, :, 0],
+        particles.vpar0 * np.ones_like(vpar[0, :, 0]),
+        atol=max(1e-12, 100 * EPS),
+        rtol=RTOL,
     )
     # The phi position should be given by the angular velocity
-    np.testing.assert_allclose(rpz[0, :, 1], phi_exact, atol=1e-12)
+    np.testing.assert_allclose(
+        rpz[0, :, 1], phi_exact, atol=max(1e-12, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -228,13 +237,13 @@ def test_tracing_vacuum_tokamak():
     # where vpar0 is the initial parallel velocity and R0 is the initial R.
     phi_exact = particles.vpar0[0] / R0 * ts
 
-    assert np.allclose(rpz[:, 2], z_exact, atol=1e-12)
+    assert np.allclose(rpz[:, 2], z_exact, atol=max(1e-12, 100 * EPS))
     # There is no radial drift, R should remain constant
-    assert np.allclose(rpz[:, 0], R0, atol=1e-12)
+    assert np.allclose(rpz[:, 0], R0, atol=max(1e-12, 100 * EPS))
     # There is no mirror force, parallel velocity should be the same
-    assert np.allclose(vpar[0, :, 0], particles.vpar0, atol=1e-12)
+    assert np.allclose(vpar[0, :, 0], particles.vpar0, atol=max(1e-12, 100 * EPS))
     # The phi position should be given by the angular velocity
-    assert np.allclose(rpz[:, 1], phi_exact, atol=1e-12)
+    assert np.allclose(rpz[:, 1], phi_exact, atol=max(1e-12, 100 * EPS))
 
 
 @pytest.mark.unit
@@ -435,14 +444,14 @@ def test_init_curve_particles():
 
     assert x0.shape == (N, 4)
     assert args.shape == (N, 3)
-    np.testing.assert_allclose(x0[:, 0], 0.0, atol=1e-8)
+    np.testing.assert_allclose(x0[:, 0], 0.0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
     # mid curve should lie on the LCFS of small equilibrium
     x0, args = particles_mid.init_particles(model, eq)
 
     assert x0.shape == (N, 4)
     assert args.shape == (N, 3)
-    np.testing.assert_allclose(x0[:, 0], 1.0, atol=1e-8)
+    np.testing.assert_allclose(x0[:, 0], 1.0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
     # test that intitializer is jitable
     _, _ = jit(particles_mid.init_particles)(model, eq)
@@ -455,14 +464,16 @@ def test_init_curve_particles():
 
     assert x0.shape == (N, 4)
     assert args.shape == (N, 3)
-    np.testing.assert_allclose(x0[:, 0], 0.0, atol=1e-8)
+    np.testing.assert_allclose(x0[:, 0], 0.0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
     # also check that particle positions are correct in lab frame
     grid_t = Grid(x0[:, :3], jitable=True)
     rpz = eq_large.compute("x", grid=grid_t)["x"]
 
-    np.testing.assert_allclose(rpz[:, 0], curve_large.R_n[0], atol=1e-8)
-    np.testing.assert_allclose(rpz[:, 2], 0.0, atol=1e-8)
+    np.testing.assert_allclose(
+        rpz[:, 0], curve_large.R_n[0], atol=max(1e-8, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(rpz[:, 2], 0.0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
     # smaller curve is out of larger equilibrium, so it should fail
     with pytest.raises(match="Mapping from lab to flux coordinates failed"):

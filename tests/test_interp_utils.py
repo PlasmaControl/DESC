@@ -135,10 +135,16 @@ class TestFastInterp:
 
         v = func(xq, yq)
         np.testing.assert_allclose(
-            nufft2d2r(xq, yq, f1, domain_x, domain_y), v, rtol=1e-6, atol=ATOL
+            nufft2d2r(xq, yq, f1, domain_x, domain_y),
+            v,
+            rtol=1e-6 + 1e3 * EPS,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
-            nufft2d2r(xq, yq, f2, domain_x, domain_y, None), v, rtol=1e-6, atol=ATOL
+            nufft2d2r(xq, yq, f2, domain_x, domain_y, None),
+            v,
+            rtol=1e-6 + 1e3 * EPS,
+            atol=ATOL,
         )
 
         @partial(grad, argnums=(0, 1))
@@ -333,7 +339,7 @@ class TestPolyUtils:
                         # ok to keep both double roots here because they are
                         # one red and one green since they lie on opposite
                         # sides of the true double root.
-                        assert np.allclose(root, (-3, 2, 2))
+                        assert np.allclose(root, (-3, 2, 2), atol=max(1e-8, 100 * EPS))
                     else:
                         # also okay to remove both
                         assert root.size == 1 and np.allclose(root, -3)

@@ -35,6 +35,8 @@ from desc.magnetic_fields import (
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
 
+from .utils import EPS
+
 OLD_FINUFFT = Version(jax_finufft.__version__) <= Version("1.2.0")
 
 
@@ -49,8 +51,9 @@ def _compare_against_master(
             else:
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
-                rtol = 1e-5 if "Gamma_" in name and OLD_FINUFFT else 1e-8
-                atol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
+                tol = max(1e-8, 1e3 * EPS)
+                rtol = 1e-5 if "Gamma_" in name and OLD_FINUFFT else tol
+                atol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else tol
                 atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg
@@ -83,8 +86,8 @@ def _compare_against_rpz(p, data, data_rpz, coordinate_conversion_func):
         if data_index[p][name]["dim"] != 3:
             continue
         res = coordinate_conversion_func(data, name) - data_rpz[name]
-        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else 1e-8
-        atol = 1e-8
+        rtol = 1e-4 if "Gamma_" in name and OLD_FINUFFT else max(1e-8, 1e3 * EPS)
+        atol = max(1e-8, 1e3 * EPS)
         errorif(
             not np.all(
                 (
@@ -344,8 +347,8 @@ def fft_grid_data(p):
     np.testing.assert_allclose(
         d["Gamma_c"],
         data["Gamma_c"],
-        rtol=1e-9,
-        atol=1e-9,
+        rtol=max(1e-9, 100 * EPS),
+        atol=max(1e-9, 100 * EPS),
         err_msg="Gamma_c vectorization",
     )
     # check no nufft

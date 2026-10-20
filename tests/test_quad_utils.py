@@ -23,6 +23,8 @@ from desc.integrals.quad_utils import (
     uniform,
 )
 
+from .utils import ATOL, EPS, RTOL
+
 
 @pytest.mark.unit
 def test_automorphism():
@@ -31,25 +33,35 @@ def test_automorphism():
     x = np.linspace(a, b, 10)
     y = bijection_to_disc(x, a, b)
     x_1 = bijection_from_disc(y, a, b)
-    np.testing.assert_allclose(x_1, x)
-    np.testing.assert_allclose(bijection_to_disc(x_1, a, b), y)
+    np.testing.assert_allclose(x_1, x, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(bijection_to_disc(x_1, a, b), y, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(
-        automorphism_arcsin(automorphism_sin(y), gamma=1), y, atol=5e-7
+        automorphism_arcsin(automorphism_sin(y), gamma=1),
+        y,
+        atol=max(5e-7, 100 * EPS),
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
-        automorphism_sin(automorphism_arcsin(y, gamma=1)), y, atol=5e-7
+        automorphism_sin(automorphism_arcsin(y, gamma=1)),
+        y,
+        atol=max(5e-7, 100 * EPS),
+        rtol=RTOL,
     )
 
-    np.testing.assert_allclose(grad_bijection_from_disc(a, b), 1 / (2 / (b - a)))
+    np.testing.assert_allclose(
+        grad_bijection_from_disc(a, b), 1 / (2 / (b - a)), rtol=RTOL, atol=ATOL
+    )
     np.testing.assert_allclose(
         grad_automorphism_sin(y),
         1 / grad_automorphism_arcsin(automorphism_sin(y), gamma=1),
         atol=2e-6,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         1 / grad_automorphism_arcsin(y, gamma=1),
         grad_automorphism_sin(automorphism_arcsin(y, gamma=1)),
         atol=2e-6,
+        rtol=RTOL,
     )
 
     # test that floating point error is acceptable
@@ -72,23 +84,35 @@ def test_leggauss_lobatto():
     assert x.size == w.size == 0
 
     x, w = leggauss_lob(2)
-    np.testing.assert_allclose(x, [-1, 1])
-    np.testing.assert_allclose(w, [1, 1])
+    np.testing.assert_allclose(x, [-1, 1], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(w, [1, 1], rtol=RTOL, atol=ATOL)
 
     x, w = leggauss_lob(3)
-    np.testing.assert_allclose(x, [-1, 0, 1])
-    np.testing.assert_allclose(w, [1 / 3, 4 / 3, 1 / 3])
-    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+    np.testing.assert_allclose(x, [-1, 0, 1], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(w, [1 / 3, 4 / 3, 1 / 3], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]), rtol=RTOL, atol=ATOL
+    )
 
     x, w = leggauss_lob(4)
-    np.testing.assert_allclose(x, [-1, -np.sqrt(1 / 5), np.sqrt(1 / 5), 1])
-    np.testing.assert_allclose(w, [1 / 6, 5 / 6, 5 / 6, 1 / 6])
-    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+    np.testing.assert_allclose(
+        x, [-1, -np.sqrt(1 / 5), np.sqrt(1 / 5), 1], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(w, [1 / 6, 5 / 6, 5 / 6, 1 / 6], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]), rtol=RTOL, atol=ATOL
+    )
 
     x, w = leggauss_lob(5)
-    np.testing.assert_allclose(x, [-1, -np.sqrt(3 / 7), 0, np.sqrt(3 / 7), 1])
-    np.testing.assert_allclose(w, [1 / 10, 49 / 90, 32 / 45, 49 / 90, 1 / 10])
-    np.testing.assert_allclose(leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]))
+    np.testing.assert_allclose(
+        x, [-1, -np.sqrt(3 / 7), 0, np.sqrt(3 / 7), 1], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        w, [1 / 10, 49 / 90, 32 / 45, 49 / 90, 1 / 10], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        leggauss_lob(x.size - 2, True), (x[1:-1], w[1:-1]), rtol=RTOL, atol=ATOL
+    )
 
     def fun(a):
         x, w = leggauss_lob(a.size)

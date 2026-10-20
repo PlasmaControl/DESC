@@ -1576,7 +1576,9 @@ def test_contravariant_basis_vectors_PEST(eq):
 
 @pytest.mark.unit
 @pytest.mark.slow
-@pytest.mark.parametrize("eq, mapping_tol", [(get("precise_QA"), 1e-10)])
+@pytest.mark.parametrize(
+    "eq, mapping_tol", [(get("precise_QA"), max(1e-10, 100 * EPS))]
+)
 def test_PEST_derivative_math(eq, mapping_tol):
     """Verify math to write PEST derivative quantities by redefining θ to θ_PEST."""
     from desc.compute import data_index

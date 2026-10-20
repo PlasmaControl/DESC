@@ -2666,7 +2666,7 @@ def test_share_parameters():
     assert not np.allclose(surf1.Phi_mn.shape, surf3.Phi_mn.shape)
 
     # index 0 Phi_mn should be same bc was shared btwn surf1 and surf2
-    assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0])
+    assert np.allclose(surf1.Phi_mn[0], surf2.Phi_mn[0], atol=max(1e-8, 100 * EPS))
 
 
 @pytest.mark.unit

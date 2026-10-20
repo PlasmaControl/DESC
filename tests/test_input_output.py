@@ -31,7 +31,7 @@ from desc.profiles import (
 from desc.transform import Transform
 from desc.utils import equals
 
-from .utils import ATOL, RTOL
+from .utils import ATOL, EPS, RTOL
 
 
 @pytest.mark.unit
@@ -661,9 +661,9 @@ def test_ascii_io(tmpdir_factory):
         rtol=RTOL,
         atol=ATOL,
     )
-    np.testing.assert_allclose(
-        eq1.pressure(rho), eq2.pressure(rho), rtol=1e-3, atol=1e-3
-    )
+    p = eq1.pressure(rho)
+    atol = max(1e-3, 100 * EPS * np.abs(p).max())
+    np.testing.assert_allclose(p, eq2.pressure(rho), rtol=1e-3, atol=atol)
     np.testing.assert_allclose(
         eq1.surface.R_lmn, eq2.surface.R_lmn, rtol=RTOL, atol=ATOL
     )

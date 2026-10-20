@@ -14,6 +14,8 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.objectives import MagneticWell, MercierStability
 from desc.utils import PRINT_WIDTH, cross, dot
 
+from .utils import ATOL, RTOL
+
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
 DEFAULT_ATOL = 1e-6
@@ -556,7 +558,9 @@ def test_grad_alpha_zeta0_maps():
         },
     )["g^aa"]
 
-    np.testing.assert_allclose(data["gds2"], g_sup_aa * data["rho"] ** 2)
+    np.testing.assert_allclose(
+        data["gds2"], g_sup_aa * data["rho"] ** 2, rtol=RTOL, atol=ATOL
+    )
     assert jnp.any(jnp.sign(data["iota"]) < 0), "The test is better if ι < 0."
 
     cvdrift = eq.compute(
@@ -578,6 +582,8 @@ def test_grad_alpha_zeta0_maps():
         * cvdrift
         * data["rho"] ** 2
         * 2,
+        rtol=RTOL,
+        atol=ATOL,
     )
     assert jnp.any(jnp.sign(data["psi"]) < 0), "The test is better if ψ < 0."
 

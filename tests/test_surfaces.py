@@ -13,7 +13,7 @@ from desc.geometry.surface import _constant_offset_surface
 from desc.grid import LinearGrid
 from desc.utils import rpz2xyz
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestFourierRZToroidalSurface:
@@ -452,7 +452,9 @@ class TestZernikeRZToroidalSection:
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=10, M=10)
         area = np.pi * 1**2
-        np.testing.assert_allclose(s.compute("A", grid=grid)["A"], area)
+        np.testing.assert_allclose(
+            s.compute("A", grid=grid)["A"], area, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_normal(self):

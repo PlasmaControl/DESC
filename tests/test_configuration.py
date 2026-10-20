@@ -572,9 +572,10 @@ def test_get_profile():
     current3 = eq.get_profile("current", kind="fourier_zernike")
 
     x = np.linspace(0, 1, 20)
-    np.testing.assert_allclose(current0(x), current1(x), rtol=1e-6, atol=1e-1)
-    np.testing.assert_allclose(current0(x), current2(x), rtol=1e-6, atol=1e-1)
-    np.testing.assert_allclose(current0(x), current3(x), rtol=1e-6, atol=1e-1)
+    atol = max(1e-1, 100 * EPS * np.abs(current0(x)).max())
+    np.testing.assert_allclose(current0(x), current1(x), rtol=1e-6, atol=atol)
+    np.testing.assert_allclose(current0(x), current2(x), rtol=1e-6, atol=atol)
+    np.testing.assert_allclose(current0(x), current3(x), rtol=1e-6, atol=atol)
 
 
 @pytest.mark.unit

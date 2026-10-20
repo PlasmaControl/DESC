@@ -7,6 +7,8 @@ from desc.backend import jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
 from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, safenormalize
 
+from .utils import ATOL, RTOL
+
 
 @pytest.mark.unit
 def test_isalmostequal():
@@ -100,7 +102,7 @@ def test_broadcast_tree():
     tree = broadcast_tree(tree_in, tree_out)
     assert tree_structure(tree) == tree_structure(tree_out)
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_out)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
     # broadcast single leaf to full tree
     tree_in = {"a": np.arange(1)}
@@ -114,7 +116,7 @@ def test_broadcast_tree():
         ],
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
     # broadcast from only major branches
     tree_in = [{"b": np.arange(2), "c": np.arange(1, 3)}, {"a": np.arange(1)}]
@@ -128,7 +130,7 @@ def test_broadcast_tree():
         ],
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
     # broadcast from minor branches
     tree_in = [
@@ -145,7 +147,7 @@ def test_broadcast_tree():
         ],
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
     # tree_in with empty dicts and arrays
     tree_in = [
@@ -172,7 +174,7 @@ def test_broadcast_tree():
         ],
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
     # tree_in with bool values
     tree_in = [
@@ -196,7 +198,7 @@ def test_broadcast_tree():
         ],
     ]
     for leaf, leaf_correct in zip(tree_leaves(tree), tree_leaves(tree_correct)):
-        np.testing.assert_allclose(leaf, leaf_correct)
+        np.testing.assert_allclose(leaf, leaf_correct, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit

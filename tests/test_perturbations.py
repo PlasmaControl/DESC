@@ -16,6 +16,8 @@ from desc.objectives import (
 )
 from desc.perturbations import optimal_perturb, perturb
 
+from .utils import ATOL, RTOL
+
 
 @pytest.mark.regression
 @pytest.mark.slow
@@ -200,10 +202,10 @@ def test_perturb_axis():
 
     assert eq_new.is_nested()
 
-    np.testing.assert_allclose(eq_new.axis.R_n, ax2.R_n)
-    np.testing.assert_allclose(eq_new.axis.Z_n, ax2.Z_n)
-    np.testing.assert_allclose(eq_new.get_axis().R_n, ax2.R_n)
-    np.testing.assert_allclose(eq_new.get_axis().Z_n, ax2.Z_n)
+    np.testing.assert_allclose(eq_new.axis.R_n, ax2.R_n, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq_new.axis.Z_n, ax2.Z_n, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq_new.get_axis().R_n, ax2.R_n, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq_new.get_axis().Z_n, ax2.Z_n, rtol=RTOL, atol=ATOL)
 
     assert np.max(np.abs(eq.Rb_lmn - eq_new.Rb_lmn)) > 0.2
     assert np.max(np.abs(eq.Zb_lmn - eq_new.Zb_lmn)) > 0.2

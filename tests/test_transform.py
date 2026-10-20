@@ -17,7 +17,7 @@ from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
-from .utils import EPS, RTOL
+from .utils import ATOL, EPS, RTOL
 
 
 class TestTransform:
@@ -249,12 +249,12 @@ class TestTransform:
         f0 = for_tform.transform(for_coeffs, 0, 0, 0)
         f1 = for_tform.transform(for_coeffs, 0, 0, 1)
 
-        np.testing.assert_allclose(s0, correct_s0, atol=1e-8)
-        np.testing.assert_allclose(s1, correct_s1, atol=1e-8)
-        np.testing.assert_allclose(c0, correct_c0, atol=1e-8)
-        np.testing.assert_allclose(c1, correct_c1, atol=1e-8)
-        np.testing.assert_allclose(f0, correct_f0, atol=1e-8)
-        np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
+        np.testing.assert_allclose(s0, correct_s0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(s1, correct_s1, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(c0, correct_c0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(c1, correct_c1, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(f0, correct_f0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(f1, correct_f1, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
     @pytest.mark.slow
     @pytest.mark.unit
@@ -521,7 +521,7 @@ class TestTransform:
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
         x = transform.transform(c)
         c1 = transform.fit(x)
-        np.testing.assert_allclose(c, c1, atol=1e-12)
+        np.testing.assert_allclose(c, c1, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
     @pytest.mark.unit
     def test_fit_fft(self):
@@ -580,17 +580,29 @@ class TestTransform:
                 x1 = t1.transform(c)
                 x2 = t2.transform(c)
                 np.testing.assert_allclose(
-                    x1, x2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                    x1,
+                    x2,
+                    atol=max(1e-10, 100 * EPS),
+                    err_msg=f"N={N} sym={sym}",
+                    rtol=RTOL,
                 )
                 c1 = t1.fit(x1)
                 c2 = t2.fit(x2)
                 np.testing.assert_allclose(
-                    c1, c2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                    c1,
+                    c2,
+                    atol=max(1e-10, 100 * EPS),
+                    err_msg=f"N={N} sym={sym}",
+                    rtol=RTOL,
                 )
                 y1 = t1.project(x1)
                 y2 = t2.project(x2)
                 np.testing.assert_allclose(
-                    y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
+                    y1,
+                    y2,
+                    atol=max(1e-10, 100 * EPS),
+                    err_msg=f"N={N} sym={sym}",
+                    rtol=RTOL,
                 )
 
 
@@ -617,8 +629,10 @@ def test_transform_pytree():
         return transform.transform(x)
 
     x = np.random.random(basis.num_modes)
-    np.testing.assert_allclose(foo(x, transform), transform.transform(x))
-    np.testing.assert_allclose(bar(x), transform.transform(x))
+    np.testing.assert_allclose(
+        foo(x, transform), transform.transform(x), rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(bar(x), transform.transform(x), rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit

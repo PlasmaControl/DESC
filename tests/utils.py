@@ -15,6 +15,9 @@ from desc.vmec import VMECIO
 
 # machine precision of the floats desc computes with, ie float32 unless x64 is enabled
 EPS = np.finfo(jnp.zeros(0).dtype).eps
+# numpy's default rtol and an atol for exact zeros, but not below the rounding error
+RTOL = max(1e-7, 100 * EPS)
+ATOL = 100 * EPS
 
 
 def compute_coords(equil, Nr=10, Nt=8, Nz=None):

@@ -12,7 +12,7 @@ from desc.grid import Grid, LinearGrid
 from desc.io import load
 from desc.utils import cross, dot, rpz2xyz_vec
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -53,13 +53,19 @@ def test_aliases():
     # automatic case
     primary_data = eq.compute("R_tz")
     alias_data = eq.compute("R_zt")
-    np.testing.assert_allclose(primary_data["R_tz"], alias_data["R_zt"])
+    np.testing.assert_allclose(
+        primary_data["R_tz"], alias_data["R_zt"], rtol=RTOL, atol=ATOL
+    )
 
     # manual case
     primary_data = eq.compute("e_rho_rt")
     alias_data = eq.compute(["x_rrt", "e_theta_rr"])
-    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["x_rrt"])
-    np.testing.assert_allclose(primary_data["e_rho_rt"], alias_data["e_theta_rr"])
+    np.testing.assert_allclose(
+        primary_data["e_rho_rt"], alias_data["x_rrt"], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        primary_data["e_rho_rt"], alias_data["e_theta_rr"], rtol=RTOL, atol=ATOL
+    )
 
 
 @pytest.mark.unit
@@ -70,7 +76,7 @@ def test_total_volume(DummyStellarator):
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
     lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
-    np.testing.assert_allclose(lcfs_volume, total_volume)
+    np.testing.assert_allclose(lcfs_volume, total_volume, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -86,19 +92,31 @@ def test_enclosed_volumes():
     # 𝐞(ρ, θ, ζ) = R(ρ, θ, ζ) 𝐫 + Z(ρ, θ, ζ) 𝐳
     # V(ρ) = ∯ dθ dζ (∂_θ 𝐞 × ∂_ζ 𝐞) ⋅ (0, 0, Z)
     #      = ∯ dθ dζ (R₀ + ρ cos θ + 0.2 cos ζ) (2 ρ² sin²θ − 0.2 ρ sin θ sin ζ)
-    np.testing.assert_allclose(4 * R0 * np.pi**2, surf.compute(["V"])["V"])
+    np.testing.assert_allclose(
+        4 * R0 * np.pi**2, surf.compute(["V"])["V"], rtol=RTOL, atol=ATOL
+    )
     eq = Equilibrium(surface=surf)  # elliptical cross-section with torsion
     rho = np.linspace(0, 1, 64)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)", "V_rrr(r)"], grid=grid)
     np.testing.assert_allclose(
-        4 * data["R0"] * (np.pi * rho) ** 2, grid.compress(data["V(r)"])
+        4 * data["R0"] * (np.pi * rho) ** 2,
+        grid.compress(data["V(r)"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        8 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
+        8 * data["R0"] * np.pi**2 * rho,
+        grid.compress(data["V_r(r)"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
-    np.testing.assert_allclose(8 * data["R0"] * np.pi**2, data["V_rr(r)"])
-    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=3e-14)
+    np.testing.assert_allclose(
+        8 * data["R0"] * np.pi**2, data["V_rr(r)"], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        0, data["V_rrr(r)"], atol=max(3e-14, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -115,7 +133,9 @@ def test_enclosed_areas():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["A(r)"], grid=grid)
     # area = π a b = 2 π ρ²
-    np.testing.assert_allclose(2 * np.pi * rho**2, grid.compress(data["A(r)"]))
+    np.testing.assert_allclose(
+        2 * np.pi * rho**2, grid.compress(data["A(r)"]), rtol=RTOL, atol=ATOL
+    )
 
 
 @pytest.mark.unit
@@ -157,9 +177,9 @@ def test_surface_areas_2():
         data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
     )
 
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi**2)
-    np.testing.assert_allclose(At, np.pi * (11**2 - 10**2))
-    np.testing.assert_allclose(Az, np.pi)
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi**2, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(At, np.pi * (11**2 - 10**2), rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(Az, np.pi, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -189,9 +209,9 @@ def test_elongation():
     data2 = surf2.compute(["a_major/a_minor"], grid=grid)
     data3 = surf3.compute(["a_major/a_minor"], grid=grid)
     # elongation approximation is less accurate as elongation increases
-    np.testing.assert_allclose(1.0, data1["a_major/a_minor"])
-    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4)
-    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3)
+    np.testing.assert_allclose(1.0, data1["a_major/a_minor"], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(2.0, data2["a_major/a_minor"], rtol=1e-4, atol=ATOL)
+    np.testing.assert_allclose(3.0, data3["a_major/a_minor"], rtol=1e-3, atol=ATOL)
 
 
 @pytest.mark.slow
@@ -1153,10 +1173,16 @@ def test_boozer_transform_multiple_surfaces():
     data2 = eq.compute("|B|_mn_B", grid=grid2, M_booz=eq.M, N_booz=eq.N)
     data3 = eq.compute("|B|_mn_B", grid=grid3, M_booz=eq.M, N_booz=eq.N)
     np.testing.assert_allclose(
-        data1["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0]
+        data1["|B|_mn_B"],
+        data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[0],
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        data2["|B|_mn_B"], data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1]
+        data2["|B|_mn_B"],
+        data3["|B|_mn_B"].reshape((grid3.num_rho, -1))[1],
+        rtol=RTOL,
+        atol=ATOL,
     )
 
 
@@ -1168,12 +1194,12 @@ def test_compute_averages():
     rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)
     out = eq.compute("V_r(r)", grid=grid)
-    np.testing.assert_allclose(V_r(rho), out["V_r(r)"], rtol=1e-4)
+    np.testing.assert_allclose(V_r(rho), out["V_r(r)"], rtol=1e-4, atol=ATOL)
 
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])
     out = eq.compute("A", grid=grid)
-    np.testing.assert_allclose(out["A"], np.pi)
+    np.testing.assert_allclose(out["A"], np.pi, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -1671,7 +1697,11 @@ def test_PEST_derivative_math(eq, mapping_tol):
 
     for key_DESC, key_PEST in zip(keys_DESC, keys_PEST):
         np.testing.assert_allclose(
-            data[key_PEST], data[key_DESC], err_msg=f"{key_PEST} vs {key_DESC}"
+            data[key_PEST],
+            data[key_DESC],
+            err_msg=f"{key_PEST} vs {key_DESC}",
+            rtol=RTOL,
+            atol=ATOL,
         )
         # This should have spectrally accurate error tolerance, but it doesn't.
         # Checks correctness of PEST quantities beyond ensuring there are no
@@ -1683,6 +1713,7 @@ def test_PEST_derivative_math(eq, mapping_tol):
             data[key_DESC][near_zero],
             atol=2 * near_zero_atol,
             err_msg=key_PEST,
+            rtol=RTOL,
         )
         try:
             np.testing.assert_allclose(
@@ -1690,6 +1721,7 @@ def test_PEST_derivative_math(eq, mapping_tol):
                 data[key_DESC][~near_zero],
                 rtol=7e-3,
                 err_msg=key_PEST,
+                atol=ATOL,
             )
         except AssertionError as e:
             print(e)
@@ -1934,8 +1966,8 @@ def test_surface_equilibrium_geometry():
                 data_eq[thing],
                 data_surf[thing],
                 err_msg=thing,
-                rtol=1e-14,
-                atol=6e-12,
+                rtol=max(1e-14, 100 * EPS),
+                atol=max(6e-12, 100 * EPS),
             )
         # compare at zeta=0, where we expect the eq.compute and the
         # poincare surface.compute to agree for these surface basis vectors
@@ -1949,8 +1981,8 @@ def test_surface_equilibrium_geometry():
                 data_eq[thing],
                 data_surf[thing],
                 err_msg=thing,
-                rtol=3e-13,
-                atol=1e-13,
+                rtol=max(3e-13, 100 * EPS),
+                atol=max(1e-13, 100 * EPS),
             )
 
 
@@ -1984,9 +2016,14 @@ def test_clebsch_sfl_funs():
                 "phi",
             ],
         )
-        np.testing.assert_allclose(data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T)
         np.testing.assert_allclose(
-            data["|B|_z|r,a"], dot(data["grad(|B|)"], data["e_zeta|r,a"])
+            data["e_zeta|r,a"], (data["B"].T / data["B^zeta"]).T, rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            data["|B|_z|r,a"],
+            dot(data["grad(|B|)"], data["e_zeta|r,a"]),
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             data["|e_zeta|r,a|_z|r,a"],
@@ -1995,18 +2032,33 @@ def test_clebsch_sfl_funs():
             * data["B^zeta_z|r,a"]
             * np.sign(data["B^zeta"])
             / data["B^zeta"] ** 2,
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
-            data["B"], cross(data["grad(psi)"], data["grad(alpha)"])
+            data["B"],
+            cross(data["grad(psi)"], data["grad(alpha)"]),
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
-            data["B^zeta"], data["psi_r"] / data["sqrt(g)_Clebsch"]
+            data["B^zeta"],
+            data["psi_r"] / data["sqrt(g)_Clebsch"],
+            rtol=RTOL,
+            atol=ATOL,
         )
-        np.testing.assert_allclose(data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"])
-        np.testing.assert_allclose(data["B^phi"], dot(data["B"], data["grad(phi)"]))
-        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1])
         np.testing.assert_allclose(
-            data["gbdrift (secular)"], data["gbdrift (secular)/phi"] * data["phi"]
+            data["B^phi"], data["psi_r"] / data["sqrt(g)_PEST"], rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            data["B^phi"], dot(data["B"], data["grad(phi)"]), rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(data["B_phi"], data["B"][:, 1], rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(
+            data["gbdrift (secular)"],
+            data["gbdrift (secular)/phi"] * data["phi"],
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     test(get("W7-X"))

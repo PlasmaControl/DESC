@@ -41,6 +41,8 @@ from desc.objectives.normalization import compute_scaling_factors
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
+from .utils import ATOL, RTOL
+
 pytest_mpl_tol = 7.8
 pytest_mpl_remove_text = True
 
@@ -92,25 +94,32 @@ class TestBootstrapCompute:
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
                 grid.expand(np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])),
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
                 grid.expand(1 / np.sqrt([13.0**2 - 2.6**2, 9.0**2 - 3.7**2])),
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
                 f_t_data["min_tz |B|"],
                 grid.expand(np.array([13.0 - 2.6, 9.0 - 3.7])),
                 rtol=1e-4,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
                 f_t_data["max_tz |B|"],
                 grid.expand(np.array([13.0 + 2.6, 9.0 + 3.7])),
                 rtol=1e-4,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
                 f_t_data["effective r/R0"],
                 grid.expand(np.array([2.6 / 13.0, 3.7 / 9.0])),
                 rtol=1e-3,
+                atol=ATOL,
             )
 
     @pytest.mark.unit
@@ -158,23 +167,29 @@ class TestBootstrapCompute:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
 
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], grid.expand(B0 / (1 + epsilon))
+                f_t_data["min_tz |B|"],
+                grid.expand(B0 / (1 + epsilon)),
+                rtol=RTOL,
+                atol=ATOL,
             )
             # Looser tolerance for Bmax since there is no grid point there:
             Bmax = B0 / (1 - epsilon)
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], grid.expand(Bmax), rtol=0.001
+                f_t_data["max_tz |B|"], grid.expand(Bmax), rtol=0.001, atol=ATOL
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"], grid.expand(epsilon), rtol=1e-4
+                f_t_data["effective r/R0"], grid.expand(epsilon), rtol=1e-4, atol=ATOL
             )
             # Eq (A8):
             fsa_B2 = B0**2 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<|B|^2>"], grid.expand(fsa_B2), rtol=1e-6
+                f_t_data["<|B|^2>"], grid.expand(fsa_B2), rtol=1e-6, atol=ATOL
             )
             np.testing.assert_allclose(
-                f_t_data["<1/|B|>"], grid.expand((2 + epsilon**2) / (2 * B0))
+                f_t_data["<1/|B|>"],
+                grid.expand((2 + epsilon**2) / (2 * B0)),
+                rtol=RTOL,
+                atol=ATOL,
             )
             # Note the loose tolerance for this next test since we do not expect precise
             # agreement.
@@ -679,11 +694,13 @@ class TestBootstrapCompute:
                 alphas[j_nu_star, :] = J_dot_B_data["alpha"]
                 nu_e_stars[j_nu_star, :] = J_dot_B_data["nu_e_star"]
                 nu_i_stars[j_nu_star, :] = J_dot_B_data["nu_i_star"]
-                np.testing.assert_allclose(J_dot_B_data["nu_e_star"], target_nu_e_star)
+                np.testing.assert_allclose(
+                    J_dot_B_data["nu_e_star"], target_nu_e_star, rtol=RTOL, atol=ATOL
+                )
                 # nu*i is tiny bit different from the target since
                 # lnLambda_i != lnLambda_e:
                 np.testing.assert_allclose(
-                    J_dot_B_data["nu_i_star"], target_nu_i_star, rtol=0.2
+                    J_dot_B_data["nu_i_star"], target_nu_i_star, rtol=0.2, atol=ATOL
                 )
 
             # Make a plot, matching the axis ranges of Redl's

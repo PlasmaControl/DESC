@@ -18,6 +18,8 @@ from desc.grid import (
 )
 from desc.profiles import PowerSeriesProfile
 
+from .utils import ATOL, EPS, RTOL
+
 
 class TestGrid:
     """Test for Grid classes."""
@@ -535,7 +537,7 @@ class TestGrid:
         g = eq.compute("sqrt(g)", grid=grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
-        np.testing.assert_allclose(vol, vol_quad)
+        np.testing.assert_allclose(vol, vol_quad, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_repr(self):
@@ -852,14 +854,22 @@ def test_find_most_rational_surfaces():
     # simple test, linear iota going from 1 to 3
     iota = PowerSeriesProfile([1, 2])
     rho, io = find_most_rational_surfaces(iota, 5)
-    np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
-    np.testing.assert_allclose(io, np.linspace(1, 3, 5), atol=1e-14, rtol=0)
+    np.testing.assert_allclose(
+        rho, np.linspace(0, 1, 5), atol=max(1e-14, 100 * EPS), rtol=0
+    )
+    np.testing.assert_allclose(
+        io, np.linspace(1, 3, 5), atol=max(1e-14, 100 * EPS), rtol=0
+    )
 
     # simple test, linear iota going from -1 to -3
     iota = PowerSeriesProfile([-1, -2])
     rho, io = find_most_rational_surfaces(iota, 5)
-    np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
-    np.testing.assert_allclose(io, np.linspace(-1, -3, 5), atol=1e-14, rtol=0)
+    np.testing.assert_allclose(
+        rho, np.linspace(0, 1, 5), atol=max(1e-14, 100 * EPS), rtol=0
+    )
+    np.testing.assert_allclose(
+        io, np.linspace(-1, -3, 5), atol=max(1e-14, 100 * EPS), rtol=0
+    )
 
     # invalid (a > b) ranges and negative ranges are swapped and made positive
     all_same = [

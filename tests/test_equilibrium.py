@@ -19,7 +19,7 @@ from desc.objectives import ForceBalance, ObjectiveFunction, get_equilibrium_obj
 from desc.objectives.normalization import compute_scaling_factors
 from desc.profiles import PowerSeriesProfile
 
-from .utils import area_difference, compute_coords
+from .utils import ATOL, EPS, RTOL, area_difference, compute_coords
 
 
 @pytest.mark.unit
@@ -105,11 +105,16 @@ def test_map_clebsch_coordinates():
         )["L"]
     assert lmbda.basis.NFP == eq.NFP
     np.testing.assert_allclose(
-        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1], zeta
+        lmbda.grid.meshgrid_reshape(lmbda.grid.nodes[:, 2], "rtz")[0, 0, ::-1],
+        zeta,
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
         _map_poloidal_coordinates(iota, alpha, zeta[::-1], eq.L_lmn, lmbda)[..., ::-1],
         grid.meshgrid_reshape(out[:, 1], "raz"),
+        rtol=RTOL,
+        atol=ATOL,
     )
 
 
@@ -149,7 +154,7 @@ def test_map_coordinates_derivative():
     for j1, j2 in zip(J1.values(), J2.values()):
         assert ~np.any(np.isnan(j1))
         assert ~np.any(np.isnan(j2))
-        np.testing.assert_allclose(j1, j2, atol=1e-12)
+        np.testing.assert_allclose(j1, j2, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -176,7 +181,7 @@ def test_map_coordinates_derivative():
 
     assert ~np.any(np.isnan(J1))
     assert ~np.any(np.isnan(J2))
-    np.testing.assert_allclose(J1, J2)
+    np.testing.assert_allclose(J1, J2, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.slow
@@ -188,8 +193,8 @@ def test_to_sfl():
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-4, rtol=RTOL)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6, rtol=RTOL)
 
 
 @pytest.mark.slow

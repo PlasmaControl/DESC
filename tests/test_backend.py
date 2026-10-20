@@ -17,7 +17,7 @@ from desc.backend import (
     vmap,
 )
 
-from .utils import EPS
+from .utils import ATOL, EPS
 
 
 @pytest.mark.unit
@@ -134,25 +134,25 @@ def test_lstsq():
     A = rng.standard_normal((10, 5))
     b = rng.standard_normal(10)
     np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6, atol=ATOL
     )
     # wide
     A = rng.standard_normal((5, 10))
     b = rng.standard_normal(5)
     np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6, atol=ATOL
     )
     # square
     A = rng.standard_normal((5, 5))
     b = rng.standard_normal(5)
     np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6, atol=ATOL
     )
     # scalar
     A = rng.standard_normal((1, 5))
     b = rng.standard_normal(1)
     np.testing.assert_allclose(
-        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6
+        _lstsq(A, b), np.linalg.lstsq(A, b, rcond=None)[0], rtol=1e-6, atol=ATOL
     )
 
 

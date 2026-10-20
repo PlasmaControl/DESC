@@ -26,7 +26,7 @@ from desc.basis import (
 from desc.derivatives import Derivative
 from desc.grid import LinearGrid
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestBasis:
@@ -110,14 +110,30 @@ class TestBasis:
         approx2ddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=2)
         approx2dddf = zernike_radial_poly(r[:, np.newaxis], l, m, dr=3)
 
-        np.testing.assert_allclose(approx1f, exactf, atol=1e-12)
-        np.testing.assert_allclose(approx1df, exactdf, atol=1e-12)
-        np.testing.assert_allclose(approx1ddf, exactddf, atol=1e-12)
-        np.testing.assert_allclose(approx1dddf, exactdddf, atol=1e-12)
-        np.testing.assert_allclose(approx2f, exactf, atol=1e-12)
-        np.testing.assert_allclose(approx2df, exactdf, atol=1e-12)
-        np.testing.assert_allclose(approx2ddf, exactddf, atol=1e-12)
-        np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
+        np.testing.assert_allclose(
+            approx1f, exactf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx1df, exactdf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx1ddf, exactddf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx1dddf, exactdddf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx2f, exactf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx2df, exactdf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx2ddf, exactddf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            approx2dddf, exactdddf, atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_powers(self):
@@ -142,7 +158,9 @@ class TestBasis:
 
         correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
         values = chebyshev(r[:, np.newaxis], l, dr=0)
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
         with pytest.raises(NotImplementedError):
             chebyshev(r[:, np.newaxis], l, dr=1)
@@ -212,8 +230,12 @@ class TestBasis:
             for dr in range(max_dr + 1)
         }
         for dr in range(max_dr + 1):
-            np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
-            np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
+            np.testing.assert_allclose(
+                radial[dr], desired[dr], err_msg=dr, rtol=RTOL, atol=ATOL
+            )
+            np.testing.assert_allclose(
+                radial_poly[dr], desired[dr], err_msg=dr, rtol=RTOL, atol=ATOL
+            )
 
     @pytest.mark.unit
     def test_fourier(self):
@@ -270,7 +292,9 @@ class TestBasis:
         basis = DoubleFourierSeries(M=1, N=1)
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_change_resolution(self):

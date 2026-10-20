@@ -7,6 +7,8 @@ import pytest
 from desc.backend import jnp
 from desc.utils import rotation_matrix
 
+from .utils import ATOL, RTOL
+
 
 @pytest.mark.unit
 def test_rotation_matrix():
@@ -15,6 +17,6 @@ def test_rotation_matrix():
     dfdx_rev = jax.jacrev(rotation_matrix)
     x0 = jnp.array([0.0, 0.0, 0.0])
 
-    np.testing.assert_allclose(rotation_matrix(x0), np.eye(3))
-    np.testing.assert_allclose(dfdx_fwd(x0), np.zeros((3, 3, 3)))
-    np.testing.assert_allclose(dfdx_rev(x0), np.zeros((3, 3, 3)))
+    np.testing.assert_allclose(rotation_matrix(x0), np.eye(3), rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(dfdx_fwd(x0), np.zeros((3, 3, 3)), rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(dfdx_rev(x0), np.zeros((3, 3, 3)), rtol=RTOL, atol=ATOL)

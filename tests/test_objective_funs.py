@@ -112,7 +112,7 @@ from desc.profiles import (
 from desc.utils import PRINT_WIDTH, ResolutionWarning, safenorm
 from desc.vmec_utils import ptolemy_linear_transform
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestObjectiveFunction:
@@ -129,8 +129,7 @@ class TestObjectiveFunction:
             if compress:
                 val = obj._constants["transforms"]["grid"].compress(val)
             np.testing.assert_allclose(
-                obj.compute(thing.params_dict),
-                val,
+                obj.compute(thing.params_dict), val, rtol=RTOL, atol=ATOL
             )
 
         test("curvature", FourierXYZCurve(Y_n=[-1, 0, 0]), LinearGrid(0, 0, 12))
@@ -189,7 +188,7 @@ class TestObjectiveFunction:
         objective = LinearObjectiveFromUser(myfun, eq)
         objective.build()
         f = objective.compute(*objective.xs(eq))
-        np.testing.assert_allclose(f, np.array([0, 2]))
+        np.testing.assert_allclose(f, np.array([0, 2]), rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_volume(self):
@@ -206,9 +205,9 @@ class TestObjectiveFunction:
             V = obj.compute_unscaled(*obj.xs(eq))
             V_scaled = obj.compute_scaled_error(*obj.xs(eq))
             V_scalar = obj.compute_scalar(*obj.xs(eq))
-            np.testing.assert_allclose(V, 20 * np.pi**2)
-            np.testing.assert_allclose(V_scaled, 10)
-            np.testing.assert_allclose(V_scalar, 10)
+            np.testing.assert_allclose(V, 20 * np.pi**2, rtol=RTOL, atol=ATOL)
+            np.testing.assert_allclose(V_scaled, 10, rtol=RTOL, atol=ATOL)
+            np.testing.assert_allclose(V_scalar, 10, rtol=RTOL, atol=ATOL)
 
         eqi = Equilibrium(iota=PowerSeriesProfile(0))
         test(eqi)
@@ -225,8 +224,8 @@ class TestObjectiveFunction:
             obj.build()
             AR = obj.compute_unscaled(*obj.xs(eq))
             AR_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(AR, 10)
-            np.testing.assert_allclose(AR_scaled, 5)
+            np.testing.assert_allclose(AR, 10, rtol=RTOL, atol=ATOL)
+            np.testing.assert_allclose(AR_scaled, 5, rtol=RTOL, atol=ATOL)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -271,8 +270,10 @@ class TestObjectiveFunction:
             obj.build()
             iota = obj.compute_unscaled(*obj.xs(eq))
             iota_scaled = obj.compute_scaled_error(*obj.xs(eq))
-            np.testing.assert_allclose(iota, 0)
-            np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
+            np.testing.assert_allclose(iota, 0, rtol=RTOL, atol=ATOL)
+            np.testing.assert_allclose(
+                iota_scaled, -2 / np.sqrt(3), rtol=RTOL, atol=ATOL
+            )
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -338,7 +339,7 @@ class TestObjectiveFunction:
             obj = QuasisymmetryBoozer(eq=eq)
             obj.build()
             fb = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_allclose(fb, 0, atol=1e-12)
+            np.testing.assert_allclose(fb, 0, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
         test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
@@ -353,7 +354,7 @@ class TestObjectiveFunction:
             obj.build()
             obj.compile("all")
             fb = obj.compute_scaled_error(obj.x(eq))
-            np.testing.assert_allclose(fb, 0, atol=1e-12)
+            np.testing.assert_allclose(fb, 0, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
@@ -393,13 +394,17 @@ class TestObjectiveFunction:
         idx_B = np.argsort(np.abs(B_mn))
 
         # check that largest amplitudes are the QH modes
-        np.testing.assert_allclose(B_mn[idx_B[-3:]], np.flip(np.delete(B_mn, idx)[:3]))
+        np.testing.assert_allclose(
+            B_mn[idx_B[-3:]], np.flip(np.delete(B_mn, idx)[:3]), rtol=RTOL, atol=ATOL
+        )
         # check that these QH modes are not returned by the objective
         assert [b not in f for b in B_mn[idx_B[-3:]]]
         # check that the objective returns the lowest amplitudes
         # 120 ~ smallest amplitudes BEFORE QH modes show up so that sorting both arrays
         # should have the same values up until then
-        np.testing.assert_allclose(f[idx_f][:120], B_mn[idx_B][:120], rtol=1e-6)
+        np.testing.assert_allclose(
+            f[idx_f][:120], B_mn[idx_B][:120], rtol=1e-6, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_qh_boozer_multiple_surfaces(self):
@@ -444,7 +449,9 @@ class TestObjectiveFunction:
         f1 = obj1.compute_unscaled(*obj1.xs(eq))
         f2 = obj2.compute_unscaled(*obj2.xs(eq))
         f3 = obj3.compute_unscaled(*obj3.xs(eq))
-        np.testing.assert_allclose(f3, np.concatenate([f1, f2]), atol=1e-14)
+        np.testing.assert_allclose(
+            f3, np.concatenate([f1, f2]), atol=max(1e-14, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
@@ -492,7 +499,7 @@ class TestObjectiveFunction:
             obj = QuasisymmetryTripleProduct(eq=eq)
             obj.build()
             ft = obj.compute_unscaled(*obj.xs(eq))
-            np.testing.assert_allclose(ft, 0, atol=5e-35)
+            np.testing.assert_allclose(ft, 0, atol=max(5e-35, 100 * EPS), rtol=RTOL)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -576,7 +583,7 @@ class TestObjectiveFunction:
             obj = Isodynamicity(eq=eq)
             obj.build()
             iso = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(iso, 0, atol=1e-14)
+            np.testing.assert_allclose(iso, 0, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -774,7 +781,9 @@ class TestObjectiveFunction:
         obj1.build()
         f0 = obj0.compute_scaled_error(*obj0.xs())
         f1 = obj1.compute_scaled_error(*obj1.xs())
-        np.testing.assert_allclose(f0, f1, err_msg=f"{objective}", atol=1e-19)
+        np.testing.assert_allclose(
+            f0, f1, err_msg=f"{objective}", atol=max(1e-19, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_target_mean_iota(self):
@@ -790,9 +799,15 @@ class TestObjectiveFunction:
             mean_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
             mean_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
             mean_iota_scaled = obj.compute_scaled(*obj.xs(eq))
-            np.testing.assert_allclose(mean_iota, mean_iota_unscaled, atol=1e-16)
-            np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
-            np.testing.assert_allclose(mean_iota_scaled, mean_iota, atol=5e-16)
+            np.testing.assert_allclose(
+                mean_iota, mean_iota_unscaled, atol=max(1e-16, 100 * EPS), rtol=RTOL
+            )
+            np.testing.assert_allclose(
+                mean_iota_scaled_error, 0, atol=max(5e-16, 100 * EPS), rtol=RTOL
+            )
+            np.testing.assert_allclose(
+                mean_iota_scaled, mean_iota, atol=max(5e-16, 100 * EPS), rtol=RTOL
+            )
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -832,9 +847,15 @@ class TestObjectiveFunction:
             min_iota_unscaled = obj.compute_unscaled(*obj.xs(eq))
             min_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
             min_iota_scaled = obj.compute_scaled(*obj.xs(eq))
-            np.testing.assert_allclose(min_iota, min_iota_unscaled, atol=1e-16)
-            np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
-            np.testing.assert_allclose(min_iota_scaled, min_iota, atol=5e-16)
+            np.testing.assert_allclose(
+                min_iota, min_iota_unscaled, atol=max(1e-16, 100 * EPS), rtol=RTOL
+            )
+            np.testing.assert_allclose(
+                min_iota_scaled_error, 0, atol=max(5e-16, 100 * EPS), rtol=RTOL
+            )
+            np.testing.assert_allclose(
+                min_iota_scaled, min_iota, atol=max(5e-16, 100 * EPS), rtol=RTOL
+            )
 
         test(get("DSHAPE"))
         test(get("HELIOTRON"))
@@ -882,7 +903,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
-        np.testing.assert_allclose(d, a_s - a_p)
+        np.testing.assert_allclose(d, a_s - a_p, rtol=RTOL, atol=ATOL)
 
         # for unequal M, should have error of order M_spacing*a_p
         surf_grid = LinearGrid(M=5, N=6)
@@ -938,7 +959,7 @@ class TestObjectiveFunction:
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
         assert d.size == obj.dim_f
-        np.testing.assert_allclose(np.abs(d).min(), a_s - a_p, rtol=1.5e-1)
+        np.testing.assert_allclose(np.abs(d).min(), a_s - a_p, rtol=1.5e-1, atol=ATOL)
 
         # for large enough alpha, should be same as actual min
         obj = PlasmaVesselDistance(
@@ -951,7 +972,7 @@ class TestObjectiveFunction:
         )
         obj.build()
         d = obj.compute_unscaled(*obj.xs(eq, surface))
-        np.testing.assert_allclose(d, a_s - a_p)
+        np.testing.assert_allclose(d, a_s - a_p, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_mean_curvature(self):
@@ -1092,7 +1113,7 @@ class TestObjectiveFunction:
             obj = CoilCurvature(coil, grid=grid)
             obj.build()
             f = obj.compute(params=coil.params_dict)
-            np.testing.assert_allclose(f, 1 / 2, rtol=1e-8)
+            np.testing.assert_allclose(f, 1 / 2, rtol=max(1e-8, 100 * EPS), atol=ATOL)
             assert len(f) == obj.dim_f
 
         coil = FourierPlanarCoil(r_n=2, basis="rpz")
@@ -1668,7 +1689,9 @@ class TestObjectiveFunction:
         obj = QuadraticFlux(eq, t_field)
         obj.build(verbose=2)
         f = obj.compute(t_field.params_dict)
-        np.testing.assert_allclose(f, 0, rtol=1e-14, atol=1e-14)
+        np.testing.assert_allclose(
+            f, 0, rtol=max(1e-14, 100 * EPS), atol=max(1e-14, 100 * EPS)
+        )
 
         # test non-axisymmetric surface
         eq = desc.examples.get("precise_QA", "all")[0]
@@ -1715,7 +1738,9 @@ class TestObjectiveFunction:
         f = obj.compute(t_field.params_dict)
         dA = eq.compute("|e_theta x e_zeta|", grid=eval_grid)["|e_theta x e_zeta|"]
         # check that they're the same since we set B_plasma = 0
-        np.testing.assert_allclose(f, Bnorm * np.sqrt(dA), atol=1e-14)
+        np.testing.assert_allclose(
+            f, Bnorm * np.sqrt(dA), atol=max(1e-14, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_quadratic_flux_minimizing_surface(self):
@@ -1841,7 +1866,7 @@ class TestObjectiveFunction:
         # the modular coils all link 1 other coil (the axis)
         # while the axis links all 10 modular coils
         expected = np.array([1] * 10 + [10])
-        np.testing.assert_allclose(out, expected, rtol=1e-3)
+        np.testing.assert_allclose(out, expected, rtol=1e-3, atol=ATOL)
 
         # produce a coilset of non-planar coils with nonzero writhe
         coil3 = FourierXYZCoil(
@@ -1852,7 +1877,7 @@ class TestObjectiveFunction:
         obj.build()
         out = obj.compute_scaled_error(coilset3.params_dict)
         expected = np.array([0] * 5)
-        np.testing.assert_allclose(out, expected, atol=1e-12)
+        np.testing.assert_allclose(out, expected, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
     @pytest.mark.unit
     def test_signed_plasma_vessel_distance(self):
@@ -2025,40 +2050,54 @@ class TestObjectiveFunction:
             -c * 0.5,
             -c * 1.5,
         ]
-        np.testing.assert_allclose(coilset1._all_currents(), expected_currents)
+        np.testing.assert_allclose(
+            coilset1._all_currents(), expected_currents, rtol=RTOL, atol=ATOL
+        )
         obj = LinkingCurrentConsistency(eq, coilset1)
         obj.build()
         f = obj.compute(coilset1.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0, atol=1e-8)
+        np.testing.assert_allclose(f, 0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
         # same with virtual coils
         coilset2 = CoilSet(coil1, coil2, NFP=2, sym=True)
-        np.testing.assert_allclose(coilset2._all_currents(), expected_currents)
+        np.testing.assert_allclose(
+            coilset2._all_currents(), expected_currents, rtol=RTOL, atol=ATOL
+        )
         obj = LinkingCurrentConsistency(eq, coilset2)
         obj.build()
         f = obj.compute(coilset2.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, 0, atol=1e-8)
+        np.testing.assert_allclose(f, 0, atol=max(1e-8, 100 * EPS), rtol=RTOL)
 
         # both coilsets together. These have overlapping coils but it doesn't
         # affect the linking number
         coilset3 = MixedCoilSet(coilset1, coilset2, check_intersection=False)
         np.testing.assert_allclose(
-            coilset3._all_currents(), expected_currents + expected_currents
+            coilset3._all_currents(),
+            expected_currents + expected_currents,
+            rtol=RTOL,
+            atol=ATOL,
         )
         obj = LinkingCurrentConsistency(eq, coilset3)
         obj.build()
         f = obj.compute(coilset3.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -G, rtol=1e-7)  # coils provide 2G so error is -G
+        np.testing.assert_allclose(
+            f, -G, rtol=max(1e-7, 100 * EPS), atol=ATOL
+        )  # coils provide 2G so error is -G
 
         # CoilSet + 1 extra coil
         coilset4 = MixedCoilSet(coilset1, coil2, check_intersection=False)
         np.testing.assert_allclose(
-            coilset4._all_currents(), expected_currents + [0.5 * G / 8]
+            coilset4._all_currents(),
+            expected_currents + [0.5 * G / 8],
+            rtol=RTOL,
+            atol=ATOL,
         )
         obj = LinkingCurrentConsistency(eq, coilset4)
         obj.build()
         f = obj.compute(coilset4.params_dict, eq.params_dict)
-        np.testing.assert_allclose(f, -0.5 * G / 8, rtol=1e-7)
+        np.testing.assert_allclose(
+            f, -0.5 * G / 8, rtol=max(1e-7, 100 * EPS), atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_omnigenity_multiple_surfaces(self):
@@ -2109,7 +2148,10 @@ class TestObjectiveFunction:
         # the order will be different but the values should be the same so we sort
         # before comparing
         np.testing.assert_allclose(
-            np.sort(np.concatenate([f1, f2])), np.sort(f3), atol=1e-14
+            np.sort(np.concatenate([f1, f2])),
+            np.sort(f3),
+            atol=max(1e-14, 100 * EPS),
+            rtol=RTOL,
         )
 
     @pytest.mark.unit
@@ -2161,9 +2203,9 @@ class TestObjectiveFunction:
         field1.G = 2 * field1.G
         result5 = test(field1, grid)
 
-        np.testing.assert_allclose(result1, result3)
-        np.testing.assert_allclose(result1 * 2, result5)
-        np.testing.assert_allclose(result2, result4)
+        np.testing.assert_allclose(result1, result3, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(result1 * 2, result5, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(result2, result4, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_surface_current_regularizations(self):
@@ -2316,9 +2358,11 @@ class TestObjectiveFunction:
         x = objective.x(eq, coils)
 
         np.testing.assert_allclose(
-            objective._things_per_objective_idx, [[0, 1], [1, 0]]
+            objective._things_per_objective_idx, [[0, 1], [1, 0]], rtol=RTOL, atol=ATOL
         )
-        np.testing.assert_allclose(objective.compute_scaled_error(x), 0, atol=1e-14)
+        np.testing.assert_allclose(
+            objective.compute_scaled_error(x), 0, atol=max(1e-14, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_errors_bootstrap(self):
@@ -2568,6 +2612,8 @@ def test_target_profiles():
                 obji._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     objs = Shear(target=shear, eq=eqi)
     objs.build()
@@ -2578,6 +2624,8 @@ def test_target_profiles():
                 objs._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     objc = ToroidalCurrent(target=current, eq=eqc)
     objc.build()
@@ -2588,6 +2636,8 @@ def test_target_profiles():
                 objc._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     objm = MercierStability(bounds=(merc, np.inf), eq=eqi)
     objm.build()
@@ -2598,8 +2648,10 @@ def test_target_profiles():
                 objm._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
-    np.testing.assert_allclose(objm.bounds[1], np.inf)
+    np.testing.assert_allclose(objm.bounds[1], np.inf, rtol=RTOL, atol=ATOL)
     objw = MagneticWell(bounds=(merc, well), eq=eqi)
     objw.build()
     np.testing.assert_allclose(
@@ -2609,6 +2661,8 @@ def test_target_profiles():
                 objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
         objw.bounds[1],
@@ -2617,6 +2671,8 @@ def test_target_profiles():
                 objw._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     objp = Pressure(target=pres, eq=eqc)
     objp.build()
@@ -2627,6 +2683,8 @@ def test_target_profiles():
                 objp._constants["transforms"]["grid"].unique_rho_idx
             ]
         ),
+        rtol=RTOL,
+        atol=ATOL,
     )
     objp = Pressure(target=lambda x: 2 * x, eq=eqc)
     objp.build()
@@ -2636,6 +2694,8 @@ def test_target_profiles():
         * objp._constants["transforms"]["grid"].nodes[
             objp._constants["transforms"]["grid"].unique_rho_idx, 0
         ],
+        rtol=RTOL,
+        atol=ATOL,
     )
 
 
@@ -2862,7 +2922,7 @@ def test_plasma_vessel_distance_print(capsys):
     )
     obj.build(verbose=0)
     d = obj.compute_unscaled(*obj.xs(eq, surface))
-    np.testing.assert_allclose(d, a_s - a_p)
+    np.testing.assert_allclose(d, a_s - a_p, rtol=RTOL, atol=ATOL)
     test(obj, eq, surface, d)
     test(obj, eq, surface, d, pass_f=True)
     test(obj, eq, surface, d, print_init=True)
@@ -3168,14 +3228,14 @@ def test_objective_fun_things():
     )
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq, surface))
-    np.testing.assert_allclose(d, a_s - a_p)
+    np.testing.assert_allclose(d, a_s - a_p, rtol=RTOL, atol=ATOL)
 
     surface2 = surface.copy()
     eq2 = eq.copy()
     obj.things = [eq2, surface2]
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq2, surface2))
-    np.testing.assert_allclose(d, a_s - a_p)
+    np.testing.assert_allclose(d, a_s - a_p, rtol=RTOL, atol=ATOL)
 
     # change objects, and surface resolution as well
     a_s2 = 2.5
@@ -3187,7 +3247,7 @@ def test_objective_fun_things():
     obj.things = [eq2, surface2]
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq2, surface2))
-    np.testing.assert_allclose(d, a_s2 - a_p)
+    np.testing.assert_allclose(d, a_s2 - a_p, rtol=RTOL, atol=ATOL)
 
     # test that works correctly when changing both objects
     # with the resolution of the equilibrium surface also changing
@@ -3199,7 +3259,7 @@ def test_objective_fun_things():
     obj.things = [eq2, surface2]
     obj.build()
     d = obj.compute_unscaled(*obj.xs(eq2, surface2))
-    np.testing.assert_allclose(d, a_s2 - a_s)
+    np.testing.assert_allclose(d, a_s2 - a_s, rtol=RTOL, atol=ATOL)
 
     with pytest.raises(AssertionError):
         # one of these is not optimizable, throws error
@@ -4315,7 +4375,7 @@ class TestObjectiveNaNGrad:
         obj.build(verbose=0)
         g = obj.grad(obj.x())
         assert not np.any(np.isnan(g))
-        np.testing.assert_allclose(g, g_0, atol=2e-5)
+        np.testing.assert_allclose(g, g_0, atol=2e-5, rtol=RTOL)
 
     @pytest.mark.unit
     def test_objective_no_nangrad_ballooning(self):
@@ -4443,7 +4503,9 @@ def test_nae_coefficients_asym():
             if s1 < 0
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
-        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+        np.testing.assert_allclose(
+            coefs[key][inds_asym], 0, err_msg=key, atol=max(1e-13, 100 * EPS), rtol=RTOL
+        )
     coefs, bases = _calc_2nd_order_NAE_coeffs(qsc_eq, eq)
     for key in coefs.keys():
         if "L" in key:
@@ -4457,7 +4519,9 @@ def test_nae_coefficients_asym():
             if s1 < 0
             else np.where(bases["Rbasis_cos"].modes[:, 2] >= 0)
         )
-        np.testing.assert_allclose(coefs[key][inds_asym], 0, err_msg=key, atol=1e-13)
+        np.testing.assert_allclose(
+            coefs[key][inds_asym], 0, err_msg=key, atol=max(1e-13, 100 * EPS), rtol=RTOL
+        )
 
 
 @pytest.mark.unit

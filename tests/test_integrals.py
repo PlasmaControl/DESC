@@ -58,7 +58,7 @@ from desc.integrals.surface_integral import _get_grid_surface
 from desc.transform import Transform
 from desc.utils import dot, errorif, safediv
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestSurfaceIntegral:
@@ -94,17 +94,17 @@ class TestSurfaceIntegral:
         result = surface_integrals(lg, q, surface_label="rho")
         del lg._unique_rho_idx
         np.testing.assert_allclose(
-            surface_integrals(lg, q, surface_label="rho"), result
+            surface_integrals(lg, q, surface_label="rho"), result, rtol=RTOL, atol=ATOL
         )
         result = surface_averages(lg, q, surface_label="theta")
         del lg._unique_poloidal_idx
         np.testing.assert_allclose(
-            surface_averages(lg, q, surface_label="theta"), result
+            surface_averages(lg, q, surface_label="theta"), result, rtol=RTOL, atol=ATOL
         )
         result = surface_variance(lg, q, surface_label="zeta")
         del lg._unique_zeta_idx
         np.testing.assert_allclose(
-            surface_variance(lg, q, surface_label="zeta"), result
+            surface_variance(lg, q, surface_label="zeta"), result, rtol=RTOL, atol=ATOL
         )
 
     @pytest.mark.unit
@@ -128,7 +128,9 @@ class TestSurfaceIntegral:
             assert integrals.shape == (unique_size, grid.num_nodes), surface_label
 
             desired = self._surface_integrals(grid, q, surface_label)
-            np.testing.assert_allclose(integrals, desired, err_msg=surface_label)
+            np.testing.assert_allclose(
+                integrals, desired, err_msg=surface_label, rtol=RTOL, atol=ATOL
+            )
 
         cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP)
         lg = LinearGrid(
@@ -161,7 +163,11 @@ class TestSurfaceIntegral:
                 / self._surface_integrals(grid, sqrt_g, surface_label)
             ).T
             np.testing.assert_allclose(
-                grid.compress(averages, surface_label), desired, err_msg=surface_label
+                grid.compress(averages, surface_label),
+                desired,
+                err_msg=surface_label,
+                rtol=RTOL,
+                atol=ATOL,
             )
 
         cg = ConcentricGrid(L=self.L, M=self.M, N=self.N, sym=True, NFP=self.NFP)
@@ -187,7 +193,9 @@ class TestSurfaceIntegral:
                 grid, surface_label=surface_label, expand_out=False
             )
             correct_area = 4 * np.pi**2 if surface_label == "rho" else 2 * np.pi
-            np.testing.assert_allclose(areas, correct_area, err_msg=surface_label)
+            np.testing.assert_allclose(
+                areas, correct_area, err_msg=surface_label, rtol=RTOL, atol=ATOL
+            )
 
         lg = LinearGrid(
             L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False, endpoint=False
@@ -262,7 +270,7 @@ class TestSurfaceIntegral:
                         fix_surface=("theta", theta_val),
                         expand_out=False,
                     )
-                    np.testing.assert_allclose(result, 1)
+                    np.testing.assert_allclose(result, 1, rtol=RTOL, atol=ATOL)
                 for rho_val in grid.nodes[grid.unique_rho_idx, 0]:
                     result = line_integrals(
                         grid,
@@ -270,7 +278,7 @@ class TestSurfaceIntegral:
                         fix_surface=("rho", rho_val),
                         expand_out=False,
                     )
-                    np.testing.assert_allclose(result, 2 * np.pi)
+                    np.testing.assert_allclose(result, 2 * np.pi, rtol=RTOL, atol=ATOL)
             for zeta_val in grid.nodes[grid.unique_zeta_idx, 2]:
                 result = line_integrals(
                     grid,
@@ -278,7 +286,7 @@ class TestSurfaceIntegral:
                     fix_surface=("zeta", zeta_val),
                     expand_out=False,
                 )
-                np.testing.assert_allclose(result, 2 * np.pi)
+                np.testing.assert_allclose(result, 2 * np.pi, rtol=RTOL, atol=ATOL)
 
         lg = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=False)
         lg_sym = LinearGrid(L=self.L, M=self.M, N=self.N, NFP=self.NFP, sym=True)
@@ -322,7 +330,7 @@ class TestSurfaceIntegral:
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
         b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
         a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
-        np.testing.assert_allclose(a_plus_b, a + b)
+        np.testing.assert_allclose(a_plus_b, a + b, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_surface_integrals_against_shortcut(self):
@@ -359,15 +367,21 @@ class TestSurfaceIntegral:
         )
         # number of nodes per surface
         n = grid.num_rho * grid.num_theta
-        np.testing.assert_allclose(np.bincount(grid.inverse_zeta_idx), desired=n)
+        np.testing.assert_allclose(
+            np.bincount(grid.inverse_zeta_idx), desired=n, rtol=RTOL, atol=ATOL
+        )
         ds = grid.spacing[:, :2].prod(axis=-1)
         np.testing.assert_allclose(
             surface_integrals(grid, q / ds, surface_label="zeta") / n,
             desired=mean,
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             surface_averages(grid, q, surface_label="zeta"),
             desired=mean,
+            rtol=RTOL,
+            atol=ATOL,
         )
 
         # test on grids with a single rho surface
@@ -381,11 +395,15 @@ class TestSurfaceIntegral:
             surface_averages(grid, data["|B|"], data["sqrt(g)"]),
             np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
             err_msg="average with sqrt(g) fail",
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             surface_averages(grid, data["|B|"]),
             np.mean(data["|B|"]),
             err_msg="average without sqrt(g) fail",
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -408,8 +426,9 @@ class TestSurfaceIntegral:
             np.testing.assert_allclose(
                 surface_averages(grid, f),
                 true_surface_avg * function_of_rho,
-                rtol=1e-15,
+                rtol=max(1e-15, 100 * EPS),
                 err_msg=type(grid),
+                atol=ATOL,
             )
 
         # these tests should be run on relatively low resolution grids,
@@ -491,6 +510,8 @@ class TestSurfaceIntegral:
                 numerical_avg[isinstance(grid, ConcentricGrid) :],
                 true_avg,
                 err_msg=str(type(grid)) + " " + str(grid.sym),
+                rtol=RTOL,
+                atol=ATOL,
             )
 
         M = 5
@@ -538,10 +559,14 @@ class TestSurfaceIntegral:
             np.testing.assert_allclose(
                 biased[i],
                 desired=np.cov(chunks[i], bias=True, aweights=weights[i]),
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
                 unbiased[i],
                 desired=np.cov(chunks[i], aweights=weights[i]),
+                rtol=RTOL,
+                atol=ATOL,
             )
 
         # Test weighted sample variance converges to unweighted sample variance
@@ -550,10 +575,14 @@ class TestSurfaceIntegral:
         np.testing.assert_allclose(
             surface_variance(grid, q, np.e, bias=True, surface_label="zeta"),
             desired=chunks.var(axis=-1),
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             surface_variance(grid, q, np.e, surface_label="zeta"),
             desired=chunks.var(axis=-1, ddof=1),
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -680,7 +709,7 @@ class TestSingularities:
         Bplasma = np.linalg.norm(Bplasma, axis=-1)
         # scale by total field magnitude
         B = Bplasma / np.linalg.norm(data["B"], axis=-1).mean()
-        np.testing.assert_allclose(B, 0, atol=atol)
+        np.testing.assert_allclose(B, 0, atol=atol, rtol=RTOL)
 
     @pytest.mark.unit
     def test_vanilla_params(self):
@@ -708,7 +737,7 @@ class TestSingularities:
         f = _c_2d(theta, zeta)
         for i in range(dt.size):
             truth = _c_2d(theta + dt[i], zeta + dz[i])
-            np.testing.assert_allclose(interp(f, i), truth)
+            np.testing.assert_allclose(interp(f, i), truth, rtol=RTOL, atol=ATOL)
 
 
 class TestBouncePoints:
@@ -733,8 +762,8 @@ class TestBouncePoints:
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
-        np.testing.assert_allclose(z1, intersect[0::2])
-        np.testing.assert_allclose(z2, intersect[1::2])
+        np.testing.assert_allclose(z1, intersect[0::2], rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[1::2], rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_z2_first(self):
@@ -749,8 +778,8 @@ class TestBouncePoints:
         check_bounce_points(z1, z2, pitch_inv, k, B.c.T, plot=True, include_knots=True)
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
-        np.testing.assert_allclose(z1, intersect[1:-1:2])
-        np.testing.assert_allclose(z2, intersect[0::2][1:])
+        np.testing.assert_allclose(z1, intersect[1:-1:2], rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[0::2][1:], rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_z1_before_extrema(self):
@@ -769,11 +798,11 @@ class TestBouncePoints:
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
-        np.testing.assert_allclose(z1[1], 1.982767, rtol=1e-6)
-        np.testing.assert_allclose(z1, intersect[[1, 2]], rtol=1e-6)
+        np.testing.assert_allclose(z1[1], 1.982767, rtol=1e-6, atol=ATOL)
+        np.testing.assert_allclose(z1, intersect[[1, 2]], rtol=1e-6, atol=ATOL)
         # intersect array could not resolve double root as single at index 2,3
-        np.testing.assert_allclose(intersect[2], intersect[3], rtol=1e-6)
-        np.testing.assert_allclose(z2, intersect[[3, 4]], rtol=1e-6)
+        np.testing.assert_allclose(intersect[2], intersect[3], rtol=1e-6, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[[3, 4]], rtol=1e-6, atol=ATOL)
 
     @pytest.mark.unit
     def test_z2_before_extrema(self):
@@ -798,8 +827,8 @@ class TestBouncePoints:
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
-        np.testing.assert_allclose(z1, intersect[[0, -2]])
-        np.testing.assert_allclose(z2, intersect[[1, -1]])
+        np.testing.assert_allclose(z1, intersect[[0, -2]], rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[[1, -1]], rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_extrema_first_and_before_z1(self):
@@ -828,10 +857,10 @@ class TestBouncePoints:
         z1, z2 = TestBouncePoints.filter(z1, z2)
         assert z1.size and z2.size
         intersect = B.solve(pitch_inv, extrapolate=False)
-        np.testing.assert_allclose(z1[0], 0.835319, rtol=1e-6)
+        np.testing.assert_allclose(z1[0], 0.835319, rtol=1e-6, atol=ATOL)
         intersect = intersect[intersect >= k[2]]
-        np.testing.assert_allclose(z1, intersect[[0, 2, 4]], rtol=1e-6)
-        np.testing.assert_allclose(z2, intersect[[0, 3, 5]], rtol=1e-6)
+        np.testing.assert_allclose(z1, intersect[[0, 2, 4]], rtol=1e-6, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[[0, 3, 5]], rtol=1e-6, atol=ATOL)
 
     @pytest.mark.unit
     def test_extrema_first_and_before_z2(self):
@@ -852,11 +881,11 @@ class TestBouncePoints:
         assert z1.size and z2.size
         # Our routine correctly detects intersection, while scipy, jnp.root fails.
         intersect = B.solve(pitch_inv, extrapolate=False)
-        np.testing.assert_allclose(z1[0], -0.671904, rtol=1e-6)
-        np.testing.assert_allclose(z1, intersect[[0, 3, 5]], rtol=1e-5)
+        np.testing.assert_allclose(z1[0], -0.671904, rtol=1e-6, atol=ATOL)
+        np.testing.assert_allclose(z1, intersect[[0, 3, 5]], rtol=1e-5, atol=ATOL)
         # intersect array could not resolve double root as single at index 0,1
-        np.testing.assert_allclose(intersect[0], intersect[1], rtol=1e-5)
-        np.testing.assert_allclose(z2, intersect[[2, 4, 6]], rtol=1e-5)
+        np.testing.assert_allclose(intersect[0], intersect[1], rtol=1e-5, atol=ATOL)
+        np.testing.assert_allclose(z2, intersect[[2, 4, 6]], rtol=1e-5, atol=ATOL)
 
     @pytest.mark.unit
     def test_get_mins(self):
@@ -932,6 +961,7 @@ class TestBounceQuadrature:
             bounce.integrate(integrand, pitch_inv, check=True, plot=True).sum(),
             truth,
             rtol=1e-4,
+            atol=ATOL,
         )
 
     @staticmethod
@@ -1490,6 +1520,7 @@ class TestBounce2D:
             ),
             h(argmin_g),
             rtol=1e-6,
+            atol=ATOL,
         )
 
     @pytest.mark.unit

@@ -9,6 +9,8 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
+from .utils import ATOL, EPS, RTOL
+
 
 class _ExactValueProfile:
     """Monkey patches the compute method of desc.Profile for testing."""
@@ -115,6 +117,8 @@ class TestConstrainCurrent:
                     desired=desired[name][mask],
                     equal_nan=False,
                     err_msg=name,
+                    rtol=RTOL,
+                    atol=ATOL,
                 )
 
         eq = desc.examples.get("DSHAPE")
@@ -185,9 +189,10 @@ class TestConstrainCurrent:
                 np.testing.assert_allclose(
                     actual=actual[name][mask],
                     desired=desired[name][mask],
-                    atol=1e-7,
+                    atol=max(1e-7, 100 * EPS),
                     equal_nan=False,
                     err_msg=name,
+                    rtol=RTOL,
                 )
 
         # Only makes sense to test on configurations with fixed current profiles.

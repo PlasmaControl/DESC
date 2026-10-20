@@ -14,7 +14,7 @@ from desc.geometry import (
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestFourierRZCurve:
@@ -39,24 +39,28 @@ class TestFourierRZCurve:
         """Test length of circular curve."""
         c = FourierRZCurve()
         np.testing.assert_allclose(
-            c.compute("length", grid=20)["length"], 10 * 2 * np.pi
+            c.compute("length", grid=20)["length"], 10 * 2 * np.pi, rtol=RTOL, atol=ATOL
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("length", grid=20)["length"], 10 * 2 * np.pi
+            c.compute("length", grid=20)["length"], 10 * 2 * np.pi, rtol=RTOL, atol=ATOL
         )
 
     @pytest.mark.unit
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierRZCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 10, rtol=RTOL, atol=ATOL
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 10)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 10, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -76,9 +80,15 @@ class TestFourierRZCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[-1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 0, 1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
@@ -86,9 +96,15 @@ class TestFourierRZCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 0, 1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_coords(self):
@@ -158,19 +174,26 @@ class TestFourierRZCurve:
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         # same thing but pass in a closed grid
         grid = LinearGrid(N=20, endpoint=True)
@@ -179,19 +202,26 @@ class TestFourierRZCurve:
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
         # same thing but with arclength angle
@@ -202,6 +232,7 @@ class TestFourierRZCurve:
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
             atol=3e-3,
+            rtol=RTOL,
         )
 
         # pass in non-monotonic s
@@ -248,10 +279,10 @@ class TestFourierRZCurve:
         curve2 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve1.change_resolution(curve2.N)
 
-        np.testing.assert_allclose(curve1.R_n, curve2.R_n)
-        np.testing.assert_allclose(curve1.Z_n, curve2.Z_n)
-        np.testing.assert_allclose(curve1.NFP, curve2.NFP)
-        np.testing.assert_allclose(curve1.sym, curve2.sym)
+        np.testing.assert_allclose(curve1.R_n, curve2.R_n, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve1.Z_n, curve2.Z_n, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve1.NFP, curve2.NFP, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve1.sym, curve2.sym, rtol=RTOL, atol=ATOL)
 
         path = "tests/inputs/input.QSC_r2_5.5_vmec"
 
@@ -260,10 +291,10 @@ class TestFourierRZCurve:
             curve4 = Equilibrium(**InputReader(path).inputs[0], check_kwargs=False).axis
         curve3.change_resolution(curve4.N)
 
-        np.testing.assert_allclose(curve3.R_n, curve4.R_n)
-        np.testing.assert_allclose(curve3.Z_n, curve4.Z_n)
-        np.testing.assert_allclose(curve3.NFP, curve4.NFP)
-        np.testing.assert_allclose(curve3.sym, curve4.sym)
+        np.testing.assert_allclose(curve3.R_n, curve4.R_n, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve3.Z_n, curve4.Z_n, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve3.NFP, curve4.NFP, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(curve3.sym, curve4.sym, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_to_FourierRZCurve(self):
@@ -272,48 +303,66 @@ class TestFourierRZCurve:
         grid = LinearGrid(N=10, endpoint=False)
         # convert back and check now
         rzz = xyz.to_FourierRZ(N=2, grid=grid)
-        np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
-        np.testing.assert_allclose(rzz.Z_n, 0)
+        np.testing.assert_allclose(
+            rzz.R_n[rzz.R_basis.get_idx(0)], 10, rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(rzz.Z_n, 0, rtol=RTOL, atol=ATOL)
 
         np.testing.assert_allclose(
             rzz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
         # same thing but pass in a closed grid
         grid = LinearGrid(N=10, endpoint=True)
         rzz = xyz.to_FourierRZ(N=2, grid=grid)
-        np.testing.assert_allclose(rzz.R_n[rzz.R_basis.get_idx(0)], 10)
-        np.testing.assert_allclose(rzz.Z_n, 0)
+        np.testing.assert_allclose(
+            rzz.R_n[rzz.R_basis.get_idx(0)], 10, rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(rzz.Z_n, 0, rtol=RTOL, atol=ATOL)
         np.testing.assert_allclose(
             rzz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rzz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         # pass in non-monotonic phi
         phi_non_monotonic = np.array([0, 3, 2, 4, 1])
@@ -350,7 +399,9 @@ class TestFourierRZCurve:
         phis = np.linspace(0, 2 * np.pi, 4)
         coords = np.vstack([np.cos(phis), phis, np.zeros_like(phis)]).T
         c = FourierRZCurve.from_values(coords, N=1)
-        np.testing.assert_allclose(c.R_n[c.R_basis.get_idx(N=1)], 1.0)
+        np.testing.assert_allclose(
+            c.R_n[c.R_basis.get_idx(N=1)], 1.0, rtol=RTOL, atol=ATOL
+        )
 
 
 class TestFourierXYZCurve:
@@ -361,13 +412,19 @@ class TestFourierXYZCurve:
         """Test center of curve."""
         c = FourierXYZCurve(X_n=[1, 10, 2], Y_n=[0, -3, 1], Z_n=[-2, 2, 3])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [10, -3, 2]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [10, -3, 2],
+            rtol=RTOL,
+            atol=ATOL,
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [-11, -2, 3]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [-11, -2, 3],
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -388,24 +445,34 @@ class TestFourierXYZCurve:
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierXYZCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=RTOL, atol=ATOL
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_torsion(self):
         """Test torsion of circular curve."""
         c = FourierXYZCurve(modes=[-1, 0, 1])
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"],
+            0,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"],
+            0,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
     @pytest.mark.unit
@@ -416,9 +483,15 @@ class TestFourierXYZCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[-1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
@@ -426,9 +499,15 @@ class TestFourierXYZCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_coords(self):
@@ -520,8 +599,8 @@ class TestFourierXYZCurve:
         phi = np.zeros_like(t)
         coords = np.vstack([R, phi, Z]).T
         coil = FourierXYZCurve.from_values(coords, basis="rpz", N=1)
-        np.testing.assert_allclose(coil.X_n[-1], 1.0)
-        np.testing.assert_allclose(coil.Z_n[0], 1.0)
+        np.testing.assert_allclose(coil.X_n[-1], 1.0, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(coil.Z_n[0], 1.0, rtol=RTOL, atol=ATOL)
 
 
 class TestFourierPlanarCurve:
@@ -554,33 +633,43 @@ class TestFourierPlanarCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(
+            datax["x"][:, 0], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in Y-Z plane
+        np.testing.assert_allclose(
+            datay["x"][:, 1], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in X-Z plane
+        np.testing.assert_allclose(
+            dataz["x"][:, 2], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierPlanarCurve(modes=[0])
         np.testing.assert_allclose(
-            c.compute("length", grid=20)["length"], 2 * 2 * np.pi
+            c.compute("length", grid=20)["length"], 2 * 2 * np.pi, rtol=RTOL, atol=ATOL
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("length", grid=20)["length"], 2 * 2 * np.pi
+            c.compute("length", grid=20)["length"], 2 * 2 * np.pi, rtol=RTOL, atol=ATOL
         )
 
     @pytest.mark.unit
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierPlanarCurve()
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=RTOL, atol=ATOL
+        )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
-        np.testing.assert_allclose(c.compute("curvature", grid=20)["curvature"], 1 / 2)
+        np.testing.assert_allclose(
+            c.compute("curvature", grid=20)["curvature"], 1 / 2, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_torsion(self):
@@ -604,9 +693,15 @@ class TestFourierPlanarCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[-1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
@@ -614,29 +709,35 @@ class TestFourierPlanarCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierPlanarCurve()
         r, p, z = c.compute("x", grid=0, basis="rpz")["x"].T
-        np.testing.assert_allclose(r, 12)
-        np.testing.assert_allclose(p, 0)
-        np.testing.assert_allclose(z, 0)
+        np.testing.assert_allclose(r, 12, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(p, 0, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z, 0, rtol=RTOL, atol=ATOL)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
-        np.testing.assert_allclose(dr, 0)
-        np.testing.assert_allclose(dp, 0, atol=1e-14)
-        np.testing.assert_allclose(dz, 2)
+        np.testing.assert_allclose(dr, 0, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(dp, 0, atol=max(1e-14, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(dz, 2, rtol=RTOL, atol=ATOL)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
-        np.testing.assert_allclose(x, 1)
-        np.testing.assert_allclose(y, -11)
-        np.testing.assert_allclose(z, 1)
+        np.testing.assert_allclose(x, 1, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(y, -11, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z, 1, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_basis(self):
@@ -648,19 +749,25 @@ class TestFourierPlanarCurve:
 
         x_xyz = cxyz.compute("x")["x"]
         x_rpz = crpz.compute("x")["x"]
-        np.testing.assert_allclose(x_xyz, x_rpz)
+        np.testing.assert_allclose(x_xyz, x_rpz, rtol=RTOL, atol=ATOL)
 
         xs_xyz = cxyz.compute("x_s")["x_s"]
         xs_rpz = crpz.compute("x_s")["x_s"]
-        np.testing.assert_allclose(xs_xyz, xs_rpz, atol=2e-15)
+        np.testing.assert_allclose(
+            xs_xyz, xs_rpz, atol=max(2e-15, 100 * EPS), rtol=RTOL
+        )
 
         xss_xyz = cxyz.compute("x_ss")["x_ss"]
         xss_rpz = crpz.compute("x_ss")["x_ss"]
-        np.testing.assert_allclose(xss_xyz, xss_rpz, atol=2e-15)
+        np.testing.assert_allclose(
+            xss_xyz, xss_rpz, atol=max(2e-15, 100 * EPS), rtol=RTOL
+        )
 
         xsss_xyz = cxyz.compute("x_sss")["x_sss"]
         xsss_rpz = crpz.compute("x_sss")["x_sss"]
-        np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+        np.testing.assert_allclose(
+            xsss_xyz, xsss_rpz, atol=max(2e-15, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_misc(self):
@@ -723,15 +830,21 @@ class TestFourierPlanarCurve:
         coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
 
         # Assertions for point positions
-        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_spline, coords_planar, atol=max(1e-10, 100 * EPS), rtol=RTOL
+        )
         np.testing.assert_allclose(
             coords_backwards_spline,
             coords_backwards_planar,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
+            rtol=RTOL,
         )
         # backwards coordinate order is important for Biot-Savart current
         np.testing.assert_allclose(
-            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+            coords_planar,
+            np.flip(coords_backwards_planar, axis=0),
+            atol=max(1e-10, 100 * EPS),
+            rtol=RTOL,
         )
 
 
@@ -743,17 +856,26 @@ class TestFourierXYCurve:
         """Test center of curve."""
         c = FourierXYCurve(center=[5, 4, 3], X_n=[0.5, 2], Y_n=[1, 0], basis="xyz")
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [5, 4, 3]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [5, 4, 3],
+            rtol=RTOL,
+            atol=ATOL,
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [-6, 5, 4]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [-6, 5, 4],
+            rtol=RTOL,
+            atol=ATOL,
         )
         c = FourierXYCurve(center=[5, 1, -2], X_n=[0.5, 2], Y_n=[1, 0], basis="rpz")
         np.testing.assert_allclose(
-            c.compute("center", basis="rpz")["center"][0, :], [5, 1, -2]
+            c.compute("center", basis="rpz")["center"][0, :],
+            [5, 1, -2],
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -765,9 +887,15 @@ class TestFourierXYCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(
+            datax["x"][:, 0], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in Y-Z plane
+        np.testing.assert_allclose(
+            datay["x"][:, 1], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in X-Z plane
+        np.testing.assert_allclose(
+            dataz["x"][:, 2], 0, atol=max(2e-16, 100 * EPS), rtol=RTOL
+        )  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -802,13 +930,19 @@ class TestFourierXYCurve:
         """Test torsion of circular curve."""
         c = FourierXYCurve()
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"],
+            0,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("torsion", grid=20)["torsion"], 0, atol=1e-12
+            c.compute("torsion", grid=20)["torsion"],
+            0,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
     @pytest.mark.unit
@@ -819,9 +953,15 @@ class TestFourierXYCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[-1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
@@ -829,29 +969,35 @@ class TestFourierXYCurve:
             ["frenet_tangent", "frenet_normal", "frenet_binormal"], basis="xyz", grid=0
         )
         T, N, B = data["frenet_tangent"], data["frenet_normal"], data["frenet_binormal"]
-        np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
-        np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
-        np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
+        np.testing.assert_allclose(
+            T, np.array([[0, 0, -1]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            N, np.array([[1, 0, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            B, np.array([[0, 1, 0]]), atol=max(1e-12, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierXYCurve()
         r, p, z = c.compute("x", grid=0, basis="rpz")["x"].T
-        np.testing.assert_allclose(r, 12)
-        np.testing.assert_allclose(p, 0)
-        np.testing.assert_allclose(z, 0)
+        np.testing.assert_allclose(r, 12, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(p, 0, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z, 0, rtol=RTOL, atol=ATOL)
         dr, dp, dz = c.compute("x_sss", grid=0, basis="rpz")["x_sss"].T
-        np.testing.assert_allclose(dr, 0, atol=1e-14)
-        np.testing.assert_allclose(dp, 0, atol=1e-14)
-        np.testing.assert_allclose(dz, 2)
+        np.testing.assert_allclose(dr, 0, atol=max(1e-14, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(dp, 0, atol=max(1e-14, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(dz, 2, rtol=RTOL, atol=ATOL)
         c.rotate(angle=np.pi / 2)
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         x, y, z = c.compute("x", grid=0, basis="xyz")["x"].T
-        np.testing.assert_allclose(x, 1)
-        np.testing.assert_allclose(y, -11)
-        np.testing.assert_allclose(z, 1)
+        np.testing.assert_allclose(x, 1, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(y, -11, rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(z, 1, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_basis(self):
@@ -917,7 +1063,7 @@ class TestFourierXYCurve:
         # check that curve is the same as default after n=0 mode is removed
         x = c.compute("x", grid=0)["x"]
         x0 = c0.compute("x", grid=0)["x"]
-        np.testing.assert_allclose(x, x0)
+        np.testing.assert_allclose(x, x0, rtol=RTOL, atol=ATOL)
 
     @pytest.mark.unit
     def test_to_FourierXYCurve_orientation(self):
@@ -948,15 +1094,21 @@ class TestFourierXYCurve:
         coords_backwards_planar = c_backwards_planar.compute("x", grid=grid)["x"]
 
         # Assertions for point positions
-        np.testing.assert_allclose(coords_spline, coords_planar, atol=1e-10)
+        np.testing.assert_allclose(
+            coords_spline, coords_planar, atol=max(1e-10, 100 * EPS), rtol=RTOL
+        )
         np.testing.assert_allclose(
             coords_backwards_spline,
             coords_backwards_planar,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
+            rtol=RTOL,
         )
         # backwards coordinate order is important for Biot-Savart current
         np.testing.assert_allclose(
-            coords_planar, np.flip(coords_backwards_planar, axis=0), atol=1e-10
+            coords_planar,
+            np.flip(coords_backwards_planar, axis=0),
+            atol=max(1e-10, 100 * EPS),
+            rtol=RTOL,
         )
 
     @pytest.mark.unit
@@ -970,21 +1122,26 @@ class TestFourierXYCurve:
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
-            atol=1e-16,
+            atol=max(1e-16, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
-            atol=1e-16,
+            atol=max(1e-16, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             rz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         # same thing but pass in a closed grid
         grid = LinearGrid(N=20, endpoint=True)
@@ -993,20 +1150,26 @@ class TestFourierXYCurve:
         np.testing.assert_allclose(
             rz.compute("curvature", grid=grid)["curvature"],
             xyz.compute("curvature", grid=grid)["curvature"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("torsion", grid=grid)["torsion"],
             xyz.compute("torsion", grid=grid)["torsion"],
-            atol=1e-16,
+            atol=max(1e-16, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
+            rtol=RTOL,
+            atol=ATOL,
         )
         np.testing.assert_allclose(
             rz.compute("x", grid=grid, basis="xyz")["x"],
             xyz.compute("x", basis="xyz", grid=grid)["x"],
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
         # same thing but with arclength angle
@@ -1017,6 +1180,7 @@ class TestFourierXYCurve:
             rz.compute("length", grid=grid)["length"],
             xyz.compute("length", grid=grid)["length"],
             rtol=1e-5,
+            atol=ATOL,
         )
 
         # pass in non-monotonic s
@@ -1039,13 +1203,19 @@ class TestSplineXYZCurve:
             Z=np.array([-2, -1, 1, 0]),
         )
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [6.5, 2.5, -0.5]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [6.5, 2.5, -0.5],
+            rtol=RTOL,
+            atol=ATOL,
         )
         c.translate([1, 1, 1])
         c.rotate(angle=np.pi)
         c.flip([0, 1, 0])
         np.testing.assert_allclose(
-            c.compute("center", basis="xyz")["center"][0, :], [-7.5, 3.5, 0.5]
+            c.compute("center", basis="xyz")["center"][0, :],
+            [-7.5, 3.5, 0.5],
+            rtol=RTOL,
+            atol=ATOL,
         )
 
     @pytest.mark.unit
@@ -1084,6 +1254,7 @@ class TestSplineXYZCurve:
                 R * 2 * np.pi,
                 atol=atol,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
@@ -1093,6 +1264,7 @@ class TestSplineXYZCurve:
                 R * 2 * np.pi,
                 atol=atol,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
 
             # make a simple circular curve with supplied knots as phi
@@ -1109,6 +1281,7 @@ class TestSplineXYZCurve:
                 R * 2 * np.pi,
                 atol=atol,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
@@ -1118,6 +1291,7 @@ class TestSplineXYZCurve:
                 R * 2 * np.pi,
                 atol=atol,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
 
             if method == "nearest":
@@ -1136,12 +1310,14 @@ class TestSplineXYZCurve:
                 R * 2 * np.pi,
                 atol=atol,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
             np.testing.assert_allclose(
                 c.compute("length", grid=None)["length"],
                 R * 2 * np.pi,
                 atol=9e-3,
                 err_msg=f"Failed at {method}",
+                rtol=RTOL,
             )
 
     @pytest.mark.unit
@@ -1211,16 +1387,24 @@ class TestSplineXYZCurve:
         c2 = c.to_SplineXYZ(grid=npts)
 
         np.testing.assert_allclose(
-            c.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
+            c.compute("length", grid=npts)["length"],
+            R * 2 * np.pi,
+            atol=2e-3,
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            c2.compute("length", grid=npts)["length"], R * 2 * np.pi, atol=2e-3
+            c2.compute("length", grid=npts)["length"],
+            R * 2 * np.pi,
+            atol=2e-3,
+            rtol=RTOL,
         )
         grid = LinearGrid(N=20, endpoint=False)
         coords1 = c.compute("x", grid=grid)["x"]
         coords2 = c2.compute("x", grid=grid)["x"]
 
-        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
+        np.testing.assert_allclose(
+            coords1, coords2, atol=max(1e-10, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_asserts_and_errors(self):

@@ -14,7 +14,7 @@ from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.profiles import FourierZernikeProfile, SplineProfile
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 @pytest.mark.unit
@@ -74,7 +74,7 @@ def test_flip_helicity_iota():
     # check that basis vectors did not change
     for key in ["e_rho", "e_theta", "e^zeta"]:
         atol = 100 * EPS * np.abs(data_old[key]).max()
-        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol)
+        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol, rtol=RTOL)
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
@@ -89,12 +89,15 @@ def test_flip_helicity_iota():
 
     # check that stability did not change
     np.testing.assert_allclose(
-        grid.compress(data_old["D_Mercier"]), grid.compress(data_new["D_Mercier"])
+        grid.compress(data_old["D_Mercier"]),
+        grid.compress(data_new["D_Mercier"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3)
+    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -117,7 +120,7 @@ def test_flip_helicity_current():
     # check that basis vectors did not change
     for key in ["e_rho", "e_theta", "e^zeta"]:
         atol = 100 * EPS * np.abs(data_old[key]).max()
-        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol)
+        np.testing.assert_allclose(data_old[key], data_flip[key], atol=atol, rtol=RTOL)
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
@@ -130,16 +133,21 @@ def test_flip_helicity_current():
 
     # check that stability did not change
     np.testing.assert_allclose(
-        grid.compress(data_old["D_Mercier"]), grid.compress(data_new["D_Mercier"])
+        grid.compress(data_old["D_Mercier"]),
+        grid.compress(data_new["D_Mercier"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3)
+    np.testing.assert_allclose(data_old["|F|"], data_flip["|F|"], rtol=1e-3, atol=ATOL)
 
     # check that the QH errors now need the opposite helicity
     # (equivalent collocation points now corresond to the opposite zeta values)
-    np.testing.assert_allclose(data_old["f_C"], data_flip["f_C"], atol=1e-8)
+    np.testing.assert_allclose(
+        data_old["f_C"], data_flip["f_C"], atol=max(1e-8, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -165,22 +173,34 @@ def test_flip_theta_axisym():
     np.testing.assert_allclose(
         data_old["sqrt(g)"].reshape((grid.num_rho, grid.num_theta)),
         np.fliplr(data_new["sqrt(g)"].reshape((grid.num_rho, grid.num_theta))),
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
         data_old["|F|"].reshape((grid.num_rho, grid.num_theta)),
         np.fliplr(data_new["|F|"].reshape((grid.num_rho, grid.num_theta))),
         rtol=2e-5,
+        atol=ATOL,
     )
 
     # check that profiles did not change
     np.testing.assert_allclose(
-        grid.compress(data_old["iota"]), grid.compress(data_new["iota"])
+        grid.compress(data_old["iota"]),
+        grid.compress(data_new["iota"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        grid.compress(data_old["current"]), grid.compress(data_new["current"])
+        grid.compress(data_old["current"]),
+        grid.compress(data_new["current"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        grid.compress(data_old["D_Mercier"]), grid.compress(data_new["D_Mercier"])
+        grid.compress(data_old["D_Mercier"]),
+        grid.compress(data_new["D_Mercier"]),
+        rtol=RTOL,
+        atol=ATOL,
     )
 
 
@@ -200,9 +220,15 @@ def test_flip_theta_nonaxisym():
     data_new = eq.compute(data_keys, grid=grid_flip, helicity=(1, eq.NFP))
 
     # check that basis vectors did not change
-    np.testing.assert_allclose(data_old["e_rho"], data_new["e_rho"], atol=1e-15)
-    np.testing.assert_allclose(data_old["e_theta"], data_new["e_theta"], atol=1e-15)
-    np.testing.assert_allclose(data_old["e^zeta"], data_new["e^zeta"], atol=1e-15)
+    np.testing.assert_allclose(
+        data_old["e_rho"], data_new["e_rho"], atol=max(1e-15, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(
+        data_old["e_theta"], data_new["e_theta"], atol=max(1e-15, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(
+        data_old["e^zeta"], data_new["e^zeta"], atol=max(1e-15, 100 * EPS), rtol=RTOL
+    )
 
     # check that Jacobian is still positive
     np.testing.assert_array_less(0, grid.compress(data_new["sqrt(g)"]))
@@ -212,15 +238,18 @@ def test_flip_theta_nonaxisym():
         grid.compress(data_old["D_Mercier"]),
         grid.compress(data_new["D_Mercier"]),
         rtol=2e-2,
+        atol=ATOL,
     )
 
     # check that the total force balance error on each surface did not change
     # (equivalent collocation points now corresond to theta + pi)
-    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"], rtol=1e-3)
+    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"], rtol=1e-3, atol=ATOL)
 
     # check that the QH helicity did not change
     # (equivalent collocation points now corresond to theta + pi)
-    np.testing.assert_allclose(data_old["f_C"], data_new["f_C"], atol=1e-8)
+    np.testing.assert_allclose(
+        data_old["f_C"], data_new["f_C"], atol=max(1e-8, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -258,34 +287,40 @@ def test_rescale():
     eq = rescale(eq)
     new_vals = fun(eq)
     for key, val in old_vals.items():
-        np.testing.assert_allclose(new_vals[key], val)
+        np.testing.assert_allclose(new_vals[key], val, rtol=RTOL, atol=ATOL)
 
     # scale R0 and B0
     eq = eq0.copy()
     eq = rescale(eq, L=("R0", 1), B=("B0", 0.5))
     new_vals = fun(eq)
-    np.testing.assert_allclose(new_vals["R0"], 1)
-    np.testing.assert_allclose(new_vals["B0"], 0.5)
-    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
-    np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+    np.testing.assert_allclose(new_vals["R0"], 1, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["B0"], 0.5, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        new_vals["err"], old_vals["err"], atol=max(1e-10, 100 * EPS), rtol=RTOL
+    )
 
     # scale a and <B>
     eq = eq0.copy()
     eq = rescale(eq, L=("a", 0.5), B=("<B>", 1))
     new_vals = fun(eq)
-    np.testing.assert_allclose(new_vals["a"], 0.5)
-    np.testing.assert_allclose(new_vals["<B>"], 1)
-    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
-    np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+    np.testing.assert_allclose(new_vals["a"], 0.5, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["<B>"], 1, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        new_vals["err"], old_vals["err"], atol=max(1e-10, 100 * EPS), rtol=RTOL
+    )
 
     # scale V and B_max
     eq = eq0.copy()
     eq = rescale(eq, L=("V", 200), B=("B_max", 2))
     new_vals = fun(eq)
-    np.testing.assert_allclose(new_vals["V"], 200)
-    np.testing.assert_allclose(new_vals["B_max"], 2)
-    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"])
-    np.testing.assert_allclose(new_vals["err"], old_vals["err"], atol=1e-10)
+    np.testing.assert_allclose(new_vals["V"], 200, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["B_max"], 2, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(new_vals["R0/a"], old_vals["R0/a"], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        new_vals["err"], old_vals["err"], atol=max(1e-10, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -345,9 +380,15 @@ def test_contract_equilibrium():
     ## test quantities for the eq with contracted profiles
     # ensure the new surface is the same as the desired inner surface
     surf_inner = eq.get_surface_at(rho)
-    np.testing.assert_allclose(surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R")
-    np.testing.assert_allclose(surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z")
-    np.testing.assert_allclose(surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP")
+    np.testing.assert_allclose(
+        surf_inner.R_lmn, eq_half_rho.surface.R_lmn, err_msg="R", rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        surf_inner.Z_lmn, eq_half_rho.surface.Z_lmn, err_msg="Z", rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        surf_inner.NFP, eq_half_rho.surface.NFP, err_msg="NFP", rtol=RTOL, atol=ATOL
+    )
 
     # test geometry, profiles, |B| and |F| match btwn orig eq and new contracted eq
     data_keys = ["|B|", "|F|", "R", "Z", "lambda", "p", "iota", "sqrt(g)"]
@@ -367,25 +408,43 @@ def test_contract_equilibrium():
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:
         if key != "|F|" and key != "sqrt(g)":
-            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
+            np.testing.assert_allclose(
+                contract_data[key], data[key], err_msg=key, rtol=RTOL, atol=ATOL
+            )
     np.testing.assert_allclose(
-        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
+        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|", atol=ATOL
     )
     np.testing.assert_allclose(
-        contract_data["sqrt(g)"] * 2, data["sqrt(g)"], rtol=1e-8, err_msg="sqrt(g)"
+        contract_data["sqrt(g)"] * 2,
+        data["sqrt(g)"],
+        rtol=max(1e-8, 100 * EPS),
+        err_msg="sqrt(g)",
+        atol=ATOL,
     )
 
     ## test only the profiles and geometry for the eq without contracted profiles,
     ## as the other quantities will be different since the profiles
     ## now differ in real space
     np.testing.assert_allclose(
-        surf_inner.R_lmn, eq_half_rho_same_profiles.surface.R_lmn, err_msg="R"
+        surf_inner.R_lmn,
+        eq_half_rho_same_profiles.surface.R_lmn,
+        err_msg="R",
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        surf_inner.Z_lmn, eq_half_rho_same_profiles.surface.Z_lmn, err_msg="Z"
+        surf_inner.Z_lmn,
+        eq_half_rho_same_profiles.surface.Z_lmn,
+        err_msg="Z",
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        surf_inner.NFP, eq_half_rho_same_profiles.surface.NFP, err_msg="NFP"
+        surf_inner.NFP,
+        eq_half_rho_same_profiles.surface.NFP,
+        err_msg="NFP",
+        rtol=RTOL,
+        atol=ATOL,
     )
 
     # test geometry match btwn orig eq and new contracted eq
@@ -394,7 +453,9 @@ def test_contract_equilibrium():
     contract_data = eq_half_rho_same_profiles.compute(data_keys, grid=contract_grid)
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:
-        np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
+        np.testing.assert_allclose(
+            contract_data[key], data[key], err_msg=key, rtol=RTOL, atol=ATOL
+        )
     # test profiles
     assert eq_half_rho_same_profiles.pressure.equiv(eq.pressure)
     assert eq_half_rho_same_profiles.current.equiv(eq.current)
@@ -431,10 +492,16 @@ def test_contract_equilibrium_warns_errors():
     data = eq.compute(data_keys, grid=grid)
     for key in data_keys:
         if key != "|F|" and key != "sqrt(g)":
-            np.testing.assert_allclose(contract_data[key], data[key], err_msg=key)
+            np.testing.assert_allclose(
+                contract_data[key], data[key], err_msg=key, rtol=RTOL, atol=ATOL
+            )
     np.testing.assert_allclose(
-        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|"
+        contract_data["|F|"], data["|F|"], rtol=2e-4, err_msg="|F|", atol=ATOL
     )
     np.testing.assert_allclose(
-        contract_data["sqrt(g)"] * 2, data["sqrt(g)"], rtol=1e-8, err_msg="sqrt(g)"
+        contract_data["sqrt(g)"] * 2,
+        data["sqrt(g)"],
+        rtol=max(1e-8, 100 * EPS),
+        err_msg="sqrt(g)",
+        atol=ATOL,
     )

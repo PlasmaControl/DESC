@@ -34,7 +34,7 @@ from desc.magnetic_fields import (
 from desc.objectives import LinkingCurrentConsistency
 from desc.utils import copy_rpz_periods, dot, rpz2xyz, xyz2rpz, xyz2rpz_vec
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 class TestCoil:
@@ -73,13 +73,25 @@ class TestCoil:
             grid_rpz, basis="rpz", source_grid=coil_grid
         )
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierXYZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierXYZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYZCoil"
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierXYZCoil",
         )
 
         # SplineXYZCoil
@@ -92,13 +104,25 @@ class TestCoil:
             grid_rpz, basis="rpz", source_grid=coil_grid
         )
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using SplineXYZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using SplineXYZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using SplineXYZCoil"
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using SplineXYZCoil",
         )
 
         # FourierPlanarCoil
@@ -110,20 +134,24 @@ class TestCoil:
             grid_rpz, basis="rpz", source_grid=coil_grid
         )
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierPlanarCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierPlanarCoil",
         )
         np.testing.assert_allclose(
             B_true_rpz_xy,
             B_rpz,
             rtol=1e-3,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
             err_msg="Using FourierPlanarCoil",
         )
         np.testing.assert_allclose(
             B_true_rpz_phi,
             B_rpz,
             rtol=1e-3,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
             err_msg="Using FourierPlanarCoil",
         )
 
@@ -136,20 +164,24 @@ class TestCoil:
             grid_rpz, basis="rpz", source_grid=coil_grid
         )
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierXYCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierXYCoil",
         )
         np.testing.assert_allclose(
             B_true_rpz_xy,
             B_rpz,
             rtol=1e-3,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
             err_msg="Using FourierXYCoil",
         )
         np.testing.assert_allclose(
             B_true_rpz_phi,
             B_rpz,
             rtol=1e-3,
-            atol=1e-10,
+            atol=max(1e-10, 100 * EPS),
             err_msg="Using FourierXYCoil",
         )
 
@@ -168,13 +200,25 @@ class TestCoil:
             grid_rpz, basis="rpz", source_grid=coil_grid
         )
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
 
         # FourierRZCoil with NFP>1
@@ -182,13 +226,25 @@ class TestCoil:
         B_xyz = coil.compute_magnetic_field(grid_xyz, basis="xyz", source_grid=None)
         B_rpz = coil.compute_magnetic_field(grid_rpz, basis="rpz", source_grid=None)
         np.testing.assert_allclose(
-            B_true_xyz, B_xyz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_xyz,
+            B_xyz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_xy, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_rpz_xy,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
         np.testing.assert_allclose(
-            B_true_rpz_phi, B_rpz, rtol=1e-3, atol=1e-10, err_msg="Using FourierRZCoil"
+            B_true_rpz_phi,
+            B_rpz,
+            rtol=1e-3,
+            atol=max(1e-10, 100 * EPS),
+            err_msg="Using FourierRZCoil",
         )
 
     @pytest.mark.unit
@@ -212,13 +268,25 @@ class TestCoil:
                 grid_rpz, basis="rpz", source_grid=coil_grid
             )
             np.testing.assert_allclose(
-                A_true, A_xyz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+                A_true,
+                A_xyz,
+                rtol=1e-3,
+                atol=max(1e-10, 100 * EPS),
+                err_msg=f"Using {coil}",
             )
             np.testing.assert_allclose(
-                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+                A_true,
+                A_rpz,
+                rtol=1e-3,
+                atol=max(1e-10, 100 * EPS),
+                err_msg=f"Using {coil}",
             )
             np.testing.assert_allclose(
-                A_true, A_rpz, rtol=1e-3, atol=1e-10, err_msg=f"Using {coil}"
+                A_true,
+                A_rpz,
+                rtol=1e-3,
+                atol=max(1e-10, 100 * EPS),
+                err_msg=f"Using {coil}",
             )
 
         # FourierXYZCoil
@@ -302,10 +370,10 @@ class TestCoil:
             )
 
             np.testing.assert_allclose(
-                correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}"
+                correct_flux, flux_xyz, rtol=rtol, err_msg=f"Using {coil}", atol=ATOL
             )
             np.testing.assert_allclose(
-                correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}"
+                correct_flux, flux_rpz, rtol=rtol, err_msg=f"Using {coil}", atol=ATOL
             )
             np.testing.assert_allclose(
                 A_true_rpz,
@@ -426,7 +494,9 @@ class TestCoil:
         B_approx = field.compute_magnetic_field(
             np.array([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=max(1e-10, 100 * EPS)
+        )
 
     @pytest.mark.unit
     def test_adding_MagneticField_with_Coil_or_CoilSet(self):
@@ -454,7 +524,11 @@ class TestCoil:
                 np.array([[10, y, 0], [10, -y, 0]]), basis="xyz", source_grid=100
             )[0]
             np.testing.assert_allclose(
-                B_true, B_approx, rtol=1e-3, atol=1e-10, err_msg=f"field {i}"
+                B_true,
+                B_approx,
+                rtol=1e-3,
+                atol=max(1e-10, 100 * EPS),
+                err_msg=f"field {i}",
             )
 
     @pytest.mark.unit
@@ -500,16 +574,20 @@ class TestCoil:
             np.zeros((1, 3)), source_grid=grid, basis="xyz"
         )
 
-        np.testing.assert_allclose(x1, x2, atol=1e-12)
-        np.testing.assert_allclose(x1, x3, atol=1e-12)
-        np.testing.assert_allclose(x1, x4, atol=1e-12)
-        np.testing.assert_allclose(x1, x5, atol=1e-12)
-        np.testing.assert_allclose(x1, x6, atol=1e-10)
-        np.testing.assert_allclose(B1, B2, rtol=1e-8, atol=1e-8)
-        np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=1e-8)
-        np.testing.assert_allclose(B1, B4, rtol=1e-8, atol=1e-8)
-        np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
-        np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=1e-7)
+        np.testing.assert_allclose(x1, x2, atol=max(1e-12, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(x1, x3, atol=max(1e-12, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(x1, x4, atol=max(1e-12, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(x1, x5, atol=max(1e-12, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(x1, x6, atol=max(1e-10, 100 * EPS), rtol=RTOL)
+        np.testing.assert_allclose(
+            B1, B2, rtol=max(1e-8, 100 * EPS), atol=max(1e-8, 100 * EPS)
+        )
+        np.testing.assert_allclose(B1, B3, rtol=1e-3, atol=max(1e-8, 100 * EPS))
+        np.testing.assert_allclose(
+            B1, B4, rtol=max(1e-8, 100 * EPS), atol=max(1e-8, 100 * EPS)
+        )
+        np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=max(1e-7, 100 * EPS))
+        np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=max(1e-7, 100 * EPS))
 
 
 class TestCoilSet:
@@ -600,7 +678,9 @@ class TestCoilSet:
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid, transforms=transforms
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=max(1e-10, 100 * EPS)
+        )
 
         # with stellarator symmetry
         NFP = 4
@@ -613,7 +693,9 @@ class TestCoilSet:
         B_approx = coils2.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=32
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=max(1e-10, 100 * EPS)
+        )
 
         # With a MixedCoilSet as the base coils and only rotation
         coil = FourierPlanarCoil(I)
@@ -626,7 +708,9 @@ class TestCoilSet:
         B_approx = coils.compute_magnetic_field(
             [10, 0, 0], basis="rpz", source_grid=grid
         )[0]
-        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
+        np.testing.assert_allclose(
+            B_true, B_approx, rtol=1e-3, atol=max(1e-10, 100 * EPS)
+        )
 
     @pytest.mark.unit
     def test_is_self_intersecting_warnings(self):
@@ -676,9 +760,15 @@ class TestCoilSet:
                     [12, 1.5, 0],
                 ]
             ).reshape((4, 1, 3)),
+            rtol=RTOL,
+            atol=ATOL,
         )
-        np.testing.assert_allclose([dat["curvature"] for dat in data], 1 / 2)
-        np.testing.assert_allclose([dat["torsion"] for dat in data], 0)
+        np.testing.assert_allclose(
+            [dat["curvature"] for dat in data], 1 / 2, rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            [dat["torsion"] for dat in data], 0, rtol=RTOL, atol=ATOL
+        )
         T = [dat["frenet_tangent"] for dat in data]
         N = [dat["frenet_normal"] for dat in data]
         B = [dat["frenet_binormal"] for dat in data]
@@ -692,7 +782,8 @@ class TestCoilSet:
                     [0, 0, -1],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             N,
@@ -704,7 +795,8 @@ class TestCoilSet:
                     [-1, 0, 0],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             B,
@@ -716,13 +808,18 @@ class TestCoilSet:
                     [0, 1, 0],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         data = coils.compute("length", grid=32)
-        np.testing.assert_allclose([dat["length"] for dat in data], 2 * 2 * np.pi)
+        np.testing.assert_allclose(
+            [dat["length"] for dat in data], 2 * 2 * np.pi, rtol=RTOL, atol=ATOL
+        )
         coils.translate([1, 1, 1])
         data = coils.compute("length", grid=32)
-        np.testing.assert_allclose([dat["length"] for dat in data], 2 * 2 * np.pi)
+        np.testing.assert_allclose(
+            [dat["length"] for dat in data], 2 * 2 * np.pi, rtol=RTOL, atol=ATOL
+        )
         coils.flip([1, 0, 0])
         data = coils.compute(
             ["frenet_tangent", "frenet_normal", "frenet_binormal"],
@@ -742,7 +839,8 @@ class TestCoilSet:
                     [0, 0, -1],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             N,
@@ -754,7 +852,8 @@ class TestCoilSet:
                     [1, 0, 0],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
             B,
@@ -766,7 +865,8 @@ class TestCoilSet:
                     [0, 1, 0],
                 ]
             ).reshape((4, 1, 3)),
-            atol=1e-12,
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
 
     @pytest.mark.unit
@@ -858,26 +958,38 @@ class TestCoilSet:
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x4 = coils4.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
-            [xi["x"] for xi in x0], [xi["x"] for xi in x1], atol=1e-12
+            [xi["x"] for xi in x0],
+            [xi["x"] for xi in x1],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x0], [xi["x"] for xi in x2], atol=1e-12
+            [xi["x"] for xi in x0],
+            [xi["x"] for xi in x2],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x0], [xi["x"] for xi in x3], atol=1e-12
+            [xi["x"] for xi in x0],
+            [xi["x"] for xi in x3],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x0], [xi["x"] for xi in x4], atol=1e-12
+            [xi["x"] for xi in x0],
+            [xi["x"] for xi in x4],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         B0 = coils0.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B1 = coils1.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B2 = coils2.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B3 = coils3.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B4 = coils4.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
-        np.testing.assert_allclose(B0, B1, rtol=1e-2)
-        np.testing.assert_allclose(B0, B2, rtol=1e-2)
-        np.testing.assert_allclose(B0, B3, rtol=1e-2)
-        np.testing.assert_allclose(B0, B4, rtol=1e-2)
+        np.testing.assert_allclose(B0, B1, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B0, B2, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B0, B3, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B0, B4, rtol=1e-2, atol=ATOL)
 
         # CoilSet
         coil = coils2[0]  # FourierXYZCoil
@@ -905,26 +1017,38 @@ class TestCoilSet:
         grid_planar = Grid(np.array([np.zeros_like(zeta), np.zeros_like(zeta), zeta]).T)
         x9 = coils9.compute("x", grid=grid_planar, basis="xyz")
         np.testing.assert_allclose(
-            [xi["x"] for xi in x5], [xi["x"] for xi in x6], atol=1e-12
+            [xi["x"] for xi in x5],
+            [xi["x"] for xi in x6],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x5], [xi["x"] for xi in x7], atol=1e-12
+            [xi["x"] for xi in x5],
+            [xi["x"] for xi in x7],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x5], [xi["x"] for xi in x8], atol=1e-12
+            [xi["x"] for xi in x5],
+            [xi["x"] for xi in x8],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         np.testing.assert_allclose(
-            [xi["x"] for xi in x5], [xi["x"] for xi in x9], atol=1e-12
+            [xi["x"] for xi in x5],
+            [xi["x"] for xi in x9],
+            atol=max(1e-12, 100 * EPS),
+            rtol=RTOL,
         )
         B5 = coils5.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B6 = coils6.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B7 = coils7.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B8 = coils8.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
         B9 = coils9.compute_magnetic_field(np.array([[5, 2, 1]]), source_grid=grid)
-        np.testing.assert_allclose(B5, B6, rtol=1e-2)
-        np.testing.assert_allclose(B5, B7, rtol=1e-2)
-        np.testing.assert_allclose(B5, B8, rtol=1e-2)
-        np.testing.assert_allclose(B5, B9, rtol=1e-2)
+        np.testing.assert_allclose(B5, B6, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B5, B7, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B5, B8, rtol=1e-2, atol=ATOL)
+        np.testing.assert_allclose(B5, B9, rtol=1e-2, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -945,16 +1069,16 @@ def test_symmetry_position(DummyCoilSet):
     x_asym = coilset_asym._compute_position(basis="xyz", grid=grid)
     x_mixed = coilset_mixed._compute_position(basis="xyz", grid=grid)
 
-    np.testing.assert_allclose(x_sym, x_asym)
-    np.testing.assert_allclose(x_sym, x_mixed)
+    np.testing.assert_allclose(x_sym, x_asym, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(x_sym, x_mixed, rtol=RTOL, atol=ATOL)
 
     # check that positions of CoilSets are the same with rpz basis
     x_sym = coilset_sym._compute_position(basis="rpz", grid=grid)
     x_asym = coilset_asym._compute_position(basis="rpz", grid=grid)
     x_mixed = coilset_mixed._compute_position(basis="rpz", grid=grid)
 
-    np.testing.assert_allclose(x_sym, x_asym)
-    np.testing.assert_allclose(x_sym, x_mixed)
+    np.testing.assert_allclose(x_sym, x_asym, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(x_sym, x_mixed, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -978,13 +1102,17 @@ def test_symmetry_magnetic_field(DummyCoilSet):
     nodes_rpz = np.array([data["R"], data["phi"], data["Z"]]).T
     B_sym_rpz = coilset_sym.compute_magnetic_field(nodes_rpz, basis="rpz")
     B_asym_rpz = coilset_asym.compute_magnetic_field(nodes_rpz, basis="rpz")
-    np.testing.assert_allclose(B_sym_rpz, B_asym_rpz, atol=1e-14)
+    np.testing.assert_allclose(
+        B_sym_rpz, B_asym_rpz, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
     # test in (X, Y, Z) coordinates
     nodes_xyz = np.array([data["X"], data["Y"], data["Z"]]).T
     B_sym_xyz = coilset_sym.compute_magnetic_field(nodes_xyz, basis="xyz")
     B_asym_xyz = coilset_asym.compute_magnetic_field(nodes_xyz, basis="xyz")
-    np.testing.assert_allclose(B_sym_xyz, B_asym_xyz, atol=1e-14)
+    np.testing.assert_allclose(
+        B_sym_xyz, B_asym_xyz, atol=max(1e-14, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.unit
@@ -1011,7 +1139,9 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
     # check values at saved points, ensure they match
     for i, (c1, c2) in enumerate(zip(coilset, coilset2)):
         # make sure knots are exactly the same
-        np.testing.assert_allclose(c1.knots, c2.knots, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.knots, c2.knots, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
 
         grid = LinearGrid(zeta=coilset2[0].knots, endpoint=False)
         coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
@@ -1024,10 +1154,14 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
         Y2 = coords2[:, 1]
         Z2 = coords2[:, 2]
 
-        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.current, c2.current, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(
+            Z1, Z2, atol=max(2e-7, 100 * EPS), err_msg=f"Coil {i}", rtol=RTOL
+        )
 
     # check magnetic field from both, check that matches
     grid = LinearGrid(N=200, endpoint=False)
@@ -1038,7 +1172,7 @@ def test_load_and_save_makegrid_coils(tmpdir_factory):
         np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
     )
 
-    np.testing.assert_allclose(B1, B2, atol=1e-7)
+    np.testing.assert_allclose(B1, B2, atol=max(1e-7, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -1142,10 +1276,18 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
             print(c3)
             # make sure knots are exactly the same
             np.testing.assert_allclose(
-                c1.knots, c2.knots, err_msg=f"CoilSet {i} Coil {j}"
+                c1.knots,
+                c2.knots,
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
-                c3.knots, c2.knots, err_msg=f"CoilSet {i} Coil {j}"
+                c3.knots,
+                c2.knots,
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
+                atol=ATOL,
             )
 
             coords1 = c1.compute("x", grid=grid, basis="xyz")["x"]
@@ -1164,20 +1306,44 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
             Z3 = coords3[:, 2]
 
             np.testing.assert_allclose(
-                c1.current, c2.current, err_msg=f"CoilSet {i} Coil {j}"
+                c1.current,
+                c2.current,
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
-                c3.current, c2.current, err_msg=f"CoilSet {i} Coil {j}"
-            )
-            np.testing.assert_allclose(X1, X2, err_msg=f"CoilSet {i} Coil {j}")
-            np.testing.assert_allclose(X3, X2, err_msg=f"CoilSet {i} Coil {j}")
-            np.testing.assert_allclose(Y1, Y2, err_msg=f"CoilSet {i} Coil {j}")
-            np.testing.assert_allclose(Y3, Y2, err_msg=f"CoilSet {i} Coil {j}")
-            np.testing.assert_allclose(
-                Z1, Z2, atol=2e-7, err_msg=f"CoilSet {i} Coil {j}"
+                c3.current,
+                c2.current,
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
+                atol=ATOL,
             )
             np.testing.assert_allclose(
-                Z3, Z2, atol=2e-7, err_msg=f"CoilSet {i} Coil {j}"
+                X1, X2, err_msg=f"CoilSet {i} Coil {j}", rtol=RTOL, atol=ATOL
+            )
+            np.testing.assert_allclose(
+                X3, X2, err_msg=f"CoilSet {i} Coil {j}", rtol=RTOL, atol=ATOL
+            )
+            np.testing.assert_allclose(
+                Y1, Y2, err_msg=f"CoilSet {i} Coil {j}", rtol=RTOL, atol=ATOL
+            )
+            np.testing.assert_allclose(
+                Y3, Y2, err_msg=f"CoilSet {i} Coil {j}", rtol=RTOL, atol=ATOL
+            )
+            np.testing.assert_allclose(
+                Z1,
+                Z2,
+                atol=max(2e-7, 100 * EPS),
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
+            )
+            np.testing.assert_allclose(
+                Z3,
+                Z2,
+                atol=max(2e-7, 100 * EPS),
+                err_msg=f"CoilSet {i} Coil {j}",
+                rtol=RTOL,
             )
 
     # check magnetic field from both, check that matches
@@ -1192,8 +1358,8 @@ def test_load_and_save_makegrid_coils_groups(tmpdir_factory):
         np.array([[0.7, 0, 0]]), basis="xyz", source_grid=grid
     )
 
-    np.testing.assert_allclose(B1, B2, atol=1e-7)
-    np.testing.assert_allclose(B3, B2, atol=1e-7)
+    np.testing.assert_allclose(B1, B2, atol=max(1e-7, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(B3, B2, atol=max(1e-7, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -1226,10 +1392,14 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
         Y2 = coords2[:, 1]
         Z2 = coords2[:, 2]
 
-        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.current, c2.current, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(
+            Z1, Z2, atol=max(2e-7, 100 * EPS), err_msg=f"Coil {i}", rtol=RTOL
+        )
 
     # check values at interpolated points, ensure they match closely
     grid = LinearGrid(N=51, endpoint=False)
@@ -1244,10 +1414,18 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
         Y2 = coords2[:, 1]
         Z2 = coords2[:, 2]
 
-        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", atol=1e-16)
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", atol=1e-16)
-        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.current, c2.current, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            X1, X2, err_msg=f"Coil {i}", atol=max(1e-16, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            Y1, Y2, err_msg=f"Coil {i}", atol=max(1e-16, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            Z1, Z2, atol=max(2e-7, 100 * EPS), err_msg=f"Coil {i}", rtol=RTOL
+        )
 
     # check Bnormal on torus and ensure is near zero
     surf = FourierRZToroidalSurface(
@@ -1258,9 +1436,9 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
     )
 
     B_normal, _ = coilset.compute_Bnormal(surf, source_grid=grid)
-    np.testing.assert_allclose(B_normal, 0, atol=1e-16)
+    np.testing.assert_allclose(B_normal, 0, atol=max(1e-16, 100 * EPS), rtol=RTOL)
     B_normal2, _ = coilset2.compute_Bnormal(surf)
-    np.testing.assert_allclose(B_normal2, 0, atol=1e-16)
+    np.testing.assert_allclose(B_normal2, 0, atol=max(1e-16, 100 * EPS), rtol=RTOL)
 
     # check B btwn the two coilsets
     B1 = coilset.compute_magnetic_field(
@@ -1272,7 +1450,7 @@ def test_save_and_load_makegrid_coils_rotated(tmpdir_factory):
 
     # coilset uses fourier discretization so biot savart is more accurate
     # coilset2 uses hanson hirshman which is only 2nd order
-    np.testing.assert_allclose(B1, B2, atol=1e-16, rtol=1e-6)
+    np.testing.assert_allclose(B1, B2, atol=max(1e-16, 100 * EPS), rtol=1e-6)
 
 
 @pytest.mark.unit
@@ -1305,10 +1483,14 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         Y2 = coords2[:, 1]
         Z2 = coords2[:, 2]
 
-        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.current, c2.current, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL)
+        np.testing.assert_allclose(
+            Z1, Z2, atol=max(2e-7, 100 * EPS), err_msg=f"Coil {i}", rtol=RTOL
+        )
 
     # check values at interpolated points, ensure they match closely
     grid = LinearGrid(N=101, endpoint=False)
@@ -1323,10 +1505,18 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         Y2 = coords2[:, 1]
         Z2 = coords2[:, 2]
 
-        np.testing.assert_allclose(c1.current, c2.current, err_msg=f"Coil {i}")
-        np.testing.assert_allclose(X1, X2, err_msg=f"Coil {i}", atol=1e-16)
-        np.testing.assert_allclose(Y1, Y2, err_msg=f"Coil {i}", atol=1e-16)
-        np.testing.assert_allclose(Z1, Z2, atol=2e-7, err_msg=f"Coil {i}")
+        np.testing.assert_allclose(
+            c1.current, c2.current, err_msg=f"Coil {i}", rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            X1, X2, err_msg=f"Coil {i}", atol=max(1e-16, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            Y1, Y2, err_msg=f"Coil {i}", atol=max(1e-16, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            Z1, Z2, atol=max(2e-7, 100 * EPS), err_msg=f"Coil {i}", rtol=RTOL
+        )
 
     # check Bnormal on torus and ensure is near zero
     surf = FourierRZToroidalSurface(
@@ -1337,9 +1527,9 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
     )
 
     B_normal, _ = coilset.compute_Bnormal(surf, source_grid=grid)
-    np.testing.assert_allclose(B_normal, 0, atol=1e-16)
+    np.testing.assert_allclose(B_normal, 0, atol=max(1e-16, 100 * EPS), rtol=RTOL)
     B_normal2, _ = coilset2.compute_Bnormal(surf)
-    np.testing.assert_allclose(B_normal2, 0, atol=1e-16)
+    np.testing.assert_allclose(B_normal2, 0, atol=max(1e-16, 100 * EPS), rtol=RTOL)
 
     # check B btwn the two coilsets
     B1 = coilset.compute_magnetic_field(
@@ -1349,7 +1539,7 @@ def test_save_and_load_makegrid_coils_rotated_int_grid(tmpdir_factory):
         np.array([[10, 0, 0]]), basis="xyz", source_grid=grid
     )
 
-    np.testing.assert_allclose(B1, B2, atol=1e-10)
+    np.testing.assert_allclose(B1, B2, atol=max(1e-10, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -1485,12 +1675,12 @@ def test_linking_number():
     # represent linking numbers (they are zero here anyway).
     mask = ~jnp.eye(link.shape[0], dtype=bool)
     link = jnp.where(mask, link, 0)
-    np.testing.assert_allclose(link[:-1, :-1], 0, atol=1e-14)
+    np.testing.assert_allclose(link[:-1, :-1], 0, atol=max(1e-14, 100 * EPS), rtol=RTOL)
 
     # we expect the axis coil to link all the modular coils, with alternating sign
     # due to alternating orientation of the coils due to symmetry.
     expected = [1, -1] * 5
-    np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3)
+    np.testing.assert_allclose(link[-1, :-1], expected, rtol=1e-3, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -1515,14 +1705,14 @@ def test_precomputed_biot_savart_source():
         np.testing.assert_allclose(
             source.compute_magnetic_field(pts),
             field.compute_magnetic_field(pts),
-            rtol=1e-10,
-            atol=1e-14,
+            rtol=max(1e-10, 100 * EPS),
+            atol=max(1e-14, 100 * EPS),
         )
         np.testing.assert_allclose(
             source.compute_magnetic_vector_potential(pts),
             field.compute_magnetic_vector_potential(pts),
-            rtol=1e-10,
-            atol=1e-14,
+            rtol=max(1e-10, 100 * EPS),
+            atol=max(1e-14, 100 * EPS),
         )
 
     # MixedCoilSet accepts one source grid per member coil
@@ -1531,8 +1721,8 @@ def test_precomputed_biot_savart_source():
     np.testing.assert_allclose(
         source.compute_magnetic_field(pts),
         mixed.compute_magnetic_field(pts, source_grid=grids),
-        rtol=1e-10,
-        atol=1e-14,
+        rtol=max(1e-10, 100 * EPS),
+        atol=max(1e-14, 100 * EPS),
     )
     # CoilSet requires a single shared grid
     with pytest.raises(ValueError, match="single source_grid"):
@@ -1549,8 +1739,8 @@ def test_precomputed_biot_savart_source():
     r_old, z_old = field_line_integrate(
         r0, z0, phis, coilset, use_precomputed_source=False
     )
-    np.testing.assert_allclose(r_new, r_old, rtol=1e-6, atol=1e-8)
-    np.testing.assert_allclose(z_new, z_old, rtol=1e-6, atol=1e-8)
+    np.testing.assert_allclose(r_new, r_old, rtol=1e-6, atol=max(1e-8, 100 * EPS))
+    np.testing.assert_allclose(z_new, z_old, rtol=1e-6, atol=max(1e-8, 100 * EPS))
 
 
 @pytest.mark.unit
@@ -1559,14 +1749,16 @@ def test_initialize_modular():
     eq = Equilibrium(NFP=2, sym=True)
     coilset = initialize_modular_coils(eq, 3, 2.0)
     assert len(coilset) == 3
-    np.testing.assert_allclose(coilset[0].r_n, 2.0)  # a=1, so r/a of 2 gives r=2
+    np.testing.assert_allclose(
+        coilset[0].r_n, 2.0, rtol=RTOL, atol=ATOL
+    )  # a=1, so r/a of 2 gives r=2
     x = coilset[1]._compute_position(basis="rpz")[0]
     # eq is axisymmetric so coils should each be at const zeta
     # with symmetry and 2 field periods, each half period goes from 0 to pi/2
     # with 3 coils, one coil should be right in the middle at pi/4
-    np.testing.assert_allclose(x[:, 1], np.pi / 4)
-    np.testing.assert_allclose(x[:, 0].min(), 8, rtol=1e-2)  # Rmin ~ 10-2
-    np.testing.assert_allclose(x[:, 0].max(), 12, rtol=1e-2)  # Rmax ~ 10+2
+    np.testing.assert_allclose(x[:, 1], np.pi / 4, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(x[:, 0].min(), 8, rtol=1e-2, atol=ATOL)  # Rmin ~ 10-2
+    np.testing.assert_allclose(x[:, 0].max(), 12, rtol=1e-2, atol=ATOL)  # Rmax ~ 10+2
     y = coilset._compute_position()
     assert len(y) == 12  # 3 coils/fp * 2 fp * 2 sym
 
@@ -1579,26 +1771,30 @@ def test_initialize_saddle():
     assert len(coilset) == 3
     y = coilset._compute_position()
     assert len(y) == 6  # 3 coils/fp * 2 fp
-    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    np.testing.assert_allclose(
+        coilset[0].r_n, 1.0, rtol=RTOL, atol=ATOL
+    )  # a=1, so r/a of 1 gives r=1
     x = coilset[1]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 3 coils, one coil should be right in the middle at pi/2, eg parallel to
     # x axis
-    np.testing.assert_allclose(x[:, 1], 8)  # R ~ 10-2
-    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
-    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+    np.testing.assert_allclose(x[:, 1], 8, rtol=RTOL, atol=ATOL)  # R ~ 10-2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2, atol=ATOL)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2, atol=ATOL)  # xmax
 
     coilset = initialize_saddle_coils(eq, 1, offset=2.0, r_over_a=1.0, position="outer")
     assert len(coilset) == 1
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
-    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    np.testing.assert_allclose(
+        coilset[0].r_n, 1.0, rtol=RTOL, atol=ATOL
+    )  # a=1, so r/a of 1 gives r=1
     x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
-    np.testing.assert_allclose(x[:, 1], 12)  # R ~ 10+2
-    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
-    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+    np.testing.assert_allclose(x[:, 1], 12, rtol=RTOL, atol=ATOL)  # R ~ 10+2
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2, atol=ATOL)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2, atol=ATOL)  # xmax
 
     offset = 3.0
     coilset = initialize_saddle_coils(
@@ -1607,13 +1803,15 @@ def test_initialize_saddle():
     assert len(coilset) == 1
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
-    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    np.testing.assert_allclose(
+        coilset[0].r_n, 1.0, rtol=RTOL, atol=ATOL
+    )  # a=1, so r/a of 1 gives r=1
     x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
-    np.testing.assert_allclose(x[:, 2], offset)  # Z ~ 3
-    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
-    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+    np.testing.assert_allclose(x[:, 2], offset, rtol=RTOL, atol=ATOL)  # Z ~ 3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2, atol=ATOL)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2, atol=ATOL)  # xmax
 
     coilset = initialize_saddle_coils(
         eq, 1, offset=offset, r_over_a=1.0, position="bottom"
@@ -1621,13 +1819,15 @@ def test_initialize_saddle():
     assert len(coilset) == 1
     y = coilset._compute_position()
     assert len(y) == 2  # 3 coils/fp * 2 fp
-    np.testing.assert_allclose(coilset[0].r_n, 1.0)  # a=1, so r/a of 1 gives r=1
+    np.testing.assert_allclose(
+        coilset[0].r_n, 1.0, rtol=RTOL, atol=ATOL
+    )  # a=1, so r/a of 1 gives r=1
     x = coilset[0]._compute_position(grid=LinearGrid(N=50), basis="xyz")[0]
     # 2 field periods, each half period goes from 0 to pi
     # with 1 coils, it should be at pi/2
-    np.testing.assert_allclose(x[:, 2], -offset)  # Z ~ -3
-    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2)  # xmin
-    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2)  # xmax
+    np.testing.assert_allclose(x[:, 2], -offset, rtol=RTOL, atol=ATOL)  # Z ~ -3
+    np.testing.assert_allclose(x[:, 0].min(), -1, rtol=1e-2, atol=ATOL)  # xmin
+    np.testing.assert_allclose(x[:, 0].max(), 1, rtol=1e-2, atol=ATOL)  # xmax
 
 
 @pytest.mark.unit

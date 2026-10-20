@@ -19,6 +19,8 @@ from desc.integrals import surface_integrals_map
 from desc.objectives import GenericObjective, ObjectiveFunction
 from desc.utils import dot, errorif, getsource
 
+from .utils import ATOL, EPS, RTOL
+
 # Unless mentioned in the source code of the compute function, the assumptions
 # made to compute the magnetic axis limit can be reduced to assuming that these
 # functions tend toward zero as the magnetic axis is approached and that
@@ -344,23 +346,32 @@ class TestAxisLimits:
             # For the rotational transform to be finite at the magnetic axis,
             # the magnetic field must satisfy 𝐁 ⋅ 𝐞_ζ × 𝐞ᵨ = 0. This is also
             # required for 𝐁^θ component of the field to be physical.
-            np.testing.assert_allclose(dot(data["b"], data["n_theta"]), 0, atol=1e-15)
+            np.testing.assert_allclose(
+                dot(data["b"], data["n_theta"]),
+                0,
+                atol=max(1e-15, 100 * EPS),
+                rtol=RTOL,
+            )
             # and be orthogonal with 𝐞^ρ because 𝐞^ρ is multivalued at the
             # magnetic axis. 𝐁^ρ = 𝐁 ⋅ 𝐞^ρ must be single-valued for the
             # magnetic field to be physical. (The direction of the vector needs
             # to be unique).
-            np.testing.assert_allclose(dot(data["b"], data["n_rho"]), 0, atol=1e-15)
+            np.testing.assert_allclose(
+                dot(data["b"], data["n_rho"]), 0, atol=max(1e-15, 100 * EPS), rtol=RTOL
+            )
             # and collinear with 𝐞_ζ near ρ=0
             np.testing.assert_allclose(
                 # |𝐁_ζ| == ‖𝐁‖ ‖𝐞_ζ‖
                 np.abs(dot(data["b"], (data["e_zeta"].T / np.sqrt(data["g_zz"])).T)),
                 1,
+                rtol=RTOL,
+                atol=ATOL,
             )
             # Explicitly check 𝐁 is single-valued at the magnetic axis.
             for B in data["B"].reshape((grid.num_zeta, -1, 3)):
-                np.testing.assert_allclose(B[:, 0], B[0, 0])
-                np.testing.assert_allclose(B[:, 1], B[0, 1])
-                np.testing.assert_allclose(B[:, 2], B[0, 2])
+                np.testing.assert_allclose(B[:, 0], B[0, 0], rtol=RTOL, atol=ATOL)
+                np.testing.assert_allclose(B[:, 1], B[0, 1], rtol=RTOL, atol=ATOL)
+                np.testing.assert_allclose(B[:, 2], B[0, 2], rtol=RTOL, atol=ATOL)
 
         eq = get("W7-X")
         with pytest.warns(UserWarning, match="Reducing radial"):

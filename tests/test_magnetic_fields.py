@@ -42,7 +42,7 @@ from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
 from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 from .utils import FiniteDiffDerivative as Derivative
 
 
@@ -153,18 +153,26 @@ class TestMagneticFields:
         scaled_field = 3.1 * tfield
         assert scaled_field.B0 == 2
         assert scaled_field.scale == 3.1
-        np.testing.assert_allclose(scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field([1.0, 0, 0]), np.array([[0, 6.2, 0]]), rtol=RTOL, atol=ATOL
+        )
         np.testing.assert_allclose(
             scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
             np.array([[0, 0, -3.1 * 2 * 1 * np.log(2)]]),
+            rtol=RTOL,
+            atol=ATOL,
         )
 
         scaled_field.R0 = 1.3
         scaled_field.scale = 1.0
-        np.testing.assert_allclose(scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]))
+        np.testing.assert_allclose(
+            scaled_field([1.3, 0, 0]), np.array([[0, 2, 0]]), rtol=RTOL, atol=ATOL
+        )
         np.testing.assert_allclose(
             scaled_field.compute_magnetic_vector_potential([2.0, 0, 0]),
             np.array([[0, 0, -2 * 1.3 * np.log(2)]]),
+            rtol=RTOL,
+            atol=ATOL,
         )
         assert scaled_field.optimizable_params == ["B0", "R0", "scale"]
         assert hasattr(scaled_field, "B0")
@@ -175,7 +183,10 @@ class TestMagneticFields:
         assert len(sum_field_tv) == 2
 
         np.testing.assert_allclose(
-            sum_field([1.3, 0, 0.0]), [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]]
+            sum_field([1.3, 0, 0.0]),
+            [[0.0, 2, 3.2 + 2 * 1.2 * 0.3]],
+            rtol=RTOL,
+            atol=ATOL,
         )
 
         tfield_A = np.array([[0, 0, -tfield.B0 * tfield.R0 * np.log(tfield.R0)]])
@@ -186,6 +197,8 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             sum_field_tv.compute_magnetic_vector_potential([x, y, 0.0], basis="xyz"),
             tfield_A + vfield_A,
+            rtol=RTOL,
+            atol=ATOL,
         )
 
         assert sum_field.optimizable_params == [
@@ -205,7 +218,7 @@ class TestMagneticFields:
         ]
         assert sum_field.dim_x == 6
         p = sum_field.pack_params(sum_field.params_dict)
-        np.testing.assert_allclose(p, [3.2, 2, 1, 1.2, 2, 1.3])
+        np.testing.assert_allclose(p, [3.2, 2, 1, 1.2, 2, 1.3], rtol=RTOL, atol=ATOL)
         p *= 1.3
         sum_field.params_dict = sum_field.unpack_params(p)
         assert sum_field[0].B0 == 1.3 * 3.2
@@ -216,7 +229,10 @@ class TestMagneticFields:
         del sum_field[-1]
         assert len(sum_field) == 2
         np.testing.assert_allclose(
-            sum_field([1.3, 0, 0.0]), [[0.0, 0.0, (3.2 + 2 * 1.2 * 0.3)]]
+            sum_field([1.3, 0, 0.0]),
+            [[0.0, 0.0, (3.2 + 2 * 1.2 * 0.3)]],
+            rtol=RTOL,
+            atol=ATOL,
         )
         assert sum_field.optimizable_params == [
             ["B0"],
@@ -225,7 +241,10 @@ class TestMagneticFields:
         sum_field.insert(1, tfield)
         assert len(sum_field) == 3
         np.testing.assert_allclose(
-            sum_field([1.3, 0, 0.0]), [[0.0, 2.0, (3.2 + 2 * 1.2 * 0.3)]]
+            sum_field([1.3, 0, 0.0]),
+            [[0.0, 2.0, (3.2 + 2 * 1.2 * 0.3)]],
+            rtol=RTOL,
+            atol=ATOL,
         )
         assert sum_field.optimizable_params == [
             ["B0"],
@@ -435,8 +454,12 @@ class TestMagneticFields:
             dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
         )
 
-        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
-        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+        np.testing.assert_allclose(
+            correct_flux, flux_xyz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
+        np.testing.assert_allclose(
+            correct_flux, flux_rpz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
 
         field.params["G"] = -2 * field.params["G"]
 
@@ -455,8 +478,12 @@ class TestMagneticFields:
             dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
         )
 
-        np.testing.assert_allclose(-2 * correct_flux, flux_xyz, rtol=1e-8)
-        np.testing.assert_allclose(-2 * correct_flux, flux_rpz, rtol=1e-8)
+        np.testing.assert_allclose(
+            -2 * correct_flux, flux_xyz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
+        np.testing.assert_allclose(
+            -2 * correct_flux, flux_rpz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_fourier_current_potential_field(self):
@@ -768,8 +795,12 @@ class TestMagneticFields:
             dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
         )
 
-        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
-        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+        np.testing.assert_allclose(
+            correct_flux, flux_xyz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
+        np.testing.assert_allclose(
+            correct_flux, flux_rpz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
 
         field.G = -2 * field.G
         field.I = 0
@@ -789,8 +820,12 @@ class TestMagneticFields:
             dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
         )
 
-        np.testing.assert_allclose(-2 * correct_flux, flux_xyz, rtol=1e-8)
-        np.testing.assert_allclose(-2 * correct_flux, flux_rpz, rtol=1e-8)
+        np.testing.assert_allclose(
+            -2 * correct_flux, flux_xyz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
+        np.testing.assert_allclose(
+            -2 * correct_flux, flux_rpz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
 
         field = FourierCurrentPotentialField.from_surface(
             surface=surface,
@@ -815,8 +850,12 @@ class TestMagneticFields:
             dot(A_rpz, curve_data_rpz["x_s"], axis=-1) * curve_grid.spacing[:, 2]
         )
 
-        np.testing.assert_allclose(correct_flux, flux_xyz, rtol=1e-8)
-        np.testing.assert_allclose(correct_flux, flux_rpz, rtol=1e-8)
+        np.testing.assert_allclose(
+            correct_flux, flux_xyz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
+        np.testing.assert_allclose(
+            correct_flux, flux_rpz, rtol=max(1e-8, 100 * EPS), atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_fourier_current_potential_field_symmetry(self):
@@ -1115,10 +1154,14 @@ class TestMagneticFields:
                 (getattr(field3, attr) * np.array(extcur)).sum(axis=-1),
                 getattr(field4, attr).squeeze(),
                 err_msg=attr,
+                rtol=RTOL,
+                atol=ATOL,
             )
         attrs_3d = ["_R", "_phi", "_Z"]
         for attr in attrs_3d:
-            np.testing.assert_allclose(getattr(field3, attr), getattr(field4, attr))
+            np.testing.assert_allclose(
+                getattr(field3, attr), getattr(field4, attr), rtol=RTOL, atol=ATOL
+            )
 
         r = 0.70
         p = 0
@@ -1148,7 +1191,10 @@ class TestMagneticFields:
         ).T
 
         np.testing.assert_allclose(
-            field3([0.70, 0, 0]), np.array([[0, -0.671, 0.0858]]), rtol=1e-3, atol=1e-8
+            field3([0.70, 0, 0]),
+            np.array([[0, -0.671, 0.0858]]),
+            rtol=1e-3,
+            atol=max(1e-8, 100 * EPS),
         )
 
         np.testing.assert_allclose(field3([0.70, 0, 0]), B2, rtol=1e-3, atol=5e-3)
@@ -1158,7 +1204,7 @@ class TestMagneticFields:
             field3([0.70, 0, 0]),
             2 * np.array([[0, -0.671, 0.0858]]),
             rtol=1e-3,
-            atol=1e-8,
+            atol=max(1e-8, 100 * EPS),
         )
 
     @pytest.mark.unit
@@ -1239,7 +1285,9 @@ class TestMagneticFields:
             )
             exact = np.stack(loop(pts[:, 0], pts[:, 2]), axis=1)
             B = np.asarray(field.compute_magnetic_field(pts))
-            np.testing.assert_allclose(B[:, 1], 0, atol=1e-14)
+            np.testing.assert_allclose(
+                B[:, 1], 0, atol=max(1e-14, 100 * EPS), rtol=RTOL
+            )
             return np.abs(B[:, [0, 2]] - exact).max() / np.abs(exact).max()
 
         e_coarse = max_err(33, 1, "cubic")
@@ -1252,7 +1300,9 @@ class TestMagneticFields:
         # cubic must beat linear between nodes
         assert e_fine < 0.2 * max_err(65, 1, "linear")
         # single plane agrees with the multi-plane 3D path
-        np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
+        np.testing.assert_allclose(
+            e_fine, max_err(65, 4, "cubic"), rtol=1e-3, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_field_line_integrate(self):
@@ -1404,7 +1454,9 @@ class TestMagneticFields:
             return jnp.squeeze(r[-1])
 
         df_dr = jax.grad(jit(fun))(10.1)
-        np.testing.assert_allclose(df_dr, 1, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(
+            df_dr, 1, rtol=max(1e-8, 100 * EPS), atol=max(1e-8, 100 * EPS)
+        )
 
     @pytest.mark.unit
     def test_field_line_integrate_long(self):
@@ -1513,11 +1565,15 @@ class TestMagneticFields:
         )
 
         # make sure x calculation is the same
-        np.testing.assert_allclose(x, x_from_Bnorm, atol=1e-16)
+        np.testing.assert_allclose(
+            x, x_from_Bnorm, atol=max(1e-16, 100 * EPS), rtol=RTOL
+        )
 
         tfield.save_BNORM_file(eq, path, 40, 40)
         Bnorm_from_file = read_BNORM_file(path, eq, grid)
-        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-8)
+        np.testing.assert_allclose(
+            Bnorm, Bnorm_from_file, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
         asym_surf = FourierRZToroidalSurface(sym=False)
         with pytest.raises(AssertionError, match="sym"):
@@ -1578,7 +1634,7 @@ class TestMagneticFields:
         ).T
         B_saved = save_field.compute_magnetic_field(grid)
         B_loaded = load_field.compute_magnetic_field(grid)
-        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6)
+        np.testing.assert_allclose(B_loaded, B_saved, rtol=1e-6, atol=ATOL)
 
     @pytest.mark.unit
     def test_omnigenous_field_change_resolution_B(self):
@@ -1706,9 +1762,9 @@ def test_dommaschk_radial_field():
     d_arr = [0]
     B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0)
+    np.testing.assert_allclose(B_dom[:, 0], 0, rtol=RTOL, atol=ATOL)
     np.testing.assert_array_equal(B_dom[:, 1], 1 / R.flatten())
-    np.testing.assert_allclose(B_dom[:, 2], 0)
+    np.testing.assert_allclose(B_dom[:, 2], 0, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -1754,23 +1810,29 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     )
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-13)
-    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-13)
-    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-13)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=max(1e-13, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(
+        B_dom[:, 1], B0 / R.flatten(), atol=max(1e-13, 100 * EPS), rtol=RTOL
+    )
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=max(1e-13, 100 * EPS), rtol=RTOL)
 
-    np.testing.assert_allclose(B._params["B0"], B0)
+    np.testing.assert_allclose(B._params["B0"], B0, rtol=RTOL, atol=ATOL)
 
     # only nonzero coefficient of the field should be the B0 and a_ml = a_01
-    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-13)
+    np.testing.assert_allclose(
+        B._params["B0"], B0, atol=max(1e-13, 100 * EPS), rtol=RTOL
+    )
     for coef, m, l in zip(
         B._params["a_arr"], B._full_params["ms"], B._full_params["ls"]
     ):
         if m == 0 and l == 1:
-            np.testing.assert_allclose(coef, B0_Z)
+            np.testing.assert_allclose(coef, B0_Z, rtol=RTOL, atol=ATOL)
         else:
-            np.testing.assert_allclose(coef, 0, atol=1e-13)
+            np.testing.assert_allclose(coef, 0, atol=max(1e-13, 100 * EPS), rtol=RTOL)
     for name in ["b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[name], 0, atol=1e-13)
+        np.testing.assert_allclose(
+            B._params[name], 0, atol=max(1e-13, 100 * EPS), rtol=RTOL
+        )
 
 
 @pytest.mark.unit

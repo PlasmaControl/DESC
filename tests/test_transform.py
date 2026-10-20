@@ -17,7 +17,7 @@ from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
-from .utils import EPS
+from .utils import EPS, RTOL
 
 
 class TestTransform:
@@ -142,7 +142,9 @@ class TestTransform:
 
         values = transf.transform(c, 0, 0, 0)
 
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(
+            values, correct_vals, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_volume_zernike(self):

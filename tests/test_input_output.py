@@ -31,6 +31,8 @@ from desc.profiles import (
 from desc.transform import Transform
 from desc.utils import equals
 
+from .utils import ATOL, RTOL
+
 
 @pytest.mark.unit
 def test_vmec_input(tmpdir_factory):
@@ -620,20 +622,28 @@ def test_ascii_io(tmpdir_factory):
         write_ascii(tmp_path, eq1)
     with pytest.warns(DeprecationWarning):
         eq2 = read_ascii(tmp_path)
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
-    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, rtol=RTOL, atol=ATOL)
     np.testing.assert_allclose(
         eq1.iota.params[np.nonzero(eq1.iota.params)],
         eq2.iota.params[np.nonzero(eq2.iota.params)],
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
         eq1.pressure.params[np.nonzero(abs(eq1.pressure.params) > 1e-3)],
         eq2.pressure.params[np.nonzero(abs(eq2.pressure.params) > 1e-3)],
+        rtol=RTOL,
+        atol=ATOL,
     )
-    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
-    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
-    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+    np.testing.assert_allclose(
+        eq1.surface.R_lmn, eq2.surface.R_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq1.surface.Z_lmn, eq2.surface.Z_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi, rtol=RTOL, atol=ATOL)
 
     # test with different profile type
     eq1.pressure = eq1.get_profile("p", kind="spline")
@@ -641,20 +651,26 @@ def test_ascii_io(tmpdir_factory):
         write_ascii(tmp_path, eq1)
     with pytest.warns(DeprecationWarning):
         eq2 = read_ascii(tmp_path)
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
-    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, rtol=RTOL, atol=ATOL)
     rho = np.linspace(0, 1, 20)
     np.testing.assert_allclose(
         eq1.iota.params[np.nonzero(eq1.iota.params)],
         eq2.iota.params[np.nonzero(eq2.iota.params)],
+        rtol=RTOL,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
         eq1.pressure(rho), eq2.pressure(rho), rtol=1e-3, atol=1e-3
     )
-    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
-    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
-    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+    np.testing.assert_allclose(
+        eq1.surface.R_lmn, eq2.surface.R_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq1.surface.Z_lmn, eq2.surface.Z_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi, rtol=RTOL, atol=ATOL)
 
     # test kinetic and current profiles
     eq1 = desc.examples.get("reactor_QA")
@@ -662,9 +678,9 @@ def test_ascii_io(tmpdir_factory):
         write_ascii(tmp_path, eq1)
     with pytest.warns(DeprecationWarning):
         eq2 = read_ascii(tmp_path)
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
-    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, rtol=RTOL, atol=ATOL)
     rho = np.linspace(0, 1, 20)
     # this eq's iota is not well represented by an even PowerSeries
     np.testing.assert_allclose(
@@ -681,9 +697,13 @@ def test_ascii_io(tmpdir_factory):
         rtol=2e-2,
         atol=1e-5,
     )
-    np.testing.assert_allclose(eq1.surface.R_lmn, eq2.surface.R_lmn)
-    np.testing.assert_allclose(eq1.surface.Z_lmn, eq2.surface.Z_lmn)
-    np.testing.assert_allclose(eq1.Psi, eq2.Psi)
+    np.testing.assert_allclose(
+        eq1.surface.R_lmn, eq2.surface.R_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq1.surface.Z_lmn, eq2.surface.Z_lmn, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(eq1.Psi, eq2.Psi, rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit

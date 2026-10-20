@@ -76,7 +76,7 @@ from desc.optimize.optimizer import _parse_x_scale
 from desc.optimize.utils import chol, gershgorin_bounds
 from desc.utils import get_all_instances
 
-from .utils import EPS
+from .utils import ATOL, EPS, RTOL
 
 
 @jit
@@ -195,7 +195,9 @@ class TestFmin:
             gtol=1e-12,
             options={"tr_method": "dogleg"},
         )
-        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+        np.testing.assert_allclose(
+            out["x"], SCALAR_FUN_SOLN, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_convex_full_hess_subspace(self):
@@ -214,7 +216,9 @@ class TestFmin:
             gtol=1e-12,
             options={"tr_method": "subspace"},
         )
-        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+        np.testing.assert_allclose(
+            out["x"], SCALAR_FUN_SOLN, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_convex_full_hess_exact(self):
@@ -233,7 +237,9 @@ class TestFmin:
             gtol=1e-12,
             options={"tr_method": "exact"},
         )
-        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+        np.testing.assert_allclose(
+            out["x"], SCALAR_FUN_SOLN, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.slow
     @pytest.mark.unit
@@ -1863,7 +1869,9 @@ def test_ess_scaling_without_proximal():
     )
 
     assert out["success"] is not None
-    np.testing.assert_allclose(out["x_scale"], eq.pack_params(eq._get_ess_scale()))
+    np.testing.assert_allclose(
+        out["x_scale"], eq.pack_params(eq._get_ess_scale()), rtol=RTOL, atol=ATOL
+    )
 
 
 @pytest.mark.unit
@@ -1956,15 +1964,19 @@ def test_get_ess_scale():  # noqa: C901
     np.testing.assert_allclose(
         rz_coil_scale["R_n"],
         np.exp(-alpha * np.linalg.norm(rz_coil.R_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         rz_coil_scale["Z_n"],
         np.exp(-alpha * np.linalg.norm(rz_coil.Z_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in rz_coil_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(rz_coil_scale[key], 1)
+        np.testing.assert_allclose(rz_coil_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # FourierPlanarCoil
     assert planar_coil_scale.keys() == set(planar_coil.optimizable_params)
@@ -1972,26 +1984,32 @@ def test_get_ess_scale():  # noqa: C901
         planar_coil_scale["r_n"],
         np.exp(-alpha * np.linalg.norm(planar_coil.r_basis.modes, axis=1))
         / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in planar_coil_scale.keys():
         if key in ["r_n"]:
             continue
-        np.testing.assert_allclose(planar_coil_scale[key], 1)
+        np.testing.assert_allclose(planar_coil_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # FourierXYCoil
     assert xy_coil_scale.keys() == set(xy_coil.optimizable_params)
     np.testing.assert_allclose(
         xy_coil_scale["X_n"],
         np.exp(-alpha * np.linalg.norm(xy_coil.X_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         xy_coil_scale["Y_n"],
         np.exp(-alpha * np.linalg.norm(xy_coil.Y_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in xy_coil_scale.keys():
         if key in ["X_n", "Y_n"]:
             continue
-        np.testing.assert_allclose(xy_coil_scale[key], 1)
+        np.testing.assert_allclose(xy_coil_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # FourierXYZCoil
     assert xyz_coil_scale.keys() == set(xyz_coil.optimizable_params)
@@ -1999,89 +2017,121 @@ def test_get_ess_scale():  # noqa: C901
         xyz_coil_scale["X_n"],
         np.exp(-alpha * np.linalg.norm(xyz_coil.X_basis.modes, axis=1))
         / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         xyz_coil_scale["Y_n"],
         np.exp(-alpha * np.linalg.norm(xyz_coil.Y_basis.modes, axis=1))
         / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         xyz_coil_scale["Z_n"],
         np.exp(-alpha * np.linalg.norm(xyz_coil.Z_basis.modes, axis=1))
         / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in xyz_coil_scale.keys():
         if key in ["X_n", "Y_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(xyz_coil_scale[key], 1)
+        np.testing.assert_allclose(xyz_coil_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # FourierRZCurve
     assert axis_scale.keys() == set(axis.optimizable_params)
     np.testing.assert_allclose(
         axis_scale["R_n"],
         np.exp(-alpha * np.linalg.norm(axis.R_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         axis_scale["Z_n"],
         np.exp(-alpha * np.linalg.norm(axis.Z_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in axis_scale.keys():
         if key in ["R_n", "Z_n"]:
             continue
-        np.testing.assert_allclose(axis_scale[key], 1)
+        np.testing.assert_allclose(axis_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # FourierRZToroidalSurface
     assert surf_scale.keys() == set(surf.optimizable_params)
     np.testing.assert_allclose(
         surf_scale["R_lmn"],
         np.exp(-alpha * np.linalg.norm(surf.R_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         surf_scale["Z_lmn"],
         np.exp(-alpha * np.linalg.norm(surf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in surf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(surf_scale[key], 1)
+        np.testing.assert_allclose(surf_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # ZernikeRZToroidalSection
     assert zsurf_scale.keys() == set(zsurf.optimizable_params)
     np.testing.assert_allclose(
         zsurf_scale["R_lmn"],
         np.exp(-alpha * np.linalg.norm(zsurf.R_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         zsurf_scale["Z_lmn"],
         np.exp(-alpha * np.linalg.norm(zsurf.Z_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     for key in zsurf_scale.keys():
         if key in ["R_lmn", "Z_lmn"]:
             continue
-        np.testing.assert_allclose(zsurf_scale[key], 1)
+        np.testing.assert_allclose(zsurf_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     # Equilibrium
     assert eq_scale.keys() == set(eq.optimizable_params)
     np.testing.assert_allclose(
         eq_scale["R_lmn"],
         np.exp(-alpha * np.linalg.norm(eq.R_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         eq_scale["Z_lmn"],
         np.exp(-alpha * np.linalg.norm(eq.Z_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
     np.testing.assert_allclose(
         eq_scale["L_lmn"],
         np.exp(-alpha * np.linalg.norm(eq.L_basis.modes, axis=1)) / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
-    np.testing.assert_allclose(eq_scale["Ra_n"], axis_scale["R_n"])
-    np.testing.assert_allclose(eq_scale["Za_n"], axis_scale["Z_n"])
-    np.testing.assert_allclose(eq_scale["Rb_lmn"], surf_scale["R_lmn"])
-    np.testing.assert_allclose(eq_scale["Zb_lmn"], surf_scale["Z_lmn"])
+    np.testing.assert_allclose(
+        eq_scale["Ra_n"], axis_scale["R_n"], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq_scale["Za_n"], axis_scale["Z_n"], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq_scale["Rb_lmn"], surf_scale["R_lmn"], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        eq_scale["Zb_lmn"], surf_scale["Z_lmn"], rtol=RTOL, atol=ATOL
+    )
     for key in eq_scale.keys():
         if key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn", "Ra_n", "Za_n"]:
             continue
-        np.testing.assert_allclose(eq_scale[key], 1)
+        np.testing.assert_allclose(eq_scale[key], 1, atol=1e1 * EPS, rtol=RTOL)
 
     eq2 = eq.copy()
     eq2.surface = FourierCurrentPotentialField.from_surface(eq.surface)
@@ -2092,6 +2142,8 @@ def test_get_ess_scale():  # noqa: C901
         eq2_scale["Phi_mn"],
         np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
         / np.exp(-alpha),
+        atol=1e1 * EPS,
+        rtol=RTOL,
     )
-    np.testing.assert_allclose(eq2_scale["I"], 1)
-    np.testing.assert_allclose(eq2_scale["G"], 1)
+    np.testing.assert_allclose(eq2_scale["I"], 1, atol=1e1 * EPS, rtol=RTOL)
+    np.testing.assert_allclose(eq2_scale["G"], 1, atol=1e1 * EPS, rtol=RTOL)

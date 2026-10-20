@@ -82,7 +82,7 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 
-from .utils import EPS, area_difference_desc, area_difference_vmec
+from .utils import ATOL, EPS, RTOL, area_difference_desc, area_difference_vmec
 
 
 @pytest.mark.regression
@@ -153,10 +153,12 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2, rtol=RTOL)
+    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2, rtol=RTOL)
     curr = eq.get_profile("current")
-    np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), 0, atol=1e-8)
+    np.testing.assert_allclose(
+        curr(np.linspace(0, 1, 20)), 0, atol=max(1e-8, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.regression
@@ -1028,18 +1030,18 @@ def test_omnigenity_qa():
     B1 = field.B_basis.evaluate(np.array([[1, 0, 0]])) @ B_lm
 
     # x_lmn=0 because the equilibrium is QS
-    np.testing.assert_allclose(field.x_lmn, 0, atol=1e-12)
+    np.testing.assert_allclose(field.x_lmn, 0, atol=max(1e-12, 100 * EPS), rtol=RTOL)
 
     # check that magnetic well parameters get |B| on axis correct
     grid = LinearGrid(N=eq.N_grid, NFP=eq.NFP, rho=0)
     data = eq.compute("|B|", grid=grid)
-    np.testing.assert_allclose(B0, np.mean(data["|B|"]), rtol=1e-3)
+    np.testing.assert_allclose(B0, np.mean(data["|B|"]), rtol=1e-3, atol=ATOL)
 
     # check that magnetic well parameters get |B| min & max on LCFS correct
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=1)
     data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=grid)
-    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3)
-    np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3)
+    np.testing.assert_allclose(np.min(B1), data["min_tz |B|"][0], rtol=2e-3, atol=ATOL)
+    np.testing.assert_allclose(np.max(B1), data["max_tz |B|"][0], rtol=2e-3, atol=ATOL)
 
 
 @pytest.mark.regression
@@ -1812,8 +1814,8 @@ def test_qfm_optimization_with_analytic_field():
     # to get to Bnorm = 0
     nonax_R = surface.R_lmn[np.where(surface.R_basis.modes[:, 2] != 0)]
     nonax_Z = surface.Z_lmn[np.where(surface.Z_basis.modes[:, 2] != 0)]
-    np.testing.assert_allclose(nonax_R, 0, atol=1e-7)
-    np.testing.assert_allclose(nonax_Z, 0, atol=1e-7)
+    np.testing.assert_allclose(nonax_R, 0, atol=max(1e-7, 100 * EPS), rtol=RTOL)
+    np.testing.assert_allclose(nonax_Z, 0, atol=max(1e-7, 100 * EPS), rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -1836,10 +1838,14 @@ def test_second_stage_optimization():
         maxiter=100,
         verbose=2,
     )
-    np.testing.assert_allclose(field[0].R0, 3.5)  # this value was fixed
-    np.testing.assert_allclose(field[0].B0, 1)  # toroidal field (no change)
+    np.testing.assert_allclose(
+        field[0].R0, 3.5, rtol=RTOL, atol=ATOL
+    )  # this value was fixed
+    np.testing.assert_allclose(
+        field[0].B0, 1, rtol=RTOL, atol=ATOL
+    )  # toroidal field (no change)
     # vertical field (vanishes)
-    np.testing.assert_allclose(field[1].B0, 0, atol=1e3 * EPS)
+    np.testing.assert_allclose(field[1].B0, 0, atol=1e3 * EPS, rtol=RTOL)
 
 
 @pytest.mark.unit
@@ -1897,7 +1903,9 @@ def test_second_stage_optimization_CoilSet():
     )
 
     # should be small current in the circular coil providing the vertical field
-    np.testing.assert_allclose(field[0].current, 0, atol=1e-12)
+    np.testing.assert_allclose(
+        field[0].current, 0, atol=max(1e-12, 100 * EPS), rtol=RTOL
+    )
 
 
 @pytest.mark.slow
@@ -2274,9 +2282,9 @@ def test_external_vs_generic_objectives(tmpdir_factory):
         verbose=2,
     )
 
-    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l)
-    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2)
-    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2)
+    np.testing.assert_allclose(eq_generic.p_l, eq_external.p_l, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(eq_generic.p_l[:2], [2e2, -2e2], rtol=4e-2, atol=ATOL)
+    np.testing.assert_allclose(eq_external.p_l[:2], [2e2, -2e2], rtol=4e-2, atol=ATOL)
 
 
 @pytest.mark.unit
@@ -2309,12 +2317,20 @@ def test_coil_arclength_optimization():
     xs1 = coil_opt_with_arc_obj.compute("x_s")["x_s"]
     xs2 = coil_opt_without_arc_obj.compute("x_s")["x_s"]
     np.testing.assert_allclose(
-        coil_opt_without_arc_obj.compute("length")["length"], target_length, rtol=1e-4
+        coil_opt_without_arc_obj.compute("length")["length"],
+        target_length,
+        rtol=1e-4,
+        atol=ATOL,
     )
     np.testing.assert_allclose(
-        coil_opt_with_arc_obj.compute("length")["length"], target_length, rtol=1e-4
+        coil_opt_with_arc_obj.compute("length")["length"],
+        target_length,
+        rtol=1e-4,
+        atol=ATOL,
     )
-    np.testing.assert_allclose(np.var(np.linalg.norm(xs1, axis=1)), 0, atol=1e-3)
+    np.testing.assert_allclose(
+        np.var(np.linalg.norm(xs1, axis=1)), 0, atol=1e-3, rtol=RTOL
+    )
     assert np.var(np.linalg.norm(xs1, axis=1)) < np.var(np.linalg.norm(xs2, axis=1))
 
 
@@ -2639,10 +2655,10 @@ def test_share_parameters():
         ftol=1e-8,
     )
 
-    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn)
-    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn)
-    np.testing.assert_allclose(surf1.R_lmn, surf3.R_lmn)
-    np.testing.assert_allclose(surf1.Z_lmn, surf3.Z_lmn)
+    np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(surf1.R_lmn, surf3.R_lmn, rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(surf1.Z_lmn, surf3.Z_lmn, rtol=RTOL, atol=ATOL)
 
     # Phi should be different bc not shared and
     # the 2 target eqs are different
@@ -2753,18 +2769,32 @@ def test_share_parameters_coilsets():
         gtol=0,
     )
     # check that things which should be same are same
-    np.testing.assert_allclose(coils1.current[0][0], coils2.current[0][0])
-    np.testing.assert_allclose(coils1[0][0].center[0], coils2[0][0].center[0])
-    np.testing.assert_allclose(coils1[0][1].center, coils2[0][1].center)
-    np.testing.assert_allclose(coils1[0][1].normal, coils2[0][1].normal)
-    np.testing.assert_allclose(coils1[0][2].r_n, coils2[0][2].r_n)
+    np.testing.assert_allclose(
+        coils1.current[0][0], coils2.current[0][0], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        coils1[0][0].center[0], coils2[0][0].center[0], rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        coils1[0][1].center, coils2[0][1].center, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(
+        coils1[0][1].normal, coils2[0][1].normal, rtol=RTOL, atol=ATOL
+    )
+    np.testing.assert_allclose(coils1[0][2].r_n, coils2[0][2].r_n, rtol=RTOL, atol=ATOL)
     for i in range(len(coils1[1])):
-        np.testing.assert_allclose(coils1[1][i].shift, coils2[1][i].shift)
-        np.testing.assert_allclose(coils1[1][i].rotmat, coils2[1][i].rotmat)
-    np.testing.assert_allclose(coils1[2].X_n[1], coils2[2].X_n[1])
-    np.testing.assert_allclose(coils1[2].X_n[2], coils2[2].X_n[2])
-    np.testing.assert_allclose(coils1[2].Z_n[0], coils2[2].Z_n[0])
-    np.testing.assert_allclose(coils1[-1].current, coils2[-1].current)
+        np.testing.assert_allclose(
+            coils1[1][i].shift, coils2[1][i].shift, rtol=RTOL, atol=ATOL
+        )
+        np.testing.assert_allclose(
+            coils1[1][i].rotmat, coils2[1][i].rotmat, rtol=RTOL, atol=ATOL
+        )
+    np.testing.assert_allclose(coils1[2].X_n[1], coils2[2].X_n[1], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(coils1[2].X_n[2], coils2[2].X_n[2], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(coils1[2].Z_n[0], coils2[2].Z_n[0], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(
+        coils1[-1].current, coils2[-1].current, rtol=RTOL, atol=ATOL
+    )
 
     # did not share these
     assert not np.isclose(coils1.current[-2], coils2.current[-2])

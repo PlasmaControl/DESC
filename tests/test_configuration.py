@@ -17,6 +17,8 @@ from desc.geometry import (
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
+from .utils import ATOL, EPS, RTOL
+
 
 class TestConstructor:
     """Tests for creating equilibrium objects."""
@@ -243,10 +245,14 @@ class TestInitialGuess:
         """Test the default initial guess."""
         eq = Equilibrium()
         eq.set_initial_guess()
-        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1)
+        np.testing.assert_allclose(
+            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1, rtol=RTOL, atol=ATOL
+        )
         del eq._axis
         eq.set_initial_guess()
-        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1)
+        np.testing.assert_allclose(
+            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_errors(self):
@@ -298,7 +304,9 @@ class TestInitialGuess:
         # move z axis up to 0.5 for no good reason
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])
         eq.set_initial_guess(surface, axis)
-        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2 * 1)
+        np.testing.assert_allclose(
+            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2 * 1, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_guess_from_surface2(self):
@@ -307,7 +315,9 @@ class TestInitialGuess:
         # specify an interior flux surface
         surface = FourierRZToroidalSurface(rho=0.5)
         eq.set_initial_guess(surface)
-        np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2**2)
+        np.testing.assert_allclose(
+            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2**2, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_guess_from_points(self):
@@ -387,9 +397,15 @@ class TestInitialGuess:
         coords = eq.compute(["R", "Z", "lambda"], grid=grid)
         eq2 = Equilibrium(L=3, M=3, N=1)
         eq2.set_initial_guess(grid.nodes, coords["R"], coords["Z"], coords["lambda"])
-        np.testing.assert_allclose(eq.R_lmn, eq2.R_lmn, atol=1e-8)
-        np.testing.assert_allclose(eq.Z_lmn, eq2.Z_lmn, atol=1e-8)
-        np.testing.assert_allclose(eq.L_lmn, eq2.L_lmn, atol=1e-8)
+        np.testing.assert_allclose(
+            eq.R_lmn, eq2.R_lmn, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            eq.Z_lmn, eq2.Z_lmn, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
+        np.testing.assert_allclose(
+            eq.L_lmn, eq2.L_lmn, atol=max(1e-8, 100 * EPS), rtol=RTOL
+        )
 
     @pytest.mark.unit
     def test_NFP_error(self):
@@ -460,7 +476,9 @@ class TestGetSurfaces:
         rho = 0.5
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
-        np.testing.assert_allclose(surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho)
+        np.testing.assert_allclose(
+            surf.compute("S")["S"], 4 * np.pi**2 * R0 * rho, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
@@ -469,7 +487,9 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute("A")["A"], np.pi * rho**2)
+        np.testing.assert_allclose(
+            surf.compute("A")["A"], np.pi * rho**2, rtol=RTOL, atol=ATOL
+        )
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -498,8 +518,8 @@ def test_magnetic_axis():
     data = eq.compute(["R", "Z"], grid=grid)
     coords = axis.compute("x", grid=grid)["x"]
 
-    np.testing.assert_allclose(coords[:, 0], data["R"])
-    np.testing.assert_allclose(coords[:, 2], data["Z"])
+    np.testing.assert_allclose(coords[:, 0], data["R"], rtol=RTOL, atol=ATOL)
+    np.testing.assert_allclose(coords[:, 2], data["Z"], rtol=RTOL, atol=ATOL)
 
 
 @pytest.mark.unit

@@ -1774,3 +1774,29 @@ def test_write_vmec_input(TmpDir):
     np.testing.assert_allclose(W0, W1)
     np.testing.assert_allclose(rho_err, 0, atol=1e-4)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_load_lambda_half_mesh():
+    """Test that VMECIO.load fits lambda on the VMEC half mesh (gh issue #2351)."""
+    path = "./tests/inputs/wout_DSHAPE.nc"
+    eq = VMECIO.load(path, L=24)
+    file = Dataset(path, mode="r")
+    ns = int(file.variables["ns"][:])
+    xm = file.variables["xm"][:].filled()
+    lmns = file.variables["lmns"][:].filled()
+    file.close()
+
+    s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+    idx = np.arange(2, ns - 1, 4)  # rows of the half mesh, skipping the axis row
+    theta = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    t, j = np.meshgrid(theta, idx, indexing="ij")
+    t, j = t.ravel(), j.ravel()
+    lam_vmec = np.sum(lmns[j] * np.sin(xm * t[:, None]), axis=1)
+
+    # VMEC wouts are left-handed; load flips theta -> -theta, lambda -> -lambda
+    rho = np.sqrt(s_half[j - 1])
+    grid = Grid(np.array([rho, -t, np.zeros_like(t)]).T, sort=False)
+    lam_desc = -eq.compute("lambda", grid=grid)["lambda"]
+    # half mesh fit gives ~2.5e-4, fitting on the full mesh gave ~6e-3
+    np.testing.assert_allclose(lam_desc, lam_vmec, atol=1e-3)

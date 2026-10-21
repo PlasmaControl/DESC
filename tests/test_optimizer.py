@@ -17,7 +17,7 @@ from scipy.optimize import (
 )
 
 import desc.examples
-from desc.backend import jit, jnp, qr_multiply, vmap
+from desc.backend import jit, jnp, qr_multiply
 from desc.coils import (
     FourierPlanarCoil,
     FourierRZCoil,
@@ -1383,21 +1383,17 @@ def test_proximal_jacobian():
 
     def lm_regularized_solve(Fxh, Fc):
         # replicates the default qr method
-        # Vectorized over columns of Fc.
-        def solve(fc):
-            Qt_fc, R = qr_multiply(Fxh, fc, mode="right")
-            smin = estimate_singular_value(R, mode="min")
-            smax = estimate_singular_value(R, mode="max")
-            cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
-            sqrt_alpha = jnp.maximum(smin, cutoff * smax)
-            n = R.shape[1]
-            # solve the regularized system
-            stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
-            rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
-            Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
-            return solve_triangular_regularized(Rs, Qst_rhs)
-
-        return vmap(solve, in_axes=1, out_axes=1)(Fc)
+        Qt_fc, R = qr_multiply(Fxh, Fc.T, mode="right")
+        smin = estimate_singular_value(R, mode="min")
+        smax = estimate_singular_value(R, mode="max")
+        cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
+        sqrt_alpha = jnp.maximum(smin, cutoff * smax)
+        n = R.shape[1]
+        # solve the regularized system
+        stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
+        rhs = jnp.hstack([Qt_fc, jnp.zeros((Qt_fc.shape[0], n), dtype=Qt_fc.dtype)])
+        Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
+        return solve_triangular_regularized(Rs, Qst_rhs.T)
 
     def svd_reg_inv(Fxh):
         # the svd method (previous default)

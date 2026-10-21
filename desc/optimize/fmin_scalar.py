@@ -24,7 +24,7 @@ from .utils import (
     compute_hess_scale,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    scale_columns,
+    scale_matrix,
 )
 
 
@@ -243,9 +243,9 @@ def fmintr(  # noqa: C901
     # we don't need unscaled H anymore, so we overwrite it with H_h = d[:, None] * H * d
     # to avoid carrying so many H-sized matrices in memory, which can be large. The
     # buffer is donated so the scaling doesn't allocate a second copy of H.
-    H_h = scale_columns(H, d)
+    H_h = scale_matrix(H, d)
     del H
-    H_h = scale_columns(H_h, d[:, None])
+    H_h = scale_matrix(H_h, d[:, None])
 
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -440,9 +440,9 @@ def fmintr(  # noqa: C901
 
             g_h = g * d
 
-            H_h = scale_columns(H, d)
+            H_h = scale_matrix(H, d)
             del H
-            H_h = scale_columns(H_h, d[:, None])
+            H_h = scale_matrix(H_h, d[:, None])
 
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -474,8 +474,8 @@ def fmintr(  # noqa: C901
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     # after overwriting H_h with the scaled version, we have to revert back and
     # store the unscaled one
-    H_h = scale_columns(H_h, 1 / d)
-    H_h = scale_columns(H_h, 1 / d[:, None])
+    H_h = scale_matrix(H_h, 1 / d)
+    H_h = scale_matrix(H_h, 1 / d[:, None])
     result = OptimizeResult(
         x=x,
         success=success,

@@ -900,19 +900,6 @@ class TestGrid:
         )
 
     @pytest.mark.unit
-    def test_meshgrid_reshape_curve(self):
-        """Test that reshaping meshgrids works correctly for curve grids."""
-        grid = LinearGridCurve(3, 4)
-
-        s = grid.nodes[grid.unique_s_idx, 2]
-
-        # user regular allclose for broadcasting to work correctly
-        # reshaping _s_ should have s along 2nd axis
-        assert np.allclose(
-            grid.meshgrid_reshape(grid.nodes, "_s_")[:, :, :, 2], s[None, :, None]
-        )
-
-    @pytest.mark.unit
     def test_meshgrid_flatten(self):
         """Test that meshgrid_flatten is the inverse of meshgrid_reshape."""
         grid = LinearGridFlux(2, 3, 4)

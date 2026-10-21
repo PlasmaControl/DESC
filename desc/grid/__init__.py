@@ -2,21 +2,21 @@
 
 import warnings
 
-from .core import AbstractGrid
-from .curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
-from .flux import (
+from ._core import AbstractGrid
+from ._curve import AbstractGridCurve, CustomGridCurve, LinearGridCurve
+from ._flux import (
     AbstractGridFlux,
     ConcentricGridFlux,
     CustomGridFlux,
     LinearGridFlux,
     QuadratureGridFlux,
 )
-from .surface import (
+from ._surface import (
     AbstractGridToroidalSurface,
     CustomGridToroidalSurface,
     LinearGridToroidalSurface,
 )
-from .utils import (
+from ._utils import (
     cf_to_dec,
     dec_to_cf,
     find_least_rational_surfaces,

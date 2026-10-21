@@ -8,8 +8,8 @@ from scipy import special
 from desc.backend import jnp, put, repeat
 from desc.utils import check_nonnegint, check_posint, errorif, warnif
 
-from .core import AbstractGrid
-from .utils import _create_linear_nodes, midpoint_spacing, periodic_spacing
+from ._core import AbstractGrid
+from ._utils import _create_linear_nodes, midpoint_spacing, periodic_spacing
 
 
 class AbstractGridFlux(AbstractGrid):
@@ -752,7 +752,7 @@ class QuadratureGridFlux(AbstractGridFlux):
         self._fft_x2 = True
         self._can_fft2 = True
         self._nodes, self._spacing = self._create_nodes(L=L, M=M, N=N, NFP=NFP)
-        # symmetry is never enforced for Quadrature CustomGridFlux
+        # symmetry is not enforced for QuadratureGridFlux
         self._sort_nodes()
         self._axis = self._find_axis()
         (

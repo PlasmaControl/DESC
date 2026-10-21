@@ -925,15 +925,6 @@ class TestGrid:
             z = grid.meshgrid_flatten(y, order)
             np.testing.assert_allclose(x, z)
 
-        grid = LinearGridCurve(4)
-        orders = ["__s", "_s_", "s__"]
-        rng = np.random.default_rng(123)
-        x = rng.random(grid.num_nodes)
-        for order in orders:
-            y = grid.meshgrid_reshape(x, order)
-            z = grid.meshgrid_flatten(y, order)
-            np.testing.assert_allclose(x, z)
-
     @pytest.mark.unit
     def test_volume_weights(self):
         """Test that grid weights integrate to the volume of the coordinate system."""

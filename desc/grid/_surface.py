@@ -5,8 +5,8 @@ import numpy as np
 from desc.backend import jnp
 from desc.utils import check_nonnegint, check_posint, errorif
 
-from .core import AbstractGrid
-from .utils import _create_linear_nodes
+from ._core import AbstractGrid
+from ._utils import _create_linear_nodes
 
 
 class AbstractGridToroidalSurface(AbstractGrid):

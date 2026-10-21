@@ -14,6 +14,7 @@ are designed to simulate the motion of charged particles in magnetic fields eith
     :recursive:
     :template: class.rst
 
+    desc.particles.SlowingDownGuidingCenterTrajectory
     desc.particles.VacuumGuidingCenterTrajectory
 
 

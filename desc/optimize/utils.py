@@ -589,7 +589,8 @@ def solve_triangular_regularized(R, b, lower=False):
     denom = jnp.where(dr == 0, 1, dr)
     dri = jnp.where(dr == 0, 0, 1 / denom)
     Rs = R * dri[:, None]
-    b = dri * b
+    # b can be a vector or a matrix, we need to scale the rows
+    b = (dri * b.T).T
     return solve_triangular(Rs, b, unit_diagonal=True, lower=lower)
 
 

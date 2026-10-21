@@ -1374,11 +1374,12 @@ def _proximal_eq_tangents(
     if inv_method == "svd":
         cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
         uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-        sf += sf[-1]
+        sf += sf[-1]  # add a tiny bit of regularization
         sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
-        dfdc = vtf.T @ (sfi * (uf.T @ Fc))
+        # this is (dF/dx)⁻¹ @ dF/dc for all the directions at once  # noqa : E800
+        dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
     elif inv_method == "qr":
-        Qt_fc, R = qr_multiply(Fxh, Fc, mode="right")
+        Qt_fc, R = qr_multiply(Fxh, Fc.T, mode="right")
         # Levenberg-Marquardt regularization with alpha=smin² is similar to
         # above regularization. Use power iteration to estimate smin/smax
         smin = estimate_singular_value(R, mode="min")
@@ -1388,9 +1389,11 @@ def _proximal_eq_tangents(
         n = R.shape[1]
         # solve the regularized system
         stacked = jnp.vstack([R, sqrt_alpha * jnp.eye(n, dtype=R.dtype)])
-        rhs = jnp.concatenate([Qt_fc, jnp.zeros(n, dtype=Qt_fc.dtype)])
+        rhs = jnp.concatenate(
+            [Qt_fc, jnp.zeros((Qt_fc.shape[0], n), dtype=Qt_fc.dtype)], axis=1
+        )
         Qst_rhs, Rs = qr_multiply(stacked, rhs, mode="right")
-        dfdc = solve_triangular_regularized(Rs, Qst_rhs)
+        dfdc = solve_triangular_regularized(Rs, Qst_rhs.T)
     # feasible_tangents maps the reduced eq state vector back to the full one
     return dxdcv - (eq_feasible_tangents @ dfdc).T
 

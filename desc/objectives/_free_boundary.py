@@ -1,5 +1,9 @@
 """Objectives for solving free boundary equilibria."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 from scipy.constants import mu_0
 
@@ -9,7 +13,7 @@ from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
 from desc.integrals import DFTInterpolator, FFTInterpolator, virtual_casing_biot_savart
 from desc.nestor import Nestor
-from desc.objectives.objective_funs import _Objective, collect_docs
+from desc.objectives.objective_funs import ObjectiveKwargs, _Objective, collect_docs
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
@@ -21,6 +25,9 @@ from desc.utils import (
 
 from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class VacuumBoundaryError(_Objective):
@@ -75,29 +82,20 @@ class VacuumBoundaryError(_Objective):
     _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
 
+    _default_kwargs = {"name": "Vacuum boundary error"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         eval_grid=None,
         field_grid=None,
         field_fixed=False,
-        name="Vacuum boundary error",
-        jac_chunk_size=None,
-        *,
         bs_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
-        if target is None and bounds is None:
-            target = 0
         self._eval_grid = eval_grid
         self._eq = eq
         self._field = [field] if not isinstance(field, list) else field
@@ -109,15 +107,7 @@ class VacuumBoundaryError(_Objective):
             things.append(self._field)
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -464,17 +454,13 @@ class BoundaryError(_Objective):
 
     _coordinates = "rtz"
 
+    _default_kwargs = {"name": "Boundary error"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         s=None,
         q=None,
         source_grid=None,
@@ -482,15 +468,10 @@ class BoundaryError(_Objective):
         field_grid=None,
         field_fixed=False,
         eq_fixed=False,
-        name="Boundary error",
-        jac_chunk_size=None,
-        *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._eq = eq
         self._source_grid = source_grid
         self._eval_grid = eval_grid
@@ -520,15 +501,7 @@ class BoundaryError(_Objective):
             things.append(self._field)
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1037,27 +1010,20 @@ class BoundaryErrorNESTOR(_Objective):
     _units = "(T^2*m^2)"
     _coordinates = "rtz"
 
+    _default_kwargs = {"name": "NESTOR Boundary"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
+        *,
         mf=None,
         nf=None,
         ntheta=None,
         nzeta=None,
         field_grid=None,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        name="NESTOR Boundary",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._mf = mf
         self._nf = nf
         self._ntheta = ntheta
@@ -1066,15 +1032,7 @@ class BoundaryErrorNESTOR(_Objective):
         self._field_grid = field_grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

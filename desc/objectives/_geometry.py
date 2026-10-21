@@ -1,5 +1,9 @@
 """Objectives for targeting geometrical quantities."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from desc.backend import jnp, vmap
@@ -17,8 +21,11 @@ from desc.utils import (
 )
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
 from .utils import check_if_points_are_inside_perimeter, softmin
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class AspectRatio(_Objective):
@@ -48,34 +55,19 @@ class AspectRatio(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Aspect ratio: "
 
+    _default_kwargs = {"name": "aspect ratio", "target": 2}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="aspect ratio",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 2
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -191,34 +183,19 @@ class Elongation(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Elongation: "
 
+    _default_kwargs = {"loss_function": "max", "name": "elongation", "target": 1}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function="max",
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="elongation",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 1
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -332,34 +309,19 @@ class Volume(_Objective):
     _units = "(m^3)"
     _print_value_fmt = "Plasma volume: "
 
+    _default_kwargs = {"name": "volume", "target": 1}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="volume",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 1
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -520,30 +482,22 @@ class PlasmaVesselDistance(_Objective):
     _units = "(m)"
     _print_value_fmt = "Plasma-vessel distance: "
 
+    _default_kwargs = {"name": "plasma-vessel distance", "bounds": (1, np.inf)}
+
     def __init__(
         self,
         eq,
         surface,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
         eq_fixed=False,
         surface_fixed=False,
         softmin_alpha=1.0,
-        name="plasma-vessel distance",
         use_signed_distance=False,
-        jac_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (1, np.inf)
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
@@ -559,11 +513,6 @@ class PlasmaVesselDistance(_Objective):
         self._softmin_alpha = parse_argname_change(
             softmin_alpha, kwargs, "alpha", "softmin_alpha"
         )
-        errorif(
-            len(kwargs) != 0,
-            AssertionError,
-            f"PlasmaVesselDistance got unexpected keyword argument: {kwargs.keys()}",
-        )
         things = []
         if not eq_fixed:
             things.append(eq)
@@ -571,15 +520,7 @@ class PlasmaVesselDistance(_Objective):
             things.append(surface)
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -853,34 +794,19 @@ class MeanCurvature(_Objective):
     _units = "(m^-1)"
     _print_value_fmt = "Mean curvature: "
 
+    _default_kwargs = {"name": "mean curvature", "bounds": (-np.inf, 0)}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="mean curvature",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -992,34 +918,19 @@ class PrincipalCurvature(_Objective):
     _units = "(m^-1)"
     _print_value_fmt = "Principal curvature: "
 
+    _default_kwargs = {"name": "principal-curvature", "target": 1}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="principal-curvature",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 1
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1126,34 +1037,19 @@ class BScaleLength(_Objective):
     _units = "(m)"
     _print_value_fmt = "Magnetic field scale length: "
 
+    _default_kwargs = {"name": "B-scale-length", "bounds": (1, np.inf)}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="B-scale-length",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (1, np.inf)
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1256,36 +1152,21 @@ class GoodCoordinates(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Coordinate goodness : "
 
+    _default_kwargs = {"name": "coordinate goodness"}
+
     def __init__(
         self,
         eq,
         sigma=1,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coordinate goodness",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         self._sigma = sigma
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1394,35 +1275,19 @@ class MirrorRatio(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Mirror ratio: "
 
+    _default_kwargs = {"target": 0.2, "name": "mirror ratio"}
+
     def __init__(
         self,
         eq,
         *,
         grid=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        name="mirror ratio",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0.2
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

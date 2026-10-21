@@ -1,6 +1,9 @@
 """Objectives for targeting quasisymmetry."""
 
+from __future__ import annotations
+
 import warnings
+from typing import TYPE_CHECKING
 
 from desc.backend import jnp
 from desc.batching import vmap_chunked
@@ -12,7 +15,10 @@ from desc.utils import Timer, errorif, warnif
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class QuasisymmetryBoozer(_Objective):
@@ -68,27 +74,20 @@ class QuasisymmetryBoozer(_Objective):
         "_scale_invariant",
     ]
 
+    _default_kwargs = {"name": "QS Boozer"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
         helicity=(1, 0),
         M_booz=None,
         N_booz=None,
         scale_invariant=False,
-        name="QS Boozer",
-        jac_chunk_size=None,
         surf_batch_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -96,20 +95,9 @@ class QuasisymmetryBoozer(_Objective):
         self._surf_batch_size = surf_batch_size
         self._scale_invariant = scale_invariant
         if scale_invariant:
-            normalize = False
+            kwargs["normalize"] = False
             self._units = "(dimensionless)"
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=eq, **kwargs)
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) Boozer error: ".format(
             self.helicity[0], self.helicity[1]
@@ -280,42 +268,24 @@ class QuasisymmetryTwoTerm(_Objective):
     _print_value_fmt = "Quasi-symmetry two-term error: "
     _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
+    _default_kwargs = {"name": "QS two-term"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
         helicity=(1, 0),
         scale_invariant=False,
-        name="QS two-term",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         self.helicity = helicity
         self._scale_invariant = scale_invariant
         if scale_invariant:
-            normalize = False
+            kwargs["normalize"] = False
             self._units = "(dimensionless)"
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=eq, **kwargs)
 
         self._print_value_fmt = "Quasi-symmetry ({},{}) two-term error: ".format(
             self.helicity[0], self.helicity[1]
@@ -463,40 +433,22 @@ class QuasisymmetryTripleProduct(_Objective):
     _print_value_fmt = "Quasi-symmetry error: "
     _static_attrs = _Objective._static_attrs + ["_scale_invariant"]
 
+    _default_kwargs = {"name": "QS triple product"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
         scale_invariant=False,
-        name="QS triple product",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         self._scale_invariant = scale_invariant
         if scale_invariant:
-            normalize = False
+            kwargs["normalize"] = False
             self._units = "(dimensionless)"
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=eq, **kwargs)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -637,17 +589,13 @@ class Omnigenity(_Objective):
     _units = "(T)"
     _print_value_fmt = "Omnigenity error: "
 
+    _default_kwargs = {"name": "omnigenity"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         eq_grid=None,
         field_grid=None,
         M_booz=None,
@@ -655,12 +603,9 @@ class Omnigenity(_Objective):
         eta_weight=1,
         eq_fixed=False,
         field_fixed=False,
-        name="omnigenity",
-        jac_chunk_size=None,
         surf_batch_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._eq = eq
         self._field = field
         self._eq_grid = eq_grid
@@ -682,15 +627,7 @@ class Omnigenity(_Objective):
             raise ValueError("Cannot fix both the eq and field.")
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -966,34 +903,23 @@ class Isodynamicity(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Isodynamicity error: "
 
+    _default_kwargs = {
+        "normalize": False,
+        "normalize_target": False,
+        "name": "Isodynamicity",
+    }
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="Isodynamicity",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

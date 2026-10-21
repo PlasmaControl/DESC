@@ -1,5 +1,9 @@
 """Objectives related to the bootstrap current profile."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from desc.backend import jnp
@@ -9,7 +13,10 @@ from desc.grid import LinearGrid
 from desc.utils import Timer, errorif, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class BootstrapRedlConsistency(_Objective):
@@ -57,24 +64,17 @@ class BootstrapRedlConsistency(_Objective):
     _units = "(T A m^-2)"
     _print_value_fmt = "Bootstrap current self-consistency error: "
 
+    _default_kwargs = {"name": "Bootstrap current self-consistency (Redl)"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
         helicity=(1, 0),
         degree=None,
-        name="Bootstrap current self-consistency (Redl)",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
         self._grid = grid
@@ -82,15 +82,7 @@ class BootstrapRedlConsistency(_Objective):
         self._degree = degree
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

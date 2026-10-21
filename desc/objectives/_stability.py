@@ -1,5 +1,9 @@
 """Objectives for targeting MHD stability."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from desc.backend import jnp
@@ -9,8 +13,11 @@ from desc.grid import LinearGrid
 from desc.utils import ResolutionWarning, Timer, errorif, setdefault, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 overwrite_stability = {
     "target": """
@@ -60,34 +67,19 @@ class MercierStability(_Objective):
     _units = "(Wb^-2)"
     _print_value_fmt = "Mercier Stability: "
 
+    _default_kwargs = {"name": "Mercier Stability", "bounds": (0, np.inf)}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="Mercier Stability",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -224,34 +216,19 @@ class MagneticWell(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Magnetic Well: "
 
+    _default_kwargs = {"name": "Magnetic Well", "bounds": (0, np.inf)}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="Magnetic Well",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -412,16 +389,12 @@ class BallooningStability(_Objective):
     _units = "~"
     _print_value_fmt = "Ideal ballooning lambda: "
 
+    _default_kwargs = {"name": "ideal ballooning lambda"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         rho=np.array([0.5]),
         alpha=None,
         nturns=3,
@@ -431,11 +404,8 @@ class BallooningStability(_Objective):
         lambda0=0.0,
         w0=1.0,
         w1=10.0,
-        name="ideal ballooning lambda",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
 
         self._nturns = nturns
         self._nzetaperturn = nzetaperturn
@@ -457,15 +427,7 @@ class BallooningStability(_Objective):
 
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

@@ -1,5 +1,9 @@
 """Objectives for targeting profiles."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from desc.compute.utils import _compute as compute_fun
@@ -8,8 +12,11 @@ from desc.grid import LinearGrid
 from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
 from .utils import _parse_callable_target_bounds
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 profile_overwrite = {
     "target": """
@@ -49,34 +56,19 @@ class Pressure(_Objective):
     _units = "(Pa)"
     _print_value_fmt = "Pressure: "
 
+    _default_kwargs = {"name": "pressure"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="pressure",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -183,34 +175,19 @@ class RotationalTransform(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Rotational transform: "
 
+    _default_kwargs = {"name": "rotational transform"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="rotational transform",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -330,34 +307,19 @@ class Shear(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Shear: "
 
+    _default_kwargs = {"name": "shear", "bounds": (-np.inf, 0)}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="shear",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -469,34 +431,19 @@ class ToroidalCurrent(_Objective):
     _units = "(A)"
     _print_value_fmt = "Toroidal current: "
 
+    _default_kwargs = {"name": "toroidal current"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="toroidal current",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

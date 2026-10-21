@@ -1,5 +1,9 @@
 """Objectives for neoclassical transport."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 from packaging import version
 
@@ -8,7 +12,10 @@ from desc.compute.utils import _compute as compute_fun
 from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif, warnif
 
-from .objective_funs import _Objective, collect_docs, doc_bounce
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs, doc_bounce
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class EffectiveRipple(_Objective):
@@ -55,19 +62,13 @@ class EffectiveRipple(_Objective):
     _units = "~"
     _print_value_fmt = "Effective ripple ε: "
 
+    # TODO: change to deriv_mode="auto" once jax>0.11.0
+    _default_kwargs = {"name": "Effective ripple", "deriv_mode": "rev"}
+
     def __init__(
         self,
         eq,
         *,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="rev",  # TODO: change to deriv_mode="auto" once jax>0.11.0
-        jac_chunk_size=None,
-        name="Effective ripple",
         grid=None,
         X=32,
         Y=32,
@@ -81,10 +82,10 @@ class EffectiveRipple(_Objective):
         surf_batch_size=1,
         nufft_eps=1e-6,
         spline=True,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         errorif(
-            deriv_mode == "fwd"
+            kwargs.get("deriv_mode") == "fwd"
             and (version.parse(jax.__version__) < version.parse("0.11.0")),
             ValueError,
             "JAX version >= 0.11.0 required for fwd deriv mode for objective: "
@@ -107,6 +108,7 @@ class EffectiveRipple(_Objective):
             FutureWarning,
             "Argument use_bounce1d has been deprecated and is no longer used.",
         )
+        kwargs.pop("use_bounce1d", None)
         if "num_transit" in kwargs:
             warnif(
                 True,
@@ -117,8 +119,6 @@ class EffectiveRipple(_Objective):
             )
             field_period_transits = kwargs.pop("num_transit") * eq.NFP
 
-        if target is None and bounds is None:
-            target = 0.0
         self._grid = grid
         if alpha is None:
             alpha = jnp.zeros(1)
@@ -137,18 +137,7 @@ class EffectiveRipple(_Objective):
             "spline": spline,
         }
 
-        super().__init__(
-            things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            jac_chunk_size=jac_chunk_size,
-            name=name,
-        )
+        super().__init__(things=eq, **kwargs)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.

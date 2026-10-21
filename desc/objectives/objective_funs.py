@@ -1,7 +1,10 @@
 """Base classes for objectives."""
 
+from __future__ import annotations
+
 import functools
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, ClassVar, TypedDict
 
 import numpy as np
 
@@ -10,6 +13,7 @@ from desc.backend import (
     execute_on_cpu,
     jit,
     jnp,
+    single_precision,
     tree_flatten,
     tree_leaves,
     tree_map,
@@ -32,6 +36,39 @@ from desc.utils import (
     unique_list,
     warnif,
 )
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
+
+
+class ObjectiveKwargs(TypedDict, total=False):
+    """Keyword arguments common to all objectives, see ``_Objective``."""
+
+    target: Any
+    bounds: Any
+    weight: Any
+    normalize: bool
+    normalize_target: bool
+    loss_function: str | None
+    deriv_mode: str
+    name: str | None
+    jac_chunk_size: int | None
+    precision: str | None
+
+
+# defaults of ObjectiveKwargs, objectives can override them with ``_default_kwargs``
+_OBJECTIVE_DEFAULTS = {
+    "target": 0,
+    "bounds": None,
+    "weight": 1,
+    "normalize": True,
+    "normalize_target": True,
+    "loss_function": None,
+    "deriv_mode": "auto",
+    "name": None,
+    "jac_chunk_size": None,
+    "precision": None,
+}
 
 doc_target = """
     target : {float, ndarray}, optional
@@ -94,6 +131,14 @@ doc_jac_chunk_size = """
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
+doc_precision = """
+    precision : {None, "f32", "f64"}, optional
+        Floating point precision used to compute the objective and its derivatives.
+        ``"f32"`` lowers the memory of the objective and its Jacobian, but should only
+        be used if the objective is accurate enough in single precision. The rest of
+        DESC, like the optimization variables, stays in double precision. If ``None``,
+        uses the precision of the ``ObjectiveFunction``, which defaults to ``"f64"``.
+"""
 doc_target_coil = """
     target : float, list, optional
         Target values for the coil objective.
@@ -129,6 +174,7 @@ docs = {
     "deriv_mode": doc_deriv_mode,
     "name": doc_name,
     "jac_chunk_size": doc_jac_chunk_size,
+    "precision": doc_precision,
 }
 
 doc_bounce = """
@@ -309,6 +355,29 @@ def collect_docs(
     return doc_params
 
 
+def _with_precision(method):
+    """Run an _Objective compute method in the precision of the objective."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if self.precision == "f64":
+            return method(self, *args, **kwargs)
+
+        # arrays made inside default to 32 bit, so cast the ones made outside, which
+        # includes the constants (transforms, grids, etc) of the objective itself
+        to32 = {"f": jnp.float32, "c": jnp.complex64, "i": jnp.int32, "u": jnp.uint32}
+        cast = lambda x: (
+            x.astype(to32[x.dtype.kind])
+            if getattr(getattr(x, "dtype", None), "kind", None) in to32
+            else x
+        )
+        self, args, kwargs = tree_map(cast, (self, args, kwargs))
+        with single_precision():
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives.
 
@@ -347,6 +416,10 @@ class ObjectiveFunction(IOAble):
         accurately estimate the available device memory, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
+    precision : {None, "f32", "f64"}, optional
+        Floating point precision of all the sub-objectives, see ``_Objective``. It is
+        an error at build if a sub-objective was given a different precision. If
+        ``None``, sub-objectives keep their own precision, which defaults to ``"f64"``.
 
     """
 
@@ -364,6 +437,7 @@ class ObjectiveFunction(IOAble):
         "_deriv_mode",
         "_jac_chunk_size",
         "_name",
+        "_precision",
         "_things_per_objective_idx",
         "_use_jit",
         "_static_attrs",
@@ -376,6 +450,7 @@ class ObjectiveFunction(IOAble):
         deriv_mode="auto",
         name="ObjectiveFunction",
         jac_chunk_size="auto",
+        precision=None,
     ):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
@@ -395,8 +470,10 @@ class ObjectiveFunction(IOAble):
             jac_chunk_size = 1
         assert deriv_mode in {"auto", "batched", "blocked"}
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
+        assert precision in {None, "f32", "f64"}
 
         self._jac_chunk_size = jac_chunk_size
+        self._precision = precision
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
@@ -462,6 +539,17 @@ class ObjectiveFunction(IOAble):
 
         timer = Timer()
         timer.start("Objective build")
+
+        for objective in self.objectives:
+            errorif(
+                self._precision is not None
+                and objective._precision not in {None, self._precision},
+                ValueError,
+                f"ObjectiveFunction precision={self._precision} conflicts with "
+                f"precision={objective._precision} of objective {objective.name}.",
+            )
+            if self._precision is not None:
+                objective.precision = self._precision
 
         # build objectives
         self._dim_f = 0
@@ -533,7 +621,8 @@ class ObjectiveFunction(IOAble):
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
-            estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            bytes_ = 4 if all(o.precision == "f32" for o in self.objectives) else 8
+            estimated_memory_usage = 3e-8 * bytes_ * self.dim_f * self.dim_x + 1  # GB
             avail_mem = desc_config.get("avail_mem")
             max_chunk_size = round(
                 (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
@@ -1279,25 +1368,43 @@ class _Objective(IOAble, ABC):
         "_name",
         "_normalize",
         "_normalize_target",
+        "_precision",
         "_print_value_fmt",
         "_scalar",
         "_units",
         "_static_attrs",
     ]
 
-    def __init__(
-        self,
-        things=None,
-        target=0,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        name=None,
-        jac_chunk_size=None,
-    ):
+    _default_kwargs: ClassVar[dict] = {}
+    # common kwargs the objective does not accept, always set to these values
+    _fixed_kwargs: ClassVar[dict] = {}
+
+    def __init__(self, things=None, **kwargs: Unpack[ObjectiveKwargs]):
+        unknown = set(kwargs) - (set(_OBJECTIVE_DEFAULTS) - set(self._fixed_kwargs))
+        errorif(
+            unknown,
+            TypeError,
+            f"{type(self).__name__} got unexpected keyword arguments {unknown}",
+        )
+        # None for target or bounds means not given, and giving either one of them
+        # replaces both defaults
+        kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if not (k in ("target", "bounds") and v is None)
+        }
+        defaults = {**_OBJECTIVE_DEFAULTS, **self._default_kwargs}
+        if "target" in kwargs or "bounds" in kwargs:
+            defaults["target"] = defaults["bounds"] = None
+        elif defaults["bounds"] is not None:
+            defaults["target"] = None
+        kwargs = {**defaults, **kwargs, **self._fixed_kwargs}
+        target, bounds, weight = kwargs["target"], kwargs["bounds"], kwargs["weight"]
+        normalize, normalize_target = kwargs["normalize"], kwargs["normalize_target"]
+        loss_function, deriv_mode = kwargs["loss_function"], kwargs["deriv_mode"]
+        name, jac_chunk_size = kwargs["name"], kwargs["jac_chunk_size"]
+        precision = kwargs["precision"]
+
         if self._scalar:
             assert self._coordinates == ""
         assert np.all(np.asarray(tree_leaves(weight)) >= 0)
@@ -1308,8 +1415,10 @@ class _Objective(IOAble, ABC):
         assert loss_function in [None, "mean", "min", "max", "sum"]
         assert deriv_mode in {"auto", "fwd", "rev"}
         assert jac_chunk_size is None or isposint(jac_chunk_size)
+        assert precision in {None, "f32", "f64"}
 
         self._jac_chunk_size = jac_chunk_size
+        self._precision = precision
 
         self._target = target
         self._bounds = bounds
@@ -1442,6 +1551,7 @@ class _Objective(IOAble, ABC):
         return argsout
 
     @jit
+    @_with_precision
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
         args = self._maybe_array_to_params(*args)
@@ -1451,6 +1561,7 @@ class _Objective(IOAble, ABC):
         return jnp.atleast_1d(f)
 
     @jit
+    @_with_precision
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1460,6 +1571,7 @@ class _Objective(IOAble, ABC):
         return jnp.atleast_1d(self._scale(f, **kwargs))
 
     @jit
+    @_with_precision
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         args = self._maybe_array_to_params(*args)
@@ -1553,34 +1665,43 @@ class _Objective(IOAble, ABC):
     def jac_scaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(
+        J = Derivative(
             self.compute_scaled,
             argnums,
             mode=self._deriv_mode,
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
+        # reverse mode gives the dtype of the inputs, which are float64
+        dtype = jnp.float32 if self.precision == "f32" else None
+        return tree_map(lambda a: a.astype(dtype), J) if dtype else J
 
     @jit
     def jac_scaled_error(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_scaled_error wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(
+        J = Derivative(
             self.compute_scaled_error,
             argnums,
             mode=self._deriv_mode,
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
+        # reverse mode gives the dtype of the inputs, which are float64
+        dtype = jnp.float32 if self.precision == "f32" else None
+        return tree_map(lambda a: a.astype(dtype), J) if dtype else J
 
     @jit
     def jac_unscaled(self, *args, **kwargs):
         """Compute Jacobian matrix of self.compute_unscaled wrt x."""
         argnums = tuple(range(len(self.things)))
-        return Derivative(
+        J = Derivative(
             self.compute_unscaled,
             argnums,
             mode=self._deriv_mode,
             chunk_size=self._jac_chunk_size,
         )(*args, **kwargs)
+        # reverse mode gives the dtype of the inputs, which are float64
+        dtype = jnp.float32 if self.precision == "f32" else None
+        return tree_map(lambda a: a.astype(dtype), J) if dtype else J
 
     def _jvp(self, v, x, constants=None, op="scaled"):
         v = ensure_tuple(v)
@@ -1603,7 +1724,8 @@ class _Objective(IOAble, ABC):
             # equivalent to fwd mode above, which batches over the first axis
             Jv = tree_map(lambda a, b: jnp.dot(a, b.T), jac, v)
             # sum over different things.
-            return jnp.sum(jnp.asarray(Jv), axis=0).T
+            Jv = jnp.sum(jnp.asarray(Jv), axis=0).T
+            return Jv.astype(jnp.float32) if self.precision == "f32" else Jv
 
     @jit
     def jvp_scaled(self, v, x, constants=None):
@@ -1912,6 +2034,16 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         self._bounds = bounds
         self._check_dimensions()
+
+    @property
+    def precision(self):
+        """str: Floating point precision of the objective, ``"f32"`` or ``"f64"``."""
+        return self._precision or "f64"
+
+    @precision.setter
+    def precision(self, precision):
+        assert precision in {None, "f32", "f64"}
+        self._precision = precision
 
     @property
     def weight(self):

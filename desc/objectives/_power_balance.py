@@ -1,12 +1,19 @@
 """Objectives for targeting energy confinement."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer, errorif
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class FusionPower(_Objective):
@@ -44,39 +51,24 @@ class FusionPower(_Objective):
     _units = "(W)"
     _print_value_fmt = "Fusion power: "
 
+    _default_kwargs = {"name": "fusion power", "target": 1e9}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         fuel="DT",
         grid=None,
-        name="fusion power",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         errorif(
             fuel not in ["DT"], ValueError, f"fuel must be one of ['DT'], got {fuel}."
         )
-        if target is None and bounds is None:
-            target = 1e9
         self._fuel = fuel
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -210,38 +202,23 @@ class HeatingPowerISS04(_Objective):
     _units = "(W)"
     _print_value_fmt = "Heating power: "
 
+    _default_kwargs = {"name": "heating power"}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         H_ISS04=1,
         gamma=0,
         grid=None,
-        name="heating power",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._H_ISS04 = H_ISS04
         self._gamma = gamma
         self._grid = grid
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

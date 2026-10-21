@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import numbers
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 from scipy.constants import mu_0
@@ -24,8 +27,11 @@ from desc.utils import (
 )
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
 from .utils import softmax, softmin
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class _CoilObjective(_Objective):
@@ -64,38 +70,20 @@ class _CoilObjective(_Objective):
 
     __doc__ = __doc__.rstrip() + collect_docs(coil=True)
     _static_attrs = _Objective._static_attrs + ["_coilset_tree", "_broadcast_input"]
+    _default_kwargs = {"target": None}
 
     def __init__(
         self,
         coil,
         data_keys,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name=None,
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         self._grid = grid
         self._data_keys = data_keys
-        self._normalize = normalize
 
-        super().__init__(
-            things=[coil],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=[coil], **kwargs)
 
     def build(self, use_jit=True, verbose=1):  # noqa:C901
         """Build constant arrays.
@@ -386,36 +374,21 @@ class CoilLength(_CoilObjective):
     _print_value_fmt = "Coil length: "
     _broadcast_input = "coil"
 
+    _default_kwargs = {"name": "coil length", "target": 2 * np.pi}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil length",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 2 * np.pi
 
         super().__init__(
             coil,
             ["length"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -490,36 +463,21 @@ class CoilCurvature(_CoilObjective):
     _print_value_fmt = "Coil curvature: "
     _broadcast_input = "node"
 
+    _default_kwargs = {"name": "coil curvature", "bounds": (0, 1)}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil curvature",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (0, 1)
 
         super().__init__(
             coil,
             ["curvature"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -590,36 +548,21 @@ class CoilTorsion(_CoilObjective):
     _print_value_fmt = "Coil torsion: "
     _broadcast_input = "node"
 
+    _default_kwargs = {"name": "coil torsion"}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil torsion",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
 
         super().__init__(
             coil,
             ["torsion"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -690,35 +633,20 @@ class CoilCurrentLength(CoilLength):
     _print_value_fmt = "Coil current length: "
     _broadcast_input = "coil"
 
+    _default_kwargs = {"name": "coil current length"}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil current length",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
 
         super().__init__(
             coil,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -798,35 +726,20 @@ class CoilIntegratedCurvature(_CoilObjective):
     _print_value_fmt = "Integrated curvature: "
     _broadcast_input = "coil"
 
+    _default_kwargs = {"name": "coil integrated curvature", "target": 2 * np.pi}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil integrated curvature",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 2 * np.pi
         super().__init__(
             coil,
             ["ds", "x_s", "curvature"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -929,28 +842,21 @@ class CoilSetMinDistance(_Objective):
     _units = "(m)"
     _print_value_fmt = "Minimum coil-coil distance: "
 
+    _default_kwargs = {"name": "coil-coil minimum distance", "bounds": (1, np.inf)}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil-coil minimum distance",
-        jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
         num_neighbors=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         from desc.coils import CoilSet
 
-        if target is None and bounds is None:
-            bounds = (1, np.inf)
         self._grid = grid
         self._use_softmin = use_softmin
         self._softmin_alpha = softmin_alpha
@@ -963,15 +869,7 @@ class CoilSetMinDistance(_Objective):
         )
         super().__init__(
             things=coil,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1135,30 +1033,23 @@ class PlasmaCoilSetDistanceBound(_Objective):
     _units = "(m)"
     _print_value_fmt = "Plasma-coil distance: "
 
+    _default_kwargs = {"name": "plasma-coil distance", "bounds": (0, 1)}
+
     def __init__(
         self,
         eq,
         coil,
         mode="bound",
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         plasma_grid=None,
         coil_grid=None,
         eq_fixed=False,
         coils_fixed=False,
-        name="plasma-coil distance",
-        jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (0, 1)
         errorif(
             mode not in ["bound", "max", "min"],
             ValueError,
@@ -1182,15 +1073,7 @@ class PlasmaCoilSetDistanceBound(_Objective):
             things.append(coil)
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1421,49 +1304,34 @@ class PlasmaCoilSetMinDistance(PlasmaCoilSetDistanceBound):
     _units = "(m)"
     _print_value_fmt = "Minimum plasma-coil distance: "
 
+    _default_kwargs = {"name": "plasma-coil minimum distance", "bounds": (1, np.inf)}
+
     def __init__(
         self,
         eq,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         plasma_grid=None,
         coil_grid=None,
         eq_fixed=False,
         coils_fixed=False,
-        name="plasma-coil minimum distance",
-        jac_chunk_size=None,
         use_softmin=False,
         softmin_alpha=1.0,
         dist_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (1, np.inf)
         super().__init__(
             eq=eq,
             coil=coil,
             mode="min",
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             plasma_grid=plasma_grid,
             coil_grid=coil_grid,
             eq_fixed=eq_fixed,
             coils_fixed=coils_fixed,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
             use_softmin=use_softmin,
             softmin_alpha=softmin_alpha,
             dist_chunk_size=dist_chunk_size,
+            **kwargs,
         )
 
 
@@ -1500,34 +1368,22 @@ class CoilArclengthVariance(_CoilObjective):
     _print_value_fmt = "Coil Arclength Variance: "
     _broadcast_input = "coil"
 
+    _default_kwargs = {"name": "coil arclength variance"}
+    _fixed_kwargs = {"jac_chunk_size": None}
+
     def __init__(
         self,
         coils,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="coil arclength variance",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
 
         super().__init__(
             coils,
             ["x_s"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
             grid=grid,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1656,30 +1512,24 @@ class QuadraticFlux(_Objective):
     _units = "(T m^2)"
     _coordinates = "rtz"
 
+    _default_kwargs = {"name": "Quadratic flux"}
+    _fixed_kwargs = {"loss_function": None, "deriv_mode": "auto"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         source_grid=None,
         eval_grid=None,
         field_grid=None,
         vacuum=False,
-        name="Quadratic flux",
-        jac_chunk_size=None,
-        *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         from desc.geometry import FourierRZToroidalSurface
 
-        if target is None and bounds is None:
-            target = 0
         self._source_grid = source_grid
         self._eval_grid = eval_grid
         self._eq = eq
@@ -1697,13 +1547,7 @@ class QuadraticFlux(_Objective):
         )
         super().__init__(
             things=self._field,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1878,26 +1722,20 @@ class SurfaceQuadraticFlux(_Objective):
     _units = "(T m^2)"
     _coordinates = "rtz"
 
+    _default_kwargs = {"name": "Surface Quadratic Flux"}
+    _fixed_kwargs = {"loss_function": None, "deriv_mode": "auto"}
+
     def __init__(
         self,
         surface,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         eval_grid=None,
         field_grid=None,
-        name="Surface Quadratic Flux",
         field_fixed=False,
-        jac_chunk_size=None,
-        *,
         bs_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._eval_grid = eval_grid
         self._surface = surface
         self._field = field
@@ -1910,13 +1748,7 @@ class SurfaceQuadraticFlux(_Objective):
             things += [field]
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2098,29 +1930,22 @@ class ToroidalFlux(_Objective):
     _units = "(Wb)"
     _print_value_fmt = "Toroidal Flux: "
 
+    _default_kwargs = {"name": "toroidal-flux"}
+
     def __init__(
         self,
         eq,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         field_grid=None,
         eval_grid=None,
-        name="toroidal-flux",
         field_fixed=False,
         eq_fixed=False,
-        jac_chunk_size=None,
-        *,
         bs_chunk_size=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 1.0 if not hasattr(eq, "Psi") else eq.Psi
+        if kwargs.get("target") is None and kwargs.get("bounds") is None:
+            kwargs["target"] = 1.0 if not hasattr(eq, "Psi") else eq.Psi
         self._field = field
         self._field_grid = field_grid
         self._eval_grid = eval_grid
@@ -2140,15 +1965,7 @@ class ToroidalFlux(_Objective):
             things += [field]
         super().__init__(
             things=things,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2366,6 +2183,8 @@ class LinkingCurrentConsistency(_Objective):
     _units = "(A)"
     _print_value_fmt = "Linking current error: "
 
+    _default_kwargs = {"name": "linking current"}
+
     def __init__(
         self,
         eq,
@@ -2373,18 +2192,8 @@ class LinkingCurrentConsistency(_Objective):
         *,
         grid=None,
         eq_fixed=False,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        jac_chunk_size=None,
-        name="linking current",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         self._eq_fixed = eq_fixed
         self._linear = eq_fixed
@@ -2393,15 +2202,7 @@ class LinkingCurrentConsistency(_Objective):
 
         super().__init__(
             things=[coil] if eq_fixed else [coil, eq],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            jac_chunk_size=jac_chunk_size,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2556,24 +2357,16 @@ class CoilSetLinkingNumber(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Coil linking number: "
 
+    _default_kwargs = {"name": "coil-coil linking number"}
+
     def __init__(
         self,
         coil,
         grid=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        jac_chunk_size=None,
-        name="coil-coil linking number",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         from desc.coils import CoilSet
 
-        if target is None and bounds is None:
-            target = 0
         self._grid = grid
         errorif(
             not isinstance(coil, CoilSet),
@@ -2582,15 +2375,7 @@ class CoilSetLinkingNumber(_Objective):
         )
         super().__init__(
             things=coil,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            jac_chunk_size=jac_chunk_size,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2716,20 +2501,15 @@ class SurfaceCurrentRegularization(_Objective):
     _coordinates = "tz"
     _print_value_fmt = "Surface Current Regularization: "
 
+    _default_kwargs = {"name": "surface-current-regularization"}
+
     def __init__(
         self,
         surface_current_field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        jac_chunk_size=None,
+        *,
         regularization="K",
         source_grid=None,
-        name="surface-current-regularization",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         from desc.magnetic_fields import (
             CurrentPotentialField,
@@ -2742,8 +2522,6 @@ class SurfaceCurrentRegularization(_Objective):
             "regularization must be one of ['K', 'Phi', 'sqrt(Phi)'], "
             + f"got {regularization}.",
         )
-        if target is None and bounds is None:
-            target = 0
         assert isinstance(
             surface_current_field, (CurrentPotentialField, FourierCurrentPotentialField)
         ), (
@@ -2761,15 +2539,7 @@ class SurfaceCurrentRegularization(_Objective):
 
         super().__init__(
             things=[surface_current_field],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            jac_chunk_size=jac_chunk_size,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

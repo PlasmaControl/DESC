@@ -6,7 +6,10 @@ Linear objective functions must be of the form `A*x-b`, where:
     - `b` is the desired vector set by `objective.target`
 """
 
+from __future__ import annotations
+
 import warnings
+from typing import TYPE_CHECKING
 
 import numpy as np
 from termcolor import colored
@@ -24,7 +27,10 @@ from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
 from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 # TODO (#1391): get rid of this class and inherit from FixParameters instead?
@@ -32,6 +38,11 @@ class _FixedObjective(_Objective):
     _fixed = True
     _linear = True
     _scalar = False
+    _fixed_kwargs = {
+        "loss_function": None,
+        "deriv_mode": "auto",
+        "jac_chunk_size": None,
+    }
 
     def update_target(self, thing):
         """Update target values using an Optimizable object.
@@ -150,26 +161,19 @@ class FixParameters(_Objective):
     _units = "(~)"
     _print_value_fmt = "Fixed parameters error: "
 
+    _default_kwargs = {"name": "fixed parameters", "target": None}
+    _fixed_kwargs = _FixedObjective._fixed_kwargs
+
     def __init__(
         self,
         thing,
         params=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed parameters",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         self._params = params
         super().__init__(
             things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -326,11 +330,21 @@ class ShareParameters(_Objective):
     _units = "(~)"
     _print_value_fmt = "Shared parameters error: "
 
+    _default_kwargs = {"name": "shared parameters"}
+    _fixed_kwargs = {
+        **_FixedObjective._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+        "normalize": False,
+        "normalize_target": False,
+    }
+
     def __init__(
         self,
         things,
         params=None,
-        name="shared parameters",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         self._params = params
         assert len(things) > 1, "only makes sense for >1 thing"
@@ -340,12 +354,7 @@ class ShareParameters(_Objective):
 
         super().__init__(
             things=things,
-            target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -475,21 +484,26 @@ class BoundaryRSelfConsistency(_Objective):
     _units = "(m)"
     _print_value_fmt = "R boundary self consistency error: "
 
+    _default_kwargs = {"name": "self_consistency R"}
+    _fixed_kwargs = {
+        **_FixedObjective._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+        "normalize": False,
+        "normalize_target": False,
+    }
+
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency R",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         self._surface_label = surface_label
         super().__init__(
             things=eq,
-            target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            name=name,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -583,21 +597,26 @@ class BoundaryZSelfConsistency(_Objective):
     _units = "(m)"
     _print_value_fmt = "Z boundary self consistency error: "
 
+    _default_kwargs = {"name": "self_consistency Z"}
+    _fixed_kwargs = {
+        **_FixedObjective._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+        "normalize": False,
+        "normalize_target": False,
+    }
+
     def __init__(
         self,
         eq,
         surface_label=None,
-        name="self_consistency Z",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         self._surface_label = surface_label
         super().__init__(
             things=eq,
-            target=0,
-            bounds=None,
-            weight=1,
-            normalize=False,
-            normalize_target=False,
-            name=name,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -691,18 +710,24 @@ class AxisRSelfConsistency(_Objective):
     _units = "(m)"
     _print_value_fmt = "R axis self consistency error: "
 
+    _default_kwargs = {"name": "axis R self consistency"}
+    _fixed_kwargs = {
+        **_FixedObjective._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+        "normalize": False,
+        "normalize_target": False,
+    }
+
     def __init__(
         self,
         eq,
-        name="axis R self consistency",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             things=eq,
-            target=0,
-            weight=1,
-            name=name,
-            normalize=False,
-            normalize_target=False,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -788,18 +813,24 @@ class AxisZSelfConsistency(_Objective):
     _units = "(m)"
     _print_value_fmt = "Z axis self consistency error: "
 
+    _default_kwargs = {"name": "axis Z self consistency"}
+    _fixed_kwargs = {
+        **_FixedObjective._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+        "normalize": False,
+        "normalize_target": False,
+    }
+
     def __init__(
         self,
         eq,
-        name="axis Z self consistency",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             things=eq,
-            target=0,
-            weight=1,
-            name=name,
-            normalize=False,
-            normalize_target=False,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -890,16 +921,14 @@ class FixBoundaryR(FixParameters):
     _units = "(m)"
     _print_value_fmt = "R boundary error: "
 
+    _default_kwargs = {"name": "lcfs R", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="lcfs R",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -910,12 +939,7 @@ class FixBoundaryR(FixParameters):
         super().__init__(
             thing=eq,
             params={"Rb_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -971,16 +995,14 @@ class FixBoundaryZ(FixParameters):
     _units = "(m)"
     _print_value_fmt = "Z boundary error: "
 
+    _default_kwargs = {"name": "lcfs Z", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="lcfs Z",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -991,12 +1013,7 @@ class FixBoundaryZ(FixParameters):
         super().__init__(
             thing=eq,
             params={"Zb_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1039,12 +1056,18 @@ class FixLambdaGauge(FixParameters):
     _units = "(rad)"
     _print_value_fmt = "lambda gauge error: "
 
+    _default_kwargs = {"name": "lambda gauge"}
+    _fixed_kwargs = {
+        **FixParameters._fixed_kwargs,
+        "target": 0,
+        "bounds": None,
+        "weight": 1,
+    }
+
     def __init__(
         self,
         eq,
-        normalize=True,
-        normalize_target=True,
-        name="lambda gauge",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if eq.sym:
             indices = False
@@ -1055,10 +1078,7 @@ class FixLambdaGauge(FixParameters):
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
-            target=0,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -1084,23 +1104,18 @@ class FixThetaSFL(FixParameters):
     _units = "(rad)"
     _print_value_fmt = "theta - theta SFL error: "
 
+    _default_kwargs = {"name": "theta SFL"}
+    _fixed_kwargs = {**FixParameters._fixed_kwargs, "target": 0, "bounds": None}
+
     def __init__(
         self,
         eq,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="theta SFL",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"L_lmn": True},
-            target=0,
-            bounds=None,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -1139,16 +1154,14 @@ class FixAxisR(FixParameters):
     _units = "(m)"
     _print_value_fmt = "R axis error: "
 
+    _default_kwargs = {"name": "axis R", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="axis R",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1159,12 +1172,7 @@ class FixAxisR(FixParameters):
         super().__init__(
             thing=eq,
             params={"Ra_n": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1220,16 +1228,14 @@ class FixAxisZ(FixParameters):
     _units = "(m)"
     _print_value_fmt = "Z axis error: "
 
+    _default_kwargs = {"name": "axis Z", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="axis Z",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1240,12 +1246,7 @@ class FixAxisZ(FixParameters):
         super().__init__(
             thing=eq,
             params={"Za_n": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1301,16 +1302,14 @@ class FixModeR(FixParameters):
     _units = "(m)"
     _print_value_fmt = "Fixed-R modes error: "
 
+    _default_kwargs = {"name": "fix mode R", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="fix mode R",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1321,12 +1320,7 @@ class FixModeR(FixParameters):
         super().__init__(
             thing=eq,
             params={"R_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1382,16 +1376,14 @@ class FixModeZ(FixParameters):
     _units = "(m)"
     _print_value_fmt = "Fixed-Z modes error: "
 
+    _default_kwargs = {"name": "fix mode Z", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="fix mode Z",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1402,12 +1394,7 @@ class FixModeZ(FixParameters):
         super().__init__(
             thing=eq,
             params={"Z_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1462,16 +1449,14 @@ class FixModeLambda(FixParameters):
     _units = "(rad)"
     _print_value_fmt = "Fixed lambda modes error: "
 
+    _default_kwargs = {"name": "fix mode lambda", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         modes=True,
-        name="fix mode lambda",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         if isinstance(modes, bool):
             indices = modes
@@ -1482,12 +1467,7 @@ class FixModeLambda(FixParameters):
         super().__init__(
             thing=eq,
             params={"L_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -1531,18 +1511,17 @@ class FixSumModesR(_FixedObjective):
     _units = "(m)"
     _print_value_fmt = "Fixed-R sum modes error: "
 
+    _default_kwargs = {"name": "Fix Sum Modes R", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         sum_weights=None,
         modes=True,
-        name="Fix Sum Modes R",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
+        target, bounds = kwargs.get("target"), kwargs.get("bounds")
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -1567,12 +1546,7 @@ class FixSumModesR(_FixedObjective):
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -1697,18 +1671,17 @@ class FixSumModesZ(_FixedObjective):
     _units = "(m)"
     _print_value_fmt = "Fixed-Z sum modes error: "
 
+    _default_kwargs = {"name": "Fix Sum Modes Z", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         sum_weights=None,
         modes=True,
-        name="Fix Sum Modes Z",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
+        target, bounds = kwargs.get("target"), kwargs.get("bounds")
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -1733,12 +1706,7 @@ class FixSumModesZ(_FixedObjective):
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -1864,18 +1832,17 @@ class FixSumModesLambda(_FixedObjective):
     _units = "(rad)"
     _print_value_fmt = "Fixed-lambda sum modes error: "
 
+    _default_kwargs = {"name": "Fix Sum Modes lambda", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         sum_weights=None,
         modes=True,
-        name="Fix Sum Modes lambda",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
+        target, bounds = kwargs.get("target"), kwargs.get("bounds")
         errorif(
             modes is None or modes is False,
             ValueError,
@@ -1900,12 +1867,7 @@ class FixSumModesLambda(_FixedObjective):
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -2030,26 +1992,19 @@ class FixPressure(FixParameters):
     _units = "(Pa)"
     _print_value_fmt = "Fixed pressure profile error: "
 
+    _default_kwargs = {"name": "fixed pressure", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed pressure",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"p_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2110,26 +2065,19 @@ class FixAnisotropy(FixParameters):
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed anisotropy profile error: "
 
+    _default_kwargs = {"name": "fixed anisotropy", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed anisotropy",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"a_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2187,26 +2135,19 @@ class FixIota(FixParameters):
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed iota profile error: "
 
+    _default_kwargs = {"name": "fixed iota", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed iota",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"i_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2266,26 +2207,19 @@ class FixCurrent(FixParameters):
     _units = "(A)"
     _print_value_fmt = "Fixed current profile error: "
 
+    _default_kwargs = {"name": "fixed current", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed current",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"c_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2348,26 +2282,19 @@ class FixElectronTemperature(FixParameters):
     _units = "(eV)"
     _print_value_fmt = "Fixed electron temperature profile error: "
 
+    _default_kwargs = {"name": "fixed electron temperature", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed electron temperature",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"Te_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2432,26 +2359,19 @@ class FixElectronDensity(FixParameters):
     _units = "(m^-3)"
     _print_value_fmt = "Fixed electron density profile error: "
 
+    _default_kwargs = {"name": "fixed electron density", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed electron density",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"ne_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2514,26 +2434,19 @@ class FixIonTemperature(FixParameters):
     _units = "(eV)"
     _print_value_fmt = "Fixed ion temperature profile error: "
 
+    _default_kwargs = {"name": "fixed ion temperature", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed ion temperature",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"Ti_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2596,26 +2509,19 @@ class FixIonDensity(FixParameters):
     _units = "(m^-3)"
     _print_value_fmt = "Fixed ion density profile error: "
 
+    _default_kwargs = {"name": "fixed ion density", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed ion density",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"ni_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2676,26 +2582,19 @@ class FixAtomicNumber(FixParameters):
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed atomic number profile error: "
 
+    _default_kwargs = {"name": "fixed atomic number", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed atomic number",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"Zeff_l": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2749,25 +2648,17 @@ class FixPsi(FixParameters):
     _units = "(Wb)"
     _print_value_fmt = "Fixed Psi error: "
 
+    _default_kwargs = {"name": "fixed Psi", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed Psi",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"Psi": True},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -2818,25 +2709,17 @@ class FixCurveShift(FixParameters):
     _units = "(m)"
     _print_value_fmt = "Fixed shift error: "
 
+    _default_kwargs = {"name": "fixed shift", "target": None}
+
     def __init__(
         self,
         curve,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed shift",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=curve,
             params={"shift": True},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -2868,25 +2751,17 @@ class FixCurveRotation(FixParameters):
     _units = "(rad)"
     _print_value_fmt = "Fixed rotation error: "
 
+    _default_kwargs = {"name": "fixed rotation", "target": None}
+
     def __init__(
         self,
         curve,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed rotation",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=curve,
             params={"rotmat": True},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -2958,27 +2833,20 @@ class FixCoilCurrent(FixParameters):
     _units = "(A)"
     _print_value_fmt = "Fixed coil current error: "
 
+    _default_kwargs = {"name": "fixed coil current", "target": None}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed coil current",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         indices = tree_map(lambda idx: {"current": idx}, indices)
         super().__init__(
             thing=coil,
             params=indices,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -3083,29 +2951,22 @@ class FixSumCoilCurrent(FixCoilCurrent):
     _units = "(A)"
     _print_value_fmt = "Summed coil current error: "
 
+    _default_kwargs = {"name": "summed coil current", "target": None}
+
     def __init__(
         self,
         coil,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="summed coil current",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        self._default_target = False
-        if target is None and bounds is None:
-            self._default_target = True
+        self._default_target = (
+            kwargs.get("target") is None and kwargs.get("bounds") is None
+        )
         super().__init__(
             coil=coil,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
             indices=indices,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -3182,26 +3043,19 @@ class FixOmniWell(FixParameters):
     _units = "(T)"
     _print_value_fmt = "Fixed omnigenity well error: "
 
+    _default_kwargs = {"name": "fixed omnigenity well", "target": None}
+
     def __init__(
         self,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed omnigenity well",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=field,
             params={"B_lm": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -3234,26 +3088,19 @@ class FixOmniMap(FixParameters):
     _units = "(rad)"
     _print_value_fmt = "Fixed omnigenity map error: "
 
+    _default_kwargs = {"name": "fixed omnigenity map", "target": None}
+
     def __init__(
         self,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
+        *,
         indices=True,
-        name="fixed omnigenity map",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=field,
             params={"x_lmn": indices},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -3283,25 +3130,18 @@ class FixOmniBmax(_FixedObjective):
     _units = "(rad)"
     _print_value_fmt = "Fixed omnigenity B_max error: "
 
+    _default_kwargs = {"name": "fixed omnigenity B_max", "target": None}
+
     def __init__(
         self,
         field,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed omnigenity B_max",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
+        target, bounds = kwargs.get("target"), kwargs.get("bounds")
         self._target_from_user = setdefault(bounds, target)
         super().__init__(
             things=field,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
     @execute_on_cpu
@@ -3397,25 +3237,17 @@ class FixSheetCurrent(FixParameters):
     _units = "(~)"
     _print_value_fmt = "Fixed sheet current error: "
 
+    _default_kwargs = {"name": "fixed sheet current", "target": None}
+
     def __init__(
         self,
         eq,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="fixed sheet current",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         super().__init__(
             thing=eq,
             params={"I": True, "G": True, "Phi_mn": True},
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
+            **kwargs,
         )
 
 
@@ -3457,28 +3289,23 @@ class FixNearAxisR(_FixedObjective):
     _units = "(m)"
     _print_value_fmt = "Fixed-Near-Axis R Behavior error: "
 
+    _default_kwargs = {"name": "Fix Near Axis R Behavior", "target": None}
+    _fixed_kwargs = {**_FixedObjective._fixed_kwargs, "bounds": None}
+
     def __init__(
         self,
         eq,
         order=1,
         N=None,
-        target=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="Fix Near Axis R Behavior",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        self._nae_eq = target
+        self._nae_eq = kwargs.pop("target", None)
         self._eq = eq
         self._order = order
         self._N = N
         super().__init__(
             things=eq,
-            target=None,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -3607,28 +3434,23 @@ class FixNearAxisZ(_FixedObjective):
     _units = "(m)"
     _print_value_fmt = "Fixed-Near-Axis Z Behavior error: "
 
+    _default_kwargs = {"name": "Fix Near Axis Z Behavior", "target": None}
+    _fixed_kwargs = {**_FixedObjective._fixed_kwargs, "bounds": None}
+
     def __init__(
         self,
         eq,
         order=1,
         N=None,
-        target=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="Fix Near Axis Z Behavior",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        self._nae_eq = target
+        self._nae_eq = kwargs.pop("target", None)
         self._eq = eq
         self._order = order
         self._N = N
         super().__init__(
             things=eq,
-            target=None,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -3763,30 +3585,22 @@ class FixNearAxisLambda(_FixedObjective):
     _units = "(dimensionless)"
     _print_value_fmt = "Fixed-Near-Axis Lambda Behavior error: "
 
+    _default_kwargs = {"name": "Fix Near Axis Lambda Behavior", "target": None}
+
     def __init__(
         self,
         eq,
         order=1,
         N=None,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        name="Fix Near Axis Lambda Behavior",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        self._nae_eq = target
+        self._nae_eq = kwargs.pop("target", None)
         self._order = order
         self._N = N
-        self._target_from_user = setdefault(bounds, None)
+        self._target_from_user = kwargs.get("bounds")
         super().__init__(
             things=eq,
-            target=None,
-            bounds=bounds,
-            weight=weight,
-            name=name,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):

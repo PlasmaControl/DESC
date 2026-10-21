@@ -1,11 +1,14 @@
 """Functions to run the TERPSICHORE stability solver on a DESC equilibrium."""
 
+from __future__ import annotations
+
 import datetime
 import functools
 import multiprocessing as mp
 import os
 import shutil
 import subprocess
+from typing import TYPE_CHECKING
 
 import numpy as np
 from netCDF4 import Dataset, stringtochar
@@ -16,10 +19,13 @@ from desc.compat import flip_theta
 from desc.compute.utils import get_transforms
 from desc.grid import LinearGrid
 from desc.objectives import ExternalObjective
-from desc.objectives.objective_funs import collect_docs
+from desc.objectives.objective_funs import ObjectiveKwargs, collect_docs
 from desc.transform import Transform
 from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 def terpsichore(
@@ -797,16 +803,17 @@ class TERPSICHORE(ExternalObjective):
     _units = "(dimensionless)"
     _print_value_fmt = "TERPSICHORE growth rate: "
 
+    _default_kwargs = {
+        "bounds": (-np.inf, 0),
+        "normalize": False,
+        "normalize_target": False,
+        "name": "terpsichore",
+    }
+
     def __init__(
         self,
         eq,
         *,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        loss_function=None,
         abs_step=1e-4,
         rel_step=0,
         processes=1,
@@ -830,10 +837,8 @@ class TERPSICHORE(ExternalObjective):
         timeout=60,
         tmp_dir="tmp_TERPS",
         save_tmp=False,
-        name="terpsichore",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            bounds = (-np.inf, 0)
         super().__init__(
             eq=eq,
             fun=terpsichore,
@@ -864,13 +869,7 @@ class TERPSICHORE(ExternalObjective):
             vectorized=True,
             abs_step=abs_step,
             rel_step=rel_step,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):

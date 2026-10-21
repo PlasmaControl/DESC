@@ -1,6 +1,9 @@
 """Generic objectives that don't belong anywhere else."""
 
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -27,7 +30,10 @@ from desc.utils import (
 )
 
 from .linear_objectives import _FixedObjective
-from .objective_funs import _Objective, collect_docs
+from .objective_funs import ObjectiveKwargs, _Objective, collect_docs
+
+if TYPE_CHECKING:
+    from typing_extensions import Unpack
 
 
 class ExternalObjective(_Objective):
@@ -99,6 +105,13 @@ class ExternalObjective(_Objective):
         "_vectorized",
     ]
 
+    _default_kwargs = {
+        "normalize": False,
+        "normalize_target": False,
+        "name": "external",
+    }
+    _fixed_kwargs = {"deriv_mode": "fwd", "jac_chunk_size": None}
+
     def __init__(
         self,
         eq,
@@ -109,16 +122,8 @@ class ExternalObjective(_Objective):
         vectorized=False,
         abs_step=1e-4,
         rel_step=0,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        loss_function=None,
-        name="external",
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._eq = eq.copy()
         self._fun = fun
         self._fun_kwargs = fun_kwargs
@@ -128,14 +133,7 @@ class ExternalObjective(_Objective):
         self._rel_step = rel_step
         super().__init__(
             things=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode="fwd",
-            name=name,
+            **kwargs,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -256,22 +254,16 @@ class GenericObjective(_Objective):
     _print_value_fmt = "Generic objective value: "
     _static_attrs = _Objective._static_attrs + ["_compute_kwargs", "f", "_p"]
 
+    _default_kwargs = {"name": "Generic"}
+
     def __init__(
         self,
         f,
         thing,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="Generic",
-        jac_chunk_size=None,
         compute_kwargs=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         errorif(
             isinstance(thing, OptimizableCollection),
@@ -279,24 +271,11 @@ class GenericObjective(_Objective):
             "thing must be of type Optimizable and not OptimizableCollection.",
         )
         thing = parse_argname_change(thing, kwargs, "eq", "thing")
-        if target is None and bounds is None:
-            target = 0
         self.f = f
         self._grid = grid
         self._compute_kwargs = setdefault(compute_kwargs, {})
-        super().__init__(
-            things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
-        self._print_value_fmt = f"{name} objective value: "
+        super().__init__(things=thing, **kwargs)
+        self._print_value_fmt = f"{self._name} objective value: "
         self._p = _parse_parameterization(thing)
         self._scalar = not bool(data_index[self._p][self.f]["dim"])
         self._coordinates = data_index[self._p][self.f]["coordinates"]
@@ -412,30 +391,23 @@ class LinearObjectiveFromUser(_FixedObjective):
     _units = "(Unknown)"
     _print_value_fmt = "Custom linear objective value: "
 
+    _default_kwargs = {
+        "normalize": False,
+        "normalize_target": False,
+        "name": "custom linear",
+    }
+    _fixed_kwargs = {"loss_function": None, "deriv_mode": "auto"}
+
     def __init__(
         self,
         fun,
         thing,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        name="custom linear",
-        jac_chunk_size=None,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         self._fun = fun
         super().__init__(
             things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
+            **kwargs,
         )
 
     def build(self, use_jit=False, verbose=1):
@@ -551,22 +523,16 @@ class ObjectiveFromUser(_Objective):
         "_p",
     ]
 
+    _default_kwargs = {"name": "Custom"}
+
     def __init__(
         self,
         fun,
         thing,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
+        *,
         grid=None,
-        name="Custom",
-        jac_chunk_size=None,
         compute_kwargs=None,
-        **kwargs,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
         errorif(
             isinstance(thing, OptimizableCollection),
@@ -574,25 +540,12 @@ class ObjectiveFromUser(_Objective):
             "thing must be of type Optimizable and not OptimizableCollection.",
         )
         thing = parse_argname_change(thing, kwargs, "eq", "thing")
-        if target is None and bounds is None:
-            target = 0
         self._fun = fun
         self._grid = grid
-        self._print_value_fmt = f"{name} objective value: "
 
         self._compute_kwargs = setdefault(compute_kwargs, {})
-        super().__init__(
-            things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=thing, **kwargs)
+        self._print_value_fmt = f"{self._name} objective value: "
         self._p = _parse_parameterization(thing)
 
     def build(self, use_jit=True, verbose=1):
@@ -780,6 +733,8 @@ class DeflationOperator(_Objective):
     _units = "~"
     _print_value_fmt = "Deflation error: "
 
+    _default_kwargs = {"name": "Deflation"}
+
     def __init__(
         self,
         thing,
@@ -788,21 +743,12 @@ class DeflationOperator(_Objective):
         objective=None,
         sigma=1.0,
         power=2,
-        target=None,
-        bounds=None,
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        loss_function=None,
-        deriv_mode="auto",
-        name="Deflation",
-        jac_chunk_size=None,
+        *,
         deflation_type="power",
         multiple_deflation_type="prod",
         single_shift=False,
+        **kwargs: Unpack[ObjectiveKwargs],
     ):
-        if target is None and bounds is None:
-            target = 0
         errorif(
             not np.all(
                 [
@@ -853,24 +799,13 @@ class DeflationOperator(_Objective):
                 " passed to DeflationOperator must be the same as the one passed to the"
                 " wrapped objective",
             )
-            name = "Deflated " + self._objective._name
+            kwargs["name"] = "Deflated " + self._objective._name
             self._units = self._objective._units
             self._scalar = self._objective._scalar
             self._coordinates = self._objective._coordinates
             self._print_value_fmt = "Deflated " + self._objective._print_value_fmt
 
-        super().__init__(
-            things=thing,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
+        super().__init__(things=thing, **kwargs)
 
     def build(self, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -605,6 +605,12 @@ class ProximalProjection(ObjectiveFunction):
                 "ProximalProjection can only handle equality constraints, "
                 + f"got bounds for constraint {con}",
             )
+            # Fx is too ill-conditioned for single precision in Fx^-1 Fc
+            errorif(
+                "f32" in (con._precision, constraint._precision),
+                ValueError,
+                f"ProximalProjection requires f64 precision for constraint {con}.",
+            )
         self._objective = objective
         self._constraint = constraint
         solve_options = {} if solve_options is None else solve_options

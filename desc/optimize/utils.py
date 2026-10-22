@@ -226,7 +226,7 @@ def _cholmod(A, maxiter=4):
     k = 2**maxiter  # number of values to try
     A = jnp.asarray(A)
     n = A.shape[0]
-    eye = jnp.eye(n)
+    eye = jnp.eye(n, dtype=A.dtype)
     # upper and lower bounds on eig(A)
     lb, _ = gershgorin_bounds(A)
     abs_lb = jnp.abs(lb)
@@ -522,9 +522,9 @@ def scale_columns(A, d):
     """Compute `A * d` reusing `A`'s buffer instead of allocating a second copy.
 
     `A` is invalid after this call, so callers must rebind, ie
-    `A = scale_columns(A, d)`.
+    `A = scale_columns(A, d)`. The result keeps the dtype of `A`.
     """
-    return A * d
+    return A * d.astype(A.dtype)
 
 
 @jit

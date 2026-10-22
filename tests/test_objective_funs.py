@@ -103,6 +103,7 @@ from desc.objectives.nae_utils import (
 from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.objectives.utils import softmax, softmin
+from desc.optimize import ProximalProjection
 from desc.profiles import (
     FourierZernikeProfile,
     PowerProfile,
@@ -4841,3 +4842,64 @@ def test_deprecated_constants():
     obj.build()
     with pytest.warns(FutureWarning, match="constants is deprecated"):
         _ = obj.compute_scaled_error(obj.x(), constants=obj.constants)
+
+
+@pytest.mark.unit
+@pytest.mark.skipif(
+    Version(jax.__version__) < Version("0.8.0"), reason="needs jax.enable_x64"
+)
+def test_objective_precision():
+    """Test single precision objectives and their dtypes inside ObjectiveFunction."""
+    eq = get("precise_QA")
+    with pytest.warns(UserWarning, match="Reducing radial"):
+        eq.change_resolution(4, 4, 4, 8, 8, 8)
+    for mode in ["fwd", "rev"]:
+        o64 = ForceBalance(eq, deriv_mode=mode)
+        o32 = ForceBalance(eq, deriv_mode=mode, precision="f32")
+        o64.build(verbose=0)
+        o32.build(verbose=0)
+        f64, f32 = o64.compute_scaled_error(eq.params_dict), o32.compute_scaled_error(
+            eq.params_dict
+        )
+        J64 = o64.jac_scaled_error(eq.params_dict)[0]["R_lmn"]
+        J32 = o32.jac_scaled_error(eq.params_dict)[0]["R_lmn"]
+        assert f32.dtype == jnp.float32 and J32.dtype == jnp.float32
+        np.testing.assert_allclose(f32, f64, atol=1e-4 * np.abs(f64).max())
+        np.testing.assert_allclose(J32, J64, atol=1e-4 * np.abs(J64).max())
+
+    for precisions, dtype in [(["f32", "f32"], "float32"), (["f32", None], "float64")]:
+        obj = ObjectiveFunction(
+            [
+                ForceBalance(eq, precision=precisions[0]),
+                AspectRatio(eq, precision=precisions[1]),
+            ],
+            deriv_mode="blocked",
+        )
+        obj.build(verbose=0)
+        assert obj.compute_scaled_error(obj.x(eq)).dtype == dtype
+        assert obj.jac_scaled_error(obj.x(eq)).dtype == dtype
+
+    obj = ObjectiveFunction([ForceBalance(eq), AspectRatio(eq)], precision="f32")
+    obj.build(verbose=0)
+    assert all(o.precision == "f32" for o in obj.objectives)
+    assert obj.jac_scaled_error(obj.x(eq)).dtype == jnp.float32
+
+    obj = ObjectiveFunction(ForceBalance(eq, precision="f32"), precision="f64")
+    with pytest.raises(ValueError, match="conflicts"):
+        obj.build(verbose=0)
+    with pytest.raises(ValueError, match="requires f64"):
+        ProximalProjection(
+            ObjectiveFunction(AspectRatio(eq)),
+            ObjectiveFunction(ForceBalance(eq), precision="f32"),
+            eq,
+        )
+
+    eq1, _ = eq.solve(
+        objective=ObjectiveFunction(ForceBalance(eq, precision="f32")),
+        maxiter=3,
+        verbose=0,
+        copy=True,
+    )
+    eq2, _ = eq.solve(maxiter=3, verbose=0, copy=True)
+    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=1e-5)
+    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=1e-5)

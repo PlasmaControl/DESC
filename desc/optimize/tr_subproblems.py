@@ -196,6 +196,9 @@ def trust_region_step_exact_svd(
 
     """
     uf = u.T.dot(f)
+    # solve the small reduced problem in the higher of the input and alpha precisions
+    dtype = jnp.result_type(uf, s, v, initial_alpha)
+    uf, s, v = uf.astype(dtype), s.astype(dtype), v.astype(dtype)
     suf = s * uf
 
     def phi_and_derivative(alpha, suf, s, trust_radius):
@@ -301,6 +304,9 @@ def trust_region_step_exact_cho(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
+    # solve the small reduced problem in the higher of the input and alpha precisions
+    dtype = jnp.result_type(g, B, initial_alpha)
+    g, B = g.astype(dtype), B.astype(dtype)
     # try full newton step
     R = chol(B)
     p_newton = cho_solve((R, True), -g)
@@ -410,6 +416,9 @@ def trust_region_step_exact_qr(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
+    # solve the small reduced problem in the higher of the input and alpha precisions
+    dtype = jnp.result_type(p_newton, z, R, initial_alpha)
+    p_newton, z, R = p_newton.astype(dtype), z.astype(dtype), R.astype(dtype)
 
     def truefun(*_):
         return p_newton, False, 0.0

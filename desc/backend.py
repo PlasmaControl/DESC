@@ -1,5 +1,6 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
+import contextlib
 import functools
 import os
 import warnings
@@ -281,6 +282,19 @@ if use_jax:  # noqa: C901
                 return func(*args, **kwargs)
 
         return wrapper
+
+    @contextlib.contextmanager
+    def single_precision():
+        """Trace JAX code in float32, with float32 (not TF32) matrix multiplies.
+
+        Arrays created inside default to float32. Float64 arrays created outside
+        should be cast to float32 before use inside.
+        """
+        # the experimental x64 context of older versions mixes dtypes in nested jits
+        if Version(jax.__version__) < Version("0.8.0"):
+            raise NotImplementedError("Single precision requires jax >= 0.8.0")
+        with jax.enable_x64(False), jax.default_matmul_precision("highest"):
+            yield
 
     _eigh_tridiagonal = jnp.vectorize(
         jax.scipy.linalg.eigh_tridiagonal,
@@ -661,6 +675,7 @@ if use_jax:  # noqa: C901
 else:  # pragma: no cover
     jit = lambda func, *args, **kwargs: func
     execute_on_cpu = lambda func: func
+    single_precision = contextlib.nullcontext
     import scipy.optimize
     from numpy.fft import ifft, irfft, irfft2, rfft, rfft2  # noqa: F401
     from scipy.fft import dct, dctn, idct, idctn  # noqa: F401

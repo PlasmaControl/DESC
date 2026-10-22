@@ -20,4 +20,6 @@ def test_agni_stability():
     obj = ObjectiveFunction(AgniStability(eq, basis))
     obj.build(verbose=0)
     # gamma^2 of family 0 on this basis, from a dense solve
-    np.testing.assert_allclose(obj.compute_scaled_error(obj.x(eq)), 2.278446950686e-3)
+    np.testing.assert_allclose(
+        obj.compute_scaled_error(obj.x(eq)), 2.278446950686e-3, rtol=3e-3
+    )

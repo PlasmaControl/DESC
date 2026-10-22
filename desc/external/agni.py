@@ -57,8 +57,8 @@ class AgniStability(_Objective):
     iteration. More information about the normalization in the preprint [1]_
 
 
-    The applied perturbations do not change the ρ=1 boundary (ξ·∇ρ = 0 there), so the modes are global
-    internal modes:
+    The applied perturbations do not change the ρ=1 boundary (ξ·∇ρ = 0 there),
+    so the modes are global internal modes:
 
     - γ² > 0: unstable to a global internal mode of the chosen toroidal family,
     - γ² ≤ 0: stable.
@@ -165,7 +165,8 @@ class AgniStability(_Objective):
         errorif(
             self._density and eq.electron_density is None,
             ValueError,
-            "density=True needs a density profile, please make sure that eq.electron_density is not None.",
+            "density=True needs a density profile, please make sure that "
+            "eq.electron_density is not None.",
         )
         self._coarse_basis = None
         if self._solver.eigensolver == "jd":

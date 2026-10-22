@@ -980,7 +980,7 @@ def reflection_matrix(normal):
     return R
 
 
-def rotation_matrix(axis, angle=None):
+def rotation_matrix_angle(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
 
     NOTE: This function works but will have zero gradient w.r.t.
@@ -989,7 +989,7 @@ def rotation_matrix(axis, angle=None):
     result for this case to avoid a NaN leak due to 1/0 division.
 
     If seeking to rotate one vector onto another, it is recommended
-    to use rotate_vector_to_vector instead which uses quaternions
+    to use rotation_matrix_vector_to_vector instead which uses quaternions
     to avoid this issue
 
     Parameters
@@ -1017,7 +1017,7 @@ def rotation_matrix(axis, angle=None):
     return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
-def rotate_vector_to_vector(u, v):
+def rotation_matrix_vector_to_vector(u, v):
     """
     Computes a rotation matrix that rotates vector u onto vector v.
 

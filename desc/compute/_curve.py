@@ -5,7 +5,7 @@ from desc.backend import jnp, sign
 from ..utils import (
     cross,
     dot,
-    rotate_vector_to_vector,
+    rotation_matrix_vector_to_vector,
     rpz2xyz,
     rpz2xyz_vec,
     xyz2rpz,
@@ -220,7 +220,7 @@ def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([X, Y, Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
     # convert back to rpz
@@ -258,7 +258,7 @@ def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([dX, dY, dZ]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
@@ -302,7 +302,7 @@ def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d2X, d2Y, d2Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
@@ -353,7 +353,7 @@ def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
@@ -395,7 +395,7 @@ def _x_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([X, Y, Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T) + center
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T) + params["shift"]
@@ -432,7 +432,7 @@ def _x_s_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([dX, dY, dZ]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
@@ -469,7 +469,7 @@ def _x_ss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d2X, d2Y, d2Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)
@@ -506,7 +506,7 @@ def _x_sss_FourierXYCurve(params, transforms, profiles, data, **kwargs):
     coords = jnp.array([d3X, d3Y, d3Z]).T
     # rotate into place
     Zaxis = jnp.array([0.0, 0.0, 1.0])  # 2D curve in X-Y plane has normal = +Z axis
-    A = rotate_vector_to_vector(Zaxis, normal)
+    A = rotation_matrix_vector_to_vector(Zaxis, normal)
 
     coords = jnp.matmul(coords, A.T)
     coords = jnp.matmul(coords, params["rotmat"].reshape((3, 3)).T)

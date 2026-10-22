@@ -17,7 +17,7 @@ from desc.utils import (
     copy_coeffs,
     errorif,
     get_ess_scale,
-    rotation_matrix,
+    rotation_matrix_angle,
     rpz2xyz,
     rpz2xyz_vec,
     warnif,
@@ -921,7 +921,7 @@ class FourierPlanarCurve(Curve):
         rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
             np.allclose(dotprod, -1.0),
             np.diag(np.array([1.0, -1.0, -1.0])),
-            rotation_matrix(axis, angle),
+            rotation_matrix_angle(axis, angle),
         )
         coords_rotated = coords_centered @ rotmat  # rotate to X-Y plane
 
@@ -953,7 +953,7 @@ class FourierPlanarCurve(Curve):
             # original curve was parameterized "backwards" (clockwise),
             # compared to FourierPlanarCurve assumption
             normal = -normal  # flip normal vector direction
-            rotmat = rotation_matrix(axis, np.pi)
+            rotmat = rotation_matrix_angle(axis, np.pi)
             coords_rotated = (
                 coords_rotated @ rotmat
             )  # flip on X-Y plane to match normal vector
@@ -1332,7 +1332,7 @@ class FourierXYCurve(Curve):
         rotmat = np.where(  # handle the case where normal is aligned with the -Z axis
             np.allclose(dotprod, -1.0),
             np.diag(np.array([1.0, -1.0, -1.0])),
-            rotation_matrix(axis, angle),
+            rotation_matrix_angle(axis, angle),
         )
         coords = coords @ rotmat  # rotate to X-Y plane
 

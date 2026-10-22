@@ -1366,11 +1366,14 @@ def test_proximal_jacobian():
     # this is basically the old method we're benchmarking against
     xf = con1.x(eq1)
     xg = obj1.x(eq1)
+    eq_unfixed_idx = prox1._eq_solve_objective._unfixed_idx
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    eq_Z = (1 / prox1._eq_solve_objective._D)[eq_unfixed_idx, None] * (
+        prox1._eq_solve_objective._feasible_tangents[eq_unfixed_idx]
+    )
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    eq_unfixed_idx = prox1._eq_solve_objective._unfixed_idx
-    eq_Z = prox1._eq_solve_objective._Z
     Fxh = Fx[:, eq_unfixed_idx] @ eq_Z
     Gxh = Gx[:, eq_unfixed_idx] @ eq_Z
     Fc = Fx @ prox1._dxdc
@@ -1544,8 +1547,10 @@ def test_LinearConstraint_jacobian():
 
     x = obj1.x()
     x_reduced = lc1.x()
-    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
-    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    Z1 = (1 / lc1._D)[lc1._unfixed_idx, None] * lc1._feasible_tangents[lc1._unfixed_idx]
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ Z1
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ Z1
     jvp_scaled = jac_scaled @ vl
     jvp_unscaled = jac_unscaled @ vl
     vjp_scaled = jac_scaled.T @ vr

@@ -6,8 +6,7 @@ from jax.test_util import check_grads
 
 from desc.backend import jnp
 from desc.utils import (
-    rotation_matrix_angle,
-    rotation_matrix_vector_to_vector,
+    rotation_matrix,
     rpz2xyz,
     rpz2xyz_vec,
     safenormalize,
@@ -19,8 +18,12 @@ from desc.utils import (
 @pytest.mark.unit
 def test_rotation_matrix_angle():
     """Test calculation of rotation matrices."""
-    A = rotation_matrix_angle([0, 0, np.pi / 2])
+    A = rotation_matrix([0, 0, np.pi / 2])
     At = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+    np.testing.assert_allclose(A, At, atol=1e-10)
+    A = rotation_matrix([0, 0, 2], np.pi / 2)
+    np.testing.assert_allclose(A, At, atol=1e-10)
+    A = rotation_matrix(axis=[0, 0, 2], angle=np.pi / 2)
     np.testing.assert_allclose(A, At, atol=1e-10)
 
 
@@ -29,21 +32,21 @@ def test_rotation_matrix_vector_to_vector():
     """Test calculation of rotation matrices given two vectors."""
     u = safenormalize(np.random.rand(3))
     v = safenormalize(np.random.rand(3) + np.array([0.1, 0.2, 0.3]))
-    A = rotation_matrix_vector_to_vector(u, v)
+    A = rotation_matrix(u, v)
     np.testing.assert_allclose(v, u @ A.T)
     # edge case: vectors parallel
     v = u
-    A = rotation_matrix_vector_to_vector(u, v)
+    A = rotation_matrix(u, v)
     np.testing.assert_allclose(v, u @ A.T)
     # edge case: vectors antiparallel
     v = -u
-    A = rotation_matrix_vector_to_vector(u, v)
+    A = rotation_matrix(u, v)
     np.testing.assert_allclose(v, u @ A.T)
 
 
 @pytest.mark.unit
 def test_rotation_matrix_vector_to_vector_gradients():
-    """Test grad of rotation_matrix_vector_to_vector against finite diffs."""
+    """Test grad of rotation_matrix(u, v) against finite diffs."""
     # Standard non-aligned case
     u = jnp.array([1.0, 2.0, 3.0])
     v = jnp.array([4.0, 1.0, -2.0])
@@ -51,7 +54,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     # Validates order 1 derivatives wrt positional args (0: u, 1: v)
     # using forward-mode ('fwd') and reverse-mode ('rev') AD against finite differences
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u, v),
         order=1,
         modes=["fwd", "rev"],
@@ -64,7 +67,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     u_par = jnp.array([1.0, 0.0, 0.0])
     v_par = jnp.array([2.0, 0.0, 0.0])
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u_par, v_par),
         order=1,
         modes=["fwd", "rev"],
@@ -75,7 +78,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     u_par = jnp.array([1.0, 1e-5, 0.0])
     v_par = jnp.array([2.0, 0.0, 0.0])
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u_par, v_par),
         order=1,
         modes=["fwd", "rev"],
@@ -87,7 +90,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     u_anti = jnp.array([1.0, 1e-2, 0.0])
     v_anti = jnp.array([-1.0, 0.0, 0.0])
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u_anti, v_anti),
         order=1,
         modes=["fwd", "rev"],
@@ -99,7 +102,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     u_anti = jnp.array([1.0, 1e-5, 0.0])
     v_anti = jnp.array([-1.0, 0.0, 0.0])
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u_anti, v_anti),
         order=1,
         modes=["fwd", "rev"],
@@ -111,7 +114,7 @@ def test_rotation_matrix_vector_to_vector_gradients():
     u_anti = jnp.array([1.0, 0.0, 0.0])
     v_anti = jnp.array([-1.0, 0.0, 0.0])
     check_grads(
-        rotation_matrix_vector_to_vector,
+        rotation_matrix,
         args=(u_anti, v_anti),
         order=1,
         modes=["fwd", "rev"],

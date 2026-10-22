@@ -980,17 +980,91 @@ def reflection_matrix(normal):
     return R
 
 
-def rotation_matrix_angle(axis, angle=None):
+def rotation_matrix(
+    axis_or_vector=None, angle_or_vector=None, *, axis=None, angle=None
+):
+    """Matrix to rotate points, either about an axis or from one vector onto another.
+
+    If ``angle_or_vector`` is a scalar (or None), returns the matrix that rotates
+    points about the axis ``axis_or_vector`` by the angle ``angle_or_vector``.
+    If ``angle_or_vector`` is a length-3 vector, returns the matrix that rotates the
+    vector ``axis_or_vector`` onto the vector ``angle_or_vector``.
+
+    NOTE: When rotating about an axis by an angle, the result will have zero gradient
+    (in both forward and reverse mode AD) w.r.t. the axis when the norm of the axis
+    is nearly zero (specifically, when norm(axis)<sqrt(epsilon)), as the result is
+    manually replaced by the identity there to avoid a NaN leak from 1/0 division.
+    If ``angle_or_vector`` is None, this means zero gradient w.r.t. the angle as
+    well. If seeking to rotate one vector onto another, it is recommended to pass
+    both vectors instead of computing an axis and angle from them, which uses
+    quaternions to avoid both this zero gradient and the NaN gradient that comes
+    from computing the angle with arccos when the vectors are nearly parallel.
+
+    Parameters
+    ----------
+    axis_or_vector : array-like, shape(3,)
+        Axis of rotation, or vector to be rotated onto ``angle_or_vector`` if
+        ``angle_or_vector`` is a vector, in cartesian (X,Y,Z) coordinates.
+    angle_or_vector : float, array-like of shape(3,), or None
+        If float, angle to rotate by, in radians. If None, use norm of
+        ``axis_or_vector`` as the angle. If array-like of shape(3,), vector in
+        cartesian (X,Y,Z) coordinates to rotate ``axis_or_vector`` onto.
+    axis : array-like, shape(3,), optional
+        Keyword alias for ``axis_or_vector``, for rotating about an axis.
+    angle : float, optional
+        Keyword alias for ``angle_or_vector``, for rotating about an axis.
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    errorif(
+        axis is not None and axis_or_vector is not None,
+        ValueError,
+        "Pass only one of axis and axis_or_vector.",
+    )
+    errorif(
+        angle is not None and angle_or_vector is not None,
+        ValueError,
+        "Pass only one of angle and angle_or_vector.",
+    )
+    if axis is not None:
+        axis_or_vector = axis
+    if angle is not None:
+        errorif(
+            jnp.ndim(angle) > 0,
+            ValueError,
+            f"angle must be a scalar, got shape {jnp.shape(angle)}",
+        )
+        angle_or_vector = angle
+    errorif(axis_or_vector is None, ValueError, "axis_or_vector must be given.")
+    if angle_or_vector is not None and jnp.ndim(angle_or_vector) > 0:
+        errorif(
+            jnp.shape(angle_or_vector) != (3,),
+            ValueError,
+            "angle_or_vector must be a scalar or length-3 vector, "
+            f"got shape {jnp.shape(angle_or_vector)}",
+        )
+        return _rotation_matrix_vector_to_vector(axis_or_vector, angle_or_vector)
+    return _rotation_matrix_angle(axis_or_vector, angle_or_vector)
+
+
+def _rotation_matrix_angle(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
 
-    NOTE: This function works but will have zero gradient w.r.t.
-    the angle when the angle is nearly zero (specifically, when
-    the angle<sqrt(epsilon)) as there is a manual replacement of the
-    result for this case to avoid a NaN leak due to 1/0 division.
+    NOTE: This function will have zero gradient (in both forward and reverse
+    mode AD) w.r.t. the axis when the norm of the axis is nearly zero
+    (specifically, when norm(axis)<sqrt(epsilon)), as there is a manual
+    replacement of the result with the identity for this case to avoid a NaN
+    leak due to 1/0 division. If angle is None, this means zero gradient w.r.t.
+    the angle as well. The gradient w.r.t. an explicitly passed angle is unaffected.
 
     If seeking to rotate one vector onto another, it is recommended
-    to use rotation_matrix_vector_to_vector instead which uses quaternions
-    to avoid this issue
+    to use _rotation_matrix_vector_to_vector instead which uses quaternions
+    to avoid this issue, as well as the NaN gradient that comes from computing
+    the angle with arccos when the vectors are nearly parallel.
 
     Parameters
     ----------
@@ -1017,7 +1091,7 @@ def rotation_matrix_angle(axis, angle=None):
     return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
 
 
-def rotation_matrix_vector_to_vector(u, v):
+def _rotation_matrix_vector_to_vector(u, v):
     """
     Computes a rotation matrix that rotates vector u onto vector v.
 

@@ -17,7 +17,7 @@ from desc.compute.utils import (
 from desc.grid import LinearGrid, QuadratureGrid, _Grid
 from desc.io import IOAble
 from desc.optimizable import Optimizable, optimizable_parameter
-from desc.utils import errorif, reflection_matrix, rotation_matrix_angle
+from desc.utils import errorif, reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, Optimizable, ABC):
@@ -190,7 +190,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
-        R = rotation_matrix_angle(axis=np.asarray(axis).astype(float), angle=angle)
+        R = rotation_matrix(axis=np.asarray(axis).astype(float), angle=angle)
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 

@@ -19,6 +19,7 @@ Breaking Changes and Deprecations
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+- ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (preivous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals.
 
 Bug Fixes
 
@@ -28,6 +29,7 @@ Bug Fixes
 - Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Improves planar coil representation (``desc.coils.FourierPlanarCoil`` and ``desc.coils.FourierXYCoil``) internal rotation methods to avoid potential NaNs which could occur when the normal is parallel or antiparallel to Z-axis( to within machine epsilon), and also ensure the gradient at those edge cases is not only not NaN but also non-zero to avoid optimizer stalls at those cases.
+
 - Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.

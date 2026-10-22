@@ -135,8 +135,7 @@ def _evaluate_in_chunks(
 
     if reduction is None:
         # write the chunks in place, stacking then concatenating them copies the output
-        # the last (possibly partial) chunk is computed first to allocate the output
-        n_scan = (n_elements - 1) // chunk_size * chunk_size
+        n_scan = n_elements - n_elements % chunk_size
         f_partial, dyn_args = _argnums_partial(vmapped_fun, argnums, args, kwargs)
 
         def f_chunk(i, size=chunk_size):
@@ -153,10 +152,15 @@ def _evaluate_in_chunks(
                 None,
             )
 
-        out = tree_map(
-            lambda y: jnp.zeros((n_elements, *y.shape[1:]), y.dtype).at[n_scan:].set(y),
-            f_chunk(n_scan, n_elements - n_scan),
+        # only trace the shape if there is no remainder, compiling f twice is slow
+        y = (
+            f_chunk(n_scan, n_elements - n_scan)
+            if n_scan < n_elements
+            else jax.eval_shape(f_chunk, 0)
         )
+        out = tree_map(lambda y: jnp.zeros((n_elements, *y.shape[1:]), y.dtype), y)
+        if n_scan < n_elements:
+            out = tree_map(lambda o, y: o.at[n_scan:].set(y), out, y)
         return scan(body, out, jnp.arange(0, n_scan, chunk_size))[0]
 
     scan_x, remain_x = zip(

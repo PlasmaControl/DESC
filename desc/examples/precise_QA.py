@@ -34,13 +34,13 @@ from desc.optimize import Optimizer
 surf = FourierRZToroidalSurface(
     R_lmn=[1, 0.166, 0.1],
     Z_lmn=[-0.166, -0.1],
-    modes_R=[[0, 0], [1, 0], [0, 1]],
-    modes_Z=[[-1, 0], [0, -1]],
-    NFP=2,
+    modes_R=[[0, 0], [1, 0], [0, 2]],
+    modes_Z=[[-1, 0], [0, -2]],
+    NFP=1,
 )
 # create initial equilibrium. Psi chosen to give B ~ 1 T. Could also give profiles here,
 # default is zero pressure and zero current
-eq = Equilibrium(M=8, N=8, Psi=0.087, surface=surf)
+eq = Equilibrium(M=8, N=16, Psi=0.087, surface=surf)
 # this is usually all you need to solve a fixed boundary equilibrium
 eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
 # it will be helpful to store intermediate results

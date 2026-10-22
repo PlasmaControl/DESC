@@ -192,8 +192,12 @@ class VMECIO:
         eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
 
         # lambda
+        # VMEC stores lambda on the half mesh, s_j = (j - 1/2) / (ns - 1),
+        # and the first row (axis) is unused
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
+        ns = L_mn.shape[0]
+        r_half = np.sqrt((np.arange(1, ns) - 0.5) / (ns - 1))
+        eq.L_lmn = fourier_to_zernike(m, n, L_mn[1:], eq.L_basis, rho=r_half)
 
         # apply boundary conditions
         constraints = get_fixed_axis_constraints(

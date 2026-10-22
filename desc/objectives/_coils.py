@@ -220,9 +220,11 @@ class _CoilObjective(_Objective):
         )
 
         _build_coilset_tree()
-        quad_weights = np.concatenate([g.spacing[:, 2] for g in grid])[
-            self._coilset_tree["objective_mask"]
-        ]
+        quad_weights = np.sqrt(
+            np.concatenate([g.spacing[:, 2] for g in grid])[
+                self._coilset_tree["objective_mask"]
+            ]
+        )
 
         if self._broadcast_input.lower() == "node":
             grid_nodes_unmasked = [
@@ -2634,7 +2636,9 @@ class CoilSetLinkingNumber(_Objective):
             params=params, grid=constants["grid"]
         )
 
-        return jnp.abs(link).sum(axis=0)
+        # the diagonal entries of "link" should be excluded
+        mask = ~jnp.eye(self._dim_f, dtype=bool)
+        return jnp.abs(link).sum(axis=0, where=mask)
 
 
 class SurfaceCurrentRegularization(_Objective):
@@ -2817,13 +2821,20 @@ class SurfaceCurrentRegularization(_Objective):
             has_axis=source_grid.axis.size,
         )
         if self._normalize:
+            Phi = np.mean(
+                np.abs(surface_current_field.compute("Phi", grid=source_grid)["Phi"])
+            )
+            current_norm = np.max([Phi, 1])
             if isinstance(surface_current_field, FourierCurrentPotentialField):
-                self._normalization = np.max(
-                    [abs(surface_current_field.I) + abs(surface_current_field.G), 1]
-                )
-            else:  # it does not have I,G bc is CurrentPotentialField
-                Phi = surface_current_field.compute("Phi", grid=source_grid)["Phi"]
-                self._normalization = np.max([np.mean(np.abs(Phi)), 1])
+                IG = abs(surface_current_field.I) + abs(surface_current_field.G)
+                current_norm = np.max([current_norm, IG])
+            scales = compute_scaling_factors(surface_current_field)
+            if self._regularization == "K":  # units = A
+                self._normalization = current_norm
+            elif self._regularization == "Phi":  # units = A*m
+                self._normalization = current_norm * scales["a"]
+            elif self._regularization == "sqrt(Phi)":  # units = sqrt(A)*m
+                self._normalization = np.sqrt(current_norm) * scales["a"]
 
         self._constants = {
             "surface_transforms": surface_transforms,

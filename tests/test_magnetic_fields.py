@@ -1201,6 +1201,59 @@ class TestMagneticFields:
             field.compute_magnetic_vector_potential(np.array([1.75, 0.0, 0.0]))
 
     @pytest.mark.unit
+    def test_spline_field_axisym_filament_convergence(self):
+        """Single-phi-plane cubic spline vs analytic circular filament loop."""
+        from scipy.special import ellipe, ellipk
+
+        a, current = 2.0, 1.0
+
+        def loop(R, Z):
+            # on-axis-free field of a circular filament of radius a at Z=0
+            k2 = 4 * a * R / ((a + R) ** 2 + Z**2)
+            K, E = ellipk(k2), ellipe(k2)
+            d = (a - R) ** 2 + Z**2
+            s = np.sqrt((a + R) ** 2 + Z**2)
+            c = mu_0 * current / (2 * np.pi)
+            BZ = c / s * (K + (a**2 - R**2 - Z**2) / d * E)
+            BR = c * Z / (R * s) * (-K + (a**2 + R**2 + Z**2) / d * E)
+            return BR, BZ
+
+        def max_err(n, nphi, method):
+            R = np.linspace(0.5, 1.5, n)
+            Z = np.linspace(-0.5, 0.5, n)
+            phi = np.linspace(0, 2 * np.pi, nphi, endpoint=False)
+            BR, BZ = loop(*np.meshgrid(R, Z, indexing="ij"))
+            rep = lambda x: np.repeat(x[:, None, :], nphi, axis=1)
+            field = SplineMagneticField(
+                R, phi, Z, rep(BR), rep(0 * BR), rep(BZ), method=method
+            )
+            # quarter-cell offsets, away from the boundary
+            i = np.arange(2, n - 3, 3)
+            pts = np.array(
+                [
+                    (R[p] + 0.25 * (R[1] - R[0]), 0.3, Z[q] + 0.25 * (Z[1] - Z[0]))
+                    for p in i
+                    for q in i
+                ]
+            )
+            exact = np.stack(loop(pts[:, 0], pts[:, 2]), axis=1)
+            B = np.asarray(field.compute_magnetic_field(pts))
+            np.testing.assert_allclose(B[:, 1], 0, atol=1e-14)
+            return np.abs(B[:, [0, 2]] - exact).max() / np.abs(exact).max()
+
+        e_coarse = max_err(33, 1, "cubic")
+        e_fine = max_err(65, 1, "cubic")
+        # "cubic" uses 2nd-order finite-difference derivatives, so the
+        # interpolation error is O(h^3) (observed ~7x per halving of h);
+        # zero Z-derivatives (the bug) gave O(h) behaviour and 1e-3 errors.
+        assert e_fine < 1e-5
+        assert e_coarse / e_fine > 6
+        # cubic must beat linear between nodes
+        assert e_fine < 0.2 * max_err(65, 1, "linear")
+        # single plane agrees with the multi-plane 3D path
+        np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
+
+    @pytest.mark.unit
     def test_field_line_integrate(self):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit

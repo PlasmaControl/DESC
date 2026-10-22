@@ -295,7 +295,8 @@ class PlasmaField(_MagneticField):
 
         def _compute_A(coords):
             out_transform = self._out_transform(coords, derivs=0)
-            # Interpolate the A grid
+            # Interpolate the A grid. `Transform.transform` squeezes a single-node
+            # result to a scalar, so restore the (num_points, 3) shape explicitly.
             return jnp.stack(
                 [
                     out_transform.transform(self._A_coeff[:, 0]),
@@ -303,7 +304,7 @@ class PlasmaField(_MagneticField):
                     out_transform.transform(self._A_coeff[:, 2]),
                 ],
                 axis=-1,
-            )
+            ).reshape(coords.shape[0], 3)
 
         A = batch_map(_compute_A, coords, chunk_size)
 

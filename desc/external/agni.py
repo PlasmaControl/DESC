@@ -165,7 +165,7 @@ class AgniStability(_Objective):
         errorif(
             self._density and eq.electron_density is None,
             ValueError,
-            "density=True needs a density profile, eq.electron_density.",
+            "density=True needs a density profile, please make sure that eq.electron_density is not None.",
         )
         self._coarse_basis = None
         if self._solver.eigensolver == "jd":

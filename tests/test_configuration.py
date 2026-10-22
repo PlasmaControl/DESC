@@ -613,6 +613,46 @@ class TestInitialGuess:
         )
 
     @pytest.mark.unit
+    def test_ensure_nested_method_rejects_unknown_name(self):
+        """Reject an ensure_nested_method other than opt or map2disc."""
+        surf = _surface_where_heuristic_guess_is_unnested()
+        eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq.is_nested()
+
+        with pytest.raises(ValueError, match="one of 'opt', 'map2disc'"):
+            with pytest.warns(UserWarning, match="not nested"):
+                eq.set_initial_guess(ensure_nested_method="scaling")
+
+    @pytest.mark.unit
+    def test_map2disc_falls_back_when_init_raises(self, monkeypatch, capsys):
+        """Fall back to GoodCoordinates when map2disc initialization raises."""
+        import types
+
+        import desc.equilibrium.initial_guess as initial_guess
+
+        monkeypatch.setitem(
+            sys.modules, "map2disc_jax", types.ModuleType("map2disc_jax")
+        )
+
+        def _fail(_eq):
+            raise RuntimeError("map2disc init failed")
+
+        monkeypatch.setattr(initial_guess, "_babin_init_Zernike_only", _fail)
+        surf = _surface_where_heuristic_guess_is_unnested()
+        eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
+        assert not eq_raw.is_nested()
+
+        with pytest.warns(UserWarning, match="not nested"):
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+
+        captured = capsys.readouterr()
+        assert "Unable to use map2disc method" in captured.out
+        assert "map2disc init failed" in captured.out
+        assert not np.allclose(eq.R_lmn, eq_raw.R_lmn) or not np.allclose(
+            eq.Z_lmn, eq_raw.Z_lmn
+        )
+
+    @pytest.mark.unit
     def test_map2disc_preserves_boundary_and_right_handed_jacobian(self):
         """Preserve the boundary and a positive Jacobian after map2disc init."""
         pytest.importorskip("map2disc_jax")
@@ -690,6 +730,19 @@ class TestInitialGuess:
             sym_coeffs[sym_basis.get_idx(0, 0, 0)], expected[(0, 0, 0)], atol=1e-12
         )
         assert sym_basis.get_idx(1, 1, -1, error=False).size == 0
+
+    @pytest.mark.unit
+    def test_zernike_vs_zeta_fit_rejects_wrong_shape(self):
+        """Reject Zernike samples whose toroidal length is not 2N+1."""
+        from desc.basis import FourierZernikeBasis
+        from desc.equilibrium.initial_guess import _zernike_coeffs_to_fourier_zernike
+
+        basis = FourierZernikeBasis(L=2, M=2, N=1, NFP=1)
+        lm = np.array([[0, 0], [1, -1], [1, 1]])
+        zeta = np.zeros(2 * basis.N + 1)
+        c_vs_zeta = np.zeros((lm.shape[0], zeta.size + 1))
+        with pytest.raises(ValueError, match="Expected Zernike coefficients"):
+            _zernike_coeffs_to_fourier_zernike(c_vs_zeta, zeta, lm, basis)
 
 
 class TestGetSurfaces:

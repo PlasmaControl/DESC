@@ -10,6 +10,11 @@ from desc.io import IOAble
 from desc.utils import Index, errorif, flatten_list, svd_inv_null, unique_list, warnif
 
 
+def _get_auto_x_scale(x):
+    """Scale for the linear constraint projection determined from a state vector."""
+    return np.where(np.abs(x) < 1e2, 1, np.abs(x))
+
+
 def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa: C901
     """Compute and factorize A to get particular solution and nullspace.
 
@@ -26,9 +31,9 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     x_scale : array_like or ``'auto'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
-        If set to ``'auto'``, the scale is determined from the initial state vector.
-        This can be passed through optimizer options as
-        solve_options["linear_constraint_options"]["x_scale"].
+        If set to ``'auto'``, or for any entries equal to 0, the scale is determined
+        from the initial state vector. When optimizing with ``Optimizer.optimize``
+        this is set by its ``x_scale`` argument.
 
     Returns
     -------
@@ -123,17 +128,17 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
     A, b, xp, unfixed_idx, fixed_idx = remove_fixed_parameters(A, b, xp)
 
     # compute x_scale if not provided
-    # Note: this x_scale is not the same as the x_scale as in solve_options["x_scale"]
-    # but the one given as solve_options["linear_constraint_options"]["x_scale"]
-    if x_scale == "auto":
-        x_scale = objective.x(*objective.things)
+    auto_x_scale = _get_auto_x_scale(objective.x(*objective.things))
+    if isinstance(x_scale, str) and x_scale == "auto":
+        x_scale = auto_x_scale
     errorif(
         x_scale.shape != xp.shape,
         ValueError,
         "x_scale must be the same size as the full state vector. "
         + f"Got size {x_scale.size} for state vector of size {xp.size}.",
     )
-    D = np.where(np.abs(x_scale) < 1e2, 1, np.abs(x_scale))
+    # x_scale==0 means use auto scale, otherwise use user scale
+    D = np.where(x_scale == 0, auto_x_scale, x_scale)
 
     # null space & particular solution
     A = A * D[None, unfixed_idx]

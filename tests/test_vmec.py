@@ -1,10 +1,12 @@
 """Tests for reading/writing/converting VMEC data."""
 
+import jax
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
 import desc.examples
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
@@ -14,11 +16,13 @@ from desc.io import load
 from desc.transform import Transform
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
+    boozer_transform_vmec,
     fourier_to_zernike,
     make_boozmn_output,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
     ptolemy_linear_transform,
+    read_wout_boozer_inputs,
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
@@ -1800,3 +1804,73 @@ def test_load_lambda_half_mesh():
     lam_desc = -eq.compute("lambda", grid=grid)["lambda"]
     # half mesh fit gives ~2.5e-4, fitting on the full mesh gave ~6e-3
     np.testing.assert_allclose(lam_desc, lam_vmec, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_boozer_transform_vmec_against_booz_xform():
+    """Test the Boozer transform from wout harmonics against booz_xform.
+
+    Reference values were computed by booz_xform 0.1.0 from wout_HELIOTRON.nc with
+    mboz=12, nboz=6 and compute_surfs=[63, 254]. All output spectra agree with
+    booz_xform to about 1e-14 relative to their largest harmonic.
+    """
+    path = "./tests/inputs/wout_HELIOTRON.nc"
+    surfs = [63, 254]
+    out = boozer_transform_vmec(read_wout_boozer_inputs(path), surfs, 12, 6)
+    idx = [0, 13, 14, 27, 40, 41, 54, 67]
+    np.testing.assert_array_equal(out["xm_b"][idx], [0, 1, 1, 2, 3, 3, 4, 5])
+    np.testing.assert_array_equal(out["xn_b"][idx], [0, 0, 19, 19, 19, 38, 38, 38])
+    # fmt: off
+    bmnc_b = [
+        [0.38584592529618134, -0.016842764374087837, -0.007538165365146468,
+         -0.02930158909814075, -0.017751263752736522, 0.0001487256566536412,
+         -0.0015671697967390695, -0.002155474397700236],
+        [0.4186206879090174, -0.029589714897432135, 0.038368116583759625,
+         -0.15378221334057196, -0.01957256298675992, 0.016641003283856395,
+         -0.03025523487066447, -0.01105987322565873],
+    ]
+    numns_b = [
+        [0.0, -0.008104227810155382, 0.0006442830436377145, 0.003878045456315129,
+         0.002400526558830137, 1.1864281357596145e-05, 0.0002472460441279222,
+         0.0003201946436960566],
+        [0.0, -0.013513321372469444, -0.005737911890185375, 0.020016980531241332,
+         0.0027875505244253675, -0.002642788553294341, 0.0048163882906652146,
+         0.00165664625147577],
+    ]
+    # fmt: on
+    np.testing.assert_allclose(out["bmnc_b"][:, idx], bmnc_b, rtol=0, atol=1e-13)
+    np.testing.assert_allclose(out["numns_b"][:, idx], numns_b, rtol=0, atol=1e-13)
+    np.testing.assert_allclose(
+        out["G"], [3.9105863298137264, 3.9956475135216105], rtol=1e-14
+    )
+    np.testing.assert_allclose(
+        out["I"], [-0.0254628320441786, -0.15705971966698512], rtol=1e-13
+    )
+
+
+@pytest.mark.unit
+def test_boozer_transform_vmec_derivatives():
+    """Test JVP and VJP of the wout Boozer transform by FD and duality."""
+    wout = read_wout_boozer_inputs("./tests/inputs/wout_HELIOTRON.nc")
+    keys = ["bmnc", "bsubumnc", "bsubvmnc", "lmns", "iotas"]
+    surfs = np.array([40, 200])
+
+    def fun(x):
+        out = boozer_transform_vmec({**wout, **x}, surfs, M_booz=8, N_booz=4)
+        return out["bmnc_b"]
+
+    rng = np.random.default_rng(0)
+    x0 = {k: jnp.asarray(wout[k]) for k in keys}
+    tangent = {k: rng.standard_normal(wout[k].shape) * np.abs(wout[k]) for k in keys}
+    f0, jvp_out = jax.jvp(fun, (x0,), (tangent,))
+    h = 1e-6
+    fp = fun({k: x0[k] + h * tangent[k] for k in keys})
+    fm = fun({k: x0[k] - h * tangent[k] for k in keys})
+    fd = (fp - fm) / (2 * h)
+    np.testing.assert_allclose(jvp_out, fd, rtol=0, atol=1e-7 * np.max(np.abs(fd)))
+
+    cotangent = rng.standard_normal(f0.shape)
+    (vjp_out,) = jax.vjp(fun, x0)[1](cotangent)
+    lhs = np.sum(cotangent * jvp_out)
+    rhs = sum(np.sum(vjp_out[k] * tangent[k]) for k in keys)
+    np.testing.assert_allclose(lhs, rhs, rtol=1e-12)

@@ -394,3 +394,5 @@ VMEC and Other Codes
 
     desc.vmec.VMECIO
     desc.vmec_utils.make_boozmn_output
+    desc.vmec_utils.boozer_transform_vmec
+    desc.vmec_utils.read_wout_boozer_inputs

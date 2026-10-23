@@ -1,5 +1,6 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
+import jax
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 from scipy.constants import mu_0
@@ -7,6 +8,7 @@ from scipy.linalg import null_space
 
 from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
+from desc.batching import vmap_chunked
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -953,3 +955,283 @@ def make_boozmn_output(  # noqa: C901
         timer.disp("Total time")
 
     return None
+
+
+_WOUT_BOOZER_KEYS_SYM = ("bmnc", "bsubumnc", "bsubvmnc", "rmnc", "zmns", "lmns")
+_WOUT_BOOZER_KEYS_ASYM = ("bmns", "bsubumns", "bsubvmns", "rmns", "zmnc", "lmnc")
+
+
+def read_wout_boozer_inputs(path):
+    """Read the VMEC ``wout`` quantities needed for a Boozer transform.
+
+    Parameters
+    ----------
+    path : str or path-like
+        Path to a VMEC ``wout_*.nc`` file.
+
+    Returns
+    -------
+    wout : dict
+        Mode numbers ``xm``, ``xn``, ``xm_nyq``, ``xn_nyq`` (``xn`` includes the
+        factor ``NFP`` as in VMEC), integers ``nfp``, ``ns``, flag ``lasym``, and the
+        arrays ``bmnc, bsubumnc, bsubvmnc, rmnc, zmns, lmns`` with shape
+        ``(ns, mn)`` and ``iotas`` with shape ``(ns,)`` in the layout of the
+        ``wout`` file (``bmnc, bsubumnc, bsubvmnc, lmns, iotas`` on the half mesh,
+        ``rmnc, zmns`` on the full mesh). For ``lasym`` the corresponding
+        asymmetric arrays are included as well.
+
+    """
+    with Dataset(path, "r") as file:
+        lasym = bool(file.variables["lasym__logical__"][:])
+        wout = {
+            "nfp": int(file.variables["nfp"][:]),
+            "ns": int(file.variables["ns"][:]),
+            "lasym": lasym,
+            "xm": np.asarray(file.variables["xm"][:], dtype=int),
+            "xn": np.asarray(file.variables["xn"][:], dtype=int),
+            "xm_nyq": np.asarray(file.variables["xm_nyq"][:], dtype=int),
+            "xn_nyq": np.asarray(file.variables["xn_nyq"][:], dtype=int),
+            "iotas": np.asarray(file.variables["iotas"][:], dtype=float),
+        }
+        keys = _WOUT_BOOZER_KEYS_SYM + (_WOUT_BOOZER_KEYS_ASYM if lasym else ())
+        for key in keys:
+            wout[key] = np.asarray(file.variables[key][:], dtype=float)
+    return wout
+
+
+def _half_mesh_rz(x_full, xm, surfs):
+    """Interpolate full-mesh R or Z harmonics onto half-mesh surfaces.
+
+    Follows booz_xform: even m are averaged, odd m are averaged as x/sqrt(s) and
+    m=1 on the first half-mesh surface is extrapolated from the next two surfaces.
+    This map is linear in ``x_full``.
+    """
+    ns = x_full.shape[0]
+    hs = 1.0 / (ns - 1)
+    sqrt_full = np.sqrt(hs * np.arange(ns))
+    sqrt_full[0] = 1.0  # x vanishes on axis for m > 0
+    surfs = np.asarray(surfs)
+    sqrt_half = np.sqrt(hs * (surfs + 0.5))[:, None]
+    lo, hi = x_full[surfs], x_full[surfs + 1]
+    even = 0.5 * (lo + hi)
+    odd = (
+        0.5
+        * (lo / sqrt_full[surfs, None] + hi / sqrt_full[surfs + 1, None])
+        * sqrt_half
+    )
+    m1_axis = (1.5 * x_full[1] / sqrt_full[1] - 0.5 * x_full[2] / sqrt_full[2]) * (
+        sqrt_half
+    )
+    out = jnp.where(xm % 2 == 0, even, odd)
+    out = jnp.where((xm == 1) & (surfs[:, None] == 0), m1_axis, out)
+    return out
+
+
+def _vmec_synthesis(c_cos, c_sin, xm, xn, nfp, cos_t, sin_t, cos_z, sin_z, n_max):
+    """Evaluate a VMEC series sum c cos(m t - n z) + s sin(m t - n z) on a meshgrid.
+
+    Either coefficient array may be None, meaning zero. Returns the function and
+    its theta and zeta derivatives with shape (t, z). The double-angle sums are
+    separated into products of 1D tables, so the cost is
+    (num_theta + num_zeta) * num_modes rather than their product.
+    """
+    m_max = cos_t.shape[1] - 1
+    j = xn // nfp + n_max  # column index of signed n / NFP in the dense table
+
+    def dense(c):
+        return jnp.zeros((m_max + 1, 2 * n_max + 1)).at[xm, j].add(c)
+
+    def series(cc, cs):
+        # cos(mt - nz) = cos mt cos nz + sin mt sin nz
+        # sin(mt - nz) = sin mt cos nz - cos mt sin nz
+        return (
+            cos_t @ dense(cc) @ cos_z.T
+            + sin_t @ dense(cc) @ sin_z.T
+            + sin_t @ dense(cs) @ cos_z.T
+            - cos_t @ dense(cs) @ sin_z.T
+        )
+
+    if c_cos is None:
+        c_cos = jnp.zeros_like(c_sin)
+    if c_sin is None:
+        c_sin = jnp.zeros_like(c_cos)
+    f = series(c_cos, c_sin)
+    f_t = series(xm * c_sin, -xm * c_cos)
+    f_z = series(-xn * c_sin, xn * c_cos)
+    return f, f_t, f_z
+
+
+def _boozer_surface(
+    inputs, xm, xn, xm_nyq, xn_nyq, nfp, M_booz, N_booz, lasym, grid_t, grid_z
+):
+    """Boozer transform of one surface given VMEC harmonics on that surface."""
+    n_max = int(max(np.max(np.abs(xn)), np.max(np.abs(xn_nyq))) // nfp)
+    m_max = int(max(np.max(xm), np.max(xm_nyq)))
+    m_range = np.arange(m_max + 1)
+    n_range = np.arange(-n_max, n_max + 1)
+    cos_t = jnp.cos(np.outer(grid_t, m_range))
+    sin_t = jnp.sin(np.outer(grid_t, m_range))
+    cos_z = jnp.cos(np.outer(grid_z, nfp * n_range))
+    sin_z = jnp.sin(np.outer(grid_z, nfp * n_range))
+
+    def synth(cc, cs, m, n):
+        return _vmec_synthesis(cc, cs, m, n, nfp, cos_t, sin_t, cos_z, sin_z, n_max)
+
+    get = (lambda k: inputs[k]) if lasym else (lambda k: None)
+
+    # eq. (10) of Hirshman 1995 / booz_xform transpmn: w from covariant components
+    is_m = xm_nyq != 0
+    is_n = (xm_nyq == 0) & (xn_nyq != 0)
+    inv_m = np.where(is_m, 1.0 / np.where(is_m, xm_nyq, 1), 0.0)
+    inv_n = np.where(is_n, 1.0 / np.where(is_n, xn_nyq, 1), 0.0)
+    i00 = np.flatnonzero((xm_nyq == 0) & (xn_nyq == 0))[0]
+    Boozer_I = inputs["bsubumnc"][i00]
+    Boozer_G = inputs["bsubvmnc"][i00]
+    w_s = inputs["bsubumnc"] * inv_m - inputs["bsubvmnc"] * inv_n
+    w_c = -inputs["bsubumns"] * inv_m + inputs["bsubvmns"] * inv_n if lasym else None
+    w, w_t, w_z = synth(w_c, w_s, xm_nyq, xn_nyq)
+    bmod = synth(inputs["bmnc"], get("bmns"), xm_nyq, xn_nyq)[0]
+    lam, lam_t, lam_z = synth(get("lmnc"), inputs["lmns"], xm, xn)
+    r = synth(inputs["rmnc"], get("rmns"), xm, xn)[0]
+    z = synth(get("zmnc"), inputs["zmns"], xm, xn)[0]
+
+    iota = inputs["iota"]
+    GI = Boozer_G + iota * Boozer_I
+    nu = (w - Boozer_I * lam) / GI
+    nu_t = (w_t - Boozer_I * lam_t) / GI
+    nu_z = (w_z - Boozer_I * lam_z) / GI
+    theta = grid_t[:, None]
+    zeta = grid_z[None, :]
+    theta_B = theta + lam + iota * nu
+    zeta_B = zeta + nu
+    jac = (1 + lam_t) * (1 + nu_z) + (iota - lam_z) * nu_t
+    boozer_jacobian = GI / bmod**2
+
+    # projection onto cos/sin(m theta_B - n zeta_B), cf. booz_xform boozer.f
+    xm_b, xn_b = boozer_modes(M_booz, N_booz, nfp)
+    num = grid_t.size * grid_z.size
+    factor = np.full(xm_b.size, 2.0 / num)
+    factor[0] *= 0.5
+    tB, zB, wt = theta_B.ravel(), zeta_B.ravel(), jac.ravel()
+    mb = np.arange(M_booz)
+    nb = np.arange(-N_booz, N_booz + 1) * nfp
+    cm, sm = jnp.cos(tB[:, None] * mb), jnp.sin(tB[:, None] * mb)
+    cn, sn = jnp.cos(zB[:, None] * nb), jnp.sin(zB[:, None] * nb)
+    idx_m, idx_n = xm_b, xn_b // nfp + N_booz
+
+    def project(f):
+        fw = (wt * f.ravel())[:, None]
+        C = (fw * cm).T @ cn + (fw * sm).T @ sn
+        S = (fw * sm).T @ cn - (fw * cm).T @ sn
+        return C[idx_m, idx_n] * factor, S[idx_m, idx_n] * factor
+
+    out = {"iota": iota, "G": Boozer_G, "I": Boozer_I}
+    out["bmnc_b"], out["bmns_b"] = project(bmod)
+    out["rmnc_b"], out["rmns_b"] = project(r)
+    out["zmnc_b"], out["zmns_b"] = project(z)
+    out["numnc_b"], out["numns_b"] = project(nu)
+    out["gmnc_b"], out["gmns_b"] = project(boozer_jacobian)
+    if not lasym:
+        for key in ("bmns_b", "rmns_b", "zmnc_b", "numnc_b", "gmns_b"):
+            out.pop(key)
+    return out
+
+
+def boozer_modes(M_booz, N_booz, NFP):
+    """Boozer mode numbers in booz_xform order.
+
+    m = 0, ..., M_booz - 1 and n = -N_booz, ..., N_booz (n >= 0 for m = 0).
+    The returned ``xn_b`` includes the factor ``NFP``.
+    """
+    xm, xn = [], []
+    for m in range(M_booz):
+        for n in range(0 if m == 0 else -N_booz, N_booz + 1):
+            xm.append(m)
+            xn.append(n * NFP)
+    return np.array(xm, dtype=int), np.array(xn, dtype=int)
+
+
+def boozer_transform_vmec(
+    wout, surfs=None, M_booz=None, N_booz=None, surf_batch_size=4
+):
+    """Boozer transform computed directly from VMEC ``wout`` harmonics.
+
+    This applies the same transformation as the ``|B|_mn_B`` family of compute
+    functions (Hirshman 1995 eq. (10) for the Boozer stream function ``nu``,
+    ``theta_B = theta + lambda + iota nu``, ``zeta_B = zeta + nu`` and a Fourier
+    projection weighted by the Jacobian of the angle map), but it takes the
+    harmonics of ``|B|``, the covariant field components, lambda, R, Z and iota from a
+    VMEC solution instead of a DESC equilibrium. No refit of the equilibrium is
+    involved, so the result can be compared one to one with booz_xform.
+
+    All array entries of ``wout`` may be JAX tracers, so the outputs can be
+    differentiated with ``jax.jvp``, ``jax.vjp`` or ``jax.grad`` with respect to the
+    VMEC harmonics. Mode numbers, surfaces and resolutions are static.
+
+    Parameters
+    ----------
+    wout : dict
+        Output of :func:`read_wout_boozer_inputs`, optionally with array entries
+        replaced (e.g. by tangents or tracers) with the same shapes.
+    surfs : array-like of int, optional
+        Zero-based indices of half-mesh surfaces, as ``compute_surfs`` in
+        booz_xform; surface ``k`` lies at ``s = (k + 0.5) / (ns - 1)``.
+        Default is all ``ns - 1`` half-mesh surfaces.
+    M_booz : int, optional
+        Number of poloidal Boozer modes, ``m = 0, ..., M_booz - 1`` (booz_xform
+        ``mboz``). Default is ``6 * mpol`` as in booz_xform.
+    N_booz : int, optional
+        Maximum toroidal Boozer mode number ``n / NFP`` (booz_xform ``nboz``).
+        Default is ``max(2 * ntor - 1, 0)`` as in booz_xform.
+    surf_batch_size : int, optional
+        Number of surfaces transformed at once, which bounds the memory of the
+        Boozer projection (and of its reverse-mode derivative). Default is 4.
+
+    Returns
+    -------
+    out : dict
+        ``xm_b, xn_b, s_b`` and arrays with leading dimension ``len(surfs)``:
+        ``bmnc_b, rmnc_b, zmns_b, numns_b, gmnc_b, iota, G, I`` (booz_xform
+        conventions, ``gmnc_b`` is the Jacobian of (psi, theta_B, zeta_B) up to the
+        factor of ``d psi / d s``, as in booz_xform), plus ``bmns_b, rmns_b, zmnc_b,
+        numnc_b, gmns_b`` if ``lasym``.
+
+    """
+    xm, xn = np.asarray(wout["xm"]), np.asarray(wout["xn"])
+    xm_nyq, xn_nyq = np.asarray(wout["xm_nyq"]), np.asarray(wout["xn_nyq"])
+    nfp, ns, lasym = int(wout["nfp"]), int(wout["ns"]), bool(wout["lasym"])
+    if M_booz is None:
+        M_booz = 6 * int(np.max(xm) + 1)
+    if N_booz is None:
+        N_booz = max(2 * int(np.max(xn) // nfp) - 1, 0)
+    surfs = np.arange(ns - 1) if surfs is None else np.atleast_1d(surfs).astype(int)
+    if np.any(surfs < 0) or np.any(surfs > ns - 2):
+        raise ValueError(f"surfs must be half-mesh indices in [0, {ns - 2}].")
+    num_t = 2 * (2 * M_booz + 1)
+    num_z = 1 if N_booz == 0 else 2 * (2 * N_booz + 1)
+    grid_t = 2 * np.pi * np.arange(num_t) / num_t
+    grid_z = 2 * np.pi * np.arange(num_z) / (nfp * num_z)
+
+    # half-mesh rows of the wout arrays: surface k is row k + 1
+    rows = surfs + 1
+    inputs = {
+        k: jnp.asarray(wout[k])[rows] for k in ("bmnc", "bsubumnc", "bsubvmnc", "lmns")
+    }
+    inputs["iota"] = jnp.asarray(wout["iotas"])[rows]
+    inputs["rmnc"] = _half_mesh_rz(jnp.asarray(wout["rmnc"]), xm, surfs)
+    inputs["zmns"] = _half_mesh_rz(jnp.asarray(wout["zmns"]), xm, surfs)
+    if lasym:
+        for k in ("bmns", "bsubumns", "bsubvmns", "lmnc"):
+            inputs[k] = jnp.asarray(wout[k])[rows]
+        inputs["rmns"] = _half_mesh_rz(jnp.asarray(wout["rmns"]), xm, surfs)
+        inputs["zmnc"] = _half_mesh_rz(jnp.asarray(wout["zmnc"]), xm, surfs)
+
+    def fun(x):
+        return _boozer_surface(
+            x, xm, xn, xm_nyq, xn_nyq, nfp, M_booz, N_booz, lasym, grid_t, grid_z
+        )
+
+    out = vmap_chunked(jax.checkpoint(fun), chunk_size=surf_batch_size)(inputs)
+    out["xm_b"], out["xn_b"] = boozer_modes(M_booz, N_booz, nfp)
+    out["s_b"] = (surfs + 0.5) / (ns - 1)
+    return out

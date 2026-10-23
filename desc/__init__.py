@@ -189,8 +189,10 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
             config["devices"] = cpu_names
             # This memory is not individual but the total memory
             config["avail_mems"] = [cpu_mem] * num_device
-
-    elif kind == "gpu":
+    else:
+        os.environ.pop("JAX_PLATFORMS", None)
+    if kind == "gpu":
+        # so that the ids assigned by CUDA match those from nvidia-smi
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         # pynvml namespace is exposed through nvidia-ml-py
         from pynvml import (
@@ -205,64 +207,30 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
 
         nvmlInit()
         try:
-            devices = _gpu_info()
-        except FileNotFoundError:
-            devices = []
-        if len(devices) == 0:
-            warnings.warn(colored("No GPU found, falling back to CPU", "yellow"))
-            set_device(kind="cpu")
-            return
-
-        gpu_ids = [dev["index"] for dev in devices]
-        if "CUDA_VISIBLE_DEVICES" in os.environ:
-            cuda_ids = [
-                s for s in re.findall(r"\b\d+\b", os.environ["CUDA_VISIBLE_DEVICES"])
-            ]
-            gpu_ids = [i for i in cuda_ids if i in gpu_ids]
-        if len(gpu_ids) == 0:
-            warnings.warn(
-                colored(
-                    f"CUDA_VISIBLE_DEVICES={os.environ['CUDA_VISIBLE_DEVICES']} did "
-                    "not match any physical GPU "
-                    f"(id={[dev['index'] for dev in devices]}), falling back to CPU",
-                    "yellow",
-                )
-            )
-            set_device(kind="cpu")
-            return
-
-        devices = [dev for dev in devices if dev["index"] in gpu_ids]
-        memories = {dev["index"]: dev["mem_total"] - dev["mem_used"] for dev in devices}
-
-        if num_device == 1:
-            selected_gpu = max(
-                devices, key=lambda dev: dev["mem_total"] - dev["mem_used"]
-            )
-            if gpuid is not None:
-                if str(gpuid) in gpu_ids:
-                    selected_gpu = next(
-                        dev for dev in devices if dev["index"] == str(gpuid)
-                    )
-                else:
-                    warnings.warn(
-                        colored(
-                            f"Specified gpuid {gpuid} not found, selecting GPU with "
-                            "most memory",
-                            "yellow",
-                        )
-                    )
-            devices = [selected_gpu]
-
-        else:
-            if num_device > len(devices):
-                raise ValueError(
-                    f"Requested {num_device} GPUs, but only {len(devices)} available"
-                )
-            if gpuid is not None:
+            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")
+            visible = [i for i in visible if i.strip()]
+            visible = visible or [str(i) for i in range(nvmlDeviceGetCount())]
+            if gpuid is not None and num_device != 1:
                 # TODO: implement multiple GPU selection
                 raise ValueError("Cannot specify `gpuid` when requesting multiple GPUs")
-
-        devs = devices[:num_device]
-        config["avail_mems"] = [memories[dev["index"]] / 1024 for dev in devs]  # in GB
-        config["devices"] = [f"{dev['type']} (id={dev['index']})" for dev in devs]
-        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(dev["index"]) for dev in devs)
+            ids = list(range(num_device)) if gpuid is None else [int(gpuid)]
+            if not 0 <= min(ids) <= max(ids) < len(visible):
+                raise ValueError(
+                    f"Requested GPUs {ids} are out of range for the visible GPUs "
+                    f"{visible}"
+                )
+            if gpuid is not None or num_device > 1:
+                os.environ["JAX_CUDA_VISIBLE_DEVICES"] = ",".join(map(str, ids))
+            config["devices"], config["avail_mems"] = [], []
+            for i in ids:
+                # physical id of the GPU JAX will use
+                idx = int(visible[i])
+                handle = nvmlDeviceGetHandleByIndex(idx)
+                # Use nvmlMemory_v2 to account for system-reserved memory
+                mem = nvmlDeviceGetMemoryInfo(handle, version=nvmlMemory_v2)
+                config["devices"].append(f"{nvmlDeviceGetName(handle)} (id={idx})")
+                config["avail_mems"].append((mem.total - mem.used) / 1024**3)
+        finally:
+            nvmlShutdown()
+    if kind == "tpu":
+        config["devices"] = ["TPU"]

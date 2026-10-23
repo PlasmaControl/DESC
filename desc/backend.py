@@ -50,9 +50,9 @@ else:
                 )
                 set_device("cpu")
             if desc_config.get("kind") == "tpu":
-                desc_config["avail_mem"] = (
+                desc_config["avail_mems"] = [
                     jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3
-                )
+                ]
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
@@ -62,7 +62,7 @@ else:
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        warnings.warn("Failed to load JAX", "red")
+        warnings.warn("Failed to load JAX")
 
 
 def print_backend_info():
@@ -95,7 +95,7 @@ def print_backend_info():
                 "process per CPU (node). Using multiple processes per CPU (node) is "
                 "not the most efficient way to use MPI with purely CPUs."
             )
-    elif desc_config["kind"] == "gpu":
+    else:
         print(
             f"CPU Info: {desc_config['cpu_info']} with "
             f"{desc_config['cpu_mem']:.2f} GB available memory"

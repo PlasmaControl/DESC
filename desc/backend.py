@@ -6,7 +6,6 @@ import warnings
 
 import numpy as np
 from packaging.version import Version
-from termcolor import colored
 
 import desc
 from desc import config as desc_config
@@ -19,7 +18,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
 else:
-    if desc_config.get("devices") is None:
+    if desc_config.get("kind") is None:
         set_device("cpu")
     try:
         with warnings.catch_warnings():
@@ -29,6 +28,20 @@ else:
             import jaxlib
             from jax import config as jax_config
 
+            # YNNPACK reduce fusions on CPU is slow and wrong,
+            # see (https://github.com/jax-ml/jax/issues/41414).
+            # Triton GEMMs on GPU cause slow compilation without much
+            # performance gain. Keep user flags, update others if not set.
+            if Version(jax.__version__) >= Version("0.10.0"):
+                _xla_flags = os.environ.get("XLA_FLAGS", "")
+                for _flag in [
+                    "--xla_cpu_experimental_ynn_fusion_type=-reduce",
+                    "--xla_gpu_enable_triton_gemm=false",
+                ]:
+                    if _flag.split("=")[0] not in _xla_flags:
+                        _xla_flags += " " + _flag
+                os.environ["XLA_FLAGS"] = _xla_flags.strip()
+
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
@@ -36,6 +49,10 @@ else:
                     + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
+            if desc_config.get("kind") == "tpu":
+                desc_config["avail_mem"] = (
+                    jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3
+                )
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
         use_jax = True
@@ -45,7 +62,7 @@ else:
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
+        warnings.warn("Failed to load JAX", "red")
 
 
 def print_backend_info():

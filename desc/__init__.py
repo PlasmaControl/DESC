@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import warnings
 
 import colorama
@@ -128,22 +129,16 @@ def _set_cpu_count(n):
 def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
     """Sets the device to use for computation.
 
-    If kind==``'gpu'`` and a gpuid is specified, uses the specified GPU. If
-    gpuid==``None`` or a wrong GPU id is given, checks available GPUs and selects
-    the one with the most available memory. Respects environment variable
-    `CUDA_VISIBLE_DEVICES` for selecting from multiple available GPUs.
-
-    Notes
-    -----
-    This function must be called before importing anything else from DESC or JAX,
-    otherwise it will have no effect.
+    Only affects JAX, the GPUs visible to non-JAX codes are not changed. Must be called
+    before importing JAX or anything else from DESC.
 
     Parameters
     ----------
-    kind : {``'cpu'``, ``'gpu'``}
-        Whether to use CPU or GPU.
+    kind : {``'cpu'``, ``'gpu'``, ``'tpu'``}
+        Which device to use.
     gpuid : int, optional
-        GPU id to use. Default is None. Supported only when num_device is 1.
+        Index of the GPU to use among the visible ones. If ``None``, uses all visible
+        GPUs.
     num_device : int, optional
         Number of devices to use. For `cpu`, this is the number of nodes.
         For `gpu`, this is equal to the number of GPUs connected to a single node.
@@ -156,6 +151,15 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
         ``desc.backend.print_backend_info()``.
 
     """
+    if kind not in ["cpu", "gpu", "tpu"]:
+        raise ValueError(f"kind must be 'cpu', 'gpu' or 'tpu', got {kind}")
+    if "jax" in sys.modules and config["kind"] not in [None, kind]:
+        warnings.warn(
+            f"JAX has already been initialized on {config['kind']}, switching "
+            f"to {kind} will have no effect. Call set_device before importing "
+            "anything else from DESC."
+        )
+
     config["kind"] = kind
     config["num_device"] = num_device
 
@@ -166,7 +170,6 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
 
     if kind == "cpu":
         os.environ["JAX_PLATFORMS"] = "cpu"
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
         if num_device == 1:
             config["devices"] = [f"{cpu_info} CPU"]
             config["avail_mems"] = [cpu_mem]
@@ -195,38 +198,12 @@ def set_device(kind="cpu", gpuid=None, num_device=1, mpi=None):  # noqa: C901
             nvmlDeviceGetHandleByIndex,
             nvmlDeviceGetMemoryInfo,
             nvmlDeviceGetName,
-            nvmlDeviceGetUUID,
             nvmlInit,
             nvmlMemory_v2,
             nvmlShutdown,
         )
 
-        def _gpu_info():
-            """Equivalent to nvgpu.gpu_info() using nvidia-ml-py."""
-            nvmlInit()
-            try:
-                info = []
-                for device_idx in range(nvmlDeviceGetCount()):
-                    handle = nvmlDeviceGetHandleByIndex(device_idx)
-                    # Use nvmlMemory_v2 to account for system-reserved memory
-                    mem = nvmlDeviceGetMemoryInfo(handle, version=nvmlMemory_v2)
-                    _bytes_to_mib = 1024 * 1024
-                    mem_used = mem.used // _bytes_to_mib
-                    mem_total = mem.total // _bytes_to_mib
-                    info.append(
-                        {
-                            "index": str(device_idx),
-                            "type": nvmlDeviceGetName(handle),
-                            "uuid": nvmlDeviceGetUUID(handle),
-                            "mem_used": mem_used,
-                            "mem_total": mem_total,
-                            "mem_used_percent": 100.0 * mem_used / mem_total,
-                        }
-                    )
-                return info
-            finally:
-                nvmlShutdown()
-
+        nvmlInit()
         try:
             devices = _gpu_info()
         except FileNotFoundError:

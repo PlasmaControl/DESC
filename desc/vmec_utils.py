@@ -1,11 +1,13 @@
 """Utility functions needed for converting VMEC inputs/outputs."""
 
+import jax
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 from scipy.constants import mu_0
 from scipy.linalg import null_space
 
-from desc.backend import block_diag, jnp, sign, vmap
+from desc.backend import block_diag, jnp, sign
+from desc.batching import vmap_chunked
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
@@ -1149,7 +1151,9 @@ def boozer_modes(M_booz, N_booz, NFP):
     return np.array(xm, dtype=int), np.array(xn, dtype=int)
 
 
-def boozer_transform_vmec(wout, surfs=None, M_booz=None, N_booz=None):
+def boozer_transform_vmec(
+    wout, surfs=None, M_booz=None, N_booz=None, surf_batch_size=4
+):
     """Boozer transform computed directly from VMEC ``wout`` harmonics.
 
     This applies the same transformation as the ``|B|_mn_B`` family of compute
@@ -1179,6 +1183,9 @@ def boozer_transform_vmec(wout, surfs=None, M_booz=None, N_booz=None):
     N_booz : int, optional
         Maximum toroidal Boozer mode number ``n / NFP`` (booz_xform ``nboz``).
         Default is ``max(2 * ntor - 1, 0)`` as in booz_xform.
+    surf_batch_size : int, optional
+        Number of surfaces transformed at once, which bounds the memory of the
+        Boozer projection (and of its reverse-mode derivative). Default is 4.
 
     Returns
     -------
@@ -1224,7 +1231,7 @@ def boozer_transform_vmec(wout, surfs=None, M_booz=None, N_booz=None):
             x, xm, xn, xm_nyq, xn_nyq, nfp, M_booz, N_booz, lasym, grid_t, grid_z
         )
 
-    out = vmap(fun)(inputs)
+    out = vmap_chunked(jax.checkpoint(fun), chunk_size=surf_batch_size)(inputs)
     out["xm_b"], out["xn_b"] = boozer_modes(M_booz, N_booz, nfp)
     out["s_b"] = (surfs + 0.5) / (ns - 1)
     return out

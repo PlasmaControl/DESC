@@ -7,8 +7,8 @@ from scipy.constants import mu_0
 from scipy.linalg import null_space
 
 from desc.backend import block_diag, jnp, sign
-from desc.batching import vmap_chunked
 from desc.basis import DoubleFourierSeries, zernike_radial
+from desc.batching import vmap_chunked
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -1160,7 +1160,7 @@ def boozer_transform_vmec(
     functions (Hirshman 1995 eq. (10) for the Boozer stream function ``nu``,
     ``theta_B = theta + lambda + iota nu``, ``zeta_B = zeta + nu`` and a Fourier
     projection weighted by the Jacobian of the angle map), but it takes the
-    harmonics of |B|, the covariant field components, lambda, R, Z and iota from a
+    harmonics of ``|B|``, the covariant field components, lambda, R, Z and iota from a
     VMEC solution instead of a DESC equilibrium. No refit of the equilibrium is
     involved, so the result can be compared one to one with booz_xform.
 

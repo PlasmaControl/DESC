@@ -255,7 +255,9 @@ def _get_precomputed_transforms(bases, eq, grid, data_keys):
                 grid,
                 getattr(eq, c + "_basis"),
                 derivs=derivs[c],
-                build=False,
+                # jitable build: Transform.transform refuses an unbuilt transform
+                build=True,
+                build_pinv=False,
                 method="jitable",
             )
             continue

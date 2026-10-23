@@ -612,6 +612,9 @@ class ProximalProjection(ObjectiveFunction):
         self._solve_during_proximal_build = solve_options.pop(
             "solve_during_proximal_build", True
         )  # If user does not want the solve during build, mainly for debug purposes
+        # False: the inner equilibrium solves also re-solve the interior omega
+        # (generalized toroidal angle), as a standalone solve without FixOmegaInterior
+        self._fix_omega_interior = solve_options.pop("fix_omega_interior", True)
         perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
@@ -697,7 +700,9 @@ class ProximalProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Proximal projection build")
 
-        self._eq_linear_constraints = get_fixed_boundary_constraints(eq=self._eq)
+        self._eq_linear_constraints = get_fixed_boundary_constraints(
+            eq=self._eq, fix_omega_interior=self._fix_omega_interior
+        )
         self._eq_linear_constraints = maybe_add_self_consistency(
             self._eq, self._eq_linear_constraints
         )

@@ -56,6 +56,12 @@ class VacuumBoundaryError(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    area_weights : {"current", "build"}
+        Area element |e_theta x e_zeta| that weights the residual. "current"
+        (default) uses the element of the state being evaluated. "build" freezes
+        the element of the equilibrium at build time: with a generalized toroidal
+        angle (omega != 0) an optimizer can pinch the (theta, zeta) map of the
+        boundary until the current element vanishes and hide B.n there.
 
     """
 
@@ -67,6 +73,7 @@ class VacuumBoundaryError(_Objective):
         "_bs_chunk_size",
         "_eq_data_keys",
         "_field_fixed",
+        "_area_weights",
     ]
 
     _scalar = False
@@ -93,6 +100,7 @@ class VacuumBoundaryError(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
+        area_weights="current",
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -104,6 +112,12 @@ class VacuumBoundaryError(_Objective):
         self._field_grid = field_grid
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
+        errorif(
+            area_weights not in ("current", "build"),
+            ValueError,
+            f"area_weights must be 'current' or 'build', got {area_weights}",
+        )
+        self._area_weights = area_weights
         things = [eq]
         if not field_fixed:
             things.append(self._field)
@@ -185,6 +199,10 @@ class VacuumBoundaryError(_Objective):
             "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
         }
+        if self._area_weights == "build":
+            self._constants["area0"] = eq.compute("|e_theta x e_zeta|", grid=grid)[
+                "|e_theta x e_zeta|"
+            ]
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -249,7 +267,11 @@ class VacuumBoundaryError(_Objective):
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
 
-        g = data["|e_theta x e_zeta|"]
+        g = (
+            constants["area0"]
+            if self._area_weights == "build"
+            else data["|e_theta x e_zeta|"]
+        )
         Bn_err = Bn * g
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])

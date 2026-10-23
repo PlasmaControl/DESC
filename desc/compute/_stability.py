@@ -13,10 +13,10 @@ from functools import partial
 
 from scipy.constants import mu_0
 
-from desc.backend import eigh_tridiagonal, jax, jit, jnp, scan
+from desc.backend import jax, jit, jnp, scan
 
 from ..integrals.surface_integral import surface_integrals_map
-from ..utils import dot, safediv
+from ..utils import dot, eigh_tridiagonal_top_k, safediv
 from .data_index import register_compute_fun
 
 
@@ -434,17 +434,13 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     diag_inner = (c[..., 1:-1] - g_half[..., 1:] - g_half[..., :-1]) * b_inv
     diag_outer = g_half[..., 1:-1] * jnp.sqrt(b_inv[..., :-1] * b_inv[..., 1:])
 
-    # TODO: Issue #1750
-    w, v = eigh_tridiagonal(diag_inner, diag_outer)
-
-    w, top_idx = jax.lax.top_k(w, k=Neigvals)
+    w, v = eigh_tridiagonal_top_k(diag_inner, diag_outer, Neigvals)
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
     data["ideal ballooning lambda"] = w
 
     # v becomes less than the machine precision at some points which gives NaNs.
     # stop_gradient prevents that.
     v = jax.lax.stop_gradient(v)
-    v = jnp.take_along_axis(v, top_idx[..., jnp.newaxis, :], axis=-1)
     assert v.shape == (
         grid.num_rho,
         grid.num_alpha,

@@ -5,7 +5,14 @@ import pytest
 
 from desc.backend import jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
-from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, safenormalize
+from desc.utils import (
+    broadcast_tree,
+    eigh_tridiagonal_top_k,
+    isalmostequal,
+    islinspaced,
+    jaxify,
+    safenormalize,
+)
 
 
 @pytest.mark.unit
@@ -260,3 +267,39 @@ def test_safenormalize():
 
     np.testing.assert_allclose(a_norm, a_safenorm)
     np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=1), 1)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("k", [1, 3])
+@pytest.mark.parametrize("case", ["random", "ballooning-like"])
+def test_eigh_tridiagonal_top_k(k, case):
+    """Top-k eigenpairs and eigenvalue gradients against a dense eigh."""
+    rng = np.random.default_rng(0)
+    if case == "random":
+        d, e = rng.normal(size=(2, 3, 50)), rng.normal(size=(2, 3, 49))
+    else:
+        # d/dx (g dX/dx) + c X on 600 points; top eigenvalue << matrix norm
+        x = np.linspace(-3 * np.pi, 3 * np.pi, 600)
+        h = x[1] - x[0]
+        g = 1 + 0.5 * np.cos(x[:-1] + h / 2) + 0.1 * rng.random((4, 599))
+        g_sum = np.pad(g, ((0, 0), (1, 0))) + np.pad(g, ((0, 0), (0, 1)))
+        d, e = (0.1 + np.cos(x) - g_sum / h**2)[:, 1:-1], g[:, 1:-1] / h**2
+
+    def dense(d, e):
+        T = jnp.vectorize(
+            lambda d, e: jnp.diag(d) + jnp.diag(e, 1) + jnp.diag(e, -1),
+            signature="(n),(m)->(n,n)",
+        )(d, e)
+        w, v = jnp.linalg.eigh(T)
+        return w[..., ::-1][..., :k], v[..., ::-1][..., :k]
+
+    w, v = eigh_tridiagonal_top_k(d, e, k)
+    w_ref, v_ref = dense(d, e)
+    scale = np.abs(d).max() + 2 * np.abs(e).max()
+    np.testing.assert_allclose(w, w_ref, rtol=0, atol=1e-13 * scale)
+    np.testing.assert_allclose(np.abs(np.sum(v * v_ref, axis=-2)), 1, atol=1e-9)
+
+    grad = jax.grad(lambda d, e: eigh_tridiagonal_top_k(d, e, k)[0].sum(), (0, 1))
+    grad_ref = jax.grad(lambda d, e: dense(d, e)[0].sum(), (0, 1))
+    for g, g_ref in zip(grad(d, e), grad_ref(d, e)):
+        np.testing.assert_allclose(g, g_ref, rtol=0, atol=1e-9)

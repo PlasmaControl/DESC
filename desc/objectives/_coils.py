@@ -2241,6 +2241,8 @@ class SurfaceMatch(_Objective):
         """
         surfacet = self._surfacet
 
+        
+
         if self._surfacet_grid is None:
             surfacet_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -2260,12 +2262,12 @@ class SurfaceMatch(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        # residual is the signed (dR, dZ) pair at each node, see compute()
-        self._dim_f = 2 * surfacet_grid.num_nodes
+        # residual is the signed (dX, dY, dZ) triple at each node, see compute()  
+        self._dim_f = 3 * surfacet_grid.num_nodes  # [B]
 
         w = surfacet_grid.weights
         w *= jnp.sqrt(surfacet_grid.num_nodes)
-        w = jnp.tile(w, 2)
+        w = jnp.tile(w, 3)
 
         surfacet_profiles = get_profiles(
             self._data_keys, obj=surfacet, grid=surfacet_grid
@@ -2273,6 +2275,17 @@ class SurfaceMatch(_Objective):
         surfacet_transforms = get_transforms(
             self._data_keys, obj=surfacet, grid=surfacet_grid
         )
+
+        # the surface being fit gets transforms on its OWN basis (same nodes),  
+        # so it can have a different resolution than the target               
+        surface_profiles = get_profiles( 
+            self._data_keys, obj=self._surface, grid=surfacet_grid  # [A]
+        )  
+        surface_transforms = get_transforms( 
+            self._data_keys, obj=self._surface, grid=surfacet_grid  # [A]
+        )  
+
+        
 
         # Target surface data is calculate in build
         # because that's not going to change
@@ -2291,7 +2304,10 @@ class SurfaceMatch(_Objective):
             "surfacet_data": surfacet_data,
             "surfacet_transforms": surfacet_transforms,
             "surfacet_profiles": surfacet_profiles,
+            "surface_transforms": surface_transforms,  
+            "surface_profiles": surface_profiles,  
         }
+            
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -2318,13 +2334,14 @@ class SurfaceMatch(_Objective):
             Dictionary of constant data, eg transforms, profiles etc. Defaults to
             self.constants
 
-        Returns
-        -------
-        f : ndarray
-            Signed R and Z displacement from the target surface at each node,
-            concatenated as [dR, dZ], length ``2 * surfacet_grid.num_nodes`` (m).
+      Returns:
+      f : ndarray
+            Signed X, Y and Z displacement from the target surface at each node,   
+            concatenated as [dX, dY, dZ], length ``3 * surfacet_grid.num_nodes``  
+            (m).                                                                   
 
         """
+        
         constants = self._get_deprecated_constants(constants)
         surf_params = params_1
 
@@ -2333,15 +2350,18 @@ class SurfaceMatch(_Objective):
             self._surface,
             self._data_keys,
             surf_params,
-            constants["surfacet_transforms"],
-            constants["surfacet_profiles"],
+            constants["surface_transforms"], 
+            constants["surface_profiles"],  
         )
         xR = surface_data["R"]
+        xP = surface_data["phi"] 
         xZ = surface_data["Z"]
 
         y = constants["surfacet_data"]
         yR = y["R"]
+        yP = y["phi"]  
         yZ = y["Z"]
+
 
         # Signed components, NOT the distance sqrt(dR^2 + dZ^2).  The distance
         # has an infinite derivative where it vanishes, and it vanishes at every
@@ -2352,7 +2372,13 @@ class SurfaceMatch(_Objective):
         # residuals anyway: it squares and sums them itself, recovering the same
         # cost sum(dR^2 + dZ^2) while keeping the derivative well defined at the
         # minimum.
-        return jnp.concatenate([(xR - yR).ravel(), (xZ - yZ).ravel()])
+        return jnp.concatenate( 
+            [  
+                (xR * jnp.cos(xP) - yR * jnp.cos(yP)).ravel(), 
+                (xR * jnp.sin(xP) - yR * jnp.sin(yP)).ravel(),  
+                (xZ - yZ).ravel(),  # [B]
+            ]  
+        )  
 
 
 class ToroidalFlux(_Objective):

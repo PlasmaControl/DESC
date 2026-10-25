@@ -1379,10 +1379,16 @@ class FixOmegaGauge(FixParameters):
         name="omega gauge",
     ):
         indices = np.where(eq.W_basis.modes[:, 2] == 0)[0]
+        # Fix the n=0 modes at their CURRENT values, not at zero: zeroing them on an
+        # equilibrium that carries nonzero n=0 omega (states optimized before this
+        # constraint existed) is not a gauge change by itself (the compensating
+        # shift of R, Z and lambda is missing), and the auto-added constraint then
+        # conflicts with FixBoundaryW ("Incompatible constraints", 10-25). Holding
+        # the current values removes the freedom just the same.
         super().__init__(
             thing=eq,
             params={"W_lmn": indices},
-            target=0,
+            target=np.asarray(eq.W_lmn)[indices],
             normalize=normalize,
             normalize_target=normalize_target,
             name=name,

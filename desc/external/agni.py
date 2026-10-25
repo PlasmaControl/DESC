@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import Grid, LinearGrid, QuadratureGrid
@@ -256,13 +256,34 @@ class AgniStability(_Objective):
         if self._coarse_basis is not None:
             eq_c = self._equilibrium_data(params, c, coarse=True)
             coarse = (eq_c, c["coarse_diffmat"], c["coarse_transfer"])
-        gamma2 = self._agnimhd.growth_rate(
-            params,
-            c["diffmat"],
-            self._assembly,
-            self._solver,
-            coarse=coarse,
-            equilibrium_map=lambda p: self._equilibrium_data(p, c),
+
+        def solve(p):
+            return jnp.asarray(
+                self._agnimhd.growth_rate(
+                    p,
+                    c["diffmat"],
+                    self._assembly,
+                    self._solver,
+                    coarse=coarse,
+                    equilibrium_map=lambda q: self._equilibrium_data(q, c),
+                ),
+                dtype=float,
+            ).reshape(())
+
+        # An optimizer's trial step can reach parameters where the equilibrium is
+        # not nested on the AGNI nodes (the Jacobian sqrt(g) changes sign) or the
+        # data is not finite. The assembly then produces NaN matrices, the host
+        # eigensolver raises, and the whole run ends (10-25: a first lsq-exact step
+        # on the QH test case took sqrt(g) negative at 56 of 192 nodes). Return NaN
+        # instead, so the optimizer rejects the step and shrinks its trust region,
+        # as it does for any non-finite trial cost.
+        data = self._equilibrium_data(params, c)
+        leaves = jax.tree_util.tree_leaves(data)
+        finite = jnp.all(jnp.array([jnp.all(jnp.isfinite(x)) for x in leaves]))
+        sqrtg = data.sqrtg
+        nested = jnp.all(sqrtg > 0) | jnp.all(sqrtg < 0)
+        gamma2 = jax.lax.cond(
+            finite & nested, solve, lambda p: jnp.array(jnp.nan), params
         )
         return jnp.atleast_1d(gamma2)
 

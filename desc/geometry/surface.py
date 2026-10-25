@@ -33,6 +33,7 @@ from desc.utils import (
     get_ess_scale,
     rpz2xyz_vec,
     setdefault,
+    warnif,
     xyz2rpz,
     xyz2rpz_vec,
 )
@@ -1646,10 +1647,10 @@ class NurbsRZToroidalSurface(ToroidalSurface):
             ValueError,
             f"cs_interior_gangle must have shape {shape}, got {new.shape}",
         )
-        errorif(
+        warnif(
             jnp.any(jnp.abs(new) >= 2 * jnp.pi / self._n_points_per_cs),
-            ValueError,
-            "all cs_interior_gangle must lie within (-2π/n_points_per_cs, "
+            UserWarning,
+            "all cs_interior_gangle should lie within (-2π/n_points_per_cs, "
             + f"2π/n_points_per_cs), got {new}",
         )
         self._cs_interior_gangle = new

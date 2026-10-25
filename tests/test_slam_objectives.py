@@ -18,8 +18,9 @@ from desc.objectives import (
 
 
 def _ellipse_torus(kappa):
+    # Z sin coefficient negative: right-handed (theta, zeta)
     surf = FourierRZToroidalSurface(
-        R_lmn=[3.0, 1.0], Z_lmn=[kappa], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+        R_lmn=[3.0, 1.0], Z_lmn=[-kappa], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
     )
     return Equilibrium(surface=surf, L=2, M=2, N=0, sym=True)
 

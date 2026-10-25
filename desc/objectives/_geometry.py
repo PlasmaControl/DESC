@@ -497,8 +497,7 @@ class SLAMElongation(_Objective):
             Maximum over planes of smooth max radius / smooth min radius.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -685,8 +684,7 @@ class SLAMPerpElongation(_Objective):
 
     def sections(self, params, constants=None):
         """Elongation of every section, shape (num stations,)."""
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -966,8 +964,7 @@ class SLAMCrossSection(_Objective):
             Cross-section area at each requested plane, in square meters.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1246,8 +1243,7 @@ class SLAMCenter(_Objective):
             ``2 * len(X0)``.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1489,8 +1485,7 @@ class SLAMStraightSectionCenter(_Objective):
             Y residuals, optionally followed by Z residuals, in meters.
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -1802,8 +1797,7 @@ class SurfaceArea(_Objective):
             Plasma volume (m^3).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,
@@ -2594,8 +2588,7 @@ class AxisTorsion(_Objective):
             Magnetic axis torsion at each point (m^-1).
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self._get_deprecated_constants(constants)
         data = compute_fun(
             self.things[0],
             self._data_keys,

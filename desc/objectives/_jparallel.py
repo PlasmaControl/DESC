@@ -222,7 +222,7 @@ class JparDjdaNorm(_JparFixedB):
         super().build(use_jit=use_jit, verbose=verbose)
 
     def _normalized(self, params, constants):
-        c = self.constants if constants is None else constants
+        c = self._get_deprecated_constants(constants)
         J, dJ = self.jmaps(params, c)
         m = jnp.sqrt(J.mean(-1) ** 2 + 1e-60)  # (t, rho)
         den = m[:, self._sel] + self._floor * m[:, self._iref][:, None]
@@ -300,7 +300,7 @@ class JparOrder(_JparFixedB):
 
     def compute(self, params, constants=None):
         """Compute the closure residuals."""
-        c = self.constants if constants is None else constants
+        c = self._get_deprecated_constants(constants)
         dJ = c["d"][:, None, None] * self.jmaps(params, c)[0]
         T = c["T"]
         top = _smoothmax_logsumexp(dJ[:, :-1], axis=-1, tau=T[:, :-1, None]).squeeze(-1)
@@ -335,7 +335,7 @@ class JparSingleWell(_JparFixedB):
 
     def compute(self, params, constants=None):
         """Compute the second-well residuals."""
-        c = self.constants if constants is None else constants
+        c = self._get_deprecated_constants(constants)
         coeff, iota, bmin, bmax = self._surface_data(params, c)
         Bcut = bmin + self._t_cut * (bmax - bmin)
         zeta = c["zeta"]

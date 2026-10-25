@@ -22,6 +22,13 @@ from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
 
 SOFTPLUS_SHARPNESS = 100.0
+# softplus cutoffs below this count as zero in the J|| kernels: a point with
+# cutoff 1e-12 adds sqrt(1e-12) = 1e-6 (relative) to J||, and the largest
+# intermediate in the derivative, 1/sqrt(cutoff), stays below 1e6, so the batched
+# and reverse-mode Jacobians agree with the directional derivative to ~1e-10
+# (with a floor at 1e-200 they were wrong by 1e85 at softplus sharpness 2000).
+# See _boozer_second_adiabatic_surface_alpha_deriv and objectives/_jparallel.py.
+CUTOFF_EPS = 1e-12
 _trapz = getattr(jnp, "trapezoid", getattr(jnp, "trapz", None))
 
 
@@ -1179,19 +1186,20 @@ def _boozer_second_adiabatic_surface_alpha_deriv(
     arg = 1.0 - B[None] / B_star[:, None, None]
     cutoff = _softplus_relu(arg, beta=softplus_sharpness)
     sig = _softplus_relu_sigmoid(arg, beta=softplus_sharpness)
-    # cutoffs below 1e-200 count as zero: at high sharpness (>= ~250) the softplus
-    # tail reaches denormal numbers (~1e-300), where 1/sqrt(cutoff) in the Jacobian
-    # overflows and the gradient turns NaN (LT3 run490-494, 10-02). The change of
-    # J|| is < 1e-100, i.e. none at the default sharpness.
-    cutoff = jnp.where(cutoff > 1e-200, cutoff, 0.0)
-    sqrt_c = jnp.sqrt(jnp.maximum(cutoff, 1e-200))
-
-    safe_sqrt_c = jnp.where(cutoff > 0, sqrt_c, 1e-30)
+    # Points with a cutoff below CUTOFF_EPS contribute nothing to J|| (sqrt below
+    # 1e-10 relative) and are masked with the double-where pattern: the masked
+    # branch is evaluated at cutoff = 1, so no 1/sqrt(cutoff) ~ 1e100 intermediate
+    # is ever formed. The earlier floor at 1e-200 kept such intermediates alive and
+    # made the batched forward-mode and the reverse-mode Jacobians disagree with
+    # the directional derivative (0.4 % at sharpness 100, 1e12 at 200), while the
+    # column-by-column ("looped") Jacobian stayed exact.
+    mask = cutoff > CUTOFF_EPS
+    safe_sqrt_c = jnp.sqrt(jnp.where(mask, cutoff, 1.0))
     # df/dB for f = sqrt(cutoff) / B:
     #   d/dB[sqrt(c)/B] = (dc/dB) * (1/(2*B*sqrt(c))) - sqrt(c)/B**2,
     #   with dc/dB = sigmoid(beta*arg) * (-1/B_star).
     df_dB = jnp.where(
-        cutoff > 0,
+        mask,
         -sig / (2.0 * B_star[:, None, None] * safe_sqrt_c * B[None])
         - safe_sqrt_c / (B[None] ** 2),
         0.0,

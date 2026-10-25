@@ -16,6 +16,7 @@ import numpy as np
 from desc.backend import jax, jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute._omnigenity import (
+    CUTOFF_EPS,
     _reshape_surface_coefficients,
     _smoothmax_logsumexp,
     _softplus_relu,
@@ -159,17 +160,23 @@ class _JparFixedB(_Objective):
             B, dB = self._field_lines(x[0], x[1], c)
             arg = 1.0 - B[None] / Bstar[:, None, None]
             cut = _softplus_relu(arg, beta=self._sharp)
-            cut = jnp.where(cut > 1e-200, cut, 0.0)
-            sq = jnp.sqrt(jnp.maximum(cut, 1e-200))
-            safe = jnp.where(cut > 0, sq, 1e-30)
+            # Points with a cutoff below CUTOFF_EPS contribute nothing (sqrt < 1e-10
+            # relative) and are masked with the double-where pattern: the masked
+            # branch is evaluated at cut = 1, so no 1/sqrt(cut) ~ 1e100 intermediate
+            # exists. With the old floor at 1e-200 those intermediates made the
+            # batched forward-mode and reverse-mode Jacobians disagree with the
+            # directional derivative (0.4 % at sharpness 100, 1e12 at 200).
+            mask = cut > CUTOFF_EPS
+            safe = jnp.sqrt(jnp.where(mask, cut, 1.0))
+            sq = jnp.where(mask, safe, 0.0)
             dfdB = jnp.where(
-                cut > 0,
+                mask,
                 -_softplus_relu_sigmoid(arg, beta=self._sharp)
                 / (2.0 * Bstar[:, None, None] * safe * B[None])
                 - safe / B[None] ** 2,
                 0.0,
             )
-            J = _trapz(jnp.where(cut > 0, sq, 0.0) / B[None], zeta, axis=-1)
+            J = _trapz(sq / B[None], zeta, axis=-1)
             return J, _trapz(dfdB * dB[None], zeta, axis=-1)
 
         J, dJ = jax.lax.map(surface, (coeff, iota))  # (rho, t, alpha) each

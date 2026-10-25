@@ -1225,20 +1225,23 @@ def boozer_second_adiabatic_invariant_alpha_derivative_analytical(
     B_star = jnp.broadcast_to(B_star, (rho.size, B_star.shape[-1]))
     zeta_max = 2 * jnp.pi / nfp if zeta_max is None else zeta_max
 
-    return vmap(
-        lambda r, it, cB, pi, a: _boozer_second_adiabatic_surface_alpha_deriv(
+    # one surface at a time (jax.lax.map, not vmap): vmapped over the surfaces the
+    # Boozer basis on the field-line points was a 70 GB array at M_booz 22, N_booz 44
+    return jax.lax.map(
+        lambda x: _boozer_second_adiabatic_surface_alpha_deriv(
             basis,
-            r,
-            cB,
-            it,
-            a,
-            pi,
+            x[0],
+            x[2],
+            x[1],
+            x[4],
+            x[3],
             zeta_min,
             zeta_max,
             nzeta,
             softplus_sharpness,
-        )
-    )(rho, iota, coeff_B, B_star, alpha)
+        ),
+        (rho, iota, coeff_B, B_star, alpha),
+    )
 
 
 def boozer_second_adiabatic_invariant_alpha_derivative_from_data(

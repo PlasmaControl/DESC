@@ -51,10 +51,12 @@ from ._geometry import (
     SLAMCenter,
     SLAMCrossSection,
     SLAMElongation,
+    SLAMPerpElongation,
     SLAMStraightSectionCenter,
     SurfaceArea,
     Volume,
 )
+from ._jparallel import JparDjdaNorm, JparDjdaTopK, JparOrder, JparSingleWell
 from ._neoclassical import EffectiveRipple
 from ._omnigenity import (
     Isodynamicity,

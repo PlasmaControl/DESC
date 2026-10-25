@@ -547,6 +547,210 @@ class SLAMElongation(_Objective):
         return jnp.max(vmap(plane_ratio)(constants["X0"]))
 
 
+def _axis_frames(eq, zeta, n=8000):
+    """Magnetic-axis points and unit tangents at ``zeta`` (whole device, NFP=1)."""
+    zeta = np.mod(np.atleast_1d(np.asarray(zeta, float)), 2 * np.pi)
+    # dense sorted grid, then periodic interpolation: LinearGrid sorts the zeta it is
+    # given, so the stations cannot be passed to it directly
+    z = np.linspace(0.0, 2 * np.pi, n, endpoint=False)
+    grid = LinearGrid(rho=0.0, theta=0.0, zeta=z, NFP=1, sym=False)
+    d = eq.compute(["X", "Y", "Z"], grid=grid)
+    A = np.stack([np.asarray(d[k]) for k in ("X", "Y", "Z")], axis=1)
+    dA = np.roll(A, -1, axis=0) - np.roll(A, 1, axis=0)
+    zp = np.append(z, 2 * np.pi)
+
+    def interp(F):
+        return np.stack(
+            [np.interp(zeta, zp, np.append(F[:, k], F[0, k])) for k in range(3)], axis=1
+        )
+
+    t = interp(dA)
+    return interp(A), t / np.linalg.norm(t, axis=1, keepdims=True)
+
+
+class SLAMPerpElongation(_Objective):
+    """Elongation of sections perpendicular to the magnetic axis.
+
+    Each section is the ``rho`` surface cut by the plane through the axis point at
+    one of the stations ``zeta``, with the local axis tangent as its normal. Along
+    every theta line the crossing is a Gaussian-weighted average (as in
+    ``SLAMElongation``), restricted to a ball of radius ``rcut`` about the axis point
+    so a theta line cannot cross the plane on the far side of the device. The
+    elongation of the closed section is √(I_max / I_min) of its second moments of
+    area about the area centroid: a/b for an ellipse. The maximum over the stations
+    is returned.
+
+    Unlike constant-zeta cuts, these sections stay perpendicular to the axis where it
+    bends and tilts, so a tilted bend is not read as elongated. The planes are fixed
+    when the objective is built.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    zeta : array-like
+        Axis stations (zeta over the whole device) where the planes are placed.
+    grid : LinearGrid
+        Single rho surface, ``NFP=1``, ``sym=False``, whose zeta window covers every
+        plane on every theta line.
+    bandwidth : float
+        Gaussian width along the plane normal [m]. Default 0.01.
+    rcut : float
+        Radius [m] of the ball about each axis point inside which crossings count.
+        Default 0.4.
+
+    """
+
+    __doc__ = __doc__.rstrip() + collect_docs(
+        target_default="``target=1``.",
+        bounds_default="``target=1``.",
+        normalize_detail=" Note: Has no effect for this objective.",
+        normalize_target_detail=" Note: Has no effect for this objective.",
+        loss_detail=" Note: The maximum over stations is taken inside the objective.",
+    )
+
+    _scalar = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Perpendicular elongation: "
+
+    def __init__(
+        self,
+        eq,
+        zeta,
+        grid,
+        bandwidth=0.01,
+        rcut=0.4,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        loss_function=None,
+        deriv_mode="auto",
+        name="perpendicular elongation",
+        jac_chunk_size=None,
+    ):
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
+        self._zeta = np.atleast_1d(np.asarray(zeta, float))
+        self._bandwidth = float(bandwidth)
+        self._rcut = float(rcut)
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            loss_function=loss_function,
+            deriv_mode=deriv_mode,
+            name=name,
+            jac_chunk_size=jac_chunk_size,
+        )
+
+    def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        errorif(
+            self._grid.num_rho != 1,
+            ValueError,
+            "SLAMPerpElongation needs a LinearGrid on a single rho surface.",
+        )
+        P, T = _axis_frames(eq, self._zeta)
+        ref = np.where(np.abs(T[:, 2:3]) < 0.9, [[0.0, 0.0, 1.0]], [[1.0, 0.0, 0.0]])
+        E1 = np.cross(T, ref)
+        E1 /= np.linalg.norm(E1, axis=1, keepdims=True)
+        E2 = np.cross(T, E1)
+        self._dim_f = 1
+        self._data_keys = ["X", "Y", "Z"]
+        self._constants = {
+            "transforms": get_transforms(self._data_keys, obj=eq, grid=self._grid),
+            "profiles": get_profiles(self._data_keys, obj=eq, grid=self._grid),
+            "P": jnp.asarray(P),
+            "T": jnp.asarray(T),
+            "E1": jnp.asarray(E1),
+            "E2": jnp.asarray(E2),
+        }
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def sections(self, params, constants=None):
+        """Elongation of every section, shape (num stations,)."""
+        if constants is None:
+            constants = self.constants
+        data = compute_fun(
+            self.things[0],
+            self._data_keys,
+            params=params,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+        )
+        grid = constants["transforms"]["grid"]
+        X, Y, Z = (grid.meshgrid_reshape(data[k], "rtz")[0] for k in ("X", "Y", "Z"))
+        sigma, rcut = self._bandwidth, self._rcut
+
+        def one(p, t, e1, e2):
+            dx, dy, dz = X - p[0], Y - p[1], Z - p[2]
+            d = dx * t[0] + dy * t[1] + dz * t[2]
+            r2 = dx**2 + dy**2 + dz**2 - d**2
+            # the plane, and only near this axis point
+            log_w = -0.5 * (d / sigma) ** 2 - (r2 / rcut**2) ** 4
+            log_w = log_w - jnp.max(log_w, axis=1, keepdims=True)
+            w = jnp.exp(log_w)
+            w = w / jnp.sum(w, axis=1, keepdims=True)
+            y = jnp.sum(w * (dx * e1[0] + dy * e1[1] + dz * e1[2]), axis=1)
+            z = jnp.sum(w * (dx * e2[0] + dy * e2[1] + dz * e2[2]), axis=1)
+            yn, zn = jnp.roll(y, -1), jnp.roll(z, -1)
+            cr = y * zn - yn * z
+            A = jnp.sum(cr) / 2
+            yc = jnp.sum((y + yn) * cr) / (6 * A)
+            zc = jnp.sum((z + zn) * cr) / (6 * A)
+            # second moments of area about the centroid; a clockwise curve gives
+            # negative area and moments, hence the sign
+            s = jnp.sign(A)
+            Iyy = s * (jnp.sum((y**2 + y * yn + yn**2) * cr) / 12 - A * yc**2)
+            Izz = s * (jnp.sum((z**2 + z * zn + zn**2) * cr) / 12 - A * zc**2)
+            Iyz = s * (
+                jnp.sum((y * zn + 2 * y * z + 2 * yn * zn + yn * z) * cr) / 24
+                - A * yc * zc
+            )
+            tr, det = Iyy + Izz, Iyy * Izz - Iyz**2
+            disc = jnp.sqrt(jnp.maximum((tr / 2) ** 2 - det, 0.0))
+            return jnp.sqrt((tr / 2 + disc) / jnp.maximum(tr / 2 - disc, 1e-300))
+
+        return vmap(one)(
+            constants["P"], constants["T"], constants["E1"], constants["E2"]
+        )
+
+    def compute(self, params, constants=None):
+        """Compute the maximum perpendicular elongation over the stations.
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        elongation : float
+            Maximum over the stations of the section elongation.
+
+        """
+        return jnp.max(self.sections(params, constants))
+
+
 class SLAMCrossSection(_Objective):
     """Area of constant Cartesian-X cross sections.
 

@@ -476,11 +476,14 @@ def test_precomputed_zernike_bases():
     from desc.compute.utils import _compute as compute_fun
     from desc.compute.utils import get_transforms
     from desc.particles import (
-        _GC_FLUX_DATA_KEYS,
+        VacuumGuidingCenterTrajectory,
         _get_precomputed_transforms,
         _precompute_zernike_bases,
     )
     from desc.profiles import PowerSeriesProfile
+
+    # the keys the guiding-centre model computes (they live on the model class)
+    _GC_FLUX_DATA_KEYS = VacuumGuidingCenterTrajectory.data_keys
 
     rng = np.random.default_rng(0)
     nodes = np.column_stack(

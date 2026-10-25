@@ -5,7 +5,7 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import jit, jnp, rfft, root, root_scalar, vmap
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -129,9 +129,7 @@ def map_coordinates(  # noqa: C901
     # solved for, so those inversions no longer decouple; in that case we fall
     # through to the general Newton solve, which handles theta_PEST and alpha
     # (both defined via phi) correctly.
-    omega_is_0 = OMEGA_IS_0 and (
-        getattr(eq, "W_basis", None) is None or eq.W_basis.num_modes == 0
-    )
+    omega_is_0 = getattr(eq, "W_basis", None) is None or eq.W_basis.num_modes == 0
     if outbasis == ("rho", "theta", "zeta") and omega_is_0:
         if inbasis == ("rho", "alpha", "zeta"):
             errorif(
@@ -446,13 +444,18 @@ def _partial_sum(lmbda, L_lmn, omega, W_lmn, iota):
         msg="Poloidal grid resolution is higher than necessary for coordinate mapping.",
     )
     warnif(
-        grid.M < M,
+        grid.M < lmbda.basis.M or (omega is not None and grid.M < omega.basis.M),
         ResolutionWarning,
-        msg="High frequency lambda modes will be truncated in coordinate mapping.",
+        msg="High frequency lambda/omega modes will be truncated in coordinate "
+        "mapping.",
     )
     lmbda_minus_iota_omega = lmbda.transform(L_lmn)
     if omega is not None:
-        lmbda_minus_iota_omega -= grid.expand(iota) * omega.transform(W_lmn)
+        # iota is one value per unique rho; broadcast it to the (rho, theta, zeta)
+        # node ordering that lmbda_minus_iota_omega is already in.
+        lmbda_minus_iota_omega = lmbda_minus_iota_omega - iota[
+            grid.inverse_rho_idx
+        ] * omega.transform(W_lmn)
     lmbda_minus_iota_omega = (
         rfft(grid.meshgrid_reshape(lmbda_minus_iota_omega, "rzt"), norm="forward")
         .at[..., (0, -1) if ((grid.num_theta % 2) == 0) else 0]
@@ -476,8 +479,8 @@ def _map_poloidal_coordinates(
     *,
     tol=1e-6,
     maxiter=30,
-    W_lmn=None,
     omega=None,
+    W_lmn=None,
     **kwargs,
 ):
     """Map poloidal coordinate in the input basis to the output basis.
@@ -520,10 +523,11 @@ def _map_poloidal_coordinates(
         Stopping tolerance.
     maxiter : int
         Maximum number of Newton iterations.
-    W_lmn : jnp.ndarray
-        Spectral coefficients for ω.
-    omega : Transform
-        Transform for ω on the same grid as ``lmbda``. Default ``None`` means ω = 0.
+    omega : Transform, optional
+        Transform for ω built on the same grid as ``lmbda``. If not given, ω is
+        assumed to be 0 (as for an equilibrium with no generalized toroidal angle).
+    W_lmn : jnp.ndarray, optional
+        Spectral coefficients for ω. Required if ``omega`` is given.
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root_scalar`` such as ``maxiter_ls``,
         ``alpha``.
@@ -566,14 +570,19 @@ def _map_poloidal_coordinates(
             **kwargs,
         )
 
-    # α = ϑ − ι ϕ with ϕ = ζ + ω, so θ + (λ − ι ω) = α + ι ζ for input α
-    errorif(
-        omega is not None and (inbasis != "alpha" or outbasis == "lambda"),
-        NotImplementedError,
-        "With omega only the map from alpha to theta or delta is implemented.",
-    )
     q_m, modes = _partial_sum(lmbda, L_lmn, omega, W_lmn, iota)
     q_m = q_m[:, None]
+
+    # inbasis="vartheta" and outbasis="lambda" need ω evaluated at the θ being
+    # solved for (a genuinely coupled problem), which isn't implemented; every
+    # other combination only needs the (λ−ιω) series above, already handled.
+    errorif(
+        (inbasis == "vartheta" or outbasis == "lambda")
+        and W_lmn is not None
+        and W_lmn.size,
+        msg="TODO: 568",
+    )
+    omega_scalar = 0
 
     if varepsilon is None:
         iota = iota[:, None, None]
@@ -581,14 +590,15 @@ def _map_poloidal_coordinates(
         if inbasis == "alpha":
             varepsilon = poloidal + iota * zeta
         elif inbasis == "vartheta":
-            varepsilon = poloidal
+            varepsilon = poloidal - iota * omega_scalar
 
     t = vecroot(setdefault(guess, varepsilon), varepsilon, q_m)
 
     if outbasis == "theta":
         return t
     if outbasis == "lambda":
-        return varepsilon - t
+        vartheta = varepsilon + iota * omega_scalar
+        return vartheta - t
     if outbasis == "delta":
         alpha = varepsilon - iota * zeta
         return t - alpha

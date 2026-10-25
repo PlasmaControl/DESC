@@ -264,9 +264,8 @@ class VMECIO:
         errorif(
             np.any(eq.W_lmn),
             NotImplementedError,
-            "VMEC output requires the computational toroidal angle to be the "
-            "cylindrical angle (omega = 0), but this equilibrium has nonzero "
-            "omega (generalized toroidal angle).",
+            "VMEC output requires cylindrical toroidal angle (omega = 0)"
+            "but this equilibrium uses a generalized toroidal angle.",
         )
 
         """ VMEC netCDF file is generated in VMEC2000/Sources/Input_Output/wrout.f

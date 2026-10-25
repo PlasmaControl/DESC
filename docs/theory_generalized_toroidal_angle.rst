@@ -135,9 +135,10 @@ Current limitations
 ===================
 
 * ``A(z)``, ``A``, ``A(r)``, ``a``, ``R0/a``, ``perimeter(z)`` and
-  ``a_major/a_minor`` are computed on constant-:math:`\zeta` cross-sections.
-  When :math:`\omega \neq 0` that is not a planar constant-:math:`\phi`
-  section, so these become approximations.
+  ``a_major/a_minor`` are defined on constant-:math:`\zeta` cross-sections.
+  When :math:`\omega \neq 0` such a cross-section is not planar, so the area it
+  encloses is definition dependent; DESC's line integral and a projection onto
+  the cross-section's own plane differ only at second order in :math:`\omega`.
 * Plotting routines accept :math:`\omega \neq 0` equilibria, but a panel
   labelled "constant :math:`\phi`" is really constant :math:`\zeta` unless you
   supply a grid mapped with

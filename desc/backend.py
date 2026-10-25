@@ -11,8 +11,6 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
-OMEGA_IS_0 = True
-
 use_jax = os.environ.get("DESC_BACKEND") != "numpy"
 if use_jax:
     if desc_config["kind"] is None:

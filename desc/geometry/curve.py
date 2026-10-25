@@ -37,12 +37,12 @@ __all__ = [
 
 
 class FourierRZCurve(Curve):
-    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle phi.
+    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle s.
 
     When a nonzero ``W_n`` is given, the curve parameter ``s`` is a generalized
     toroidal angle and the physical cylindrical angle is
     ``phi = s + W(s)``, with W a periodic Fourier series. The default W = 0
-    recovers the standard parameterization by the cylindrical angle.
+    recovers the standard parameterization by the cylindrical angle, ie s = phi.
 
     Parameters
     ----------
@@ -123,17 +123,14 @@ class FourierRZCurve(Curve):
             modes_Z = np.array([0])
 
         modes_R, modes_Z, modes_W = (
-            np.asarray(modes_R),
-            np.asarray(modes_Z),
+            np.asarray(modes_R, dtype=int),
+            np.asarray(modes_Z, dtype=int),
             np.asarray(modes_W, dtype=int),
         )
 
         assert R_n.size == modes_R.size, "R_n size and modes_R must be the same size"
         assert Z_n.size == modes_Z.size, "Z_n size and modes_Z must be the same size"
         assert W_n.size == modes_W.size, "W_n size and modes_W must be the same size"
-
-        assert issubclass(modes_R.dtype.type, np.integer)
-        assert issubclass(modes_Z.dtype.type, np.integer)
 
         if sym == "auto":
             # omega is odd under stellarator symmetry, like Z
@@ -209,25 +206,25 @@ class FourierRZCurve(Curve):
         return max(self.R_basis.N, self.Z_basis.N)
 
     @property
-    def Nz(self):
+    def Nw(self):
         """Maximum mode number of the omega basis."""
         return self.W_basis.N
 
-    def change_resolution(self, N=None, NFP=None, sym=None, Nz=None):
+    def change_resolution(self, N=None, NFP=None, sym=None, Nw=None):
         """Change the maximum toroidal resolution."""
         N = check_nonnegint(N, "N")
-        Nz = check_nonnegint(Nz, "Nz")
+        Nw = check_nonnegint(Nw, "Nw")
         NFP = check_posint(NFP, "NFP")
         if (
             ((N is not None) and (N != self.N))
-            or ((Nz is not None) and (Nz != self.Nz))
+            or ((Nw is not None) and (Nw != self.Nw))
             or ((NFP is not None) and (NFP != self.NFP))
             or ((sym is not None) and (sym != self.sym))
         ):
             self._NFP = int(NFP if NFP is not None else self.NFP)
             self._sym = bool(sym) if sym is not None else self.sym
             N = int(N if N is not None else self.N)
-            Nz = int(Nz if Nz is not None else self.Nz)
+            Nw = int(Nw if Nw is not None else self.Nw)
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
             W_modes_old = self.W_basis.modes
@@ -238,11 +235,11 @@ class FourierRZCurve(Curve):
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
             W_sym = "sin" if self.sym else self.sym
-            if not W_modes_old.size and Nz == 0:
+            if not W_modes_old.size and Nw == 0:
                 # no omega before and none asked for: keep the basis empty, see
                 # the note in __init__
                 W_sym = "sin"
-            self.W_basis.change_resolution(N=Nz, NFP=self.NFP, sym=W_sym)
+            self.W_basis.change_resolution(N=Nw, NFP=self.NFP, sym=W_sym)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
             self.W_n = copy_coeffs(self.W_n, W_modes_old, self.W_basis.modes)

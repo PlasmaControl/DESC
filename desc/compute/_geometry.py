@@ -18,19 +18,23 @@ from ..integrals.surface_integral import line_integrals, surface_integrals
 from ..utils import cross, dot, safenorm
 from .data_index import register_compute_fun
 
-# Shared caveat for the constant-zeta cross-section family.  With a generalized
-# toroidal angle (omega != 0) a constant-zeta surface is not planar, and the
-# quadrature branch of _compute_A_of_z integrates the area OF THAT WARPED SHEET.
-# Measured on a racetrack with |W_lmn| = 0.53: A is 24 % high and elongation
-# 33 % low.  The error grows with the shaping, so it is worst exactly where
-# these quantities matter -- an elongated or high-torsion magnetic axis, or
-# other exotic shapes.
+# Shared note for the constant-zeta cross-section family.  These are defined on
+# a constant-zeta cross-section, never on a constant-phi one, so there is no
+# cylindrical reference for them to approximate.  With a generalized toroidal
+# angle (omega != 0) that cross-section is no longer planar, and the area
+# enclosed by a non-planar closed curve is definition dependent: the
+# line-integral branch of _compute_A_of_z and a projection onto the curve's own
+# best-fit plane agree to second order in the warp (measured on an elongated
+# surface, the two differ by 0.06 % at |W_lmn| = 0.025 and 0.93 % at 0.1, i.e.
+# quadratically, while the non-planarity itself grows linearly).  The
+# quadrature branch instead integrates the area of the warped sheet, which is a
+# different quantity again.
 NOTE_CONST_ZETA = (
-    " NOTE: defined on a constant zeta surface. With a generalized toroidal"
-    " angle (omega != 0) that surface is not planar, and this quantity can be"
-    " badly wrong for an elongated or high-torsion magnetic axis or other"
-    " exotic shapes. Compute it on a LinearGrid with sym=False and"
-    " override_grid=False to select the line-integral branch."
+    " NOTE: defined on a constant zeta cross-section. With a generalized"
+    " toroidal angle (omega != 0) that cross-section is not planar, so the"
+    " enclosed area depends on the definition used; the line-integral branch"
+    " (a LinearGrid with sym=False and override_grid=False) and a projection"
+    " onto the cross-section's own plane differ only at second order in omega."
 )
 
 

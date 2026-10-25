@@ -282,7 +282,7 @@ def _initial_guess_omega(eq, surface, axis=None, coord=None):
         UserWarning,
         "The given surface has a nonzero generalized toroidal angle (omega), "
         "but this equilibrium has no omega resolution, so it will be ignored. "
-        "Pass Mz/Nz (and Lz) to the Equilibrium to keep it.",
+        "Pass Mw/Nw (and Lw) to the Equilibrium to keep it.",
     )
     if not (eq_modes and surf_modes):
         return

@@ -76,6 +76,34 @@ def test_vmec_input(tmpdir_factory):
 
 
 @pytest.mark.unit
+def test_indented_input_lines(tmpdir_factory):
+    """Test that leading whitespace on an input line does not change how it parses."""
+    with open("./tests/inputs/DSHAPE") as f:
+        lines = f.readlines()
+
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    plain = tmpdir.join("DSHAPE_plain")
+    indented = tmpdir.join("DSHAPE_indented")
+    with open(plain, "w") as f:
+        f.writelines(lines)
+    with open(indented, "w") as f:
+        f.writelines("   " + line if line.strip() else line for line in lines)
+
+    expected = InputReader(cl_args=[str(plain)]).inputs
+    actual = InputReader(cl_args=[str(indented)]).inputs
+
+    assert len(actual) == len(expected)
+    for exp, act in zip(expected, actual):
+        for key, value in exp.items():
+            if "path" in key:  # derived from the file name, so expected to differ
+                continue
+            if isinstance(value, np.ndarray):
+                np.testing.assert_allclose(act[key], value, err_msg=key)
+            else:
+                assert act[key] == value, key
+
+
+@pytest.mark.unit
 def test_write_desc_input_Nones(tmpdir_factory):
     """Test converting writing DESC input file when an input tol is None."""
     # tests how None is handled as a passed-in input to the input writer

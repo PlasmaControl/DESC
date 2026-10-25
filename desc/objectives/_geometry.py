@@ -64,6 +64,8 @@ class AspectRatio(_Objective):
         grid=None,
         name="aspect ratio",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 2
@@ -79,6 +81,8 @@ class AspectRatio(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -207,6 +211,8 @@ class Elongation(_Objective):
         grid=None,
         name="elongation",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -222,6 +228,8 @@ class Elongation(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1562,6 +1570,8 @@ class Volume(_Objective):
         grid=None,
         name="volume",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -1577,6 +1587,8 @@ class Volume(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -1899,6 +1911,8 @@ class PlasmaVesselDistance(_Objective):
         name="plasma-vessel distance",
         use_signed_distance=False,
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
         **kwargs,
     ):
         if target is None and bounds is None:
@@ -1939,6 +1953,8 @@ class PlasmaVesselDistance(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2225,6 +2241,8 @@ class MeanCurvature(_Objective):
         grid=None,
         name="mean curvature",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (-np.inf, 0)
@@ -2240,6 +2258,8 @@ class MeanCurvature(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2364,6 +2384,8 @@ class PrincipalCurvature(_Objective):
         grid=None,
         name="principal-curvature",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 1
@@ -2379,6 +2401,8 @@ class PrincipalCurvature(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2785,6 +2809,8 @@ class BScaleLength(_Objective):
         grid=None,
         name="B-scale-length",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             bounds = (1, np.inf)
@@ -2800,6 +2826,8 @@ class BScaleLength(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -2916,6 +2944,8 @@ class GoodCoordinates(_Objective):
         grid=None,
         name="coordinate goodness",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0
@@ -2932,6 +2962,8 @@ class GoodCoordinates(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):
@@ -3054,6 +3086,8 @@ class MirrorRatio(_Objective):
         deriv_mode="auto",
         name="mirror ratio",
         jac_chunk_size=None,
+        device_id=0,
+        rank=None,
     ):
         if target is None and bounds is None:
             target = 0.2
@@ -3069,6 +3103,8 @@ class MirrorRatio(_Objective):
             deriv_mode=deriv_mode,
             name=name,
             jac_chunk_size=jac_chunk_size,
+            device_id=device_id,
+            rank=rank,
         )
 
     def build(self, use_jit=True, verbose=1):

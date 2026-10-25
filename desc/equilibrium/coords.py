@@ -80,7 +80,9 @@ def map_coordinates(  # noqa: C901
         Maximum number of Newton iterations.
     full_output : bool, optional
         If True, also return a tuple where the first element is the residual from
-        the root finding and the second is the number of iterations.
+        the root finding and the second is the number of iterations. The residual
+        identifies failed inversions, which are returned as computed (see
+        Returns).
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
         ``alpha``.
@@ -89,9 +91,11 @@ def map_coordinates(  # noqa: C901
     -------
     out : jnp.ndarray
         Shape (k, 3).
-        Coordinates mapped from ``inbasis`` to ``outbasis``. Values of NaN will be
-        returned for coordinates where root finding did not succeed, possibly
-        because the coordinate is not in the plasma volume.
+        Coordinates mapped from ``inbasis`` to ``outbasis``. If the inversion fails
+        to converge, the output is still evaluated at the final solver iterate;
+        failed results are not automatically replaced with NaN. Use
+        ``full_output=True`` to obtain the residual for each point and reject
+        results with a non-finite residual or a residual greater than ``tol``.
     info : tuple
         2 element tuple containing residuals and number of iterations
         for each point. Only returned if ``full_output`` is True.

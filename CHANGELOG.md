@@ -1,6 +1,12 @@
 Changelog
 =========
 
+- Adds initial support for multi-device optimization with MPI. This allows to compute derivatives and costs on multiple devices (GPUs/CPUs), and to split memory usage during these operations across devices. See the [documentation](https://desc-docs.readthedocs.io/en/stable/notebooks/tutorials/multi_device.html) for details. Couple important notes:
+    - MPI is not a default dependency of DESC, so, to use MPI functionality, the users should verify their MPI installation themselves.
+    - Using MPI is recommended only for the cases where you get out-of-memory error. If your problem fits to single GPU memory, it's unlikely that MPI will give speed improvement.
+    - MPI is not implemented for matrix decompositions (i.e. QR/SVD/Cholesky) which default optimizer ``lsq-exact`` uses. For the cases where Jacobian doesn't fit to GPU memory, matrix decompositions will be performed on CPU and will be slow. Feel free to open a PR, if you have knowledge on parallel QR/SVD or Cholesky.
+    - CUDA-aware MPI is not supported yet.
+
 New Features
 
 - Adds ``SecondAdiabaticInvariantAlphaDerivative`` and ``SoftConnectivity`` objectives for omnigenity optimization targeting the second adiabatic invariant (bounce action) $J^*$ along Boozer magnetic field lines and enforcing clean single-well magnetic field structure.
@@ -27,6 +33,10 @@ Bug Fixes
 
 - Fixes NaN Jacobian in ``SurfaceMatch``, which returned the distance ``sqrt(dR^2 + dZ^2)`` between the surface and its target. That has an infinite derivative where it vanishes, which is every node whenever the surface starts equal to its target -- the normal way to use the objective. It now returns the signed ``[dR, dZ]`` components, so ``dim_f`` is ``2 * grid.num_nodes`` rather than ``grid.num_nodes``. A least-squares optimizer squares and sums them itself, so the cost is unchanged. Also corrects the objective's units from ``(T m^2)`` to ``(m)``.
 - Regularizes the elongation approximation ``a_major/a_minor``, which took ``sqrt(|u|)`` of the isoperimetric deficit ``u``. ``u`` is exactly zero for a circular cross-section, so ``d(elongation)/dA`` diverged there (measured ~2e9 at a circle), making an objective such as ``Elongation(bounds=(1.0, 1.005))`` -- which targets a circle by construction -- ill-conditioned or NaN. The branch point is genuine, so the fix replaces ``sqrt(|u|)`` with the smooth ``(u^2 + d^2)^(1/4)``, ``d = 1e-12 * P^2``. Values away from a circle are unchanged to every printed digit; near a circle they shift by ~1e-6.
+- Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
+- Fixes ``VMECIO.load`` fitting lambda as if ``lmns`` were on the full radial mesh. VMEC stores lambda on the half mesh, so the fitted lambda was shifted by half a radial cell and pulled towards the zero placeholder row at the axis, which gave errors of order 0.1% in ``|B|`` of loaded equilibria. See [#2351](https://github.com/PlasmaControl/DESC/issues/2351). Note that the ``VMECIO.load`` guidance remains the same as before: re-solving the equilibrium in DESC  after loading from a VMEC wout is recommended given the representation differences between the two codes.
+- Fixes ``SplineMagneticField`` with a single toroidal plane (axisymmetric mgrid): the cubic 2D interpolation now uses the Z derivatives instead of the zero phi derivatives, so its error between nodes falls from about 1e-3 to the expected cubic level [#2357](https://github.com/PlasmaControl/DESC/pull/2357).
+- Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
@@ -41,6 +51,8 @@ Bug Fixes
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
 - Improves the handling of failed Cholesky factorizations in the ``"cho"`` trust-region method.
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
+- Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
+- Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 
 
@@ -206,7 +218,6 @@ New Features
     - `field_line_integrate` function doesn't accept additional keyword-arguments related to `diffrax`, if it is necessary, they must be given through `options` dictionary.
     - ``poincare_plot`` and ``plot_field_lines`` functions can now plot partial results if the integration failed. Previously, user had to pass ``throw=False`` or change the integration parameters. Users can ignore the warnings that are caused by hitting the bounds (i.e. `Terminating differential equation solve because an event occurred.`).
     - `chunk_size` argument is now used for chunking the number of field lines. For the chunking of Biot-Savart integration for the magnetic field, users can use `bs_chunk_size` instead.
-
 
 
 Bug Fixes

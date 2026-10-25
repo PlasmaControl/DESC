@@ -25,6 +25,7 @@
    installation
    notebooks/tutorials/use_outputs.ipynb
    performance_tips
+   notebooks/tutorials/multi_device.ipynb
 
 
 .. toctree::

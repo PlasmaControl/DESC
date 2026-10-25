@@ -23,47 +23,41 @@ if use_jax:
             import jaxlib
             from jax import config as jax_config
 
+            # YNNPACK reduce fusions on CPU is slow and wrong,
+            # see (https://github.com/jax-ml/jax/issues/41414).
+            # Triton GEMMs on GPU cause slow compilation without much
+            # performance gain. Keep user flags, update others if not set.
+            if Version(jax.__version__) >= Version("0.10.0"):
+                _xla_flags = os.environ.get("XLA_FLAGS", "")
+                for _flag in [
+                    "--xla_cpu_experimental_ynn_fusion_type=-reduce",
+                    "--xla_gpu_enable_triton_gemm=false",
+                ]:
+                    if _flag.split("=")[0] not in _xla_flags:
+                        _xla_flags += " " + _flag
+                os.environ["XLA_FLAGS"] = _xla_flags.strip()
+
             jax_config.update("jax_enable_x64", True)
+            if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
+                warnings.warn(
+                    "JAX failed to detect GPU, are you sure you "
+                    + "installed JAX with GPU support?"
+                )
+                set_device("cpu")
+            if desc_config.get("kind") == "tpu":
+                desc_config["avail_mems"] = [
+                    jax.devices("tpu")[0].memory_stats()["bytes_limit"] / 1024**3
+                ]
             x = jnp.linspace(0, 5, 2)
             y = jnp.exp(x)
-            _device = jax.local_devices()[0]
-            _mem_stats = _device.memory_stats()  # None for CPU backends
+        use_jax = True
     except ModuleNotFoundError:
+        jnp = np
+        x = jnp.linspace(0, 5, 2)
+        y = jnp.exp(x)
         use_jax = False
+        set_device(kind="cpu")
         warnings.warn("Failed to load JAX")
-
-if not use_jax:  # DESC_BACKEND=numpy, or JAX failed to load
-    jnp = np
-    x = jnp.linspace(0, 5, 2)
-    y = jnp.exp(x)
-    _device = _mem_stats = None
-    set_device("cpu")
-elif desc_config["kind"] != _device.platform:
-    warnings.warn(
-        f"JAX is running on {_device.platform}, not the requested "
-        + f"{desc_config['kind']}. Make sure JAX is installed with support "
-        + "for it, and that set_device was called before importing anything "
-        + "else from DESC."
-    )
-    desc_config["kind"] = _device.platform
-
-if _mem_stats is None:  # CPU backends don't report memory stats
-    import psutil
-
-    desc_config["device"] = "CPU"
-    desc_config["avail_mem"] = psutil.virtual_memory().available / 1024**3
-else:
-    # JAX only preallocates a fraction of the GPU memory,
-    # but we want to report the total available memory
-    _mem_frac = 1.0
-    if _device.platform == "gpu":
-        _mem_frac = float(
-            os.environ.get("XLA_CLIENT_MEM_FRACTION")
-            or os.environ.get("XLA_PYTHON_CLIENT_MEM_FRACTION")
-            or 0.75
-        )
-    desc_config["device"] = f"{_device.device_kind} (id={_device.id})"
-    desc_config["avail_mem"] = _mem_stats["bytes_limit"] / _mem_frac / 1024**3
 
 
 def print_backend_info():
@@ -72,15 +66,48 @@ def print_backend_info():
     if use_jax:
         print(
             f"Using JAX backend: jax version={jax.__version__}, "
-            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
+            f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}."
         )
     else:
         print(f"Using NumPy backend: version={np.__version__}, dtype={y.dtype}.")
-    print(
-        "Using device: {}, with {:.2f} GB available memory.".format(
-            desc_config.get("device"), desc_config.get("avail_mem")
+
+    if desc_config["kind"] == "cpu":
+        if desc_config["num_device"] == 1:
+            print(
+                f"CPU Info: {desc_config['cpu_info']} with "
+                f"{desc_config['cpu_mem']:.2f} GB available memory"
+            )
+        else:
+            print(
+                f"Using {desc_config['num_device']} CPUs with "
+                + f"{desc_config['avail_mems'][0]:.2f} GB total available memory:"
+            )
+            for dev in desc_config["devices"]:
+                print(f"\t CPU : {dev}")
+
+            print(
+                "\nNote: The backend information assumes that the user has 1 "
+                "process per CPU (node). Using multiple processes per CPU (node) is "
+                "not the most efficient way to use MPI with purely CPUs."
+            )
+    else:
+        print(
+            f"CPU Info: {desc_config['cpu_info']} with "
+            f"{desc_config['cpu_mem']:.2f} GB available memory"
         )
-    )
+        print(f"Using {desc_config['num_device']} device:")
+        for i, dev in enumerate(desc_config["devices"]):
+            print(
+                f"\t Device : {dev} with {desc_config['avail_mems'][i]:.2f} "
+                "GB available memory"
+            )
+
+        if desc_config["num_device"] != 1:
+            print(
+                "\nNote: The backend information only reflects the devices for "
+                "the current process. The full set of devices used by other processes "
+                "may be different."
+            )
 
 
 def _diag_to_full(d, e):
@@ -656,6 +683,69 @@ if use_jax:  # noqa: C901
             x = jax.lax.custom_root(res, x0, solve, _tangent_solve, has_aux=False)
             return x
 
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Safe Bcast function for Jax arrays.
+
+        JAX arrays cannot be directly broadcasted using MPI's Bcast, but numpy
+        arrays can. If CUDA-aware MPI is available, JAX arrays on GPU can be
+        broadcasted directly. This function checks the type of the array and
+        perform the broadcast safely.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to broadcast.
+        comm : MPI.Comm
+            MPI communicator.
+        root : int
+            Rank of root process. Default is 0.
+
+        Returns
+        -------
+        arr : jnp.ndarray or np.ndarray
+            Broadcasted array.
+        """
+        if not desc_config["mpi-cuda"]:
+            arr = np.array(arr)
+        comm.Bcast(arr, root=root)
+        # don't use this returned value for root == rank, as it will replace the jax
+        # array with a numpy array, which is not ideal
+        return arr
+
+    def safe_transfer_to_device(arr):
+        """Safely transfer array to device.
+
+        Handles the final array device if the array is too big for GPU,
+        or the backend is CPU.
+
+        Parameters
+        ----------
+        arr : jnp.ndarray or np.ndarray
+            Array to transfer.
+
+        Returns
+        -------
+        arr : jnp.ndarray
+            Array on the target device.
+        """
+        size_gb = arr.nbytes / 1024**3
+
+        # this can still fail if arr is big even for CPU
+        if desc_config["kind"] == "cpu" or size_gb > desc_config["avail_mems"][0] * 0.9:
+            if (
+                not desc_config["SUPPRESS_GPU_MEMORY_WARNING"]
+                and desc_config["kind"] == "gpu"
+            ):
+                warnings.warn(
+                    "The total size of the arrays exceeds the available memory of the "
+                    "GPU[id=0]. Moving the array to CPU. This may cause performance "
+                    "degredation. To suppress this warning, use \n"
+                    "`from desc import config as desc_config` \n"
+                    "`desc_config['SUPPRESS_GPU_MEMORY_WARNING'] = True`"
+                )
+            return jnp.asarray(arr, device=jax.devices("cpu")[0])
+        return jnp.asarray(arr)
+
 
 # we can't really test the numpy backend stuff in automated testing, so we ignore it
 # for coverage purposes
@@ -1131,3 +1221,11 @@ else:  # pragma: no cover
         else:
             out = np.take(a, indices, axis, out, mode)
         return out
+
+    def safe_mpi_Bcast(arr, comm, root=0):
+        """Numpy implementation of desc.backend.safe_mpi_Bcast."""
+        return comm.Bcast(arr, root=root)
+
+    def safe_transfer_to_device(arr):
+        """Numpy implementation of desc.backend.safe_transfer_to_device."""
+        return arr

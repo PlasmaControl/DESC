@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 
 from desc.backend import execute_on_cpu, jit, jnp, put, root_scalar, sign, vmap
-from desc.basis import DoubleFourierSeries, ZernikePolynomial
+from desc.basis import DoubleFourierSeries, FourierSeries, ZernikePolynomial
 from desc.compute import get_transforms
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -1004,7 +1004,7 @@ class FourierRZToroidalSurface(Surface):
 
         # over-sample to get a good axis fit
         grid = LinearGrid(rho=1, theta=2, zeta=self.N * 4, NFP=self.NFP)
-        data = self.compute(["R", "Z"], grid=grid)
+        data = self.compute(["R", "Z", "phi"], grid=grid)
         R = data["R"]
         Z = data["Z"]
         # Calculate the R and Z values at theta=0 and pi degrees for bunch of toroidal
@@ -1023,6 +1023,26 @@ class FourierRZToroidalSurface(Surface):
         axis = FourierRZCurve.from_values(
             jnp.vstack([Rmid, phis, Zmid]).T, N=self.N, NFP=self.NFP, sym=self.sym
         )
+        if self.W_basis.num_modes and self.N > 0:
+            # With a generalized toroidal angle the two points sit at
+            # phi = zeta + omega, so the axis takes the mid point of omega too.
+            # Left at omega = 0 it lies off its own cross section, and the initial
+            # guess, which blends omega from the axis to the boundary, twists the
+            # constant zeta surfaces toroidally until they fold.
+            omega = data["phi"] - grid.nodes[:, 2]
+            Wmid = (omega[::2] + omega[1::2]) / 2
+            W_basis = FourierSeries(self.Nw, self.NFP, sym="sin" if self.sym else False)
+            A = W_basis.evaluate(np.stack([0 * phis, 0 * phis, phis], axis=1))
+            axis = FourierRZCurve(
+                R_n=axis.R_n,
+                Z_n=axis.Z_n,
+                modes_R=axis.R_basis.modes[:, 2],
+                modes_Z=axis.Z_basis.modes[:, 2],
+                NFP=self.NFP,
+                sym=self.sym,
+                W_n=np.linalg.lstsq(A, Wmid, rcond=None)[0],
+                modes_W=W_basis.modes[:, 2],
+            )
         return axis
 
     def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):

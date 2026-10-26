@@ -1087,6 +1087,48 @@ class TestOmegaSmallBranches:
         assert np.max(np.abs(np.asarray(eq2.W_lmn) - np.asarray(eq.W_lmn))) > 1e-3
 
 
+class TestAxisFromOmegaSurface:
+    """The default axis of an omega boundary sits on its own cross sections."""
+
+    @staticmethod
+    def _surface():
+        return FourierRZToroidalSurface(
+            R_lmn=np.array([10.0, 1.0, 0.1]),
+            Z_lmn=np.array([-1.0, -0.1]),
+            modes_R=np.array([[0, 0], [1, 0], [1, 1]]),
+            modes_Z=np.array([[-1, 0], [-1, 1]]),
+            NFP=3,
+            sym=True,
+            W_lmn=np.array([0.3, 0.05]),
+            modes_W=np.array([[0, -1], [-1, 1]]),
+        )
+
+    @pytest.mark.unit
+    def test_get_axis_carries_omega(self):
+        """get_axis takes the mid point of omega at theta = 0, pi, like R and Z."""
+        axis = self._surface().get_axis()
+        zeta = np.linspace(0, 2 * np.pi / 3, 17, endpoint=False)
+        W = (
+            axis.W_basis.evaluate(np.stack([0 * zeta, 0 * zeta, zeta], axis=1))
+            @ axis.W_n
+        )
+        # the m = 1 omega mode cancels between theta = 0 and pi
+        np.testing.assert_allclose(W, 0.3 * np.sin(3 * zeta), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_initial_guess_omega_on_axis(self):
+        """Without a user axis, the guess starts omega on the axis at the boundary.
+
+        An axis at omega = 0 makes the guess blend each m = 0 omega mode from 0 on
+        the axis to its boundary value, twisting the constant zeta surfaces.
+        """
+        eq = Equilibrium(L=4, M=4, N=1, NFP=3, sym=True, surface=self._surface(), Nw=1)
+        zeta = np.linspace(0, 2 * np.pi / 3, 17, endpoint=False)
+        w = eq.compute("omega", grid=_grid(0.0, 0.0, zeta))["omega"]
+        np.testing.assert_allclose(w, 0.3 * np.sin(3 * zeta), atol=1e-12)
+        assert eq.is_nested()
+
+
 class TestContinuationWithOmega:
     """Continuation on a boundary carrying a generalized toroidal angle."""
 

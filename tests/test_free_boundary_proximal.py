@@ -191,11 +191,13 @@ def test_free_boundary_jacobian_stellarator():
     f = prox.compute_scaled_error(x)
     np.testing.assert_allclose(prox.grad(x), f @ J, rtol=1e-10, atol=1e-12)
 
-    # boundary prediction for a step, from the derivatives stored by the jacobian
+    # boundary prediction for a step, one jvp along the step should agree with the
+    # boundary changes for all directions combined
     prox._x_old = x
     dx = 1e-3 * v * np.abs(x).max()
     b1 = np.asarray(prox._predict_boundary(x + dx))
-    np.testing.assert_allclose(b1, prox._dbdv[2].T @ dx, rtol=1e-8, atol=1e-14)
+    db = np.asarray(prox._boundary_tangents(np.eye(x.size), prox._lin_old[1])[1])
+    np.testing.assert_allclose(b1, db.T @ dx, rtol=1e-8, atol=1e-14)
     # predictions stay in the null space of the constraints on the boundary
     Z = np.asarray(prox._fb_Z)
     np.testing.assert_allclose(Z @ (Z.T @ b1), b1, atol=1e-12)

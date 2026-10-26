@@ -1764,10 +1764,8 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
 
         # derivatives of the free boundary problem at the most recent state
         self._linearization = None
-        # (x, v, db, linearization) from the last jvp, where db is the boundary change
-        # for each direction v in the optimization variables, for predicting the new
-        # boundary
-        self._dbdv = None
+        # (x, linearization) from the last jvp, for predicting the new boundary
+        self._lin_old = None
 
         if self._solve_during_proximal_build:
             # derivatives assume we start from a free boundary equilibrium
@@ -2014,9 +2012,8 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
     def _predict_boundary(self, x):
         """Predict the change in the free boundary unknowns from x_old to x.
 
-        Uses the derivatives from the last jvp at x_old, which are known in the
-        directions v of that jvp (usually the full space, or the null space of the
-        linear constraints which contains x - x_old).
+        To first order db = db/dq (x - x_old), with one jvp along the step using the
+        linearization at x_old from the last jvp there.
 
         Returns
         -------
@@ -2027,14 +2024,13 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         """
         if (
             not self._fb_predict
-            or self._dbdv is None
-            or not np.array_equal(self._dbdv[0], self._x_old)
+            or self._lin_old is None
+            or not np.array_equal(self._lin_old[0], self._x_old)
         ):
             return None
-        _, v, db, lin = self._dbdv
+        lin = self._lin_old[1]
         dq = np.asarray(x - self._x_old)
-        a = np.linalg.lstsq(v.T, dq, rcond=None)[0]
-        b1 = db.T @ a
+        b1 = np.asarray(self._boundary_tangents(dq, lin)[1][0])
         if self._fb_predict_order == 1:
             return b1
         return b1 + self._second_order_boundary(dq, b1, lin)
@@ -2167,6 +2163,34 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
 
         """
         lin = self._linearize(xopt)
+        tangents, db = self._boundary_tangents(v, lin)
+        tangents[self._eq_idx] = (
+            tangents[self._eq_idx] + db @ lin["T_c"][self._c_idx_fb]
+        )
+        self._lin_old = (np.asarray(x), lin)
+        tangents = jnp.concatenate(tangents, axis=-1)
+        return tangents if v.ndim == 2 else tangents[0]
+
+    def _boundary_tangents(self, v, lin):
+        """Fixed boundary tangents and boundary changes for directions v.
+
+        Parameters
+        ----------
+        v : ndarray
+            Directions in the space of optimization variables, as rows.
+        lin : dict
+            Linearization from self._linearize at the current state.
+
+        Returns
+        -------
+        tangents : list of ndarray
+            Change in the full state vector of each thing for each direction in v, at
+            fixed boundary (force balance maintained).
+        db : ndarray
+            Change in the free boundary unknowns for each direction in v, to stay in
+            free boundary equilibrium.
+
+        """
         T_c, P, Z = lin["T_c"], lin["P"], self._fb_Z
         v2 = jnp.atleast_2d(v)
         vs = jnp.split(v2, np.cumsum(self._dimc_per_thing)[:-1], axis=-1)
@@ -2175,15 +2199,11 @@ class ProximalProjectionFreeBoundary(ProximalProjection):
         tangents[self._eq_idx] = vs[self._eq_idx] @ T_c[self._c_idx_q]
         # change in free boundary error from the optimization variables
         dB = self._constraint_fb.jvp_scaled(
-            self._fb_tangents(tangents[self._eq_idx], tangents), self._fb_x(xopt)
+            self._fb_tangents(tangents[self._eq_idx], tangents), self._fb_x(lin["x"])
         )
         # change in the boundary to keep free boundary equilibrium: db = -dB/db⁺ dB
         db = -(jnp.atleast_2d(dB) @ P.T) @ Z.T
-        tangents[self._eq_idx] = tangents[self._eq_idx] + db @ T_c[self._c_idx_fb]
-        if v.ndim == 2:
-            self._dbdv = (np.asarray(x), np.asarray(v), np.asarray(db), lin)
-        tangents = jnp.concatenate(tangents, axis=-1)
-        return tangents if v.ndim == 2 else tangents[0]
+        return tangents, db
 
     def grad(self, x, constants=None):
         """Compute gradient of self.compute_scalar.

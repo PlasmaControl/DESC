@@ -506,9 +506,11 @@ def _write_terps_input(  # noqa: C901
     )
     f.write("C\n")
     f.write("C        NJ    NK  IVAC  LSSL  LSSD MMAXDF NMAXDF\n")
+    # TERPSICHORE reads this line as (5x,5i6,2i7): every value must stay in its own
+    # 6-wide column, or a 5-digit LSSL shifts the rest and MMAXDF is misread.
     f.write(
-        "        {:>3d}   {:>3d}   {:>3d}  {:>4d}  {:>4d}    120     64\n".format(
-            nj, nk, ivac, lssl, lssd
+        "     {:>6d}{:>6d}{:>6d}{:>6d}{:>6d}{:>7d}{:>7d}\n".format(
+            nj, nk, ivac, lssl, lssd, 120, 64
         )
     )
     f.write("C\n")

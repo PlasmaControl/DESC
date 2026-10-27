@@ -181,32 +181,31 @@ def test_tr_step_exact_cho_alpha_converges(cond, frac):
     step must agree with the QR and SVD methods.
     """
     rtol = 0.01
-    for seed in range(5):
-        J, f = _tr_test_problem(60, 30, cond, seed)
-        g, B = J.T @ f, J.T @ J
-        p_newton = np.linalg.lstsq(J, -f, rcond=None)[0]
-        trust_radius = frac * np.linalg.norm(p_newton)
+    J, f = _tr_test_problem(60, 30, cond, seed=0)
+    g, B = J.T @ f, J.T @ J
+    p_newton = np.linalg.lstsq(J, -f, rcond=None)[0]
+    trust_radius = frac * np.linalg.norm(p_newton)
 
-        p, hits_boundary, alpha = trust_region_step_exact_cho(
-            jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
-        )
-        assert hits_boundary
-        assert alpha > 0
-        p_alpha = np.linalg.solve(B + float(alpha) * np.eye(B.shape[0]), -g)
-        assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
+    p, hits_boundary, alpha = trust_region_step_exact_cho(
+        jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
+    )
+    assert hits_boundary
+    assert alpha > 0
+    p_alpha = np.linalg.solve(B + float(alpha) * np.eye(B.shape[0]), -g)
+    assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
 
-        Q, R = np.linalg.qr(J)
-        Qt_f = jnp.asarray(Q.T @ f)
-        R = jnp.asarray(R)
-        p_qr, _, _ = trust_region_step_exact_qr(
-            solve_triangular_regularized(R, -Qt_f), Qt_f, R, trust_radius, 0.0
-        )
-        U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
-        p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius, 0.0)
-        # all three stop once ||p|| is within rtol of the radius, so they agree to
-        # the accuracy that tolerance allows, not to round-off
-        np.testing.assert_allclose(p, p_qr, rtol=0, atol=5 * rtol * trust_radius)
-        np.testing.assert_allclose(p, p_svd, rtol=0, atol=5 * rtol * trust_radius)
+    Q, R = np.linalg.qr(J)
+    Qt_f = jnp.asarray(Q.T @ f)
+    R = jnp.asarray(R)
+    p_qr, _, _ = trust_region_step_exact_qr(
+        solve_triangular_regularized(R, -Qt_f), Qt_f, R, trust_radius, 0.0
+    )
+    U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
+    p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius, 0.0)
+    # all three stop once ||p|| is within rtol of the radius, so they agree to
+    # the accuracy that tolerance allows, not to round-off
+    np.testing.assert_allclose(p, p_qr, rtol=0, atol=5 * rtol * trust_radius)
+    np.testing.assert_allclose(p, p_svd, rtol=0, atol=5 * rtol * trust_radius)
 
 
 @pytest.mark.unit

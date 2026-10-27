@@ -142,8 +142,16 @@ class VMECIO:
             inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
-            inputs["current"] = SplineProfile(curr, r, name="current")
+            # VMEC stores buco on the half mesh, s_j = (j - 1/2) / (ns - 1),
+            # j = 1, ..., ns - 1, with buco[0] unused. The enclosed current is zero
+            # on axis, and at the edge we extrapolate as VMEC does for ctor.
+            ns = file.variables["ns"][:].filled()
+            buco = file.variables["buco"][:].filled()
+            s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+            buco_edge = 1.5 * buco[-1] - 0.5 * buco[-2]
+            curr = 2 * np.pi / mu_0 * np.concatenate([[0.0], buco[1:], [buco_edge]])
+            r_curr = np.sqrt(np.concatenate([[0.0], s_half, [1.0]]))
+            inputs["current"] = SplineProfile(curr, r_curr, name="current")
             inputs["iota"] = None
 
         # boundary
@@ -192,8 +200,12 @@ class VMECIO:
         eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
 
         # lambda
+        # VMEC stores lambda on the half mesh, s_j = (j - 1/2) / (ns - 1),
+        # and the first row (axis) is unused
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
+        ns = L_mn.shape[0]
+        r_half = np.sqrt((np.arange(1, ns) - 0.5) / (ns - 1))
+        eq.L_lmn = fourier_to_zernike(m, n, L_mn[1:], eq.L_basis, rho=r_half)
 
         # apply boundary conditions
         constraints = get_fixed_axis_constraints(

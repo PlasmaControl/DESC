@@ -35,6 +35,7 @@
    notebooks/tutorials/continuation_step_by_step.ipynb
    notebooks/tutorials/nae_constraint.ipynb
    notebooks/tutorials/free_boundary_equilibrium.ipynb
+   notebooks/tutorials/sharp_equilibrium.ipynb
 
 
 .. toctree::

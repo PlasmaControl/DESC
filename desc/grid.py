@@ -14,8 +14,8 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
-    "SharpConcentricGrid",
-    "SharpSymConcentricGrid",
+    "RidgeConcentricGrid",
+    "RidgeSymConcentricGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
@@ -1777,7 +1777,7 @@ class ConcentricGrid(_Grid):
             self._weights = self._scale_weights()
 
 
-class SharpConcentricGrid(ConcentricGrid):
+class RidgeConcentricGrid(ConcentricGrid):
     """ConcentricGrid for an equilibrium whose boundary has m_b corners on X-lines.
 
     The corners sit at the helical angle α_b = θ - ι_b ζ = 2πk/m_b on ρ = 1, with
@@ -1793,7 +1793,7 @@ class SharpConcentricGrid(ConcentricGrid):
     3. On every plane the rings are rotated by ι_b ζ, θ = α_b + ι_b ζ, so the nodes
        sit at the same place relative to the corners on every plane.
 
-    The grid covers the full poloidal circle; ``SharpSymConcentricGrid`` is its
+    The grid covers the full poloidal circle; ``RidgeSymConcentricGrid`` is its
     stellarator-symmetric half.
 
     Parameters
@@ -1922,8 +1922,8 @@ class SharpConcentricGrid(ConcentricGrid):
         ) = self._find_unique_inverse_nodes()
 
 
-class SharpSymConcentricGrid(SharpConcentricGrid):
-    """Stellarator-symmetric half of a ``SharpConcentricGrid``.
+class RidgeSymConcentricGrid(RidgeConcentricGrid):
+    """Stellarator-symmetric half of a ``RidgeConcentricGrid``.
 
     ConcentricGrid's usual half θ ∈ [0, π] does not work once the rings rotate with ζ:
     the mirror (θ, ζ) -> (-θ, -ζ), followed by the shift of ζ back into the field
@@ -1931,7 +1931,7 @@ class SharpSymConcentricGrid(SharpConcentricGrid):
     images of the nodes overlap and leave gaps.
 
     This grid halves in ζ instead. It keeps the full rotated rings of a
-    ``SharpConcentricGrid`` on the planes ζ_k = k T/(2N+1), k = 0, ..., N (T = 2π/NFP),
+    ``RidgeConcentricGrid`` on the planes ζ_k = k T/(2N+1), k = 0, ..., N (T = 2π/NFP),
     and doubles the weight of k ≥ 1. The mirror of plane k is plane 2N+1-k, which is
     dropped, and plane 0 is its own mirror. The mirror of a node lands on a node of the
     full grid, because each ring is unchanged by a rotation of 2π/m_b and by

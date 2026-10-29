@@ -1,10 +1,16 @@
 """Objectives for solving equilibrium problems."""
 
 from desc.backend import jnp
+from desc.basis import FourierZernikeRidgeBasis
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.utils import Timer
+from desc.grid import (
+    ConcentricGrid,
+    QuadratureGrid,
+    RidgeConcentricGrid,
+    RidgeSymConcentricGrid,
+)
+from desc.utils import Timer, warnif
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
@@ -35,7 +41,10 @@ class ForceBalance(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
-        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``
+        Defaults to ``ConcentricGrid(eq.L_grid, eq.M_grid, eq.N_grid)``. For a
+        ``RidgeEquilibrium`` it defaults to ``RidgeSymConcentricGrid`` (or
+        ``RidgeConcentricGrid`` if the equilibrium is not stellarator symmetric) at the
+        same resolution, and other grids raise a warning.
 
     """
 
@@ -90,7 +99,17 @@ class ForceBalance(_Objective):
 
         """
         eq = self.things[0]
-        if self._grid is None:
+        ridge = isinstance(eq.R_basis, FourierZernikeRidgeBasis)
+        if self._grid is None and ridge:
+            grid = (RidgeSymConcentricGrid if eq.sym else RidgeConcentricGrid)(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                m_b=eq.m_b,
+                n_b=eq.n_b,
+            )
+        elif self._grid is None:
             grid = ConcentricGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
@@ -101,6 +120,13 @@ class ForceBalance(_Objective):
             )
         else:
             grid = self._grid
+            warnif(
+                ridge and not isinstance(grid, RidgeConcentricGrid),
+                UserWarning,
+                "ForceBalance on a RidgeEquilibrium should use a RidgeConcentricGrid "
+                "or RidgeSymConcentricGrid, which keep nodes off the axis and ρ = 1 "
+                "and rotate with the corners, got " + type(grid).__name__ + ".",
+            )
 
         self._dim_f = 2 * grid.num_nodes
         self._data_keys = [

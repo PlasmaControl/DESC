@@ -1,5 +1,5 @@
 """The distance of a sharp boundary to a separatrix, read from per-edge distance fields.
-We include this penalty for force error minimization as the `SharpEquilibrium` 
+We include this penalty for force error minimization as the `RidgeEquilibrium` 
 needs to allow the parameterization of its boundary to slide.
 
 The separatrix of an equilibrium with m_b corners on its boundary is given as points

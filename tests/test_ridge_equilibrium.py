@@ -21,7 +21,7 @@ from desc.compute._ridge import (
 from desc.compute.utils import _compute as compute_fun
 from desc.equilibrium import Equilibrium, RidgeEquilibrium
 from desc.geometry import FourierRZToroidalRidgeSurface
-from desc.grid import Grid, SharpConcentricGrid, SharpSymConcentricGrid
+from desc.grid import ConcentricGrid, Grid, RidgeConcentricGrid, RidgeSymConcentricGrid
 from desc.io import load
 from desc.objectives import (
     BoundaryDistance,
@@ -30,6 +30,7 @@ from desc.objectives import (
     FixCornerFlatness,
     FixCorners,
     FixXLineLambda,
+    ForceBalance,
     ObjectiveFunction,
     SeparatrixDistanceFields,
     get_fixed_boundary_constraints,
@@ -155,15 +156,15 @@ def test_iota_must_match_corners():
 
 
 @pytest.mark.unit
-def test_sharp_sym_grid_mirror(eq):
-    """Test that the force on the dropped half of the sharp grid mirrors the kept half.
+def test_ridge_sym_grid_mirror(eq):
+    """Test that the force on the dropped half of the ridge grid mirrors the kept half.
 
     The mirror of every node of the symmetric half is a node of the full grid, and for a
     stellarator-symmetric state |F| there equals |F| on the kept node (the tied λ keeps
     its parity on mirrored rings).
     """
-    full = SharpConcentricGrid(L=8, M=8, N=4, NFP=NFP, m_b=M_B, n_b=N_B)
-    half = SharpSymConcentricGrid(L=8, M=8, N=4, NFP=NFP, m_b=M_B, n_b=N_B)
+    full = RidgeConcentricGrid(L=8, M=8, N=4, NFP=NFP, m_b=M_B, n_b=N_B)
+    half = RidgeSymConcentricGrid(L=8, M=8, N=4, NFP=NFP, m_b=M_B, n_b=N_B)
     np.testing.assert_allclose(np.sum(full.weights), np.sum(half.weights))
     T = 2 * np.pi / NFP
     mirror = np.column_stack(
@@ -181,6 +182,44 @@ def test_sharp_sym_grid_mirror(eq):
     F = eq.compute("|F|", grid=full)["|F|"]
     F_half = eq.compute("|F|", grid=half)["|F|"]
     np.testing.assert_allclose(F[j], F_half, rtol=1e-9)
+
+
+@pytest.mark.unit
+def test_force_balance_ridge_grid(eq):
+    """Test that ForceBalance defaults to the ridge grid and warns on other grids.
+
+    A symmetric RidgeEquilibrium gets the RidgeSymConcentricGrid at its own grid
+    resolution, a non-symmetric one the full RidgeConcentricGrid, and a standard
+    Equilibrium still gets the ConcentricGrid.
+    """
+
+    def default_grid(eq):
+        obj = ForceBalance(eq)
+        obj.build(verbose=0)
+        return obj, obj._constants["transforms"]["grid"]
+
+    res = dict(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, m_b=M_B, n_b=N_B)
+    obj, grid = default_grid(eq)
+    assert type(grid) is RidgeSymConcentricGrid
+    explicit = ForceBalance(eq, grid=RidgeSymConcentricGrid(**res))
+    explicit.build(verbose=0)
+    np.testing.assert_array_equal(
+        grid.nodes, explicit._constants["transforms"]["grid"].nodes
+    )
+    np.testing.assert_array_equal(
+        obj.compute(eq.params_dict), explicit.compute(eq.params_dict)
+    )
+
+    surf = ridge_surface()
+    surf.change_resolution(sym=False)
+    eq_asym = RidgeEquilibrium(surf, iota=PowerSeriesProfile([-0.5, 0, -0.5]))
+    assert type(default_grid(eq_asym)[1]) is RidgeConcentricGrid
+    assert type(default_grid(Equilibrium())[1]) is ConcentricGrid
+
+    ## a ridge grid raises no warning (warnings are errors in the tests), others do
+    ForceBalance(eq, grid=RidgeConcentricGrid(**res)).build(verbose=0)
+    with pytest.warns(UserWarning, match="RidgeConcentricGrid"):
+        ForceBalance(eq, grid=ConcentricGrid(L=8, M=8, N=4, NFP=NFP)).build(verbose=0)
 
 
 @pytest.mark.unit

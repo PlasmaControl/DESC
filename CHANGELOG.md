@@ -31,7 +31,6 @@ Bug Fixes
 - Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
 - Improves planar coil representation (``desc.coils.FourierPlanarCoil`` and ``desc.coils.FourierXYCoil``) internal rotation methods to avoid potential NaNs which could occur when the normal is parallel or antiparallel to Z-axis( to within machine epsilon), and also ensure the gradient at those edge cases is not only not NaN but also non-zero to avoid optimizer stalls at those cases.
-
 - Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.

@@ -128,6 +128,7 @@ Geometry
 
 Grid
 ****
+1D curve grids:
 
 .. autosummary::
     :toctree: _api/grid/
@@ -138,15 +139,36 @@ Grid
     desc.grid.CustomGridCurve
     desc.grid.LinearGridCurve
 
+2D toroidal surface grids:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
+
     desc.grid.AbstractGridToroidalSurface
     desc.grid.CustomGridToroidalSurface
     desc.grid.LinearGridToroidalSurface
+
+3D flux coordinate grids:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
 
     desc.grid.AbstractGridFlux
     desc.grid.CustomGridFlux
     desc.grid.LinearGridFlux
     desc.grid.QuadratureGridFlux
     desc.grid.ConcentricGridFlux
+
+Utility functions:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
 
     desc.grid.find_least_rational_surfaces
     desc.grid.find_most_rational_surfaces

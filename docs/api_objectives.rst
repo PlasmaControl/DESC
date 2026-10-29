@@ -265,6 +265,9 @@ often it is desired to specify where particular objectives should be targeted, s
 targeting quasi-symmetry on particular surfaces. For this a user defined grid can be
 created and passed to the corresponding objective.
 
+There are different types of grids representing different coordinate systems.
+For 1D coordinates along a curve:
+
 .. autosummary::
     :toctree: _api/grid/
     :recursive:
@@ -274,9 +277,23 @@ created and passed to the corresponding objective.
     desc.grid.CustomGridCurve
     desc.grid.LinearGridCurve
 
+For 2D coordinates on a toroidal surface:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
+
     desc.grid.AbstractGridToroidalSurface
     desc.grid.CustomGridToroidalSurface
     desc.grid.LinearGridToroidalSurface
+
+For 3D flux coordinates in an equilibrium:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
 
     desc.grid.AbstractGridFlux
     desc.grid.CustomGridFlux

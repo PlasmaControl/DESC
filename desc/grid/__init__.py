@@ -28,6 +28,17 @@ from ._utils import (
     periodic_spacing,
 )
 
+__all__ = [
+    "CustomGridCurve",
+    "LinearGridCurve",
+    "ConcentricGridFlux",
+    "CustomGridFlux",
+    "LinearGridFlux",
+    "QuadratureGridFlux",
+    "CustomGridToroidalSurface",
+    "LinearGridToroidalSurface",
+]
+
 
 def __getattr__(name):
     """Get new classes for deprecated names."""

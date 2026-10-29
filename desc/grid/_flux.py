@@ -439,7 +439,7 @@ class AbstractGridFlux(AbstractGrid):
 class LinearGridFlux(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
-    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta).
 
     Parameters
     ----------
@@ -729,7 +729,7 @@ class QuadratureGridFlux(AbstractGridFlux):
 
     Exactly integrates a Fourier-Zernike basis of resolution (L,M,N).
 
-    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta).
 
     Parameters
     ----------
@@ -863,7 +863,7 @@ class ConcentricGridFlux(AbstractGridFlux):
     Nodes are arranged concentrically within each toroidal cross-section, with more
     nodes per flux surface at larger radii.
 
-    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta).
 
     Parameters
     ----------
@@ -1097,8 +1097,8 @@ class ConcentricGridFlux(AbstractGridFlux):
 class CustomGridFlux(AbstractGridFlux):
     """Collocation grid with custom node placement.
 
-    Unlike subclasses LinearGridFlux and ConcentricGridFlux, the base CustomGridFlux
-    allows the user to pass in a custom set of collocation nodes.
+    Coordinates (x0,x1,x2) represent the flux coordinate system specified by the
+    coordinates input.
 
     Parameters
     ----------

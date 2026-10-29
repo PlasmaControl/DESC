@@ -920,6 +920,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 
     return data
 
+
 @register_compute_fun(
     name="|B|_pwO",
     label="|\\mathbf{B}_{pwO}|",
@@ -947,17 +948,19 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
-    
-    # DISCLAIMER: This must give automatically w2 = pi. 
-    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
-        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
+
+    # DISCLAIMER: This must give automatically w2 = pi.
+    w_2 = (
+        jnp.pi**2
+        * (1 - t_1 * t_2)
+        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
     )
-    
+
     B_min = params["B_min"]
     B_max = params["B_max"]
 
     p = kwargs.get("p", 3)
-    
+
     exponent = -1 * (
         ((zeta_B - zeta_C + t_1 * (theta_B - theta_C)) / w_1) ** (2 * p)
         + ((theta_B - theta_C + t_2 * (zeta_B - zeta_C)) / w_2) ** (2 * p)
@@ -969,6 +972,7 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     data["|B|_pwO"] = B_pwO
 
     return data
+
 
 @register_compute_fun(
     name="Q_pwO",
@@ -985,16 +989,18 @@ def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
-    iota0 = kwargs.get("iota", 0.6) 
+    iota0 = kwargs.get("iota", 0.6)
     NFP = transforms["grid"].NFP
 
     t_1 = params["t_1"]
     t_2 = params["t_2"]
     w_1 = jnp.pi / NFP * (1 - t_1 * t_2) / (1 + t_2 / iota0)
 
-    w_2 = jnp.pi**2 * (1- t_1 * t_2) / (
-        jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1)  / (iota0 + 1/t_1) ) 
-    ) 
+    w_2 = (
+        jnp.pi**2
+        * (1 - t_1 * t_2)
+        / (jnp.pi - (iota0 + t_2) * ((jnp.pi - NFP * w_1) / (iota0 + 1 / t_1)))
+    )
 
     zeta_pp = (w_1 - t_1 * w_2) / (1 - t_1 * t_2)
     zeta_pm = (w_1 + t_1 * w_2) / (1 - t_1 * t_2)
@@ -1019,6 +1025,7 @@ def _Q_piecewise_omni(params, transforms, profiles, data, **kwargs):
     data["Q_pwO"] = Q
 
     return data
+
 
 @register_compute_fun(
     name="isodynamicity",

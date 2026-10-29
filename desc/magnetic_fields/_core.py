@@ -3014,7 +3014,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         This is an optimizable parameter.
     theta_C : float
         Boozer poloidal coordinate of the center of the parallelogram.
-        This is an optimizable parameter. 
+        This is an optimizable parameter.
     t_1 : float
         Tilt parameter t_1.
         This is an optimizable parameter.
@@ -3022,7 +3022,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         Tilt parameter t_2.
         This is an optimizable parameter.
     NFP : int
-        Number of field periods. 
+        Number of field periods.
     p : int
         Exponent of the pwO field.
 
@@ -3046,7 +3046,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         "_theta_C",
         "_t_1",
         "_t_2",
-        "_p", 
+        "_p",
     ]
 
     def __init__(
@@ -3058,7 +3058,7 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
         t_1=0.2,
         t_2=1.0,
         NFP=1,
-        p=3, 
+        p=3,
     ):
         self._NFP = NFP
         self._B_min = B_min
@@ -3144,12 +3144,12 @@ class PiecewiseOmnigenousField(Optimizable, IOAble):
     def NFP(self):
         """int: Number of (toroidal) field periods."""
         return self._NFP
-    
+
     @property
     def p(self):
         """int: Exponent of the pwO parametrization."""
         return self._p
-        
+
     @p.setter
     def p(self, p):
         self._p = p

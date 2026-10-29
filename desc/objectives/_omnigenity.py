@@ -1131,7 +1131,7 @@ class PiecewiseOmnigenity(_Objective):
             "iota": iota_data["iota"][0],
             "iota_r": iota_data["iota_r"][0],
             "shear": iota_data["shear"][0],
-        }   
+        }
 
         eq_grid = constants["eq_transforms"]["grid"]
         # Express the intended theta phase at each physical point. Rolling the
@@ -1167,7 +1167,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data=data,
                 iota=data["iota"],
-                p = field.p, 
+                p=field.p,
             )
         else:
             field_data = compute_fun(
@@ -1178,7 +1178,7 @@ class PiecewiseOmnigenity(_Objective):
                 profiles={},
                 data={},
                 iota=data["iota"],
-                p = field.p, 
+                p=field.p,
             )
 
         B_pwO = field_data["|B|_pwO"]
@@ -1191,10 +1191,12 @@ class PiecewiseOmnigenity(_Objective):
         if self._field_fixed:
             Q_B = 0
         else:
-            Q_B = 100 * (field_params["B_max"] - field_params["B_min"] <= 0.15 )
+            Q_B = 100 * (field_params["B_max"] - field_params["B_min"] <= 0.15)
 
         # Residual: pwO error + corners penalty + Bmax/Bmin penalty
-        pwO_error = (eq_data["|B|"] - B_pwO) + constants["overlap_penalty"] * Q_pwO + Q_B
+        pwO_error = (
+            (eq_data["|B|"] - B_pwO) + constants["overlap_penalty"] * Q_pwO + Q_B
+        )
 
         return pwO_error.ravel()
 

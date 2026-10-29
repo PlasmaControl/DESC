@@ -93,10 +93,12 @@ class AbstractGridCurve(AbstractGrid):
 class LinearGridCurve(AbstractGridCurve):
     """Grid in which the nodes are linearly spaced in the curve coordinate.
 
+    Coordinates (x0,x1,x2) represent (_,_,s).
+
     Parameters
     ----------
     N : int, optional
-        Grid resolution.
+        Grid resolution for coordinate s.
     NFP : int
         Number of field periods (Default = 1).
     endpoint : bool
@@ -241,6 +243,8 @@ class LinearGridCurve(AbstractGridCurve):
 
 class CustomGridCurve(AbstractGridCurve):
     """Collocation grid with custom node placement.
+
+    Coordinates (x0,x1,x2) represent (_,_,s).
 
     Parameters
     ----------

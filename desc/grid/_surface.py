@@ -156,12 +156,14 @@ class AbstractGridToroidalSurface(AbstractGrid):
 class LinearGridToroidalSurface(AbstractGridToroidalSurface):
     """Grid in which the nodes are linearly spaced in the surface coordinate.
 
+    Coordinates (x0,x1,x2) represent (_,theta,zeta).
+
     Parameters
     ----------
     M : int, optional
-        Poloidal grid resolution.
+        Poloidal grid resolution, for coordinate theta.
     N : int, optional
-        Toroidal grid resolution.
+        Toroidal grid resolution, for coordinate zeta.
     NFP : int
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period
@@ -389,6 +391,8 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
 
 class CustomGridToroidalSurface(AbstractGridToroidalSurface):
     """Collocation grid with custom node placement.
+
+    Coordinates (x0,x1,x2) represent (_,theta,zeta).
 
     Parameters
     ----------

@@ -439,14 +439,16 @@ class AbstractGridFlux(AbstractGrid):
 class LinearGridFlux(AbstractGridFlux):
     """Grid in which the nodes are linearly spaced in each coordinate.
 
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
+
     Parameters
     ----------
     L : int, optional
-        Radial grid resolution.
+        Radial grid resolution, for coordinate rho.
     M : int, optional
-        Poloidal grid resolution.
+        Poloidal grid resolution, for coordinate alpha/theta/theta_PEST.
     N : int, optional
-        Toroidal grid resolution.
+        Toroidal grid resolution, for coordinate phi/zeta.
     NFP : int
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period
@@ -725,19 +727,23 @@ class LinearGridFlux(AbstractGridFlux):
 class QuadratureGridFlux(AbstractGridFlux):
     """Grid used for numerical quadrature.
 
-    Exactly integrates a Fourier-Zernike basis of resolution (L,M,N)
-    This grid is never symmetric.
+    Exactly integrates a Fourier-Zernike basis of resolution (L,M,N).
+
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
 
     Parameters
     ----------
     L : int
-        radial grid resolution (exactly integrates radial modes up to order L)
+        Radial grid resolution, for coordinate rho.
+        Exactly integrates radial modes up to order L.
     M : int
-        poloidal grid resolution (exactly integrates poloidal modes up to order M)
+        Poloidal grid resolution, for coordinate alpha/theta/theta_PEST.
+        Exactly integrates poloidal modes up to order M.
     N : int
-        toroidal grid resolution (exactly integrates toroidal modes up to order N)
+        Toroidal grid resolution, for coordinate phi/zeta.
+        Exactly integrates toroidal modes up to order N.
     NFP : int
-        number of field periods (Default = 1)
+        Number of field periods. (Default = 1)
 
     """
 
@@ -857,16 +863,18 @@ class ConcentricGridFlux(AbstractGridFlux):
     Nodes are arranged concentrically within each toroidal cross-section, with more
     nodes per flux surface at larger radii.
 
+    Coordinates (x0,x1,x2) represent (rho,theta,zeta) unless specified otherwise.
+
     Parameters
     ----------
     L : int
-        radial grid resolution
+        Radial grid resolution, for coordinate rho.
     M : int
-        poloidal grid resolution
+        Poloidal grid resolution, for coordinate alpha/theta/theta_PEST.
     N : int
-        toroidal grid resolution
+        Toroidal grid resolution, for coordinate phi/zeta.
     NFP : int
-        number of field periods (Default = 1)
+        Number of field periods. (Default = 1)
     sym : bool
         ``True`` for poloidal up/down symmetry, ``False`` otherwise.
         Default is ``False``.

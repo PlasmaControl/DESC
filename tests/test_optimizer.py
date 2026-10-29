@@ -202,10 +202,9 @@ def test_tr_step_exact_cho_alpha_converges(cond, frac):
     )
     U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
     p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius, 0.0)
-    # all three stop once ||p|| is within rtol of the radius, so they agree to
-    # the accuracy that tolerance allows, not to round-off
-    np.testing.assert_allclose(p, p_qr, rtol=0, atol=5 * rtol * trust_radius)
-    np.testing.assert_allclose(p, p_svd, rtol=0, atol=5 * rtol * trust_radius)
+    # all three converge to the same alpha, up to round-off from forming J^T J
+    np.testing.assert_allclose(p, p_qr, rtol=0, atol=1e-4 * trust_radius)
+    np.testing.assert_allclose(p, p_svd, rtol=0, atol=1e-4 * trust_radius)
 
 
 @pytest.mark.unit

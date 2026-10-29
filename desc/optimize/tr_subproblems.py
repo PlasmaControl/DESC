@@ -153,7 +153,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
 @jit
 def trust_region_step_exact_svd(
-    f, u, s, v, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10, threshold=None
+    f, u, s, v, trust_radius, initial_alpha=1e-6, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -264,7 +264,7 @@ def trust_region_step_exact_svd(
 
 @jit
 def trust_region_step_exact_cho(
-    g, B, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
+    g, B, trust_radius, initial_alpha=1e-6, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 

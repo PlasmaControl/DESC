@@ -552,9 +552,9 @@ class TestFourierPlanarCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=5e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=5e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=5e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -763,9 +763,9 @@ class TestFourierXYCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=5e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=5e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=5e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):

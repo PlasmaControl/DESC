@@ -123,9 +123,7 @@ if use_jax:  # noqa: C901
         def _householder_multiply(at, taus, c, *, transpose=False, offset=0):
             """Apply reflectors in ``at``/``taus`` to ``c`` from the left, one block.
 
-            ``at`` holds the reflectors as rows, ie ``V.T``, which is how ``geqrf``
-            already returns them, so the ``(M, N)`` transpose is never formed and all
-            three products below come from dot dimension numbers alone.
+            ``at`` holds the reflectors as rows, ie ``V.T``.
 
             Forms ``Q = I - V T^{-1} V^H`` via the identity ``T^{-1} + T^{-H} = V^H V``,
             recovering the triangular ``T^{-1}`` by correcting the diagonal. ``offset``
@@ -151,7 +149,7 @@ if use_jax:  # noqa: C901
         def _blocked_householder_multiply(at, taus, c, *, left, transpose):
             """Apply Q (or Q^H) to c in blocks (block sizes tuned on A100).
 
-            ``at`` is ``V.T``, ie the reflectors as rows, straight out of ``geqrf``.
+            ``at`` is ``V.T``, ie the reflectors as rows.
             """
             if not left:  # c @ Q == (Q^H @ c^H)^H
                 ct = c.conj().swapaxes(-1, -2)
@@ -176,12 +174,8 @@ if use_jax:  # noqa: C901
             mid_limit = 4096 * esize
             nb = min(k, 256 if m <= hi_limit else 128 if m <= mid_limit else 64)
 
-            # Each block spans all m rows rather than only rows j0:, so every block
-            # has the same shape and the loop can be a scan compiled once instead of
-            # k/nb unrolled copies. That is worth ~30x in compile time on the shapes
-            # lsqtr factorizes, and the rows above the block cost O(m nb^2) extra
-            # flops, which is the cost model the block size is already chosen by.
-            # Blocks are contiguous rows of ``at``, so no copy of it is needed.
+            # Each block spans all m rows (rows above its diagonal are masked in
+            # _householder_multiply), all full blocks share one shape and are scanned.
             def block(c, j0, width):
                 return _householder_multiply(
                     jax.lax.dynamic_slice(at, (j0, 0), (width, m)),
@@ -213,9 +207,7 @@ if use_jax:  # noqa: C901
             k = min(m, n)
             # mode="raw" returns the packed reflectors (transposed) plus tau factors,
             # via the existing geqrf primitive -- no new primitive / jaxlib rebuild.
-            # h is (N, M): upper triangle of h.T = R, strict lower = the reflectors,
-            # so h holds V.T already. Transposing only the leading (N, k) block keeps
-            # the (M, N) transpose from ever being materialized.
+            # h is (N, M): h.T has R on and above the diagonal, the reflectors below.
             h, taus = jnp.linalg.qr(a, mode="raw")
             R = jnp.triu(h[:, :k].swapaxes(-1, -2))
             # When m <= n geqrf's last reflector (row m-1) is the identity (tau == 0).

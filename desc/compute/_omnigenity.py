@@ -932,6 +932,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=[],
+    p="int: Super-Gaussian exponent; powers in the target are 2*p.",
     parameterization="desc.magnetic_fields._core.PiecewiseOmnigenousField",
 )
 def _B_piecewise_omni(params, transforms, profiles, data, **kwargs):

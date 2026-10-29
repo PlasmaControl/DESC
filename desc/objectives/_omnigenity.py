@@ -1095,6 +1095,7 @@ class PiecewiseOmnigenity(_Objective):
             constants = self.constants
 
         if self._eq_fixed:
+            eq_params = self._eq.params_dict
             field_params = params_1
             field = self.things[0]
         elif self._field_fixed:
@@ -1132,10 +1133,28 @@ class PiecewiseOmnigenity(_Objective):
             "shear": iota_data["shear"][0],
         }   
 
+        eq_grid = constants["eq_transforms"]["grid"]
+        # Express the intended theta phase at each physical point. Rolling the
+        # flattened values also moves some points into another toroidal column.
+        theta_shift = (constants["Ntheta_B"] // 2) * (
+            2 * jnp.pi / constants["Ntheta_B"]
+        )
+        field_grid = Grid(
+            nodes=jnp.column_stack(
+                (
+                    eq_grid.nodes[:, 0],
+                    (eq_data["theta_B"] - theta_shift) % (2 * jnp.pi),
+                    eq_data["zeta_B"] % (2 * jnp.pi / eq_grid.NFP),
+                )
+            ),
+            NFP=eq_grid.NFP,
+            sort=False,
+            jitable=True,
+        )
         field_transforms = get_transforms(
             self._field_data_keys,
             obj=field,
-            grid=constants["eq_transforms"]["grid"], # Ensure that the residual is evaluated at same collocation nodes
+            grid=field_grid,
             jitable=True,
         )
 
@@ -1162,10 +1181,7 @@ class PiecewiseOmnigenity(_Objective):
                 p = field.p, 
             )
 
-        Ntheta = constants["Ntheta_B"]
-
-        # Rolling ensures max(B) occurs in the corners
-        B_pwO = jnp.roll(field_data["|B|_pwO"], Ntheta / 2)
+        B_pwO = field_data["|B|_pwO"]
         Q_pwO = field_data["Q_pwO"]
 
         # ReLU operation

@@ -331,7 +331,9 @@ def trust_region_step_exact_cho(
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            q = solve_triangular(R.T, p, lower=False)
+            # R is lower triangular with R @ R.T = Bi, so the Newton update for
+            # alpha needs ||q||^2 = p.T @ inv(Bi) @ p, i.e. q = inv(R) @ p
+            q = solve_triangular(R, p, lower=True)
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius

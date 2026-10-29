@@ -73,7 +73,12 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
-from desc.optimize.utils import chol, gershgorin_bounds
+from desc.optimize.tr_subproblems import (
+    trust_region_step_exact_cho,
+    trust_region_step_exact_qr,
+    trust_region_step_exact_svd,
+)
+from desc.optimize.utils import chol, gershgorin_bounds, solve_triangular_regularized
 from desc.utils import get_all_instances
 
 
@@ -152,6 +157,75 @@ def test_chol_positive_definite_path_unchanged():
         rtol=1e-14,
         atol=1e-14,
     )
+
+
+def _tr_test_problem(m, n, cond, seed):
+    """Least squares problem min ||J p + f|| with singular values 1 ... 1/cond."""
+    rng = default_rng(seed)
+    U, _ = np.linalg.qr(rng.standard_normal((m, n)))
+    V, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    J = (U * np.logspace(0, -np.log10(cond), n)) @ V.T
+    f = rng.standard_normal(m)
+    return J, f
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cond", [1e2, 1e4, 1e6])
+@pytest.mark.parametrize("frac", [0.5, 0.1, 0.01])
+def test_tr_step_exact_cho_alpha_converges(cond, frac):
+    """The cho root-find returns an alpha whose step lies on the trust region.
+
+    The Levenberg-Marquardt parameter returned by the Cholesky method must satisfy
+    ``abs(||p(alpha)|| - trust_radius) <= rtol * trust_radius`` for
+    ``p(alpha) = -(B + alpha I)^-1 g``, within the default 10 iterations, and the
+    step must agree with the QR and SVD methods.
+    """
+    rtol = 0.01
+    J, f = _tr_test_problem(60, 30, cond, seed=0)
+    g, B = J.T @ f, J.T @ J
+    p_newton = np.linalg.lstsq(J, -f, rcond=None)[0]
+    trust_radius = frac * np.linalg.norm(p_newton)
+
+    p, hits_boundary, alpha = trust_region_step_exact_cho(
+        jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
+    )
+    assert hits_boundary
+    assert alpha > 0
+    p_alpha = np.linalg.solve(B + float(alpha) * np.eye(B.shape[0]), -g)
+    assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
+
+    Q, R = np.linalg.qr(J)
+    Qt_f = jnp.asarray(Q.T @ f)
+    R = jnp.asarray(R)
+    p_qr, _, _ = trust_region_step_exact_qr(
+        solve_triangular_regularized(R, -Qt_f), Qt_f, R, trust_radius, 0.0
+    )
+    U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
+    p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius, 0.0)
+    # all three converge to the same alpha, up to round-off from forming J^T J
+    np.testing.assert_allclose(p, p_qr, rtol=0, atol=1e-4 * trust_radius)
+    np.testing.assert_allclose(p, p_svd, rtol=0, atol=1e-4 * trust_radius)
+
+
+@pytest.mark.unit
+def test_tr_step_exact_cho_indefinite():
+    """The cho method on an indefinite Hessian, as used by fmintr."""
+    rng = default_rng(0)
+    n = 30
+    Q, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    B = (Q * np.linspace(-1, 2, n)) @ Q.T
+    g = rng.standard_normal(n)
+    rtol = 0.01
+    for trust_radius in [0.1, 1.0]:
+        p, hits_boundary, alpha = trust_region_step_exact_cho(
+            jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
+        )
+        assert hits_boundary
+        np.testing.assert_allclose(np.linalg.norm(p), trust_radius, rtol=1e-12)
+        # B + alpha I must be positive definite at the returned alpha
+        assert np.linalg.eigvalsh(B + float(alpha) * np.eye(n)).min() > 0
+        p_alpha = np.linalg.solve(B + float(alpha) * np.eye(n), -g)
+        assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
 
 
 @jit

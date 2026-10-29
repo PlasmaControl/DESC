@@ -21,3 +21,22 @@ from ._current_potential import (
     solve_regularized_surface_current,
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
+
+__all__ = [
+    "CurrentPotentialField",
+    "DommaschkPotentialField",
+    "FourierCurrentPotentialField",
+    "MagneticFieldFromUser",
+    "OmnigenousField",
+    "PoloidalMagneticField",
+    "ScalarPotentialField",
+    "ScaledMagneticField",
+    "SplineMagneticField",
+    "SumMagneticField",
+    "ToroidalMagneticField",
+    "VectorPotentialField",
+    "VerticalMagneticField",
+    "field_line_integrate",
+    "read_BNORM_file",
+    "solve_regularized_surface_current",
+]

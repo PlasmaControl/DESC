@@ -9,3 +9,13 @@ from .curve import (
     SplineXYZCurve,
 )
 from .surface import FourierRZToroidalSurface, ZernikeRZToroidalSection
+
+__all__ = [
+    "FourierPlanarCurve",
+    "FourierRZCurve",
+    "FourierRZToroidalSurface",
+    "FourierXYCurve",
+    "FourierXYZCurve",
+    "SplineXYZCurve",
+    "ZernikeRZToroidalSection",
+]

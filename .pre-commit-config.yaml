@@ -50,6 +50,14 @@ repos:
         pass_filenames: true
   - repo: local
     hooks:
+      - id: check_public_api
+        name: check_public_api
+        entry: devtools/check_public_api.py
+        language: script
+        files: ^(desc/.*\.py|docs/api.*\.rst)$
+        pass_filenames: false
+  - repo: local
+    hooks:
     - id: clean_logfiles
       name: clean_logfiles
       entry: devtools/clean_logfiles.sh

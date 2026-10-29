@@ -26,6 +26,15 @@ from desc.io import IOAble
 from desc.magnetic_fields import _MagneticField
 from desc.utils import cross, dot, errorif, safediv, setdefault
 
+__all__ = [
+    "CurveParticleInitializer",
+    "ManualParticleInitializerFlux",
+    "ManualParticleInitializerLab",
+    "SurfaceParticleInitializer",
+    "VacuumGuidingCenterTrajectory",
+    "trace_particles",
+]
+
 JOULE_PER_EV = 11606 * Boltzmann
 EV_PER_JOULE = 1 / JOULE_PER_EV
 

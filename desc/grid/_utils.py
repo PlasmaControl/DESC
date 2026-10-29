@@ -4,6 +4,7 @@ import numpy as np
 from scipy import optimize
 
 from desc.backend import jnp
+from desc.utils import warnif
 
 
 def cf_to_dec(cf):
@@ -384,6 +385,11 @@ def _create_linear_nodes(res, x, period, endpoint, NFP=1, sym=False):
 
     elif x is not None:
         xx = np.atleast_1d(x).astype(float)
+        warnif(
+            np.any(xx > period),
+            msg="Nodes are outside the coordinate bounds and "
+            + "will be adjusted by the coordinate periodicity.",
+        )
         xx[xx != period] %= period  # enforce periodicity
         xx = np.sort(xx)  # need to sort to compute correct spacing
         if sym:

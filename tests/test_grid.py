@@ -1076,3 +1076,14 @@ def test_custom_jitable_grid_indexing():
         _ = eq.compute(["|B|"], grid=grid2, override_grid=True)["|B|"]
     b3 = eq.compute(["|B|"], grid=grid3, override_grid=True)["|B|"]
     np.testing.assert_allclose(b1, b3)
+
+
+@pytest.mark.unit
+def test_periodicity_warning():
+    """Test that warning is thrown when nodes are outside of bounds."""
+    with pytest.warns(UserWarning, match="Nodes are outside the coordinate bounds"):
+        _ = LinearGridToroidalSurface(theta=np.linspace(np.pi, 3 * np.pi, 10))
+    with pytest.warns(UserWarning, match="Nodes are outside the coordinate bounds"):
+        _ = LinearGridFlux(theta=np.linspace(2 * np.pi, 4 * np.pi, 10))
+    with pytest.warns(UserWarning, match="Nodes are outside the coordinate bounds"):
+        _ = LinearGridFlux(zeta=np.linspace(0, 4 * np.pi, 10))

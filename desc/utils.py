@@ -980,9 +980,7 @@ def reflection_matrix(normal):
     return R
 
 
-def rotation_matrix(
-    axis_or_vector=None, angle_or_vector=None, *, axis=None, angle=None
-):
+def rotation_matrix(axis_or_vector=None, angle_or_vector=None, **kwargs):
     """Matrix to rotate points, either about an axis or from one vector onto another.
 
     If ``angle_or_vector`` is a scalar (or None), returns the matrix that rotates
@@ -1009,10 +1007,6 @@ def rotation_matrix(
         If float, angle to rotate by, in radians. If None, use norm of
         ``axis_or_vector`` as the angle. If array-like of shape(3,), vector in
         cartesian (X,Y,Z) coordinates to rotate ``axis_or_vector`` onto.
-    axis : array-like, shape(3,), optional
-        Keyword alias for ``axis_or_vector``, for rotating about an axis.
-    angle : float, optional
-        Keyword alias for ``angle_or_vector``, for rotating about an axis.
 
     Returns
     -------
@@ -1020,25 +1014,13 @@ def rotation_matrix(
         Matrix to rotate points in cartesian (X,Y,Z) coordinates.
 
     """
-    errorif(
-        axis is not None and axis_or_vector is not None,
-        ValueError,
-        "Pass only one of axis and axis_or_vector.",
+    axis_or_vector = parse_argname_change(
+        axis_or_vector, kwargs, "axis", "axis_or_vector"
     )
-    errorif(
-        angle is not None and angle_or_vector is not None,
-        ValueError,
-        "Pass only one of angle and angle_or_vector.",
+    angle_or_vector = parse_argname_change(
+        angle_or_vector, kwargs, "angle", "angle_or_vector"
     )
-    if axis is not None:
-        axis_or_vector = axis
-    if angle is not None:
-        errorif(
-            jnp.ndim(angle) > 0,
-            ValueError,
-            f"angle must be a scalar, got shape {jnp.shape(angle)}",
-        )
-        angle_or_vector = angle
+
     errorif(axis_or_vector is None, ValueError, "axis_or_vector must be given.")
     if angle_or_vector is not None and jnp.ndim(angle_or_vector) > 0:
         errorif(

@@ -20,7 +20,7 @@ Breaking Changes and Deprecations
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
-- ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals.
+- ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
 
 Bug Fixes
 

@@ -23,7 +23,7 @@ def test_rotation_matrix_angle():
     np.testing.assert_allclose(A, At, atol=1e-10)
     A = rotation_matrix([0, 0, 2], np.pi / 2)
     np.testing.assert_allclose(A, At, atol=1e-10)
-    A = rotation_matrix(axis=[0, 0, 2], angle=np.pi / 2)
+    A = rotation_matrix([0, 0, 2], np.pi / 2)
     np.testing.assert_allclose(A, At, atol=1e-10)
 
 

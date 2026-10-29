@@ -1,6 +1,7 @@
 """Classes defining objectives for equilibrium and optimization."""
 
 from ._bootstrap import BootstrapRedlConsistency
+from ._boundary_distance import BoundaryDistance, SeparatrixDistanceFields
 from ._coils import (
     CoilArclengthVariance,
     CoilCurrentLength,
@@ -62,6 +63,7 @@ from .getters import (
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
     get_NAE_constraints,
+    get_soft_boundary_constraints,
     maybe_add_self_consistency,
 )
 from .linear_objectives import (
@@ -76,6 +78,8 @@ from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
     FixCoilCurrent,
+    FixCornerFlatness,
+    FixCorners,
     FixCurrent,
     FixCurveRotation,
     FixCurveShift,
@@ -103,6 +107,7 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixXLineLambda,
     ShareParameters,
 )
 from .objective_funs import ObjectiveFunction

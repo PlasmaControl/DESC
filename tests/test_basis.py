@@ -1,5 +1,6 @@
 """Tests for basis classes and evaluation functions."""
 
+import h5py
 import mpmath
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
+    FourierZernikeRidgeBasis,
     PowerSeries,
     ZernikePolynomial,
     _jacobi,
@@ -27,6 +29,7 @@ from desc.basis import (
 )
 from desc.derivatives import Derivative
 from desc.grid import LinearGrid
+from desc.io import load
 
 
 class TestBasis:
@@ -478,6 +481,46 @@ class TestBasis:
         )
 
     @pytest.mark.unit
+    def test_ridge_basis_sharp_resolution(self, tmp_path):
+        """Test that the ridge bases keep their sharp resolutions, saved or not."""
+        kw = dict(NFP=5, m_b=5, n_b=-1, gamma=0.75, sym="cos")
+        surface = DoubleFourierRidgeSeries(M=3, N=2, M_b=2, **kw)
+        volume = FourierZernikeRidgeBasis(4, 3, 2, 3, 2, 1, **kw)
+        assert (surface.M_b, surface.N_b) == (2, 2)  # N_b defaults to N
+        assert (volume.L_b, volume.M_b, volume.N_b) == (3, 2, 1)
+
+        surface.change_resolution(4, 3, 1, 2)
+        volume.change_resolution(5, 4, 3, 2, 3)
+        assert (surface.M, surface.N, surface.M_b, surface.N_b) == (4, 3, 1, 2)
+        assert (volume.L_b, volume.M_b, volume.N_b) == (2, 3, 3)
+        assert surface.sharp_bases[1].M == 1 and volume.sharp_bases[1].L == 2
+        assert surface == DoubleFourierRidgeSeries(M=4, N=3, M_b=1, N_b=2, **kw)
+        assert volume == FourierZernikeRidgeBasis(5, 4, 3, 2, 3, 3, **kw)
+
+        ## the sharp resolutions are saved, and a file saved without them (before
+        ## they were saved) gets them from the sharp blocks
+        for basis, names in ((surface, ["_M_b", "_N_b"]), (volume, ["_L_b"])):
+            for old in (False, True):
+                path = str(tmp_path / f"{type(basis).__name__}_{old}.h5")
+                basis.save(path)
+                with h5py.File(path, "r+") as f:
+                    assert all(name in f for name in names)
+                    if old:
+                        for name in ("_L_b", "_M_b", "_N_b"):
+                            f.pop(name, None)
+                if old:
+                    with pytest.warns(RuntimeWarning, match="was not loaded"):
+                        loaded = load(path)
+                else:
+                    loaded = load(path)
+                assert loaded == basis and hash(loaded) == hash(basis)
+                for name in ("L_b", "M_b", "N_b"):
+                    if hasattr(basis, name):
+                        assert getattr(loaded, name) == getattr(basis, name)
+                        assert type(getattr(loaded, "_" + name)) is int
+                np.testing.assert_array_equal(loaded.modes, basis.modes)
+
+    @pytest.mark.unit
     def test_basis_hash(self):
         """Test that all basis classes can be hashable."""
         all_bases = []
@@ -500,6 +543,12 @@ class TestBasis:
             [
                 DoubleFourierRidgeSeries(M=3, N=3, M_b=2, m_b=3, n_b=1, gamma=0.5),
                 DoubleFourierRidgeSeries(M=3, N=3, M_b=2, m_b=3, n_b=1, gamma=0.5),
+            ]
+        )
+        all_bases.append(
+            [
+                FourierZernikeRidgeBasis(3, 3, 3, 2, 2, m_b=3, n_b=1, gamma=0.5),
+                FourierZernikeRidgeBasis(3, 3, 3, 2, 2, m_b=3, n_b=1, gamma=0.5),
             ]
         )
         for basis1, basis2 in all_bases:

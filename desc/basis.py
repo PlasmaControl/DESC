@@ -20,6 +20,7 @@ __all__ = [
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
+    "FourierZernikeRidgeBasis",
     "ChebyshevPolynomial",
 ]
 
@@ -738,8 +739,10 @@ class _RidgeBasis(_Basis):
         X = A + Re(Q_γ) B_1 + Im(Q_γ) B_2,
 
     where A, B_1 and B_2 are expanded in standard bases (the sub-bases) and Q_γ is the
-    ridge function (see ``ridge_function``) of the helical angle α_b = θ - ι_b ζ, with
-    ι_b = NFP n_b / m_b. Q_γ vanishes on the m_b ridges α_b = 2πk/m_b, where the
+    ridge function of ρ and of the helical angle α_b = θ - ι_b ζ, with
+    ι_b = NFP n_b / m_b (``ridge_function`` on a surface, ``disc_ridge_function`` in a
+    volume; each subclass gives it in ``_ridge_factor``). Q_γ vanishes on the m_b
+    ridges α_b = 2πk/m_b, where the
     cross-sections have corners of angle γπ.
 
     The modes are those of the sub-bases stacked in the order A, B_1, B_2, so every row
@@ -755,6 +758,8 @@ class _RidgeBasis(_Basis):
         "_m_b",
         "_n_b",
         "_gamma",
+        "_M_b",
+        "_N_b",
     ]
     _static_attrs = _Basis._static_attrs + [
         "_smooth_basis",
@@ -762,6 +767,8 @@ class _RidgeBasis(_Basis):
         "_m_b",
         "_n_b",
         "_gamma",
+        "_M_b",
+        "_N_b",
     ]
 
     def _check_ridge_inputs(self, m_b, n_b, gamma):
@@ -803,7 +810,13 @@ class _RidgeBasis(_Basis):
         return np.vstack([basis.modes for basis in self._sub_bases])
 
     def _set_up(self):
-        """Do things after loading or changing resolution."""
+        """Do things after loading or changing resolution.
+
+        Bases saved before M_b and N_b were saved get them from their sharp blocks.
+        """
+        if getattr(self, "_M_b", None) is None:
+            self._M_b, self._N_b = self._sharp_bases[0].M, self._sharp_bases[0].N
+        self._M_b, self._N_b = int(self._M_b), int(self._N_b)
         self._modes = self._get_modes()
         self._blocks = np.concatenate(
             [np.full(basis.num_modes, b) for b, basis in enumerate(self._sub_bases)]
@@ -836,12 +849,12 @@ class _RidgeBasis(_Basis):
     @property
     def M_b(self):
         """int: Maximum poloidal resolution of the sharp blocks."""
-        return self._sharp_bases[0].M
+        return self._M_b
 
     @property
     def N_b(self):
         """int: Maximum toroidal resolution of the sharp blocks."""
-        return self._sharp_bases[0].N
+        return self._N_b
 
     @property
     def m_b(self):
@@ -915,6 +928,7 @@ class _RidgeBasis(_Basis):
         """
         if not isinstance(grid, _Grid):
             grid = Grid(grid, sort=False, jitable=True)
+        full = modes is None  # then each sub-basis evaluates all of its own modes
         if modes is None:
             modes, blocks = self.modes, self.blocks
         modes = np.atleast_2d(modes)
@@ -925,26 +939,38 @@ class _RidgeBasis(_Basis):
         derivatives = np.asarray(derivatives).ravel()
         dr, dt, dz = (int(d) for d in derivatives[:3])
 
+        ρ = grid.nodes[:, 0]
         α = grid.nodes[:, 1] - self.iota_b * grid.nodes[:, 2]
         columns, order = [], []
         for b, basis in enumerate(self._sub_bases):
             idx = np.where(blocks == b)[0]
             if not idx.size:
                 continue
+            sub_modes = None if full else modes[idx]
             if b == 0:
-                y = basis.evaluate(grid, derivatives, modes=modes[idx])
+                y = basis.evaluate(grid, derivatives, modes=sub_modes)
             else:
                 ## Leibniz rule, where ∂_θ Q = ∂_α Q and ∂_ζ Q = -ι_b ∂_α Q
                 y = 0
                 part = "re" if b == 1 else "im"
-                for i in range(dt + 1):
-                    for j in range(dz + 1):
-                        Q = ridge_function(α, self.m_b, self.gamma, i + j, part)
-                        F = basis.evaluate(
-                            grid, np.array([dr, dt - i, dz - j]), modes=modes[idx]
-                        )
-                        coef = comb(dt, i) * comb(dz, j) * (-self.iota_b) ** j
-                        y = y + coef * Q[:, None] * F
+                for h in range(dr + 1):
+                    for i in range(dt + 1):
+                        for j in range(dz + 1):
+                            Q = self._ridge_factor(ρ, α, h, i + j, part)
+                            if Q is None:
+                                continue
+                            F = basis.evaluate(
+                                grid,
+                                np.array([dr - h, dt - i, dz - j]),
+                                modes=sub_modes,
+                            )
+                            coef = (
+                                comb(dr, h)
+                                * comb(dt, i)
+                                * comb(dz, j)
+                                * (-self.iota_b) ** j
+                            )
+                            y = y + coef * Q[:, None] * F
             columns.append(y)
             order.append(idx)
         return jnp.concatenate(columns, axis=1)[:, np.argsort(np.concatenate(order))]
@@ -1023,8 +1049,9 @@ class DoubleFourierRidgeSeries(_RidgeBasis):
         self._sym = bool(sym) if not sym else str(sym)
         self._spectral_indexing = "linear"
         self._check_ridge_inputs(m_b, n_b, gamma)
-        M_b = check_nonnegint(M_b, "M_b", False)
-        N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        self._M_b = check_nonnegint(M_b, "M_b", False)
+        self._N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        M_b, N_b = self._M_b, self._N_b
         self._smooth_basis = DoubleFourierSeries(M, N, NFP, sym)
         self._sharp_bases = (
             DoubleFourierSeries(M_b, N_b, NFP, sym),
@@ -1057,13 +1084,156 @@ class DoubleFourierRidgeSeries(_RidgeBasis):
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
         self._sym = sym if sym is not None else self.sym
-        N_b = N_b if N_b is not None else N
+        self._M_b = check_nonnegint(M_b, "M_b", False)
+        self._N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        M_b, N_b = self._M_b, self._N_b
         self._smooth_basis.change_resolution(M, N, self.NFP, self.sym)
         self._sharp_bases[0].change_resolution(M_b, N_b, self.NFP, self.sym)
         self._sharp_bases[1].change_resolution(
             M_b, N_b, self.NFP, self._opposite_sym(self.sym)
         )
         self._set_up()
+
+    def _ridge_factor(self, rho, alpha, dr, da, part):
+        """∂_ρ^dr ∂_α^da of Re or Im Q_γ on ρ = 1, None where it vanishes (dr > 0)."""
+        if dr > 0:
+            return None
+        return ridge_function(alpha, self.m_b, self.gamma, da, part)
+
+
+class FourierZernikeRidgeBasis(_RidgeBasis):
+    """3D ridge basis set for a toroidal volume whose boundary has sharp corners.
+
+    Fourier-Zernike series for the smooth block A and the sharp blocks B_1 and B_2:
+
+        X(ρ, θ, ζ) = A(ρ, θ, ζ) + Re(Q_γ(z)) B_1(ρ, θ, ζ) + Im(Q_γ(z)) B_2(ρ, θ, ζ),
+
+    with Q_γ the ridge function of z = ρ exp(iα_b), α_b = θ - ι_b ζ (see
+    ``disc_ridge_function``). Q_γ vanishes only at the m_b corners z^m_b = 1 of the
+    boundary, the X-lines, and is smooth everywhere else, the axis included. The ρ = 1
+    trace of every mode is the mode (m, n) of the same block of a
+    ``DoubleFourierRidgeSeries``. See ``_RidgeBasis``.
+
+    Parameters
+    ----------
+    L, M, N : int
+        Maximum radial, poloidal and toroidal resolution of the smooth block A.
+    L_b, M_b, N_b : int
+        Maximum radial, poloidal and toroidal resolution of the sharp blocks B_1 and
+        B_2. N_b defaults to N.
+    NFP : int
+        Number of field periods.
+    m_b : int
+        Number of ridges (corners on a cross-section).
+    n_b : int
+        Toroidal winding of the ridges, which have rotational transform
+        ι_b = NFP n_b / m_b.
+    gamma : float
+        Exponent γ of the ridge function, 0 < γ ≤ 1. γ = 1 has no corners.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+        A and B_1 take this symmetry and B_2 the opposite one.
+    spectral_indexing : {``'ansi'``, ``'fringe'``}
+        Indexing method of the Fourier-Zernike sub-bases, default ``'ansi'``.
+
+    """
+
+    _io_attrs_ = _RidgeBasis._io_attrs_ + ["_L_b"]
+    _static_attrs = _RidgeBasis._static_attrs + ["_L_b"]
+
+    def __init__(
+        self,
+        L,
+        M,
+        N,
+        L_b,
+        M_b,
+        N_b=None,
+        NFP=1,
+        m_b=1,
+        n_b=0,
+        gamma=1.0,
+        sym=False,
+        spectral_indexing="ansi",
+    ):
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = str(spectral_indexing)
+        self._check_ridge_inputs(m_b, n_b, gamma)
+        self._L_b = check_nonnegint(L_b, "L_b", False)
+        self._M_b = check_nonnegint(M_b, "M_b", False)
+        self._N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        L_b, M_b, N_b = self._L_b, self._M_b, self._N_b
+        self._smooth_basis = FourierZernikeBasis(L, M, N, NFP, sym, spectral_indexing)
+        self._sharp_bases = (
+            FourierZernikeBasis(L_b, M_b, N_b, NFP, sym, spectral_indexing),
+            FourierZernikeBasis(
+                L_b, M_b, N_b, NFP, self._opposite_sym(sym), spectral_indexing
+            ),
+        )
+        self._set_up()
+
+    def _set_up(self):
+        """Do things after loading or changing resolution.
+
+        Bases saved before L_b was saved get it from their sharp blocks.
+        """
+        if getattr(self, "_L_b", None) is None:
+            self._L_b = self._sharp_bases[0].L
+        self._L_b = int(self._L_b)
+        super()._set_up()
+
+    @property
+    def L_b(self):
+        """int: Maximum radial resolution of the sharp blocks."""
+        return self._L_b
+
+    def change_resolution(self, L, M, N, L_b, M_b, N_b=None, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L, M, N : int
+            Maximum radial, poloidal and toroidal resolution of the smooth block.
+        L_b, M_b, N_b : int
+            Maximum radial, poloidal and toroidal resolution of the sharp blocks.
+            N_b defaults to N.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = NFP if NFP is not None else self.NFP
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._sym = sym if sym is not None else self.sym
+        self._L_b = check_nonnegint(L_b, "L_b", False)
+        self._M_b = check_nonnegint(M_b, "M_b", False)
+        self._N_b = check_nonnegint(N_b if N_b is not None else N, "N_b", False)
+        L_b, M_b, N_b = self._L_b, self._M_b, self._N_b
+        self._smooth_basis.change_resolution(L, M, N, self.NFP, self.sym)
+        self._sharp_bases[0].change_resolution(L_b, M_b, N_b, self.NFP, self.sym)
+        self._sharp_bases[1].change_resolution(
+            L_b, M_b, N_b, self.NFP, self._opposite_sym(self.sym)
+        )
+        self._set_up()
+
+    def _ridge_factor(self, rho, alpha, dr, da, part):
+        """∂_ρ^dr ∂_α^da of Re or Im Q_γ(ρ exp(iα))."""
+        return disc_ridge_function(rho, alpha, self.m_b, self.gamma, dr, da, part)
 
 
 class ZernikePolynomial(_Basis):
@@ -2268,6 +2438,63 @@ def ridge_function(alpha, m_b, gamma, dt=0, part="re"):
         f = jax.grad(f)
     alpha = jnp.asarray(alpha, dtype=float)
     return vmap(f)(alpha.ravel()).reshape(alpha.shape)
+
+
+def disc_ridge_function(rho, alpha, m_b, gamma, dr=0, da=0, part="re"):
+    """Ridge function Q_γ of the ridge basis on the unit disc ρ ≤ 1.
+
+    Q_γ = (|P| / m_b) exp(iγ arg P),   P = 1 - z^m_b,   z = ρ exp(iα),
+
+    which is ``ridge_function`` on ρ = 1. As Re(P) ≥ 0 on the closed disc, arg(P) is
+    the principal value and no branch cut is reached. Q_γ vanishes only at the m_b
+    corners z^m_b = 1 and is smooth everywhere else, with Q_γ = 1/m_b on the axis.
+    The modulus and the real part of P are written without cancellation,
+
+    |P|² = (1 - ρ^m_b)² + 4 ρ^m_b sin²(m_b α/2),
+    Re(P) = 1 - ρ^m_b + 2 ρ^m_b sin²(m_b α/2),
+
+    and the derivatives are found by automatic differentiation.
+
+    Parameters
+    ----------
+    rho, alpha : ndarray, shape(N,)
+        Radial coordinate and helical angle α_b = θ - ι_b ζ to evaluate at.
+    m_b : int
+        Number of ridges.
+    gamma : float
+        Exponent on the argument of P, 0 < γ ≤ 1.
+    dr, da : int
+        Order of the derivative in ρ and in α.
+    part : {"re", "im"}
+        Whether to return the real or the imaginary part of Q_γ.
+
+    Returns
+    -------
+    y : ndarray, shape(N,)
+        Real or imaginary part of Q_γ (or its derivative) evaluated at (rho, alpha).
+
+    """
+    rho, alpha = jnp.broadcast_arrays(
+        jnp.asarray(rho, dtype=float), jnp.asarray(alpha, dtype=float)
+    )
+    return _disc_ridge_function(rho, alpha, m_b, gamma, dr, da, part)
+
+
+@functools.partial(jit, static_argnums=(2, 3, 4, 5, 6))
+def _disc_ridge_function(rho, alpha, m_b, gamma, dr, da, part):
+    def Q(r, a):
+        rm = r**m_b
+        s2 = jnp.sin(m_b * a / 2) ** 2
+        mod = jnp.sqrt((1 - rm) ** 2 + 4 * rm * s2) / m_b
+        arg = gamma * jnp.arctan2(-rm * jnp.sin(m_b * a), 1 - rm + 2 * rm * s2)
+        return mod * (jnp.cos(arg) if part == "re" else jnp.sin(arg))
+
+    f = Q
+    for _ in range(dr):
+        f = jax.grad(f, argnums=0)
+    for _ in range(da):
+        f = jax.grad(f, argnums=1)
+    return vmap(f)(rho.ravel(), alpha.ravel()).reshape(rho.shape)
 
 
 def zernike_norm(l, m):

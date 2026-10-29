@@ -11,12 +11,18 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    FourierZernikeBasis,
+    FourierZernikeRidgeBasis,
+    fourier,
+    zernike_radial,
+)
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
     _grow_seeds,
+    _parse_parameterization,
     get_data_deps,
     get_params,
     get_profiles,
@@ -24,6 +30,7 @@ from desc.compute.utils import (
 )
 from desc.geometry import (
     FourierRZCurve,
+    FourierRZToroidalRidgeSurface,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
@@ -999,7 +1006,7 @@ class Equilibrium(IOAble, Optimizable):
         if data is None:
             data = {}
 
-        p = "desc.equilibrium.equilibrium.Equilibrium"
+        p = _parse_parameterization(self)
         deps = set(
             get_data_deps(names, obj=p, has_axis=grid.axis.size, data=data) + names
         )
@@ -1021,7 +1028,7 @@ class Equilibrium(IOAble, Optimizable):
         need_src_deps = _grow_seeds(p, set(filter(need_src, deps)), deps)
 
         dep0d = {
-            dep for dep in deps if is_0d_vol_grid(dep) and dep not in need_src_deps
+            dep for dep in deps if is_0d_vol_grid(dep, p) and dep not in need_src_deps
         }
         deps_after_0d = set(
             get_data_deps(
@@ -1032,7 +1039,7 @@ class Equilibrium(IOAble, Optimizable):
         dep1dr = {
             dep
             for dep in deps_after_0d
-            if is_1dr_rad_grid(dep) and dep not in need_src_deps
+            if is_1dr_rad_grid(dep, p) and dep not in need_src_deps
         }
         deps_after_0d_1dr = set(
             get_data_deps(
@@ -1043,7 +1050,7 @@ class Equilibrium(IOAble, Optimizable):
         dep1dz = {
             dep
             for dep in deps_after_0d_1dr
-            if is_1dz_tor_grid(dep) and dep not in need_src_deps
+            if is_1dz_tor_grid(dep, p) and dep not in need_src_deps
             # These don't need a special grid, since the transforms are always
             # built on the (rho, theta, zeta) coordinate grid.
             and dep not in ["phi", "zeta"]
@@ -1074,7 +1081,8 @@ class Equilibrium(IOAble, Optimizable):
                     "r" in req and grid.L < self.L_grid
                     # and won't override grid to one with more radial resolution
                     and not (
-                        override_grid and (is_1dz_tor_grid(dep) or is_0d_vol_grid(dep))
+                        override_grid
+                        and (is_1dz_tor_grid(dep, p) or is_0d_vol_grid(dep, p))
                     ),
                     ResolutionWarning,
                     msg("radial") + f" got L_grid={grid.L} < {self._L_grid}.",
@@ -1086,9 +1094,9 @@ class Equilibrium(IOAble, Optimizable):
                     and not (
                         override_grid
                         and (
-                            is_1dr_rad_grid(dep)
-                            or is_1dz_tor_grid(dep)
-                            or is_0d_vol_grid(dep)
+                            is_1dr_rad_grid(dep, p)
+                            or is_1dz_tor_grid(dep, p)
+                            or is_0d_vol_grid(dep, p)
                         )
                     ),
                     ResolutionWarning,
@@ -1099,7 +1107,8 @@ class Equilibrium(IOAble, Optimizable):
                     "z" in req and (grid.N * grid.NFP < self.N_grid * self.NFP)
                     # and won't override grid to one with more toroidal resolution
                     and not (
-                        override_grid and (is_1dr_rad_grid(dep) or is_0d_vol_grid(dep))
+                        override_grid
+                        and (is_1dr_rad_grid(dep, p) or is_0d_vol_grid(dep, p))
                     ),
                     ResolutionWarning,
                     msg("toroidal") + f" got N_grid*grid.NFP={grid.N}*{grid.NFP} "
@@ -1116,7 +1125,7 @@ class Equilibrium(IOAble, Optimizable):
 
         if calc0d and override_grid:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key, p)}
             data0d = compute_fun(
                 self,
                 list(dep0d),
@@ -1143,7 +1152,7 @@ class Equilibrium(IOAble, Optimizable):
             data.update(data0d)
 
         if (calc1dr or calc1dz) and override_grid:
-            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key)}
+            data0d_seed = {key: data[key] for key in data if is_0d_vol_grid(key, p)}
         else:
             data0d_seed = {}
         if calc1dr and override_grid:
@@ -1165,7 +1174,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dr_seed = {
                 key: grid1dr.copy_data_from_other(data[key], grid, surface_label="rho")
                 for key in data
-                if is_1dr_rad_grid(key)
+                if is_1dr_rad_grid(key, p)
             }
             data1dr = compute_fun(
                 self,
@@ -1215,7 +1224,7 @@ class Equilibrium(IOAble, Optimizable):
             data1dz_seed = {
                 key: grid1dz.copy_data_from_other(data[key], grid, surface_label="zeta")
                 for key in data
-                if is_1dz_tor_grid(key)
+                if is_1dz_tor_grid(key, p)
             }
             data1dz = compute_fun(
                 self,
@@ -2686,6 +2695,390 @@ class Equilibrium(IOAble, Optimizable):
         if hasattr(self.surface, "Phi_mn"):
             scales["Phi_mn"] = bdry_scale["Phi_mn"]
         return scales
+
+
+class RidgeEquilibrium(Equilibrium):
+    """Equilibrium whose boundary has sharp corners on the X-lines of a separatrix.
+
+    R and Z are written on a ``FourierZernikeRidgeBasis``,
+
+        X = A + Re(Q_γ(z)) B_1 + Im(Q_γ(z)) B_2,   z = ρ exp(iα_b),  α_b = θ - ι_b ζ,
+
+    whose ρ = 1 trace is the ``FourierRZToroidalRidgeSurface`` of the boundary: the
+    cross-sections have m_b corners, on the X-lines α_b = 2πk/m_b, which wind with
+    ι_b = NFP n_b / m_b. The stream function is tied to the Jacobian,
+
+        λ = λ_0 + λ_1 - E,   λ_1 = A_θ[√g - <√g>_θ] / <√g>_θ,
+
+    with λ_0 the ordinary Fourier-Zernike series (``L_lmn``) and E the ridge
+    subtraction that makes λ constant along the X-lines (see ``desc.compute._ridge``).
+    λ_1 has no coefficients of its own: it is computed from the map, with <.>_θ the
+    average over θ at fixed (ρ, ζ) and A_θ the zero-mean antiderivative in θ, so that
+    1 + ∂_θ λ_1 = √g / <√g>_θ. Near the corners √g has the sharp structure of the
+    ridge basis, which a smooth λ_0 cannot follow; λ_1 carries it, and λ_0 is left
+    with the smooth remainder.
+    The tie is part of this class's λ in DESC's compute system, so every quantity
+    computed for it (``ForceBalance``, ``compute``, the plotting functions) uses it.
+
+    The X-lines are field lines only if ι(1) = ι_b, so the rotational transform is
+    prescribed and must equal ι_b on the boundary. The flatness of the smooth block at
+    the corners (``FixCornerFlatness``) and λ_0 constant on the X-lines
+    (``FixXLineLambda``) are added to every solve.
+
+    The initial guess extends every block of the surface inward as ρ^|m|, with Q_γ at
+    ρ exp(iα_b), and λ_0 = 0.
+
+    Parameters
+    ----------
+    surface : FourierRZToroidalRidgeSurface
+        Boundary of the plasma, right handed. It gives NFP, sym, m_b, n_b and γ.
+    Psi : float (optional)
+        Total toroidal flux (in Webers) within the boundary. Default 1.0.
+    L, M, N : int (optional)
+        Radial, poloidal and toroidal resolution of the smooth block A. Default M and
+        N of the surface, and L = M.
+    L_b, M_b, N_b : int (optional)
+        Radial, poloidal and toroidal resolution of the sharp blocks B_1, B_2. Default
+        M_b and N_b of the surface, and L_b = M_b.
+    L_lambda, M_lambda, N_lambda : int (optional)
+        Radial, poloidal and toroidal resolution of λ_0. Default L, M and N. λ_0 has
+        its own resolution because R and Z carry the sharp blocks on top of the smooth
+        block A, so they have more degrees of freedom than a λ_0 at (L, M, N); raising
+        the λ_0 resolution (e.g. M_lambda = M + 2) brings the two closer.
+    L_grid, M_grid, N_grid : int (optional)
+        Resolution of the real space nodes. Default twice the largest resolution of
+        the blocks.
+    pressure : Profile or ndarray shape(k,2) (optional)
+        Pressure profile or array of mode numbers and spectral coefficients. Default
+        zero.
+    iota : Profile or ndarray shape(k,2)
+        Rotational transform profile or array of mode numbers and spectral
+        coefficients, with ι(1) = ι_b.
+    spectral_indexing : str (optional)
+        Type of Zernike indexing scheme to use. Default ``'ansi'``.
+
+    """
+
+    _io_attrs_ = Equilibrium._io_attrs_ + ["_L_b", "_M_b", "_N_b"]
+    _static_attrs = Equilibrium._static_attrs + ["_L_b", "_M_b", "_N_b"]
+
+    @execute_on_cpu
+    def __init__(
+        self,
+        surface,
+        Psi=1.0,
+        L=None,
+        M=None,
+        N=None,
+        L_b=None,
+        M_b=None,
+        N_b=None,
+        L_lambda=None,
+        M_lambda=None,
+        N_lambda=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        pressure=None,
+        iota=None,
+        spectral_indexing="ansi",
+    ):
+        errorif(
+            not isinstance(surface, FourierRZToroidalRidgeSurface),
+            TypeError,
+            f"surface must be a FourierRZToroidalRidgeSurface, got {type(surface)}",
+        )
+        errorif(
+            surface._compute_orientation() == -1,
+            ValueError,
+            "The surface is left handed; flip θ and n_b of its data.",
+        )
+        errorif(
+            not isinstance(float(Psi), numbers.Real),
+            ValueError,
+            f"Psi should be a real integer or float, got {type(Psi)}",
+        )
+        self._Psi = jnp.float64(float(Psi))
+        self._spectral_indexing = spectral_indexing
+        self._NFP = surface.NFP
+        self._sym = surface.sym
+        self._R_sym = "cos" if self.sym else False
+        self._Z_sym = "sin" if self.sym else False
+
+        # resolution
+        self._M = int(setdefault(check_nonnegint(M, "M"), surface.M))
+        self._N = int(setdefault(check_nonnegint(N, "N"), surface.N))
+        self._L = int(setdefault(check_nonnegint(L, "L"), self.M))
+        self._M_b = int(setdefault(check_nonnegint(M_b, "M_b"), surface.M_b))
+        self._N_b = int(setdefault(check_nonnegint(N_b, "N_b"), surface.N_b))
+        self._L_b = int(setdefault(check_nonnegint(L_b, "L_b"), self.M_b))
+        L_b, M_b, N_b = self.L_b, self.M_b, self.N_b
+        self._L_grid = setdefault(L_grid, 2 * max(self.L, L_b))
+        self._M_grid = setdefault(M_grid, 2 * max(self.M, M_b))
+        self._N_grid = setdefault(N_grid, 2 * max(self.N, N_b))
+
+        # the boundary, at the resolution of the blocks
+        self._surface = surface.copy()
+        self._surface.change_resolution(self.M, self.N, M_b, N_b)
+        self._bdry_mode = "lcfs"
+
+        # bases
+        kwargs = dict(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            L_b=L_b,
+            M_b=M_b,
+            N_b=N_b,
+            NFP=self.NFP,
+            m_b=surface.m_b,
+            n_b=surface.n_b,
+            gamma=surface.gamma,
+            spectral_indexing=self.spectral_indexing,
+        )
+        self._R_basis = FourierZernikeRidgeBasis(**kwargs, sym=self._R_sym)
+        self._Z_basis = FourierZernikeRidgeBasis(**kwargs, sym=self._Z_sym)
+        self._L_basis = FourierZernikeBasis(
+            L=int(setdefault(check_nonnegint(L_lambda, "L_lambda"), self.L)),
+            M=int(setdefault(check_nonnegint(M_lambda, "M_lambda"), self.M)),
+            N=int(setdefault(check_nonnegint(N_lambda, "N_lambda"), self.N)),
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
+
+        # profiles: prescribed iota and pressure only
+        errorif(iota is None, ValueError, "A RidgeEquilibrium needs an iota profile.")
+        self._current = None
+        self._electron_temperature = self._electron_density = None
+        self._ion_temperature = self._ion_density = self._atomic_number = None
+        self._anisotropy = None
+        self.pressure = 0 if pressure is None else pressure
+        self._iota = None
+        self.iota = iota
+
+        self._axis = FourierRZCurve(NFP=self.NFP, sym=self.sym, name="axis")
+        self._axis.change_resolution(self.N, sym=self.sym)
+        self._R_lmn = np.zeros(self.R_basis.num_modes)
+        self._Z_lmn = np.zeros(self.Z_basis.num_modes)
+        self._L_lmn = np.zeros(self.L_basis.num_modes)
+        self.set_initial_guess()
+
+    def _set_up(self):
+        """Set unset attributes after loading.
+
+        Equilibria saved before L_b, M_b and N_b were saved get them from R_basis.
+        """
+        super()._set_up()
+        if self._L_b is None or self._M_b is None or self._N_b is None:
+            self._L_b, self._M_b, self._N_b = (
+                self.R_basis.L_b,
+                self.R_basis.M_b,
+                self.R_basis.N_b,
+            )
+        self._L_b, self._M_b, self._N_b = int(self._L_b), int(self._M_b), int(self._N_b)
+
+    def set_initial_guess(self):
+        """Set R_lmn, Z_lmn from the surface, λ_0 = 0, and the axis.
+
+        Every block of the surface is extended inward as ρ^|m|: the coefficient of the
+        mode (l = |m|, m, n) of each block is that of the surface's mode (m, n) of the
+        same block. The axis is the map's ρ = 0 (``AxisRSelfConsistency``).
+        """
+        from desc.objectives import AxisRSelfConsistency, AxisZSelfConsistency
+
+        for X in ("R", "Z"):
+            basis = getattr(self, X + "_basis")
+            surface_basis = getattr(self.surface, X + "_basis")
+            surface_lmn = np.asarray(getattr(self.surface, X + "_lmn"))
+            x_lmn = np.zeros(basis.num_modes)
+            for k, (_, m, n) in enumerate(surface_basis.modes):
+                b = surface_basis.blocks[k]
+                x_lmn[basis.get_idx(abs(m), m, n, block=b)] = surface_lmn[k]
+            setattr(self, X + "_lmn", x_lmn)
+        self.L_lmn = np.zeros(self.L_basis.num_modes)
+        for cls, X in ((AxisRSelfConsistency, "R"), (AxisZSelfConsistency, "Z")):
+            con = cls(self)
+            con.build(verbose=0)
+            setattr(self, X + "a_n", con._A @ np.asarray(getattr(self, X + "_lmn")))
+
+    @property
+    def L_b(self):
+        """int: Maximum radial mode number of the sharp blocks B_1, B_2."""
+        return self._L_b
+
+    @property
+    def M_b(self):
+        """int: Maximum poloidal mode number of the sharp blocks B_1, B_2."""
+        return self._M_b
+
+    @property
+    def N_b(self):
+        """int: Maximum toroidal mode number of the sharp blocks B_1, B_2."""
+        return self._N_b
+
+    @property
+    def m_b(self):
+        """int: Number of corners (X-lines)."""
+        return self.R_basis.m_b
+
+    @property
+    def n_b(self):
+        """int: Toroidal winding of the X-lines."""
+        return self.R_basis.n_b
+
+    @property
+    def iota_b(self):
+        """float: Rotational transform of the X-lines, ι_b = NFP n_b / m_b."""
+        return self.R_basis.iota_b
+
+    @property
+    def gamma(self):
+        """float: Exponent of the ridge function; the corners have an angle γπ."""
+        return self.R_basis.gamma
+
+    @property
+    def iota(self):
+        """Profile: Rotational transform (iota) profile, with ι(1) = ι_b."""
+        return self._iota
+
+    @iota.setter
+    def iota(self, new):
+        new = parse_profile(new, "iota")
+        errorif(new is None, ValueError, "A RidgeEquilibrium needs an iota profile.")
+        iota_1 = float(np.asarray(new(np.array([1.0]))).squeeze())
+        errorif(
+            not np.isclose(iota_1, self.iota_b, rtol=0, atol=1e-12),
+            ValueError,
+            f"iota(1) = {iota_1} must equal iota_b = NFP n_b / m_b = {self.iota_b}: "
+            "otherwise the X-lines are not field lines.",
+        )
+        Equilibrium.iota.fset(self, new)
+
+    def compute(self, names, grid=None, **kwargs):
+        """Compute the quantity given by name on grid, with the tied λ.
+
+        As ``Equilibrium.compute``, but refuses quantities that need a derivative of λ
+        that the tied λ does not provide (see ``desc.compute._ridge``).
+        """
+        from desc.compute._ridge import UNTIED_LAMBDA_KEYS
+        from desc.compute.utils import get_data_deps
+
+        names = [names] if isinstance(names, str) else list(names)
+        untied = sorted(
+            set(get_data_deps(names, obj=self) + names) & UNTIED_LAMBDA_KEYS
+        )
+        errorif(
+            len(untied) > 0,
+            NotImplementedError,
+            f"The tied lambda does not provide {untied}, needed for {names}.",
+        )
+        return super().compute(names, grid=grid, **kwargs)
+
+    def change_resolution(
+        self,
+        L=None,
+        M=None,
+        N=None,
+        L_b=None,
+        M_b=None,
+        N_b=None,
+        L_lambda=None,
+        M_lambda=None,
+        N_lambda=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+    ):
+        """Change the resolution of the blocks, of λ_0 and of the real space grid.
+
+        Every coefficient of R, Z and λ_0 is copied to the mode with the same
+        (l, m, n), and block, of the new bases: new modes are zero and dropped modes are
+        truncated. So raising the resolution keeps the map and λ_0 exactly. The
+        boundary and the axis are then reset to the traces of the new map, which only
+        differ from the old ones if modes were dropped.
+
+        Parameters
+        ----------
+        L, M, N : int (optional)
+            Resolution of the smooth block A. Default the current.
+        L_b, M_b, N_b : int (optional)
+            Resolution of the sharp blocks B_1, B_2. Default the current.
+        L_lambda, M_lambda, N_lambda : int (optional)
+            Resolution of λ_0. Default the current.
+        L_grid, M_grid, N_grid : int (optional)
+            Resolution of the real space nodes. Default twice the largest resolution
+            of the blocks, as for a new RidgeEquilibrium.
+
+        """
+        from desc.objectives import (
+            AxisRSelfConsistency,
+            AxisZSelfConsistency,
+            BoundaryRSelfConsistency,
+            BoundaryZSelfConsistency,
+        )
+
+        self._L = int(setdefault(L, self.L))
+        self._M = int(setdefault(M, self.M))
+        self._N = int(setdefault(N, self.N))
+        self._L_b = int(setdefault(L_b, self.L_b))
+        self._M_b = int(setdefault(M_b, self.M_b))
+        self._N_b = int(setdefault(N_b, self.N_b))
+        L_b, M_b, N_b = self.L_b, self.M_b, self.N_b
+        self._L_grid = int(setdefault(L_grid, 2 * max(self.L, L_b)))
+        self._M_grid = int(setdefault(M_grid, 2 * max(self.M, M_b)))
+        self._N_grid = int(setdefault(N_grid, 2 * max(self.N, N_b)))
+
+        for X in ("R", "Z"):
+            basis = getattr(self, X + "_basis")
+            modes_old, blocks_old = basis.modes.copy(), basis.blocks.copy()
+            c_old = np.asarray(getattr(self, X + "_lmn"))
+            basis.change_resolution(self.L, self.M, self.N, L_b, M_b, N_b)
+            c_new = np.zeros(basis.num_modes)
+            for b in range(3):
+                new = basis.block_slice(b)
+                c_new[new] = copy_coeffs(
+                    c_old[blocks_old == b],
+                    modes_old[blocks_old == b],
+                    basis.modes[new],
+                )
+            setattr(self, "_" + X + "_lmn", c_new)
+        modes_old = self.L_basis.modes.copy()
+        self.L_basis.change_resolution(
+            int(setdefault(L_lambda, self.L_basis.L)),
+            int(setdefault(M_lambda, self.L_basis.M)),
+            int(setdefault(N_lambda, self.L_basis.N)),
+        )
+        self._L_lmn = copy_coeffs(self.L_lmn, modes_old, self.L_basis.modes)
+
+        ## the boundary and the axis: the traces of the new map
+        self._surface.change_resolution(self.M, self.N, M_b, N_b)
+        for cls, src, dst in (
+            (BoundaryRSelfConsistency, "R_lmn", "Rb_lmn"),
+            (BoundaryZSelfConsistency, "Z_lmn", "Zb_lmn"),
+            (AxisRSelfConsistency, "R_lmn", "Ra_n"),
+            (AxisZSelfConsistency, "Z_lmn", "Za_n"),
+        ):
+            con = cls(self)
+            con.build(verbose=0)
+            setattr(self, dst, con._A @ np.asarray(getattr(self, src)))
+
+    def get_surface_at(self, rho=None, theta=None, zeta=None):
+        """Not implemented for a RidgeEquilibrium: use ``surface`` for ρ = 1."""
+        raise NotImplementedError(
+            "A RidgeEquilibrium has no surface but its boundary, eq.surface."
+        )
+
+    def __repr__(self):
+        """String form of the object."""
+        return (
+            type(self).__name__
+            + " at "
+            + str(hex(id(self)))
+            + f" (L={self.L}, M={self.M}, N={self.N}, L_b={self.L_b}, "
+            + f"M_b={self.M_b}, N_b={self.N_b}, NFP={self.NFP}, "
+            + f"m_b={self.m_b}, n_b={self.n_b}, gamma={self.gamma}, sym={self.sym})"
+        )
 
 
 class EquilibriaFamily(IOAble, MutableSequence):

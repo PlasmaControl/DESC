@@ -168,7 +168,7 @@ def test_constrain_asserts():
         con.build()
         _ = factorize_linear_constraints(obj_c, con)
     # if only slightly off, should raise only a warning
-    with pytest.warns(UserWarning):
+    with pytest.warns(UserWarning, match="is not satisfied"):
         con1 = FixCurrent(target=eqc.c_l, eq=eqc)
         con2 = FixCurrent(target=eqc.c_l * (1 + 1e-9), eq=eqc)
         con = ObjectiveFunction((con1, con2))

@@ -153,7 +153,7 @@ class ForceBalance(_Objective):
         """
         constants = self._get_deprecated_constants(constants)
         data = compute_fun(
-            "desc.equilibrium.equilibrium.Equilibrium",
+            self.things[0],
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

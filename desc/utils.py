@@ -7,6 +7,7 @@ import warnings
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
+import scipy.linalg
 from scipy.special import factorial
 from termcolor import colored
 
@@ -419,6 +420,13 @@ def svd_inv_null(A):
 
     """
     u, s, vh = jnp.linalg.svd(A, full_matrices=True)
+    if not jnp.all(jnp.isfinite(s)):
+        # the divide-and-conquer SVD (LAPACK gesdd) can fail to converge on some
+        # rank-deficient matrices; the QR-iteration SVD (gesvd) is slower but robust
+        u, s, vh = map(
+            jnp.asarray,
+            scipy.linalg.svd(np.asarray(A), full_matrices=True, lapack_driver="gesvd"),
+        )
     M, N = u.shape[0], vh.shape[1]
     K = min(M, N)
     rcond = np.finfo(A.dtype).eps * max(M, N)

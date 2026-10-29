@@ -5,7 +5,14 @@ import pytest
 
 from desc.backend import jax, jnp, tree_leaves, tree_structure
 from desc.grid import LinearGrid
-from desc.utils import broadcast_tree, isalmostequal, islinspaced, jaxify, safenormalize
+from desc.utils import (
+    broadcast_tree,
+    isalmostequal,
+    islinspaced,
+    jaxify,
+    safenormalize,
+    svd_inv_null,
+)
 
 
 @pytest.mark.unit
@@ -260,3 +267,22 @@ def test_safenormalize():
 
     np.testing.assert_allclose(a_norm, a_safenorm)
     np.testing.assert_allclose(np.linalg.norm(a_safenorm, axis=1), 1)
+
+
+@pytest.mark.unit
+def test_svd_inv_null_fallback(monkeypatch):
+    """Test that svd_inv_null falls back to gesvd when the default SVD fails."""
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((4, 3)) @ rng.standard_normal((3, 6))  # rank 3
+    Ainv, Z = svd_inv_null(A)
+    svd = jnp.linalg.svd
+
+    def failing_svd(*args, **kwargs):
+        u, s, vh = svd(*args, **kwargs)
+        return u, jnp.full_like(s, jnp.nan), vh
+
+    monkeypatch.setattr(jnp.linalg, "svd", failing_svd)
+    Ainv_fallback, Z_fallback = svd_inv_null(A)
+    np.testing.assert_allclose(Ainv_fallback, Ainv, atol=1e-12)
+    assert Z_fallback.shape == Z.shape == (6, 3)
+    np.testing.assert_allclose(A @ Z_fallback, 0, atol=1e-12)

@@ -571,6 +571,11 @@ def get_transforms(
                 build_pinv=False,
                 method=method,
             )
+        elif c == "ring":  # the ring quadrature of the tied λ of a RidgeEquilibrium
+            from ._ridge import TiedLambdaRings
+
+            errorif(jitable, ValueError, "The rings of the tied λ cannot be jitable.")
+            transforms["ring"] = TiedLambdaRings(obj, grid)
         elif c not in transforms:  # possible other stuff lumped in with transforms
             transforms[c] = getattr(obj, c)
 

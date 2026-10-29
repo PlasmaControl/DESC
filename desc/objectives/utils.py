@@ -178,28 +178,16 @@ def factorize_linear_constraints(objective, constraint, x_scale="auto"):  # noqa
             + f"{con}.",
         )
 
-        # else check with tighter tols and throw an error, these tolerances
-        # could be tripped due to just numerical round-off or poor scaling between
-        # constraints, so don't want to error out but we do want to warn the user.
-        atol = 3e-14
-        rtol = 3e-14
-
-        try:
-            np.testing.assert_allclose(
-                y1,
-                y2,
-                atol=atol,
-                rtol=rtol,
-                err_msg="Incompatible constraints detected, cannot satisfy constraint "
-                + f"{con}.",
-            )
-        except AssertionError as e:
-            warnif(
-                True,
-                UserWarning,
-                str(e) + "\n This may indicate incompatible constraints, "
-                "or be due to floating point error.",
-            )
+        # else warn if the error is above round-off: the constraints cannot all be
+        # met, though not grossly
+        error = float(np.max(np.abs(y1 - y2), initial=0))
+        warnif(
+            error > 1e-10 * max(1, float(np.max(np.abs(y2), initial=0))),
+            UserWarning,
+            f"Linear constraint {con.name} is not satisfied (max error {error:.2e} "
+            + f"{con._units}): the linear constraints are incompatible at this "
+            + "resolution. Raise the resolution, or check the targets.",
+        )
 
     return (
         xp,

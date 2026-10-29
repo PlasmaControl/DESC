@@ -40,6 +40,7 @@ from . import (
     _old,
     _omnigenity,
     _profiles,
+    _ridge,
     _stability,
     _surface,
 )

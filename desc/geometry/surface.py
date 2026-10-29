@@ -901,8 +901,26 @@ class FourierRZToroidalRidgeSurface(Surface):
         "_Z_basis",
         "_NFP",
         "_rho",
+        "_M_b",
+        "_N_b",
     ]
-    _static_attrs = Surface._static_attrs + ["_NFP", "_R_basis", "_Z_basis"]
+    _static_attrs = Surface._static_attrs + [
+        "_NFP",
+        "_R_basis",
+        "_Z_basis",
+        "_M_b",
+        "_N_b",
+    ]
+
+    def _set_up(self):
+        """Set things after loading.
+
+        Surfaces saved before M_b and N_b were saved get them from their bases.
+        """
+        super()._set_up()
+        if getattr(self, "_M_b", None) is None:
+            self._M_b, self._N_b = self.R_basis.M_b, self.R_basis.N_b
+        self._M_b, self._N_b = int(self._M_b), int(self._N_b)
 
     @execute_on_cpu
     def __init__(

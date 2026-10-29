@@ -1,5 +1,6 @@
 """Utilities for getting standard groups of objectives and constraints."""
 
+from desc.basis import FourierZernikeRidgeBasis
 from desc.utils import errorif, flatten_list, get_all_instances, isposint, unique_list
 
 from ._equilibrium import Energy, ForceBalance, HelicalForceBalance, RadialForceBalance
@@ -14,6 +15,8 @@ from .linear_objectives import (
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCornerFlatness,
+    FixCorners,
     FixCurrent,
     FixCurveRotation,
     FixCurveShift,
@@ -29,6 +32,7 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
     FixSheetCurrent,
+    FixXLineLambda,
 )
 from .nae_utils import (
     calc_zeroth_order_lambda,
@@ -146,7 +150,53 @@ def get_fixed_boundary_constraints(eq, profiles=True, normalize=True):
 
     """
     kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
-    constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs), FixPsi(**kwargs))
+    constraints = (FixBoundaryR(**kwargs), FixBoundaryZ(**kwargs))
+    constraints += _get_flux_and_profile_constraints(eq, profiles, normalize)
+
+    return constraints
+
+
+def get_soft_boundary_constraints(
+    eq, profiles=True, normalize=True, corner_target=None
+):
+    """Get the constraints of a fixed-boundary problem without the boundary itself.
+
+    These are the constraints of ``get_fixed_boundary_constraints`` except
+    ``FixBoundaryR`` and ``FixBoundaryZ``: the flux, the profiles and the sheet current.
+    Use them when the boundary is held by a penalty in the objective instead, such as
+    ``BoundaryDistance``, which lets the boundary points slide along the target
+    surface. For a ``RidgeEquilibrium`` the corners are still pinned to the X-lines by
+    ``FixCorners``.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to constrain.
+    profiles : bool
+        If True, also include constraints to fix all profiles assigned to equilibrium.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    corner_target : ndarray, optional
+        Target of ``FixCorners`` (the X-line values of R and Z) for a
+        ``RidgeEquilibrium``. Defaults to the current values. Ignored otherwise.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in problems with a penalized boundary.
+
+    """
+    constraints = _get_flux_and_profile_constraints(eq, profiles, normalize)
+    if isinstance(getattr(eq, "R_basis", None), FourierZernikeRidgeBasis):
+        constraints += (FixCorners(eq, target=corner_target),)
+
+    return constraints
+
+
+def _get_flux_and_profile_constraints(eq, profiles, normalize):
+    """Get FixPsi, the profile constraints and FixSheetCurrent, in that order."""
+    kwargs = {"eq": eq, "normalize": normalize, "normalize_target": normalize}
+    constraints = (FixPsi(**kwargs),)
     if profiles:
         for name, con in _PROFILE_CONSTRAINTS.items():
             if getattr(eq, name) is not None:
@@ -361,6 +411,11 @@ def maybe_add_self_consistency(thing, constraints):
 
     if {"Z_lmn", "Za_n"} <= params:
         constraints = add_if_multiple(constraints, AxisZSelfConsistency)
+
+    # RidgeEquilibrium: the corners are flat and the X-lines are field lines
+    if isinstance(getattr(thing, "R_basis", None), FourierZernikeRidgeBasis):
+        constraints = add_if_multiple(constraints, FixCornerFlatness)
+        constraints = add_if_multiple(constraints, FixXLineLambda)
 
     # Curve
     if {"shift"} <= params:

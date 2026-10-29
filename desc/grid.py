@@ -14,6 +14,8 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "SharpConcentricGrid",
+    "SharpSymConcentricGrid",
     "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
@@ -1773,6 +1775,233 @@ class ConcentricGrid(_Grid):
                 self._inverse_zeta_idx,
             ) = self._find_unique_inverse_nodes()
             self._weights = self._scale_weights()
+
+
+class SharpConcentricGrid(ConcentricGrid):
+    """ConcentricGrid for an equilibrium whose boundary has m_b corners on X-lines.
+
+    The corners sit at the helical angle α_b = θ - ι_b ζ = 2πk/m_b on ρ = 1, with
+    ι_b = NFP n_b / m_b (see ``desc.basis.FourierZernikeRidgeBasis``). The grid is a
+    ``ConcentricGrid`` changed in three ways:
+
+    1. The radial nodes are the ``jacobi`` pattern, the only one with every node
+       strictly inside (0, 1): no node sits on the axis or on ρ = 1, where the ridge
+       basis is singular at the corners.
+    2. The number of poloidal nodes on each ring is rounded to the nearest multiple of
+       m_b, so each ring is unchanged by a rotation of 2π/m_b (the corners' period) and
+       by α_b -> -α_b.
+    3. On every plane the rings are rotated by ι_b ζ, θ = α_b + ι_b ζ, so the nodes
+       sit at the same place relative to the corners on every plane.
+
+    The grid covers the full poloidal circle; ``SharpSymConcentricGrid`` is its
+    stellarator-symmetric half.
+
+    Parameters
+    ----------
+    L : int
+        Radial grid resolution.
+    M : int
+        Poloidal grid resolution.
+    N : int
+        Toroidal grid resolution.
+    NFP : int
+        Number of field periods (Default = 1).
+    m_b : int
+        Number of corners.
+    n_b : int
+        Toroidal winding of the corners, ι_b = NFP n_b / m_b.
+
+    """
+
+    _io_attrs_ = ConcentricGrid._io_attrs_ + ["_m_b", "_n_b"]
+    _static_attrs = ConcentricGrid._static_attrs + ["_m_b", "_n_b"]
+    _fft_toroidal = False
+
+    def __init__(self, L, M, N, NFP=1, m_b=1, n_b=0):
+        self._m_b = check_posint(m_b, "m_b", False)
+        errorif(
+            not np.isclose(n_b, np.round(n_b)),
+            ValueError,
+            f"n_b must be an integer, got {n_b}.",
+        )
+        self._n_b = int(np.round(n_b))
+        super().__init__(
+            L=L, M=M, N=N, NFP=NFP, sym=False, axis=False, node_pattern="jacobi"
+        )
+        self._rotate_rings()
+
+    @property
+    def m_b(self):
+        """int: Number of corners."""
+        return self._m_b
+
+    @property
+    def n_b(self):
+        """int: Toroidal winding of the corners."""
+        return self._n_b
+
+    @property
+    def iota_b(self):
+        """float: Rotational transform of the corners, ι_b = NFP n_b / m_b."""
+        return self.NFP * self.n_b / self.m_b
+
+    def change_resolution(self, L, M, N, NFP=None):
+        """Change the resolution of the grid, keeping the rings on the corners.
+
+        Parameters
+        ----------
+        L : int
+            new radial grid resolution
+        M : int
+            new poloidal grid resolution
+        N : int
+            new toroidal grid resolution
+        NFP : int
+            Number of field periods.
+
+        """
+        NFP = self.NFP if NFP is None else NFP
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+            super().change_resolution(L, M, N, NFP)
+            self._rotate_rings()
+
+    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
+        """Create grid nodes and spacing.
+
+        As ``ConcentricGrid._create_nodes`` with ``node_pattern="jacobi"``, except that
+        the number of poloidal nodes of each ring is rounded to the nearest positive
+        multiple of m_b instead of up to an odd number.
+        """
+        self._L = check_nonnegint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._period = (np.inf, 2 * np.pi, 2 * np.pi / self._NFP)
+
+        rho = np.sort(special.js_roots(L // 2 + 1, 2, 2)[0], axis=None)
+        drho = _midpoint_spacing(rho, jnp=np)
+        r, t, dr, dt = [], [], [], []
+        for iring in range(L // 2 + 1, 0, -1):
+            ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            ntheta = self.m_b * max(int(round(ntheta / self.m_b)), 1)
+            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
+            r += [rho[-iring]] * ntheta
+            t += list(theta)
+            dr += [drho[-iring]] * ntheta
+            dt += [2 * np.pi / ntheta] * ntheta
+        r, t, dr, dt = map(np.asarray, (r, t, dr, dt))
+        dimzern = r.size
+
+        z = np.linspace(0, 2 * np.pi / NFP, 2 * N + 1, endpoint=False)
+        dz = 2 * np.pi / z.size
+        r = np.tile(r, 2 * N + 1)
+        t = np.tile(t, 2 * N + 1)
+        z = np.tile(z[np.newaxis], (dimzern, 1)).flatten(order="F")
+        dr = np.tile(dr, 2 * N + 1)
+        dt = np.tile(dt, 2 * N + 1)
+        dz = np.ones_like(z) * dz
+        return np.column_stack([r, t, z]), np.column_stack([dr, dt, dz])
+
+    def _rotate_rings(self):
+        """Rotate every ring by ι_b ζ.
+
+        A rigid rotation at fixed ζ keeps the spacing and the weights, which were set
+        on the unrotated grid.
+        """
+        nodes = np.array(self.nodes, dtype=float)
+        nodes[:, 1] = np.mod(nodes[:, 1] + self.iota_b * nodes[:, 2], 2 * np.pi)
+        self._nodes = nodes
+        self._axis = self._find_axis()
+        (
+            self._unique_rho_idx,
+            self._inverse_rho_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
+            self._unique_zeta_idx,
+            self._inverse_zeta_idx,
+        ) = self._find_unique_inverse_nodes()
+
+
+class SharpSymConcentricGrid(SharpConcentricGrid):
+    """Stellarator-symmetric half of a ``SharpConcentricGrid``.
+
+    ConcentricGrid's usual half θ ∈ [0, π] does not work once the rings rotate with ζ:
+    the mirror (θ, ζ) -> (-θ, -ζ), followed by the shift of ζ back into the field
+    period, moves α_b by ι_b 2π/NFP = 2π n_b/m_b, so the kept half and the mirror
+    images of the nodes overlap and leave gaps.
+
+    This grid halves in ζ instead. It keeps the full rotated rings of a
+    ``SharpConcentricGrid`` on the planes ζ_k = k T/(2N+1), k = 0, ..., N (T = 2π/NFP),
+    and doubles the weight of k ≥ 1. The mirror of plane k is plane 2N+1-k, which is
+    dropped, and plane 0 is its own mirror. The mirror of a node lands on a node of the
+    full grid, because each ring is unchanged by a rotation of 2π/m_b and by
+    α_b -> -α_b. So, for a stellarator-symmetric state, a residual on the dropped half
+    is the mirror image of one on the kept half. ``sym`` stays False: the grid is not
+    a poloidal half, and flux surface averages over it are only valid for even
+    integrands.
+
+    Parameters
+    ----------
+    L : int
+        Radial grid resolution.
+    M : int
+        Poloidal grid resolution.
+    N : int
+        Toroidal grid resolution.
+    NFP : int
+        Number of field periods (Default = 1).
+    m_b : int
+        Number of corners.
+    n_b : int
+        Toroidal winding of the corners, ι_b = NFP n_b / m_b.
+
+    """
+
+    def __init__(self, L, M, N, NFP=1, m_b=1, n_b=0):
+        super().__init__(L=L, M=M, N=N, NFP=NFP, m_b=m_b, n_b=n_b)
+        self._halve_zeta()
+
+    def change_resolution(self, L, M, N, NFP=None):
+        """Change the resolution of the grid, keeping it a symmetric half.
+
+        Parameters
+        ----------
+        L : int
+            new radial grid resolution
+        M : int
+            new poloidal grid resolution
+        N : int
+            new toroidal grid resolution
+        NFP : int
+            Number of field periods.
+
+        """
+        NFP = self.NFP if NFP is None else NFP
+        if L != self.L or M != self.M or N != self.N or NFP != self.NFP:
+            super().change_resolution(L, M, N, NFP)
+            self._halve_zeta()
+
+    def _halve_zeta(self):
+        """Keep the planes k = 0, ..., N and double the weight of k ≥ 1."""
+        T = 2 * np.pi / self.NFP
+        nz = 2 * self.N + 1
+        k = np.rint(np.asarray(self.nodes[:, 2]) / (T / nz)).astype(int) % nz
+        keep = k <= self.N
+        factor = np.where(k[keep] >= 1, 2.0, 1.0)
+        self._nodes = np.asarray(self.nodes)[keep]
+        spacing = np.asarray(self.spacing)[keep].copy()
+        spacing[:, 2] *= factor
+        self._spacing = spacing
+        self._weights = np.asarray(self.weights)[keep] * factor
+        self._axis = self._find_axis()
+        (
+            self._unique_rho_idx,
+            self._inverse_rho_idx,
+            self._unique_poloidal_idx,
+            self._inverse_poloidal_idx,
+            self._unique_zeta_idx,
+            self._inverse_zeta_idx,
+        ) = self._find_unique_inverse_nodes()
 
 
 def _round(x, tol):

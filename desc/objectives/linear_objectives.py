@@ -443,6 +443,14 @@ class ShareParameters(_Objective):
         )
 
 
+def _blocks(basis):
+    """Block of every mode of a ridge basis (0 for A, 1, 2 for B_1, B_2).
+
+    All 0 for an ordinary basis.
+    """
+    return np.asarray(getattr(basis, "blocks", np.zeros(basis.num_modes, dtype=int)))
+
+
 class BoundaryRSelfConsistency(_Objective):
     """Ensure that the boundary and interior surfaces are self-consistent.
 
@@ -512,9 +520,20 @@ class BoundaryRSelfConsistency(_Objective):
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
+        # a ridge basis matches the modes block by block; its ridge factor is only
+        # the surface's on rho = 1
+        blocks = _blocks(eq.R_basis)
+        surface_blocks = _blocks(eq.surface.R_basis)
+        errorif(
+            blocks.any() and surf != 1,
+            NotImplementedError,
+            "A ridge basis only has its boundary on rho = 1.",
+        )
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                j = np.argwhere(
+                    (modes[:, 1:] == [m, n]).all(axis=1) & (surface_blocks == blocks[i])
+                )
                 Js.append(j.flatten())
             else:
                 raise NotImplementedError(
@@ -622,9 +641,20 @@ class BoundaryZSelfConsistency(_Objective):
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
         Js = []
         surf = eq.surface.rho if self._surface_label is None else self._surface_label
+        # a ridge basis matches the modes block by block; its ridge factor is only
+        # the surface's on rho = 1
+        blocks = _blocks(eq.Z_basis)
+        surface_blocks = _blocks(eq.surface.Z_basis)
+        errorif(
+            blocks.any() and surf != 1,
+            NotImplementedError,
+            "A ridge basis only has its boundary on rho = 1.",
+        )
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if eq.bdry_mode == "lcfs":
-                j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                j = np.argwhere(
+                    (modes[:, 1:] == [m, n]).all(axis=1) & (surface_blocks == blocks[i])
+                )
                 Js.append(j.flatten())
             else:
                 raise NotImplementedError(
@@ -721,16 +751,15 @@ class AxisRSelfConsistency(_Objective):
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        # the ridge factor of a ridge basis is 1/m_b (Re) and 0 (Im) on the axis
+        blocks = _blocks(eq.R_basis)
+        factor = (1.0, 1.0 / getattr(eq.R_basis, "m_b", 1), 0.0)
 
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if m != 0:
                 continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
+            j = np.argwhere(n == ns)
+            self._A[j, i] = (1 if (l // 2) % 2 == 0 else -1) * factor[blocks[i]]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -818,16 +847,15 @@ class AxisZSelfConsistency(_Objective):
         ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+        # the ridge factor of a ridge basis is 1/m_b (Re) and 0 (Im) on the axis
+        blocks = _blocks(eq.Z_basis)
+        factor = (1.0, 1.0 / getattr(eq.Z_basis, "m_b", 1), 0.0)
 
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if m != 0:
                 continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
+            j = np.argwhere(n == ns)
+            self._A[j, i] = (1 if (l // 2) % 2 == 0 else -1) * factor[blocks[i]]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -1015,6 +1043,307 @@ class FixBoundaryZ(FixParameters):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
         super().build(use_jit=use_jit, verbose=verbose)
+
+
+def xline_constraint_matrix(eq, basis, derivatives, rcond=1e-10):
+    """Orthonormal rows that make a combination of derivatives vanish on the X-lines.
+
+    The m_b X-lines of a ``RidgeEquilibrium`` are the ridges ρ = 1,
+    θ = 2πk/m_b + ι_b ζ. On a ridge, a mode f_m(θ) g_n(ζ) of ``basis`` has frequencies
+    |m ι_b ± n NFP| ≤ |ι_b| M + NFP N in ζ and period 2π m_b/NFP, so
+    2 ceil((|ι_b| M + NFP N) m_b/NFP) + 2 samples per period and ridge resolve it (as
+    in ``FourierRZToroidalRidgeSurface.corner_constraint_matrix``). The rows give
+    Σ_d coef_d ∂^d X at these samples, and their row space is taken by SVD.
+
+    Parameters
+    ----------
+    eq : RidgeEquilibrium
+        The equilibrium, for m_b, n_b and NFP.
+    basis : FourierZernikeBasis
+        The basis of X, sampled on ρ = 1.
+    derivatives : list of (coef, (dr, dt, dz))
+        The combination of derivatives of X.
+    rcond : float
+        Relative singular value cutoff used to determine the rank of the rows.
+
+    Returns
+    -------
+    C : ndarray, shape(r, basis.num_modes)
+        Matrix with orthonormal rows such that ``C @ c == 0`` iff the combination
+        vanishes on every X-line.
+
+    """
+    J = (abs(eq.iota_b) * basis.M + eq.NFP * basis.N) * eq.m_b / eq.NFP
+    n_zeta = 2 * int(np.ceil(J)) + 2
+    zeta = np.linspace(0, 2 * np.pi * eq.m_b / eq.NFP, n_zeta, endpoint=False)
+    k = np.arange(eq.m_b)
+    theta = (2 * np.pi * k[:, None] / eq.m_b + eq.iota_b * zeta[None, :]).ravel()
+    nodes = np.column_stack(
+        [np.ones_like(theta), np.mod(theta, 2 * np.pi), np.tile(zeta, eq.m_b)]
+    )
+    rows = sum(coef * np.asarray(basis.evaluate(nodes, d)) for coef, d in derivatives)
+    _, s, Vt = np.linalg.svd(rows, full_matrices=False)
+    C = Vt[: int(np.sum(s > rcond * s[0]))]
+    # zero the SVD round-off: remove_fixed_parameters counts nonzero entries exactly,
+    # and a row left with a single round-off entry would "fix" a mode
+    C[np.abs(C) < 1e-12] = 0.0
+    return C
+
+
+def _smooth_block_rows(eq, X, derivatives):
+    """Rows of ``xline_constraint_matrix`` for the smooth block A of R or Z.
+
+    As rows on all of R_lmn or Z_lmn: zero on the sharp blocks, where Q_γ = 0 on the
+    X-lines.
+    """
+    basis = getattr(eq, X + "_basis")
+    C = xline_constraint_matrix(eq, basis.smooth_basis, derivatives)
+    rows = np.zeros((C.shape[0], basis.num_modes))
+    rows[:, basis.block_slice(0)] = C
+    return rows
+
+
+class FixCorners(_FixedObjective):
+    """Fix the corners of a RidgeEquilibrium: R and Z on all of every X-line.
+
+    The X-lines are the ridges ρ = 1, θ = 2πk/m_b + ι_b ζ, where Q_γ = 0, so only the
+    smooth block A of R and Z appears. The rows are those of
+    ``xline_constraint_matrix``, and the target defaults to the current values, the
+    X-line values of the fitted boundary.
+
+    Parameters
+    ----------
+    eq : RidgeEquilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : {float, ndarray}, optional
+        Target value(s) of the objective. Defaults to the current values.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _fixed = False  # not "diagonal": each row is a sum over modes
+    _units = "(m)"
+    _print_value_fmt = "Corner error: "
+
+    def __init__(self, eq, target=None, name="corners"):
+        self._target_from_user = target
+        super().__init__(
+            things=eq,
+            target=target,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        self._A_R = _smooth_block_rows(eq, "R", [(1, (0, 0, 0))])
+        self._A_Z = _smooth_block_rows(eq, "Z", [(1, (0, 0, 0))])
+        self._dim_f = self._A_R.shape[0] + self._A_Z.shape[0]
+        self.target, self.bounds = self._parse_target_from_user(
+            self._target_from_user,
+            np.concatenate([self._A_R @ eq.R_lmn, self._A_Z @ eq.Z_lmn]),
+            None,
+            np.arange(self._dim_f),
+        )
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the corner values (in the orthonormal row basis).
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Corner values, R rows then Z rows.
+
+        """
+        return jnp.concatenate(
+            [jnp.dot(self._A_R, params["R_lmn"]), jnp.dot(self._A_Z, params["Z_lmn"])]
+        )
+
+
+class FixCornerFlatness(_Objective):
+    """Make the smooth block of R and Z flat at the corners of a RidgeEquilibrium.
+
+    ∂_ρ A = ∂_θ A = 0 on all of every X-line, for A the smooth block of R and of Z. The
+    sharp blocks give the corners a single Jacobian from every direction; a smooth part
+    with a tangent at a corner would make √g, hence B, two-valued there and the
+    current unbounded. The rows are those of ``xline_constraint_matrix``. The ∂_θ rows
+    only see the boundary trace, the ∂_ρ rows also the interior modes.
+
+    Note: this constraint is automatically applied to a RidgeEquilibrium, and does not
+    need to be included by the user.
+
+    Parameters
+    ----------
+    eq : RidgeEquilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Corner flatness error: "
+
+    def __init__(self, eq, name="corner flatness"):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        self._A_R, self._A_Z = (
+            np.vstack(
+                [
+                    _smooth_block_rows(eq, X, [(1, (1, 0, 0))]),
+                    _smooth_block_rows(eq, X, [(1, (0, 1, 0))]),
+                ]
+            )
+            for X in "RZ"
+        )
+        self._dim_f = self._A_R.shape[0] + self._A_Z.shape[0]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute ∂_ρ A and ∂_θ A on the X-lines (in the orthonormal row basis).
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            Corner flatness errors, R rows then Z rows.
+
+        """
+        return jnp.concatenate(
+            [jnp.dot(self._A_R, params["R_lmn"]), jnp.dot(self._A_Z, params["Z_lmn"])]
+        )
+
+
+class FixXLineLambda(_Objective):
+    """Hold λ_0 constant along the X-lines of a RidgeEquilibrium.
+
+    The X-lines must be field lines. As B^ρ = 0, this is B · ∇α_b = 0 on the ridges,
+    which with ι(1) = ι_b is (∂_ζ + ι_b ∂_θ) λ = 0 there: λ is constant along every
+    X-line. With the tied λ = λ_0 + λ_1 - E, the ridge subtraction E cancels the
+    variation of λ_1, and this constraint holds λ_0 constant. The rows are those of
+    ``xline_constraint_matrix``; the constant on each X-line stays free.
+
+    Note: this constraint is automatically applied to a RidgeEquilibrium, and does not
+    need to be included by the user.
+
+    Parameters
+    ----------
+    eq : RidgeEquilibrium
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str, optional
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(rad)"
+    _print_value_fmt = "X-line lambda error: "
+
+    def __init__(self, eq, name="X-line lambda"):
+        super().__init__(
+            things=eq,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
+            name=name,
+        )
+
+    @execute_on_cpu
+    def build(self, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = self.things[0]
+        self._A = xline_constraint_matrix(
+            eq, eq.L_basis, [(1, (0, 0, 1)), (eq.iota_b, (0, 1, 0))]
+        )
+        self._dim_f = self._A.shape[0]
+        super().build(use_jit=use_jit, verbose=verbose)
+
+    def compute(self, params, constants=None):
+        """Compute the variation of λ_0 along the X-lines (orthonormal row basis).
+
+        Parameters
+        ----------
+        params : dict
+            Dictionary of equilibrium degrees of freedom, eg Equilibrium.params_dict
+        constants : dict
+            Dictionary of constant data, eg transforms, profiles etc. Defaults to
+            self.constants
+
+        Returns
+        -------
+        f : ndarray
+            X-line λ_0 errors.
+
+        """
+        return jnp.dot(self._A, params["L_lmn"])
 
 
 class FixLambdaGauge(FixParameters):

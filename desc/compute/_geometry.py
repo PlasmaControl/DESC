@@ -588,19 +588,22 @@ def _perimeter_of_z(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="z",
-    data=["e_theta"],
+    data=["rho", "e_theta"],
     parameterization=["desc.geometry.surface.FourierRZToroidalSurface"],
     resolution_requirement="t",
     grid_requirement={"sym": False},
 )
 def _perimeter_of_z_flux_surface(params, transforms, profiles, data, **kwargs):
+    # TODO: remove max_rho and set fix_surface=("x0", 0.0)
+    # when flux grids are no longer allowed for surface computations
+    max_rho = jnp.max(data["rho"])
     data["perimeter(z)"] = line_integrals(
         transforms["grid"],
         safenorm(data["e_theta"], axis=-1),
         line_label="theta",
-        fix_surface=("x0", 0.0),
+        fix_surface=("x0", max_rho),
         expand_out=True,
-    )
+    ) / jnp.where(max_rho == 0, 1, max_rho)
     return data
 
 

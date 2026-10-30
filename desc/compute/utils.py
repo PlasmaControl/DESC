@@ -129,11 +129,7 @@ def compute(  # noqa: C901
                 )
 
         # this call is purely for validation of the grid/deps consistency
-        has_axis = (
-            transforms["grid"].axis.size
-            if isinstance(transforms["grid"], AbstractGridFlux)
-            else False
-        )
+        has_axis = _has_axis(transforms["grid"])
         _ = _get_deps(p, names, data, has_axis=has_axis, check_fun=check_fun)
 
     if data is None:
@@ -188,11 +184,7 @@ def _compute(
     if data is None:
         data = {}
 
-    has_axis = (
-        transforms["grid"].axis.size
-        if isinstance(transforms["grid"], AbstractGridFlux)
-        else False
-    )
+    has_axis = _has_axis(transforms["grid"])
     needed = _get_deps(p, names, data=data, has_axis=has_axis)
     needed = sorted(needed, key=_topological_order[p].__getitem__)
 
@@ -391,11 +383,7 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     """
     p = _parse_parameterization(obj)
     keys = [keys] if isinstance(keys, str) else keys
-    has_axis = has_axis or (
-        grid is not None and grid.axis.size
-        if isinstance(grid, AbstractGridFlux)
-        else False
-    )
+    has_axis = has_axis or _has_axis(grid)
     deps_type = "full_with_axis_dependencies" if has_axis else "full_dependencies"
     profs = set()
     # below loop doesn't consider extra "phi" in basis="xyz" case
@@ -492,11 +480,7 @@ def get_transforms(
 
     method = "jitable" if jitable or kwargs.get("method") == "jitable" else "auto"
     keys = [keys] if isinstance(keys, str) else keys
-    has_axis = has_axis or (
-        grid is not None and grid.axis.size
-        if isinstance(grid, AbstractGridFlux)
-        else False
-    )
+    has_axis = has_axis or _has_axis(grid)
     derivs = get_derivs(keys, obj, has_axis=has_axis, basis=basis)
     transforms = {"grid": grid}
     for c in derivs.keys():
@@ -627,3 +611,7 @@ def _has_transforms(qty, transforms, parameterization):
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
     return all(flags.values())
+
+
+def _has_axis(grid):
+    return grid.axis.size if isinstance(grid, AbstractGridFlux) else False

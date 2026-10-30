@@ -21,6 +21,10 @@ from desc.transform import Transform
 from desc.utils import errorif, warnif
 from desc.vmec_utils import ptolemy_identity_rev, zernike_to_fourier
 
+__all__ = [
+    "TERPSICHORE",
+]
+
 
 def terpsichore(
     eq,

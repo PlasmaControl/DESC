@@ -10,6 +10,10 @@ from desc.grid import Grid
 from desc.io import IOAble
 from desc.utils import combination_permutation, warnif
 
+__all__ = [
+    "Transform",
+]
+
 
 class Transform(IOAble):
     """Transforms from spectral coefficients to real space values.

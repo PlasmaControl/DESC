@@ -28,3 +28,11 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
+
+      - name: Check for unmarked tests
+        if: ${{ !cancelled() }}
+        run: python devtools/check_unmarked_tests.py tests/*.py
+
+      - name: Check public API matches docs
+        if: ${{ !cancelled() }}
+        run: python devtools/check_public_api.py

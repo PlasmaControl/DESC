@@ -8,6 +8,7 @@ New Features
 
 Performance Improvements
 
+- Reduces memory use of Boozer harmonic projections and their derivatives by contracting the poloidal and toroidal Fourier factors separately.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
@@ -20,20 +21,28 @@ Breaking Changes and Deprecations
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
+- ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
 
 Bug Fixes
 
+- Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
 - Fixes ``VMECIO.load`` fitting lambda as if ``lmns`` were on the full radial mesh. VMEC stores lambda on the half mesh, so the fitted lambda was shifted by half a radial cell and pulled towards the zero placeholder row at the axis, which gave errors of order 0.1% in ``|B|`` of loaded equilibria. See [#2351](https://github.com/PlasmaControl/DESC/issues/2351). Note that the ``VMECIO.load`` guidance remains the same as before: re-solving the equilibrium in DESC  after loading from a VMEC wout is recommended given the representation differences between the two codes.
 - Fixes ``SplineMagneticField`` with a single toroidal plane (axisymmetric mgrid): the cubic 2D interpolation now uses the Z derivatives instead of the zero phi derivatives, so its error between nodes falls from about 1e-3 to the expected cubic level [#2357](https://github.com/PlasmaControl/DESC/pull/2357).
 - Corrects the labels of ``e^helical`` and ``e^helical*sqrt(g)`` (and their magnitudes), which showed the opposite sign to the computed vectors, and the units of the Jacobian-weighted quantities from ``T m^2`` to ``T m``.
 - Fixes bug in ``auglag`` optimizers which prevented them from accepting solver hyperparameters.
+- Improves planar coil representation (``desc.coils.FourierPlanarCoil`` and ``desc.coils.FourierXYCoil``) internal rotation methods to avoid potential NaNs which could occur when the normal is parallel or antiparallel to Z-axis( to within machine epsilon), and also ensure the gradient at those edge cases is not only not NaN but also non-zero to avoid optimizer stalls at those cases.
+- Fixes potential scaling-based issue in DESC-based optimization methods which use adaptive Hessian scaling (e.g. ``"fmintr"``) that could occur when the problem size was small and there were directions of near-zero derivative in the problem.
 - Fixes computation of ``CoilSetLinkingNumber`` to exclude coil writhe.
 - Adjusts the `quad_weights` of coil objectives of type `_broadcast_input = "node"` to ensure their outputs are roughly independent of grid resolution.
 - Fixes bug in modified Cholesky factorization used by the trust-region
   subproblems when the Gershgorin lower bound of the Hessian was exactly zero
   (e.g. a Hessian with an all-zero row), producing NaN steps in ``fmintr`` and
   ``fmin-auglag`` with the default ``tr_method="exact"``, and in
+  ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes the Levenberg-Marquardt parameter update in the Cholesky trust-region
+  subproblem, which often failed to converge and returned inexact steps in
+  ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives

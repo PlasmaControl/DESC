@@ -14,10 +14,28 @@ import functools
 from interpax import interp1d
 
 from desc.backend import jnp, sign, vmap
+from desc.basis import DoubleFourierSeries, fourier
 from desc.batching import vmap_chunked
 
 from ..utils import cross, dot, safediv
 from .data_index import register_compute_fun
+
+
+def _project(basis, nodes, f):
+    """Return ``basis.evaluate(nodes).T @ f`` without the dense basis matrix.
+
+    A DoubleFourierSeries is an outer product of poloidal and toroidal Fourier
+    series, so the two factors are contracted separately and the
+    (num_nodes, num_modes) matrix is never formed.
+    """
+    if not isinstance(basis, DoubleFourierSeries):
+        return basis.evaluate(nodes).T @ f
+    m = basis.modes[basis.unique_M_idx, 1]
+    n = basis.modes[basis.unique_N_idx, 2]
+    poloidal = fourier(nodes[:, 1, None], m)
+    toroidal = fourier(nodes[:, 2, None], n, basis.NFP)
+    proj = poloidal.T @ (f[:, None] * toroidal)
+    return proj[basis.inverse_M_idx, basis.inverse_N_idx]
 
 
 @register_compute_fun(
@@ -294,7 +312,7 @@ def _nu_B_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            * (_project(transforms["B"].basis, nodes, sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return quant_mn
@@ -473,7 +491,7 @@ def _sqrtg_Boozer_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            * (_project(transforms["B"].basis, nodes, sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return quant_mn
@@ -535,7 +553,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         B_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            * (_project(transforms["B"].basis, nodes, sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return B_mn
@@ -596,7 +614,7 @@ def _R_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            * (_project(transforms["B"].basis, nodes, sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return quant_mn
@@ -657,7 +675,7 @@ def _Z_mn(params, transforms, profiles, data, **kwargs):
         nodes = jnp.array([rho, theta_B, zeta_B]).T
         quant_mn = (
             norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * (transforms["B"].basis.evaluate(nodes).T @ (sqrtg_B_desc * quant))
+            * (_project(transforms["B"].basis, nodes, sqrtg_B_desc * quant))
             / transforms["B"].grid.num_nodes
         )
         return quant_mn

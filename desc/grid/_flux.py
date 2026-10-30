@@ -470,15 +470,18 @@ class LinearGridFlux(AbstractGridFlux):
     rho : int or ndarray of float, optional
         Radial coordinates (Default = 1.0).
         Alternatively, the number of radial coordinates (if an integer).
-        Note that if supplied the values may be reordered in the resulting grid.
+        Note that an array of values may be reordered in the resulting grid
+        due to sorting.
     theta : int or ndarray of float, optional
         Poloidal coordinates (Default = 0.0).
         Alternatively, the number of poloidal coordinates (if an integer).
-        Note that if supplied the values may be reordered in the resulting grid.
+        Note that an array of values may be reordered in the resulting grid
+        due to sorting and/or modding to the periodicity of the coordinate bounds.
     zeta : int or ndarray of float, optional
         Toroidal coordinates (Default = 0.0).
         Alternatively, the number of toroidal coordinates (if an integer).
-        Note that if supplied the values may be reordered in the resulting grid.
+        Note that an array of values may be reordered in the resulting grid
+        due to sorting and/or modding to the periodicity of the coordinate bounds.
     """
 
     _io_attrs_ = AbstractGridFlux._io_attrs_ + [

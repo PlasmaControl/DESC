@@ -376,9 +376,8 @@ def get_profiles(keys, obj, grid=None, has_axis=False, basis="rpz"):
     -------
     profiles : list of str or dict of Profile
         Profiles needed to compute key.
-        if eq is None, returns a list of the names of profiles needed
-        otherwise, returns a dict of Profiles
-        Keys for pressure, iota, etc.
+        If eq is None, returns a list of the names of profiles needed.
+        Otherwise, returns a dict of Profiles with keys for pressure, iota, etc.
 
     """
     p = _parse_parameterization(obj)

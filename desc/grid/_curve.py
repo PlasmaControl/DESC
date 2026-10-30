@@ -108,7 +108,8 @@ class LinearGridCurve(AbstractGridCurve):
     s : int or ndarray of float, optional
         Curve coordinates (Default = 0.0).
         Alternatively, the number of coordinates (if an integer).
-        Note that if supplied the values may be reordered in the resulting grid.
+        Note that an array of values may be reordered in the resulting grid
+        due to sorting and/or modding to the periodicity of the coordinate bounds.
     """
 
     _io_attrs_ = AbstractGridCurve._io_attrs_ + ["_endpoint"]
@@ -164,7 +165,6 @@ class LinearGridCurve(AbstractGridCurve):
         s : int or ndarray of float, optional
             Curve coordinates (Default = 0.0).
             Alternatively, the number of coordinates (if an integer).
-            Note that if supplied the values may be reordered in the resulting grid.
 
         Returns
         -------

@@ -146,7 +146,7 @@ class VacuumBoundaryError(_Objective):
         pres = np.max(np.abs(data["p"]))
         curr = np.max(np.abs(data["current"]))
 
-        errorif_wrong_grid(grid, AbstractGridFlux, msg_grid="eval_grid")
+        errorif_wrong_grid(grid, AbstractGridFlux, msg_arg="eval_grid")
         errorif(
             not np.all(grid.nodes[:, 0] == 1.0),
             ValueError,
@@ -569,8 +569,8 @@ class BoundaryError(_Objective):
 
         self._use_same_grid = eval_grid.equiv(source_grid)
 
-        errorif_wrong_grid(source_grid, AbstractGridFlux, msg_grid="source_grid")
-        errorif_wrong_grid(eval_grid, AbstractGridFlux, msg_grid="eval_grid")
+        errorif_wrong_grid(source_grid, AbstractGridFlux, msg_arg="source_grid")
+        errorif_wrong_grid(eval_grid, AbstractGridFlux, msg_arg="eval_grid")
         errorif(
             not np.all(source_grid.nodes[:, 0] == 1.0),
             ValueError,

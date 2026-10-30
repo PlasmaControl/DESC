@@ -632,7 +632,7 @@ class PlasmaVesselDistance(_Objective):
             msg=f"Type {type(surface_grid)} for argument surface_grid is deprecated, "
             + "an AbstractGridToroidalSurface will be required in the future.",
         )
-        errorif_wrong_grid(plasma_grid, AbstractGridFlux, msg_grid="plasma_grid")
+        errorif_wrong_grid(plasma_grid, AbstractGridFlux, msg_arg="plasma_grid")
         warnif(
             not np.allclose(plasma_grid.nodes[:, 0], 1),
             UserWarning,

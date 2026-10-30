@@ -1199,10 +1199,10 @@ def get_ess_scale(modes, alpha=1.2, order=np.inf, min_value=1e-7):
     return scales
 
 
-def errorif_wrong_grid(grid, correct, msg_grid="Grid"):
+def errorif_wrong_grid(grid, correct, msg_arg="grid"):
     """Raise a TypeError if grid is not the correct type."""
     errorif(
         not isinstance(grid, correct),
         TypeError,
-        msg=f"{msg_grid} must be of type {correct}, but got type {type(grid)}.",
+        msg=f"Argument {msg_arg} must be of type {correct}, but got type {type(grid)}.",
     )

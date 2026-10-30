@@ -265,15 +265,41 @@ often it is desired to specify where particular objectives should be targeted, s
 targeting quasi-symmetry on particular surfaces. For this a user defined grid can be
 created and passed to the corresponding objective.
 
+There are different types of grids representing different coordinate systems.
+For 1D coordinates along a curve:
+
 .. autosummary::
     :toctree: _api/grid/
     :recursive:
     :template: class.rst
 
-    desc.grid.Grid
-    desc.grid.LinearGrid
-    desc.grid.QuadratureGrid
-    desc.grid.ConcentricGrid
+    desc.grid.AbstractGridCurve
+    desc.grid.CustomGridCurve
+    desc.grid.LinearGridCurve
+
+For 2D coordinates on a toroidal surface:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
+
+    desc.grid.AbstractGridToroidalSurface
+    desc.grid.CustomGridToroidalSurface
+    desc.grid.LinearGridToroidalSurface
+
+For 3D flux coordinates in an equilibrium:
+
+.. autosummary::
+    :toctree: _api/grid/
+    :recursive:
+    :template: class.rst
+
+    desc.grid.AbstractGridFlux
+    desc.grid.CustomGridFlux
+    desc.grid.LinearGridFlux
+    desc.grid.QuadratureGridFlux
+    desc.grid.ConcentricGridFlux
 
 ``desc.grid`` also contains utilities for finding the most and least rational surfaces
 for a given iota profile, for either avoiding or analyzing rational surfaces.

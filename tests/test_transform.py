@@ -14,7 +14,7 @@ from desc.basis import (
     ZernikePolynomial,
 )
 from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, Grid, LinearGrid
+from desc.grid import ConcentricGridFlux, CustomGridFlux, LinearGridFlux
 from desc.transform import Transform
 
 
@@ -24,9 +24,9 @@ class TestTransform:
     @pytest.mark.unit
     def test_eq(self):
         """Tests equals operator overload method."""
-        grid_1 = LinearGrid(L=10, N=1)
-        grid_2 = LinearGrid(M=2, N=2)
-        grid_3 = ConcentricGrid(L=4, M=2, N=2)
+        grid_1 = LinearGridFlux(L=10, N=1)
+        grid_2 = LinearGridFlux(M=2, N=2)
+        grid_3 = ConcentricGridFlux(L=4, M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
         basis_2 = FourierZernikeBasis(L=1, M=1, N=1)
@@ -44,7 +44,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
-        grid = LinearGrid(L=10)
+        grid = LinearGridFlux(L=10)
         basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=0)
 
@@ -61,7 +61,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_profile(self):
         """Tests transform of power series on a radial profile."""
-        grid = LinearGrid(L=10)
+        grid = LinearGridFlux(L=10)
         basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=1)
 
@@ -80,7 +80,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface."""
-        grid = LinearGrid(M=2, N=2, sym=True)
+        grid = LinearGridFlux(M=2, N=2, sym=True)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
 
@@ -116,7 +116,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_volume_chebyshev(self):
         """Tests transform of Chebyshev-Fourier basis in a toroidal volume."""
-        grid = ConcentricGrid(L=4, M=2, N=2)
+        grid = ConcentricGridFlux(L=4, M=2, N=2)
         basis = ChebyshevDoubleFourierBasis(L=1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
@@ -145,7 +145,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_volume_zernike(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
-        grid = ConcentricGrid(L=4, M=2, N=2)
+        grid = ConcentricGridFlux(L=4, M=2, N=2)
         basis = FourierZernikeBasis(L=1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
@@ -175,9 +175,9 @@ class TestTransform:
         """Tests the grid setter method."""
         basis = FourierZernikeBasis(L=1, M=1, N=1)
 
-        grid_1 = LinearGrid(L=0)
-        grid_3 = LinearGrid(L=2)
-        grid_5 = LinearGrid(L=4)
+        grid_1 = LinearGridFlux(L=0)
+        grid_3 = LinearGridFlux(L=2)
+        grid_5 = LinearGridFlux(L=4)
 
         with pytest.warns(UserWarning):
             transf_1 = Transform(grid_1, basis, method="fft")
@@ -195,7 +195,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_set_basis(self):
         """Tests the basis setter method."""
-        grid = ConcentricGrid(L=4, M=2, N=1)
+        grid = ConcentricGridFlux(L=4, M=2, N=1)
 
         basis_20 = FourierZernikeBasis(L=1, M=2, N=0)
         basis_21 = FourierZernikeBasis(L=1, M=2, N=1)
@@ -216,7 +216,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_fft(self):
         """Tests Fast Fourier Transform method."""
-        grid = LinearGrid(N=16)
+        grid = LinearGridFlux(N=16)
         zeta = grid.nodes[:, 2]
 
         sin_coeffs = np.array([0.5, -1, 2])
@@ -264,7 +264,7 @@ class TestTransform:
         Nnodes = 3
         NFP = 4
 
-        grid = ConcentricGrid(Lnodes, Mnodes, Nnodes, NFP)
+        grid = ConcentricGridFlux(Lnodes, Mnodes, Nnodes, NFP)
         basis1 = FourierZernikeBasis(L, M, N, NFP)
         basis2 = FourierSeries(N, NFP)
         basis3 = DoubleFourierSeries(M, N, NFP)
@@ -321,7 +321,7 @@ class TestTransform:
         Mnodes += 1
         Nnodes += 1
 
-        grid = ConcentricGrid(Lnodes, Mnodes, Nnodes, NFP, sym=True)
+        grid = ConcentricGridFlux(Lnodes, Mnodes, Nnodes, NFP, sym=True)
         basis1 = FourierZernikeBasis(L, M, N, NFP, sym="cos")
         basis2 = FourierSeries(N, NFP, sym="sin")
         basis3 = DoubleFourierSeries(M, N, NFP, sym="sin")
@@ -394,7 +394,7 @@ class TestTransform:
     def test_project(self):
         """Tests projection method for Galerkin method."""
         basis = FourierZernikeBasis(L=1, M=5, N=3)
-        grid = ConcentricGrid(L=4, M=2, N=5)
+        grid = ConcentricGridFlux(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
@@ -408,7 +408,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
         basis = FourierZernikeBasis(L=1, M=5, N=3, sym="cos")
-        grid = ConcentricGrid(L=4, M=2, N=5)
+        grid = ConcentricGridFlux(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
@@ -422,7 +422,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
         basis = FourierZernikeBasis(L=1, M=5, N=0, sym="sin")
-        grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
+        grid = ConcentricGridFlux(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
@@ -438,13 +438,13 @@ class TestTransform:
     @pytest.mark.unit
     def test_fft_warnings(self):
         """Test that warnings are thrown when trying to use fft where it won't work."""
-        g = Grid(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
+        g = CustomGridFlux(np.array([[0, 0, 0], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
         with pytest.warns(UserWarning, match="compatible grid"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(rho=2, M=2, N=2, NFP=2)
+        g = LinearGridFlux(rho=2, M=2, N=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
         # this actually will emit 2 warnings, one for the NFP for
         # basis and grid not matching, and one for nodes completing 1 full period
@@ -463,14 +463,14 @@ class TestTransform:
                 nodes_warning_exists = True
         assert NFP_grid_basis_warning_exists and nodes_warning_exists
 
-        g = LinearGrid(rho=2, M=2, N=2)
+        g = LinearGridFlux(rho=2, M=2, N=2)
         b = DoubleFourierSeries(M=1, N=3)
-        with pytest.warns(UserWarning, match="can not undersample in zeta"):
+        with pytest.warns(UserWarning, match="can not undersample in x2"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
         b._fft_toroidal = False
-        g = LinearGrid(2, 3, 4)
+        g = LinearGridFlux(2, 3, 4)
         with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
@@ -478,14 +478,14 @@ class TestTransform:
     @pytest.mark.unit
     def test_direct2_warnings(self):
         """Test that warnings are thrown when trying to use direct2 if it won't work."""
-        g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
+        g = CustomGridFlux(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
         with pytest.warns(UserWarning, match="requires compatible grid"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
         b._fft_toroidal = False
-        g = LinearGrid(2, 3, 4)
+        g = LinearGridFlux(2, 3, 4)
         with pytest.warns(UserWarning, match="compatible basis"):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
@@ -494,7 +494,7 @@ class TestTransform:
     def test_fit_direct1_and_jitable(self):
         """Test fitting with direct1 and jitable method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
-        grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
+        grid = ConcentricGridFlux(3, 3, 2, node_pattern="ocs")
         transform = Transform(grid, basis, method="direct1", build_pinv=True)
         np.random.seed(0)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
@@ -511,7 +511,7 @@ class TestTransform:
     def test_fit_direct2(self):
         """Test fitting with direct2 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
-        grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
+        grid = ConcentricGridFlux(4, 4, 3, node_pattern="jacobi")
         transform = Transform(grid, basis, method="direct2", build_pinv=True)
         np.random.seed(1)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
@@ -523,7 +523,7 @@ class TestTransform:
     def test_fit_fft(self):
         """Test fitting with fft method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
-        grid = LinearGrid(4, 4, 3)
+        grid = LinearGridFlux(4, 4, 3)
         transform = Transform(grid, basis, method="fft", build_pinv=True)
         np.random.seed(2)
         c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
@@ -534,7 +534,7 @@ class TestTransform:
     @pytest.mark.unit
     def test_empty_grid(self):
         """Make sure we can build transforms with empty grids."""
-        grid = Grid(nodes=np.empty((0, 3)))
+        grid = CustomGridFlux(nodes=np.empty((0, 3)))
         basis = FourierZernikeBasis(6, 0, 0)
         _ = Transform(grid, basis)
 
@@ -546,7 +546,7 @@ class TestTransform:
         """Make sure we always have the 0,0,0 derivative for projections."""
         eq = desc.examples.get("DSHAPE")
         data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)", "F_helical", "|e^helical|"]
-        grid = ConcentricGrid(
+        grid = ConcentricGridFlux(
             L=eq.L_grid,
             M=eq.M_grid,
             N=eq.N_grid,
@@ -570,7 +570,7 @@ class TestTransform:
             basis = FourierZernikeBasis(2, 2, 4, sym=sym)
             c = np.random.random(basis.num_modes)
             for N in range(9, 16):
-                grid = LinearGrid(L=2, M=2, zeta=N)
+                grid = LinearGridFlux(L=2, M=2, zeta=N)
                 t1 = Transform(grid, basis, method="direct1", build_pinv=True)
                 t2 = Transform(grid, basis, method="fft", build_pinv=True)
                 x1 = t1.transform(c)
@@ -593,7 +593,7 @@ class TestTransform:
 @pytest.mark.unit
 def test_transform_pytree():
     """Ensure that Transforms are valid pytree/JAX types."""
-    grid = LinearGrid(5, 6, 7)
+    grid = LinearGridFlux(5, 6, 7)
     basis = FourierZernikeBasis(4, 5, 6)
     transform = Transform(grid, basis, build=True)
 
@@ -621,10 +621,10 @@ def test_transform_pytree():
 def test_NFP_warning():
     """Make sure we only warn about basis/grid NFP in cases where it matters."""
     rho = np.linspace(0, 1, 20)
-    g01 = LinearGrid(rho=rho, M=5, N=0, NFP=1)
-    g02 = LinearGrid(rho=rho, M=5, N=0, NFP=2)
-    g21 = LinearGrid(rho=rho, M=5, N=5, NFP=1)
-    g22 = LinearGrid(rho=rho, M=5, N=5, NFP=2)
+    g01 = LinearGridFlux(rho=rho, M=5, N=0, NFP=1)
+    g02 = LinearGridFlux(rho=rho, M=5, N=0, NFP=2)
+    g21 = LinearGridFlux(rho=rho, M=5, N=5, NFP=1)
+    g22 = LinearGridFlux(rho=rho, M=5, N=5, NFP=2)
     b01 = FourierZernikeBasis(L=2, M=2, N=0, NFP=1)
     b02 = FourierZernikeBasis(L=2, M=2, N=0, NFP=2)
     b21 = FourierZernikeBasis(L=2, M=2, N=2, NFP=1)

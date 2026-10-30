@@ -98,7 +98,7 @@ class LinearGridCurve(AbstractGridCurve):
     Parameters
     ----------
     N : int, optional
-        Grid resolution for coordinate s.
+        Grid resolution, for coordinate s.
     NFP : int
         Number of field periods (Default = 1).
     endpoint : bool
@@ -205,9 +205,9 @@ class LinearGridCurve(AbstractGridCurve):
         Parameters
         ----------
         N : int
-            New grid resolution.
+            New grid resolution, for coordinate s.
         NFP : int
-            Number of field periods.
+            New number of field periods.
 
         """
         if NFP is None:

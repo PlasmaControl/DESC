@@ -293,7 +293,8 @@ def _get_grid(thing, **kwargs):
     thing : Optimizable
         Thing that is being plotted.
     kwargs
-        Any arguments taken by LinearGridCurve or LinearGridFlux.
+        Any arguments taken by LinearGridCurve, LinearGridFlux, or
+        LinearGridToroidalSurface.
 
     Returns
     -------

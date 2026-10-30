@@ -672,13 +672,13 @@ class LinearGridFlux(AbstractGridFlux):
         Parameters
         ----------
         L : int
-            new radial grid resolution (L radial nodes)
+            New radial grid resolution, for coordinate rho.
         M : int
-            new poloidal grid resolution (M poloidal nodes)
+            New poloidal grid resolution, for coordinate theta.
         N : int
-            new toroidal grid resolution (N toroidal nodes)
+            New toroidal grid resolution, for coordinate zeta.
         NFP : int
-            Number of field periods.
+            New number of field periods.
 
         """
         if NFP is None:
@@ -834,13 +834,13 @@ class QuadratureGridFlux(AbstractGridFlux):
         Parameters
         ----------
         L : int
-            new radial grid resolution (L radial nodes)
+            New radial grid resolution, for coordinate rho.
         M : int
-            new poloidal grid resolution (M poloidal nodes)
+            New poloidal grid resolution, for coordinate theta.
         N : int
-            new toroidal grid resolution (N toroidal nodes)
+            New toroidal grid resolution, for coordinate zeta.
         NFP : int
-            Number of field periods.
+            New number of field periods.
 
         """
         if NFP is None:
@@ -1058,13 +1058,13 @@ class ConcentricGridFlux(AbstractGridFlux):
         Parameters
         ----------
         L : int
-            new radial grid resolution
+            New radial grid resolution, for coordinate rho.
         M : int
-            new poloidal grid resolution
+            New poloidal grid resolution, for coordinate theta.
         N : int
-            new toroidal grid resolution
+            New toroidal grid resolution, for coordinate zeta.
         NFP : int
-            Number of field periods.
+            New number of field periods.
 
         """
         if NFP is None:

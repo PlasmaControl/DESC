@@ -180,7 +180,10 @@ class AbstractGrid(IOAble, ABC):
 
         """
         surface_label_axis = self.get_label_axis(surface_label)
-        errorif(len(x) != getattr(self, f"num_x{surface_label_axis}"))
+        errorif(
+            len(x) != getattr(self, f"num_x{surface_label_axis}"),
+            msg=f"Got unexpected len(x) of {len(x)}.",
+        )
         return x[getattr(self, f"inverse_x{surface_label_axis}_idx")]
 
     def meshgrid_reshape(self, x, order):
@@ -535,7 +538,7 @@ class AbstractGrid(IOAble, ABC):
 
     @property
     def can_fft2(self):
-        """bool: Whether this grid is compatible with 2D FFT.
+        """bool: Whether this grid is compatible with 2D FFT over x1 and x2 coordinates.
 
         Tensor product grid with uniformly spaced points in the x1 and x2 coordinates.
         """

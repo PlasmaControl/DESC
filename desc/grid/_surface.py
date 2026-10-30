@@ -10,7 +10,7 @@ from ._utils import _create_linear_nodes
 
 
 class AbstractGridToroidalSurface(AbstractGrid):
-    """Base class for collocation grids along 2D geometric surfaces."""
+    """Base class for collocation grids along 2D toroidal surfaces."""
 
     _io_attrs_ = AbstractGrid._io_attrs_ + ["_NFP", "_sym"]
 
@@ -346,11 +346,11 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
         Parameters
         ----------
         M : int
-            new poloidal grid resolution (M poloidal nodes)
+            New poloidal grid resolution, for coordinate theta.
         N : int
-            new toroidal grid resolution (N toroidal nodes)
+            New toroidal grid resolution, for coordinate zeta.
         NFP : int
-            Number of field periods.
+            New number of field periods.
 
         """
         if NFP is None:

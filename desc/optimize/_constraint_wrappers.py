@@ -4,7 +4,11 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import jax, jit, jnp, put
+from desc.compute import compute as compute_fun
+from desc.compute import get_transforms
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -621,31 +625,48 @@ class ProximalProjection(ObjectiveFunction):
         # desc.optimize.optimizer) and also removing columns corresponding to these
         # variables from the constraint matrix A in
         # desc.objectives.utils.factorize_linear_constraints.
-        for arg in ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]:
+        removed = ["R_lmn", "Z_lmn", "L_lmn", "Ra_n", "Za_n"]
+        if self._surf_idx is not None:
+            removed += ["Rb_lmn", "Zb_lmn"]
+        for arg in removed:
             self._args.remove(arg)
 
-        dxdc = []
         xz = {arg: np.zeros(self._eq.dimensions[arg]) for arg in full_args}
 
+        # Rb
+        c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
+        # We have A @ R_lmn = Rb_lmn
+        A = c.jac_unscaled(xz)[0]["R_lmn"]
+        Ainv = np.linalg.pinv(A)
+        # Once this is multipled by Rb_lmn, we get the full eq state vector
+        # with the R_lmn but rest is 0
+        dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
+
+        # Zb
+        c = get_instance(self._eq_linear_constraints, BoundaryZSelfConsistency)
+        A = c.jac_unscaled(xz)[0]["Z_lmn"]
+        Ainv = np.linalg.pinv(A)
+        dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+
+        # these are static
+        self._dxdRb = dxdRb
+        self._dxdZb = dxdZb
+
+        dxdc = []
         for arg in self._args:
-            if arg not in ["Rb_lmn", "Zb_lmn"]:
-                x_idx = self._eq.x_idx[arg]
-                dxdc.append(np.eye(self._eq.dim_x)[:, x_idx])
             if arg == "Rb_lmn":
-                c = get_instance(self._eq_linear_constraints, BoundaryRSelfConsistency)
-                # We have A @ R_lmn = Rb_lmn
-                A = c.jac_unscaled(xz)[0]["R_lmn"]
-                Ainv = np.linalg.pinv(A)
-                # Once this is multipled by Rb_lmn, we get the full eq state vector
-                # with the R_lmn but rest is 0
-                dxdRb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["R_lmn"]] @ Ainv
                 dxdc.append(dxdRb)
-            if arg == "Zb_lmn":
-                c = get_instance(self._eq_linear_constraints, BoundaryZSelfConsistency)
-                A = c.jac_unscaled(xz)[0]["Z_lmn"]
-                Ainv = np.linalg.pinv(A)
-                dxdZb = np.eye(self._eq.dim_x)[:, self._eq.x_idx["Z_lmn"]] @ Ainv
+            elif arg == "Zb_lmn":
                 dxdc.append(dxdZb)
+            else:
+                dxdc.append(np.eye(self._eq.dim_x)[:, self._eq.x_idx[arg]])
+        self._dxdc = jnp.hstack(dxdc)
+
+        self._dxdp = None
+        if self._surf_idx is not None:
+            self._update_dxdp(self._surf.pack_params(self._surf.params_dict))
+
+        # TODO: Fix this comment, it's completely stale now
         # dxdc is a matrix that when multiplied by the optimization variables (only
         # Rb_lmn, Zb_lmn) gives the full state vector of the equilibrium (Rb_lmn and
         # Zb_lmn part will be 0, but they will be represented by the equivalent
@@ -659,7 +680,10 @@ class ProximalProjection(ObjectiveFunction):
         #     jnp.zeros_like(Rb_lmn), jnp.zeros_like(Zb_lmn),     # noqa : E800
         #     p_l, i_l,                                           # noqa : E800
         # ]                                                       # noqa : E800
-        self._dxdc = jnp.hstack(dxdc)
+
+    def _update_dxdp(self, p):
+        dRbdp, dZbdp = self._dRbZb_dp(p)
+        self._dxdp = self._dxdRb @ dRbdp + self._dxdZb @ dZbdp
 
     def build(self, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
@@ -711,10 +735,57 @@ class ProximalProjection(ObjectiveFunction):
             "ProximalProjection can only handle constraints on the equilibrium.",
         )
 
+        # a non-Fourier boundary surface is always optimized through its own params
+        surf = self._eq.surface
+        if not isinstance(surf, FourierRZToroidalSurface) and (
+            surf not in self._objective.things
+        ):
+            self._objective._set_things(self._objective.things + [surf])
+
         self._objectives = [self._objective, self._constraint]
         self._set_things()
 
         self._eq_idx = self.things.index(self._eq)
+
+        self._surf = self._eq.surface
+        self._surf_idx = (
+            self.things.index(self._surf) if self._surf in self.things else None
+        )
+
+        if self._surf_idx is not None:
+            for attr in ["M", "N", "NFP", "sym"]:
+                errorif(
+                    getattr(self._eq, attr) != getattr(self._surf, attr),
+                    ValueError,
+                    f"Surface {attr}={getattr(self._surf, attr)} does not match "
+                    + f"Equilibrium {attr}={getattr(self._eq, attr)}.",
+                )
+
+            # Building grid to compute dXbdp
+
+            grid = LinearGrid(
+                M=2 * self._eq.M + 5,
+                N=2 * self._eq.N + 5,
+                NFP=self._eq.NFP,
+                sym=self._eq.sym,
+            )
+            transforms = get_transforms(["Rb_lmn", "Zb_lmn"], obj=self._surf, grid=grid)
+
+            self._c_transforms = transforms
+
+            def RbZb_of_p(p):
+                params = self._surf.unpack_params(p)
+                data = compute_fun(
+                    self._surf,
+                    ["Rb_lmn", "Zb_lmn"],
+                    params=params,
+                    transforms=transforms,
+                    profiles={},
+                )
+                return data["Rb_lmn"], data["Zb_lmn"]
+
+            self._RbZb = jax.jit(RbZb_of_p)
+            self._dRbZb_dp = jax.jit(jax.jacfwd(RbZb_of_p))
 
         self._dim_f = self._objective.dim_f
         if self._dim_f == 1:
@@ -741,6 +812,10 @@ class ProximalProjection(ObjectiveFunction):
         # first, ensure equilibrium is solved to the
         # specified tolerances, necessary as we assume
         # eq is solved when taking the derivatives later
+        if self._surf_idx is not None:
+            p0 = self._surf.pack_params(self._surf.params_dict)
+            self._eq.Rb_lmn, self._eq.Zb_lmn = self._RbZb(p0)
+
         if self._solve_during_proximal_build:
             self._eq.solve(
                 objective=self._eq_solve_objective,
@@ -887,6 +962,13 @@ class ProximalProjection(ObjectiveFunction):
             xeq_dict = x_list[self._eq_idx]
             xeq_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): xeq_dict[key] - xeq_dict_old[key] for key in xeq_dict}
+
+            if self._surf_idx is not None:
+                p = self._surf.pack_params(x_list[self._surf_idx])
+                Rb, Zb = self._RbZb(p)
+                deltas["Rb_lmn"] = Rb - self._eq.Rb_lmn
+                deltas["Zb_lmn"] = Zb - self._eq.Zb_lmn
+
             # We pass in the LinearConstraintProjection object to skip some redundant
             # computations in the perturb and solve methods
             self._eq = self._eq.perturb(
@@ -912,6 +994,8 @@ class ProximalProjection(ObjectiveFunction):
         if store:
             self._x_old = x
             x_list = self.unpack_state(x, False)
+            if self._surf_idx is not None:
+                self._update_dxdp(self._surf.pack_params(x_list[self._surf_idx]))
             xeq_dict = self._eq.unpack_params(xeq)
             self._eq.params_dict = xeq_dict
             x_list[self._eq_idx] = xeq_dict
@@ -1037,8 +1121,10 @@ class ProximalProjection(ObjectiveFunction):
             constants[1],
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
+            self._dxdp,
             self._dimc_per_thing,
             self._eq_idx,
+            self._surf_idx,
             "scaled_error",
         )
         g = self._objective.compute_scaled_error(xg, constants[0])
@@ -1203,8 +1289,10 @@ class ProximalProjection(ObjectiveFunction):
             constants[1],
             self._eq_solve_objective._feasible_tangents,
             self._dxdc,
+            self._dxdp,
             self._dimc_per_thing,
             self._eq_idx,
+            self._surf_idx,
             op,
         )
 
@@ -1262,7 +1350,7 @@ def jit_if_possible(func=None, *, static_argnames=("op",)):
     return wrapper
 
 
-@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "op"))
+@jit_if_possible(static_argnames=("dimc_per_thing", "eq_idx", "surf_idx", "op"))
 def _proximal_get_tangents(
     constraint,
     xf,
@@ -1270,10 +1358,13 @@ def _proximal_get_tangents(
     constants,
     eq_feasible_tangents,
     dxdc,
+    dxdp,
     dimc_per_thing,
     eq_idx,
+    surf_idx,
     op="scaled_error",
 ):
+    # TODO: Fix this comment it's also completely stale
     # We try to find dG/dc - dG/dx * (dF/dx)⁻¹ * dF/dc
     # where G is the objective function. Since DESC stores x and c in the same
     # vector, instead of multiple JVP calls, we will just find a tangent direction
@@ -1290,20 +1381,24 @@ def _proximal_get_tangents(
     # v contains prox._args DoFs from eq and other objects (like coils, surfaces
     # etc). Only the eq block changes when the equilibrium is re-solved.
     vs = jnp.split(v, np.cumsum(dimc_per_thing)[:-1], axis=-1)
+    vc, D = vs[eq_idx], dxdc
+    if surf_idx is not None:
+        vc = jnp.concatenate([vc, vs[surf_idx]], axis=-1)
+        D = jnp.hstack([dxdc, dxdp])
     # JVPs are taken for the dxdc @ v tangents, but at most dimc of them are useful,
     # so take whichever combination needs fewer of them. Applying v after the JVPs
     # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
-    if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
-        eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
+    if vc.ndim == 2 and vc.shape[0] > vc.shape[-1]:
+        eq_tangents = vc @ _proximal_eq_tangents(
+            constraint, xf, constants, eq_feasible_tangents, D.T, op
         )
     else:
-        dxdcv = vs[eq_idx] @ dxdc.T
+        dxdcpv = vc @ D.T
         # atleast_2d and reshape are to also handle a single (1D) direction
         eq_tangents = _proximal_eq_tangents(
-            constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
+            constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcpv), op
         )
-        eq_tangents = eq_tangents.reshape(dxdcv.shape)
+        eq_tangents = eq_tangents.reshape(dxdcpv.shape)
     return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
 
 

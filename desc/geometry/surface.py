@@ -1,5 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
+import functools
 import os
 import warnings
 
@@ -16,8 +17,11 @@ from desc.backend import (
     vmap,
 )
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.compute import get_transforms
-from desc.grid import Grid, LinearGrid
+from desc.compute import compute as compute_fun
+from desc.compute import data_index, get_transforms
+from desc.compute.utils import _parse_parameterization, get_data_deps
+from desc.geometry.curve import FourierRZCurve, NurbsRPZCurve
+from desc.grid import Grid, LinearGrid, _Grid
 from desc.io import InputReader
 from desc.optimizable import optimizable_parameter
 from desc.transform import Transform
@@ -29,16 +33,17 @@ from desc.utils import (
     get_ess_scale,
     rpz2xyz_vec,
     setdefault,
+    warnif,
     xyz2rpz,
     xyz2rpz_vec,
 )
 
-from .core import Surface
+from .core import Surface, ToroidalSurface
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
 
-class FourierRZToroidalSurface(Surface):
+class FourierRZToroidalSurface(ToroidalSurface):
     """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
 
     Parameters
@@ -1176,6 +1181,652 @@ class ZernikeRZToroidalSection(Surface):
         scales.update(get_ess_scale(modes, alpha, order, min_value))
 
         return scales
+
+
+def _invalidates_fourier_fit(setter):
+    """Mark the stored Fourier fit R_lmn, Z_lmn stale after setting a NURBS param."""
+
+    @functools.wraps(setter)
+    def wrapper(self, new):
+        setter(self, new)
+        self._fourier_fit_stale = True
+
+    return wrapper
+
+
+class NurbsRZToroidalSurface(ToroidalSurface):
+    """Toroidal surface represented by Fourier series in poloidal and toroidal angles.
+
+    Parameters
+    ----------
+    R_lmn, Z_lmn : array-like, shape(k,)
+        Fourier coefficients for R and Z in cylindrical coordinates
+    modes_R : array-like, shape(k,2)
+        poloidal and toroidal mode numbers [m,n] for R_lmn.
+    modes_Z : array-like, shape(k,2)
+        mode numbers associated with Z_lmn, defaults to modes_R
+    NFP : int
+        number of field periods
+    sym : bool
+        whether to enforce stellarator symmetry. Default is "auto" which enforces if
+        modes are symmetric. If True, non-symmetric modes will be truncated.
+    M, N: int or None
+        Maximum poloidal and toroidal mode numbers. Defaults to maximum from modes_R
+        and modes_Z.
+    rho : float [0,1]
+        flux surface label for the toroidal surface
+    name : str
+        name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
+
+    """
+
+    _io_attrs_ = Surface._io_attrs_ + [
+        "_cs_start_r",
+        "_cs_start_theta",
+        "_cs_start_w",
+        "_cs_interior_r",
+        "_cs_interior_theta",
+        "_cs_interior_w",
+        "_NFP",
+        "_p_u",
+        "_p_v",
+        "_rho",
+        "_R_basis",
+        "_Z_basis",
+    ]
+    _static_attrs = Surface._static_attrs + [
+        "_NFP",
+        "_fourier_fit_stale",
+        "_n_cs",
+        "_n_points_per_cs",
+        "_local_basis",
+        "_p_u",
+        "_p_v",
+        "_R_basis",
+        "_Z_basis",
+    ]
+
+    def __init__(
+        self,
+        interior_axis,
+        n_cs,
+        n_points_per_cs,
+        cs_start_r,
+        cs_start_theta,
+        cs_start_w,
+        cs_interior_r,
+        cs_interior_theta,
+        cs_interior_w,
+        cs_interior_phi,
+        cs_interior_gangle,
+        p_u=3,
+        p_v=3,
+        local_basis="cylindrical",
+        NFP=2,
+        M=6,
+        N=6,
+        sym=True,
+        rho=1,
+        **kwargs,
+    ):
+
+        if sym:
+            assert n_cs >= 2, "Number of cross sections must be at least two. "
+
+        assert isinstance(
+            interior_axis, NurbsRPZCurve
+        ), f"Interior axis should be of type NurbsRPZCurve, got {interior_axis}"
+        assert (
+            sym == interior_axis.sym
+        ), "Interior axis and NurbsRZToroidalSurface must have the same symmetry"
+        assert (
+            NFP == interior_axis.nfp
+        ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
+        # since user needs to specify the number of dofs for the axis,
+        # just force the user to supply the interior axis
+        self._interior_axis = interior_axis
+
+        errorif(
+            local_basis not in ("cylindrical", "bishop"),
+            ValueError,
+            f'Local basis must be ("cylindrical", "bishop"); ' f"got {local_basis}",
+        )
+        self._local_basis = local_basis
+
+        self._n_points_per_cs = n_points_per_cs
+        self._n_cs = n_cs
+        self._sym = bool(sym)
+        self._M = check_nonnegint(M, "M")
+        self._N = check_nonnegint(N, "N")
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._p_u = check_posint(p_u, "p_u", False)
+        self._p_v = check_posint(p_v, "p_v", False)
+        self._rho = rho
+        self._L = 0
+        self._R_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="cos" if sym else False
+        )
+        self._Z_basis = DoubleFourierSeries(
+            M=self._M, N=self._N, NFP=NFP, sym="sin" if sym else False
+        )
+        self._R_lmn = None
+        self._Z_lmn = None
+
+        if sym:
+            # first control point of each cross section sits at theta=0, a
+            # fixed point of the stellarator-symmetric reflection, so it isn't a
+            # free DOF: cs_start_theta stores only the remaining n_half - 1 angles
+            for name, arr in (
+                ("cs_start_r", cs_start_r),
+                ("cs_start_theta", cs_start_theta),
+                ("cs_start_w", cs_start_w),
+                ("cs_interior_r", cs_interior_r),
+                ("cs_interior_theta", cs_interior_theta),
+                ("cs_interior_w", cs_interior_w),
+                ("cs_interior_phi", cs_interior_phi),
+                ("cs_interior_gangle", cs_interior_gangle),
+            ):
+                setattr(self, name, arr)
+        else:
+            raise NotImplementedError
+        self._update_fourier_fit()
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        override_grid=True,
+        **kwargs,
+    ):
+        if isinstance(names, str):
+            names = [names]
+        m = self.M or 0
+        n = self.N or 0
+        if grid is None:
+            grid = LinearGrid(
+                # Nyquist + 5 margin
+                rho=self.rho,
+                M=2 * m + 5,
+                N=2 * n + 5,
+                NFP=self.NFP,
+                sym=self.sym,
+            )
+        errorif(
+            not isinstance(grid, _Grid),
+            TypeError,
+            f"grid argument must be a Grid object, got type {type(grid)}",
+        )
+
+        params = params or self.params_dict
+        data = data or {}
+
+        # TODO: check this out, copied logic from Surface.compute()
+        p = _parse_parameterization(self)
+        deps = list(set(get_data_deps(names, obj=p) + names))
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[p][dep]["coordinates"] == "") and (dep not in data)
+        ]
+        calc0d = bool(len(dep0d))
+        if (
+            calc0d
+            and (grid.N >= 2 * n + 5)
+            and (grid.M > 2 * m + 5)
+            and isinstance(grid, LinearGrid)
+        ):
+            calc0d = False
+        if calc0d and override_grid:
+            grid0d = LinearGrid(rho=self.rho, M=2 * m + 5, N=2 * n + 5, NFP=self.NFP)
+            data0d = compute_fun(
+                self,
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles={},
+                data=data,
+                **kwargs,
+            )
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        return compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles={},
+            data=data,
+            **kwargs,
+        )
+
+    @property
+    def R_basis(self):
+        """DoubleFourierSeries: Spectral basis for Rb_lmn."""
+        return self._R_basis
+
+    @property
+    def Z_basis(self):
+        """DoubleFourierSeries: Spectral basis for Zb_lmn."""
+        return self._Z_basis
+
+    def _update_fourier_fit(self):
+        grid = LinearGrid(
+            M=2 * self.M + 5, N=2 * self.N + 5, NFP=self.NFP, sym=self.sym
+        )
+        names = ["Rb_lmn", "Zb_lmn"]
+        transforms = get_transforms(names, obj=self, grid=grid)
+        data = jit(
+            lambda params: compute_fun(
+                self, names, params=params, transforms=transforms, profiles={}
+            )
+        )(self.params_dict)
+        self._R_lmn, self._Z_lmn = data["Rb_lmn"], data["Zb_lmn"]
+        self._fourier_fit_stale = False
+
+    def _check_fourier_fit(self):
+        if getattr(self, "_fourier_fit_stale", True):
+            self._update_fourier_fit()
+
+    @property
+    def R_lmn(self):
+        """ndarray: Fourier coefficients of R on R_basis, fit to the NURBS surface.
+
+        Not an optimizable parameter. Setting it stores the given values until the
+        NURBS params change, after which it is refit from the surface.
+        """
+        self._check_fourier_fit()
+        return self._R_lmn
+
+    @R_lmn.setter
+    def R_lmn(self, new):
+        self._check_fourier_fit()
+        new = jnp.atleast_1d(jnp.asarray(new))
+        errorif(
+            new.size != self.R_basis.num_modes,
+            ValueError,
+            f"R_lmn should have the same size as R_basis, got {new.size} for basis "
+            + f"with {self.R_basis.num_modes} modes.",
+        )
+        self._R_lmn = new
+
+    @property
+    def Z_lmn(self):
+        """ndarray: Fourier coefficients of Z on Z_basis, fit to the NURBS surface.
+
+        Not an optimizable parameter. Setting it stores the given values until the
+        NURBS params change, after which it is refit from the surface.
+        """
+        self._check_fourier_fit()
+        return self._Z_lmn
+
+    @Z_lmn.setter
+    def Z_lmn(self, new):
+        self._check_fourier_fit()
+        new = jnp.atleast_1d(jnp.asarray(new))
+        errorif(
+            new.size != self.Z_basis.num_modes,
+            ValueError,
+            f"Z_lmn should have the same size as Z_basis, got {new.size} for basis "
+            + f"with {self.Z_basis.num_modes} modes.",
+        )
+        self._Z_lmn = new
+
+    @optimizable_parameter
+    @property
+    def cs_start_r(self):
+        """ndarray: radial control points of the start cross section.
+
+        Shape (n_points_per_cs//2 + 1,). The other end of the half field
+        period is obtained for free by the stellarator-symmetric reflection.
+        """
+        return self._cs_start_r
+
+    @cs_start_r.setter
+    @_invalidates_fourier_fit
+    def cs_start_r(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != n_half,
+            ValueError,
+            f"cs_start_r must have shape {(n_half,)}, got {new.shape}",
+        )
+        self._cs_start_r = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_start_theta(self):
+        """ndarray: angular control points of the start cross section.
+
+        Shape (n_points_per_cs//2,), excluding the fixed theta=0 point.
+        """
+        return self._cs_start_theta
+
+    @cs_start_theta.setter
+    @_invalidates_fourier_fit
+    def cs_start_theta(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != n_half - 1,
+            ValueError,
+            f"cs_start_theta must have shape {(n_half - 1,)}, got {new.shape}",
+        )
+        self._cs_start_theta = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_start_w(self):
+        """ndarray: NURBS weights of the start cross section.
+
+        Shape (n_points_per_cs//2 + 1,).
+        """
+        return self._cs_start_w
+
+    @cs_start_w.setter
+    @_invalidates_fourier_fit
+    def cs_start_w(self, new):
+        n_half = self._n_points_per_cs // 2 + 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != n_half,
+            ValueError,
+            f"cs_start_w must have shape {(n_half,)}, got {new.shape}",
+        )
+        self._cs_start_w = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_r(self):
+        """ndarray: radial control points of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
+        return self._cs_interior_r
+
+    @cs_interior_r.setter
+    @_invalidates_fourier_fit
+    def cs_interior_r(self, new):
+        shape = (self._n_cs - 1, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_r must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_r = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_theta(self):
+        """ndarray: angular control points of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
+        return self._cs_interior_theta
+
+    @cs_interior_theta.setter
+    @_invalidates_fourier_fit
+    def cs_interior_theta(self, new):
+        shape = (self._n_cs - 1, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_theta must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_theta = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_w(self):
+        """ndarray: NURBS weights of the interior cross sections.
+
+        Flattened from shape (n_cs - 2, n_points_per_cs).
+        """
+        return self._cs_interior_w
+
+    @cs_interior_w.setter
+    @_invalidates_fourier_fit
+    def cs_interior_w(self, new):
+        shape = (self._n_cs - 1, self._n_points_per_cs)
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape[0] * shape[1],
+            ValueError,
+            f"cs_interior_w must have shape {shape}, got {new.shape}",
+        )
+        self._cs_interior_w = new.reshape(-1)
+
+    @optimizable_parameter
+    @property
+    def cs_interior_phi(self):
+        """ndarray: (1, n_cs) array of zeta values for the interior cross sections."""
+        return self._cs_interior_phi
+
+    @cs_interior_phi.setter
+    @_invalidates_fourier_fit
+    def cs_interior_phi(self, new):
+        shape = self._n_cs - 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape,
+            ValueError,
+            f"cs_interior_phi must have shape {shape}, got {new.shape}",
+        )
+        errorif(
+            jnp.any(jnp.logical_or(new <= 0, new >= jnp.pi / self._NFP)),
+            ValueError,
+            f"all cs_interior_phi must lie within (0,π/NFP), got {new}",
+        )
+        self._cs_interior_phi = new
+
+    @optimizable_parameter
+    @property
+    def cs_interior_gangle(self):
+        """ndarray: (1, n_cs - 1) array of global angles for interior cross sections."""
+        return self._cs_interior_gangle
+
+    @cs_interior_gangle.setter
+    @_invalidates_fourier_fit
+    def cs_interior_gangle(self, new):
+        shape = self._n_cs - 1
+        new = jnp.asarray(new)
+        errorif(
+            new.size != shape,
+            ValueError,
+            f"cs_interior_gangle must have shape {shape}, got {new.shape}",
+        )
+        warnif(
+            jnp.any(jnp.abs(new) >= 2 * jnp.pi / self._n_points_per_cs),
+            UserWarning,
+            "all cs_interior_gangle should lie within (-2π/n_points_per_cs, "
+            + f"2π/n_points_per_cs), got {new}",
+        )
+        self._cs_interior_gangle = new
+
+    @property
+    def interior_axis(self):
+        """NurbsRPZCurve: curve around which the spline dofs are specified."""
+        return self._interior_axis
+
+    @interior_axis.setter
+    def interior_axis(self, new):
+        assert isinstance(
+            new, NurbsRPZCurve
+        ), f"Interior axis should be of type NurbsRPZCurve, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Interior axis and NurbsRZToroidalSurface must have the same symmetry"
+        assert (
+            self.NFP == new.nfp
+        ), "Interior axis and NurbsRZToroidalSurface must have the same NFP"
+        self._interior_axis = new
+
+    @optimizable_parameter
+    @property
+    def axis_R(self):
+        """ndarray: R control points of the interior axis."""
+        return self.interior_axis.R
+
+    @axis_R.setter
+    @_invalidates_fourier_fit
+    def axis_R(self, new):
+        self.interior_axis.R = new
+
+    @optimizable_parameter
+    @property
+    def axis_phi(self):
+        """ndarray: phi control points of the interior axis."""
+        return self.interior_axis.phi
+
+    @axis_phi.setter
+    @_invalidates_fourier_fit
+    def axis_phi(self, new):
+        self.interior_axis.phi = new
+
+    @optimizable_parameter
+    @property
+    def axis_Z(self):
+        """ndarray: Z control points of the interior axis."""
+        return self.interior_axis.Z
+
+    @axis_Z.setter
+    @_invalidates_fourier_fit
+    def axis_Z(self, new):
+        self.interior_axis.Z = new
+
+    @optimizable_parameter
+    @property
+    def axis_W(self):
+        """ndarray: NURBS weights of the interior axis control points."""
+        return self.interior_axis.W
+
+    @axis_W.setter
+    @_invalidates_fourier_fit
+    def axis_W(self, new):
+        self.interior_axis.W = new
+
+    @property
+    def axis_degree(self):
+        """int: degree of the interior axis spline."""
+        return self.interior_axis.degree
+
+    @property
+    def axis_knot_parametrization(self):
+        """str: knot parametrization of the interior axis spline."""
+        return self.interior_axis.knot_parametrization
+
+    def change_resolution(self, *args, **kwargs):
+        """Change the resolution of the Fourier fit R_lmn, Z_lmn.
+
+        Takes (M, N) or (L, M, N) positionally, or keywords. L is ignored and the
+        NURBS control net is unchanged.
+        """
+        kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
+        assert len(kwargs) == 0, f"change_resolution got unexpected kwarg: {kwargs}"
+        if len(args) == 2:
+            M, N = args
+        elif len(args) == 3:
+            _, M, N = args
+        errorif(
+            NFP is not None and NFP != self.NFP,
+            ValueError,
+            "Cannot change NFP of a NurbsRZToroidalSurface.",
+        )
+        errorif(
+            sym is not None and bool(sym) != self.sym,
+            ValueError,
+            "Cannot change sym of a NurbsRZToroidalSurface.",
+        )
+        M = int(setdefault(check_nonnegint(M, "M"), self.M))
+        N = int(setdefault(check_nonnegint(N, "N"), self.N))
+        if (M, N) != (self.M, self.N):
+            self._M, self._N = M, N
+            self._R_basis = DoubleFourierSeries(
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else False
+            )
+            self._Z_basis = DoubleFourierSeries(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else False
+            )
+            self._update_fourier_fit()
+
+    def get_axis(self):
+        """Get a FourierRZCurve fit to the interior axis of the surface.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            Axis of the surface.
+
+        """
+        grid = LinearGrid(zeta=16 * self.NFP * (self.N + 1), NFP=1, endpoint=False)
+        x = self.interior_axis.compute("x", grid=grid)["x"]
+        phi = x[:, 1] % (2 * np.pi)
+        idx = jnp.argsort(phi)
+        return FourierRZCurve.from_values(
+            jnp.vstack([x[idx, 0], phi[idx], x[idx, 2]]).T,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self.sym,
+        )
+
+    def _get_ess_scale(self, alpha=1.2, order=np.inf, min_value=1e-7):
+        """Create x_scale, with exponential spectral scaling for R_lmn, Z_lmn."""
+        scales = super()._get_ess_scale(alpha, order, min_value)
+        modes = {"R_lmn": self.R_basis.modes, "Z_lmn": self.Z_basis.modes}
+        scales.update(get_ess_scale(modes, alpha, order, min_value))
+        return scales
+
+    @property
+    def NFP(self):
+        """int: number of field periods."""
+        return self._NFP
+
+    @property
+    def p_u(self):
+        """int: degree of NURBS spline in u (poloidal) direction."""
+        return self._p_u
+
+    @property
+    def p_v(self):
+        """int: degree of NURBS spline in v (toroidal) direction."""
+        return self._p_v
+
+    @property
+    def n_cs(self):
+        """int: number of cross sections over a half field period."""
+        return self._n_cs
+
+    @property
+    def n_points_per_cs(self):
+        """int: number of control points per cross section."""
+        return self._n_points_per_cs
+
+    @property
+    def rho(self):
+        """float: Flux surface label."""
+        if not (hasattr(self, "_rho")) or self._rho is None:
+            self._rho = 1.0
+        return self._rho
+
+    @rho.setter
+    def rho(self, rho):
+        self._rho = rho
 
 
 def _constant_offset_surface(

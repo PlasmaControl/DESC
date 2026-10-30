@@ -554,8 +554,8 @@ def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     "This is not a position vector unless basis is cartesian. "
     "When basis is cartesian, the units are meters.",
     dim=3,
-    params=["R_n", "Z_n", "rotmat", "shift"],
-    transforms={"R": [[0, 0, 0]], "Z": [[0, 0, 0]], "grid": []},
+    params=["R_n", "Z_n", "W_n", "rotmat", "shift"],
+    transforms={"R": [[0, 0, 0]], "Z": [[0, 0, 0]], "W": [[0, 0, 0]], "grid": []},
     profiles=[],
     coordinates="s",
     data=[],
@@ -564,7 +564,8 @@ def _center_FourierRZCurve(params, transforms, profiles, data, **kwargs):
 def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_n"], dz=0)
     Z = transforms["Z"].transform(params["Z_n"], dz=0)
-    phi = transforms["grid"].nodes[:, 2]
+    W = transforms["W"].transform(params["W_n"], dz=0)
+    phi = transforms["grid"].nodes[:, 2] + W
     coords = jnp.stack([R, phi, Z], axis=1)
     # convert to xyz for displacement and rotation
     coords = rpz2xyz(coords)
@@ -584,8 +585,13 @@ def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, first derivative",
     dim=3,
-    params=["R_n", "Z_n", "rotmat"],
-    transforms={"R": [[0, 0, 0], [0, 0, 1]], "Z": [[0, 0, 1]], "grid": []},
+    params=["R_n", "Z_n", "W_n", "rotmat"],
+    transforms={
+        "R": [[0, 0, 0], [0, 0, 1]],
+        "Z": [[0, 0, 1]],
+        "W": [[0, 0, 0], [0, 0, 1]],
+        "grid": [],
+    },
     profiles=[],
     coordinates="s",
     data=["phi"],
@@ -595,9 +601,11 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
     dR = transforms["R"].transform(params["R_n"], dz=1)
     dZ = transforms["Z"].transform(params["Z_n"], dz=1)
-    coords = jnp.stack([dR, R0, dZ], axis=1)
-    # convert to xyz for rotation using phi=s
-    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    W = transforms["W"].transform(params["W_n"], dz=0)
+    dphi = 1 + transforms["W"].transform(params["W_n"], dz=1)
+    coords = jnp.stack([dR, R0 * dphi, dZ], axis=1)
+    # convert to xyz for rotation using the curve's own cylindrical angle
+    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2] + W)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz using real phi to account for displacement
     coords = xyz2rpz_vec(coords, phi=data["phi"])
@@ -612,8 +620,13 @@ def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, second derivative",
     dim=3,
-    params=["R_n", "Z_n", "rotmat"],
-    transforms={"R": [[0, 0, 0], [0, 0, 1], [0, 0, 2]], "Z": [[0, 0, 2]], "grid": []},
+    params=["R_n", "Z_n", "W_n", "rotmat"],
+    transforms={
+        "R": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
+        "Z": [[0, 0, 2]],
+        "W": [[0, 0, 0], [0, 0, 1], [0, 0, 2]],
+        "grid": [],
+    },
     profiles=[],
     coordinates="s",
     data=["phi"],
@@ -624,9 +637,12 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     d1R = transforms["R"].transform(params["R_n"], dz=1)
     d2R = transforms["R"].transform(params["R_n"], dz=2)
     d2Z = transforms["Z"].transform(params["Z_n"], dz=2)
-    coords = jnp.stack([d2R - R0, 2 * d1R, d2Z], axis=1)
-    # convert to xyz for rotation using phi=s
-    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    W = transforms["W"].transform(params["W_n"], dz=0)
+    d1phi = 1 + transforms["W"].transform(params["W_n"], dz=1)
+    d2phi = transforms["W"].transform(params["W_n"], dz=2)
+    coords = jnp.stack([d2R - R0 * d1phi**2, 2 * d1R * d1phi + R0 * d2phi, d2Z], axis=1)
+    # convert to xyz for rotation using the curve's own cylindrical angle
+    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2] + W)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz using real phi to account for displacement
     coords = xyz2rpz_vec(coords, phi=data["phi"])
@@ -641,10 +657,11 @@ def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     units_long="meters",
     description="Position vector along curve, third derivative",
     dim=3,
-    params=["R_n", "Z_n", "rotmat"],
+    params=["R_n", "Z_n", "W_n", "rotmat"],
     transforms={
         "R": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
         "Z": [[0, 0, 3]],
+        "W": [[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]],
         "grid": [],
     },
     profiles=[],
@@ -658,9 +675,20 @@ def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     d2R = transforms["R"].transform(params["R_n"], dz=2)
     d3R = transforms["R"].transform(params["R_n"], dz=3)
     d3Z = transforms["Z"].transform(params["Z_n"], dz=3)
-    coords = jnp.stack([d3R - 3 * d1R, 3 * d2R - R0, d3Z], axis=1)
-    # convert to xyz for rotation using phi=s
-    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2])
+    W = transforms["W"].transform(params["W_n"], dz=0)
+    d1phi = 1 + transforms["W"].transform(params["W_n"], dz=1)
+    d2phi = transforms["W"].transform(params["W_n"], dz=2)
+    d3phi = transforms["W"].transform(params["W_n"], dz=3)
+    coords = jnp.stack(
+        [
+            d3R - 3 * d1R * d1phi**2 - 3 * R0 * d1phi * d2phi,
+            3 * d2R * d1phi + 3 * d1R * d2phi + R0 * (d3phi - d1phi**3),
+            d3Z,
+        ],
+        axis=1,
+    )
+    # convert to xyz for rotation using the curve's own cylindrical angle
+    coords = rpz2xyz_vec(coords, phi=transforms["grid"].nodes[:, 2] + W)
     coords = coords @ params["rotmat"].reshape((3, 3)).T
     # convert back to rpz using real phi to account for displacement
     coords = xyz2rpz_vec(coords, phi=data["phi"])

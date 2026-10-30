@@ -657,7 +657,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)
+        coils = field.to_CoilSet(1, step=50)
 
         np.testing.assert_allclose(
             coils.compute_magnetic_field(
@@ -687,7 +687,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)
+        coils = field.to_CoilSet(1, step=50)
 
         np.testing.assert_allclose(
             -coils.compute_magnetic_field(

@@ -4,7 +4,14 @@ import functools
 
 import numpy as np
 
-from desc.backend import jit, jnp, put
+from desc.backend import (
+    desc_config,
+    jit,
+    jnp,
+    put,
+    safe_mpi_Bcast,
+    safe_transfer_to_device,
+)
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -12,6 +19,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
+from desc.objectives.objective_funs import jvp_proximal_per_process
 from desc.objectives.utils import (
     _Project,
     _Recover,
@@ -1044,6 +1052,12 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
+        if self._objective._is_mpi:
+            # a VJP would need the objectives on the other ranks to communicate with
+            # each other, so form the full Jacobian instead.
+            f = jnp.atleast_1d(self.compute_scaled_error(x, constants))
+            J = self.jac_scaled_error(x, constants)
+            return f.T @ J
         tangents = _proximal_get_tangents(
             self._constraint,
             xf,
@@ -1226,12 +1240,14 @@ class ProximalProjection(ObjectiveFunction):
             # objective's method already know about its jac_chunk_size
             return getattr(self._objective, "jvp_" + op)(tangents, xg, constants[0])
         else:
-            return _proximal_jvp_blocked_pure(
-                self._objective,
-                jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1),
-                jnp.split(xg, np.cumsum(self._dimx_per_thing)),
-                op,
-            )
+            if not self._objective._is_mpi:
+                vgs = jnp.split(tangents, np.cumsum(self._dimx_per_thing), axis=-1)
+                xgs = jnp.split(xg, np.cumsum(self._dimx_per_thing))
+                return _proximal_jvp_blocked_pure(self._objective, vgs, xgs, op)
+            else:
+                return _proximal_jvp_blocked_parallel(
+                    self._objective, tangents, xg, np.cumsum(self._dimx_per_thing), op
+                )
 
     @property
     def constants(self):
@@ -1382,4 +1398,50 @@ def _proximal_jvp_blocked_pure(objective, vgs, xgs, op):
         else:
             outi = getattr(obj, "jvp_" + op)([_vi for _vi in vi], xi).T
             out.append(outi)
+
     return jnp.concatenate(out).T
+
+
+def _proximal_jvp_blocked_parallel(objective, vgs, xgs, splits, op):
+    if objective.rank == 0:
+        message = (objective._obj_type + ":proximal_jvp_" + op, xgs.shape, vgs.shape)
+        objective.comm.bcast(message, root=0)
+        safe_mpi_Bcast(xgs, comm=objective.comm, root=0)
+        safe_mpi_Bcast(vgs, comm=objective.comm, root=0)
+
+        xgs = jnp.split(xgs, splits)
+        vgs = jnp.split(vgs, splits, axis=-1)
+
+        obj_idx_rank = objective._obj_per_rank[objective.rank]
+        xs = [
+            [xgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        vs = [
+            [vgs[i] for i in objective._things_per_objective_idx[idx]]
+            for idx in obj_idx_rank
+        ]
+        objs = [objective.objectives[i] for i in obj_idx_rank]
+        J_rank = jvp_proximal_per_process(xs, vs, objs, op=op)
+        if not desc_config["mpi-cuda"]:
+            J_rank = np.array(J_rank)
+            recvbuf = np.empty((objective.dim_f, J_rank.shape[1]), dtype=np.float64)
+        else:
+            recvbuf = jnp.empty((objective.dim_f, J_rank.shape[1]), dtype=jnp.float64)
+        objective.comm.Gatherv(
+            J_rank,
+            (
+                recvbuf,
+                objective._f_sizes * J_rank.shape[1],
+                objective._f_displs * J_rank.shape[1],
+                objective.mpi.DOUBLE,
+            ),
+            root=0,
+        )
+        recvbuf = safe_transfer_to_device(recvbuf)
+
+        # we collected the Jacobian in the proper way above, but as a convention
+        # the _jvp methods return the transpose of the Jacobian. For example,
+        # _jac methods always take the transpose of the returned quantity by _jvp.
+        # To be consistent with that, we return the transpose here.
+        return recvbuf.T

@@ -355,33 +355,20 @@ def test_tied_lambda_direct(eq):
     np.testing.assert_allclose(lam[0], lam[1], atol=1e-12)
 
 
-def separatrix_data(surf, planes, n=400):
-    """Sample the surface on the planes, uniform in α_b (corners included)."""
-    α = 2 * np.pi * np.arange(n) / n
-    R, Z, A, Zt = [], [], [], []
-    for z in planes:
-        nodes = np.column_stack(
-            [np.ones(n), np.mod(α + surf.iota_b * z, 2 * np.pi), np.full(n, z)]
-        )
-        d = surf.compute(["R", "Z"], grid=Grid(nodes, sort=False))
-        R.append(d["R"]), Z.append(d["Z"]), A.append(α), Zt.append(np.full(n, z))
-    return map(np.concatenate, (R, Z, A, Zt))
-
-
 @pytest.mark.unit
 def test_distance_scaling():
     """Test that the boundary distance is unchanged when all is scaled by 10.
 
     The equilibrium and the separatrix (a different ridge surface) are scaled together.
     """
-    planes = np.array([0.0, 0.3, 0.6])
     f = []
     for scale in (1.0, 10.0):
         eq = RidgeEquilibrium(
             ridge_surface(scale), iota=PowerSeriesProfile([-0.5, 0, -0.5])
         )
-        R, Z, α, ζ = separatrix_data(ridge_surface(scale, seed=3), planes)
-        fields = SeparatrixDistanceFields(R, Z, α, ζ, planes, np.ones(3), M_B)
+        fields = SeparatrixDistanceFields(
+            ridge_surface(scale, seed=3), n_planes=3, n_alpha=400
+        )
         obj = BoundaryDistance(eq, fields)
         obj.build(verbose=0)
         f.append(np.asarray(obj.compute_scaled_error(*obj.xs(eq))))
@@ -393,25 +380,55 @@ def test_distance_scaling():
 def test_distance_reader():
     """Test the distance read from the fields against a dense polyline of the edge.
 
-    To ~1e-6 m, at points within half the band of the interior of an edge.
+    To 2e-6 a, at points of the interior of an edge within half the band and within
+    half the local radius of curvature of it (closer to the centre of curvature the
+    distance is not smooth, and the interpolation misses by up to ~1e-4 m).
     """
-    planes = np.array([0.0, 0.3])
-    R, Z, α, ζ = separatrix_data(ridge_surface(), planes)
-    fields = SeparatrixDistanceFields(R, Z, α, ζ, planes, np.ones(2), M_B)
+    fields = SeparatrixDistanceFields(
+        ridge_surface(), n_planes=2, n_alpha=400
+    )
     rng = np.random.default_rng(4)
     band = fields.arrays["band"]
     for f, curve in enumerate(fields.curves):
         u = rng.uniform(0.1 * curve.L, 0.9 * curve.L, 50)
-        T = curve.d1(u)
+        T, S = curve.d1(u), curve.d2(u)
         normal = (
             np.column_stack([T[:, 1], -T[:, 0]]) / np.linalg.norm(T, axis=1)[:, None]
         )
-        pts = curve.point(u) + rng.uniform(-band / 2, band / 2, 50)[:, None] * normal
-        d, inside = fields.distance(pts[:, 0], pts[:, 1], np.full(50, f))
+        offset = rng.uniform(-band / 2, band / 2, 50)
+        radius = np.linalg.norm(T, axis=1) ** 3 / np.abs(
+            T[:, 0] * S[:, 1] - T[:, 1] * S[:, 0]
+        )
+        keep = np.abs(offset) <= radius / 2
+        pts = (curve.point(u) + offset[:, None] * normal)[keep]
+        d, inside = fields.distance(pts[:, 0], pts[:, 1], np.full(len(pts), f))
         dense = curve.point(np.linspace(-curve.ext, curve.L + curve.ext, 400001))
         direct = np.min(np.linalg.norm(dense[None] - pts[:, None], axis=2), axis=1)
         assert np.all(np.asarray(inside))
-        np.testing.assert_allclose(np.abs(np.asarray(d)), direct, atol=1e-6)
+        np.testing.assert_allclose(np.abs(np.asarray(d)), direct, atol=2e-6 * fields.a)
+
+
+@pytest.mark.unit
+def test_distance_fields_from_points():
+    """Test that from_points on a surface's own samples gives the surface's fields."""
+    surf = ridge_surface()
+    fields = SeparatrixDistanceFields(surf, n_planes=2, n_alpha=400)
+    planes = fields.planes
+    alpha, zeta = (
+        x.ravel()
+        for x in np.meshgrid(2 * np.pi * np.arange(400) / 400, planes, indexing="ij")
+    )
+    theta = np.mod(alpha + surf.iota_b * zeta, 2 * np.pi)
+    nodes = np.column_stack([np.ones_like(theta), theta, zeta])
+    data = surf.compute(["R", "Z"], grid=Grid(nodes, sort=False))
+    points = SeparatrixDistanceFields.from_points(
+        data["R"], data["Z"], alpha, zeta, surf.m_b, surf.NFP, n_planes=2
+    )
+    assert points.a == fields.a
+    for k, v in fields.arrays.items():
+        np.testing.assert_array_equal(points.arrays[k], v)
+    with pytest.raises(TypeError):
+        SeparatrixDistanceFields(data["R"], 2)
 
 
 def with_lambda_resolution(eq, M_lambda):

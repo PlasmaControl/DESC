@@ -3,9 +3,12 @@ We include this penalty for force error minimization as the `RidgeEquilibrium`
 needs to allow the parameterization of its boundary to slide.
 
 The separatrix of an equilibrium with m_b corners on its boundary is given as points
-(R, Z, α_b, ζ) on a set of toroidal planes, with the corners (the X-points) at
-α_b = 2πk/m_b. On every plane, each edge between two corners becomes a smooth curve,
-and its signed distance is sampled once on a narrow band around it. The boundary of the
+(R, Z, α_b, ζ) on a set of uniform toroidal planes, with the corners (the X-points) at
+α_b = 2πk/m_b: sampled from a ridge surface fit of it (``SeparatrixDistanceFields``)
+or given directly, e.g. traced (``SeparatrixDistanceFields.from_points``). On every
+plane, each edge between two
+corners becomes a smooth curve, and its signed distance is sampled once on a narrow
+band around it. The boundary of the
 equilibrium is then compared with the separatrix by reading these fields, which is
 smooth in (R, Z) and cheap to differentiate. Every length is a fraction of the
 separatrix's effective minor radius a, so nothing depends on the size of the device.
@@ -18,6 +21,7 @@ from scipy.spatial import cKDTree
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
+from desc.geometry import FourierRZToroidalRidgeSurface
 from desc.grid import Grid
 from desc.io import IOAble
 from desc.utils import errorif
@@ -87,6 +91,95 @@ def separatrix_edge(R, Z, alpha, k, m_b, dmin, corner_gap):
             keep.append(i)
     keep.append(len(x) - 1)
     return x[keep], y[keep]
+
+
+def separatrix_planes(NFP, n_planes, sym=True):
+    """The planes ζ of the distance fields and their quadrature weights, summing to 1.
+
+    With stellarator symmetry, ``n_planes`` uniform planes on the half field period
+    ζ ∈ [0, π/NFP] (both ends included) with trapezoid weights; without it,
+    ``n_planes`` uniform planes ζ = 2πk/(NFP n_planes) on the field period, with
+    uniform weights.
+
+    Parameters
+    ----------
+    NFP : int
+        Number of field periods.
+    n_planes : int
+        Number of planes.
+    sym : bool
+        Whether the separatrix is stellarator symmetric.
+
+    Returns
+    -------
+    planes, weights : ndarray
+        The planes ζ and their weights.
+
+    """
+    n_planes = int(n_planes)
+    if sym:
+        errorif(
+            n_planes < 2,
+            ValueError,
+            f"With sym=True the planes include both ends of the half field period, "
+            f"so n_planes must be at least 2, got {n_planes}.",
+        )
+        planes = np.linspace(0, np.pi / NFP, n_planes)
+        weights = np.ones(n_planes)
+        weights[[0, -1]] = 0.5
+    else:
+        errorif(n_planes < 1, ValueError, f"n_planes must be positive, got {n_planes}.")
+        planes = 2 * np.pi / NFP * np.arange(n_planes) / n_planes
+        weights = np.ones(n_planes)
+    return planes, weights / np.sum(weights)
+
+
+def _on_planes(zeta, planes):
+    """The points on each plane (to 1e-9), with an error if a plane has none."""
+    on_plane = [np.isclose(zeta, z, rtol=0, atol=1e-9) for z in planes]
+    missing = [z for z, on in zip(planes, on_plane) if not np.any(on)]
+    errorif(
+        len(missing) > 0,
+        ValueError,
+        f"The separatrix data have no points on the planes ζ = "
+        f"{np.array2string(np.array(missing), precision=6)}. The data contain the "
+        f"planes ζ = {np.array2string(np.unique(np.round(zeta, 9)), precision=6)}.",
+    )
+    return on_plane
+
+
+def separatrix_effective_radius(R, Z, alpha, zeta, m_b, planes, weights):
+    """The effective minor radius a = sqrt(<A_sep>_ζ / π) of a separatrix.
+
+    A_sep is the area inside the (unthinned) separatrix points of a plane, ordered
+    edge by edge (``separatrix_edge``), and <.>_ζ the weighted mean over the planes.
+
+    Parameters
+    ----------
+    R, Z, alpha, zeta : ndarray
+        The separatrix points, their helical angles α_b and planes ζ.
+    m_b : int
+        Number of corners.
+    planes, weights : ndarray
+        The planes ζ to use and their weights, summing to 1 (``separatrix_planes``).
+
+    Returns
+    -------
+    a : float
+        Effective minor radius.
+
+    """
+    R, Z, alpha, zeta = map(np.asarray, (R, Z, alpha, zeta))
+    areas = []
+    for on in _on_planes(zeta, planes):
+        edges = [
+            separatrix_edge(R[on], Z[on], alpha[on], k, m_b, 0.0, 0.0)
+            for k in range(m_b)
+        ]
+        x = np.concatenate([e[0][:-1] for e in edges])
+        y = np.concatenate([e[1][:-1] for e in edges])
+        areas.append(abs(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y)) / 2)
+    return float(np.sqrt(np.sum(np.asarray(weights) * np.array(areas)) / np.pi))
 
 
 class EdgeCurve:
@@ -242,22 +335,36 @@ class SeparatrixDistanceFields(IOAble):
 
     One field per (plane, edge): an ``EdgeCurve`` through the edge's data
     (``separatrix_edge``), whose signed distance is sampled on the band |d| ≤ ``band``
-    with spacing ``h`` and stored in square tiles of ``tile`` x ``tile`` cells (with
-    a halo for the 4 x 4 Catmull-Rom stencil). Field f = p m_b + k is edge k of
-    plane p. Every length parameter is a fraction of a = sqrt(<A_sep>_ζ / π), the
-    effective minor radius of the separatrix, with A_sep the area inside it on a plane.
+    with spacing ``h`` and stored in square tiles of ``tile`` x ``tile`` cells Every 
+    length parameter is a fraction of a = sqrt(<A_sep>_ζ / π), the
+    effective minor radius of the separatrix, with A_sep the area inside it on a plane
+    (``separatrix_effective_radius``).
+
+    This constructor takes the separatrix as a ``FourierRZToroidalRidgeSurface``: it
+    is sampled on ρ = 1 at α_b = 2πk/``n_alpha`` (k = 0, ..., ``n_alpha`` - 1, the
+    corners included), θ = α_b + ι_b ζ, on the planes, and the fields are built from
+    these points. The fields are the distance to this surface and to nothing else, so
+    the boundary of a ``BoundaryDistance`` penalty with these fields is pulled onto it.
+    Passing the same low-resolution surface that a fixed-boundary solve starts from
+    makes the soft boundary chase that fit, with its errors; the intended use is a
+    high-resolution fit of the separatrix, accurate enough to stand in for the
+    separatrix itself. To build the fields from points instead, e.g. traced data, use
+    ``from_points``.
+
+    The planes are uniform and generated from ``n_planes`` (``separatrix_planes``,
+    with the surface's NFP and sym): with ``sym=True`` the half field period
+    ζ ∈ [0, π/NFP], both ends included, with trapezoid weights; with ``sym=False`` the
+    field period, with uniform weights.
 
     Parameters
     ----------
-    R, Z, alpha, zeta : ndarray
-        The separatrix points, their helical angles α_b and planes ζ. The corners
-        (X-points) are the points with α_b = 2πk/m_b.
-    planes : ndarray
-        The planes ζ to use.
-    plane_weights : ndarray
-        The weight of each plane, normalized to sum to 1.
-    m_b : int
-        Number of corners.
+    surface : FourierRZToroidalRidgeSurface
+        The separatrix. Its m_b, NFP, sym and ι_b are used.
+    n_planes : int
+        Number of planes.
+    n_alpha : int
+        Number of points per plane, a multiple of m_b so that every corner is
+        sampled.
     band, extend, h, dmin, corner_gap : float
         The band half-width, the extension of the curves past the corners, the grid
         spacing, the thinning spacing and the gap kept free of data at the corners,
@@ -271,13 +378,9 @@ class SeparatrixDistanceFields(IOAble):
 
     def __init__(
         self,
-        R,
-        Z,
-        alpha,
-        zeta,
-        planes,
-        plane_weights,
-        m_b,
+        surface,
+        n_planes,
+        n_alpha=4000,
         band=0.05,
         extend=0.05,
         h=0.002,
@@ -285,23 +388,138 @@ class SeparatrixDistanceFields(IOAble):
         corner_gap=0.001,
         tile=32,
     ):
+        errorif(
+            not isinstance(surface, FourierRZToroidalRidgeSurface),
+            TypeError,
+            "SeparatrixDistanceFields needs a FourierRZToroidalRidgeSurface, got "
+            f"{type(surface).__name__}; use SeparatrixDistanceFields.from_points for "
+            "points.",
+        )
+        m_b, NFP, sym = surface.m_b, surface.NFP, surface.sym
+        errorif(
+            n_alpha % m_b != 0,
+            ValueError,
+            f"n_alpha must be a multiple of m_b = {m_b} so that the corners are "
+            f"sampled, got {n_alpha}.",
+        )
+        planes, _ = separatrix_planes(NFP, n_planes, sym)
+        alpha, zeta = (
+            x.ravel()
+            for x in np.meshgrid(
+                2 * np.pi * np.arange(n_alpha) / n_alpha, planes, indexing="ij"
+            )
+        )
+        theta = np.mod(alpha + surface.iota_b * zeta, 2 * np.pi)
+        nodes = np.column_stack([np.ones_like(theta), theta, zeta])
+        data = surface.compute(["R", "Z"], grid=Grid(nodes, sort=False))
+        self._build(
+            np.asarray(data["R"]),
+            np.asarray(data["Z"]),
+            alpha,
+            zeta,
+            m_b,
+            NFP,
+            n_planes,
+            sym,
+            band,
+            extend,
+            h,
+            dmin,
+            corner_gap,
+            tile,
+        )
+
+    @classmethod
+    def from_points(
+        cls,
+        R,
+        Z,
+        alpha,
+        zeta,
+        m_b,
+        NFP,
+        n_planes,
+        sym=True,
+        band=0.05,
+        extend=0.05,
+        h=0.002,
+        dmin=0.002,
+        corner_gap=0.001,
+        tile=32,
+    ):
+        """The distance fields of a separatrix given as points, e.g. traced data.
+
+        The data must have points on every plane of ``separatrix_planes``.
+
+        Parameters
+        ----------
+        R, Z, alpha, zeta : ndarray
+            The separatrix points, their helical angles α_b and planes ζ. The corners
+            (X-points) are the points with α_b = 2πk/m_b.
+        m_b : int
+            Number of corners.
+        NFP : int
+            Number of field periods.
+        n_planes : int
+            Number of planes.
+        sym : bool
+            Whether the separatrix is stellarator symmetric, so that half a field
+            period is enough.
+        band, extend, h, dmin, corner_gap : float
+            As for the constructor, fractions of a.
+        tile : int
+            Tile size, in cells.
+
+        Returns
+        -------
+        fields : SeparatrixDistanceFields
+            The distance fields of the points.
+
+        """
+        fields = cls.__new__(cls)
+        fields._build(
+            R,
+            Z,
+            alpha,
+            zeta,
+            m_b,
+            NFP,
+            n_planes,
+            sym,
+            band,
+            extend,
+            h,
+            dmin,
+            corner_gap,
+            tile,
+        )
+        return fields
+
+    def _build(
+        self,
+        R,
+        Z,
+        alpha,
+        zeta,
+        m_b,
+        NFP,
+        n_planes,
+        sym,
+        band,
+        extend,
+        h,
+        dmin,
+        corner_gap,
+        tile,
+    ):
+        """The fields of the points: the curves, their tiles and a."""
         R, Z, alpha, zeta = map(np.asarray, (R, Z, alpha, zeta))
         self._m_b = int(m_b)
-        self._planes = np.asarray(planes, dtype=float)
-        self._weights = np.asarray(plane_weights, dtype=float) / np.sum(plane_weights)
-        on_plane = [np.isclose(zeta, z, rtol=0, atol=1e-9) for z in self._planes]
-
-        ## a from the area inside the (unthinned) separatrix of each plane
-        areas = []
-        for on in on_plane:
-            edges = [
-                separatrix_edge(R[on], Z[on], alpha[on], k, m_b, 0.0, 0.0)
-                for k in range(m_b)
-            ]
-            x = np.concatenate([e[0][:-1] for e in edges])
-            y = np.concatenate([e[1][:-1] for e in edges])
-            areas.append(abs(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y)) / 2)
-        self._a = a = float(np.sqrt(np.sum(self._weights * np.array(areas)) / np.pi))
+        self._planes, self._weights = separatrix_planes(NFP, n_planes, sym)
+        on_plane = _on_planes(zeta, self._planes)
+        self._a = a = separatrix_effective_radius(
+            R, Z, alpha, zeta, m_b, self._planes, self._weights
+        )
 
         ## the curves and their tiles
         h, band, T = h * a, band * a, int(tile)

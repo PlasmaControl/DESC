@@ -63,19 +63,7 @@ except ImportError:
         return scan_tree, remainder_tree
 
 
-_unchunk = partial(tree_map, lambda y: y.reshape(-1, *y.shape[2:]))
-_concat = partial(tree_map, lambda y1, y2: jnp.concatenate((y1, y2)))
 _get_first_chunk = partial(tree_map, lambda x: x[0])
-
-
-def _scan_append(f, x, reduction=None, carry_init_fun=None):
-    """Evaluate f element-wise in x while appending the results."""
-
-    def body(carry, x):
-        return (), f(x)
-
-    _, result = scan(body, (), x)
-    return result
 
 
 def _scan_reduce(
@@ -120,11 +108,10 @@ def _scanmap(fun, argnums=0, reduction=None, chunk_reduction=identity):
     Copyright 2021 The NetKet Authors - All rights reserved.
     Licensed under the Apache License, Version 2.0 (the "License");
     """
-    scan_fun = _scan_append if reduction is None else _scan_reduce
 
     def f_(*args, **kwargs):
         f_partial, dyn_args = _argnums_partial(fun, argnums, args, kwargs)
-        return scan_fun(
+        return _scan_reduce(
             lambda x: chunk_reduction(f_partial(*x)),
             dyn_args,
             reduction,
@@ -143,8 +130,43 @@ def _evaluate_in_chunks(
     **kwargs,
 ):
     n_elements = tree_leaves(args[argnums[0]])[0].shape[0]
+    # no chunking
     if n_elements <= chunk_size:
         return chunk_reduction(vmapped_fun(*args, **kwargs))
+
+    if reduction is None:
+        # number of elements that will be in scan of chunks
+        n_scan = n_elements - n_elements % chunk_size
+        f_partial, dyn_args = _argnums_partial(vmapped_fun, argnums, args, kwargs)
+
+        def f_chunk(i, size=chunk_size):
+            # evaluate f on rows i to i + size of the mapped arguments
+            x = tree_map(lambda a: jax.lax.dynamic_slice_in_dim(a, i, size), dyn_args)
+            return chunk_reduction(f_partial(*x))
+
+        def body(out, i):
+            return (
+                tree_map(
+                    lambda o, y: jax.lax.dynamic_update_slice_in_dim(o, y, i, 0),
+                    out,
+                    f_chunk(i),
+                ),
+                None,
+            )
+
+        # evaluate the remainder if there is one, otherwise only get the output shape
+        y = (
+            f_chunk(n_scan, n_elements - n_scan)
+            if n_scan < n_elements
+            else jax.eval_shape(f_chunk, 0)
+        )
+        # initialize the output buffer with zeros
+        out = tree_map(lambda y: jnp.zeros((n_elements, *y.shape[1:]), y.dtype), y)
+        if n_scan < n_elements:
+            # update the output buffer with the remainder
+            out = tree_map(lambda o, y: o.at[n_scan:].set(y), out, y)
+        # update the output buffer with the scan of chunks
+        return scan(body, out, jnp.arange(0, n_scan, chunk_size))[0]
 
     scan_x, remain_x = zip(
         *[
@@ -156,16 +178,10 @@ def _evaluate_in_chunks(
     scan_y = _scanmap(vmapped_fun, argnums, reduction, chunk_reduction)(
         *scan_x, **kwargs
     )
-    if reduction is None:
-        scan_y = _unchunk(scan_y)
-
     if n_elements % chunk_size == 0:
         return scan_y
 
     remain_y = chunk_reduction(vmapped_fun(*remain_x, **kwargs))
-    if reduction is None:
-        return _concat(scan_y, remain_y)
-
     return reduction(scan_y, remain_y)
 
 

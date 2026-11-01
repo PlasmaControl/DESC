@@ -340,7 +340,6 @@ class AgniStability(_Objective):
             n_theta=basis.n_theta,
             n_zeta=basis.n_zeta,
             NFP=eq.NFP,
-            Psi=params["Psi"],
             a=a,
             density=data["ni"] / jnp.max(data["ni"]) if self._density else None,
             validate=False,

@@ -112,7 +112,7 @@ class AgniStability(_Objective):
     from desc.objectives import ObjectiveFunction
     import agnimhd
     from desc.external.agni import AgniStability
-    
+
     eq = load("DESC/tests/inputs/AGNI_QH_lowres.h5")  # low resolution QH, NFP=4
     staircase = dict(eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
     basis = agnimhd.Basis(8, 8, 3, radial="lobatto", automorphism=staircase)

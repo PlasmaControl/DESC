@@ -104,20 +104,6 @@ class AgniStability(_Objective):
         Weight the kinetic energy with ``ni / max(ni)``. Needs
         ``eq.electron_density``. Default False.
 
-
-    Example
-    ---------
-    import numpy as np
-    from desc.io import load
-    from desc.objectives import ObjectiveFunction
-    import agnimhd
-    from desc.external.agni import AgniStability
-
-    eq = load("DESC/tests/inputs/AGNI_QH_lowres.h5")  # low resolution QH, NFP=4
-    basis = agnimhd.Basis(8, 8, 3, radial="lobatto")  # rho, theta, zeta nodes
-    obj = ObjectiveFunction(AgniStability(eq, basis))
-    obj.build(verbose=0)
-    gam2 = obj.compute_scaled_error(obj.x(eq))  # gamma^2 of family 0
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(
@@ -127,6 +113,20 @@ class AgniStability(_Objective):
         normalize_target_detail=" Note: Has no effect for this objective.",
     )
     __doc__ += """
+    Examples
+    --------
+    .. code-block:: python
+
+        import agnimhd
+        from desc.external.agni import AgniStability
+        from desc.io import load
+        from desc.objectives import ObjectiveFunction
+
+        eq = load("DESC/tests/inputs/AGNI_QH_lowres.h5")  # low resolution QH, NFP=4
+        basis = agnimhd.Basis(8, 8, 3, radial="lobatto")  # rho, theta, zeta nodes
+        obj = ObjectiveFunction(AgniStability(eq, basis))
+        obj.build(verbose=0)
+        gamma2 = obj.compute_scaled_error(obj.x(eq))  # gamma^2 of family 0
 
     References
     ----------

@@ -114,12 +114,10 @@ class AgniStability(_Objective):
     from desc.external.agni import AgniStability
 
     eq = load("DESC/tests/inputs/AGNI_QH_lowres.h5")  # low resolution QH, NFP=4
-    staircase = dict(eps=1e-2, x_0=0.65, m_1=2.0, m_2=3.0)
-    basis = agnimhd.Basis(8, 8, 3, radial="lobatto", automorphism=staircase)
+    basis = agnimhd.Basis(8, 8, 3, radial="lobatto")  # rho, theta, zeta nodes
     obj = ObjectiveFunction(AgniStability(eq, basis))
     obj.build(verbose=0)
-    # gamma^2 of family 0 on this basis, from a dense solve
-    gam2=obj.compute_scaled_error(obj.x(eq))
+    gam2 = obj.compute_scaled_error(obj.x(eq))  # gamma^2 of family 0
     """
 
     __doc__ = __doc__.rstrip() + collect_docs(

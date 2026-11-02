@@ -1580,13 +1580,15 @@ class ConcentricGrid(_Grid):
         volume integrals are invariant to this truncation.
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
-        pattern for radial coordinates
+    node_pattern : {'cheb1', 'cheb2', 'jacobi', 'jacobi-dna', 'ocs', 'linear'}
+        pattern for radial coordinates. Default is ``'jacobi-dna'``.
 
             * ``'cheb1'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[0,1]
             * ``'cheb2'``: Chebyshev-Gauss-Lobatto nodes scaled to r=[-1,1]
             * ``'jacobi'``: Radial nodes are roots of Shifted Jacobi polynomial of
               degree M+1 r=(0,1), and angular nodes are equispaced 2(M+1) per surface
+            * ``'jacobi-dna'``: Same as ``'jacobi'`` but has more nodes at the
+              innermost flux surface, so dense near axis (dna).
             * ``'ocs'``: optimal concentric sampling to minimize the condition number
               of the resulting transform matrix, for doing inverse transform.
             * ``linear`` : linear spacing in r=[0,1]
@@ -1596,7 +1598,9 @@ class ConcentricGrid(_Grid):
     _fft_poloidal = False
     _fft_toroidal = True
 
-    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
+    def __init__(
+        self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi-dna"
+    ):
         self._L = check_nonnegint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)

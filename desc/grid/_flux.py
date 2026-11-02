@@ -19,6 +19,8 @@ class AbstractGridFlux(AbstractGrid):
 
     _static_attrs = AbstractGrid._static_attrs + ["_NFP", "_sym"]
 
+    _coordinates = "rtz"
+
     def __repr__(self):
         """str: String form of the object."""
         return (
@@ -245,28 +247,6 @@ class AbstractGridFlux(AbstractGrid):
                 y[self.axis] if jnp.ndim(y) else y,
             )
         return x
-
-    @property
-    def coordinates(self):
-        """Coordinates specified by the nodes.
-
-        Options for x0 coordinate:
-        - r = rho
-
-        Options for x1 coordinate:
-        - a = alpha
-        - t = theta
-        - v = theta_PEST
-
-        Options for x2 coordinate:
-        - p = phi
-        - z = zeta
-        """
-        coordinates = self.__dict__.setdefault("_coordinates", "rtz")
-        errorif(coordinates[0] not in ["r"], NotImplementedError)
-        errorif(coordinates[1] not in ["a", "t", "v"], NotImplementedError)
-        errorif(coordinates[2] not in ["p", "z"], NotImplementedError)
-        return coordinates
 
     @property
     def bounds(self):
@@ -1113,9 +1093,12 @@ class CustomGridFlux(AbstractGridFlux):
         Quadrature weights for each node.
     coordinates : str
         Coordinates that are specified by the nodes.
-        raz : rho, alpha, zeta
-        rvp : rho, theta_PEST, phi
         rtz : rho, theta, zeta
+        rvz : rho, theta_PEST, zeta
+        raz : rho, alpha, zeta
+        rtp : rho, theta, phi
+        rvp : rho, theta_PEST, phi
+        rap : rho, alpha, phi
     NFP : int
         Number of field periods (Default = 1).
         Change this only if your nodes are placed within one field period.
@@ -1181,7 +1164,11 @@ class CustomGridFlux(AbstractGridFlux):
             else None
         )
 
+        errorif(coordinates[0] not in ["r"], NotImplementedError)
+        errorif(coordinates[1] not in ["a", "t", "v"], NotImplementedError)
+        errorif(coordinates[2] not in ["p", "z"], NotImplementedError)
         self._coordinates = coordinates
+
         self._source_grid = source_grid
         self._NFP = check_posint(NFP, "NFP", False)
         self._is_meshgrid = bool(is_meshgrid)

@@ -347,10 +347,9 @@ class AbstractGrid(IOAble, ABC):
         pass
 
     @property
-    @abstractmethod
     def coordinates(self):
         """Coordinates specified by the nodes."""
-        pass
+        return self._coordinates
 
     @property
     def bounds(self):

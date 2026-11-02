@@ -16,6 +16,7 @@ class AbstractGridCurve(AbstractGrid):
 
     _static_attrs = AbstractGrid._static_attrs + ["_NFP"]
 
+    _coordinates = "__s"
     _L = 0
     _M = 0
     _is_meshgrid = True
@@ -43,21 +44,6 @@ class AbstractGridCurve(AbstractGrid):
             return label
         x2 = {"s": "s"}[self.coordinates[2]]
         return {x2: "x2"}[label]
-
-    @property
-    def coordinates(self):
-        """Coordinates specified by the nodes.
-
-        Options for x0 coordinate: None
-
-        Options for x1 coordinate: None
-
-        Options for x2 coordinate:
-        - s = s
-        """
-        coordinates = self.__dict__.setdefault("_coordinates", "__s")
-        errorif(coordinates != "__s", NotImplementedError)
-        return coordinates
 
     @property
     def bounds(self):

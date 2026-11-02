@@ -16,6 +16,7 @@ class AbstractGridToroidalSurface(AbstractGrid):
 
     _static_attrs = AbstractGrid._static_attrs + ["_NFP", "_sym"]
 
+    _coordinates = "_tz"
     _L = 0
 
     def __repr__(self):
@@ -78,22 +79,6 @@ class AbstractGridToroidalSurface(AbstractGrid):
         x1 = {"t": "theta"}[self.coordinates[1]]
         x2 = {"z": "zeta"}[self.coordinates[2]]
         return {"poloidal": "x1", "toroidal": "x2", x1: "x1", x2: "x2"}[label]
-
-    @property
-    def coordinates(self):
-        """Coordinates specified by the nodes.
-
-        Options for x0 coordinate: None
-
-        Options for x1 coordinate:
-        - t = theta
-
-        Options for x2 coordinate:
-        - z = zeta
-        """
-        coordinates = self.__dict__.setdefault("_coordinates", "_tz")
-        errorif(coordinates != "_tz", NotImplementedError)
-        return coordinates
 
     @property
     def bounds(self):

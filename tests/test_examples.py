@@ -82,7 +82,13 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
 
-from .utils import area_difference_desc, area_difference_vmec
+from .utils import (
+    area_difference_desc,
+    area_difference_vmec,
+    sengupta_ellipsoidal,
+    sengupta_errors,
+    sengupta_paraboloidal,
+)
 
 
 @pytest.mark.regression
@@ -1381,6 +1387,140 @@ def test_freeb_axisym():
 
     rho_err, _ = area_difference_vmec(eq, "tests/inputs/wout_solovev_freeb.nc")
     np.testing.assert_allclose(rho_err[:, -1], 0, atol=2e-2)  # only check rho=1
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_sengupta_vacuum_fixed_boundary():
+    """Test a fixed boundary vacuum solve against an exact nonsymmetric vacuum field.
+
+    The ellipsoidal member of Sengupta et al. (arXiv:2610.28466) that VMEC++ tests,
+    inside its surface psi0 + 0.02. Given that boundary, its toroidal flux and zero
+    pressure and current, the interior surfaces, the axis, iota and B are predictions.
+    """
+    field = sengupta_ellipsoidal()
+    psi = field.psi0 + 0.02
+    M = 8
+    eq = Equilibrium(
+        L=M,
+        M=M,
+        N=M,
+        NFP=2,
+        surface=field.get_surface(psi, M=M, N=M),
+        Psi=float(field.compute_toroidal_flux(psi)[0]),
+    )
+    eq.solve(ftol=1e-10, xtol=1e-10, gtol=1e-10, maxiter=100, verbose=3)
+    err = sengupta_errors(field, eq, psi)
+    # converged at this resolution to psi 2.2e-3, iota 1.3e-3, B 1.5e-4, axis 7e-5 m
+    assert np.all(err["psi"] < 5e-3), err["psi"]
+    assert np.all(err["iota"] < 3e-3), err["iota"]
+    assert np.all(err["B"] < 4e-4), err["B"]
+    assert err["axis"] < 3e-4, err["axis"]
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_sengupta_vacuum_constant_iota():
+    """Test a fixed boundary vacuum solve with exactly constant irrational iota.
+
+    The paraboloidal member of Sengupta et al. (arXiv:2610.28466) with iota = 1/sqrt(5)
+    on every surface, inside its surface psi0 + 0.01.
+    """
+    field = sengupta_paraboloidal()
+    psi = field.psi0 + 0.01
+    M = 10
+    eq = Equilibrium(
+        L=M,
+        M=M,
+        N=M,
+        NFP=2,
+        surface=field.get_surface(psi, M=M, N=M),
+        Psi=float(field.compute_toroidal_flux(psi)[0]),
+    )
+    # every measure of the force error levels off after 10 iterations, but iota on the
+    # axis keeps converging: its error is 1.4e-2, 5.7e-3 and 2.3e-3 after 10, 30 and 45
+    # iterations, and about 2e-3 at this resolution after that
+    eq.solve(ftol=1e-10, xtol=1e-10, gtol=1e-10, maxiter=60, verbose=3)
+    iota = eq.compute("iota", grid=LinearGrid(rho=np.linspace(0, 1, 11)))["iota"]
+    np.testing.assert_allclose(iota, 1 / np.sqrt(5), rtol=5e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_sengupta_vacuum_free_boundary():
+    """Test a free boundary vacuum solve in an exact nonsymmetric vacuum field.
+
+    As in VMEC++, the ellipsoidal member of Sengupta et al. (arXiv:2610.28466) with
+    the toroidal flux of its surface psi0 + 0.02 starts from its surface psi0 + 0.01,
+    with the exact field as the external field, and has to find the boundary.
+    """
+    field = sengupta_ellipsoidal()
+    psi = field.psi0 + 0.02
+    M = 6
+    eq = Equilibrium(
+        L=M,
+        M=M,
+        N=M,
+        NFP=2,
+        surface=field.get_surface(field.psi0 + 0.01, M=M, N=M),
+        Psi=float(field.compute_toroidal_flux(psi)[0]),
+    )
+    eq.solve(ftol=1e-10, xtol=1e-10, gtol=1e-10, maxiter=100, verbose=3)
+
+    constraints = (
+        ForceBalance(eq=eq),
+        FixCurrent(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objective = ObjectiveFunction(
+        VacuumBoundaryError(eq=eq, field=field, field_fixed=True)
+    )
+    # free the boundary modes with |m|, |n| <= 2 first, then all of them
+    for k in [2, M]:
+        R_modes = eq.surface.R_basis.modes[
+            np.max(np.abs(eq.surface.R_basis.modes), 1) > k, :
+        ]
+        Z_modes = eq.surface.Z_basis.modes[
+            np.max(np.abs(eq.surface.Z_basis.modes), 1) > k, :
+        ]
+        bdry_constraints = (
+            (FixBoundaryR(eq=eq, modes=R_modes), FixBoundaryZ(eq=eq, modes=Z_modes))
+            if k < M
+            else ()
+        )
+        eq, _ = eq.optimize(
+            objective,
+            constraints + bdry_constraints,
+            optimizer="proximal-lsq-exact",
+            maxiter=10,
+            ftol=1e-10,
+            xtol=1e-10,
+            gtol=1e-10,
+            verbose=3,
+            options={
+                "solve_options": {
+                    "ftol": 1e-12,
+                    "xtol": 1e-12,
+                    "gtol": 1e-12,
+                    "maxiter": 100,
+                }
+            },
+        )
+
+    grid = LinearGrid(M=2 * M, N=2 * M, NFP=2)
+    label = field.compute_flux_label(eq.surface.compute("x", grid=grid)["x"])
+    err = sengupta_errors(field, eq, psi)
+    # at this resolution the boundary is found to 1e-4 and the interior to psi 4e-3,
+    # iota 1e-3 to 3e-3, B 4e-4 and axis 1e-3 m, depending on the path of the solve
+    np.testing.assert_allclose(label, psi, atol=5e-4 * (psi - field.psi0))
+    assert np.all(err["psi"] < 1e-2), err["psi"]
+    assert np.all(err["iota"] < 5e-3), err["iota"]
+    assert np.all(err["B"] < 1e-3), err["B"]
+    assert err["axis"] < 3e-3, err["axis"]
 
 
 class TestGetExample:

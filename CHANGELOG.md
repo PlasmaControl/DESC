@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Adds ``SenguptaVacuumField``, the exact vacuum fields with nested toroidal surfaces and no continuous symmetry of [Sengupta et al. (2026)](https://arxiv.org/abs/2610.28466), in both their ellipsoidal and paraboloidal geometries. Besides the field, it computes the exact surface label, rotational transform and toroidal flux, and gives the magnetic axis and any of its surfaces as a ``FourierRZCurve`` and ``FourierRZToroidalSurface``, so it can serve as an exact reference for fixed and free boundary vacuum equilibria.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 

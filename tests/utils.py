@@ -3,12 +3,15 @@
 import os
 import warnings
 
+import mpmath
 import numpy as np
+from scipy.special import ellipkinc
 from shapely.geometry import Polygon
 
 from desc.backend import put
 from desc.derivatives import _Derivative
 from desc.grid import Grid, LinearGrid
+from desc.magnetic_fields import SenguptaVacuumField
 from desc.utils import ensure_tuple
 from desc.vmec import VMECIO
 
@@ -569,3 +572,69 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         return self._compute(*args, **kwargs)
+
+
+def sengupta_paraboloidal():
+    """Paraboloidal member of Sengupta et al. with constant iota = 1/sqrt(5)."""
+    # K'/K = 5/2 from the nome q = exp(-5 pi / 2), k = (theta_2(q) / theta_3(q))^2
+    q = np.exp(-2.5 * np.pi)
+    k = float(mpmath.jtheta(2, 0, q) ** 2 / mpmath.jtheta(3, 0, q) ** 2)
+    u0 = np.arccosh(np.sqrt(5) / np.cosh(2 * np.pi / 5))
+    return SenguptaVacuumField(k=k, u0=u0, v0=0.0, geometry="paraboloidal")
+
+
+def sengupta_ellipsoidal(k=0.2, m_g=0.2, u0=None, **kwargs):
+    """Ellipsoidal member of Sengupta et al., by default the one VMEC++ tests with."""
+    u0 = 2 * ellipkinc(np.pi / 4, m_g) if u0 is None else u0
+    return SenguptaVacuumField(k=k, u0=u0, v0=kwargs.pop("v0", u0), m_g=m_g, **kwargs)
+
+
+def sengupta_sqrt2_7():
+    """Ellipsoidal member of Sengupta et al. with axis transform sqrt(2)/7."""
+    k = 3 - 2 * np.sqrt(2)
+    u0 = 2 * ellipkinc(np.arcsin((21 * np.sqrt(2) - 28) ** -0.5), k**2)
+    return sengupta_ellipsoidal(k=k, m_g=k**2, u0=u0)
+
+
+def sengupta_errors(field, eq, psi, rho=np.array([0.25, 0.5, 0.75, 1.0])):
+    """Deviations of a vacuum equilibrium from the exact field of Sengupta et al.
+
+    Parameters
+    ----------
+    field : SenguptaVacuumField
+        Exact field.
+    eq : Equilibrium
+        Equilibrium bounded by the surface psi of the field.
+    psi : float
+        Value of the exact surface label on the boundary of eq.
+    rho : ndarray
+        Flux surfaces of eq to measure on.
+
+    Returns
+    -------
+    errors : dict of ndarray
+        On each surface rho: "psi", the largest deviation of the exact label from its
+        mean on the surface, relative to psi - psi0; "iota", the deviation of iota from
+        its exact value at that mean, relative to that; and "B", the largest deviation
+        of B relative to |B|. "axis" is the largest distance of the magnetic axis from
+        the exact axis in the planes of constant phi.
+
+    """
+    out = {"psi": [], "iota": [], "B": []}
+    for r in rho:
+        grid = LinearGrid(rho=np.array([r]), M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP)
+        data = eq.compute(["R", "phi", "Z", "B", "iota"], grid=grid)
+        x = np.stack([data["R"], data["phi"], data["Z"]], axis=-1)
+        label = np.asarray(field.compute_flux_label(x))
+        out["psi"].append(np.max(np.abs(label - label.mean())) / (psi - field.psi0))
+        iota = field.compute_iota(label.mean())[0]
+        out["iota"].append(abs(data["iota"][0] - iota) / abs(iota))
+        B = field.compute_magnetic_field(x)
+        out["B"].append(
+            np.max(np.linalg.norm(data["B"] - B, axis=-1) / np.linalg.norm(B, axis=-1))
+        )
+    out = {key: np.array(val) for key, val in out.items()}
+    grid = LinearGrid(rho=np.array([0.0]), N=4 * eq.N, NFP=eq.NFP)
+    axis = field.get_axis(N=2 * eq.N).compute("x", grid=grid)["x"]
+    out["axis"] = np.max(np.abs(eq.compute("x", grid=grid)["x"] - axis)[:, [0, 2]])
+    return out

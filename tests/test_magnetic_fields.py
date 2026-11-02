@@ -1,6 +1,7 @@
 """Tests for magnetic field classes."""
 
 import matplotlib.pyplot as plt
+import mpmath
 import numpy as np
 import pytest
 from diffrax import (
@@ -12,6 +13,7 @@ from diffrax import (
     Tsit5,
 )
 from scipy.constants import mu_0
+from scipy.special import ellipj, ellipkinc, roots_legendre
 
 from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
@@ -29,6 +31,7 @@ from desc.magnetic_fields import (
     OmnigenousField,
     PoloidalMagneticField,
     ScalarPotentialField,
+    SenguptaVacuumField,
     SplineMagneticField,
     ToroidalMagneticField,
     VectorPotentialField,
@@ -39,10 +42,12 @@ from desc.magnetic_fields import (
 )
 from desc.magnetic_fields._core import _field_line_integrate
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
+from desc.magnetic_fields._sengupta import _ellipj, _ellipkinc, _sn
 from desc.plotting import poincare_plot
-from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 from .utils import FiniteDiffDerivative as Derivative
+from .utils import sengupta_ellipsoidal, sengupta_paraboloidal, sengupta_sqrt2_7
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -1880,3 +1885,200 @@ def test_domm_W7AS():
         marker="d",
     )
     return fig
+
+
+class TestSenguptaVacuumField:
+    """Tests for the exact vacuum fields of Sengupta et al. arXiv:2610.28466."""
+
+    @pytest.mark.unit
+    def test_elliptic_functions(self):
+        """Test the Jacobi elliptic functions against scipy and mpmath."""
+        u = np.linspace(-7, 7, 101)
+        for m in [0.0, 0.03, 0.5, 0.97]:
+            np.testing.assert_allclose(
+                _ellipj(u, m), ellipj(u, m)[:3], atol=1e-14, err_msg=f"m={m}"
+            )
+            np.testing.assert_allclose(
+                _ellipkinc(jnp.asarray(u), m), ellipkinc(u, m), rtol=1e-14
+            )
+            np.testing.assert_allclose(
+                jax.vmap(jax.grad(lambda u: _ellipj(u, m)[0]))(u),
+                ellipj(u, m)[1] * ellipj(u, m)[2],
+                atol=1e-14,
+            )
+        x, y = np.random.default_rng(0).uniform(-2, 2, (2, 20))
+        re, im = _sn(x, y, 0.25)
+        sn = [
+            complex(mpmath.ellipfun("sn", complex(a, b), m=0.25)) for a, b in zip(x, y)
+        ]
+        np.testing.assert_allclose(re + 1j * im, sn, atol=1e-14)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field",
+        [
+            sengupta_sqrt2_7(),
+            sengupta_paraboloidal(),
+            # members without stellarator symmetry and with N > 1
+            sengupta_ellipsoidal(k=0.5, m_g=0.5, v0=1.8, delta=0.2),
+            sengupta_ellipsoidal(N=2),
+            SenguptaVacuumField(
+                k=0.1, u0=0.8, v0=0.1, delta=0.3, geometry="paraboloidal"
+            ),
+        ],
+    )
+    def test_vacuum_field_with_nested_surfaces(self, field):
+        """Test curl B = div B = 0, B.grad(psi) = 0 and psi = psi0 on the axis."""
+        rng = np.random.default_rng(1)
+        u = field._u0 + 0.2 * field._rho_max * rng.uniform(-1, 1, 20)
+        v = field._v0 + 0.2 * field._rho_max * rng.uniform(-1, 1, 20)
+        zeta = rng.uniform(0, field._period, 20)
+        x = field._position(u, v, zeta)
+        np.testing.assert_allclose(
+            field.compute_coordinates(x, basis="xyz")[:, :2], np.c_[u, v], atol=1e-12
+        )
+
+        B = field.compute_magnetic_field(x, basis="xyz")
+        dB = jax.vmap(
+            jax.jacfwd(lambda x: field.compute_magnetic_field(x[None], basis="xyz")[0])
+        )(x)
+        curl = jnp.stack(
+            [
+                dB[:, 2, 1] - dB[:, 1, 2],
+                dB[:, 0, 2] - dB[:, 2, 0],
+                dB[:, 1, 0] - dB[:, 0, 1],
+            ],
+            axis=-1,
+        )
+        scale = np.abs(dB).max()
+        np.testing.assert_allclose(curl / scale, 0, atol=1e-13)
+        np.testing.assert_allclose(
+            jnp.trace(dB, axis1=1, axis2=2) / scale, 0, atol=1e-13
+        )
+
+        grad_psi = jax.vmap(
+            jax.grad(lambda x: field.compute_flux_label(x[None], basis="xyz")[0])
+        )(x)
+        np.testing.assert_allclose(
+            dot(B, grad_psi)
+            / jnp.linalg.norm(B, axis=-1)
+            / jnp.linalg.norm(grad_psi, axis=-1),
+            0,
+            atol=1e-12,
+        )
+        # the field lines advance around the torus
+        _, jac = field._jacobian(u, v, zeta)
+        assert np.all(dot(B, jnp.linalg.inv(jac)[:, 2]) > 0)
+
+        axis = field.get_axis(N=12)
+        x = axis.compute("x", grid=LinearGrid(N=30))["x"]
+        np.testing.assert_allclose(field.compute_flux_label(x), field.psi0, rtol=1e-7)
+
+    @pytest.mark.unit
+    def test_rotational_transform(self):
+        """Test the rotational transforms that the paper gives in closed form."""
+        # constant on every surface of the paraboloidal member
+        field = sengupta_paraboloidal()
+        np.testing.assert_allclose(
+            field.compute_iota(field.psi0 + np.array([1e-4, 0.01, 0.05])),
+            1 / np.sqrt(5),
+            rtol=1e-12,
+        )
+        # sqrt(2)/7 on the axis of the ellipsoidal member, by Richardson extrapolation
+        field = sengupta_sqrt2_7()
+        iota = field.compute_iota(field.psi0 + np.array([1e-5, 2e-5]))
+        np.testing.assert_allclose(2 * iota[0] - iota[1], np.sqrt(2) / 7, rtol=1e-8)
+        # 0.04235 on the axis of the reference member (the paper's figure 2)
+        field = sengupta_ellipsoidal(k=0.5, m_g=0.5)
+        np.testing.assert_allclose(
+            field.compute_iota(field.psi0 + 1e-5), 0.04235, atol=5e-6
+        )
+        # from 0.1437 on the axis to 0.1368 at psi0 + 0.1 in VMEC++'s member
+        field = sengupta_ellipsoidal()
+        np.testing.assert_allclose(
+            field.compute_iota(field.psi0 + np.array([1e-5, 0.1])),
+            [0.1437, 0.1368],
+            atol=5e-5,
+        )
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    def test_surface_and_toroidal_flux(self):
+        """Test the fitted surface and its flux against the flux through phi = 0."""
+        field = sengupta_ellipsoidal()
+        psi = field.psi0 + 0.1
+        surf = field.get_surface(psi, M=10, N=10)
+        assert surf.sym
+        x = surf.compute("x", grid=LinearGrid(M=30, N=30, NFP=2))["x"]
+        np.testing.assert_allclose(field.compute_flux_label(x), psi, atol=1e-7)
+
+        # B_phi over the section phi = 0, star shaped about the axis
+        grid = LinearGrid(theta=128, zeta=np.array([0.0]), NFP=2)
+        data = surf.compute(["R", "Z", "R_t", "Z_t"], grid=grid)
+        x0 = field.get_axis().compute("x", grid=LinearGrid(zeta=np.array([0.0])))["x"]
+        t, w = roots_legendre(32)
+        t, w = (t + 1) / 2, w / 2
+        dR, dZ = data["R"] - x0[0, 0], data["Z"] - x0[0, 2]
+        R, Z = x0[0, 0] + np.outer(t, dR), x0[0, 2] + np.outer(t, dZ)
+        B = field.compute_magnetic_field(np.c_[R.ravel(), 0 * R.ravel(), Z.ravel()])
+        area = (
+            t[:, None] * np.abs(dR * data["Z_t"] - dZ * data["R_t"]) * 2 * np.pi / 128
+        )
+        Psi = np.sum(w[:, None] * area * B[:, 1].reshape(R.shape))
+        np.testing.assert_allclose(field.compute_toroidal_flux(psi), Psi, rtol=1e-7)
+        assert (
+            Psi < 0
+        )  # the ellipsoidal fields point in the direction of decreasing phi
+
+    @pytest.mark.unit
+    def test_symmetry(self):
+        """Test the two field periods and stellarator symmetry."""
+        rng = np.random.default_rng(2)
+        for field in [sengupta_ellipsoidal(), sengupta_paraboloidal()]:
+            x = field._position(
+                field._u0 + 0.1 * rng.uniform(-1, 1, 10),
+                field._v0 + 0.1 * rng.uniform(-1, 1, 10),
+                rng.uniform(0, field._period, 10),
+            )
+            rpz = xyz2rpz(x)
+            B = field.compute_magnetic_field(rpz)
+            np.testing.assert_allclose(
+                field.compute_magnetic_field(rpz + np.array([0, np.pi, 0])),
+                B,
+                atol=1e-12,
+            )
+            assert field.sym
+            np.testing.assert_allclose(
+                field.compute_magnetic_field(rpz * np.array([1, -1, -1])),
+                B * np.array([-1, 1, 1]),
+                atol=1e-12,
+            )
+        field = sengupta_ellipsoidal(delta=0.3)
+        assert not field.sym
+        B = field.compute_magnetic_field(rpz)
+        assert not np.allclose(
+            field.compute_magnetic_field(rpz * np.array([1, -1, -1])),
+            B * np.array([-1, 1, 1]),
+        )
+
+    @pytest.mark.unit
+    def test_jit_io_and_domain(self, tmpdir_factory):
+        """Test jit, save and load, nan outside the domain, and input errors."""
+        field = sengupta_paraboloidal()
+        coords = np.array([[0.65, 0.1, 0.1], [0.6, 2.0, -0.4], [5.0, 0.0, 0.0]])
+        B = field.compute_magnetic_field(coords)
+        np.testing.assert_allclose(jit(field.compute_magnetic_field)(coords), B)
+        assert np.all(np.isfinite(B[:2])) and np.all(np.isnan(B[2]))
+
+        tmpdir = tmpdir_factory.mktemp("sengupta_field")
+        field.save(tmpdir.join("field.h5"))
+        field2 = load(tmpdir.join("field.h5"))
+        assert field2.geometry == "paraboloidal"
+        np.testing.assert_allclose(field2.compute_magnetic_field(coords), B)
+
+        with pytest.raises(ValueError, match="geometry"):
+            SenguptaVacuumField(k=0.5, u0=1, v0=1, m_g=0.5, geometry="toroidal")
+        with pytest.raises(ValueError, match="m_g"):
+            SenguptaVacuumField(k=0.5, u0=1, v0=1)
+        with pytest.raises(ValueError, match="psi0"):
+            field.get_surface(field.psi0 - 0.1)

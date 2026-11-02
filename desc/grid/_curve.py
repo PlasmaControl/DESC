@@ -47,7 +47,7 @@ class AbstractGridCurve(AbstractGrid):
 
     @property
     def bounds(self):
-        """Bounds of coordinates."""
+        """Bounds (domain) of coordinates."""
         return ((0, 0), (0, 0), (0, 2 * np.pi))
 
     @property
@@ -80,6 +80,7 @@ class LinearGridCurve(AbstractGridCurve):
     """Grid in which the nodes are linearly spaced in the curve coordinate.
 
     Coordinates (x0,x1,x2) represent (_,_,s).
+    The x0 and x1 coordinates are unused and filled with values of x0=x1=0.
 
     Parameters
     ----------
@@ -231,6 +232,7 @@ class CustomGridCurve(AbstractGridCurve):
     """Collocation grid with custom node placement.
 
     Coordinates (x0,x1,x2) represent (_,_,s).
+    The x0 and x1 coordinates are unused and filled with values of x0=x1=0.
 
     Parameters
     ----------

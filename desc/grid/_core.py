@@ -353,7 +353,7 @@ class AbstractGrid(IOAble, ABC):
 
     @property
     def bounds(self):
-        """Bounds of coordinates."""
+        """Bounds (domain) of coordinates."""
         return self.__dict__.setdefault(
             "_bounds", ((-np.inf, np.inf), (-np.inf, np.inf), (-np.inf, np.inf))
         )

@@ -82,7 +82,7 @@ class AbstractGridToroidalSurface(AbstractGrid):
 
     @property
     def bounds(self):
-        """Bounds of coordinates."""
+        """Bounds (domain) of coordinates."""
         return ((0, 0), (0, 2 * np.pi), (0, 2 * np.pi))
 
     @property
@@ -142,6 +142,7 @@ class LinearGridToroidalSurface(AbstractGridToroidalSurface):
     """Grid in which the nodes are linearly spaced in the surface coordinate.
 
     Coordinates (x0,x1,x2) represent (_,theta,zeta).
+    The x0 coordinate is unused and filled with values of x0=0.
 
     Parameters
     ----------
@@ -380,11 +381,13 @@ class CustomGridToroidalSurface(AbstractGridToroidalSurface):
     """Collocation grid with custom node placement.
 
     Coordinates (x0,x1,x2) represent (_,theta,zeta).
+    The x0 coordinate is unused and filled with values of x0=0.
 
     Parameters
     ----------
     nodes : ndarray of float, size(num_nodes,2) or size(num_nodes,3)
         Node coordinates, in (_,theta,zeta).
+        If an array with three columns is given, the first column will be ignored.
     spacing : ndarray of float, size(num_nodes,)
         Spacing between each node.
     weights : ndarray of float, size(num_nodes,)

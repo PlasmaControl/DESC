@@ -204,7 +204,7 @@ class AbstractGridFlux(AbstractGrid):
             return label
         x0 = {"r": "rho"}[self.coordinates[0]]
         x1 = {"a": "alpha", "t": "theta", "v": "theta_PEST"}[self.coordinates[1]]
-        x2 = {"z": "zeta"}[self.coordinates[2]]
+        x2 = {"p": "phi", "z": "zeta"}[self.coordinates[2]]
         return {
             "radial": "x0",
             "poloidal": "x1",
@@ -250,7 +250,7 @@ class AbstractGridFlux(AbstractGrid):
 
     @property
     def bounds(self):
-        """Bounds of coordinates."""
+        """Bounds (domain) of coordinates."""
         return ((0, 1), (0, 2 * np.pi), (0, 2 * np.pi))
 
     @property

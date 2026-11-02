@@ -174,26 +174,24 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     Parameters
     ----------
     fname : str
-        name of BNORM file to read and use to calculate Bnormal from.
+        Name of BNORM file to read and use to calculate Bnormal from.
     surface : Surface or Equilibrium
         Surface to calculate the magnetic field's Bnormal on.
         If an Equilibrium is supplied, will use its boundary surface.
-    eval_grid : AbstractGridFlux, optional
-        Grid of points on the plasma surface to evaluate the Bnormal at,
-        if None defaults to a LinearGridFlux with twice
-        the surface grid's poloidal and toroidal resolutions
+    eval_grid : AbstractGridToroidalSurface, optional
+        Grid of points on the plasma surface to evaluate the Bnormal at.
+        If None, defaults to a LinearGridToroidalSurface with twice the surface's
+        poloidal and toroidal resolutions.
     scale_by_curpol : bool, optional
-        Whether or not to un-scale the Bnormal coefficients by curpol
-        before calculating Bnormal, by default True
-        (set to False if it is known that the BNORM file was saved without scaling
-        by curpol)
-        requires an Equilibrium to be passed in
+        Whether or not to un-scale the Bnormal coefficients by curpol before calculating
+        Bnormal. True by default, set to False if it is known that the BNORM file was
+        saved without scaling by curpol. Requires an Equilibrium to be passed in.
 
     Returns
     -------
     Bnormal: ndarray,
         Bnormal distribution from the BNORM Fourier coefficients,
-        evaluated on the given eval_grid
+        evaluated on the given eval_grid.
     """
     if isinstance(surface, EquilibriaFamily):
         surface = surface[-1]
@@ -203,9 +201,9 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     else:
         eq = None
 
-    assert surface.sym, (
-        "BNORM assumes stellarator symmetry, but" "a non-symmetric surface was given!"
-    )
+    assert (
+        surface.sym
+    ), "BNORM assumes stellarator symmetry, but a non-symmetric surface was given!"
 
     if scale_by_curpol and eq is None:
         raise RuntimeError(
@@ -240,8 +238,8 @@ def read_BNORM_file(fname, surface, eval_grid=None, scale_by_curpol=True):
     )
 
     if eval_grid is None:
-        eval_grid = LinearGridFlux(
-            rho=jnp.array(1.0), M=surface.M_grid, N=surface.N_grid, NFP=surface.NFP
+        eval_grid = LinearGridToroidalSurface(
+            M=surface.M * 2, N=surface.N * 2, NFP=surface.NFP
         )
     trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
 

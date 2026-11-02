@@ -1522,7 +1522,7 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq=eq,
-        eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        eval_grid=LinearGridToroidalSurface(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGridToroidalSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=1e4,
         vacuum=True,
@@ -1547,7 +1547,7 @@ def test_regcoil_axisymmetric():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq=eq,
-        eval_grid=LinearGridFlux(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
+        eval_grid=LinearGridToroidalSurface(M=10, N=10, NFP=eq.NFP, sym=eq.sym),
         source_grid=LinearGridToroidalSurface(M=40, N=80, NFP=eq.NFP),
         lambda_regularization=1e4,
         # negate the B0 because a negative G corresponds to a positive B toroidal

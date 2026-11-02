@@ -234,7 +234,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -285,7 +285,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -325,7 +325,7 @@ class CurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -655,7 +655,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -708,7 +708,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic field.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -748,7 +748,7 @@ class FourierCurrentPotentialField(_MagneticField, FourierRZToroidalSurface):
             Dictionary of optimizable parameters, eg field.params_dict.
         basis : {"rpz", "xyz"}
             Basis for input coordinates and returned magnetic vector potential.
-        source_grid : AbstractGridFlux, int or None or array-like, optional
+        source_grid : AbstractGridToroidalSurface, int or None or array-like, optional
             Source grid upon which to evaluate the surface current density K.
         transforms : dict of Transform
             Transforms for R, Z, lambda, etc. Default is to build from source_grid
@@ -1076,7 +1076,7 @@ def _compute_A_or_B_from_CurrentPotentialField(
         current potential field object from which to compute magnetic field.
     coords : array-like shape(N,3)
         cylindrical or cartesian coordinates
-    source_grid : AbstractGridFlux,
+    source_grid : AbstractGridToroidalSurface,
         source grid upon which to evaluate the surface current density K
     params : dict, optional
         parameters to pass to compute function
@@ -1246,11 +1246,11 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         whether to use a simple regularization based off of just the single-valued
         part of Phi, or to use the full REGCOIL regularization penalizing | K | ^ 2.
         Defaults to ``"regcoil"``
-    eval_grid : AbstractGridFlux, optional
-        Grid upon which to evaluate the normal field on the plasma surface, and at which
-        the normal field is minimized. Defaults to
+    eval_grid : LinearGridToroidalSurface, optional
+        Grid upon which to evaluate the normal field on the plasma surface,
+        and at which the normal field is minimized. Defaults to
         ``LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)``.
-    source_grid : AbstractGridToroidalSurface, optional
+    source_grid : LinearGridToroidalSurface, optional
         Source grid upon which to evaluate the surface current when calculating
         the normal field on the plasma surface. Defaults to
         ``LinearGridToroidalSurface(M=max(3 * current_potential_field.M_Phi, 30),
@@ -1323,8 +1323,8 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
                     given `source_grid`. A list of arrays, with list length
                     `lambda_regularization.size`, corresponding to the array
                     of `lambda_regularization`.
-            eval_grid: AbstractGridFlux object that Bn was evaluated at.
-            source_grid: AbstractGridFlux object that Phi and K were evaluated at.
+            eval_grid: LinearGridToroidalSurface that Bn was evaluated at.
+            source_grid: LinearGridToroidalSurface that Phi and K were evaluated at.
 
     References
     ----------
@@ -1403,19 +1403,27 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
             NFP=int(eq.NFP),
         )
     if eval_grid is None:
-        eval_grid = LinearGridFlux(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
-    # compute_Bnormal requires a LinearGridToroidalSurface
-    surf_eval_grid = LinearGridToroidalSurface(
-        theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
-        zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
+        eval_grid = LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
+    # Equilibrium.compute requires a LinearGridFlux
+    flux_eval_grid = LinearGridFlux(
+        theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
         NFP=eval_grid.NFP,
         sym=eval_grid.sym,
         endpoint=eval_grid.endpoint,
     )
-    np.testing.assert_allclose(surf_eval_grid.nodes[:, 1:], eval_grid.nodes[:, 1:])
-    np.testing.assert_allclose(surf_eval_grid.weights, eval_grid.weights)
+    np.testing.assert_allclose(
+        flux_eval_grid.nodes[:, 1:],
+        eval_grid.nodes[:, 1:],
+        err_msg="flux_eval_grid does not have the same nodes as eval_grid",
+    )
+    np.testing.assert_allclose(
+        flux_eval_grid.weights,
+        eval_grid.weights,
+        err_msg="flux_eval_grid does not have the same weights as eval_grid",
+    )
 
-    B_eq_surf = eq.compute("|B|", eval_grid)["|B|"]
+    B_eq_surf = eq.compute("|B|", flux_eval_grid)["|B|"]
     # just need it for normalization, so do a simple mean
     normalization_B = jnp.mean(B_eq_surf)
 
@@ -1423,14 +1431,14 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     data["source_grid"] = source_grid
 
     # plasma surface normal vector magnitude on eval grid
-    ne_mag = eq.compute(["|e_theta x e_zeta|"], eval_grid)["|e_theta x e_zeta|"]
+    ne_mag = eq.compute(["|e_theta x e_zeta|"], flux_eval_grid)["|e_theta x e_zeta|"]
     # winding surface normal vector magnitude on source grid
     ns_mag = current_potential_field.compute(["|e_theta x e_zeta|"], source_grid)[
         "|e_theta x e_zeta|"
     ]
 
     # calculate net enclosed poloidal and toroidal currents
-    G_tot = -(eq.compute("G", grid=eval_grid)["G"][0] / mu_0 * 2 * jnp.pi)
+    G_tot = -(eq.compute("G", flux_eval_grid)["G"][0] / mu_0 * 2 * jnp.pi)
 
     if external_field:
         G_ext = _G_from_external_field(
@@ -1461,7 +1469,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         params["G"] = G
         Bn, _ = current_potential_field.compute_Bnormal(
             eq.surface,
-            eval_grid=surf_eval_grid,
+            eval_grid=eval_grid,
             source_grid=source_grid,
             params=params,
             chunk_size=chunk_size,
@@ -1567,7 +1575,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
     if external_field:
         Bn_ext, _ = external_field.compute_Bnormal(
             eq.surface,
-            eval_grid=surf_eval_grid,
+            eval_grid=eval_grid,
             source_grid=external_field_grid,
             chunk_size=chunk_size,
             B_plasma_chunk_size=B_plasma_chunk_size,

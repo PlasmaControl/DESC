@@ -362,7 +362,7 @@ def regcoil_helical_coils_scan():
     fields, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGridFlux(M=20, N=20, NFP=eq.NFP, sym=True),
+        eval_grid=LinearGridToroidalSurface(M=20, N=20, NFP=eq.NFP, sym=True),
         source_grid=LinearGridToroidalSurface(M=40, N=40, NFP=eq.NFP),
         lambda_regularization=np.append(np.array([0.0]), np.logspace(-30, -1, 5)),
         current_helicity=(1 * eq.NFP, -1),
@@ -398,7 +398,7 @@ def regcoil_modular_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        eval_grid=LinearGridToroidalSurface(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
@@ -436,7 +436,7 @@ def regcoil_windowpane_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        eval_grid=LinearGridToroidalSurface(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",
@@ -476,7 +476,7 @@ def regcoil_PF_coils():
     surface_current_field, data = solve_regularized_surface_current(
         surface_current_field,
         eq,
-        eval_grid=LinearGridFlux(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
+        eval_grid=LinearGridToroidalSurface(M=M_egrid, N=N_egrid, NFP=eq.NFP, sym=True),
         source_grid=LinearGridToroidalSurface(M=M_sgrid, N=N_sgrid, NFP=eq.NFP),
         lambda_regularization=lambda_regularization,
         regularization_type="regcoil",

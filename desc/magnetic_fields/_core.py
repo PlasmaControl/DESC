@@ -448,16 +448,22 @@ class _MagneticField(IOAble, ABC):
         if calc_Bplasma:
             # compute_B_plasma requires a LinearGridFlux
             flux_eval_grid = LinearGridFlux(
-                theta=eval_grid.nodes[eval_grid.unique_x1_idx, 1],
-                zeta=eval_grid.nodes[eval_grid.unique_x2_idx, 2],
+                theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+                zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
                 NFP=eval_grid.NFP,
                 sym=eval_grid.sym,
                 endpoint=eval_grid.endpoint,
             )
             np.testing.assert_allclose(
-                flux_eval_grid.nodes[:, 1:], eval_grid.nodes[:, 1:]
+                flux_eval_grid.nodes[:, 1:],
+                eval_grid.nodes[:, 1:],
+                err_msg="flux_eval_grid does not have the same nodes as eval_grid",
             )
-            np.testing.assert_allclose(flux_eval_grid.weights, eval_grid.weights)
+            np.testing.assert_allclose(
+                flux_eval_grid.weights,
+                eval_grid.weights,
+                err_msg="flux_eval_grid does not have the same weights as eval_grid",
+            )
             Bnormal += compute_B_plasma(
                 eq,
                 flux_eval_grid,

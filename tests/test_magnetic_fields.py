@@ -1652,7 +1652,7 @@ class TestMagneticFields:
                     solve_regularized_surface_current(
                         field,
                         eq,
-                        eval_grid=grid_flux,
+                        eval_grid=grid_surf,
                         source_grid=grid_surf,
                         vc_source_grid=grid_flux,
                         verbose=0,

@@ -1610,17 +1610,23 @@ def test_regcoil_modular_check_B(regcoil_modular_coils):
 @pytest.mark.slow
 def test_regcoil_windowpane_check_B(regcoil_windowpane_coils):
     """Test precise QA windowpane (helicity=(0,0)) regcoil solution."""
-    (
-        data,
-        surface_current_field,
-        eq,
-    ) = regcoil_windowpane_coils
+    data, surface_current_field, eq = regcoil_windowpane_coils
     assert surface_current_field.I == 0
     assert surface_current_field.G == 0
 
+    eval_grid = data["eval_grid"]
+    flux_eval_grid = LinearGridFlux(
+        rho=1.0,
+        theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+        NFP=eval_grid.NFP,
+        sym=eval_grid.sym,
+        endpoint=eval_grid.endpoint,
+    )
+
     chi_B = data["chi^2_B"][0]
     np.testing.assert_array_less(chi_B, 1e-7)
-    coords = eq.compute(["R", "phi", "Z", "B"], grid=data["eval_grid"])
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=flux_eval_grid)
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     field = surface_current_field + data["external_field"]
@@ -1641,9 +1647,20 @@ def test_regcoil_PF_check_B(regcoil_PF_coils):
     data, surface_current_field, eq = regcoil_PF_coils
     assert surface_current_field.G == 0
     assert abs(surface_current_field.I) > 0
+
+    eval_grid = data["eval_grid"]
+    flux_eval_grid = LinearGridFlux(
+        rho=1.0,
+        theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+        NFP=eval_grid.NFP,
+        sym=eval_grid.sym,
+        endpoint=eval_grid.endpoint,
+    )
+
     chi_B = data["chi^2_B"][0]
     np.testing.assert_array_less(chi_B, 1e-5)
-    coords = eq.compute(["R", "phi", "Z", "B"], grid=data["eval_grid"])
+    coords = eq.compute(["R", "phi", "Z", "B"], grid=flux_eval_grid)
     B = coords["B"]
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     field = surface_current_field + data["external_field"]
@@ -1676,14 +1693,24 @@ def test_regcoil_helical_coils_check_objective_method(
             params={"I": True, "G": True, "R_lmn": True, "Z_lmn": True},
         ),
     )
+
+    # grids
     eval_grid = data["eval_grid"]
-    sgrid = data["source_grid"]
+    source_grid = data["source_grid"]
+    flux_eval_grid = LinearGridFlux(
+        rho=1.0,
+        theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
+        zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
+        NFP=eval_grid.NFP,
+        sym=eval_grid.sym,
+        endpoint=eval_grid.endpoint,
+    )
 
     obj = QuadraticFlux(
         field=surface_current_field,
         eq=eq,
-        eval_grid=eval_grid,
-        field_grid=sgrid,
+        eval_grid=flux_eval_grid,
+        field_grid=source_grid,
         vacuum=True,
         bs_chunk_size=10,
     )
@@ -1694,14 +1721,13 @@ def test_regcoil_helical_coils_check_objective_method(
             SurfaceCurrentRegularization(
                 surface_current_field=surface_current_field,
                 weight=np.sqrt(lam),
-                source_grid=sgrid,
+                source_grid=source_grid,
             ),
         ),
         use_jit=False,
     )
 
     optimizer = Optimizer("lsq-exact")
-
     (surface_current_field,), _ = optimizer.optimize(
         (surface_current_field,),
         objective,
@@ -1719,13 +1745,13 @@ def test_regcoil_helical_coils_check_objective_method(
     coords = np.vstack([coords["R"], coords["phi"], coords["Z"]]).T
     B_from_surf = surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=sgrid,
+        source_grid=source_grid,
         basis="rpz",
         chunk_size=20,
     )
     B_from_orig_surf = initial_surface_current_field.compute_magnetic_field(
         coords,
-        source_grid=sgrid,
+        source_grid=source_grid,
         basis="rpz",
         chunk_size=20,
     )

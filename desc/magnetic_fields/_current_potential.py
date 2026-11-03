@@ -1406,6 +1406,7 @@ def solve_regularized_surface_current(  # noqa: C901 fxn too complex
         eval_grid = LinearGridToroidalSurface(M=eq.M_grid, N=eq.N_grid, NFP=int(eq.NFP))
     # Equilibrium.compute requires a LinearGridFlux
     flux_eval_grid = LinearGridFlux(
+        rho=1.0,
         theta=eval_grid.nodes[eval_grid.unique_theta_idx, 1],
         zeta=eval_grid.nodes[eval_grid.unique_zeta_idx, 2],
         NFP=eval_grid.NFP,

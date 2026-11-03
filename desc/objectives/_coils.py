@@ -11,6 +11,7 @@ from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import (
     AbstractGrid,
+    AbstractGridCurve,
     AbstractGridToroidalSurface,
     LinearGridCurve,
     LinearGridFlux,
@@ -219,7 +220,7 @@ class _CoilObjective(_Objective):
             "grid input must be broadcastable to the coil structure.",
         )
         warnif(
-            np.any([not isinstance(g, LinearGridCurve) for g in grid]),
+            np.any([not isinstance(g, AbstractGridCurve) for g in grid]),
             FutureWarning,
             "Using a LinearGridFlux for coil objectives is deprecated and will be "
             + "removed in a future DESC version, use a LinearGridCurve instead.",

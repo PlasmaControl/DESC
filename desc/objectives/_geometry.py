@@ -36,7 +36,7 @@ class AspectRatio(_Objective):
     eq : Equilibrium or FourierRZToroidalSurface
         Equilibrium or FourierRZToroidalSurface that
         will be optimized to satisfy the Objective.
-    grid : AbstractGridFlux, optional
+    grid : AbstractGrid, optional
         Collocation grid containing the nodes to evaluate at. Defaults to
         ``QuadratureGridFlux(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)`` for
         ``Equilibrium`` or ``LinearGridToroidalSurface(M=2*eq.M, N=2*eq.N, NFP=eq.NFP)``

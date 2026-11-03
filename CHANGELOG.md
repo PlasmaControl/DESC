@@ -22,6 +22,7 @@ Performance Improvements
 Breaking Changes and Deprecations
 
 - ``Curve`` and ``FourierRZToroidalSurface`` objects now expect grids of type ``AbstractGridCurve`` and ``AbstractGridToroidalSurface``, respectively. Their support for grids of type ``AbstractGridFlux`` is deprecated and will be removed in a future release.
+- The unused x0 and x1 coordinates for ``AbstractGridToroidalSurface`` and ``AbstractGridCurve`` grids now have values of 0. The previous default was ``rho=1.0`` for 1D and 2D grids.
 - The parameter ``num_transit`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` and related functions has been changed to ``field_period_transits``. This should make using a consistent resolution across different equilibria easier. The now-deprecated ``num_transit`` may still be used but note the equivalence ``field_period_transits = num_transit * grid.NFP``.
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.

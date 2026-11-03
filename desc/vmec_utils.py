@@ -9,7 +9,7 @@ from desc.backend import block_diag, jnp, sign
 from desc.basis import DoubleFourierSeries, zernike_radial
 from desc.compute import get_transforms
 from desc.grid import LinearGrid
-from desc.utils import Timer, warnif
+from desc.utils import Timer
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
@@ -278,7 +278,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
     return matrix, vmec_modes
 
 
-def fourier_to_zernike(m, n, x_mn, basis):
+def fourier_to_zernike(m, n, x_mn, basis, rho=None):
     """Convert from a double Fourier series to a Fourier-Zernike basis.
 
     Parameters
@@ -293,6 +293,9 @@ def fourier_to_zernike(m, n, x_mn, basis):
         axis to the boundary.
     basis : FourierZernikeBasis
         Basis set for x_lmn
+    rho : ndarray, shape(surfs,), optional
+        Radial coordinate of each row of x_mn. Defaults to the VMEC full mesh,
+        rho = sqrt(linspace(0, 1, surfs)).
 
     Returns
     -------
@@ -302,7 +305,9 @@ def fourier_to_zernike(m, n, x_mn, basis):
     """
     x_lmn = np.zeros((basis.num_modes,))
     surfs = x_mn.shape[0]
-    rho = np.sqrt(np.linspace(0, 1, surfs))
+    if rho is None:
+        rho = np.sqrt(np.linspace(0, 1, surfs))
+    rho = np.asarray(rho)
 
     As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):
@@ -524,14 +529,6 @@ def make_boozmn_output(  # noqa: C901
     """
     timer = Timer()
     timer.start("Total time")
-    warnif(
-        not eq.sym,
-        UserWarning,
-        "Equilibrium is asymmetric, note that the `numnc` saved with this DESC "
-        "function is opposite sign of the `numnc` saved from hidden symmetries"
-        " booz_xform and thus not verified, though every other quantity "
-        "is tested and agrees with the hidden symmetries booz_xform.",
-    )
     Psi = eq.Psi
     NFP = eq.NFP
     if M_booz is None:

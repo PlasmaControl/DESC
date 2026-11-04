@@ -1095,7 +1095,8 @@ def test_share_parameters_four_objects():
     subobj = ShareParameters([eq1, eq2, eq3, eq4], {"p_l": True, "i_l": [1, 2]})
     subobj.build()
     obj = ObjectiveFunction(subobj)
-    obj.build()
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj.build()
 
     # check dimensions
     # (len(things)-1) x p_l.size + (len(things)-1) x 2 for the 2 i_l indices
@@ -1127,7 +1128,8 @@ def test_share_parameters_two_optimizable_collections_CoilSet():
     subobj = ShareParameters([coils1, coils2], {"X_n": True, "Y_n": True, "Z_n": [2]})
     subobj.build()
     obj = ObjectiveFunction(subobj)
-    obj.build()
+    with pytest.warns(UserWarning, match="has use_jit=False"):
+        obj.build()
 
     # check dimensions
     # dim_f should be 2 (for the 2 subcoils in each coilset) x 2 (for X_n, Y_n)
@@ -1212,13 +1214,13 @@ def test_linearconstraintprojection_update_target():
     np.testing.assert_allclose(xp, lcp._xp)
     np.testing.assert_allclose(lc._ADinv, lcp._ADinv)
     np.testing.assert_allclose(ADinv, lcp._ADinv)
-    np.testing.assert_allclose(lc._Z, lcp._Z)
-    np.testing.assert_allclose(Z, lcp._Z)
     np.testing.assert_allclose(lc._D, lcp._D)
     np.testing.assert_allclose(D, lcp._D)
-    np.testing.assert_allclose(lc._ZA, lcp._ZA)
     np.testing.assert_allclose(lc._Ainv, lcp._Ainv)
+    # the tangents are D @ Z scattered into the full state vector, so checking them
+    # against a freshly built factorization also checks Z
     np.testing.assert_allclose(lc._feasible_tangents, lcp._feasible_tangents)
+    np.testing.assert_allclose(recover.feasible_tangents, lcp._feasible_tangents)
 
 
 @pytest.mark.unit

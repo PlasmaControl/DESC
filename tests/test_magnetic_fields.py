@@ -15,8 +15,8 @@ from scipy.constants import mu_0
 
 from desc.backend import jax, jit, jnp
 from desc.basis import DoubleFourierSeries
+from desc.coils import CoilSet, FourierPlanarCoil
 from desc.compute.utils import get_params, get_transforms
-from desc.derivatives import FiniteDiffDerivative as Derivative
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface, FourierXYZCurve
 from desc.grid import LinearGrid
@@ -41,6 +41,8 @@ from desc.magnetic_fields._core import _field_line_integrate
 from desc.magnetic_fields._dommaschk import CD_m_k, CN_m_k
 from desc.plotting import poincare_plot
 from desc.utils import dot, rpz2xyz, rpz2xyz_vec, xyz2rpz_vec
+
+from .utils import FiniteDiffDerivative as Derivative
 
 
 def phi_lm(R, phi, Z, a, m):
@@ -652,7 +654,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)
+        coils = field.to_CoilSet(1, step=50)
 
         np.testing.assert_allclose(
             coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
@@ -680,7 +682,7 @@ class TestMagneticFields:
             NFP=10,
         )
 
-        coils = field.to_CoilSet(1)
+        coils = field.to_CoilSet(1, step=50)
 
         np.testing.assert_allclose(
             -coils.compute_magnetic_field([20.0, 0, 0], source_grid=LinearGrid(N=700)),
@@ -1199,6 +1201,59 @@ class TestMagneticFields:
             field.compute_magnetic_vector_potential(np.array([1.75, 0.0, 0.0]))
 
     @pytest.mark.unit
+    def test_spline_field_axisym_filament_convergence(self):
+        """Single-phi-plane cubic spline vs analytic circular filament loop."""
+        from scipy.special import ellipe, ellipk
+
+        a, current = 2.0, 1.0
+
+        def loop(R, Z):
+            # on-axis-free field of a circular filament of radius a at Z=0
+            k2 = 4 * a * R / ((a + R) ** 2 + Z**2)
+            K, E = ellipk(k2), ellipe(k2)
+            d = (a - R) ** 2 + Z**2
+            s = np.sqrt((a + R) ** 2 + Z**2)
+            c = mu_0 * current / (2 * np.pi)
+            BZ = c / s * (K + (a**2 - R**2 - Z**2) / d * E)
+            BR = c * Z / (R * s) * (-K + (a**2 + R**2 + Z**2) / d * E)
+            return BR, BZ
+
+        def max_err(n, nphi, method):
+            R = np.linspace(0.5, 1.5, n)
+            Z = np.linspace(-0.5, 0.5, n)
+            phi = np.linspace(0, 2 * np.pi, nphi, endpoint=False)
+            BR, BZ = loop(*np.meshgrid(R, Z, indexing="ij"))
+            rep = lambda x: np.repeat(x[:, None, :], nphi, axis=1)
+            field = SplineMagneticField(
+                R, phi, Z, rep(BR), rep(0 * BR), rep(BZ), method=method
+            )
+            # quarter-cell offsets, away from the boundary
+            i = np.arange(2, n - 3, 3)
+            pts = np.array(
+                [
+                    (R[p] + 0.25 * (R[1] - R[0]), 0.3, Z[q] + 0.25 * (Z[1] - Z[0]))
+                    for p in i
+                    for q in i
+                ]
+            )
+            exact = np.stack(loop(pts[:, 0], pts[:, 2]), axis=1)
+            B = np.asarray(field.compute_magnetic_field(pts))
+            np.testing.assert_allclose(B[:, 1], 0, atol=1e-14)
+            return np.abs(B[:, [0, 2]] - exact).max() / np.abs(exact).max()
+
+        e_coarse = max_err(33, 1, "cubic")
+        e_fine = max_err(65, 1, "cubic")
+        # "cubic" uses 2nd-order finite-difference derivatives, so the
+        # interpolation error is O(h^3) (observed ~7x per halving of h);
+        # zero Z-derivatives (the bug) gave O(h) behaviour and 1e-3 errors.
+        assert e_fine < 1e-5
+        assert e_coarse / e_fine > 6
+        # cubic must beat linear between nodes
+        assert e_fine < 0.2 * max_err(65, 1, "linear")
+        # single plane agrees with the multi-plane 3D path
+        np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
+
+    @pytest.mark.unit
     def test_field_line_integrate(self):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
@@ -1210,6 +1265,31 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_field_line_integrate_coil_bs_chunk(self):
+        """Test field line integration for coils with bs_chunk_size."""
+        # Related to issue #2214
+        # simple toroidal field
+        B0 = 1
+        R0 = 4
+        I = 2 * np.pi * B0 * R0 / mu_0
+        field = CoilSet(
+            FourierPlanarCoil(
+                current=I,
+                center=[R0, 0, 0],
+                normal=[0, 1, 0],
+                r_n=R0 / 4,
+            ),
+            NFP=40,
+            check_intersection=False,
+        )
+        r0 = [10.0]
+        z0 = [0.0]
+        phis = [0, np.pi]
+        r, z = field_line_integrate(r0, z0, phis, field, bs_chunk_size=1000)
+        np.testing.assert_allclose(r[-1], r0[0], rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(z[-1], z0[0], rtol=1e-6, atol=1e-6)
 
     @pytest.mark.unit
     def test_field_line_integrate_jax_transforms(self, capsys):
@@ -1503,7 +1583,7 @@ class TestMagneticFields:
     def test_omnigenous_field_change_resolution_B(self):
         """Test OmnigenousField.change_resolution() of the B_lm parameters."""
         L_B_old = 1
-        L_B_new = 2
+        L_B_new = 3
         M_B_old = 3
         M_B_new = 6
         NFP = 4
@@ -1530,6 +1610,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(B_axis_lowres, B_axis_highres, rtol=6e-3)
         np.testing.assert_allclose(B_half_lowres, B_half_highres, rtol=3e-3)
         np.testing.assert_allclose(B_lcfs_lowres, B_lcfs_highres, rtol=4e-3)
+        field.change_resolution(L_B=L_B_new, M_B=M_B_new)  # Issue #2189
 
     @pytest.mark.unit
     def test_solve_current_potential_warnings_and_errors(self):

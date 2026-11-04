@@ -53,10 +53,11 @@ class VMECIO:
         boundary is loaded and the DESC Equilibrium R,Z are constrained to
         match the given VMEC boundary.
 
-        NOTE: This is only a fit, so the DESC Equilibrium returned is not
-        expected to be in force balance. It is recommended to solve the
-        Equilibrium once loaded before using the Equilibrium for any
-        analysis.
+        NOTE: This is only a fit of the VMEC R, Z and lambda, so the DESC
+        Equilibrium returned is not expected to be in force balance. It is
+        recommended to solve the Equilibrium once loaded before using the
+        Equilibrium for any analysis or computing any derived quantities in
+        DESC (e.g. anything that is not just R, Z or lambda).
 
         Parameters
         ----------
@@ -141,8 +142,16 @@ class VMECIO:
             inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
-            inputs["current"] = SplineProfile(curr, r, name="current")
+            # VMEC stores buco on the half mesh, s_j = (j - 1/2) / (ns - 1),
+            # j = 1, ..., ns - 1, with buco[0] unused. The enclosed current is zero
+            # on axis, and at the edge we extrapolate as VMEC does for ctor.
+            ns = file.variables["ns"][:].filled()
+            buco = file.variables["buco"][:].filled()
+            s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+            buco_edge = 1.5 * buco[-1] - 0.5 * buco[-2]
+            curr = 2 * np.pi / mu_0 * np.concatenate([[0.0], buco[1:], [buco_edge]])
+            r_curr = np.sqrt(np.concatenate([[0.0], s_half, [1.0]]))
+            inputs["current"] = SplineProfile(curr, r_curr, name="current")
             inputs["iota"] = None
 
         # boundary
@@ -191,8 +200,12 @@ class VMECIO:
         eq.Z_lmn = fourier_to_zernike(m, n, Z_mn, eq.Z_basis)
 
         # lambda
+        # VMEC stores lambda on the half mesh, s_j = (j - 1/2) / (ns - 1),
+        # and the first row (axis) is unused
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
-        eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
+        ns = L_mn.shape[0]
+        r_half = np.sqrt((np.arange(1, ns) - 0.5) / (ns - 1))
+        eq.L_lmn = fourier_to_zernike(m, n, L_mn[1:], eq.L_basis, rho=r_half)
 
         # apply boundary conditions
         constraints = get_fixed_axis_constraints(
@@ -734,7 +747,7 @@ class VMECIO:
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
+        jcurv.long_name = "flux surface average of sqrt(g)*J^zeta, on full mesh"
         jcurv.units = "A/m^3"
         jcurv[:] = surface_averages(
             grid_full,
@@ -790,7 +803,7 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
         raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
@@ -807,7 +820,7 @@ class VMECIO:
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
@@ -1331,7 +1344,7 @@ class VMECIO:
         # TODO (#1379): evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
-            currumns[0, :] = -(
+            currvmns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta*sqrt(g)")
@@ -1600,13 +1613,13 @@ class VMECIO:
         idx = np.where(eq.R_basis.modes[:, 1] == 0)[0]
         R0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.R_basis.modes[k, :]
+            l, m, n = eq.R_basis.modes[k, :]
             R0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         # Z axis
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * eq.N + 1,))
         for k in idx:
-            (l, m, n) = eq.Z_basis.modes[k, :]
+            l, m, n = eq.Z_basis.modes[k, :]
             Z0_n[n + eq.N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         # R axis cosine coefficients
         f.write("  RAXIS_CC = ")

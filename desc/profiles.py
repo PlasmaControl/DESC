@@ -220,6 +220,9 @@ class _Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
+            if isinstance(self, ScaledProfile):
+                self._scale *= x
+                return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -248,6 +251,9 @@ class _Profile(IOAble, ABC):
     def __pow__(self, x):
         """Raise this profile to a power."""
         if np.isscalar(x):
+            if isinstance(self, PowerProfile):
+                self._power *= x
+                return self
             return PowerProfile(x, self)
         else:
             raise NotImplementedError()
@@ -964,10 +970,10 @@ class SplineProfile(_Profile):
 
         if values is None:
             values = [0, 0, 0]
-        values = jnp.atleast_1d(values)
+        values = jnp.atleast_1d(jnp.asarray(values))
         if knots is None:
             knots = jnp.linspace(0, 1, values.size)
-        knots = jnp.atleast_1d(knots)
+        knots = jnp.atleast_1d(jnp.asarray(knots))
         errorif(values.shape[-1] != knots.shape[-1])
         errorif(not (values.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots
@@ -1056,10 +1062,10 @@ class HermiteSplineProfile(_Profile):
     def __init__(self, f, df, knots=None, name=""):
         super().__init__(name)
 
-        f, df = jnp.atleast_1d(f, df)
+        f, df = jnp.atleast_1d(jnp.asarray(f), jnp.asarray(df))
         if knots is None:
             knots = jnp.linspace(0, 1, f.size)
-        knots = jnp.atleast_1d(knots)
+        knots = jnp.atleast_1d(jnp.asarray(knots))
         errorif(not (f.shape[-1] == df.shape[-1] == knots.shape[-1]))
         errorif(not (f.ndim == df.ndim == knots.ndim == 1), NotImplementedError)
         self._knots = knots

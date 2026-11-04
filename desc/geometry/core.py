@@ -190,7 +190,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
-        R = rotation_matrix(axis=axis, angle=angle)
+        R = rotation_matrix(np.asarray(axis).astype(float), angle)
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 
@@ -312,7 +312,7 @@ class Curve(IOAble, Optimizable, ABC):
         """
         from .curve import FourierRZCurve
 
-        NFP = 1 or NFP
+        NFP = 1 if NFP is None else NFP
         if grid is None:
             grid = LinearGrid(N=2 * N + 1)
         coords = self.compute("x", grid=grid, basis="xyz")["x"]

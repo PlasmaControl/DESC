@@ -364,7 +364,7 @@ class Optimizer(IOAble):
             and constraints in the ``Objective values`` key.
 
         """
-        options = {} if options is None else options
+        options = {} if options is None else options.copy()
         is_linear_proj = isinstance(objective, LinearConstraintProjection)
         if not isinstance(constraints, (tuple, list)) and not is_linear_proj:
             constraints = (constraints,)
@@ -653,10 +653,10 @@ def _project_x_scale(x_scale, objective):
         x_scale = jnp.concatenate(x_scale)
 
     if isinstance(objective, LinearConstraintProjection):
-        # need to project x_scale down to correct size
-        Z = objective._Z
+        # need to project x_scale down to correct size using nullspace
+        Zfull = objective._feasible_tangents
         x_scale = jnp.broadcast_to(x_scale, objective._objective.dim_x)
-        x_scale = jnp.abs(jnp.diag(Z.T @ jnp.diag(x_scale[objective._unfixed_idx]) @ Z))
+        x_scale = jnp.abs((x_scale / objective._D**2) @ (Zfull * Zfull))
         x_scale = jnp.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
     return x_scale
 
@@ -671,7 +671,11 @@ def _print_output(things, things0, objective, constraints, result):
     print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
     print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
-    values = objective.print_value(objective.x(*state), objective.x(*state_0))
+    fse = result.get("fse", None)
+    f0se = result.get("f0se", None)
+    values = objective.print_value(
+        x=objective.x(*state), x0=objective.x(*state_0), fse=fse, f0se=f0se
+    )
     for con in constraints:
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]
@@ -772,17 +776,13 @@ def _maybe_wrap_nonlinear_constraints(
             )
         return objective, nonlinear_constraints
     if wrapper is None and not optimizers[method]["equality_constraints"]:
-        warnings.warn(
-            FutureWarning(
-                f"""
+        warnings.warn(FutureWarning(f"""
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
                 In the future this will raise an error. To ignore this warning, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
                 into an unconstrained one.
-                """
-            )
-        )
+                """))
         wrapper = "proximal"
     if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})

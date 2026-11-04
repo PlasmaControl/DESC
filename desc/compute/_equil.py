@@ -107,7 +107,7 @@ def _J_sup_theta_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general zeta before #568
 @register_compute_fun(
     name="(J^theta_PEST_v)|PEST",
-    label="\\partial_{\\vartheta} J^{\\theta_{PEST}}",
+    label="\\partial_{\\vartheta}|_{\\rho, \\phi} J^{\\vartheta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant PEST poloidal component of plasma current density"
@@ -144,7 +144,7 @@ def _J_sup_theta_PEST_v_PEST(params, transforms, profiles, data, **kwargs):
 # TODO: Generalize for a general phi before #568
 @register_compute_fun(
     name="(J^theta_PEST_p)|PEST",
-    label="\\partial_{\\phi}|_{\\rho, \\vartheta} J^{\\theta_{PEST}}",
+    label="\\partial_{\\phi}|_{\\rho, \\vartheta} J^{\\vartheta}",
     units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant PEST poloidal component of plasma current density"
@@ -825,7 +825,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^helical",
-    label="B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta",
+    label="B^{\\zeta} \\nabla \\theta - B^{\\theta} \\nabla \\zeta",
     units="T \\cdot m^{-2}",
     units_long="Tesla / square meter",
     description="Helical basis vector",
@@ -845,9 +845,9 @@ def _e_sup_helical(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="e^helical*sqrt(g)",
-    label="\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)",
-    units="T \\cdot m^{2}",
-    units_long="Tesla * square meter",
+    label="\\sqrt{g}(B^{\\zeta} \\nabla \\theta - B^{\\theta} \\nabla \\zeta)",
+    units="T \\cdot m",
+    units_long="Tesla * meter",
     description="Helical basis vector weighted by 3-D volume Jacobian",
     dim=3,
     params=[],
@@ -866,7 +866,7 @@ def _e_sup_helical_times_sqrt_g(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e^helical|",
-    label="|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
+    label="|B^{\\zeta} \\nabla \\theta - B^{\\theta} \\nabla \\zeta|",
     units="T \\cdot m^{-2}",
     units_long="Tesla / square meter",
     description="Magnitude of helical basis vector",
@@ -884,9 +884,9 @@ def _e_sup_helical_mag(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|e^helical*sqrt(g)|",
-    label="|\\sqrt{g}(B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta)|",
-    units="T \\cdot m^{2}",
-    units_long="Tesla * square meter",
+    label="|\\sqrt{g}(B^{\\zeta} \\nabla \\theta - B^{\\theta} \\nabla \\zeta)|",
+    units="T \\cdot m",
+    units_long="Tesla * meter",
     description="Magnitude of helical basis vector weighted by 3-D volume Jacobian",
     dim=1,
     params=[],

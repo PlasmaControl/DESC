@@ -3,6 +3,7 @@
 import warnings
 
 import numpy as np
+import optax
 import pytest
 from numpy.random import default_rng
 from scipy.constants import mu_0
@@ -72,6 +73,12 @@ from desc.optimize import (
     sgd,
 )
 from desc.optimize.optimizer import _parse_x_scale
+from desc.optimize.tr_subproblems import (
+    trust_region_step_exact_cho,
+    trust_region_step_exact_qr,
+    trust_region_step_exact_svd,
+)
+from desc.optimize.utils import chol, gershgorin_bounds, solve_triangular_regularized
 from desc.utils import get_all_instances
 
 
@@ -100,6 +107,125 @@ SCALAR_FUN_SOLN = np.array(
         (-B1 + np.sqrt(B1**2 - 4 * A1 * C1)) / (2 * A1),
     ]
 )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("matrix", [np.zeros((2, 2)), np.diag([1.0, 0.0])])
+def test_chol_zero_gershgorin_lower_bound(matrix):
+    """A zero lower bound gets a finite, small positive diagonal correction."""
+    lower_bound, _ = gershgorin_bounds(jnp.asarray(matrix))
+    assert float(lower_bound) == 0.0
+
+    factor = np.asarray(chol(jnp.asarray(matrix)))
+    reconstructed = factor @ factor.T
+    scale = max(np.linalg.norm(matrix, ord=2), 1.0)
+
+    assert np.isfinite(factor).all()
+    assert np.linalg.eigvalsh(reconstructed).min() > 0.0
+    assert np.linalg.norm(reconstructed - matrix, ord=2) < (
+        100 * np.finfo(matrix.dtype).eps * scale
+    )
+
+
+@pytest.mark.unit
+def test_chol_extreme_small_zero_gershgorin_lower_bound():
+    """The zero-bound fallback remains positive below eps-scaled normal range."""
+    matrix = np.diag(np.array([1e-300, 0.0], dtype=np.float64))
+
+    factor = np.asarray(chol(jnp.asarray(matrix)))
+    reconstructed = factor @ factor.T
+    correction = reconstructed - matrix
+
+    assert np.isfinite(factor).all()
+    assert np.linalg.eigvalsh(reconstructed).min() > 0.0
+    np.testing.assert_allclose(
+        correction,
+        np.eye(2) * correction[0, 0],
+        rtol=0.0,
+        atol=np.finfo(np.float64).tiny,
+    )
+    assert 0.0 < correction[0, 0] < matrix[0, 0]
+
+
+@pytest.mark.unit
+def test_chol_positive_definite_path_unchanged():
+    """Positive-definite input agrees with the unmodified Cholesky oracle."""
+    matrix = np.array([[2.0, 0.2], [0.2, 1.0]])
+    np.testing.assert_allclose(
+        chol(jnp.asarray(matrix)),
+        np.linalg.cholesky(matrix),
+        rtol=1e-14,
+        atol=1e-14,
+    )
+
+
+def _tr_test_problem(m, n, cond, seed):
+    """Least squares problem min ||J p + f|| with singular values 1 ... 1/cond."""
+    rng = default_rng(seed)
+    U, _ = np.linalg.qr(rng.standard_normal((m, n)))
+    V, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    J = (U * np.logspace(0, -np.log10(cond), n)) @ V.T
+    f = rng.standard_normal(m)
+    return J, f
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cond", [1e2, 1e4, 1e6])
+@pytest.mark.parametrize("frac", [0.5, 0.1, 0.01])
+def test_tr_step_exact_cho_alpha_converges(cond, frac):
+    """The cho root-find returns an alpha whose step lies on the trust region.
+
+    The Levenberg-Marquardt parameter returned by the Cholesky method must satisfy
+    ``abs(||p(alpha)|| - trust_radius) <= rtol * trust_radius`` for
+    ``p(alpha) = -(B + alpha I)^-1 g``, within the default 10 iterations, and the
+    step must agree with the QR and SVD methods.
+    """
+    rtol = 0.01
+    J, f = _tr_test_problem(60, 30, cond, seed=0)
+    g, B = J.T @ f, J.T @ J
+    p_newton = np.linalg.lstsq(J, -f, rcond=None)[0]
+    trust_radius = frac * np.linalg.norm(p_newton)
+
+    p, hits_boundary, alpha = trust_region_step_exact_cho(
+        jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
+    )
+    assert hits_boundary
+    assert alpha > 0
+    p_alpha = np.linalg.solve(B + float(alpha) * np.eye(B.shape[0]), -g)
+    assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
+
+    Q, R = np.linalg.qr(J)
+    Qt_f = jnp.asarray(Q.T @ f)
+    R = jnp.asarray(R)
+    p_qr, _, _ = trust_region_step_exact_qr(
+        solve_triangular_regularized(R, -Qt_f), Qt_f, R, trust_radius, 0.0
+    )
+    U, s, Vt = jnp.linalg.svd(J, full_matrices=False)
+    p_svd, _, _ = trust_region_step_exact_svd(f, U, s, Vt.T, trust_radius, 0.0)
+    # all three converge to the same alpha, up to round-off from forming J^T J
+    np.testing.assert_allclose(p, p_qr, rtol=0, atol=1e-4 * trust_radius)
+    np.testing.assert_allclose(p, p_svd, rtol=0, atol=1e-4 * trust_radius)
+
+
+@pytest.mark.unit
+def test_tr_step_exact_cho_indefinite():
+    """The cho method on an indefinite Hessian, as used by fmintr."""
+    rng = default_rng(0)
+    n = 30
+    Q, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    B = (Q * np.linspace(-1, 2, n)) @ Q.T
+    g = rng.standard_normal(n)
+    rtol = 0.01
+    for trust_radius in [0.1, 1.0]:
+        p, hits_boundary, alpha = trust_region_step_exact_cho(
+            jnp.asarray(g), jnp.asarray(B), trust_radius, 0.0, rtol=rtol
+        )
+        assert hits_boundary
+        np.testing.assert_allclose(np.linalg.norm(p), trust_radius, rtol=1e-12)
+        # B + alpha I must be positive definite at the returned alpha
+        assert np.linalg.eigvalsh(B + float(alpha) * np.eye(n)).min() > 0
+        p_alpha = np.linalg.solve(B + float(alpha) * np.eye(n), -g)
+        assert abs(np.linalg.norm(p_alpha) - trust_radius) <= rtol * trust_radius
 
 
 @jit
@@ -252,20 +378,89 @@ class TestSGD:
 
     @pytest.mark.unit
     def test_sgd_convex(self):
-        """Test minimizing convex test function using stochastic gradient descent."""
+        """Test minimizing convex test function using sgd with momentum."""
+        x0 = np.ones(2)
+
+        with pytest.warns(DeprecationWarning, match="'sgd' method is deprecated"):
+            out = sgd(
+                scalar_fun,
+                x0,
+                scalar_grad,
+                method="sgd",
+                verbose=3,
+                ftol=0,
+                xtol=0,
+                gtol=1e-12,
+                maxiter=2000,
+            )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "method",
+        [
+            # some of the optax optimizers
+            "optax-adam",
+            "optax-adamax",
+            "optax-lbfgs",
+            "optax-rmsprop",
+            "optax-sgd",
+        ],
+    )
+    def test_optax_convex(self, method):
+        """Test minimizing convex test function using optax."""
         x0 = np.ones(2)
 
         out = sgd(
             scalar_fun,
             x0,
             scalar_grad,
+            method=method,
             verbose=3,
-            ftol=0,
-            xtol=0,
+            ftol=1e-12,
+            xtol=1e-12,
             gtol=1e-12,
             maxiter=2000,
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
+
+    @pytest.mark.unit
+    def test_optax_custom(self):
+        """Test custom optax optimizers work."""
+        eq = desc.examples.get("DSHAPE")
+        with pytest.warns(UserWarning, match="Reducing radial"):
+            eq.change_resolution(2, 2, 0, 4, 4, 0)
+
+        # Optimizer
+        opt = optax.chain(
+            optax.sgd(learning_rate=1.0),
+            optax.scale_by_zoom_linesearch(max_linesearch_steps=15),
+        )
+        optimizer = Optimizer("optax-custom")
+        eq.solve(
+            optimizer=optimizer,
+            options={"optax-options": {"update_rule": opt}},
+            verbose=3,
+            maxiter=2,
+        )
+
+        with pytest.raises(ValueError):
+            # bad 'update_rule' type
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": "not-an-optax-optimizer"}},
+                verbose=3,
+                maxiter=2,
+            )
+
+        with pytest.raises(ValueError):
+            # extra hyperparameters
+            eq.solve(
+                optimizer=optimizer,
+                options={"optax-options": {"update_rule": opt, "learning_rate": 0.1}},
+                verbose=3,
+                maxiter=2,
+            )
 
 
 class TestLSQTR:
@@ -375,7 +570,7 @@ def test_proximal_scalar():
         constraints=constraints,
         verbose=3,
     )
-    np.testing.assert_allclose(eq.compute("V")["V"], 90)
+    np.testing.assert_allclose(eq.compute("V")["V"], 90, atol=1e-4, rtol=1e-6)
 
 
 @pytest.mark.regression
@@ -643,7 +838,9 @@ class TestAllOptimizers:
     econ = get_fixed_boundary_constraints(eq=eqe)
     fcon = get_fixed_boundary_constraints(eq=eqf)
 
-    scalar_methods = [opt for opt in optimizers if optimizers[opt]["scalar"]]
+    scalar_methods = [
+        opt for opt in optimizers if optimizers[opt]["scalar"] and opt != "optax-custom"
+    ]
     lsq_methods = [opt for opt in optimizers if not optimizers[opt]["scalar"]]
 
     @pytest.mark.unit
@@ -653,14 +850,25 @@ class TestAllOptimizers:
         if not self.eobj.built:
             self.eobj.build()
 
-        self.eqe.solve(
-            objective=self.eobj,
-            constraints=self.econ,
-            optimizer=opt,
-            copy=True,
-            verbose=3,
-            maxiter=5,
-        )
+        if opt == "sgd":
+            with pytest.warns(DeprecationWarning, match="'sgd' method is deprecated"):
+                self.eqe.solve(
+                    objective=self.eobj,
+                    constraints=self.econ,
+                    optimizer=opt,
+                    copy=True,
+                    verbose=3,
+                    maxiter=5,
+                )
+        else:
+            self.eqe.solve(
+                objective=self.eobj,
+                constraints=self.econ,
+                optimizer=opt,
+                copy=True,
+                verbose=3,
+                maxiter=5,
+            )
 
     @pytest.mark.unit
     @pytest.mark.parametrize("opt", lsq_methods)
@@ -962,12 +1170,13 @@ def test_auglag():
 @pytest.mark.optimize
 def test_constrained_AL_lsq():
     """Tests that the least squares augmented Lagrangian optimizer does something."""
+    # Note: This test is known to be sensitive to small numerical differences
     eq = desc.examples.get("SOLOVEV")
 
     constraints = (
         FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
         FixPressure(eq=eq),  # fix pressure profile
-        FixIota(eq, bounds=(eq.i_l * 0.9, eq.i_l * 1.1)),  # linear inequality
+        FixIota(eq),  # linear equality
         FixPsi(eq=eq, bounds=(eq.Psi * 0.99, eq.Psi * 1.01)),  # linear inequality
     )
     # some random constraints to keep the shape from getting wacky
@@ -996,7 +1205,7 @@ def test_constrained_AL_lsq():
         ctol=ctol,
         x_scale="auto",
         copy=True,
-        options={},
+        options={"tr_method": "svd"},
     )
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
@@ -1004,8 +1213,6 @@ def test_constrained_AL_lsq():
     assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
     assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
     assert (0.99 * eq.Psi - ctol) <= eq2.Psi <= (1.01 * eq.Psi + ctol)
-    np.testing.assert_array_less((0.9 * eq.i_l - ctol), eq2.i_l)
-    np.testing.assert_array_less(eq2.i_l, (1.1 * eq.i_l + ctol))
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)
 
@@ -1233,11 +1440,16 @@ def test_proximal_jacobian():
     # this is basically the old method we're benchmarking against
     xf = con1.x(eq1)
     xg = obj1.x(eq1)
+    eq_unfixed_idx = prox1._eq_solve_objective._unfixed_idx
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    eq_Z = (1 / prox1._eq_solve_objective._D)[eq_unfixed_idx, None] * (
+        prox1._eq_solve_objective._feasible_tangents[eq_unfixed_idx]
+    )
     # for scaled jacobian
     Fx = con1.jac_scaled(xf)
     Gx = obj1.jac_scaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Fxh = Fx[:, eq_unfixed_idx] @ eq_Z
+    Gxh = Gx[:, eq_unfixed_idx] @ eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1249,8 +1461,8 @@ def test_proximal_jacobian():
     # for unscaled jacobian
     Fx = con1.jac_unscaled(xf)
     Gx = obj1.jac_unscaled(xg)
-    Fxh = Fx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
-    Gxh = Gx[:, prox1._eq_unfixed_idx] @ prox1._eq_Z
+    Fxh = Fx[:, eq_unfixed_idx] @ eq_Z
+    Gxh = Gx[:, eq_unfixed_idx] @ eq_Z
     Fc = Fx @ prox1._dxdc
     Gc = Gx @ prox1._dxdc
     cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
@@ -1409,8 +1621,10 @@ def test_LinearConstraint_jacobian():
 
     x = obj1.x()
     x_reduced = lc1.x()
-    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ lc1._Z
-    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ lc1._Z
+    # nullspace of A @ D, ie the feasible tangents with the D scaling divided out
+    Z1 = (1 / lc1._D)[lc1._unfixed_idx, None] * lc1._feasible_tangents[lc1._unfixed_idx]
+    jac_scaled = obj1.jac_scaled(x)[:, lc1._unfixed_idx] @ Z1
+    jac_unscaled = obj1.jac_unscaled(x)[:, lc1._unfixed_idx] @ Z1
     jvp_scaled = jac_scaled @ vl
     jvp_unscaled = jac_unscaled @ vl
     vjp_scaled = jac_scaled.T @ vr

@@ -65,7 +65,7 @@ Continuation
 
 Derivatives
 ***********
-Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
+Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative``.
 
 .. autosummary::
     :toctree: _api/derivatives
@@ -73,7 +73,6 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
     :template: class.rst
 
     desc.derivatives.AutoDiffDerivative
-    desc.derivatives.FiniteDiffDerivative
 
 Equilibrium
 ***********

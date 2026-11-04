@@ -213,18 +213,19 @@ def perturb(  # noqa: C901
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     if is_linear_proj:
-        xp, Z, D, unfixed_idx, project, recover = (
+        xp, D, unfixed_idx, project, recover = (
             obj._xp,
-            obj._Z,
             obj._D,
             obj._unfixed_idx,
             obj._project,
             obj._recover,
         )
     else:
-        xp, _, _, Z, D, unfixed_idx, project, recover, *_ = (
+        xp, _, _, _, D, unfixed_idx, project, recover, *_ = (
             factorize_linear_constraints(objective, constraint)
         )
+    # dx/dx_reduced, ie D @ Z scattered into the full state vector
+    dxdx_reduced = recover.feasible_tangents
     timer.stop("linear constraint factorize")
     if verbose > 1:
         timer.disp("linear constraint factorize")
@@ -320,6 +321,7 @@ def perturb(  # noqa: C901
             weight = jnp.diag(weight)
         else:
             weight = weight[unfixed_idx, unfixed_idx]
+        Z = (1 / D)[unfixed_idx, None] * dxdx_reduced[unfixed_idx]
         W = Z.T @ weight @ Z
         scale_inv = W
         scale = jnp.linalg.inv(scale_inv)
@@ -329,7 +331,7 @@ def perturb(  # noqa: C901
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac_scaled_error(x)
-        Jx_reduced = Jx @ jnp.diag(D)[:, unfixed_idx] @ Z @ scale
+        Jx_reduced = Jx @ dxdx_reduced @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
             f = objective.compute_scaled_error(x)
@@ -589,7 +591,7 @@ def optimal_perturb(  # noqa: C901
     constraint = ObjectiveFunction(constraints)
     constraint.build(verbose=verbose)
 
-    _, _, _, Z, D, unfixed_idx, project, recover, *_ = factorize_linear_constraints(
+    _, _, _, _, _, _, project, recover, *_ = factorize_linear_constraints(
         objective_f, constraint
     )
 
@@ -605,8 +607,8 @@ def optimal_perturb(  # noqa: C901
     dx1_reduced = 0
     dx2_reduced = 0
 
-    # dx/dx_reduced
-    dxdx_reduced = jnp.diag(D)[:, unfixed_idx] @ Z
+    # dx/dx_reduced, ie D @ Z scattered into the full state vector
+    dxdx_reduced = recover.feasible_tangents
 
     # dx/dc
     dxdc = []
@@ -654,8 +656,8 @@ def optimal_perturb(  # noqa: C901
             timer.disp("dg computation")
 
         # projections onto optimization space
-        Fx_reduced = Fx @ jnp.diag(D)[:, unfixed_idx] @ Z
-        Gx_reduced = Gx @ jnp.diag(D)[:, unfixed_idx] @ Z
+        Fx_reduced = Fx @ dxdx_reduced
+        Gx_reduced = Gx @ dxdx_reduced
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
 

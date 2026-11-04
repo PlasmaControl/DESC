@@ -23,6 +23,7 @@ tests/benchmarks/.benchmarks/
 *.swp
 *.swo
 .pymon
+.DS_store
 
 # UV
 uv.lock

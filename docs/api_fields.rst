@@ -31,6 +31,17 @@ a surface and computes the normal field strength on that surface.
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
 
+There are also classes for solving source-free fields using Laplace boundary
+integral formulations:
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.SourceFreeField
+    desc.magnetic_fields.FreeSurfaceOuterField
+
 There are also classes for representing a current potential on a winding surface:
 
 .. autosummary::

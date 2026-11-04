@@ -56,6 +56,7 @@ Bug Fixes
 - Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
+- Fixes how profiles are updated in ``desc.compat`` functions.
 
 
 v0.17.3

@@ -41,8 +41,8 @@ def test_flip_magnetic_field_iota():
 
 @pytest.mark.unit
 def test_flip_magnetic_field_current():
-    """Test flip_magnetic_field on an Equilibrium with an iota profile."""
-    eq = get("HSX")
+    """Test flip_magnetic_field on an Equilibrium with a current profile."""
+    eq = get("NCSX")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data_keys = ["B_R", "B_phi", "B_Z", "|F|"]
@@ -145,7 +145,7 @@ def test_flip_helicity_iota():
 @pytest.mark.unit
 def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
-    eq = get("HSX")
+    eq = get("NCSX")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()

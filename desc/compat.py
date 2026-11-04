@@ -43,9 +43,9 @@ def ensure_positive_jacobian(eq):
         )
 
         if eq.iota is not None:
-            eq.i_l *= -1
+            eq.iota *= -1
         else:
-            eq.c_l *= -1
+            eq.current *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1
@@ -92,7 +92,7 @@ def flip_magnetic_field(eq):
     eq.Psi *= -1
 
     if eq.current is not None:
-        eq.c_l *= -1
+        eq.current *= -1
 
     return eq
 
@@ -118,9 +118,9 @@ def flip_helicity(eq):
         return eq
 
     if eq.iota is not None:
-        eq.i_l *= -1
+        eq.iota *= -1
     else:
-        eq.c_l *= -1
+        eq.current *= -1
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 2] < 0] *= -1

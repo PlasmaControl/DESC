@@ -1,12 +1,9 @@
 import numpy as np
-
 from desc.backend import jnp, tree_leaves
 from desc.compute import get_params
 from desc.utils import Timer, errorif, setdefault
-
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
-
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid, _Grid
@@ -16,11 +13,8 @@ class QuadraticFluxPM(_Objective):
     """Target B*n = 0 on LCFS.
 
     Uses virtual casing to find plasma component of B and penalizes
-    (B_coil + B_plasma)*n. The equilibrium is kept fixed while the
+    (B_dipole + B_plasma)*n. The equilibrium is kept fixed while the
     field is unfixed.
-
-    Note: This objective is intended for coil optimization. For finding the surface
-    that minimizes the normal field error, use the SurfaceQuadraticFlux objective.
 
     Parameters
     ----------
@@ -29,8 +23,12 @@ class QuadraticFluxPM(_Objective):
         will be minimized. The equilibrium is kept fixed during the optimization
         with this objective.
     field : MagneticField
-        External field produced by coils or other source, which will be optimized to
+        External field produced by dipoles, which will be optimized to
         minimize the normal field error on the provided equilibrium's surface.
+    field_fixed : MagneticField, optional
+        External field produced by coils or other source, which will be fixed during
+        optimization, acting typically as a supplemental to the toroidal flux that
+        dipoles cannot provide.
     source_grid : Grid, optional
         Collocation grid containing the nodes for plasma source terms.
         Default grid is detailed in the docs for ``compute_B_plasma``
@@ -54,6 +52,18 @@ class QuadraticFluxPM(_Objective):
         Size to split singular integral computation for B_plasma into chunks.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``. Default is ``bs_chunk_size``.
+    fixed_mask : array-like of bool, optional
+        Boolean mask specifying which dipole parameters are held fixed when
+        computing the normal field error. Entries set to True use the
+        corresponding values in ``fixed_rho``, while False entries use the
+        current optimization parameters. Only applied when using the
+        precomputed induction-matrix path. Default is None.
+    fixed_rho : array-like, optional
+        Raw dipole parameter values to use at positions where ``fixed_mask``
+        is True. The effective normalized dipole strengths are obtained
+        through ``tanh(fixed_rho)``. Must have the same shape as
+        ``fixed_mask`` and must be provided when ``fixed_mask`` is specified.
+        Default is None.
 
     """
 
@@ -96,6 +106,8 @@ class QuadraticFluxPM(_Objective):
         *,
         bs_chunk_size=None,
         B_plasma_chunk_size=None,
+        fixed_mask=None,
+        fixed_rho=None,
         **kwargs,
     ):
         from desc.geometry import FourierRZToroidalSurface
@@ -111,7 +123,37 @@ class QuadraticFluxPM(_Objective):
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
         self._B_plasma_chunk_size = setdefault(B_plasma_chunk_size, bs_chunk_size)
+        self._fixed_mask = fixed_mask
+        self._fixed_rho = fixed_rho
         self._use_induction_matrix = use_induction_matrix
+
+        if fixed_mask is None:
+            self._fixed_mask = None
+            self._fixed_rho = None
+        else:
+            errorif(
+                fixed_rho is None,
+                ValueError,
+                "fixed_rho must be supplied when fixed_mask is supplied.",
+            )
+
+            fixed_mask = np.asarray(
+                fixed_mask,
+                dtype=bool,
+            ).copy()
+
+            fixed_rho = np.asarray(
+                fixed_rho,
+            ).copy()
+
+            errorif(
+                fixed_mask.shape != fixed_rho.shape,
+                ValueError,
+                "fixed_mask and fixed_rho must have the same shape.",
+            )
+
+            self._fixed_mask = fixed_mask
+            self._fixed_rho = fixed_rho
         errorif(
             isinstance(eq, FourierRZToroidalSurface),
             TypeError,
@@ -185,6 +227,13 @@ class QuadraticFluxPM(_Objective):
             )
         )
 
+        if self._fixed_mask is None:
+            fixed_mask = None
+            fixed_rho = None
+        else:
+            fixed_mask = jnp.asarray(self._fixed_mask, dtype=bool)
+            fixed_rho = jnp.asarray(self._fixed_rho)
+
         Bcoils_vec = self._field_fixed.compute_magnetic_field(
             jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T,
             source_grid=self._field_grid,
@@ -237,6 +286,17 @@ class QuadraticFluxPM(_Objective):
             "B_plasma": Bplasma,
             "B_coils": Bcoils,
             "induction_matrices": induction_matrices,
+
+            "fixed_mask": (
+                None
+                if self._fixed_mask is None
+                else jnp.asarray(self._fixed_mask)
+            ),
+            "fixed_rho": (
+                None
+                if self._fixed_rho is None
+                else jnp.asarray(self._fixed_rho)
+            ),
         }
 
         timer.stop("Precomputing transforms")
@@ -273,47 +333,49 @@ class QuadraticFluxPM(_Objective):
         if constants is None:
             constants = self.constants
 
-        # B_plasma from equilibrium precomputed
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
         B_coils = constants["B_coils"]
- 
-        # induction_matrices = constants.get("induction_matrices")
-        # if induction_matrices is not None:
-        #     B_ext = jnp.zeros(eval_data["R"].shape[0])
-        #     for g_ij, dipole_field, params in zip(
-        #         induction_matrices, self._dipole_fields, field_params
-        #     ):
-        #         rho_list = params if isinstance(params, (list, tuple)) else [params]
-        #         rho_raw = jnp.asarray(
-        #             [jnp.atleast_1d(p["rho"])[0] for p in rho_list]
-        #         )
-        #         M0 = dipole_field.m0 * jnp.tanh(rho_raw)
-        #         B_ext = B_ext + g_ij @ M0
-        # else:
-        #     x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
- 
-        #     # B_ext is not pre-computed because field is not fixed
-        #     B_ext_vec = constants["field"].compute_magnetic_field(
-        #         x,
-        #         source_grid=constants["field_grid"],
-        #         basis="rpz",
-        #         params=field_params,
-        #         chunk_size=self._bs_chunk_size,
-        #     )
-        #     B_ext = jnp.sum(B_ext_vec * eval_data["n_rho"], axis=-1)
 
-        induction_matrices = constants.get("induction_matrices")
+        induction_matrices = constants.get(
+            "induction_matrices"
+        )
+
         if induction_matrices is not None:
+
             B_ext = jnp.zeros(eval_data["R"].shape[0])
+
+            fixed_mask = constants.get("fixed_mask")
+            fixed_rho = constants.get("fixed_rho")
+
             for g_ij, dipole_field, params in zip(
-                induction_matrices, self._dipole_fields, field_params
+                induction_matrices,
+                self._dipole_fields,
+                field_params,
             ):
-                rho_raw = jnp.atleast_1d(params["rho"])   # single array read, no python loop
-                M0 = dipole_field.m0 * jnp.tanh(rho_raw)
-                B_ext = B_ext + g_ij @ M0
- 
-        f = (B_ext + B_plasma + B_coils) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
+
+                rho_raw = jnp.atleast_1d(params["rho"])
+
+                if fixed_mask is not None:
+                    rho_raw = jnp.where(
+                        fixed_mask,
+                        fixed_rho,
+                        rho_raw,
+                    )
+
+                M0 = (dipole_field.m0 * jnp.tanh(rho_raw))
+                B_ext = (B_ext + g_ij @ M0)
+
+        f = (
+            B_ext
+            + B_plasma
+            + B_coils
+        ) * jnp.sqrt(
+            eval_data[
+                "|e_theta x e_zeta|"
+            ]
+        )
+
         return f
 
     
@@ -382,30 +444,19 @@ class _DipoleObjective(_Objective):
             f"Expected object of type Dipole or DipoleSet, got {type(dipole)}",
         )
 
-        dipoles = dipole.dipoles if isinstance(dipole, DipoleSet) else [dipole]
         self._num_dipoles = len(dipole) if isinstance(dipole, DipoleSet) else 1
-        self._dim_f = self._num_dipoles
-        # self._num_dipoles = len(dipoles)
-        # self._dim_f = self._num_dipoles
+        self._dim_f = (
+            1 if getattr(self, "_reduce_residual", False)
+            else self._num_dipoles
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing dipole parameters")
         timer.start("Precomputing dipole parameters")
 
-        # self._constants = {
-        #     "quad_weights": jnp.ones(self._num_dipoles),
-
-        #     "params": [get_params(self._data_keys, dip) for dip in dipoles],
-        # }
-
-        # self._constants = {
-        #     "quad_weights": jnp.ones(self._num_dipoles),
-        #     "params": get_params(self._data_keys, dipole),   # one dict, array-valued
-        # }
-
         self._constants = {
-            "quad_weights": jnp.ones(self._num_dipoles),
+            "quad_weights": jnp.ones(self._dim_f),
             "params": {key: getattr(dipole, key) for key in self._data_keys},
         }
 
@@ -458,6 +509,7 @@ class DipoleDiscreteness(_DipoleObjective):
     """
 
     _scalar = False
+    _reduce_residual = True
     _units = "(dimensionless)"
     _print_value_fmt = "Dipole discreteness: "
 
@@ -470,7 +522,7 @@ class DipoleDiscreteness(_DipoleObjective):
         normalize=False,
         normalize_target=False,
         loss_function=None,
-        deriv_mode="auto",
+        deriv_mode="rev",
         name="dipole-discreteness",
         jac_chunk_size=None,
     ):
@@ -491,42 +543,22 @@ class DipoleDiscreteness(_DipoleObjective):
         )
 
     def build(self, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
         super().build(use_jit=use_jit, verbose=verbose)
         self._normalization = 1.0
 
     def compute(self, params, constants=None):
-        """Compute dipole discreteness.
-
-        Parameters
-        ----------
-        params : dict or list of dict
-            Dictionary (or list, one per dipole) of the dipole's degrees of
-            freedom.
-        constants : dict
-            Dictionary of constant data. Defaults to ``self._constants``.
-
-        Returns
-        -------
-        d : ndarray, shape(num_dipoles,)
-
-        """
         if constants is None:
             constants = self._constants
+
         p = params if params is not None else constants["params"]
+
         rho_raw = jnp.atleast_1d(p["rho"])
-        #rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
         rho_tilde = jnp.tanh(rho_raw)
-        return jnp.abs(rho_tilde) * (1 - jnp.abs(rho_tilde))
+
+        a = jnp.abs(rho_tilde)
+        d = a * (1.0 - a)
+
+        return jnp.sqrt(jnp.sum(d**2)).reshape(1)
 
 
 
@@ -611,86 +643,3 @@ class DipoleVolume(_DipoleObjective):
         eps=1e-6
         #return jnp.sqrt(jnp.abs(rho_tilde)+1e-8)   # DipoleVolume specifically
         return (rho_tilde**2 + eps**2)**0.25
-
-class DipoleTikhonov(_DipoleObjective):
-    """L2 (Tikhonov / minimum-norm) regularization on dipole densities.
-
-    Penalizes rho_tilde^2 for every dipole. QuadraticFluxPM's map from
-    dipole density to boundary normal field is compact/ill-posed (smoothly
-    decaying singular value spectrum, no sharp rank cutoff), so it leaves a
-    large near-null space in which the optimizer has no field-fidelity
-    signal to follow. This objective breaks that degeneracy by preferring
-    the minimum-norm density pattern among all (near-)field-equivalent
-    solutions, rather than letting the optimizer wander unconstrained
-    through it. Unlike DipoleVolume (sparsity-promoting, ~L1/2) this does
-    not push densities toward exactly zero, just toward small magnitude --
-    it is the standard Tikhonov regularizer for a rank-deficient/ill-
-    conditioned least-squares problem like this one.
-
-    Parameters
-    ----------
-    dipole : DipoleSet
-
-    """
-
-    _scalar = False
-    _units = "(dimensionless)"
-    _print_value_fmt = "Dipole Tikhonov penalty: "
-
-    def __init__(
-        self,
-        dipole,
-        target=0,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
-        loss_function=None,
-        deriv_mode="auto",
-        name="dipole-tikhonov",
-        jac_chunk_size=None,
-    ):
-        if target is None and bounds is None:
-            target = 0
-        super().__init__(
-            dipole,
-            data_keys=["rho"],
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            loss_function=loss_function,
-            deriv_mode=deriv_mode,
-            name=name,
-            jac_chunk_size=jac_chunk_size,
-        )
-
-    def build(self, use_jit=True, verbose=1):
-        """Build constant arrays."""
-        super().build(use_jit=use_jit, verbose=verbose)
-        self._normalization = 1.0
-
-    # def compute(self, params, constants=None):
-    #     """Compute the Tikhonov (L2) penalty on dipole density.
-
-    #     Returns
-    #     -------
-    #     d : ndarray, shape(num_dipoles,)
-    #         rho_tilde for each dipole -- squared internally by the
-    #         least-squares objective machinery to give the rho_tilde^2
-    #         penalty.
-    #     """
-    #     if constants is None:
-    #         constants = self._constants
-    #     p = params if params is not None else constants["params"]
-    #     rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
-    #     rho_tilde = jnp.tanh(rho_raw)
-    #     return rho_tilde
-
-    def compute(self, params, constants=None):
-        if constants is None:
-            constants = self._constants
-        p = params if params is not None else constants["params"]
-        rho_raw = jnp.asarray(p["rho"])
-        return jnp.tanh(rho_raw)

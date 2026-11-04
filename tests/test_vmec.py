@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from netCDF4 import Dataset
+from scipy.constants import mu_0
 
 import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
@@ -1774,3 +1775,53 @@ def test_write_vmec_input(TmpDir):
     np.testing.assert_allclose(W0, W1)
     np.testing.assert_allclose(rho_err, 0, atol=1e-4)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_load_lambda_half_mesh():
+    """Test that VMECIO.load fits lambda on the VMEC half mesh (gh issue #2351)."""
+    path = "./tests/inputs/wout_DSHAPE.nc"
+    eq = VMECIO.load(path, L=24)
+    file = Dataset(path, mode="r")
+    ns = int(file.variables["ns"][:])
+    xm = file.variables["xm"][:].filled()
+    lmns = file.variables["lmns"][:].filled()
+    file.close()
+
+    s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+    idx = np.arange(2, ns - 1, 4)  # rows of the half mesh, skipping the axis row
+    theta = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    t, j = np.meshgrid(theta, idx, indexing="ij")
+    t, j = t.ravel(), j.ravel()
+    lam_vmec = np.sum(lmns[j] * np.sin(xm * t[:, None]), axis=1)
+
+    # VMEC wouts are left-handed; load flips theta -> -theta, lambda -> -lambda
+    rho = np.sqrt(s_half[j - 1])
+    grid = Grid(np.array([rho, -t, np.zeros_like(t)]).T, sort=False)
+    lam_desc = -eq.compute("lambda", grid=grid)["lambda"]
+    # half mesh fit gives ~2.5e-4, fitting on the full mesh gave ~6e-3
+    np.testing.assert_allclose(lam_desc, lam_vmec, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_load_current_half_mesh():
+    """Test that VMECIO.load fits the current profile on the VMEC half mesh."""
+    path = "./tests/inputs/wout_DSHAPE.nc"
+    eq = VMECIO.load(path, profile="current")
+    file = Dataset(path, mode="r")
+    ns = int(file.variables["ns"][:])
+    buco = file.variables["buco"][:].filled()
+    ctor = float(file.variables["ctor"][:])
+    file.close()
+
+    # buco is on the half mesh, s_j = (j - 1/2) / (ns - 1), and buco[0] is unused
+    s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+    current_vmec = 2 * np.pi / mu_0 * buco[1:]
+    current_desc = eq.current(np.sqrt(s_half))
+    # buco and the DESC current have opposite signs for this left-handed wout,
+    # and fitting on the full mesh gave errors of ~4e-3 relative to max |I|
+    np.testing.assert_allclose(
+        -current_desc, current_vmec, atol=1e-8 * np.max(np.abs(current_vmec))
+    )
+    # total current at the edge, extrapolated from the half mesh as VMEC does
+    np.testing.assert_allclose(eq.current(np.array([1.0])), ctor, rtol=1e-8)

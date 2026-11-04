@@ -1864,8 +1864,10 @@ class SplineMagneticField(_MagneticField, Optimizable):
         tempdict["fz"] = approx_df(self._Z, Bi, self._method, 2)
         tempdict["fxz"] = approx_df(self._Z, tempdict["fx"], self._method, 2)
         if self._axisym:
-            tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
-            tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
+            # single phi plane is evaluated with interp2d(R, Z), whose second
+            # coordinate "y" is Z: fy is df/dZ and fxy is d2f/dRdZ
+            tempdict["fy"] = tempdict["fz"]
+            tempdict["fxy"] = tempdict["fxz"]
             tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
         else:

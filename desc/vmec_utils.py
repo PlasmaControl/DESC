@@ -278,7 +278,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
     return matrix, vmec_modes
 
 
-def fourier_to_zernike(m, n, x_mn, basis):
+def fourier_to_zernike(m, n, x_mn, basis, rho=None):
     """Convert from a double Fourier series to a Fourier-Zernike basis.
 
     Parameters
@@ -293,6 +293,9 @@ def fourier_to_zernike(m, n, x_mn, basis):
         axis to the boundary.
     basis : FourierZernikeBasis
         Basis set for x_lmn
+    rho : ndarray, shape(surfs,), optional
+        Radial coordinate of each row of x_mn. Defaults to the VMEC full mesh,
+        rho = sqrt(linspace(0, 1, surfs)).
 
     Returns
     -------
@@ -302,7 +305,9 @@ def fourier_to_zernike(m, n, x_mn, basis):
     """
     x_lmn = np.zeros((basis.num_modes,))
     surfs = x_mn.shape[0]
-    rho = np.sqrt(np.linspace(0, 1, surfs))
+    if rho is None:
+        rho = np.sqrt(np.linspace(0, 1, surfs))
+    rho = np.asarray(rho)
 
     As = zernike_radial(rho[:, np.newaxis], basis.modes[:, 0], basis.modes[:, 1])
     for k in range(len(m)):

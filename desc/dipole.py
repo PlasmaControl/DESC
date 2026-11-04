@@ -297,14 +297,8 @@ class _Dipole(_MagneticField, Optimizable, ABC):
     @rho.setter
     def rho(self, new):
         assert jnp.isscalar(new) or new.size == 1
-        # errorif(
-        #     new < -1 or new > 1,
-        #     ValueError,
-        #     f"rho must be in range (-1, 1), got {new}"
-        # )
         self._rho = jnp.float64(float(np.squeeze(new)))
 
-    #rho_tilde is unconstrained
     @property
     def rho_tilde(self):
         """float: Dimensionless parameter in range (-1, 1) that defines radial
@@ -408,10 +402,8 @@ class _Dipole(_MagneticField, Optimizable, ABC):
             coords = rpz2xyz(coords)
 
         # rho is the only registered dof, so it's the only quantity that
-        # needs to support being overridden via `params` (e.g. during
-        # optimization/perturbation). Everything else below is fixed
-        # geometry, read straight off `self` -- no grid, no transforms, no
-        # data_index/compute_fun round-trip needed for a single point.
+        # needs to support being overridden via `params`. Everything else below is fixed
+        # geometry, read straight off `self`.
         if params is None:
             rho = jnp.tanh(self.rho)
         else:
@@ -715,9 +707,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         self._sym = bool(sym)
         self._name = str(name)
 
-        #if check_intersection:
-            #self.is_self_intersecting()
-
     @property
     def name(self):
         """str: Name of the dipole."""
@@ -760,8 +749,7 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         jax.tree_util.tree_flatten timing), and since `self` is an implicit
         positional argument to every @jit-decorated _Objective method
         (compute_scalar, grad, jac_scaled, ...), this recursive flatten ran
-        on every trace/compile -- not the actual rho array itself, which is
-        tiny, but the *bookkeeping* around 75,460 individual Python objects.
+        on every trace/compile -- not the actual rho array itself.
 
         The evolving optimization state (rho) is never read from `self`
         inside a traced compute() call -- it arrives through the separate
@@ -779,16 +767,14 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
     @classmethod
     def tree_unflatten(cls, aux_data, children):
-        """Inverse of tree_flatten -- rebuilds a DipoleSet wrapping the same
-        underlying _Dipole objects (no copying), so this stays cheap."""
+        """Inverse of tree_flatten."""
         dipoles, NFP, sym, name = aux_data
         return cls(*dipoles, NFP=NFP, sym=sym, name=name)
 
     def _invalidate_geometry_cache(self):
-        """Clear cached aggregate arrays after the dipole list itself changes
-        (append/insert/delete/item-replace). Position/orientation/m0 are fixed,
-        non-optimizable geometry, so caching them avoids rebuilding a 75,460-
-        element array via a Python loop on every access -- these properties
+        """Clear cached aggregate arrays after the dipole list itself changes. 
+        Position etc are fixed, non-optimizable geometry, so caching them avoids 
+        rebuilding a big array via a Python loop on every access -- these properties
         were previously rebuilt from scratch every single call, including
         calls made from inside JIT-traced objective compute functions."""
         for key in ("_X_cache", "_Y_cache", "_Z_cache", "_phi_cache", "_theta_cache", "_m0_cache"):
@@ -852,41 +838,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             "_m0_cache", lambda: jnp.asarray([dipole.m0 for dipole in self])
         )
 
-    # @property
-    # def X(self):
-    #     """X coordinates of all dipoles."""
-    #     return jnp.asarray([dipole.X for dipole in self])
-
-
-    # @property
-    # def Y(self):
-    #     """Y coordinates of all dipoles."""
-    #     return jnp.asarray([dipole.Y for dipole in self])
-
-
-    # @property
-    # def Z(self):
-    #     """Z coordinates of all dipoles."""
-    #     return jnp.asarray([dipole.Z for dipole in self])
-
-
-    # @property
-    # def phi(self):
-    #     """Azimuthal angles of all dipoles."""
-    #     return jnp.asarray([dipole.phi for dipole in self])
-
-
-    # @property
-    # def theta(self):
-    #     """Polar angles of all dipoles."""
-    #     return jnp.asarray([dipole.theta for dipole in self])
-
-    # @property
-    # def m0(self):
-    #     """Dipole moment magnitudes of all dipoles.
-    #     """
-    #     return jnp.asarray([dipole.m0 for dipole in self])
-
     @property
     def shift(self):
         """Shift vectors of all dipoles."""
@@ -898,25 +849,11 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         """Rotation matrices of all dipoles."""
         return jnp.asarray([dipole.rotmat for dipole in self])
     
-    # @property
-    # def rho(self):
-    #     """list: Optimization parameters for each dipole from (-1, 1)."""
-    #     return [dipole.rho for dipole in self.dipoles]
 
     @property
     def rho_tilde(self):
         """list: """
         return [dipole.rho_tilde for dipole in self.dipoles]
-
-    # @rho.setter
-    # def rho(self, new):
-    #     # new must be a 1D iterable regardless of the tree structure of the dipoleSet
-    #     old, tree = tree_flatten(self.rho)
-    #     new = jnp.atleast_1d(new).flatten()
-    #     new = jnp.broadcast_to(new, (len(old),))
-    #     new = tree_unflatten(tree, new)
-    #     for dipole, cur in zip(self.dipoles, new):
-    #         dipole.rho = cur
 
     @optimizable_parameter
     @property
@@ -1017,63 +954,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     def flip(self, *args, **kwargs):
         """Flip the dipoles across a plane."""
         [dipole.flip(*args, **kwargs) for dipole in self.dipoles]
-
-    def _compute_position(self, params=None, grid=None, dx1=False, **kwargs):
-        basis = kwargs.pop("basis", "xyz")
-        keys = ["x", "x_s"] if dx1 else ["x"]
-        if params is None:
-            params = [get_params(keys, dipole, basis=basis) for dipole in self]
-        data = self.compute(keys, grid=grid, params=params, basis=basis, **kwargs)
-        data = tree_leaves(data, is_leaf=lambda x: isinstance(x, dict))
-        x = jnp.dstack([d["x"].T for d in data]).T  # shape=(ndipoles,num_nodes,3)
-        if dx1:
-            x_s = jnp.dstack([d["x_s"].T for d in data]).T  # shape=(ndipoles,num_nodes,3)
-        # stellarator symmetry is easiest in [X,Y,Z] coordinates
-        xyz = rpz2xyz(x) if basis.lower() == "rpz" else x
-        if dx1:
-            xyz_s = (
-                rpz2xyz_vec(x_s, xyz[:, :, 0], xyz[:, :, 1])
-                if basis.lower() == "rpz"
-                else x_s
-            )
-
-        # if stellarator symmetric, add reflected dipoles from the other half field period
-        if self.sym:
-            normal = jnp.array(
-                [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
-            )
-            xyz_sym = xyz @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
-            xyz = jnp.vstack((xyz, jnp.flipud(xyz_sym)))
-            if dx1:
-                xyz_s_sym = (
-                    xyz_s @ reflection_matrix(normal).T @ reflection_matrix([0, 0, 1]).T
-                )
-                xyz_s = jnp.vstack((xyz_s, jnp.flipud(xyz_s_sym)))
-
-        # field period rotation is easiest in [R,phi,Z] coordinates
-        rpz = xyz2rpz(xyz)
-        if dx1:
-            rpz_s = xyz2rpz_vec(xyz_s, xyz[:, :, 0], xyz[:, :, 1])
-
-        # if field period symmetry, add rotated dipoles from other field periods
-        rpz0 = rpz
-        for k in range(1, self.NFP):
-            rpz = jnp.vstack((rpz, rpz0 + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])))
-        if dx1:
-            rpz_s = jnp.tile(rpz_s, (self.NFP, 1, 1))
-
-        # ensure phi in [0, 2pi)
-        rpz = rpz.at[:, :, 1].set(jnp.mod(rpz[:, :, 1], 2 * jnp.pi))
-
-        x = rpz2xyz(rpz) if basis.lower() == "xyz" else rpz
-        if dx1:
-            x_s = (
-                rpz2xyz_vec(rpz_s, phi=rpz[:, :, 1])
-                if basis.lower() == "xyz"
-                else rpz_s
-            )
-            return x, x_s
-        return x
     
     def _compute_A_or_B(
         self,
@@ -1120,8 +1000,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             ValueError,
             f'Expected "A" or "B" for compute_A_or_B, instead got {compute_A_or_B}',
         )
-        # NFP symmetry applies to dipoleset as a whole, not individual dipoles, so the grid
-        # should have NFP=1.
         errorif(
             getattr(source_grid, "NFP", 1) != 1,
             ValueError,
@@ -1140,12 +1018,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
                 ]
             )
 
-        # X, Y, Z, phi, theta, m0 are fixed (non-optimizable) geometry: read
-        # them directly as arrays via the DipoleSet properties above instead
-        # of building a `[get_params(...) for dipole in self]` list -- that
-        # was a Python loop over every dipole, run on every field evaluation,
-        # for data that never changes during optimization. This is the piece
-        # that actually mattered for scaling to O(1e5) dipoles.
         rs = jnp.stack([self.X, self.Y, self.Z], axis=-1)
         M0 = self.m0 * rho_arr
         sin_theta = jnp.sin(self.theta)
@@ -1159,13 +1031,11 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         )
         m = M0[:, jnp.newaxis] * m_hat
 
-        # stellarator symmetry is easiest in [X,Y,Z] coordinates
         if basis.lower() == "rpz":
             coords_xyz = rpz2xyz(coords)
         else:
             coords_xyz = coords
 
-        # if stellarator symmetric, add reflected nodes from the other half field period
         if self.sym:
             normal = jnp.array(
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
@@ -1177,11 +1047,9 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             )
             coords_xyz = jnp.vstack((coords_xyz, coords_sym))
 
-        # field period rotation is easiest in [R,phi,Z] coordinates
         coords_rpz = xyz2rpz(coords_xyz)
         kernel = {"B": dipole_field, "A": dipole_vector_potential}[compute_A_or_B]
 
-        # sum the magnetic fields from each field period
         def nfp_loop(k, AB):
             coords_nfp = coords_rpz + jnp.array([0, 2 * jnp.pi * k / self.NFP, 0])
             AB_xyz = kernel(rpz2xyz(coords_nfp), rs, m, chunk_size=chunk_size)
@@ -1190,8 +1058,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
         AB = fori_loop(0, self.NFP, nfp_loop, jnp.zeros_like(coords_rpz))
 
-        # sum the magnetic field/potential from both halves of
-        # the symmetric field period
         if self.sym:
             AB = AB[: coords.shape[0], :] + AB[coords.shape[0] :, :] * jnp.array(
                 [-1, 1, 1]
@@ -1350,16 +1216,11 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         mu_0 = 4 * jnp.pi * 1e-7
         if grid is None:
             grid = LinearGrid(M=M_surf, N=N_surf, NFP=eq.NFP, sym=False, endpoint=True)
+
+        data = eq.compute(["x", "n_rho"], grid=grid, basis="xyz")
+        xyz = jnp.asarray(data["x"])
+        n_surf = jnp.asarray(data["n_rho"])
  
-        # surface normal and eval positions, both explicitly in xyz -- n_rho
-        # defaults to (R, phi, Z) COMPONENTS, not xyz, which silently gives
-        # wrong dot products below except at phi=0 (confirmed against a
-        # real Equilibrium/FourierRZToroidalSurface).
-        n_surf = eq.surface.compute(['n_rho'], grid=grid, basis='xyz')['n_rho']
-        data = eq.compute(["X", "Y", "Z"], grid=grid)
-        xyz = jnp.stack([data["X"], data["Y"], data["Z"]], axis=-1)
- 
-        # unique (stored) dipole geometry
         theta = jnp.asarray([d.theta for d in self])
         phi = jnp.asarray([d.phi for d in self])
         m_hat_unique = jnp.stack(
@@ -1379,14 +1240,10 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
                 [-jnp.sin(jnp.pi / self.NFP), jnp.cos(jnp.pi / self.NFP), 0]
             )
             F = reflection_matrix(normal) @ reflection_matrix([0, 0, 1])
-            # position reflects normally; moment picks up an extra minus
-            # sign beyond the geometric reflection -- see docstring note.
             m_pos_sym = m_pos_unique @ F.T
             m_hat_sym = -(m_hat_unique @ F.T)
             m_pos_full = jnp.concatenate([m_pos_full, m_pos_sym], axis=0)
             m_hat_full = jnp.concatenate([m_hat_full, m_hat_sym], axis=0)
-            # identity owner mapping -- each dipole's mirror image belongs
-            # to its OWN column, no reversal (see docstring note).
             owner_full = jnp.concatenate([owner_full, jnp.arange(n_unique)])
  
         m_pos_all = [m_pos_full]
@@ -1401,10 +1258,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
         m_hat_all = jnp.concatenate(m_hat_all, axis=0)
         owner_all = jnp.concatenate(owner_all, axis=0)
  
-        # pairwise geometry: (n_eval, n_images) -- this is the expensive
-        # part (1/r^3 falloffs, dot products for every image against every
-        # eval point) that gets computed ONCE here rather than every
-        # optimization iteration.
         r_ij = xyz[:, None, :] - m_pos_all[None, :, :]
         r_mag = jnp.linalg.norm(r_ij, axis=-1)
         r_unit = r_ij / r_mag[:, :, None]
@@ -1415,142 +1268,10 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
  
         g_image = mu_0 / (4 * jnp.pi) * (3 * r_dot_n * r_dot_m - n_dot_m) / r_mag ** 3
  
-        # fold every image's contribution back onto its owning unique dipole
         g_ij = jnp.zeros((xyz.shape[0], n_unique))
         g_ij = g_ij.at[:, owner_all].add(g_image)
  
         return g_ij
-
-    def save_in_makegrid_format(self, coilsFilename, NFP=None, grid=None):
-        """Save CoilSet as a MAKEGRID-formatted coil txtfile.
-
-        By default, each coil is assigned to the same Coilgroup in MAKEGRID
-        with the name "Modular". For more details see the MAKEGRID documentation
-        https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
-
-        Note: if a nested CoilSet, will flatten it first before saving
-
-        Parameters
-        ----------
-        filename : str or path-like
-            path save CoilSet as a file in MAKEGRID txt format
-        NFP : int, default None
-            If > 1, assumes that the CoilSet is the coils for a coilset
-            with a nominal discrete toroidal symmetry of NFP, and will
-            put that NFP in the periods line of the coils file generated.
-            defaults to 1
-        grid: Grid, ndarray, int,
-            Unused for dipoles. Kept for API/signature compatibility with
-            the CoilSet version of this method. A point dipole has a single
-            position, not a filament sampled along a grid, so each dipole
-            contributes exactly one point to the output file regardless of
-            what is passed here.
-        """
-        # TODO(#1376): name each group based off of CoilSet name?
-        # TODO(#1376): have CoilGroup be automatically assigned based off of
-        # CoilSet if current coilset is a collection of coilsets?
-
-        coilsFilename = os.path.expanduser(coilsFilename)
-
-        NFP = 1 if NFP is None else NFP
-
-        def flatten_coils(coilset):
-            if hasattr(coilset, "__len__"):
-                if isinstance(coilset, DipoleSet):
-                    if coilset.NFP > 1 or coilset.sym:
-                        # hit a CoilSet with symmetries, this coilset only contains
-                        # its unique coils. However, for this function we
-                        # need to get the entire coilset, not just the unique coils,
-                        # so make a MixedCoilSet using this CoilSet's coils and NFP/sym
-                        coilset_full = DipoleSet.from_symmetry(
-                            coilset,
-                            NFP=coilset.NFP,
-                            sym=coilset.sym,
-                        )
-                        return [c for c in coilset_full]
-                return [a for i in coilset for a in flatten_coils(i)]
-            else:
-                return [coilset]
-
-        coils = flatten_coils(self)
-        # after flatten, should have as many elements in list as self.num_coils, if
-        # flatten worked correctly.
-        assert len(coils) == self.num_dipoles
-
-        assert (
-            int(len(coils) / NFP) == len(coils) / NFP
-        ), "Number of coils in coilset must be evenly divisible by NFP!"
-
-        header = (
-            # number of field period
-            "periods "
-            + str(NFP)
-            + "\n"
-            + "begin filament\n"
-            # not 100% sure of what this line is, neither is MAKEGRID,
-            # but it is needed and expected by other codes
-            # "The third line is read by MAKEGRID but ignored"
-            # https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
-            + "mirror NIL"
-        )
-        footer = "end\n"
-
-        x_arr = []
-        y_arr = []
-        z_arr = []
-        currents_arr = []
-        coil_end_inds = []  # indices where the coils end, need to track these
-        # to place the coilgroup number and name later, which MAKEGRID expects
-        # at the end of each individual coil
-        for i in range(int(len(coils))):
-            coil = coils[i]
-            # A point dipole isn't a filament sampled over a grid the way a
-            # coil is -- it has one fixed X,Y,Z. Previously this called
-            # `coil.compute("X", basis="xyz", grid=grid)["X"]`, which routed
-            # through the data_index/get_params machinery; now that X, Y, Z
-            # are plain (non-optimizable) properties, read them directly
-            # instead, as a single-point contour.
-            contour_X = np.atleast_1d(np.asarray(coil.X))
-            contour_Y = np.atleast_1d(np.asarray(coil.Y))
-            contour_Z = np.atleast_1d(np.asarray(coil.Z))
-
-            currents = np.ones_like(contour_X) * float(coil.rho)
-
-            coil_end_inds.append(contour_X.size)
-
-            x_arr.append(contour_X)
-            y_arr.append(contour_Y)
-            z_arr.append(contour_Z)
-            currents_arr.append(currents)
-        # form full array to save
-        x_arr = np.concatenate(x_arr)
-        y_arr = np.concatenate(y_arr)
-        z_arr = np.concatenate(z_arr)
-        currents_arr = np.concatenate(currents_arr)
-
-        save_arr = np.vstack((x_arr, y_arr, z_arr, currents_arr)).T
-        # save initial file
-        np.savetxt(
-            coilsFilename,
-            save_arr,
-            delimiter=" ",
-            header=header,
-            footer=footer,
-            fmt="%14.12e",
-            comments="",  # to avoid the # appended to the start of the header/footer
-        )
-        # now need to re-load the file and place coilgroup markers at end of each coil
-        with open(coilsFilename) as f:
-            lines = f.readlines()
-        for i in range(len(coil_end_inds)):
-            name = coils[i].name if coils[i].name != "" else "1 Modular"
-            real_end_ind = int(
-                np.sum(coil_end_inds[0 : i + 1]) + 2
-            )  # to account for the 3 header lines
-            lines[real_end_ind] = lines[real_end_ind].strip("\n") + f" {name}\n"
-        with open(coilsFilename, "w") as f:
-            f.writelines(lines)
-
 
     def __add__(self, other):
         if isinstance(other, (DipoleSet)):
@@ -1563,14 +1284,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
     # dunder methods required by MutableSequence
     def __getitem__(self, i):
         return self.dipoles[i]
-
-    # def __setitem__(self, i, new_item):
-    #     if not isinstance(new_item, _Dipole):
-    #         raise TypeError("Members of DipoleSet must be of type Dipole.")
-    #     self._dipoles[i] = new_item
-
-    # def __delitem__(self, i):
-    #     del self._dipoles[i]
 
     def __setitem__(self, i, new_item):
         if not isinstance(new_item, _Dipole):
@@ -1591,12 +1304,6 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
 
     def __len__(self):
         return len(self._dipoles)
-
-    # def insert(self, i, new_item):
-    #     """Insert a new dipole into the dipoleset at position i."""
-    #     if not isinstance(new_item, _Dipole):
-    #         raise TypeError("Members of DipoleSet must be of type Dipole.")
-    #     self._dipoles.insert(i, new_item)
     
     def __repr__(self):
         """Get the string form of the object."""
@@ -1606,9 +1313,10 @@ class DipoleSet(OptimizableCollection, _Dipole, MutableSequence):
             + str(hex(id(self)))
             + " (name={}, with {} submembers)".format(self.name, len(self))
         )
+
     
 def export_dipoles(dipole_set, f):
-    '''
+    """
     Exports dipoles to a CSV file.
 
     Writes the data of each dipole to a comma-separated file with a header row.
@@ -1623,7 +1331,7 @@ def export_dipoles(dipole_set, f):
     Format
     -------------
     x (m), y (m), z (m), rho (unitless), phi (rad), theta (rad)
-    '''
+    """
     d = dipole_set.dipoles
 
     outfile = open(f, 'w')
@@ -1636,94 +1344,93 @@ def export_dipoles(dipole_set, f):
     outfile.close()
 
 
+def import_dipoles(NFP, sym, filename):
+    """
+    Create a DipoleSet from a .focus or .csv file.
 
-def create_dipole(X, Y, Z, phi, theta, m0, rho_tilde, rho_tilde_clip=0.95):
-    '''
-    Creates a Dipole object using given data.
+    FOCUS files are automatically converted to CSV before importing.
 
     Parameters
     ----------
-    rho_tilde_clip : float, optional
-        Maximum |rho_tilde| magnitude to initialize a dipole at. Imported
-        data (e.g. the output of a prior DipoleDiscreteness-driven run) can
-        arrive essentially saturated at rho_tilde ~= +-1; since rho_tilde is
-        stored internally via arctanh, that starting point has a
-        near-vanishing gradient (d(tanh)/d(rho) -> 0 as |rho_tilde| -> 1),
-        which silently stalls any objective built on rho_tilde (e.g.
-        DipoleVolume) even though it looks like the optimizer isn't doing
-        anything. Clipping the *starting* magnitude keeps the same sign/
-        discreteness while leaving a usable gradient. Set to ``None`` to
-        disable and use the raw imported value as before.
-    '''
-    # if rho_tilde_clip is not None:
-    #     rho_tilde = jnp.clip(rho_tilde, -rho_tilde_clip, rho_tilde_clip)
-    dip = _Dipole(X=X, Y=Y, Z=Z, phi=phi, theta=theta, m0=m0, 
-                   #rho=rho_tilde
-                   )
-    dip.rho_tilde = rho_tilde
-    return dip
+    NFP : int
+        Number of field periods for enforcing field-period symmetry.
+    sym : bool
+        Whether to enforce stellarator symmetry.
+    filename : str or path-like
+        Path to a .focus or .csv file.
 
-# def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
-#     '''
-#     Creates a DipoleSet object using data from a given CSV file containing
-#     each dipole's attributes, including x, y, z, phi, theta, m0, and rho.
+    Returns
+    -------
+    dipole_set : DipoleSet
+        Imported collection of dipoles.
+    """
+    from pathlib import Path
 
-#     Parameters
-#     ----------
-#     rho_tilde_clip : float or None, optional
-#         Passed through to ``create_dipole``; caps the starting |rho_tilde|
-#         magnitude so a saturated CSV (e.g. the output of a prior
-#         DipoleDiscreteness run) doesn't start every dipole with a
-#         near-vanishing gradient. See ``create_dipole`` docstring. Default
-#         0.95; pass ``None`` to use the raw imported values unclipped.
-#     '''
-#     with open(filename, newline="") as f:
-#         reader = csv.DictReader(f)
- 
-#         csv_data = [
-#             (
-#                 float(line["x (m)"]),
-#                 float(line["y (m)"]),
-#                 float(line["z (m)"]),
-#                 float(line["phi (rad)"]),
-#                 float(line["theta (rad)"]),
-#                 float(line["m0"]),
-#                 float(line["rho (unitless)"]),
-#                 float(line["Ic"]),
-#             )
-#             for line in reader
-#         ]
-#     dipole_set = DipoleSet(NFP=NFP, sym=sym)
-#     for line in csv_data:
-#         dipole_params, Ic = line[:-1], line[-1]
-#         if Ic != 0:
-#             dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=rho_tilde_clip))
- 
-#     return dipole_set
+    filename = Path(filename)
 
-def import_dipoles(NFP, sym, filename, rho_tilde_clip=0.95):
+    if filename.suffix.lower() == ".focus":
+        output_filename = filename.with_suffix(".csv")
+
+        data = np.genfromtxt(
+            filename,
+            delimiter=",",
+            skip_header=3,
+            usecols=(3, 4, 5, 10, 11, 7, 8, 6),
+            ndmin=2,
+        )
+
+        if data.size == 0 or not np.all(np.isfinite(data)):
+            raise ValueError(f"Invalid FOCUS data in {filename}")
+
+        header = [
+            "x (m)",
+            "y (m)",
+            "z (m)",
+            "phi (rad)",
+            "theta (rad)",
+            "m0",
+            "rho (unitless)",
+            "Ic",
+        ]
+
+        with open(output_filename, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(data)
+
+        filename = output_filename
+
+    elif filename.suffix.lower() != ".csv":
+        raise ValueError(
+            f"Unsupported file format '{filename.suffix}'. "
+            "Expected .focus or .csv."
+        )
+
+    dipole_set = DipoleSet(NFP=NFP, sym=sym)
+
     with open(filename, newline="") as f:
         reader = csv.DictReader(f)
         reader.fieldnames = [name.strip() for name in reader.fieldnames]
         has_Ic = "Ic" in reader.fieldnames
 
-        csv_data = [
-            (
-                float(line["x (m)"]),
-                float(line["y (m)"]),
-                float(line["z (m)"]),
-                float(line["phi (rad)"]),
-                float(line["theta (rad)"]),
-                float(line["m0"]),
-                float(line["rho (unitless)"]),
-                float(line["Ic"]) if has_Ic else 1.0,
+        for line in reader:
+            Ic = float(line["Ic"]) if has_Ic else 1.0
+
+            # Skips dipoles marked as inactive, assuming they are blocked by ports
+            if Ic == 0:
+                continue
+
+            dip = _Dipole(
+                X=float(line["x (m)"]),
+                Y=float(line["y (m)"]),
+                Z=float(line["z (m)"]),
+                phi=float(line["phi (rad)"]),
+                theta=float(line["theta (rad)"]),
+                m0=float(line["m0"]),
             )
-            for line in reader
-        ]
-    dipole_set = DipoleSet(NFP=NFP, sym=sym)
-    for line in csv_data:
-        dipole_params, Ic = line[:-1], line[-1]
-        if Ic != 0:
-            dipole_set.append(create_dipole(*dipole_params, rho_tilde_clip=0.95))
+
+            dip.rho_tilde = float(line["rho (unitless)"])
+
+            dipole_set.append(dip)
 
     return dipole_set

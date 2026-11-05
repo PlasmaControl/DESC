@@ -3,6 +3,7 @@ Changelog
 
 New Features
 
+- Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 - Adds ``NeutronWallLoading`` objective to compute the neutron wall loading (MW/m²) on a chosen/optimized surface.
@@ -15,6 +16,9 @@ Performance Improvements
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
 - More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
+- Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
+- Reduces the compilation time of custom `qr_multiply` algorithm.
+- Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
 
 Breaking Changes and Deprecations
 

@@ -1174,22 +1174,34 @@ def plot_3d(  # noqa : C901
     showaxislabels = kwargs.pop("showaxislabels", True)
 
     if name != "B*n":
-        data, label = _compute(
-            eq,
-            name,
-            grid,
-            component=component,
-            compute_kwargs=compute_kwargs,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Unequal number of field periods for grid .* and basis .*",
+                category=UserWarning,
+            )
+            data, label = _compute(
+                eq,
+                name,
+                grid,
+                component=component,
+                compute_kwargs=compute_kwargs,
+            )
     else:
-        data, label = _compute_Bn(
-            eq=eq,
-            field=kwargs.pop("field", None),
-            plot_grid=grid,
-            field_grid=kwargs.pop("field_grid", None),
-            chunk_size=kwargs.pop("chunk_size", None),
-            B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Unequal number of field periods for grid .* and basis .*",
+                category=UserWarning,
+            )
+            data, label = _compute_Bn(
+                eq=eq,
+                field=kwargs.pop("field", None),
+                plot_grid=grid,
+                field_grid=kwargs.pop("field_grid", None),
+                chunk_size=kwargs.pop("chunk_size", None),
+                B_plasma_chunk_size=kwargs.pop("B_plasma_chunk_size", None),
+            )
 
     if normalize:
         norm_data, _ = _compute(eq, normalize, grid, reshape=False)

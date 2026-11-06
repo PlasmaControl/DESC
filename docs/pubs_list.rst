@@ -45,7 +45,7 @@ Papers extending DESC functionality
    [`pdf <https://arxiv.org/abs/2310.18842>`__]
 
 #. R. Gaur, R. Conlin, D. Dickinson, J.F. Parisi, D. Panici,
-   D.W. Dudt, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2024).
+   D.W. Dudt, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2025).
    *Omnigenous stellarators with improved ideal and kinetic ballooning stability*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/ae1e9e>`__]
    [`pdf <https://arxiv.org/abs/2410.04576>`__]
@@ -55,9 +55,10 @@ Papers extending DESC functionality
    [`JPP <https://doi.org/10.1017/S0022377824000655>`__]
    [`pdf <https://arxiv.org/abs/2403.11033>`__]
 
-#. Kaya Unalmis et al. (2025).
+#. K.E. Unalmis, R. Gaur, R. Conlin, D. Panici, and E. Kolemen. (2026).
    *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
    its applications*.
+   [`JPP <https://doi.org/10.1017/S0022377826101652>`__]
    [`pdf <https://arxiv.org/abs/2412.01724>`__]
 
 #. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
@@ -67,10 +68,12 @@ Papers extending DESC functionality
 #. R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis, Y. Elmacioglu,
    D.W. Dudt, R. Conlin, and E. Kolemen. (2025).
    *Omnigenous umbilic stellarators*.
+   [`JPP <https://doi.org/10.1017/S0022377825100925>`__]
    [`pdf <https://arxiv.org/abs/2505.04211>`__]
 
 #. D. Panici, E. Rodriguez, R. Conlin, D.W. Dudt, and E. Kolemen. (2025).
    *Extending near-axis equilibria in DESC*.
+   [`JPP <https://doi.org/10.1017/S0022377825100901>`__]
    [`pdf <https://arxiv.org/abs/2506.05170>`__]
 
 #. D. Panici et al. (2025).
@@ -131,6 +134,7 @@ Papers applying DESC
 #. S.A. Cadena et al. (2025).
    *ConStellaration: A dataset of QI-like stellarator plasma boundaries
    and optimization benchmarks*.
+   [`NeurIPS <https://doi.org/10.52202/085713-0520>`__]
    [`pdf <https://arxiv.org/abs/2506.19583>`__]
 
 #. M. Landreman, J.Y. Choi, C. Alves, P. Balaprakash, M. Churchill,

@@ -1001,9 +1001,10 @@ class NeutronWallLoading(_Objective):
         else:
             surface = self.things[1]
         errorif(
-            eq.electron_density is None,
+            eq.electron_density is None and eq.ion_density is None,
             ValueError,
-            "Equilibrium must have an electron density profile.",
+            "Equilibrium must have an ion density profile, or an electron density"
+            " profile (in which case quasineutrality is assumed).",
         )
         errorif(
             eq.ion_temperature is None,

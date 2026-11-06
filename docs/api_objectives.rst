@@ -97,6 +97,9 @@ Stability
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
     desc.objectives.BallooningStability
+
+.. autosummary::
+
     desc.external.agni.AgniStability
     desc.external.terpsichore.TERPSICHORE
 

@@ -303,3 +303,8 @@ def test_eigh_tridiagonal_top_k(k, case):
     grad_ref = jax.grad(lambda d, e: dense(d, e)[0].sum(), (0, 1))
     for g, g_ref in zip(grad(d, e), grad_ref(d, e)):
         np.testing.assert_allclose(g, g_ref, rtol=0, atol=1e-9)
+
+    # eigenvectors carry no derivative, see the docstring
+    grad_v = jax.grad(lambda d, e: eigh_tridiagonal_top_k(d, e, k)[1].sum(), (0, 1))
+    for g in grad_v(d, e):
+        np.testing.assert_array_equal(g, 0)

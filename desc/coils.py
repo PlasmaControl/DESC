@@ -52,6 +52,19 @@ from desc.utils import (
     xyz2rpz_vec,
 )
 
+__all__ = [
+    "CoilSet",
+    "FourierPlanarCoil",
+    "FourierRZCoil",
+    "FourierXYCoil",
+    "FourierXYZCoil",
+    "MixedCoilSet",
+    "SplineXYZCoil",
+    "initialize_helical_coils",
+    "initialize_modular_coils",
+    "initialize_saddle_coils",
+]
+
 
 @partial(jit, static_argnames=["chunk_size"])
 def biot_savart_hh(eval_pts, coil_pts_start, coil_pts_end, current, *, chunk_size=None):

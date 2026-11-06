@@ -168,6 +168,92 @@ Papers applying DESC
    *Robustness of quasi-symmetry along parametric boundary variation*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/adf6e1>`__]
 
+#. H. Liu et al. (2025).
+   *Optimizing stellarators with hidden symmetry*.
+   [`pdf <https://arxiv.org/abs/2502.09350>`__]
+
+#. T. Thun, A. Merlo, R. Conlin, D. Panici, and D. Böckenhoff. (2025).
+   *Improving ideal MHD equilibrium accuracy with physics-informed neural networks*.
+   [`Nuclear Fusion <https://doi.org/10.1088/1741-4326/ae2937>`__]
+   [`pdf <https://arxiv.org/abs/2507.03119>`__]
+
+#. B. Jang, M. Landreman, and R. Conlin. (2026).
+   *Exponential spectral scaling: robust and efficient stellarator boundary
+   optimisation via mode-dependent scaling*.
+   [`JPP <https://doi.org/10.1017/S0022377825101074>`__]
+   [`pdf <https://arxiv.org/abs/2509.16320>`__]
+
+#. T. Thun, R. Conlin, D. Panici, and D. Böckenhoff. (2026).
+   *Narrow operator models of stellarator equilibria in Fourier Zernike basis*.
+   [`JPP <https://doi.org/10.1017/S0022377826101512>`__]
+   [`pdf <https://arxiv.org/abs/2510.13521>`__]
+
+#. L. Fu, D. Panici, E.J. Paul, A.A. Kaptanoglu, and A. Bhattacharjee. (2026).
+   *A flexible and differentiable coil proxy for stellarator equilibrium optimization*.
+   [`Physics of Plasmas <https://doi.org/10.1063/5.0307710>`__]
+   [`pdf <https://arxiv.org/abs/2510.16243>`__]
+
+#. C.P.S. Swanson et al. (2026).
+   *Overview of the Helios design: A practical planar coil stellarator fusion
+   power plant*.
+   [`Fusion Engineering and Design <https://doi.org/10.1016/j.fusengdes.2026.115999>`__]
+   [`pdf <https://arxiv.org/abs/2512.08027>`__]
+
+#. D.W. Dudt et al. (2026).
+   *Equilibrium optimization of the Helios planar coil stellarator power plant*.
+   [`Fusion Engineering and Design <https://doi.org/10.1016/j.fusengdes.2026.115903>`__]
+
+#. V. Fernández-Pacheco, J.L. Velasco, E. Sánchez, R. Gaur, J.M. García-Regaña,
+   J.A. Alonso, I. Calvo, and D. Carralero. (2026).
+   *Piecewise omnigenous magnetohydrodynamic equilibria as fusion reactor candidates*.
+   [`Physical Review X <https://doi.org/10.1103/jcks-2bzg>`__]
+   [`pdf <https://arxiv.org/abs/2601.14886>`__]
+
+#. J. Kappel, M. Landreman, P. Jurašić, and S.A. Henneberg. (2026).
+   *How does the magnetic gradient scale length influence complexity of
+   filamentary coils in stellarators?*
+   [`Nuclear Fusion <https://doi.org/10.1088/1741-4326/ae69fa>`__]
+   [`pdf <https://arxiv.org/abs/2602.18974>`__]
+
+#. A.K. Nath and Y. Suzuki. (2026).
+   *Development of a Simple Stellarator using Tilted Circular Toroidal Field Coils*.
+   [`pdf <https://arxiv.org/abs/2604.06677>`__]
+
+#. K. Salguero-Martínez and J.J.E. Herrera-Velázquez. (2026).
+   *Equilibrium of a simplified coil quasi-axisymmetric stellarator: Free
+   boundary approach*.
+   [`pdf <https://arxiv.org/abs/2605.02139>`__]
+
+#. T. Zhang, Z. Meng, and R. Xu. (2026).
+   *Agentic Stage-One Stellarator Optimization: Autonomous Multi-Objective
+   Search for Finite-Beta Equilibria*.
+   [`pdf <https://arxiv.org/abs/2608.01344>`__]
+
+#. Y. Han et al. (2026).
+   *Data-Driven Generation of Compact Quasi-Isodynamic Stellarators*.
+   [`pdf <https://arxiv.org/abs/2608.16938>`__]
+
+#. R.M. Churchill et al. (2026).
+   *AI-accelerated gyrokinetic predictions of turbulent transport for
+   stellarator design optimization and experimental planning*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb1f1>`__]
+   [`pdf <https://arxiv.org/abs/2609.28730>`__]
+
+#. E. Miralles-Dolz, R.M. Churchill, D. Panici, J. Schwartz, T. Bohm,
+   C. Moreno, and P. Wilson. (2026).
+   *Neutron wall loading in stellarator optimization*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb15b>`__]
+
+#. H. Zhu, R. Gaur, X. Wei, Z. Lin, and A. Bhattacharjee. (2026).
+   *Theory of Equivalent Tokamaks for Characterizing Turbulent Transport in
+   Quasi-symmetric Stellarators*.
+   [`pdf <https://arxiv.org/abs/2610.01131>`__]
+
+#. R. Gaur, D. Patch, R. Babin, F. Hindenlang, X. Chu, and T. Qian. (2026).
+   *Stellarators Linking Axisymmetric Mirrors Part 1: Coil Design, MHD
+   Equilibrium, and Physics Metrics*.
+   [`pdf <https://arxiv.org/abs/2610.06085>`__]
+
 .. raw:: html
 
    </div>

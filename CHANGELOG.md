@@ -26,6 +26,8 @@ Breaking Changes and Deprecations
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 - ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
+- Public modules now define ``__all__`` matching the API documentation, which makes the public API explicit for IDEs, type checkers and other tools. Note that ``from desc.<module> import *`` now only imports the documented public names.
+
 
 Bug Fixes
 

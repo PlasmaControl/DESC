@@ -99,6 +99,11 @@ Stability
     desc.objectives.MercierStability
     desc.objectives.BallooningStability
 
+.. autosummary::
+
+    desc.external.agni.AgniStability
+    desc.external.terpsichore.TERPSICHORE
+
 
 Free boundary / Single stage optimization
 -----------------------------------------
@@ -172,6 +177,9 @@ Fixing degrees of freedom
     desc.objectives.FixBoundaryZ
     desc.objectives.FixAxisR
     desc.objectives.FixAxisZ
+    desc.objectives.FixNearAxisR
+    desc.objectives.FixNearAxisZ
+    desc.objectives.FixNearAxisLambda
     desc.objectives.FixPsi
     desc.objectives.FixPressure
     desc.objectives.FixIota
@@ -185,7 +193,11 @@ Fixing degrees of freedom
     desc.objectives.FixModeZ
     desc.objectives.FixSumModesR
     desc.objectives.FixSumModesZ
+    desc.objectives.FixSumModesLambda
     desc.objectives.FixThetaSFL
+    desc.objectives.FixOmniWell
+    desc.objectives.FixOmniMap
+    desc.objectives.FixOmniBmax
     desc.objectives.FixCoilCurrent
     desc.objectives.FixSumCoilCurrent
     desc.objectives.FixParameters

@@ -4,6 +4,12 @@ import warnings
 
 import numpy as np
 
+__all__ = [
+    "export_coils_to_paraview",
+    "export_surface_to_paraview",
+    "export_volume_to_paraview",
+]
+
 try:
     import pyvista as pv
 except ImportError:

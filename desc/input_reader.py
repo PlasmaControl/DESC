@@ -1056,6 +1056,8 @@ class InputReader:
         iota_flag = True
         pres_scale = 1.0
         curr_tor = None
+        lfreeb = None
+        mgrid_file = ""
 
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
@@ -1134,13 +1136,14 @@ class InputReader:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
             # global parameters
-            if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(
-                    colored(
-                        "Using free-boundary mode! DESC will run as fixed-boundary.",
-                        "yellow",
-                    )
-                )
+            match = re.search(r"LFREEB\s*=\s*\.?([TF])", command, re.IGNORECASE)
+            if match:
+                lfreeb = match.group(1).upper() == "T"
+            match = re.search(
+                r"MGRID_FILE\s*=\s*['\"]([^'\"]*)", command, re.IGNORECASE
+            )
+            if match:
+                mgrid_file = match.group(1).strip()
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
                     colored(
@@ -1648,6 +1651,15 @@ class InputReader:
             del inputs["current"]
         else:
             del inputs["iota"]
+
+        # VMEC defaults LFREEB to true and runs free-boundary whenever a grid is named
+        if lfreeb is not False and mgrid_file.lower() not in ("", "none"):
+            warnings.warn(
+                colored(
+                    "Using free-boundary mode! DESC will run as fixed-boundary.",
+                    "yellow",
+                )
+            )
 
         vmec_file.close()
 

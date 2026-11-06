@@ -3,6 +3,7 @@
 import os
 import pathlib
 import shutil
+import warnings
 from io import BytesIO
 
 import h5py
@@ -354,6 +355,25 @@ def test_vmec_input_surface_threshold():
         surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5
+
+
+@pytest.mark.unit
+def test_vmec_input_free_boundary_warning(tmpdir_factory):
+    """VMEC runs free-boundary whenever a grid is named, unless LFREEB = F."""
+    deck = """&INDATA
+  NFP = 1  MPOL = 2  NTOR = 0  PHIEDGE = 1.0{}
+  MGRID_FILE = 'mgrid_test.nc'
+  AM = 1.0  AI = 0.5
+  RBC(0,0) = 10.0  RBC(0,1) = 1.0  ZBS(0,1) = 1.0
+/
+"""
+    path = tmpdir_factory.mktemp("desc_inputs").join("input.freeb")
+    for lfreeb, warns in (("", True), ("  LFREEB = T", True), ("  LFREEB = F", False)):
+        path.write(deck.format(lfreeb))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            InputReader.parse_vmec_inputs(str(path))
+        assert any("free-boundary" in str(w.message) for w in record) == warns
 
 
 class TestInputReader:

@@ -52,9 +52,9 @@ def ensure_positive_jacobian(eq):
         )
 
         if eq.iota is not None:
-            eq.i_l *= -1
+            eq.iota *= -1
         else:
-            eq.c_l *= -1
+            eq.current *= -1
 
         rone = np.ones_like(eq.R_lmn)
         rone[eq.R_basis.modes[:, 1] < 0] *= -1
@@ -75,6 +75,34 @@ def ensure_positive_jacobian(eq):
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
         )
     assert sign == 1
+    return eq
+
+
+def flip_magnetic_field(eq):
+    """Reverse the direction of the magnetic field.
+
+    Parameters
+    ----------
+    eq : Equilibrium or iterable of Equilibrium
+        Equilibria to flip the magnetic field of.
+
+    Returns
+    -------
+    eq : Equilibrium or iterable of Equilibrium
+        Same as input, but with the reverse direction magnetic field.
+
+    """
+    # maybe it's iterable:
+    if hasattr(eq, "__len__"):
+        for e in eq:
+            flip_magnetic_field(e)
+        return eq
+
+    eq.Psi *= -1
+
+    if eq.current is not None:
+        eq.current *= -1
+
     return eq
 
 
@@ -99,9 +127,9 @@ def flip_helicity(eq):
         return eq
 
     if eq.iota is not None:
-        eq.i_l *= -1
+        eq.iota *= -1
     else:
-        eq.c_l *= -1
+        eq.current *= -1
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 2] < 0] *= -1

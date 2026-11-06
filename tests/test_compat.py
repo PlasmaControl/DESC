@@ -6,6 +6,7 @@ import pytest
 from desc.compat import (
     contract_equilibrium,
     flip_helicity,
+    flip_magnetic_field,
     flip_theta,
     rescale,
     rotate_zeta,
@@ -13,6 +14,52 @@ from desc.compat import (
 from desc.examples import get
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.profiles import FourierZernikeProfile, SplineProfile
+
+
+@pytest.mark.unit
+def test_flip_magnetic_field_iota():
+    """Test flip_magnetic_field on an Equilibrium with an iota profile."""
+    eq = get("HELIOTRON")
+
+    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data_keys = ["B_R", "B_phi", "B_Z", "|F|"]
+
+    data_old = eq.compute(data_keys, grid=grid)
+    eq = flip_magnetic_field(eq)
+    data_new = eq.compute(data_keys, grid=grid)
+
+    # check that Jacobian, iota, and force balance error did not change
+    np.testing.assert_allclose(data_old["sqrt(g)"], data_new["sqrt(g)"])
+    np.testing.assert_allclose(data_old["iota"], data_new["iota"])
+    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"])
+
+    # check that magnetic field components changed sign
+    np.testing.assert_allclose(data_old["B_R"], -data_new["B_R"])
+    np.testing.assert_allclose(data_old["B_phi"], -data_new["B_phi"])
+    np.testing.assert_allclose(data_old["B_Z"], -data_new["B_Z"])
+
+
+@pytest.mark.unit
+def test_flip_magnetic_field_current():
+    """Test flip_magnetic_field on an Equilibrium with a current profile."""
+    eq = get("NCSX")
+
+    grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    data_keys = ["B_R", "B_phi", "B_Z", "|F|"]
+
+    data_old = eq.compute(data_keys, grid=grid)
+    eq = flip_magnetic_field(eq)
+    data_new = eq.compute(data_keys, grid=grid)
+
+    # check that Jacobian, iota, and force balance error did not change
+    np.testing.assert_allclose(data_old["sqrt(g)"], data_new["sqrt(g)"])
+    np.testing.assert_allclose(data_old["iota"], data_new["iota"])
+    np.testing.assert_allclose(data_old["|F|"], data_new["|F|"])
+
+    # check that magnetic field components changed sign
+    np.testing.assert_allclose(data_old["B_R"], -data_new["B_R"])
+    np.testing.assert_allclose(data_old["B_phi"], -data_new["B_phi"])
+    np.testing.assert_allclose(data_old["B_Z"], -data_new["B_Z"])
 
 
 @pytest.mark.unit
@@ -98,7 +145,7 @@ def test_flip_helicity_iota():
 @pytest.mark.unit
 def test_flip_helicity_current():
     """Test flip_helicity on an Equilibrium with a current profile."""
-    eq = get("HSX")
+    eq = get("NCSX")
 
     grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     nodes = grid.nodes.copy()

@@ -249,10 +249,18 @@ _class_inheritance = {
     "desc.geometry.curve.SplineXYZCurve": [
         "desc.geometry.core.Curve",
     ],
+    "desc.geometry.curve.NurbsRPZCurve": [
+        "desc.geometry.core.Curve",
+    ],
     "desc.geometry.surface.FourierRZToroidalSurface": [
+        "desc.geometry.core.ToroidalSurface",
         "desc.geometry.core.Surface",
     ],
     "desc.geometry.surface.ZernikeRZToroidalSection": [
+        "desc.geometry.core.Surface",
+    ],
+    "desc.geometry.surface.NurbsRZToroidalSurface": [
+        "desc.geometry.core.ToroidalSurface",
         "desc.geometry.core.Surface",
     ],
     "desc.coils.FourierRZCoil": [
@@ -273,11 +281,13 @@ _class_inheritance = {
     ],
     "desc.magnetic_fields._current_potential.CurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
         "desc.geometry.core.Surface",
         "desc.magnetic_fields._core.MagneticField",
     ],
     "desc.magnetic_fields._current_potential.FourierCurrentPotentialField": [
         "desc.geometry.surface.FourierRZToroidalSurface",
+        "desc.geometry.core.ToroidalSurface",
         "desc.geometry.core.Surface",
         "desc.magnetic_fields._core.MagneticField",
     ],

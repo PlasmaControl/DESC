@@ -25,6 +25,7 @@ from desc.compute.utils import (
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
+    ToroidalSurface,
     ZernikeRZToroidalSection,
 )
 from desc.grid import Grid, LinearGrid, QuadratureGrid, _Grid
@@ -1547,8 +1548,8 @@ class Equilibrium(IOAble, Optimizable):
     @surface.setter
     def surface(self, new):
         assert isinstance(
-            new, FourierRZToroidalSurface
-        ), f"surface should be of type FourierRZToroidalSurface or subclass, got {new}"
+            new, ToroidalSurface
+        ), f"surface should be of type ToroidalSurface or subclass, got {new}"
         assert (
             self.sym == new.sym
         ), "Surface and Equilibrium must have the same symmetry"

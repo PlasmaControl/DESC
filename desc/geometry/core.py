@@ -621,3 +621,13 @@ class Surface(IOAble, Optimizable, ABC):
             + str(hex(id(self)))
             + " (name={})".format(self.name)
         )
+
+
+class ToroidalSurface(Surface):
+    """Abstract base class for constant-rho toroidal surfaces.
+
+    Surfaces parameterized by poloidal and toroidal angles (theta, zeta) that can
+    serve as the boundary condition of an equilibrium. Subclasses must register
+    "Rb_lmn" and "Zb_lmn" compute functions giving the equivalent
+    FourierRZToroidalSurface coefficients.
+    """

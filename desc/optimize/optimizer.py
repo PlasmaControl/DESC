@@ -223,9 +223,8 @@ class Optimizer(IOAble):
             UserWarning,
             f"{[things[idx] for idx in duplicate_idx]} is duplicated in things.",
         )
-        x_scale = _parse_x_scale(x_scale, things, options)
-        # at this point x_scale is either "auto", an array matching with objective.x,
-        # or a list of scales in sync with things
+        # get_combined_constraint_objectives may add a non-Fourier eq.surface
+        num_user_things = len(things)
         things0 = [t.copy() for t in things]
 
         # need local import to avoid circular dependencies
@@ -266,6 +265,14 @@ class Optimizer(IOAble):
             nonlinear_constraint = None
             if not objective.built:
                 objective.build(verbose=verbose)
+        if len(things) > num_user_things:
+            # the copied boundary is the one held by the copied equilibrium
+            things0.append(things0[things.index(eq)].surface)
+            if isinstance(x_scale, (list, tuple)):
+                x_scale = list(x_scale) + [1]
+        x_scale = _parse_x_scale(x_scale, things, options)
+        # at this point x_scale is either "auto", an array matching with objective.x,
+        # or a list of scales in sync with things
         # we have to use this cumbersome indexing in this method when passing things
         # to objective to guard against the passed-in things having an ordering
         # different from objective.things, to ensure the correct order is passed
@@ -380,9 +387,9 @@ class Optimizer(IOAble):
                 final_params = t.params_dict.copy()
                 t.params_dict = init_params
                 t0.params_dict = final_params
-            return things0, result
+            return things0[:num_user_things], result
 
-        return things, result
+        return things[:num_user_things], result
 
 
 def _parse_x_scale(x_scale, things, options):
@@ -628,6 +635,7 @@ def get_combined_constraint_objectives(  # noqa: C901
     objective and nonlinear constraints that can be passed to the optimizer.
     """
     from desc.equilibrium import Equilibrium
+    from desc.geometry import FourierRZToroidalSurface
 
     # parse and combine constraints into linear & nonlinear objective functions
     linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
@@ -641,6 +649,22 @@ def get_combined_constraint_objectives(  # noqa: C901
             # see ProximalProjection._set_eq_state_vector
             continue
         linear_constraints = maybe_add_self_consistency(t, linear_constraints)
+    if is_prox:
+        # a non-Fourier boundary is optimized through its own params
+        if not isinstance(eq.surface, FourierRZToroidalSurface) and (
+            eq.surface not in things
+        ):
+            things.append(eq.surface)
+        # the proximal projection decides at build time whether the boundary surface
+        # drives the equilibrium, so it has to see the linear constraint things first
+        if not objective._objective.built:
+            objective._objective.build(verbose=verbose)
+        objective._objective._set_things(
+            unique_list(
+                objective._objective.things
+                + [t for con in linear_constraints for t in con.things]
+            )[0]
+        )
     linear_constraint = _combine_constraints(linear_constraints)
     nonlinear_constraint = _combine_constraints(nonlinear_constraints)
 

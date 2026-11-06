@@ -957,3 +957,126 @@ def make_boozmn_output(  # noqa: C901
         timer.disp("Total time")
 
     return None
+
+
+def _vmec_aux(data, prefix):
+    s = np.atleast_1d(np.asarray(data.get(prefix + "_aux_s", []), dtype=float))
+    f = np.atleast_1d(np.asarray(data.get(prefix + "_aux_f", []), dtype=float))
+    f = np.pad(f, (0, max(0, len(s) - len(f))))
+    # VMEC ends the knot list at the first non-increasing abscissa (zero padding)
+    n = len(s)
+    for i in range(1, len(s)):
+        if s[i] <= s[i - 1]:
+            n = i
+            break
+    return s[:n], f[:n]
+
+
+def _vmec_clamped_spline(s, f):
+    from scipy.interpolate import CubicSpline
+
+    # end slopes from the quadratic through the outer three points (spline_cubic.f)
+    c = ((f[2] - f[0]) / (s[2] - s[0]) - (f[1] - f[0]) / (s[1] - s[0])) / (s[2] - s[1])
+    yp1 = (f[1] - f[0]) / (s[1] - s[0]) - c * (s[1] - s[0])
+    c = ((f[-3] - f[-1]) / (s[-3] - s[-1]) - (f[-2] - f[-1]) / (s[-2] - s[-1])) / (
+        s[-3] - s[-2]
+    )
+    ypn = (f[-2] - f[-1]) / (s[-2] - s[-1]) - c * (s[-2] - s[-1])
+    return CubicSpline(s, f, bc_type=((1, yp1), (1, ypn)))
+
+
+def vmec_profile(data, kind, s):  # noqa: C901
+    """Evaluate a VMEC input profile as LIBSTELL's profile_functions.f does.
+
+    Parameters
+    ----------
+    data : dict
+        Lower-case INDATA values: ``am``, ``ai``, ``ac``, their ``*_aux_s`` and
+        ``*_aux_f`` arrays, the ``p*_type`` names and ``bloat``.
+    kind : {"pmass", "piota", "pcurr"}
+        Profile to evaluate.
+    s : ndarray
+        Normalized toroidal flux.
+
+    Returns
+    -------
+    values : ndarray
+        ``pmass`` without ``mu0*pres_scale``, ``piota``, or the enclosed current
+        ``pcurr`` before VMEC scales it to CURTOR.
+    """
+    from scipy.interpolate import Akima1DInterpolator
+
+    prefix = {"pmass": "am", "piota": "ai", "pcurr": "ac"}[kind]
+    ptype = str(data.get(kind + "_type", "power_series")).strip().lower()
+    c = np.nan_to_num(np.atleast_1d(np.asarray(data.get(prefix, [0.0]), dtype=float)))
+    s = np.asarray(s, dtype=float)
+    x = s if kind == "piota" else np.minimum(np.abs(s * data.get("bloat", 1.0)), 1.0)
+    aux_s, aux_f = _vmec_aux(data, prefix)
+    density = kind == "pcurr" and ptype in ("power_series", "two_power", "gauss_trunc")
+
+    def integral(fprime, xv):
+        nodes, weights = np.polynomial.legendre.leggauss(10)
+        nodes, weights = 0.5 * (nodes + 1), 0.5 * weights
+        return np.array([xi * np.sum(weights * fprime(xi * nodes)) for xi in xv])
+
+    def line_segments(xv):
+        slope = (aux_f[-1] - aux_f[-2]) / (aux_s[-1] - aux_s[-2])
+        return np.interp(xv, aux_s, aux_f) + np.where(
+            xv > aux_s[-1], (xv - aux_s[-1]) * slope, 0.0
+        )
+
+    def lorentz(width, p1, p2, xv):
+        return 1 / (1 + (xv / width**2) ** p1) ** p2
+
+    if ptype == "power_series":
+        if density:
+            return x * np.polynomial.Polynomial(c / np.arange(1, len(c) + 1))(x)
+        return np.polynomial.Polynomial(c)(x)
+    if ptype == "power_series_i":
+        return x * np.polynomial.Polynomial(c)(x)
+    if ptype == "two_power":
+
+        def two_power(xv):
+            return c[0] * (1 - xv ** c[1]) ** c[2]
+
+        return integral(two_power, x) if density else two_power(x)
+    if ptype == "gauss_trunc":
+        edge = np.exp(-((1 / c[1]) ** 2))
+        if density:
+            return integral(lambda xv: c[0] * (np.exp(-((xv / c[1]) ** 2)) - edge), x)
+        return c[0] / (1 - edge) * (np.exp(-((x / c[1]) ** 2)) - edge)
+    if ptype == "two_lorentz":
+        return c[0] * (
+            c[1]
+            * (lorentz(c[2], c[3], c[4], x) - lorentz(c[2], c[3], c[4], 1.0))
+            / (1 - lorentz(c[2], c[3], c[4], 1.0))
+            + (1 - c[1])
+            * (lorentz(c[5], c[6], c[7], x) - lorentz(c[5], c[6], c[7], 1.0))
+            / (1 - lorentz(c[5], c[6], c[7], 1.0))
+        )
+    if ptype == "sum_atan":
+        c = np.pad(c, (0, max(0, 21 - len(c))))
+        xc = np.minimum(x, 1.0)
+        # ATAN2 takes each term to its limit at x = 1 for any exponent, as PARVMEC
+        return c[0] + 2 / np.pi * sum(
+            c[k] * np.arctan2(c[k + 1] * xc ** c[k + 2], (1 - xc) ** c[k + 3])
+            for k in (1, 5, 9, 13, 17)
+        )
+    if ptype in ("line_segment", "line_segment_i"):
+        return line_segments(x)
+    if ptype == "line_segment_ip":
+        fine = np.union1d(x, aux_s[(aux_s > 0) & (aux_s < 1)])
+        prime = line_segments(fine)
+        cumulative = np.concatenate(
+            [[0.0], np.cumsum(0.5 * (prime[1:] + prime[:-1]) * np.diff(fine))]
+        )
+        return np.interp(x, fine, cumulative)
+    if ptype in ("cubic_spline", "cubic_spline_i"):
+        return _vmec_clamped_spline(aux_s, aux_f)(x)
+    if ptype == "cubic_spline_ip":
+        return _vmec_clamped_spline(aux_s, aux_f).antiderivative()(x)
+    if ptype in ("akima_spline", "akima_spline_i"):
+        return Akima1DInterpolator(aux_s, aux_f)(x)
+    if ptype == "akima_spline_ip":
+        return Akima1DInterpolator(aux_s, aux_f).antiderivative()(x)
+    raise ValueError(f"VMEC {kind} profile of type {ptype} is not supported")

@@ -19,6 +19,25 @@ from desc import set_device
 # instead, do local imports where needed.
 
 
+def _vmec_signgs(surface):
+    """Sign of VMEC's Jacobian for a boundary given as rows (..., m, n, R, Z).
+
+    VMEC's signgs is -1 when the cross-section at zeta = 0 runs counterclockwise
+    in (R, Z) as theta increases.
+    """
+    theta = np.linspace(0, 2 * np.pi, 256, endpoint=False)
+    R = np.zeros_like(theta)
+    Z = np.zeros_like(theta)
+    for m, n, r, z in np.atleast_2d(surface)[:, -4:]:
+        if n < 0:
+            continue
+        basis = np.cos(m * theta) if m >= 0 else np.sin(-m * theta)
+        R += r * basis
+        Z += z * basis
+    area = 0.5 * np.sum(R * np.roll(Z, -1) - np.roll(R, -1) * Z)
+    return -1.0 if area > 0 else 1.0
+
+
 class InputReader:
     """Reads command line arguments and parses input files.
 
@@ -202,6 +221,7 @@ class InputReader:
         pres_flag = False
         curr_flag = False
         vac_flag = False
+        splines = {}
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -409,6 +429,12 @@ class InputReader:
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_mode"] = words[0].lower()
+                flag = True
+            match = re.search(
+                r"spline_(rho|pressure|iota|current)", argument, re.IGNORECASE
+            )
+            if match:
+                splines[match.group(1).lower()] = numbers.astype(float)
                 flag = True
 
             # coefficient indices
@@ -687,6 +713,21 @@ class InputReader:
                 inputs_ii["surface"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
+        if splines:
+            from desc.profiles import SplineProfile
+
+            for inputs_ii in inputs_list:
+                for name in ("pressure", "iota", "current"):
+                    if name in splines and name in inputs_ii:
+                        ratio = {
+                            "pressure": inputs_ii.get("pres_ratio"),
+                            "current": inputs_ii.get("curr_ratio"),
+                        }.get(name)
+                        values = splines[name] * (1.0 if ratio is None else ratio)
+                        inputs_ii[name] = SplineProfile(
+                            values, splines["rho"], name=name
+                        )
+
         return inputs_list
 
     @staticmethod
@@ -773,6 +814,15 @@ class InputReader:
         f.write("objective = {}\n".format(inputs[0]["objective"]))
         f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+
+        if inputs[-1].get("spline"):
+            f.write("\n# profiles as cubic splines in rho\n")
+            for key, values in inputs[-1]["spline"].items():
+                f.write(
+                    "spline_{} = {}\n".format(
+                        key, ", ".join(repr(float(v)) for v in values)
+                    )
+                )
 
         f.write("\n# pressure and rotational transform/current profiles\n")
         if "iota" in inputs[-1].keys():
@@ -1113,45 +1163,16 @@ class InputReader:
         if NCURR != 0:
             iota_flag = False
 
-        # profile types
-        ptype = vmec_indata.get("PMASS_TYPE", "power_series")
-        if ptype.lower() != "power_series":
-            warnings.warn(
-                colored(
-                    "Pressure is not a power series! DESC can only read power series"
-                    " profiles from input files. Use a python script to use other"
-                    " profile types.",
-                    "yellow",
-                )
-            )
-        itype = vmec_indata.get("PIOTA_TYPE", "power_series")
-        if itype.lower() != "power_series":
-            warnings.warn(
-                colored(
-                    "iota is not a power series! DESC can only read power series"
-                    " profiles from input files. Use a python script to use other "
-                    "profile types.",
-                    "yellow",
-                )
-            )
-        ctype = vmec_indata.get("PCURR_TYPE", "power_series")
-        if not ctype.lower() in ["power_series", "power_series_i"]:
-            warnings.warn(
-                colored(
-                    "current is not a power series! DESC can only read power series"
-                    " profiles from input files. Use a python script to use other"
-                    " profile types.",
-                    "yellow",
-                )
-            )
+        # profile types, converted to splines below unless they are power series
+        ptype = vmec_indata.get("PMASS_TYPE", "power_series").strip().lower()
+        itype = vmec_indata.get("PIOTA_TYPE", "power_series").strip().lower()
+        ctype = vmec_indata.get("PCURR_TYPE", "power_series").strip().lower()
         if vmec_indata.get("GAMMA", 0.0) != 0:
             warnings.warn(
                 colored("GAMMA is not 0.0, DESC will set this to 0.0.", "yellow")
             )
-        if vmec_indata.get("BLOAT", 1.0) != 1:
-            warnings.warn(colored("BLOAT is not 1.0", "yellow"))
-        if vmec_indata.get("SPRES_PED", 1.0) != 1:
-            warnings.warn(colored("SPRES_PED is not 1.0", "yellow"))
+        bloat = float(vmec_indata.get("BLOAT", 1.0))
+        spres_ped = abs(float(vmec_indata.get("SPRES_PED", 1.0)))
         # read pressure
         pres_scale = float(vmec_indata.get("PRES_SCALE", 1.0))
         AM = _get_vmec_vector(vmec_indata, "AM", np.zeros(1))
@@ -1248,6 +1269,9 @@ class InputReader:
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
+        # VMEC normalises the current to signgs * CURTOR (profil1d.f), and the
+        # orientation of the boundary sets signgs
+        signgs = _vmec_signgs(inputs["surface"])
         if not iota_flag:
             if ctype.lower() == "power_series":
                 # integrate current derivative profile wrt s=rho^2
@@ -1262,14 +1286,59 @@ class InputReader:
                 )
             # scale current profile
             if curr_tor is not None:
-                inputs["current"][:, 1] *= curr_tor / (
-                    np.sum(inputs["current"][:, 1]) or 1
+                inputs["current"][:, 1] *= (
+                    signgs * curr_tor / (np.sum(inputs["current"][:, 1]) or 1)
                 )
         # delete unused profile
         if iota_flag:
             del inputs["current"]
         else:
             del inputs["iota"]
+
+        if (
+            ptype != "power_series"
+            or (itype if iota_flag else ctype.removesuffix("_i")) != "power_series"
+            or bloat != 1.0
+            or spres_ped < 1.0
+        ):
+            from desc.vmec_utils import vmec_profile
+
+            profile_data = {
+                "pmass_type": ptype,
+                "piota_type": itype,
+                "pcurr_type": ctype,
+                "bloat": bloat,
+                "am": AM,
+                "ai": AI,
+                "ac": AC,
+            }
+            for name in ("AM", "AI", "AC"):
+                for suffix in ("_AUX_S", "_AUX_F"):
+                    values = vmec_indata.get(name + suffix, [])
+                    values = values if isinstance(values, list) else [values]
+                    # the knots are contiguous, f90nml pads to their first index
+                    profile_data[(name + suffix).lower()] = [
+                        v for v in values if v is not None
+                    ]
+            s_knots = 0.5 * (1 - np.cos(np.pi * np.arange(401) / 400))
+            pressure = pres_scale * vmec_profile(profile_data, "pmass", s_knots)
+            # VMEC holds the pressure at its pedestal value outside SPRES_PED
+            pressure = np.where(
+                s_knots > spres_ped, np.interp(spres_ped, s_knots, pressure), pressure
+            )
+            inputs["spline"] = {"rho": np.sqrt(s_knots), "pressure": pressure}
+            if iota_flag:
+                inputs["spline"]["iota"] = vmec_profile(profile_data, "piota", s_knots)
+            else:
+                current = vmec_profile(profile_data, "pcurr", s_knots)
+                curtor = curr_tor or 0.0
+                # VMEC drops the current when the profile vanishes at the edge
+                scale = (
+                    curtor / current[-1]
+                    if abs(current[-1]) > abs(np.finfo(float).eps * curtor)
+                    else 0.0
+                )
+                inputs["spline"]["current"] = signgs * scale * current
 
         inputs_arr = [inputs]
 

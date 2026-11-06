@@ -438,8 +438,8 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     assert w.shape == (grid.num_rho, grid.num_alpha, num_zeta0, Neigvals)
     data["ideal ballooning lambda"] = w
 
-    # v becomes less than the machine precision at some points which gives NaNs.
-    # stop_gradient prevents that.
+    # eigh_tridiagonal_top_k gives the eigenvectors zero derivative.
+    # stop_gradient makes that explicit here.
     v = jax.lax.stop_gradient(v)
     assert v.shape == (
         grid.num_rho,
@@ -458,7 +458,7 @@ def _ideal_ballooning_lambda(params, transforms, profiles, data, **kwargs):
     label="X_{\\mathrm{ballooning}}",
     units="~",
     units_long="None",
-    description="Ideal ballooning eigenfunction",
+    description="Ideal ballooning eigenfunction (not differentiable)",
     dim=5,
     params=[],
     transforms={},

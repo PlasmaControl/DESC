@@ -460,8 +460,11 @@ def eigh_tridiagonal_top_k(d, e, k=1):
     4. Derivative. For an exact eigenvector, λ = Xᵀ T X does not change to first
        order when X changes, so dλ = Xᵀ dT X (Hellmann-Feynman). The eigenvalue is
        therefore returned as Xᵀ T X with X held fixed, and its derivative is exactly
-       that; nothing is differentiated through the bisection. Eigenvectors have no
-       derivative.
+       that; nothing is differentiated through the bisection. Eigenvectors are
+       computed from copies of d and e with the gradient stopped, so their
+       derivative is zero. JAX returns these zeros without any error when one
+       differentiates through v. Use a dense ``jnp.linalg.eigh`` when eigenvector
+       derivatives are needed.
 
     Parameters
     ----------

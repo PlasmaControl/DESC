@@ -18,6 +18,25 @@ from desc import set_device
 # instead, do local imports where needed.
 
 
+def _vmec_signgs(surface):
+    """Sign of VMEC's Jacobian for a boundary given as rows (..., m, n, R, Z).
+
+    VMEC's signgs is -1 when the cross-section at zeta = 0 runs counterclockwise
+    in (R, Z) as theta increases.
+    """
+    theta = np.linspace(0, 2 * np.pi, 256, endpoint=False)
+    R = np.zeros_like(theta)
+    Z = np.zeros_like(theta)
+    for m, n, r, z in np.atleast_2d(surface)[:, -4:]:
+        if n < 0:
+            continue
+        basis = np.cos(m * theta) if m >= 0 else np.sin(-m * theta)
+        R += r * basis
+        Z += z * basis
+    area = 0.5 * np.sum(R * np.roll(Z, -1) - np.roll(R, -1) * Z)
+    return -1.0 if area > 0 else 1.0
+
+
 class InputReader:
     """Reads command line arguments and parses input files.
 
@@ -201,6 +220,7 @@ class InputReader:
         pres_flag = False
         curr_flag = False
         vac_flag = False
+        splines = {}
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -408,6 +428,12 @@ class InputReader:
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
                 inputs["bdry_mode"] = words[0].lower()
+                flag = True
+            match = re.search(
+                r"spline_(rho|pressure|iota|current)", argument, re.IGNORECASE
+            )
+            if match:
+                splines[match.group(1).lower()] = numbers.astype(float)
                 flag = True
 
             # coefficient indices
@@ -686,6 +712,21 @@ class InputReader:
                 inputs_ii["surface"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
+        if splines:
+            from desc.profiles import SplineProfile
+
+            for inputs_ii in inputs_list:
+                for name in ("pressure", "iota", "current"):
+                    if name in splines and name in inputs_ii:
+                        ratio = {
+                            "pressure": inputs_ii.get("pres_ratio"),
+                            "current": inputs_ii.get("curr_ratio"),
+                        }.get(name)
+                        values = splines[name] * (1.0 if ratio is None else ratio)
+                        inputs_ii[name] = SplineProfile(
+                            values, splines["rho"], name=name
+                        )
+
         return inputs_list
 
     @staticmethod
@@ -772,6 +813,15 @@ class InputReader:
         f.write("objective = {}\n".format(inputs[0]["objective"]))
         f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+
+        if inputs[-1].get("spline"):
+            f.write("\n# profiles as cubic splines in rho\n")
+            for key, values in inputs[-1]["spline"].items():
+                f.write(
+                    "spline_{} = {}\n".format(
+                        key, ", ".join(repr(float(v)) for v in values)
+                    )
+                )
 
         f.write("\n# pressure and rotational transform/current profiles\n")
         if "iota" in inputs[-1].keys():
@@ -1056,6 +1106,8 @@ class InputReader:
         iota_flag = True
         pres_scale = 1.0
         curr_tor = None
+        profile_data = {}
+        spres_ped = 1.0
 
         # find start of namelist (&INDATA)
         vmeclines = vmec_file.readlines()
@@ -1204,9 +1256,18 @@ class InputReader:
                     iota_flag = False
 
             # pressure profile
-            if re.search(r"\bPMASS_TYPE.*\b", command, re.IGNORECASE):
-                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
-                    warnings.warn(colored("Pressure is not a power series!", "yellow"))
+            match = re.search(
+                r"\b(PMASS|PIOTA|PCURR)_TYPE\s*=\s*['\"]?(\w+)", command, re.IGNORECASE
+            )
+            if match:
+                profile_data[match.group(1).lower() + "_type"] = match.group(2).lower()
+            match = re.search(r"\b(A[MIC]_AUX_[SF])\s*=(.*)", command, re.IGNORECASE)
+            if match:
+                profile_data[match.group(1).lower()] = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(2))
+                    if re.search(r"\d", x)
+                ]
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1227,8 +1288,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                if numbers[0] != 1:
-                    warnings.warn(colored("BLOAT is not 1.0", "yellow"))
+                profile_data["bloat"] = numbers[0]
             match = re.search(r"SPRES_PED\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1236,8 +1296,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                if numbers[0] != 1:
-                    warnings.warn(colored("SPRES_PED is not 1.0", "yellow"))
+                spres_ped = abs(numbers[0])
             match = re.search(r"PRES_SCALE\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1255,6 +1314,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
+                profile_data["am"] = numbers
                 for k in range(len(numbers)):
                     l = 2 * k
                     if len(inputs["pressure"]) < k + 1:
@@ -1267,9 +1327,6 @@ class InputReader:
                     inputs["pressure"][k, 0] = l
 
             # rotational transform
-            if re.search(r"\bPIOTA_TYPE\b", command, re.IGNORECASE):
-                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
-                    warnings.warn(colored("Iota is not a power series!", "yellow"))
             match = re.search(
                 r"AI\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
@@ -1279,6 +1336,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
+                profile_data["ai"] = numbers
                 for k in range(len(numbers)):
                     l = 2 * k
                     if len(inputs["iota"]) < k + 1:
@@ -1291,9 +1349,6 @@ class InputReader:
                     inputs["iota"][k, 0] = l
 
             # current
-            if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
-                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
-                    warnings.warn(colored("Current is not a power series!", "yellow"))
             match = re.search(r"CURTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1311,6 +1366,7 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
+                profile_data["ac"] = numbers
                 for k in range(len(numbers)):
                     l = 2 * k
                     if len(inputs["current"]) < k + 1:
@@ -1640,14 +1696,50 @@ class InputReader:
             ).T,
             ((1, 0), (0, 0)),
         )
+        # VMEC normalises the current to signgs * CURTOR (profil1d.f), and the
+        # orientation of the boundary sets signgs
+        signgs = _vmec_signgs(inputs["surface"])
         # scale current profile
         if curr_tor is not None:
-            inputs["current"][:, 1] *= curr_tor / (np.sum(inputs["current"][:, 1]) or 1)
+            inputs["current"][:, 1] *= (
+                signgs * curr_tor / (np.sum(inputs["current"][:, 1]) or 1)
+            )
         # delete unused profile
         if iota_flag:
             del inputs["current"]
         else:
             del inputs["iota"]
+
+        types = [
+            profile_data.get(k + "_type", "power_series")
+            for k in ("pmass", "piota", "pcurr")
+        ]
+        if (
+            any(t != "power_series" for t in types)
+            or profile_data.get("bloat", 1.0) != 1.0
+            or spres_ped < 1.0
+        ):
+            from desc.vmec_utils import vmec_profile
+
+            s_knots = 0.5 * (1 - np.cos(np.pi * np.arange(401) / 400))
+            pressure = pres_scale * vmec_profile(profile_data, "pmass", s_knots)
+            # VMEC holds the pressure at its pedestal value outside SPRES_PED
+            pressure = np.where(
+                s_knots > spres_ped, np.interp(spres_ped, s_knots, pressure), pressure
+            )
+            inputs["spline"] = {"rho": np.sqrt(s_knots), "pressure": pressure}
+            if iota_flag:
+                inputs["spline"]["iota"] = vmec_profile(profile_data, "piota", s_knots)
+            else:
+                current = vmec_profile(profile_data, "pcurr", s_knots)
+                curtor = curr_tor or 0.0
+                # VMEC drops the current when the profile vanishes at the edge
+                scale = (
+                    curtor / current[-1]
+                    if abs(current[-1]) > abs(np.finfo(float).eps * curtor)
+                    else 0.0
+                )
+                inputs["spline"]["current"] = signgs * scale * current
 
         vmec_file.close()
 

@@ -346,6 +346,35 @@ def test_from_input_file_equilibrium_desc_vmec():
 
 
 @pytest.mark.unit
+def test_vmec_input_profile_types(tmpdir_factory):
+    """Non-polynomial VMEC profiles become splines with VMEC's current sign."""
+    tmp_path = tmpdir_factory.mktemp("desc_inputs").join("input.profiles")
+    tmp_path.write("""&INDATA
+  NFP = 1  MPOL = 4  NTOR = 0  PHIEDGE = 1.0
+  PMASS_TYPE = 'two_power'  AM = 1.0E4 1.0 2.0  PRES_SCALE = 2.0
+  NCURR = 1  CURTOR = 1.0E5
+  PCURR_TYPE = 'sum_atan'  AC = 0.0 1.0 2.0 1.0 1.0
+  RBC(0,0) = 10.0  RBC(0,1) = 1.0  ZBS(0,1) = 1.0
+/
+""")
+    ir = InputReader(cl_args=[str(tmp_path)])
+    rho = np.array([0.0, 0.5, 0.9])
+    s = rho**2
+    grid = LinearGrid(rho=rho)
+    inputs = ir.inputs[-1]
+    np.testing.assert_allclose(
+        inputs["pressure"](grid), 2.0e4 * (1 - s) ** 2, rtol=1e-6, atol=1e-6
+    )
+    # VMEC normalises the current to signgs * CURTOR, and signgs = -1 here
+    np.testing.assert_allclose(
+        inputs["current"](grid),
+        -1.0e5 * 2 / np.pi * np.arctan(2 * s / (1 - s)),
+        rtol=1e-6,
+        atol=1e-4,
+    )
+
+
+@pytest.mark.unit
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"

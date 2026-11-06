@@ -980,8 +980,73 @@ def reflection_matrix(normal):
     return R
 
 
-def rotation_matrix(axis, angle=None):
+def rotation_matrix(axis_or_vector=None, angle_or_vector=None, **kwargs):
+    """Matrix to rotate points, either about an axis or from one vector onto another.
+
+    If ``angle_or_vector`` is a scalar (or None), returns the matrix that rotates
+    points about the axis ``axis_or_vector`` by the angle ``angle_or_vector``.
+    If ``angle_or_vector`` is a length-3 vector, returns the matrix that rotates the
+    vector ``axis_or_vector`` onto the vector ``angle_or_vector``.
+
+    NOTE: When rotating about an axis by an angle, the result will have zero gradient
+    (in both forward and reverse mode AD) w.r.t. the axis when the norm of the axis
+    is nearly zero (specifically, when norm(axis)<sqrt(epsilon)), as the result is
+    manually replaced by the identity there to avoid a NaN leak from 1/0 division.
+    If ``angle_or_vector`` is None, this means zero gradient w.r.t. the angle as
+    well. If seeking to rotate one vector onto another, it is recommended to pass
+    both vectors instead of computing an axis and angle from them, which uses
+    quaternions to avoid both this zero gradient and the NaN gradient that comes
+    from computing the angle with arccos when the vectors are nearly parallel.
+
+    Parameters
+    ----------
+    axis_or_vector : array-like, shape(3,)
+        Axis of rotation, or vector to be rotated onto ``angle_or_vector`` if
+        ``angle_or_vector`` is a vector, in cartesian (X,Y,Z) coordinates.
+    angle_or_vector : float, array-like of shape(3,), or None
+        If float, angle to rotate by, in radians. If None, use norm of
+        ``axis_or_vector`` as the angle. If array-like of shape(3,), vector in
+        cartesian (X,Y,Z) coordinates to rotate ``axis_or_vector`` onto.
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    axis_or_vector = parse_argname_change(
+        axis_or_vector, kwargs, "axis", "axis_or_vector"
+    )
+    angle_or_vector = parse_argname_change(
+        angle_or_vector, kwargs, "angle", "angle_or_vector"
+    )
+
+    errorif(axis_or_vector is None, ValueError, "axis_or_vector must be given.")
+    if angle_or_vector is not None and jnp.ndim(angle_or_vector) > 0:
+        errorif(
+            jnp.shape(angle_or_vector) != (3,),
+            ValueError,
+            "angle_or_vector must be a scalar or length-3 vector, "
+            f"got shape {jnp.shape(angle_or_vector)}",
+        )
+        return _rotation_matrix_vector_to_vector(axis_or_vector, angle_or_vector)
+    return _rotation_matrix_angle(axis_or_vector, angle_or_vector)
+
+
+def _rotation_matrix_angle(axis, angle=None):
     """Matrix to rotate points about axis by given angle.
+
+    NOTE: This function will have zero gradient (in both forward and reverse
+    mode AD) w.r.t. the axis when the norm of the axis is nearly zero
+    (specifically, when norm(axis)<sqrt(epsilon)), as there is a manual
+    replacement of the result with the identity for this case to avoid a NaN
+    leak due to 1/0 division. If angle is None, this means zero gradient w.r.t.
+    the angle as well. The gradient w.r.t. an explicitly passed angle is unaffected.
+
+    If seeking to rotate one vector onto another, it is recommended
+    to use _rotation_matrix_vector_to_vector instead which uses quaternions
+    to avoid this issue, as well as the NaN gradient that comes from computing
+    the angle with arccos when the vectors are nearly parallel.
 
     Parameters
     ----------
@@ -1001,11 +1066,84 @@ def rotation_matrix(axis, angle=None):
     axis = safenormalize(axis)
     if angle is None:
         angle = norm
-    eps = 1e2 * jnp.finfo(axis.dtype).eps
+    eps = jnp.sqrt(jnp.finfo(axis.dtype).eps)
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)
     return jnp.where(norm < eps, jnp.eye(3), R1 + R2 + R3)  # if axis=0, no rotation
+
+
+def _rotation_matrix_vector_to_vector(u, v):
+    """
+    Computes a rotation matrix that rotates vector u onto vector v.
+
+    Numerically stable when vectors are parallel or anti-parallel, and avoids
+    both NaN gradient when parallel/antiparallel, and also avoids zero
+    gradient (wrt v)
+
+    Parameters
+    ----------
+    u : array-like, shape(3,)
+        first vector, in cartesian basis, to be rotated onto second vector v
+    v :  array-like, shape(3,)
+        vector, in cartesian basis, to rotate u onto
+
+    Returns
+    -------
+    rotmat : ndarray, shape(3,3)
+        Matrix to rotate points in cartesian (X,Y,Z) coordinates.
+
+    """
+    u = safenormalize(u)
+    v = safenormalize(v)
+
+    # Compute the dot product
+    dot = jnp.dot(u, v)
+
+    # things needed for near antiparallel case
+    axis = jnp.where(
+        jnp.all(jnp.less(jnp.abs(v[0]), jnp.abs(v[1]))),
+        jnp.array([0, -v[2], v[1]]),
+        jnp.array([-v[2], 0, v[0]]),
+    )
+    axis = safenormalize(axis)
+    K = jnp.array(
+        [[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]]
+    )
+    R_antiparallel = jnp.eye(3) + 2 * jnp.dot(K, K)
+
+    # Handle general cases using the half-vector (bisector) method
+    # This prevents the division-by-zero errors common in standard cross-product methods
+    h = u + v
+    h = safenormalize(h)
+
+    # Calculate quaternion components q = [w, x, y, z]
+    # Equivalent to rotating around (u x h) by the half-angle
+    qw = jnp.dot(u, h)
+    qx, qy, qz = jnp.cross(u, h)
+
+    # Convert quaternion to a standard 3x3 rotation matrix
+    R = jnp.array(
+        [
+            [
+                1 - 2 * (qy**2 + qz**2),
+                2 * (qx * qy - qw * qz),
+                2 * (qx * qz + qw * qy),
+            ],
+            [
+                2 * (qx * qy + qw * qz),
+                1 - 2 * (qx**2 + qz**2),
+                2 * (qy * qz - qw * qx),
+            ],
+            [
+                2 * (qx * qz - qw * qy),
+                2 * (qy * qz + qw * qx),
+                1 - 2 * (qx**2 + qy**2),
+            ],
+        ]
+    )
+    # where to return antiparallel R if needed, else normal R
+    return jnp.where(jnp.allclose(dot, -1.0, atol=1e-8, rtol=1e-8), R_antiparallel, R)
 
 
 def xyz2rpz(pts):

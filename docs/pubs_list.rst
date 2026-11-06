@@ -81,6 +81,20 @@ Papers extending DESC functionality
    Stellarator Optimization*.
    [`pdf <https://arxiv.org/abs/2508.09321>`__]
 
+#. D. Panici, B. Jang, R. Conlin, D.W. Dudt, Y.G. Elmacioglu, and E. Kolemen. (2026).
+   *Deflation Techniques for Stellarator Equilibrium and Optimization*.
+   [`pdf <https://arxiv.org/abs/2602.09957>`__]
+
+#. R. Gaur, S. Patil, P. Gupta, D. Patch, and T. Qian. (2026).
+   *AGNI: A differentiable MHD stability solver & optimizer for magnetic
+   confinement fusion devices*.
+   [`pdf <https://arxiv.org/abs/2608.01750>`__]
+
+#. Y.G. Elmacioglu, D. Panici, R. Conlin, D.W. Dudt, and E. Kolemen. (2026).
+   *Applications of Poincaré Boundary Condition for 3D Ideal MHD Equilibrium
+   and Optimization*.
+   [`pdf <https://arxiv.org/abs/2609.36183>`__]
+
 .. raw:: html
 
    </div>

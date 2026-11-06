@@ -8,6 +8,15 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.profiles import FourierZernikeProfile, PowerSeriesProfile, SplineProfile
 from desc.utils import errorif, setdefault, warnif
 
+__all__ = [
+    "contract_equilibrium",
+    "ensure_positive_jacobian",
+    "flip_helicity",
+    "flip_theta",
+    "rescale",
+    "rotate_zeta",
+]
+
 
 def ensure_positive_jacobian(eq):
     """Convert an Equilibrium to have a positive coordinate Jacobian.

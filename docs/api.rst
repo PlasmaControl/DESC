@@ -107,6 +107,7 @@ of the external code. Please see the README of the `desc.external` for more deta
     desc.external.paraview.export_coils_to_paraview
     desc.external.paraview.export_surface_to_paraview
     desc.external.paraview.export_volume_to_paraview
+    desc.external.agni.AgniStability
     desc.external.terpsichore.TERPSICHORE
 
 

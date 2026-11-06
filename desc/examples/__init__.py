@@ -9,6 +9,11 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry.surface import FourierRZToroidalSurface
 from desc.profiles import _Profile
 
+__all__ = [
+    "get",
+    "listall",
+]
+
 
 def listall():
     """Return a list of examples that DESC has."""

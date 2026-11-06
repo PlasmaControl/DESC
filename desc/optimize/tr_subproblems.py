@@ -153,7 +153,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
 @jit
 def trust_region_step_exact_svd(
-    f, u, s, v, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10, threshold=None
+    f, u, s, v, trust_radius, initial_alpha=1e-6, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -264,7 +264,7 @@ def trust_region_step_exact_svd(
 
 @jit
 def trust_region_step_exact_cho(
-    g, B, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
+    g, B, trust_radius, initial_alpha=1e-6, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 
@@ -331,7 +331,9 @@ def trust_region_step_exact_cho(
             alpha_upper = jnp.where(phi < 0, alpha, alpha_upper)
             alpha_lower = jnp.where(phi > 0, alpha, alpha_lower)
 
-            q = solve_triangular(R.T, p, lower=False)
+            # R is lower triangular with R @ R.T = Bi, so the Newton update for
+            # alpha needs ||q||^2 = p.T @ inv(Bi) @ p, i.e. q = inv(R) @ p
+            q = solve_triangular(R, p, lower=True)
             q_norm = jnp.linalg.norm(q)
 
             alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
@@ -358,7 +360,7 @@ def trust_region_step_exact_cho(
 
 @jit
 def trust_region_step_exact_qr(
-    p_newton, z, R, trust_radius, initial_alpha=0.0, rtol=0.01, max_iter=10
+    p_newton, z, R, trust_radius, initial_alpha=1e-6, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method.
 

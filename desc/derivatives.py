@@ -219,6 +219,50 @@ class AutoDiffDerivative(_Derivative):
         return u
 
     @classmethod
+    def linearize(cls, fun, argnum, *args, **kwargs):
+        """Thin wrapper around ``jax.linearize``.
+
+        See the JAX docs for what this actually does:
+        https://docs.jax.dev/en/latest/_autosummary/jax.linearize.html -- in
+        short, it partially evaluates ``fun`` once at a point and returns a
+        cheap linear map for repeated tangents at that same point, the same
+        way factorizing a matrix once and reusing the factors for multiple
+        right-hand sides beats refactorizing for each one. Prefer this over
+        repeated ``compute_jvp`` calls at a fixed point, e.g. when chunking a
+        Jacobian: chunking with fresh ``compute_jvp``/``jax.jvp`` calls repeats
+        that partial evaluation once per chunk instead of once overall.
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        args : tuple
+            arguments passed to fun, evaluated at the point to linearize around
+        kwargs : dict
+            keyword arguments passed to fun
+
+        Returns
+        -------
+        y : array-like
+            fun(*args, **kwargs)
+        jvp_fn : callable
+            function of tangent vectors (one per argnum) that computes df/dx * v.
+
+        """
+        _ = kwargs.pop("rel_step", None)  # unused by autodiff
+        argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
+
+        def _fun(*x):
+            _args = list(args)
+            for i, xi in zip(argnum, x):
+                _args[i] = xi
+            return fun(*_args, **kwargs)
+
+        return jax.linearize(_fun, *(args[i] for i in argnum))
+
+    @classmethod
     def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
         """Compute d^2f/dx^2*v1*v2.
 

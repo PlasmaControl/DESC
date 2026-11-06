@@ -27,6 +27,8 @@ from desc.magnetic_fields import _MagneticField
 from desc.utils import cross, dot, errorif, safediv, setdefault
 
 __all__ = [
+    "AbstractParticleInitializer",
+    "AbstractTrajectoryModel",
     "CurveParticleInitializer",
     "ManualParticleInitializerFlux",
     "ManualParticleInitializerLab",

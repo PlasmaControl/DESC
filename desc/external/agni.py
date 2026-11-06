@@ -9,6 +9,10 @@ from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import errorif, setdefault
 
+__all__ = [
+    "AgniStability",
+]
+
 # Flux functions are computed on a LinearGrid at the rho of the AGNI nodes (it
 # has the quadrature weights the AGNI nodes lack) and copied onto the nodes.
 _FLUX_KEYS = [

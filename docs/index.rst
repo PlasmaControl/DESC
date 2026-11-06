@@ -10,6 +10,7 @@
    :caption: Theory
 
    theory_general
+   theory_generalized_toroidal_angle
    notebooks/basis_grid
    notebooks/perturbations
    notebooks/zernike_eval

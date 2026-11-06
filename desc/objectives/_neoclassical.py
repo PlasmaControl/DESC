@@ -197,6 +197,8 @@ class EffectiveRipple(_Objective):
             outbasis="delta",
             # TODO (#1034): Use old theta values as initial guess.
             tol=1e-8,
+            omega=constants["omega"],
+            W_lmn=params["W_lmn"] if constants["omega"] is not None else None,
         )[..., ::-1]
 
         data = compute_fun(

@@ -56,6 +56,12 @@ class VacuumBoundaryError(_Objective):
         Size to split Biot-Savart computation into chunks of evaluation points.
         If no chunking should be done or the chunk size is the full input
         then supply ``None``.
+    area_weights : {"current", "build"}
+        Area element |e_theta x e_zeta| that weights the residual. "current"
+        (default) uses the element of the state being evaluated. "build" freezes
+        the element of the equilibrium at build time: with a generalized toroidal
+        angle (omega != 0) an optimizer can pinch the (theta, zeta) map of the
+        boundary until the current element vanishes and hide B.n there.
 
     """
 
@@ -67,6 +73,7 @@ class VacuumBoundaryError(_Objective):
         "_bs_chunk_size",
         "_eq_data_keys",
         "_field_fixed",
+        "_area_weights",
     ]
 
     _scalar = False
@@ -93,6 +100,7 @@ class VacuumBoundaryError(_Objective):
         jac_chunk_size=None,
         *,
         bs_chunk_size=None,
+        area_weights="current",
         **kwargs,
     ):
         eval_grid = parse_argname_change(eval_grid, kwargs, "grid", "eval_grid")
@@ -104,6 +112,12 @@ class VacuumBoundaryError(_Objective):
         self._field_grid = field_grid
         self._field_fixed = field_fixed
         self._bs_chunk_size = bs_chunk_size
+        errorif(
+            area_weights not in ("current", "build"),
+            ValueError,
+            f"area_weights must be 'current' or 'build', got {area_weights}",
+        )
+        self._area_weights = area_weights
         things = [eq]
         if not field_fixed:
             things.append(self._field)
@@ -185,6 +199,10 @@ class VacuumBoundaryError(_Objective):
             "field": SumMagneticField(self._field),
             "quad_weights": np.sqrt(np.tile(transforms["grid"].weights, 2)),
         }
+        if self._area_weights == "build":
+            self._constants["area0"] = eq.compute("|e_theta x e_zeta|", grid=grid)[
+                "|e_theta x e_zeta|"
+            ]
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -249,7 +267,11 @@ class VacuumBoundaryError(_Objective):
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = jnp.sum(Bin_total * Bin_total, axis=-1)
 
-        g = data["|e_theta x e_zeta|"]
+        g = (
+            constants["area0"]
+            if self._area_weights == "build"
+            else data["|e_theta x e_zeta|"]
+        )
         Bn_err = Bn * g
         Bsq_err = (bsq_in - bsq_out) * g
         return jnp.concatenate([Bn_err, Bsq_err])
@@ -688,9 +710,15 @@ class BoundaryError(_Objective):
             # sheet current stuff
             if self._sheet_current:
                 p = self._eq.surface
+                # The sheet current surface inherits the plasma boundary's
+                # geometry, so it needs the boundary's omega too: with a
+                # generalized toroidal angle the surface compute functions
+                # depend on W_lmn, and omitting it raises KeyError: 'W_lmn'.
+                # For omega == 0 the basis is empty and this is a no-op.
                 sheet_params = {
                     "R_lmn": self._eq.params_dict["Rb_lmn"],
                     "Z_lmn": self._eq.params_dict["Zb_lmn"],
+                    "W_lmn": self._eq.params_dict["Wb_lmn"],
                     "I": self._eq.params_dict["I"],
                     "G": self._eq.params_dict["G"],
                     "Phi_mn": self._eq.params_dict["Phi_mn"],
@@ -815,9 +843,13 @@ class BoundaryError(_Objective):
 
             if self._sheet_current:
                 p = self._eq.surface
+                # see the note in build(): the sheet current surface needs the
+                # boundary's omega as well, or the surface compute functions
+                # raise KeyError: 'W_lmn'.  No-op when omega == 0.
                 sheet_params = {
                     "R_lmn": eq_params["Rb_lmn"],
                     "Z_lmn": eq_params["Zb_lmn"],
+                    "W_lmn": eq_params["Wb_lmn"],
                     "I": eq_params["I"],
                     "G": eq_params["G"],
                     "Phi_mn": eq_params["Phi_mn"],

@@ -31,28 +31,6 @@ import numpy as np
 
 from desc.backend import jax, jnp
 
-__all__ = [
-    "apply_space",
-    "apply_space_t",
-    "barycentric_matrix",
-    "build_ring_blocks",
-    "coarse_gen_modes",
-    "coarse_seed_and_deflation",
-    "deflation_Y",
-    "finish_ring_block",
-    "fourier_interp_matrix",
-    "from_phys",
-    "from_phys_h",
-    "make_block_precond",
-    "level_meta",
-    "make_transfer",
-    "ring_index_maps",
-    "ring_nodes",
-    "to_phys",
-    "to_phys_h",
-]
-
-
 # ---------------------------------------------------------------------------
 # Reduced <-> physical
 # ---------------------------------------------------------------------------

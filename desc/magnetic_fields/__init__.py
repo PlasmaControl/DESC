@@ -22,3 +22,24 @@ from ._current_potential import (
 )
 from ._dommaschk import DommaschkPotentialField, dommaschk_potential
 from ._laplace import FreeSurfaceOuterField, SourceFreeField
+
+__all__ = [
+    "CurrentPotentialField",
+    "DommaschkPotentialField",
+    "FourierCurrentPotentialField",
+    "FreeSurfaceOuterField",
+    "SourceFreeField",
+    "MagneticFieldFromUser",
+    "OmnigenousField",
+    "PoloidalMagneticField",
+    "ScalarPotentialField",
+    "ScaledMagneticField",
+    "SplineMagneticField",
+    "SumMagneticField",
+    "ToroidalMagneticField",
+    "VectorPotentialField",
+    "VerticalMagneticField",
+    "field_line_integrate",
+    "read_BNORM_file",
+    "solve_regularized_surface_current",
+]

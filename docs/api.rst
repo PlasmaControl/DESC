@@ -10,8 +10,8 @@ Basis
     :recursive:
     :template: class.rst
 
-    desc.basis.ChebyshevPolynomial
     desc.basis.ChebyshevDoubleFourierBasis
+    desc.basis.ChebyshevPolynomial
     desc.basis.DoubleFourierSeries
     desc.basis.FourierSeries
     desc.basis.FourierZernikeBasis
@@ -74,6 +74,15 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
 
     desc.derivatives.AutoDiffDerivative
 
+Device Selection
+****************
+
+.. autosummary::
+    :toctree: _api/device
+    :recursive:
+
+    desc.set_device
+
 Equilibrium
 ***********
 
@@ -82,8 +91,8 @@ Equilibrium
     :recursive:
     :template: class.rst
 
-    desc.equilibrium.Equilibrium
     desc.equilibrium.EquilibriaFamily
+    desc.equilibrium.Equilibrium
 
 Examples
 ********
@@ -104,6 +113,7 @@ of the external code. Please see the README of the `desc.external` for more deta
     :toctree: _api/external
     :recursive:
 
+    desc.external.agni.AgniStability
     desc.external.paraview.export_coils_to_paraview
     desc.external.paraview.export_surface_to_paraview
     desc.external.paraview.export_volume_to_paraview
@@ -149,8 +159,8 @@ Integrals
     :recursive:
     :template: class.rst
 
-    desc.integrals.Bounce2D
     desc.integrals.Bounce1D
+    desc.integrals.Bounce2D
 
 IO
 ***
@@ -171,13 +181,15 @@ Magnetic Fields
     :template: class.rst
 
     desc.magnetic_fields.CurrentPotentialField
-    desc.magnetic_fields.FourierCurrentPotentialField
     desc.magnetic_fields.DommaschkPotentialField
+    desc.magnetic_fields.FourierCurrentPotentialField
+    desc.magnetic_fields.FreeSurfaceOuterField
     desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.OmnigenousField
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScalarPotentialField
     desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SourceFreeField
     desc.magnetic_fields.SplineMagneticField
     desc.magnetic_fields.SumMagneticField
     desc.magnetic_fields.ToroidalMagneticField
@@ -209,6 +221,7 @@ Objective Functions
     desc.objectives.CoilSetMinDistance
     desc.objectives.CoilTorsion
     desc.objectives.CurrentDensity
+    desc.objectives.DeflationOperator
     desc.objectives.EffectiveRipple
     desc.objectives.Elongation
     desc.objectives.Energy
@@ -227,9 +240,9 @@ Objective Functions
     desc.objectives.FixIota
     desc.objectives.FixModeR
     desc.objectives.FixModeZ
+    desc.objectives.FixNearAxisLambda
     desc.objectives.FixNearAxisR
     desc.objectives.FixNearAxisZ
-    desc.objectives.FixNearAxisLambda
     desc.objectives.FixOmniBmax
     desc.objectives.FixOmniMap
     desc.objectives.FixOmniWell
@@ -308,6 +321,8 @@ Particles
     :recursive:
     :template: class.rst
 
+    desc.particles.AbstractParticleInitializer
+    desc.particles.AbstractTrajectoryModel
     desc.particles.CurveParticleInitializer
     desc.particles.ManualParticleInitializerFlux
     desc.particles.ManualParticleInitializerLab
@@ -323,8 +338,8 @@ Perturbations
     :recursive:
 
     desc.perturbations.get_deltas
-    desc.perturbations.perturb
     desc.perturbations.optimal_perturb
+    desc.perturbations.perturb
 
 Plotting
 ********

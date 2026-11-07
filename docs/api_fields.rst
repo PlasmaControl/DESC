@@ -25,11 +25,14 @@ a surface and computes the normal field strength on that surface.
     desc.magnetic_fields.DommaschkPotentialField
     desc.magnetic_fields.MagneticFieldFromUser
     desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.VectorPotentialField
     desc.magnetic_fields.ToroidalMagneticField
     desc.magnetic_fields.VerticalMagneticField
     desc.magnetic_fields.PoloidalMagneticField
     desc.magnetic_fields.ScaledMagneticField
     desc.magnetic_fields.SumMagneticField
+    desc.magnetic_fields.SourceFreeField
+    desc.magnetic_fields.FreeSurfaceOuterField
 
 There are also classes for representing a current potential on a winding surface:
 

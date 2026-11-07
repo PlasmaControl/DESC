@@ -22,3 +22,8 @@ from .surface_integral import (
     surface_min,
     surface_variance,
 )
+
+__all__ = [
+    "Bounce1D",
+    "Bounce2D",
+]

@@ -171,6 +171,7 @@ __all__ = [
     "MeanCurvature",
     "MercierStability",
     "MirrorRatio",
+    "NeutronWallLoading",
     "ObjectiveFromUser",
     "ObjectiveFunction",
     "Omnigenity",

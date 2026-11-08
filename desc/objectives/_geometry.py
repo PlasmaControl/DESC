@@ -845,6 +845,8 @@ class NeutronWallLoading(_Objective):
         is constructed from ``eq.surface`` using ``offset``.
     offset : float, optional
         Constant offset distance (m) used only when ``surface`` is ``None``.
+        If ``offset`` not provided, defaults to 15% of the equilibrium's average
+        minor radius.
     source_grid : Grid, optional
         Collocation grid containing the nodes to evaluate source geometry at.
         Defaults to ``QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)``.
@@ -887,7 +889,7 @@ class NeutronWallLoading(_Objective):
         eq,
         surface=None,
         *,
-        offset=0.1,
+        offset=None,
         source_grid=None,
         surface_grid=None,
         fuel="DT",
@@ -928,7 +930,7 @@ class NeutronWallLoading(_Objective):
         self._surface_from_eq = surface is None
         self._eq_fixed = eq_fixed
         self._surface_fixed = surface_fixed
-        self._offset = float(offset)
+        self._offset = None if offset is None else float(offset)
         self._source_grid = source_grid
         self._surface_grid = surface_grid
         self._fuel = fuel
@@ -1042,7 +1044,6 @@ class NeutronWallLoading(_Objective):
         self._surface_grid = surface_grid
 
         self._dim_f = surface_grid.num_nodes
-        self._data_keys = ["NWL"]
         self._equil_data_keys = ["R", "phi", "Z", "sqrt(g)", "<sigma*nu>", "ni"]
         self._surface_data_keys = ["R", "phi", "Z", "n_rho"]
 
@@ -1106,6 +1107,8 @@ class NeutronWallLoading(_Objective):
             obj_bdryZ.build()
             self._constants["A_Rlmn_to_Rb"] = jnp.asarray(obj_bdryR._A)
             self._constants["A_Zlmn_to_Zb"] = jnp.asarray(obj_bdryZ._A)
+            if self._offset is None:
+                self._offset = float(0.15 * eq.compute("a")["a"])
         if self._eq_fixed:
             data_eq = compute_fun(
                 self._eq,

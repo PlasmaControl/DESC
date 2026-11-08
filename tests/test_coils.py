@@ -509,6 +509,30 @@ class TestCoil:
         np.testing.assert_allclose(B1, B5, rtol=1e-6, atol=1e-7)
         np.testing.assert_allclose(B1, B6, rtol=1e-6, atol=1e-7)
 
+    @pytest.mark.unit
+    @pytest.mark.parametrize("coil_type", [FourierRZCoil, SplineXYZCoil])
+    @pytest.mark.parametrize("quantity", ["field", "vector_potential"])
+    def test_current_override_does_not_mutate_params(self, coil_type, quantity):
+        """Test reusing params with a current override gives the same result."""
+        s = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+        if coil_type is FourierRZCoil:
+            coil = FourierRZCoil(1e6, [2], [0], modes_R=[0])
+        else:
+            coil = SplineXYZCoil(1e6, 2 * np.cos(s), 2 * np.sin(s), 0 * s)
+        compute = getattr(coil, f"compute_magnetic_{quantity}")
+        pts = np.array([[0.5, 0.1, 1.0], [1.0, 0.0, 2.0]])
+        params = coil.params_dict
+        params["current"] = jnp.atleast_1d(2e6)
+
+        out1 = compute(pts, params=params, basis="xyz")
+        out2 = compute(pts, params=params, basis="xyz")
+
+        coil.current = 2e6
+        expected = compute(pts, basis="xyz")
+        np.testing.assert_allclose(out1, expected)
+        np.testing.assert_allclose(out2, expected)
+        np.testing.assert_allclose(params["current"], 2e6)
+
 
 class TestCoilSet:
     """Tests for sets of multiple coils."""

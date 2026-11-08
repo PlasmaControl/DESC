@@ -7,6 +7,10 @@ import numpy as np
 from desc.backend import jnp, use_jax
 from desc.utils import ensure_tuple
 
+__all__ = [
+    "AutoDiffDerivative",
+]
+
 if use_jax:
     import jax
 

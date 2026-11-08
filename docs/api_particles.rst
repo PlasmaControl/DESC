@@ -16,6 +16,15 @@ are designed to simulate the motion of charged particles in magnetic fields eith
 
     desc.particles.VacuumGuidingCenterTrajectory
 
+New trajectory models can be defined by subclassing the abstract base class:
+
+.. autosummary::
+    :toctree: _api/particles/
+    :recursive:
+    :template: class.rst
+
+    desc.particles.AbstractTrajectoryModel
+
 
 Particle Initializers
 *********************
@@ -31,6 +40,15 @@ One can manually initialize particles or use random particle generation on given
     desc.particles.ManualParticleInitializerFlux
     desc.particles.ManualParticleInitializerLab
     desc.particles.SurfaceParticleInitializer
+
+Custom initializers can be defined by subclassing the abstract base class:
+
+.. autosummary::
+    :toctree: _api/particles/
+    :recursive:
+    :template: class.rst
+
+    desc.particles.AbstractParticleInitializer
 
 
 Particle Tracing

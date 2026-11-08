@@ -14,6 +14,7 @@ Performance Improvements
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
+- ``ideal ballooning lambda`` now computes only the requested ``Neigvals`` largest eigenpairs of each tridiagonal ballooning matrix (bisection + twisted factorization) instead of a dense ``eigh`` of every matrix. Memory of the eigensolve drops from O(N²) to O(N) per field line (peak GPU memory of the ballooning tutorial's evaluation: 14.5 GB -> 0.16 GB); results are unchanged and run times are about the same (the eigensolve is a small part of the total).
 - More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
@@ -25,6 +26,8 @@ Breaking Changes and Deprecations
 - The parameter ``Y_B`` in ``EffectiveRipple``, ``Gamma_c``, ``Bounce2D`` is now the resolution over a single field period rather than a full toroidal transit. This should make using a consistent resolution across different equilibria easier.
 - Objectives using ``Bounce2D`` now do not support fwd mode differentiation for JAX versions <0.11.0.
 - ``rotation_matrix`` utility function now accepts either an axis and an angle as arguments (previous behavior), OR a vector and a vector. In the latter case, the rotation matrix returned will rotate the first vector onto the second, using quaternions which avoids the NaN gradient issue that the axis-angle form can have at vertical normals. Note that these are positional arguments, and the kwargs ``axis`` and ``angle`` are now deprecated.
+- Public modules now define ``__all__`` matching the API documentation, which makes the public API explicit for IDEs, type checkers and other tools. Note that ``from desc.<module> import *`` now only imports the documented public names.
+
 
 Bug Fixes
 

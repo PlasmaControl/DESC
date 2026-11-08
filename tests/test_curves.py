@@ -871,6 +871,25 @@ class TestFourierXYCurve:
         xsss_rpz = crpz.compute("x_sss")["x_sss"]
         np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
 
+
+    @pytest.mark.unit
+    def test_rotmat_setter(self):
+        """Test rotmat setter handles list, array, 3x3 matrix, and invalid shapes."""
+        c = FourierRZCurve()
+        # 3x3 matrix
+        c.rotmat = np.eye(3)
+        assert c.rotmat.shape == (9,)
+        # flat 9-element list
+        c.rotmat = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        assert c.rotmat.shape == (9,)
+        # flat 9-element array
+        c.rotmat = np.ones(9)
+        assert c.rotmat.shape == (9,)
+        # invalid shape raises ValueError
+        with pytest.raises(ValueError):
+            c.rotmat = [1, 2, 3]
+        with pytest.raises(ValueError):
+            c.rotmat = np.zeros((2, 2))
     @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierXYCurve."""

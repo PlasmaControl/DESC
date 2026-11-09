@@ -1205,9 +1205,7 @@ def plot_3d(  # noqa : C901
             len(kwargs) != 0,
             msg=f"plot_3d got unexpected keyword argument: {kwargs.keys()}",
         )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            coords = eq.compute(["X", "Y", "Z"], grid=grid)
+        coords = eq.compute(["X", "Y", "Z"], grid=grid)
         X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")

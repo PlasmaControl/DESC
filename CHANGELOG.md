@@ -40,7 +40,7 @@ Bug Fixes
 - Adds a warning when sub-objectives with ``bounds`` can make the Jacobian rank-deficient, since the default ``"qr"`` trust-region method may then fail to solve the subproblem, suggesting ``options={"tr_method": "svd"}`` instead.
 - VMEC input files with ``PCURR_TYPE = 'power_series_I'`` are now read correctly. Previously the ``AC`` coefficients were always treated as coefficients of the current derivative, so VMEC input files written by ``VMECIO.write_vmec_input`` were not read back correctly. [#1902](https://github.com/PlasmaControl/DESC/issues/1902)
 - Fixes several cases where the VMEC input reader silently misread inputs, such as ignoring indexed profile or axis coefficients like ``AM(0) = ...`` and ``RAXIS_CC(0) = ...``, or reading other variables ending in ``AC`` (such as ``RAC``) as the current profile.
-
+- Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
 
 
 v0.17.3

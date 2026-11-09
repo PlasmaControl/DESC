@@ -22,7 +22,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
@@ -39,6 +39,7 @@ jobs:
               - 'requirements.txt'
               - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
+              - '.test_durations'
               - '.github/workflows/regression_tests.yml'
 
       - name: Check for relevant changes

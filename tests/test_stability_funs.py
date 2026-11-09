@@ -561,10 +561,10 @@ def test_grad_alpha_zeta0_maps():
 
     cvdrift = eq.compute(
         ["cvdrift"],
-        # Redefine ∇α to ∇(α + ι ζ₀)
+        # Redefine ∇α to ∇(α + ι ζ₀ sign ι), the same as for gds2
         data={
             "alpha_r (secular)": data["alpha_r (secular)"]
-            + data["iota_r"] / data["iota"] * iota_zeta0
+            + data["iota_r"] / jnp.abs(data["iota"]) * iota_zeta0
         },
     )["cvdrift"]
 
@@ -572,7 +572,6 @@ def test_grad_alpha_zeta0_maps():
     np.testing.assert_allclose(
         data["c ballooning"],
         (2 * psi_boundary * data["a"] * mu_0)  # a³ Bₙ μ₀
-        * jnp.sign(data["psi"])
         * data["p_r"]
         / data["psi_r"]
         / data["B^zeta"]
@@ -785,6 +784,46 @@ def test_ballooning_stability_eval():
                 "Newcomb metric indicates instability for a stable equilibrium, "
                 f"surface = {rho}, lam = {lam2}, newcomb = {Newcomb_metric}"
             )
+
+
+@pytest.mark.unit
+def test_ballooning_sign_invariance():
+    """Ballooning lambda for equivalent sign conventions (#2342).
+
+    W7-X has ψ < 0 and ι < 0. Reversing B, mirroring the device (flip_helicity) and
+    relabelling θ → -θ (left-handed coordinates) all describe the same physics.
+    """
+    from desc.compat import flip_helicity
+
+    def reverse_B(eq):
+        eq.Psi = -eq.Psi  # W7-X has a fixed iota profile, which stays the same
+        return eq
+
+    def left_handed(eq):  # θ → -θ, the reverse of desc.compat.ensure_positive_jacobian
+        eq.i_l = -eq.i_l
+        eq.R_lmn = np.where(eq.R_basis.modes[:, 1] < 0, -1, 1) * eq.R_lmn
+        eq.Z_lmn = np.where(eq.Z_basis.modes[:, 1] < 0, -1, 1) * eq.Z_lmn
+        eq.L_lmn = np.where(eq.L_basis.modes[:, 1] >= 0, -1, 1) * eq.L_lmn
+        eq.axis, eq.surface = eq.get_axis(), eq.get_surface_at(rho=1)
+        return eq
+
+    eq = desc.examples.get("W7-X")
+    alpha = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    zeta = np.linspace(-3 * np.pi, 3 * np.pi, 301)
+    grid = Grid.create_meshgrid([np.array([0.5]), alpha, zeta], coordinates="raz")
+    lam = eq.compute("ideal ballooning lambda", grid=grid)["ideal ballooning lambda"]
+    # these map the field line alpha of eq to -alpha
+    minus_alpha = (-np.arange(alpha.size)) % alpha.size
+    for flip, alpha_map in [
+        (reverse_B, np.arange(alpha.size)),
+        (flip_helicity, minus_alpha),
+        (left_handed, minus_alpha),
+        (lambda eq: reverse_B(flip_helicity(eq)), minus_alpha),
+    ]:
+        other = flip(eq.copy()).compute("ideal ballooning lambda", grid=grid)
+        np.testing.assert_allclose(
+            other["ideal ballooning lambda"][:, alpha_map], lam, rtol=0, atol=1e-12
+        )
 
 
 @pytest.mark.unit

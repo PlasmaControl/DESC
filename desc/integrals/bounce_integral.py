@@ -49,6 +49,7 @@ from desc.integrals._bounce_utils import (
 from desc.integrals._interp_utils import (
     _JF_BUG,
     _root_eps,
+    default_nufft_eps,
     interp1d_Hermite_vec,
     interp1d_vec,
     nufft2d2r,
@@ -1876,6 +1877,8 @@ class BounceOptions(NamedTuple):
         "nufft_eps": """float :
             Precision requested for interpolation with non-uniform fast Fourier
             transform (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+            Default is ``1e-6`` for effective ripple and ``1e-7`` otherwise with
+            ``jax-finufft``, and ``1e-8`` with ``nufftax``.
             """,
         "spline": """bool :
             Whether to use cubic splines to compute initial guess for bounce points
@@ -1961,10 +1964,10 @@ class BounceOptions(NamedTuple):
         )
 
         if eta == 1:
-            nufft_eps = 1e-8 if (nufft_eps < 0) else nufft_eps
+            nufft_eps = default_nufft_eps(1e-6) if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 51)
         else:
-            nufft_eps = 1e-8 if (nufft_eps < 0) else nufft_eps
+            nufft_eps = default_nufft_eps(1e-7) if (nufft_eps < 0) else nufft_eps
             num_pitch = setdefault(num_pitch, 65)
         nufft_eps = float(nufft_eps)
 

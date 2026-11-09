@@ -209,9 +209,12 @@ doc_bounce = """
         Number of flux surfaces with which to compute simultaneously.
         If given ``None``, then ``surf_batch_size`` is ``grid.num_rho``.
         Default is ``1``. Only consider increasing if ``pitch_batch_size`` is ``None``.
-    nufft_eps : float
+    nufft_eps : float, optional
         Precision requested for interpolation with non-uniform fast Fourier transform
         (NUFFT). If less than ``1e-14`` then NUFFT will not be used.
+        Default is ``1e-6`` for ``EffectiveRipple`` and ``1e-7`` for ``GammaC`` with
+        ``jax-finufft``, and ``1e-8`` with ``nufftax``, which needs a tighter
+        tolerance for comparable accuracy. ``jax-finufft`` is used if installed.
     spline : bool
         Whether to use cubic splines to compute initial guess for bounce points
         instead of Chebyshev series. Default is ``True``. It can be preferable

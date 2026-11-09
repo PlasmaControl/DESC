@@ -6,19 +6,70 @@ from functools import partial
 import numpy as np
 from interpax import interp1d
 
+from desc.backend import jax, jnp
+
+NUFFT_BACKEND = None
+"""NUFFT library in use: ``jax-finufft`` if installed, else ``nufftax``."""
+
+try:
+    from jax_finufft import nufft2, options
+
+    NUFFT_BACKEND = "jax-finufft"
+except (ImportError, ModuleNotFoundError):
+    pass
+except Exception as e:
+    error_str = str(e)
+    # This error will probably happen pretty often, we skip it to prevent breaking
+    # codes that doesn't use jax_finufft but still want to use desc
+    if "XLA FFI handler registration" in error_str:
+        warnings.warn(
+            "jax_finufft XLA FFI handler registration failed. "
+            "This is likely due to a mismatch between the JAX version and the "
+            "jax_finufft version. Change package versions to resolve this issue. "
+            "Falling back to nufftax.",
+            UserWarning,
+        )
+    # If we face any other specific error related to jax_finufft, we can catch it
+    # in an elif block and provide a more specific warning.
+    else:
+        warnings.warn(
+            "Unknown error occurred while importing jax_finufft. "
+            f"Falling back to nufftax: {e}",
+            UserWarning,
+        )
+
 try:
     from nufftax import nufft1d2, nufft2d2
 
+    NUFFT_BACKEND = NUFFT_BACKEND or "nufftax"
 except (ImportError, ModuleNotFoundError):
+    pass
+
+if NUFFT_BACKEND is None:
     warnings.warn(
-        "nufftax is not installed. NUFFT functions will not be available.",
+        "Neither jax_finufft nor nufftax is installed. "
+        "NUFFT functions will not be available.",
         UserWarning,
     )
 
-from desc.backend import jax, jnp
-
 _JF_BUG = True
-"""``nufftax`` does not support masking points, so masks are applied afterwards."""
+"""https://github.com/flatironinstitute/jax-finufft/issues/158.
+
+   Wait for jax-finufft to merge
+   https://github.com/flatironinstitute/jax-finufft/pull/216
+   then bump min version and set this to False.
+   ``nufftax`` does not support masking points, so masks are applied afterwards.
+"""
+
+
+def default_nufft_eps(eps_jax_finufft):
+    """Return the default NUFFT tolerance for the installed NUFFT library.
+
+    ``nufftax`` approximates less accurately than ``jax-finufft`` at the same
+    requested tolerance, so it uses ``1e-8`` where ``jax-finufft`` uses
+    ``eps_jax_finufft``.
+    """
+    return eps_jax_finufft if NUFFT_BACKEND == "jax-finufft" else 1e-8
 
 
 def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
@@ -64,6 +115,10 @@ def nufft1d2r(x, f, domain=(0, 2 * jnp.pi), vec=False, eps=1e-6):
     s = f.shape[-1] // 2
     s = jnp.exp(1j * s * x)
     s = s[..., jnp.newaxis, :] if vec else s
+
+    if NUFFT_BACKEND == "jax-finufft":
+        opts = options.Opts(modeord=0)
+        return (nufft2(f, x, iflag=1, eps=eps, opts=opts) * s).real
 
     return (_nufft1d2(x, f, eps, vec) * s).real
 
@@ -148,8 +203,17 @@ def nufft2d2r(
         s = s[..., jnp.newaxis, :] if vec else s
         f = jnp.fft.ifftshift(f, rfft_axis)
 
-    f = jnp.fft.fftshift(f, (-2, -1))
-    f = (_nufft2d2(x0, x1, f, eps, vec) * s).real
+    if NUFFT_BACKEND == "jax-finufft":
+        if _JF_BUG:
+            opts = options.Opts(modeord=0)
+            f = jnp.fft.fftshift(f, (-2, -1))
+            return (nufft2(f, x0, x1, iflag=1, eps=eps, opts=opts) * s).real
+
+        opts = options.Opts(modeord=1)
+        f = (nufft2(f, x0, x1, points_mask=mask, iflag=1, eps=eps, opts=opts) * s).real
+    else:
+        f = jnp.fft.fftshift(f, (-2, -1))
+        f = (_nufft2d2(x0, x1, f, eps, vec) * s).real
 
     if mask is not None and fill_value is not None:
         f = jnp.where(mask[..., jnp.newaxis, :] if vec else mask, f, fill_value)

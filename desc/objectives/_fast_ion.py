@@ -5,6 +5,7 @@ from packaging import version
 
 from desc.backend import jnp
 from desc.compute.utils import _compute as compute_fun
+from desc.integrals._interp_utils import NUFFT_BACKEND, default_nufft_eps
 from desc.integrals.bounce_integral import BounceOptions
 from desc.utils import errorif, warnif
 
@@ -100,7 +101,7 @@ class GammaC(_Objective):
         num_pitch=65,
         pitch_batch_size=None,
         surf_batch_size=1,
-        nufft_eps=1e-8,
+        nufft_eps=None,
         spline=True,
         Nemov=True,
         **kwargs,
@@ -111,12 +112,12 @@ class GammaC(_Objective):
             ValueError,
             "JAX version >= 0.11.0 required for fwd deriv mode for objective: GammaC.",
         )
-        try:
-            import nufftax  # noqa: F401
-        except Exception:
+        if nufft_eps is None:
+            nufft_eps = default_nufft_eps(1e-7)
+        if NUFFT_BACKEND is None:
             warnif(
                 nufft_eps >= 1e-14,
-                msg="\nnufftax is not installed properly.\n"
+                msg="\nNeither jax_finufft nor nufftax is installed properly.\n"
                 "Setting parameter nufft_eps to zero.\n"
                 "Performance may be somewhat slower.\n",
             )

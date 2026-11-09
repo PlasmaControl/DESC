@@ -26,12 +26,15 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid
 from desc.integrals import Bounce2D
+from desc.integrals._interp_utils import NUFFT_BACKEND
 from desc.magnetic_fields import (
     CurrentPotentialField,
     FourierCurrentPotentialField,
     OmnigenousField,
 )
 from desc.utils import ResolutionWarning, apply, errorif, xyz2rpz, xyz2rpz_vec
+
+NUFFTAX = NUFFT_BACKEND == "nufftax"
 
 
 def _compare_against_master(
@@ -45,8 +48,9 @@ def _compare_against_master(
             else:
                 mean = np.mean(np.atleast_1d(np.abs(master_data[p][name])))
             try:
-                rtol = 1e-8
-                atol = 1e-8
+                # reference data for NUFFT quantities is computed with jax-finufft
+                rtol = 1e-5 if "Gamma_" in name and NUFFTAX else 1e-8
+                atol = 1e-4 if "Gamma_" in name and NUFFTAX else 1e-8
                 atol = atol * mean + 1e-9  # add 1e-9 for basically-zero things
                 err_msg = f"Parameterization: {p}. Name: {name}."
                 assert np.isfinite(mean).all(), err_msg

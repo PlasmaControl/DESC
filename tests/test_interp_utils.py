@@ -9,6 +9,7 @@ from matplotlib.colors import LogNorm
 from numpy.polynomial.polynomial import polyvander
 from tests.test_plotting import tol_2d
 
+import desc.integrals._interp_utils as _interp_utils
 from desc.backend import jnp, rfft, rfft2
 from desc.examples import get
 from desc.integrals import Bounce2D
@@ -88,6 +89,12 @@ _test_inputs_2D = [
 
 class TestFastInterp:
     """Test fast (non-uniform) FFT and partial sum interpolation."""
+
+    @pytest.fixture(autouse=True, params=["jax-finufft", "nufftax"])
+    def nufft_backend(self, request, monkeypatch):
+        """Run each test with both NUFFT libraries."""
+        pytest.importorskip(request.param.replace("-", "_"))
+        monkeypatch.setattr(_interp_utils, "NUFFT_BACKEND", request.param)
 
     @pytest.mark.unit
     @pytest.mark.parametrize("func, n, domain", _test_inputs_1D)

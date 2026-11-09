@@ -848,14 +848,20 @@ class TestPestTransform:
         ``ragged``: plane k holds ``n_theta + k`` thetas per rho instead.
         """
         rng = np.random.default_rng(seed)
-        nodes = []
-        for k in range(n_zeta):
-            zeta = 2 * np.pi * k / (n_zeta * self.NFP)
-            for rho in self.RHO:
-                nt = n_theta + (k if ragged else 0)
-                for theta in np.sort(rng.uniform(0, 2 * np.pi, nt)):
-                    nodes.append((rho, theta, zeta))
-        return Grid(np.array(nodes), NFP=self.NFP, sort=False)
+        zeta = 2 * np.pi * np.arange(n_zeta) / (n_zeta * self.NFP)
+        rho = np.asarray(self.RHO)
+        nt = n_theta + (np.arange(n_zeta) if ragged else np.zeros(n_zeta, dtype=int))
+        # (zeta, rho, theta) slots; a plane's unused slots (ragged) sort to the end as
+        # inf and are dropped by `keep`.
+        keep = np.broadcast_to(
+            np.arange(nt.max()) < nt[:, None, None], (n_zeta, rho.size, nt.max())
+        )
+        theta = np.sort(
+            np.where(keep, rng.uniform(0, 2 * np.pi, keep.shape), np.inf), axis=-1
+        )
+        z, r, t = np.broadcast_arrays(zeta[:, None, None], rho[None, :, None], theta)
+        nodes = np.stack([r[keep], t[keep], z[keep]], axis=-1)  # zeta, rho, theta order
+        return Grid(nodes, NFP=self.NFP, sort=False)
 
     def _basis(self):
         return FourierZernikeBasis(L=3, M=3, N=2, NFP=self.NFP, sym=False)
@@ -964,6 +970,24 @@ class TestPestTransform:
         y = np.random.default_rng(3).standard_normal(grid.num_nodes)
         V = jnp.asarray(basis.evaluate(grid))
         np.testing.assert_allclose(transform.project(y), V.T @ y, atol=1e-11)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "n_zeta, ragged", [(5, False), (5, True), (9, False), (3, False)]
+    )
+    def test_pest_project_matches_direct1(self, n_zeta, ragged):
+        """Projection with pest is the same as with direct1, on pest grids.
+
+        Square, ragged, oversampled and undersampled zeta, with independent random
+        theta on every (rho, zeta) pair.
+        """
+        basis = self._basis()
+        grid = self._grid(n_zeta, ragged=ragged)
+        pest = Transform(grid, basis, method="pest", build=True)
+        direct1 = Transform(grid, basis, method="direct1", build=True)
+        assert pest.method == "pest" and direct1.method == "direct1"
+        y = np.random.default_rng(5).standard_normal(grid.num_nodes)
+        np.testing.assert_allclose(pest.project(y), direct1.project(y), atol=1e-12)
 
     @pytest.mark.unit
     def test_pest_without_zeta_indices_falls_back(self):

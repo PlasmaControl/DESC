@@ -39,6 +39,7 @@ __all__ = [
     "plotting",
     "profiles",
     "random",
+    "set_device",
     "transform",
     "vmec",
 ]

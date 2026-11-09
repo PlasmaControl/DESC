@@ -38,6 +38,7 @@ jobs:
               - 'requirements.txt'
               - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
+              - '.test_durations'
               - '.github/workflows/notebook_tests.yml'
 
       - name: Check for relevant changes

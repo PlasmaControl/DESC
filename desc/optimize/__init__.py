@@ -14,3 +14,13 @@ from .optimizer import (
     run_with_mpi,
 )
 from .stochastic import sgd
+
+__all__ = [
+    "Optimizer",
+    "fmin_auglag",
+    "fmintr",
+    "lsq_auglag",
+    "lsqtr",
+    "register_optimizer",
+    "sgd",
+]

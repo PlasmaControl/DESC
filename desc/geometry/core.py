@@ -65,7 +65,9 @@ class Curve(IOAble, Optimizable, ABC):
         if new.size == 9:
             self._rotmat = new.flatten()
         else:
-            raise ValueError(f"rotmat should be a 3x3 matrix or 9 element vector, got {new}")
+            raise ValueError(
+                f"rotmat should be a 3x3 matrix or 9 element vector, got {new}"
+            )
 
     @property
     def name(self):

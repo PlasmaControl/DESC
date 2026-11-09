@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.backend import jit
+from desc.backend import jit, jnp
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
@@ -46,17 +46,18 @@ class TestTransform:
         """Tests error handling with transform method."""
         grid = LinearGrid(L=10)
         basis = PowerSeries(L=2, sym=False)
-        transf = Transform(grid, basis, derivs=0)
+        for method in ("auto", "pest"):
+            transf = Transform(grid, basis, derivs=0, method=method)
 
-        # invalid derivative orders
-        with pytest.raises(ValueError):
-            c = np.array([1, 2, 3])
-            transf.transform(c, 1, 1, 1)
+            # invalid derivative orders
+            with pytest.raises(ValueError):
+                c = np.array([1, 2, 3])
+                transf.transform(c, 1, 1, 1)
 
-        # incompatible number of coefficients
-        with pytest.raises(ValueError):
-            c = np.array([1, 2])
-            transf.transform(c, 0, 0, 0)
+            # incompatible number of coefficients
+            with pytest.raises(ValueError):
+                c = np.array([1, 2])
+                transf.transform(c, 0, 0, 0)
 
     @pytest.mark.unit
     def test_profile(self):
@@ -192,6 +193,12 @@ class TestTransform:
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
+        pest_3 = Transform(grid_3, basis, method="pest")
+        pest_5 = Transform(grid_5, basis, method="pest")
+        pest_3.grid = grid_5
+        assert pest_3.method == "pest"
+        assert pest_3.equiv(pest_5)
+
     @pytest.mark.unit
     def test_set_basis(self):
         """Tests the basis setter method."""
@@ -212,6 +219,12 @@ class TestTransform:
         assert transf_21.equiv(transf_20)
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
+
+        pest_21 = Transform(grid, basis_21, method="pest")
+        pest_31 = Transform(grid, basis_31, method="pest")
+        pest_21.basis = basis_31
+        assert pest_21.method == "pest"
+        assert pest_21.equiv(pest_31)
 
     @pytest.mark.unit
     def test_fft(self):
@@ -252,6 +265,18 @@ class TestTransform:
         np.testing.assert_allclose(f0, correct_f0, atol=1e-8)
         np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
 
+        for basis, coeffs, correct in (
+            (sin_basis, sin_coeffs, (correct_s0, correct_s1)),
+            (cos_basis, cos_coeffs, (correct_c0, correct_c1)),
+            (for_basis, for_coeffs, (correct_f0, correct_f1)),
+        ):
+            tform = Transform(grid, basis, derivs=1, method="pest")
+            assert tform.method == "pest"
+            for dz in (0, 1):
+                np.testing.assert_allclose(
+                    tform.transform(coeffs, 0, 0, dz), correct[dz], atol=1e-8
+                )
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_direct_fft_equal(self):
@@ -281,6 +306,10 @@ class TestTransform:
         t2d2 = Transform(grid, basis2, method="direct2")
         t3d2 = Transform(grid, basis3, method="direct2")
 
+        t1p = Transform(grid, basis1, method="pest")
+        t2p = Transform(grid, basis2, method="pest")
+        t3p = Transform(grid, basis3, method="pest")
+
         for d in t1f.derivatives:
             dr = d[0]
             dv = d[1]
@@ -289,6 +318,12 @@ class TestTransform:
             y1 = t1f.transform(x, dr, dv, dz)
             y2 = t1d1.transform(x, dr, dv, dz)
             y3 = t1d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                t1p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis1, d={d}",
+            )
             np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on zernike, d={}".format(d)
             )
@@ -300,6 +335,12 @@ class TestTransform:
             y2 = t2d1.transform(x, dr, dv, dz)
             y3 = t2d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
+                t2p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis2, d={d}",
+            )
+            np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on fourier, d={}".format(d)
             )
             np.testing.assert_allclose(
@@ -309,6 +350,12 @@ class TestTransform:
             y1 = t3f.transform(x, dr, dv, dz)
             y2 = t3d1.transform(x, dr, dv, dz)
             y3 = t3d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                t3p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis3, d={d}",
+            )
             np.testing.assert_allclose(
                 y1, y2, atol=1e-12, err_msg="failed on double fourier, d={}".format(d)
             )
@@ -336,6 +383,9 @@ class TestTransform:
         t1d2.change_resolution(grid, basis1, method="direct2")
         t2d2.change_resolution(grid, basis2, method="direct2")
         t3d2.change_resolution(grid, basis3, method="direct2")
+        t1p.change_resolution(grid, basis1, method="pest")
+        t2p.change_resolution(grid, basis2, method="pest")
+        t3p.change_resolution(grid, basis3, method="pest")
 
         for d in t1f.derivatives:
             dr = d[0]
@@ -345,6 +395,12 @@ class TestTransform:
             y1 = t1f.transform(x, dr, dv, dz)
             y2 = t1d1.transform(x, dr, dv, dz)
             y3 = t1d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                t1p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis1, d={d}",
+            )
             np.testing.assert_allclose(
                 y1,
                 y2,
@@ -362,6 +418,12 @@ class TestTransform:
             y2 = t2d1.transform(x, dr, dv, dz)
             y3 = t2d2.transform(x, dr, dv, dz)
             np.testing.assert_allclose(
+                t2p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis2, d={d}",
+            )
+            np.testing.assert_allclose(
                 y1,
                 y2,
                 atol=1e-12,
@@ -377,6 +439,12 @@ class TestTransform:
             y1 = t3f.transform(x, dr, dv, dz)
             y2 = t3d1.transform(x, dr, dv, dz)
             y3 = t3d2.transform(x, dr, dv, dz)
+            np.testing.assert_allclose(
+                t3p.transform(x, dr, dv, dz),
+                y2,
+                atol=1e-12,
+                err_msg=f"pest, basis3, d={d}",
+            )
             np.testing.assert_allclose(
                 y1,
                 y2,
@@ -398,42 +466,51 @@ class TestTransform:
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
+        ptransform = Transform(grid, basis, method="pest")
         transform.build()
         dtransform1.build()
         dtransform2.build()
+        ptransform.build()
 
         y = np.random.random(grid.num_nodes)
 
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
+        np.testing.assert_allclose(ptransform.project(y), dtransform1.project(y))
 
         basis = FourierZernikeBasis(L=1, M=5, N=3, sym="cos")
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
+        ptransform = Transform(grid, basis, method="pest")
         transform.build()
         dtransform1.build()
         dtransform2.build()
+        ptransform.build()
 
         y = np.random.random(grid.num_nodes)
 
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
+        np.testing.assert_allclose(ptransform.project(y), dtransform1.project(y))
 
         basis = FourierZernikeBasis(L=1, M=5, N=0, sym="sin")
         grid = ConcentricGrid(L=4, M=2, N=5, sym=True)
         transform = Transform(grid, basis, method="fft")
         dtransform1 = Transform(grid, basis, method="direct1")
         dtransform2 = Transform(grid, basis, method="direct2")
+        ptransform = Transform(grid, basis, method="pest")
         transform.build()
         dtransform1.build()
         dtransform2.build()
+        ptransform.build()
 
         y = np.random.random(grid.num_nodes)
 
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
+        np.testing.assert_allclose(ptransform.project(y), dtransform1.project(y))
 
     @pytest.mark.unit
     def test_fft_warnings(self):
@@ -491,6 +568,24 @@ class TestTransform:
         assert t.method == "direct1"
 
     @pytest.mark.unit
+    def test_pest_warnings(self):
+        """The pest method falls back to direct1 only for an incompatible basis.
+
+        The irregular grid that direct2 rejects is a valid pest grid: pest only needs
+        zeta to be a tensor axis.
+        """
+        g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
+        b = ZernikePolynomial(L=2, M=2)
+        t = Transform(g, b, method="pest")
+        assert t.method == "pest"
+
+        b._fft_toroidal = False
+        g = LinearGrid(2, 3, 4)
+        with pytest.warns(UserWarning, match="compatible basis"):
+            t = Transform(g, b, method="pest")
+        assert t.method == "direct1"
+
+    @pytest.mark.unit
     def test_fit_direct1_and_jitable(self):
         """Test fitting with direct1 and jitable method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
@@ -520,6 +615,19 @@ class TestTransform:
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
     @pytest.mark.unit
+    def test_fit_pest(self):
+        """Test fitting with pest method (7 zeta planes > 5 toroidal modes)."""
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        assert transform.method == "pest"
+        np.random.seed(1)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
     def test_fit_fft(self):
         """Test fitting with fft method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
@@ -540,6 +648,7 @@ class TestTransform:
 
         basis = FourierZernikeBasis(6, 6, 6)
         _ = Transform(grid, basis)
+        _ = Transform(grid, basis, method="pest")
 
     @pytest.mark.unit
     def test_Z_projection(self):
@@ -588,6 +697,17 @@ class TestTransform:
                 np.testing.assert_allclose(
                     y1, y2, atol=1e-10, err_msg=f"N={N} sym={sym}"
                 )
+                t3 = Transform(grid, basis, method="pest", build_pinv=True)
+                x3 = t3.transform(c)
+                np.testing.assert_allclose(
+                    x1, x3, atol=1e-10, err_msg=f"pest N={N} sym={sym}"
+                )
+                np.testing.assert_allclose(
+                    c1, t3.fit(x3), atol=1e-10, err_msg=f"pest N={N} sym={sym}"
+                )
+                np.testing.assert_allclose(
+                    y1, t3.project(x3), atol=1e-10, err_msg=f"pest N={N} sym={sym}"
+                )
 
 
 @pytest.mark.unit
@@ -615,6 +735,12 @@ def test_transform_pytree():
     x = np.random.random(basis.num_modes)
     np.testing.assert_allclose(foo(x, transform), transform.transform(x))
     np.testing.assert_allclose(bar(x), transform.transform(x))
+
+    pest = Transform(grid, basis, build=True, method="pest")
+    leaves, treedef = jax.tree_util.tree_flatten(pest)
+    pest = jax.tree_util.tree_unflatten(treedef, leaves)
+    assert pest.method == "pest"
+    np.testing.assert_allclose(foo(x, pest), transform.transform(x), atol=1e-12)
 
 
 @pytest.mark.unit
@@ -661,3 +787,234 @@ def test_NFP_warning():
         _ = Transform(g22, b21)
     # toroidal nodes and modes, but equal nfp, no warning
     _ = Transform(g22, b22)
+
+
+class TestPestTransform:
+    """``method="pest"``: zeta is a tensor axis of the grid, (rho, theta) is not.
+
+    No equilibrium and no coordinate map: on every (rho, zeta) pair the grid has its
+    own random, sorted theta values, which is the structure of a uniform PEST lattice
+    mapped to DESC coordinates. Checked against analytic answers only -- the
+    coefficients of a known function, and its analytic derivatives.
+    """
+
+    NFP = 3
+    RHO = (0.2, 0.45, 0.7, 0.95)
+
+    # f(rho, theta, zeta) = sum of coef * R(rho) * T(theta) * Z(NFP zeta), one term per
+    # Fourier-Zernike mode (l, m, n): m < 0 is sin(|m| theta), n < 0 is sin(|n| NFP
+    # zeta), and R is the unnormalized Zernike radial polynomial R_l^|m|. Each radial
+    # factor is given with its first two derivatives.
+    TERMS = {
+        (0, 0, 0): (1.5, lambda r: (1 + 0 * r, 0 * r, 0 * r)),
+        (1, 1, 0): (2.0, lambda r: (r, 1 + 0 * r, 0 * r)),
+        (2, -2, 1): (-0.7, lambda r: (r**2, 2 * r, 2 + 0 * r)),
+        (2, 0, -1): (0.4, lambda r: (2 * r**2 - 1, 4 * r, 4 + 0 * r)),
+        (3, 1, 2): (0.3, lambda r: (3 * r**3 - 2 * r, 9 * r**2 - 2, 18 * r)),
+        (3, -3, -1): (-0.25, lambda r: (r**3, 3 * r**2, 6 * r)),
+    }
+
+    @staticmethod
+    def _trig(k, x, d):
+        """d-th derivative of cos(k x) (k >= 0) or sin(|k| x) (k < 0)."""
+        shift = d * np.pi / 2
+        a = abs(k)
+        return a**d * (np.cos(a * x + shift) if k >= 0 else np.sin(a * x + shift))
+
+    def _f(self, nodes, d=(0, 0, 0), terms=None):
+        """The test function, or its (dr, dt, dz) derivative, at ``nodes``."""
+        r, t, z = nodes.T
+        out = np.zeros(r.size)
+        for (_, m, n), (coef, R) in (terms or self.TERMS).items():
+            out += (
+                coef
+                * R(r)[d[0]]
+                * self._trig(m, t, d[1])
+                * self.NFP ** d[2]
+                * self._trig(n, self.NFP * z, d[2])
+            )
+        return out
+
+    def _coeffs(self, basis, terms=None):
+        """The coefficients of ``f`` in ``basis``: the TERMS, zero elsewhere."""
+        c = np.zeros(basis.num_modes)
+        for lmn, (coef, _) in (terms or self.TERMS).items():
+            c[basis.get_idx(*lmn)] = coef
+        return c
+
+    def _grid(self, n_zeta, n_theta=8, seed=0, ragged=False):
+        """Uniform zeta planes; each (rho, zeta) pair has its own sorted random thetas.
+
+        ``ragged``: plane k holds ``n_theta + k`` thetas per rho instead.
+        """
+        rng = np.random.default_rng(seed)
+        nodes = []
+        for k in range(n_zeta):
+            zeta = 2 * np.pi * k / (n_zeta * self.NFP)
+            for rho in self.RHO:
+                nt = n_theta + (k if ragged else 0)
+                for theta in np.sort(rng.uniform(0, 2 * np.pi, nt)):
+                    nodes.append((rho, theta, zeta))
+        return Grid(np.array(nodes), NFP=self.NFP, sort=False)
+
+    def _basis(self):
+        return FourierZernikeBasis(L=3, M=3, N=2, NFP=self.NFP, sym=False)
+
+    @pytest.mark.unit
+    def test_pest_fit_recovers_coefficients(self):
+        """fit(f) gives f's known coefficients; 5 zeta planes, 5 toroidal modes."""
+        basis = self._basis()
+        grid = self._grid(5)
+        assert grid.num_zeta == 5 and basis.N == 2
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        assert transform.method == "pest"
+        c = transform.fit(self._f(grid.nodes))
+        np.testing.assert_allclose(c, self._coeffs(basis), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_pest_derivatives_match_analytic(self):
+        """transform(c, dr, dt, dz) equals the analytic derivative of f."""
+        basis = self._basis()
+        grid = self._grid(5)
+        derivs = np.array(
+            [
+                [0, 0, 0],
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [1, 1, 0],
+                [0, 1, 1],
+                [2, 0, 0],
+                [0, 2, 0],
+                [0, 0, 2],
+            ]
+        )
+        transform = Transform(grid, basis, derivs=derivs, method="pest", build=True)
+        c = self._coeffs(basis)
+        for d in derivs:
+            np.testing.assert_allclose(
+                transform.transform(c, *d),
+                self._f(grid.nodes, d),
+                atol=1e-11,
+                err_msg=f"derivative {d}",
+            )
+
+    @pytest.mark.unit
+    def test_pest_fit_oversampled_zeta(self):
+        """More zeta planes than toroidal modes: exact for f, least squares beyond.
+
+        f is still fitted exactly, and with data outside the span the fit is the
+        least-squares solution.
+        """
+        basis = self._basis()
+        grid = self._grid(9)  # 9 planes > 5 toroidal modes
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        assert transform.method == "pest"
+        f = self._f(grid.nodes)
+        np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
+        # data outside the span: the fit must satisfy the normal equations
+        x = f + 0.1 * np.random.default_rng(1).standard_normal(f.size)
+        c = transform.fit(x)
+        V = jnp.asarray(basis.evaluate(grid))
+        np.testing.assert_allclose(
+            V.T @ (V @ c - x), 0, atol=1e-10 * float(jnp.linalg.norm(V.T @ x))
+        )
+
+    @pytest.mark.unit
+    def test_pest_fit_undersampled_zeta(self):
+        """Fewer zeta planes than toroidal modes: interpolating, minimum norm.
+
+        Toroidal modes n and n +- 3 alias on 3 planes, so f's own coefficients are not
+        the unique answer; the fit must reproduce f at the nodes and be the
+        minimum-norm solution.
+        """
+        basis = self._basis()
+        grid = self._grid(3)
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        f = self._f(grid.nodes)
+        c = transform.fit(f)
+        V = jnp.asarray(basis.evaluate(grid))
+        np.testing.assert_allclose(V @ c, f, atol=1e-11)
+        # minimum norm <=> c lies in the row space of V
+        lam = jnp.linalg.lstsq(V.T, c)[0]
+        np.testing.assert_allclose(V.T @ lam, c, atol=1e-11)
+
+    @pytest.mark.unit
+    def test_pest_ragged_planes(self):
+        """Different node counts per plane: fit, transform and project all work."""
+        basis = self._basis()
+        grid = self._grid(5, ragged=True)
+        transform = Transform(grid, basis, method="pest", build=True, build_pinv=True)
+        assert transform.method == "pest"
+        f = self._f(grid.nodes)
+        np.testing.assert_allclose(transform.fit(f), self._coeffs(basis), atol=1e-12)
+        np.testing.assert_allclose(
+            transform.transform(self._coeffs(basis)), f, atol=1e-12
+        )
+        y = np.random.default_rng(2).standard_normal(grid.num_nodes)
+        V = jnp.asarray(basis.evaluate(grid))
+        np.testing.assert_allclose(transform.project(y), V.T @ y, atol=1e-11)
+
+    @pytest.mark.unit
+    def test_pest_project_is_adjoint(self):
+        """project(y) = V^T y with V the basis evaluated at the nodes."""
+        basis = self._basis()
+        grid = self._grid(5)
+        transform = Transform(grid, basis, method="pest", build=True)
+        y = np.random.default_rng(3).standard_normal(grid.num_nodes)
+        V = jnp.asarray(basis.evaluate(grid))
+        np.testing.assert_allclose(transform.project(y), V.T @ y, atol=1e-11)
+
+    @pytest.mark.unit
+    def test_pest_without_zeta_indices_falls_back(self):
+        """A grid that does not carry zeta indices falls back to direct1, warning."""
+        nodes = self._grid(5).nodes
+        grid = Grid(nodes, NFP=self.NFP, sort=False, jitable=True)
+        with pytest.warns(UserWarning, match="falling back to direct1"):
+            transform = Transform(grid, self._basis(), method="pest")
+        assert transform.method == "direct1"
+
+    @pytest.mark.unit
+    def test_pest_under_jit(self):
+        """transform, fit and project are jittable.
+
+        The Transform is built outside jit: ``Grid(jitable=True)`` stores its index
+        arrays with ``jnp.asarray``, which makes them tracers under jit, and the pest
+        method needs them concrete to group the nodes by plane.
+        """
+        basis = self._basis()
+        grid = self._grid(5)
+        transform = Transform(
+            grid,
+            basis,
+            derivs=np.array([[0, 1, 0]]),
+            method="pest",
+            build=True,
+            build_pinv=True,
+        )
+        c = self._coeffs(basis)
+        f = self._f(grid.nodes)
+        np.testing.assert_allclose(
+            jit(lambda c: transform.transform(c, 0, 1, 0))(c),
+            self._f(grid.nodes, (0, 1, 0)),
+            atol=1e-11,
+        )
+        np.testing.assert_allclose(jit(transform.fit)(f), c, atol=1e-12)
+        y = np.random.default_rng(4).standard_normal(grid.num_nodes)
+        np.testing.assert_allclose(
+            jit(transform.project)(y), transform.project(y), atol=1e-12
+        )
+
+    @pytest.mark.unit
+    def test_get_transforms_honours_pest(self):
+        """An explicit method="pest" reaches the transforms; it used to become auto."""
+        from desc.equilibrium import Equilibrium
+
+        eq = Equilibrium(L=3, M=3, N=2, NFP=self.NFP)
+        grid = self._grid(5)
+        transforms = get_transforms(["R", "Z"], eq, grid, method="pest")
+        assert transforms["R"].method == "pest"
+        assert transforms["Z"].method == "pest"
+        # unchanged: no method -> auto's choice; jitable -> jitable
+        assert get_transforms(["R"], eq, grid)["R"].method != "pest"
+        assert get_transforms(["R"], eq, grid, jitable=True)["R"].method == "jitable"

@@ -1240,7 +1240,7 @@ class SumMagneticField(_MagneticField, MutableSequence, OptimizableCollection):
         )
 
     # dunder methods required by MutableSequence
-    def __getitem__(self, i):
+    def __getitem__(self, i) -> _MagneticField:
         return self._fields[i]
 
     def __setitem__(self, i, new_item):

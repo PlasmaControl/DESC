@@ -569,11 +569,7 @@ class TestTransform:
 
     @pytest.mark.unit
     def test_pest_warnings(self):
-        """The pest method falls back to direct1 only for an incompatible basis.
-
-        The irregular grid that direct2 rejects is a valid pest grid: pest only needs
-        zeta to be a tensor axis.
-        """
+        """The pest method falls back to direct1 for an incompatible basis."""
         g = Grid(np.array([[0, 0, -1], [1, 1, 0], [1, 1, 1]]))
         b = ZernikePolynomial(L=2, M=2)
         t = Transform(g, b, method="pest")
@@ -790,21 +786,12 @@ def test_NFP_warning():
 
 
 class TestPestTransform:
-    """``method="pest"``: zeta is a tensor axis of the grid, (rho, theta) is not.
-
-    No equilibrium and no coordinate map: on every (rho, zeta) pair the grid has its
-    own random, sorted theta values, which is the structure of a uniform PEST lattice
-    mapped to DESC coordinates. Checked against analytic answers only -- the
-    coefficients of a known function, and its analytic derivatives.
-    """
+    """``method="pest"``: zeta is a tensor axis of the grid, (rho, theta) is not."""
 
     NFP = 3
     RHO = (0.2, 0.45, 0.7, 0.95)
 
-    # f(rho, theta, zeta) = sum of coef * R(rho) * T(theta) * Z(NFP zeta), one term per
-    # Fourier-Zernike mode (l, m, n): m < 0 is sin(|m| theta), n < 0 is sin(|n| NFP
-    # zeta), and R is the unnormalized Zernike radial polynomial R_l^|m|. Each radial
-    # factor is given with its first two derivatives.
+    # f(rho, theta, zeta) (analytic function used for testing)
     TERMS = {
         (0, 0, 0): (1.5, lambda r: (1 + 0 * r, 0 * r, 0 * r)),
         (1, 1, 0): (2.0, lambda r: (r, 1 + 0 * r, 0 * r)),
@@ -845,7 +832,7 @@ class TestPestTransform:
     def _grid(self, n_zeta, n_theta=8, seed=0, ragged=False):
         """Uniform zeta planes; each (rho, zeta) pair has its own sorted random thetas.
 
-        ``ragged``: plane k holds ``n_theta + k`` thetas per rho instead.
+        ``ragged``: different zeta planes have different numbers of nodes
         """
         rng = np.random.default_rng(seed)
         zeta = 2 * np.pi * np.arange(n_zeta) / (n_zeta * self.NFP)
@@ -872,6 +859,26 @@ class TestPestTransform:
         basis = self._basis()
         grid = self._grid(5)
         assert grid.num_zeta == 5 and basis.N == 2
+        transform = Transform(grid, basis, method="pest", build_pinv=True)
+        assert transform.method == "pest"
+        c = transform.fit(self._f(grid.nodes))
+        np.testing.assert_allclose(c, self._coeffs(basis), atol=1e-12)
+
+    @pytest.mark.unit
+    def test_pest_fit_square(self):
+        """num_nodes == num_modes: the fit recreates f's coefficients."""
+        basis = self._basis()
+        nodes = np.array(
+            ConcentricGrid(
+                L=basis.L, M=basis.M, N=basis.N, NFP=self.NFP, node_pattern="jacobi"
+            ).nodes
+        )
+        # one random rotation per (rho, zeta) ring
+        _, ring = np.unique(nodes[:, [0, 2]], axis=0, return_inverse=True)
+        shift = np.random.default_rng(6).uniform(0, 2 * np.pi, ring.max() + 1)
+        nodes[:, 1] = (nodes[:, 1] + shift[ring.ravel()]) % (2 * np.pi)
+        grid = Grid(nodes, NFP=self.NFP, sort=False)
+        assert grid.num_nodes == basis.num_modes == 50
         transform = Transform(grid, basis, method="pest", build_pinv=True)
         assert transform.method == "pest"
         c = transform.fit(self._f(grid.nodes))
@@ -907,11 +914,7 @@ class TestPestTransform:
 
     @pytest.mark.unit
     def test_pest_fit_oversampled_zeta(self):
-        """More zeta planes than toroidal modes: exact for f, least squares beyond.
-
-        f is still fitted exactly, and with data outside the span the fit is the
-        least-squares solution.
-        """
+        """More zeta planes than toroidal modes."""
         basis = self._basis()
         grid = self._grid(9)  # 9 planes > 5 toroidal modes
         transform = Transform(grid, basis, method="pest", build_pinv=True)
@@ -928,12 +931,7 @@ class TestPestTransform:
 
     @pytest.mark.unit
     def test_pest_fit_undersampled_zeta(self):
-        """Fewer zeta planes than toroidal modes: interpolating, minimum norm.
-
-        Toroidal modes n and n +- 3 alias on 3 planes, so f's own coefficients are not
-        the unique answer; the fit must reproduce f at the nodes and be the
-        minimum-norm solution.
-        """
+        """Toroidal modes n and n +- 3 alias, so f coefficients aren't unique."""
         basis = self._basis()
         grid = self._grid(3)
         transform = Transform(grid, basis, method="pest", build_pinv=True)
@@ -976,11 +974,7 @@ class TestPestTransform:
         "n_zeta, ragged", [(5, False), (5, True), (9, False), (3, False)]
     )
     def test_pest_project_matches_direct1(self, n_zeta, ragged):
-        """Projection with pest is the same as with direct1, on pest grids.
-
-        Square, ragged, oversampled and undersampled zeta, with independent random
-        theta on every (rho, zeta) pair.
-        """
+        """Projection with pest is the same as with direct1."""
         basis = self._basis()
         grid = self._grid(n_zeta, ragged=ragged)
         pest = Transform(grid, basis, method="pest", build=True)
@@ -1000,38 +994,60 @@ class TestPestTransform:
 
     @pytest.mark.unit
     def test_pest_under_jit(self):
-        """transform, fit and project are jittable.
-
-        The Transform is built outside jit: ``Grid(jitable=True)`` stores its index
-        arrays with ``jnp.asarray``, which makes them tracers under jit, and the pest
-        method needs them concrete to group the nodes by plane.
-        """
+        """Built and applied under jit."""
         basis = self._basis()
-        grid = self._grid(5)
-        transform = Transform(
-            grid,
-            basis,
-            derivs=np.array([[0, 1, 0]]),
-            method="pest",
-            build=True,
-            build_pinv=True,
+        ref = self._grid(5)
+        n = ref.num_nodes
+        idx = dict(
+            _unique_rho_idx=np.asarray(ref.unique_rho_idx),
+            _inverse_rho_idx=np.asarray(ref.inverse_rho_idx),
+            _unique_poloidal_idx=np.arange(n),
+            _inverse_poloidal_idx=np.arange(n),
+            _unique_zeta_idx=np.asarray(ref.unique_zeta_idx),
+            _inverse_zeta_idx=np.asarray(ref.inverse_zeta_idx),
         )
         c = self._coeffs(basis)
-        f = self._f(grid.nodes)
-        np.testing.assert_allclose(
-            jit(lambda c: transform.transform(c, 0, 1, 0))(c),
-            self._f(grid.nodes, (0, 1, 0)),
-            atol=1e-11,
-        )
-        np.testing.assert_allclose(jit(transform.fit)(f), c, atol=1e-12)
-        y = np.random.default_rng(4).standard_normal(grid.num_nodes)
-        np.testing.assert_allclose(
-            jit(transform.project)(y), transform.project(y), atol=1e-12
-        )
+        f = self._f(ref.nodes)
+        y = np.random.default_rng(4).standard_normal(n)
+        V = jnp.asarray(basis.evaluate(ref))
+
+        def build(nodes):
+            grid = Grid(nodes, NFP=self.NFP, sort=False, jitable=True, **idx)
+            return Transform(
+                grid,
+                basis,
+                derivs=np.array([[0, 1, 0]]),
+                method="pest",
+                build=True,
+                build_pinv=True,
+            )
+
+        @jit
+        def inside(nodes):
+            transform = build(nodes)
+            assert transform.method == "pest"
+            assert transform.pest_plane_idx is None  # traced: no per-plane grouping
+            return (
+                transform.transform(c, 0, 1, 0),
+                transform.fit(f),
+                transform.project(y),
+            )
+
+        for dt_f, c_fit, proj in (
+            inside(ref.nodes),  # built under jit
+            (  # built outside, applied under jit
+                jit(lambda c: build(ref.nodes).transform(c, 0, 1, 0))(c),
+                jit(build(ref.nodes).fit)(f),
+                jit(build(ref.nodes).project)(y),
+            ),
+        ):
+            np.testing.assert_allclose(dt_f, self._f(ref.nodes, (0, 1, 0)), atol=1e-11)
+            np.testing.assert_allclose(c_fit, c, atol=1e-12)
+            np.testing.assert_allclose(proj, V.T @ y, atol=1e-11)
 
     @pytest.mark.unit
-    def test_get_transforms_honours_pest(self):
-        """An explicit method="pest" reaches the transforms; it used to become auto."""
+    def test_get_transforms_honors_pest(self):
+        """An explicit method="pest" reaches the transforms."""
         from desc.equilibrium import Equilibrium
 
         eq = Equilibrium(L=3, M=3, N=2, NFP=self.NFP)

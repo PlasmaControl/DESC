@@ -84,6 +84,7 @@ Papers extending DESC functionality
 #. E. Miralles-Dolz et al. (2026).
    *Neutron wall loading in stellarator optimization*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb15b>`__]
+   
 #. D. Panici, B. Jang, R. Conlin, D.W. Dudt, Y.G. Elmacioglu, and E. Kolemen. (2026).
    *Deflation Techniques for Stellarator Equilibrium and Optimization*.
    [`pdf <https://arxiv.org/abs/2602.09957>`__]

@@ -1866,19 +1866,29 @@ class FinitenStability(_Objective):
         weights = self._agni_to_biest(src_pest_grid.weights, n_theta_s, n_zeta_s)
 
         n_surf_s = n_theta_s * n_zeta_s
+        # `surf_nodes` are the PEST lattice MAPPED to DESC angles, where theta_DESC
+        # varies with zeta at fixed theta_PEST. So theta is NOT a tensor axis of this
+        # grid: every theta is its own unique value, and `is_meshgrid` is False.
+        # Claiming `n_theta_s` unique thetas (tiled across zeta) made the basis
+        # evaluation reuse the first zeta plane's thetas on every plane, i.e. evaluate
+        # the boundary geometry at the wrong poloidal position everywhere else -- and
+        # nothing downstream validates the claim. Same honest index arrays as
+        # `_phi_matrix_desc_source`'s eval grid. Zeta IS separable (DESC zeta is PEST
+        # phi). The index arrays are static metadata, so they stay concrete NumPy: jnp
+        # arrays built here are tracers under jit.
         surf_grid = Grid(
             nodes=surf_nodes,
             jitable=True,
-            is_meshgrid=True,
+            is_meshgrid=False,
             spacing=jnp.asarray(spacing),
             weights=jnp.asarray(weights),
             NFP=phi_pest_grid.NFP,
-            _unique_rho_idx=jnp.array([0]),
-            _unique_poloidal_idx=jnp.arange(n_theta_s),
-            _unique_zeta_idx=jnp.arange(n_zeta_s) * n_theta_s,
-            _inverse_rho_idx=jnp.zeros(n_surf_s, dtype=int),
-            _inverse_poloidal_idx=jnp.tile(jnp.arange(n_theta_s), n_zeta_s),
-            _inverse_zeta_idx=jnp.repeat(jnp.arange(n_zeta_s), n_theta_s),
+            _unique_rho_idx=np.array([0]),
+            _unique_poloidal_idx=np.arange(n_surf_s),
+            _unique_zeta_idx=np.arange(n_zeta_s) * n_theta_s,
+            _inverse_rho_idx=np.zeros(n_surf_s, dtype=int),
+            _inverse_poloidal_idx=np.arange(n_surf_s),
+            _inverse_zeta_idx=np.repeat(np.arange(n_zeta_s), n_theta_s),
         )
 
         # Prefill the frozen interpolator so DESC's dependency resolution

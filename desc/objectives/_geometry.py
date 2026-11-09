@@ -1221,13 +1221,16 @@ class NeutronWallLoading(_Objective):
             ).T
             r_source = rpz2xyz(r_source_rotated_rpz)
 
-            diffs = r_surface[:, None, :] - r_source[None, :, :]
-            norms_cubed_inv = 1.0 / (
-                jnp.linalg.norm(diffs, axis=-1, keepdims=True) ** 3
-            )
-            kernel = diffs * norms_cubed_inv
-
-            projection = jnp.einsum("si,sji->sj", normal_rhos, kernel)
+            # per-component to avoid (surface, source, 3) arrays, which blow up in AD
+            dx = r_surface[:, 0, None] - r_source[None, :, 0]
+            dy = r_surface[:, 1, None] - r_source[None, :, 1]
+            dz = r_surface[:, 2, None] - r_source[None, :, 2]
+            dist2 = dx * dx + dy * dy + dz * dz
+            projection = (
+                normal_rhos[:, 0, None] * dx
+                + normal_rhos[:, 1, None] * dy
+                + normal_rhos[:, 2, None] * dz
+            ) / (dist2 * jnp.sqrt(dist2))
             corrected_projection = jnp.where(projection < 0, 0.0, projection)
 
             nwl_contribution = (corrected_projection @ source_strength) / (4 * jnp.pi)

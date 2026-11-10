@@ -12,6 +12,7 @@ __all__ = [
     "contract_equilibrium",
     "ensure_positive_jacobian",
     "flip_helicity",
+    "flip_magnetic_field",
     "flip_theta",
     "rescale",
     "rotate_zeta",
@@ -98,6 +99,13 @@ def flip_magnetic_field(eq):
             flip_magnetic_field(e)
         return eq
 
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_magnetic_field.",
+    )
+
     eq.Psi *= -1
 
     if eq.current is not None:
@@ -125,6 +133,13 @@ def flip_helicity(eq):
         for e in eq:
             flip_helicity(e)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_helicity.",
+    )
 
     if eq.iota is not None:
         eq.iota *= -1
@@ -170,6 +185,13 @@ def flip_theta(eq):
         for e in eq:
             flip_theta(e)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by flip_theta.",
+    )
 
     rone = np.ones_like(eq.R_lmn)
     rone[eq.R_basis.modes[:, 1] % 2 == 1] *= -1
@@ -228,6 +250,13 @@ def rescale(
         for e in eq:
             rescale(e, L, B)
         return eq
+
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rescale.",
+    )
 
     assert len(L) == 2
     assert len(B) == 2
@@ -326,7 +355,15 @@ def rotate_zeta(eq, angle, copy=False):
     -------
     eq_rotated : Equilibrium
         Equilibrium rotated about the toroidal direction
+
     """
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by rotate_zeta.",
+    )
+
     eq_rotated = eq.copy() if copy else eq
     # We will apply the rotation in NFP domain
     angle = angle * eq.NFP
@@ -418,6 +455,13 @@ def contract_equilibrium(
         ValueError,
         f"Surface must be in the range 0 < inner_rho < 1, instead got {inner_rho}.",
     )
+    warnif(
+        hasattr(eq.surface, "Phi_mn"),
+        UserWarning,
+        "The Equilibrium has a sheet current, "
+        "which may not be handled correctly by contract_equilibrium.",
+    )
+
     profile_num_points = setdefault(profile_num_points, eq.L_grid)
 
     def scale_profile(profile, rho):

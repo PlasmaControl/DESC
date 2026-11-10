@@ -233,8 +233,17 @@ class _Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
-            if isinstance(self, ScaledProfile):
-                self._scale *= x
+            if (
+                isinstance(self, ScaledProfile)
+                or isinstance(self, PowerSeriesProfile)
+                or isinstance(self, SplineProfile)
+                or isinstance(self, HermiteSplineProfile)
+                or isinstance(self, FourierZernikeProfile)
+            ):
+                self.params *= x
+                return self
+            if isinstance(self, TwoPowerProfile):
+                self.params *= np.array([x, 1, 1])
                 return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
@@ -1178,7 +1187,7 @@ class MTanhProfile(_Profile):
 
         if params is None:
             params = [0, 0, 1, 1, 0]
-        self._params = params
+        self._params = jnp.atleast_1d(jnp.asarray(params))
 
     def __repr__(self):
         """Get the string form of the object."""

@@ -616,12 +616,12 @@ class TestBootstrapCompute:
                 target_nu_i_star = target_nu_star
                 # Make up some profiles
                 ne = PowerSeriesProfile([1.0e17], modes=[0])
-                ni = ne * (1 / Zeff)
+                ni = ne.copy() * (1 / Zeff)
                 Te = PowerSeriesProfile([1.0e5], modes=[0])
                 Ti_over_Te = np.sqrt(
                     4.9 * Zeff * Zeff * target_nu_e_star / (6.921 * target_nu_i_star)
                 )
-                Ti = PowerSeriesProfile([1.0e5 * Ti_over_Te], modes=[0])
+                Ti = Te.copy() * Ti_over_Te
                 rho = np.ones(n_f_t)
                 helicity_N = 0
                 G = 32.0 - rho * rho  # Doesn't matter

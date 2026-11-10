@@ -233,19 +233,17 @@ class _Profile(IOAble, ABC):
     def __mul__(self, x):
         """Multiply this profile by another or a constant."""
         if np.isscalar(x):
-            if isinstance(self, ScaledProfile):
-                self._scale *= x
-                return self
             if (
-                isinstance(self, PowerSeriesProfile)
+                isinstance(self, ScaledProfile)
+                or isinstance(self, PowerSeriesProfile)
                 or isinstance(self, SplineProfile)
                 or isinstance(self, HermiteSplineProfile)
                 or isinstance(self, FourierZernikeProfile)
             ):
-                self._params *= x
+                self.params *= x
                 return self
             if isinstance(self, TwoPowerProfile):
-                self._params *= np.array([x, 1, 1])
+                self.params *= np.array([x, 1, 1])
                 return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):

@@ -66,7 +66,8 @@ class Curve(IOAble, Optimizable, ABC):
             self._rotmat = new.flatten()
         else:
             raise ValueError(
-                f"rotmat should be a 3x3 matrix or 9 element vector, got {new}"
+                "rotmat should be a 3x3 matrix or 9 element vector, "
+                f"got shape {new.shape}"
             )
 
     @property

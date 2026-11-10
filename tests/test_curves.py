@@ -885,9 +885,9 @@ class TestFourierXYCurve:
         c.rotmat = np.ones(9)
         assert c.rotmat.shape == (9,)
         # invalid shape raises ValueError
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"got shape \(3,\)"):
             c.rotmat = [1, 2, 3]
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"got shape \(2, 2\)"):
             c.rotmat = np.zeros((2, 2))
 
     @pytest.mark.unit

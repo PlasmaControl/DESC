@@ -245,7 +245,7 @@ class _Profile(IOAble, ABC):
                 self._params *= x
                 return self
             if isinstance(self, TwoPowerProfile):
-                self._params *= [x, 1, 1]
+                self._params *= np.array([x, 1, 1])
                 return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):

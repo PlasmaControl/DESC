@@ -190,7 +190,7 @@ class TestProfiles:
         assert "FourierZernikeProfile" in str(zp)
         assert "SumProfile" in str(pp + zp)
         assert "ProductProfile" in str(pp * zp)
-        assert "ScaledProfile" in str(2 * zp)
+        assert "ScaledProfile" in str(2 * mp)
         assert "PowerProfile" in str(zp**2)
 
     @pytest.mark.unit
@@ -326,29 +326,47 @@ class TestProfiles:
     @pytest.mark.unit
     def test_scaled_profiles(self):
         """Test scaling profiles by a constant."""
-        pp = PowerSeriesProfile(
+        x = np.linspace(0, 1, 50)
+
+        p = TwoPowerProfile(params=[1, 2, 4])
+        f = 3 * p.copy()
+        assert isinstance(f, TwoPowerProfile)
+        assert f.params[0] == 3 * p.params[0]
+        assert all(f.params[1:] == p.params[1:])
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
+
+        p = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
+        f = 3 * p.copy()
+        assert isinstance(f, PowerSeriesProfile)
+        assert all(f.params == 3 * p.params)
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
 
-        f = 3 * pp
-        x = np.linspace(0, 1, 50)
-        np.testing.assert_allclose(f(x), 3 * (pp(x)), atol=1e-3)
+        p = HermiteSplineProfile(f=[0, 1, 0.5], df=[1, 0, -0.5])
+        f = 3 * p.copy()
+        assert isinstance(f, HermiteSplineProfile)
+        assert all(f.params == 3 * p.params)
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
 
-        params = f.params
-        assert params[0] == 3
-        assert all(params[1:] == pp.params)
+        p = p.to_spline(knots=3)
+        f = 3 * p.copy()
+        assert isinstance(f, SplineProfile)
+        assert all(f.params == 3 * p.params)
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
 
-        f.params = 2
-        np.testing.assert_allclose(f(x), 2 * (pp(x)), atol=1e-3)
+        p = p.to_fourierzernike(L=6)
+        f = 3 * p.copy()
+        assert isinstance(f, FourierZernikeProfile)
+        assert all(f.params == 3 * p.params)
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
 
-        f.params = 4 * pp.params
-
-        params = f.params
-        assert params.size == len(pp.params) + 1
-        assert params[0] == 2
-        np.testing.assert_allclose(params[1:], [4, -8, 4])
-        np.testing.assert_allclose(pp.params, [1, -2, 1])
-        np.testing.assert_allclose(f(x), 8 * (pp(x)), atol=1e-3)
+        p = MTanhProfile(params=[0.1, 0.5, 1, 1, 0])
+        f = 3 * p.copy()
+        assert isinstance(f, ScaledProfile)
+        assert f.params[0] == 3
+        assert all(f.params[1:] == p.params)
+        np.testing.assert_allclose(f(x), 3 * (p(x)), atol=1e-3)
 
     @pytest.mark.unit
     def test_powered_profiles(self):
@@ -573,7 +591,7 @@ class TestProfiles:
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )
-        pp2 = pp.copy() * 2
+        pp2 = ScaledProfile(2, pp)
         assert isinstance(pp2, ScaledProfile)
         assert isinstance(pp2._profile, PowerSeriesProfile)
         assert pp2._scale == 2

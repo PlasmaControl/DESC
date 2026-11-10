@@ -236,6 +236,17 @@ class _Profile(IOAble, ABC):
             if isinstance(self, ScaledProfile):
                 self._scale *= x
                 return self
+            if (
+                isinstance(self, PowerSeriesProfile)
+                or isinstance(self, SplineProfile)
+                or isinstance(self, HermiteSplineProfile)
+                or isinstance(self, FourierZernikeProfile)
+            ):
+                self._params *= x
+                return self
+            if isinstance(self, TwoPowerProfile):
+                self._params *= [x, 1, 1]
+                return self
             return ScaledProfile(x, self)
         elif isinstance(x, _Profile):
             return ProductProfile(self, x)
@@ -1178,7 +1189,7 @@ class MTanhProfile(_Profile):
 
         if params is None:
             params = [0, 0, 1, 1, 0]
-        self._params = params
+        self._params = jnp.atleast_1d(jnp.asarray(params))
 
     def __repr__(self):
         """Get the string form of the object."""

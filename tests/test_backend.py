@@ -155,6 +155,31 @@ def test_lstsq():
 
 
 @pytest.mark.unit
+def test_set_device_gpu_uuid(monkeypatch):
+    """Test set_device("gpu") with a GPU UUID or prefix in CUDA_VISIBLE_DEVICES."""
+    import pynvml
+
+    import desc
+
+    uuids = ["GPU-0d1c6a5e-26f4-4b4c-9a51-3a2e1b7c8d90", "GPU-8f3e2d1c-0b9a-4f8e-8d7c"]
+    mem = type("Memory", (), {"total": 1, "used": 0})
+    monkeypatch.setattr(pynvml, "nvmlInit", lambda: None)
+    monkeypatch.setattr(pynvml, "nvmlShutdown", lambda: None)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetCount", lambda: 2)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetHandleByIndex", lambda i: i)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetUUID", lambda h: uuids[h])
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetMemoryInfo", lambda h, version: mem)
+    monkeypatch.setattr(pynvml, "nvmlDeviceGetName", lambda h: f"GPU {h}")
+    monkeypatch.setattr(desc, "config", {"kind": None})
+    for key in ["JAX_PLATFORMS", "CUDA_DEVICE_ORDER"]:  # restored after the test
+        monkeypatch.delenv(key, raising=False)
+    for visible in [uuids[1], "GPU-8f3e"]:  # a UUID, and a prefix as HTCondor sets
+        monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
+        desc.set_device("gpu")
+        assert desc.config["device"] == f"GPU 1 (id={visible})"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "m, n",
     [

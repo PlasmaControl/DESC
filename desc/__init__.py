@@ -63,6 +63,82 @@ BANNER = colored(_BANNER, "magenta")
 config = {"device": None, "avail_mem": None, "kind": None}
 
 
+def _read_cgroup_value(directory, name, stat=False):
+    """Integer in a cgroup file (or a field of memory.stat), None if absent."""
+    try:
+        with open(os.path.join(directory, "memory.stat" if stat else name)) as f:
+            if not stat:
+                value = f.read().strip()
+                return None if value == "max" else int(value)
+            for line in f:
+                key, _, value = line.partition(" ")
+                if key == name:
+                    return int(value)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _cgroup_available_memory(proc="/proc/self/cgroup", root="/sys/fs/cgroup"):
+    """Memory left under the cgroup memory limits of this process, in bytes.
+
+    Batch systems (eg Slurm, PBS, HTCondor) and containers limit the memory of a job
+    with a cgroup, which ``psutil.virtual_memory`` does not see: it reports the
+    memory of the whole machine. Every limit on the process's cgroup and on its
+    parents counts, against the usage of that cgroup without its inactive page
+    cache, which the kernel can reclaim. Both cgroup v2 and the memory controller
+    of cgroup v1 are read.
+
+    Parameters
+    ----------
+    proc : str
+        The file listing the cgroups of the process.
+    root : str
+        Mount point of the cgroup filesystem.
+
+    Returns
+    -------
+    available : float
+        Bytes left under the tightest limit, or ``inf`` if there is none.
+
+    """
+    try:
+        with open(proc) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return float("inf")
+    available = float("inf")
+    for line in lines:
+        parts = line.split(":", 2)
+        if len(parts) != 3:
+            continue
+        hierarchy, controllers, path = parts
+        if hierarchy == "0" and controllers == "":  # cgroup v2
+            base = root
+            names = ("memory.max", "memory.current", "inactive_file")
+        elif "memory" in controllers.split(","):  # cgroup v1 memory controller
+            base = os.path.join(root, "memory")
+            if not os.path.isdir(base):  # mounted together with other controllers
+                base = os.path.join(root, controllers)
+            names = ("memory.limit_in_bytes", "memory.usage_in_bytes")
+            names += ("total_inactive_file",)
+        else:
+            continue
+        base = os.path.normpath(base)
+        directory = os.path.normpath(base + "/" + path.lstrip("/"))
+        while directory.startswith(base):
+            limit = _read_cgroup_value(directory, names[0])
+            usage = _read_cgroup_value(directory, names[1])
+            # cgroup v1 reports no limit as a number close to 2**63
+            if limit is not None and limit < 2**60 and usage is not None:
+                inactive = _read_cgroup_value(directory, names[2], stat=True) or 0
+                available = min(available, max(limit - (usage - inactive), 0))
+            if directory == base:
+                break
+            directory = os.path.dirname(directory)
+    return available
+
+
 def set_device(kind="cpu", gpuid=None):
     """Sets the device to use for computation.
 
@@ -93,7 +169,10 @@ def set_device(kind="cpu", gpuid=None):
         import psutil
 
         config["device"] = "CPU"
-        config["avail_mem"] = psutil.virtual_memory().available / 1024**3
+        # in a batch job or a container, its cgroup memory limit applies as well
+        config["avail_mem"] = (
+            min(psutil.virtual_memory().available, _cgroup_available_memory()) / 1024**3
+        )
     else:
         os.environ.pop("JAX_PLATFORMS", None)
     if kind == "gpu":

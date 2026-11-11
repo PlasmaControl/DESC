@@ -1,5 +1,7 @@
 """Tests for backend functions."""
 
+import shutil
+
 import numpy as np
 import pytest
 
@@ -228,3 +230,95 @@ def test_qr_multiply(m, n, cond):
     x_np = np.linalg.lstsq(A, b, rcond=None)[0]
     np.testing.assert_allclose(x, x_ref, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
     np.testing.assert_allclose(x, x_np, rtol=1e-8, atol=1e-8 * np.abs(x_np).max())
+
+
+@pytest.mark.unit
+def test_cgroup_available_memory(tmp_path):
+    """The tightest cgroup memory limit of the process and its parents counts."""
+    from desc import _cgroup_available_memory
+
+    gib = 1024**3
+    # cgroup v2: a job inside a user slice, both limited, page cache reclaimable
+    root = tmp_path / "cgroup"
+    job = root / "user" / "job"
+    job.mkdir(parents=True)
+    (root / "user" / "memory.max").write_text(f"{8 * gib}\n")
+    (root / "user" / "memory.current").write_text(f"{3 * gib}\n")
+    (job / "memory.max").write_text(f"{4 * gib}\n")
+    (job / "memory.current").write_text(f"{3 * gib}\n")
+    (job / "memory.stat").write_text(f"anon {2 * gib}\ninactive_file {gib}\n")
+    proc = tmp_path / "proc_cgroup"
+    proc.write_text("0::/user/job\n")
+    assert _cgroup_available_memory(str(proc), str(root)) == 2 * gib
+    # no limits
+    (job / "memory.max").write_text("max\n")
+    (root / "user" / "memory.max").write_text("max\n")
+    assert _cgroup_available_memory(str(proc), str(root)) == float("inf")
+    # cgroup v1 memory controller, its "no limit" a number close to 2**63
+    v1 = root / "memory" / "slurm" / "job_1"
+    v1.mkdir(parents=True)
+    (v1 / "memory.limit_in_bytes").write_text(f"{2 * gib}\n")
+    (v1 / "memory.usage_in_bytes").write_text(f"{gib}\n")
+    (root / "memory" / "memory.limit_in_bytes").write_text(f"{2**63 - 4096}\n")
+    (root / "memory" / "memory.usage_in_bytes").write_text(f"{gib}\n")
+    proc.write_text("12:cpuset:/slurm/job_1\n4:memory:/slurm/job_1\n")
+    assert _cgroup_available_memory(str(proc), str(root)) == gib
+    # cgroup v1 with the memory controller mounted together with another one
+    v1 = root / "cpu,memory" / "slurm" / "job_1"
+    v1.mkdir(parents=True)
+    (v1 / "memory.limit_in_bytes").write_text(f"{3 * gib}\n")
+    (v1 / "memory.usage_in_bytes").write_text(f"{gib}\n")
+    shutil.rmtree(root / "memory")
+    proc.write_text("4:cpu,memory:/slurm/job_1\n")
+    assert _cgroup_available_memory(str(proc), str(root)) == 2 * gib
+    # not in a cgroup at all
+    assert _cgroup_available_memory(str(tmp_path / "none"), str(root)) == float("inf")
+
+
+@pytest.mark.unit
+def test_set_device_cpu_respects_cgroup_limit(monkeypatch):
+    """On CPU, the available memory is no more than the cgroup limit leaves."""
+    import desc
+
+    if desc.config["kind"] != "cpu":
+        pytest.skip("only on CPU")
+    for key in ["kind", "device", "avail_mem"]:
+        monkeypatch.setitem(desc.config, key, desc.config[key])
+    monkeypatch.setenv("JAX_PLATFORMS", "cpu")
+    monkeypatch.setattr(desc, "_cgroup_available_memory", lambda: 0.5 * 1024**3)
+    desc.set_device("cpu")
+    assert desc.config["avail_mem"] == 0.5
+    monkeypatch.setattr(desc, "_cgroup_available_memory", lambda: float("inf"))
+    desc.set_device("cpu")
+    assert 0 < desc.config["avail_mem"] < float("inf")
+
+
+class _FakeGPU:
+    """A device that reports the memory statistics it is given."""
+
+    platform = "gpu"
+
+    def __init__(self, stats):
+        self.stats = stats
+
+    def memory_stats(self):
+        return self.stats
+
+
+@pytest.mark.unit
+def test_jax_available_memory(monkeypatch):
+    """On a GPU, the memory left in JAX's pool counts, not all free memory."""
+    from desc.backend import _jax_available_memory, desc_config
+
+    gib = 1024**3
+    monkeypatch.setitem(desc_config, "avail_mem", 15.0)
+    # JAX's pool: 75% of a 16 GiB GPU, 1 GiB of it in use
+    gpu = _FakeGPU({"bytes_limit": 12 * gib, "bytes_in_use": gib})
+    assert _jax_available_memory(gpu) == 11
+    # a pool larger than the free memory
+    gpu = _FakeGPU({"bytes_limit": 32 * gib, "bytes_in_use": 0})
+    assert _jax_available_memory(gpu) == 15
+    # no pool (eg XLA_PYTHON_CLIENT_ALLOCATOR=platform)
+    assert _jax_available_memory(_FakeGPU(None)) == 15
+    # CPU: the available memory found by set_device
+    assert _jax_available_memory(jax.devices("cpu")[0]) == 15

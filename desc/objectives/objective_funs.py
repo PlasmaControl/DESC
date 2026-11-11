@@ -1,5 +1,7 @@
 """Base classes for objectives."""
 
+from __future__ import annotations
+
 import functools
 from abc import ABC, abstractmethod
 
@@ -397,7 +399,7 @@ class ObjectiveFunction(IOAble):
         assert jac_chunk_size in ["auto", None] or isposint(jac_chunk_size)
 
         self._jac_chunk_size = jac_chunk_size
-        self._objectives = objectives
+        self._objectives = tuple(objectives)
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
         self._built = False
@@ -1151,8 +1153,8 @@ class ObjectiveFunction(IOAble):
         return [obj.constants for obj in self.objectives]
 
     @property
-    def objectives(self):
-        """list: List of objectives."""
+    def objectives(self) -> tuple[_Objective, ...]:
+        """tuple: Tuple of objectives."""
         return self._objectives
 
     @property

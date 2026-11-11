@@ -8,10 +8,10 @@ import pytest
 from qic import Qic
 
 from desc.__main__ import main
-from desc.backend import sign
+from desc.backend import jit, sign
 from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import _map_poloidal_coordinates
+from desc.equilibrium.coords import _is_inside, _map_poloidal_coordinates, is_inside
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
@@ -82,6 +82,99 @@ def test_map_coordinates():
         maxiter=40,
     )
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
+def _boundary_normal_points(eq, n, seed=0):
+    """Points on the boundary and the outward unit normal in their cross-section."""
+    rng = np.random.default_rng(seed)
+    theta = rng.uniform(0, 2 * np.pi, n)
+    zeta = rng.uniform(0, 2 * np.pi, n)
+    grid = Grid(np.column_stack([np.ones(n), theta, zeta]), sort=False)
+    data = eq.compute(["R", "Z", "R_t", "Z_t", "R_r", "Z_r"], grid=grid)
+    nR, nZ = data["Z_t"], -data["R_t"]
+    out = np.sign(nR * data["R_r"] + nZ * data["Z_r"])  # outward: increasing rho
+    norm = np.hypot(nR, nZ)
+    return data["R"], data["Z"], zeta, out * nR / norm, out * nZ / norm
+
+
+@pytest.mark.unit
+def test_is_inside_near_boundary():
+    """Points just inside and just outside the boundary are on the right side."""
+    eq = get("W7-X")
+    R, Z, zeta, nR, nZ = _boundary_normal_points(eq, 500)
+    for delta in [1e-1, 1e-3, 1e-6, 1e-9, 1e-11]:
+        for side in [-1, 1]:
+            coords = np.column_stack(
+                [R + side * delta * nR, zeta, Z + side * delta * nZ]
+            )
+            inside, certified = _is_inside(eq, coords)
+            np.testing.assert_array_equal(inside, side < 0)
+            assert np.all(certified)
+    # the method agrees with the equilibrium method
+    np.testing.assert_array_equal(
+        eq.is_inside(np.column_stack([R - 1e-3 * nR, zeta, Z - 1e-3 * nZ])), True
+    )
+    # single precision input is tested as the double precision points it holds
+    coords = np.column_stack([R + 1e-9 * nR, zeta, Z + 1e-9 * nZ]).astype(np.float32)
+    np.testing.assert_array_equal(
+        is_inside(eq, coords), is_inside(eq, coords.astype(float))
+    )
+
+
+@pytest.mark.unit
+def test_is_inside_jit_and_nonfinite():
+    """The test runs under jit and is False for points with non-finite coordinates."""
+    eq = get("DSHAPE")
+    R0 = eq.compute("R0")["R0"]
+    coords = np.array(
+        [[R0, 0, 0], [R0 + 10, 0, 0], [np.nan, 0, 0], [R0, np.inf, 0], [R0, 0, 0]]
+    )
+    inside = jit(lambda c, p: is_inside(eq, c, p))(coords, eq.params_dict)
+    np.testing.assert_array_equal(inside, [True, False, False, False, True])
+
+
+@pytest.mark.unit
+def test_map_coordinates_mask_outside():
+    """mask_outside masks the points outside and leaves the others as before."""
+    eq = get("HELIOTRON")
+    rng = np.random.default_rng(2)
+    n = 60
+    rtz = np.column_stack(
+        [rng.uniform(0.1, 0.9, n), rng.uniform(0, 2 * np.pi, n), np.zeros(n)]
+    )
+    rtz[1::3, 0] = 1  # on the boundary
+    data = eq.compute(["R", "Z"], grid=Grid(rtz, sort=False))
+    coords = np.column_stack([data["R"], rtz[:, 2], data["Z"]])
+    # every third point outside: 5 m away, or 1e-6 m beyond the boundary
+    outside = np.zeros(n, bool)
+    outside[0::3] = True
+    coords[0::6, 0] += 5
+    edge = np.column_stack([np.ones(n), rtz[:, 1], rtz[:, 2]])
+    edge = eq.compute(["R", "Z", "R_r", "Z_r"], grid=Grid(edge, sort=False))
+    norm = np.hypot(edge["R_r"], edge["Z_r"])
+    coords[3::6, 0] = (edge["R"] + 1e-6 * edge["R_r"] / norm)[3::6]
+    coords[3::6, 2] = (edge["Z"] + 1e-6 * edge["Z_r"] / norm)[3::6]
+
+    inbasis = ("R", "phi", "Z")
+    guess = rtz + np.array([-0.05, 0.05, 0])
+    kwargs = dict(guess=guess, tol=1e-10, full_output=True)
+    out0, (res0, niter0) = eq.map_coordinates(coords, inbasis, **kwargs)
+    out, (res, niter) = eq.map_coordinates(coords, inbasis, mask_outside=True, **kwargs)
+    # points inside and points on the boundary are root found as without the mask
+    np.testing.assert_allclose(out[~outside], out0[~outside])
+    np.testing.assert_allclose(res[~outside], res0[~outside])
+    np.testing.assert_array_equal(niter[~outside], niter0[~outside])
+    assert np.all(niter0[~outside] > 0)
+    np.testing.assert_allclose(out[~outside], rtz[~outside], atol=1e-7)
+    assert np.all(np.isnan(out[outside]))
+    assert np.all(np.isinf(res[outside]))
+    np.testing.assert_array_equal(niter[outside], 0)
+    # default unchanged: outside points come back finite
+    assert np.all(np.isfinite(out0))
+    with pytest.raises(ValueError, match="mask_outside"):
+        eq.map_coordinates(
+            rtz, ("rho", "theta", "zeta"), ("R", "phi", "Z"), mask_outside=True
+        )
 
 
 @pytest.mark.unit

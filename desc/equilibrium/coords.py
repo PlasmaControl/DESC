@@ -5,7 +5,17 @@ from functools import partial
 
 import numpy as np
 
-from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
+from desc.backend import (
+    OMEGA_IS_0,
+    fori_loop,
+    jit,
+    jnp,
+    rfft,
+    root,
+    root_scalar,
+    switch,
+    vmap,
+)
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -42,6 +52,7 @@ def map_coordinates(  # noqa: C901
     tol=1e-6,
     maxiter=30,
     full_output=False,
+    mask_outside=False,
     **kwargs,
 ):
     """Transform coordinates given in ``inbasis`` to ``outbasis``.
@@ -83,6 +94,13 @@ def map_coordinates(  # noqa: C901
         the root finding and the second is the number of iterations. The residual
         identifies failed inversions, which are returned as computed (see
         Returns).
+    mask_outside : bool, optional
+        Only for ``inbasis`` made of ``"R"``, ``"phi"`` and ``"Z"``. If True, points
+        outside the last closed flux surface (see ``is_inside``) are not root found:
+        their outputs are NaN, with residual ``inf`` and 0 iterations in ``info``.
+        Points too close to the surface to tell in double precision (about 1e-12
+        m) are root found as usual. Default is False, which leaves every point to
+        the root finding.
     kwargs : dict, optional
         Additional keyword arguments to pass to ``root`` such as ``maxiter_ls``,
         ``alpha``.
@@ -109,6 +127,11 @@ def map_coordinates(  # noqa: C901
     )
     inbasis = tuple(inbasis)
     outbasis = tuple(outbasis)
+    errorif(
+        mask_outside and sorted(inbasis) != ["R", "Z", "phi"],
+        ValueError,
+        f"mask_outside requires inbasis made of R, phi and Z, got {inbasis}.",
+    )
     params = setdefault(params, eq.params_dict)
 
     basis_derivs = tuple(f"{X}_{d}" for X in inbasis for d in ("r", "t", "z"))
@@ -212,6 +235,16 @@ def map_coordinates(  # noqa: C901
 
     yk = fixup(yk)
 
+    if mask_outside:
+        inside, certified = _is_inside(
+            eq, coords[:, [inbasis.index(k) for k in ("R", "phi", "Z")]], params
+        )
+        # only the points certified to be outside are masked
+        keep = inside | ~certified
+        # A masked point starts at the image of its guess, so the root finding
+        # stops there at once instead of running to ``maxiter``.
+        coords = jnp.where(keep[:, None], coords, compute(yk, inbasis))
+
     vecroot = jit(
         vmap(
             lambda x0, *p: root(
@@ -236,9 +269,276 @@ def map_coordinates(  # noqa: C901
         yk = vecroot(yk, coords)
 
     out = compute(yk, outbasis)
+    if mask_outside:
+        out = jnp.where(keep[:, None], out, jnp.nan)
+        if full_output:
+            res = jnp.where(keep, res, jnp.inf)
+            niter = jnp.where(keep, niter, 0)
     if full_output:
         return out, (res, niter)
     return out
+
+
+def is_inside(eq, coords, params=None):
+    """Test whether points given in real space lie inside the plasma.
+
+    Each point (R, ϕ, Z) is tested against the cross-section of the last closed flux
+    surface in its own plane ζ = ϕ: the closed curve
+    γ(θ) = (R(ρ=1, θ, ϕ), Z(ρ=1, θ, ϕ)), whose Fourier coefficients in θ follow
+    from the equilibrium's coefficients ``R_lmn`` and ``Z_lmn`` (every Zernike
+    polynomial is 1 at ρ = 1). A point is inside if the winding number of γ around
+    it is nonzero.
+
+    The winding number is computed from a polygon of samples of γ. It is certified
+    when every chord of the polygon is farther from the point than γ can deviate
+    from the chord (|γ''| Δθ² / 8) plus an a priori bound on the rounding error
+    of the samples, from the sums of the absolute values of the coefficients. Near
+    the boundary the polygon is refined around the point of γ closest to the
+    point. Points closer to γ than that rounding bound (about 1e-12 m for a
+    device of a few meters) cannot be certified in double precision and are
+    assigned by the refined polygon.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium whose last closed flux surface is tested against.
+    coords : ndarray
+        Shape (k, 3).
+        Real space coordinates (R, ϕ, Z) of the points.
+    params : dict
+        Values of equilibrium parameters to use, e.g. ``eq.params_dict``. Only
+        ``R_lmn`` and ``Z_lmn`` are used.
+
+    Returns
+    -------
+    inside : jnp.ndarray
+        Shape (k, ).
+        True for points inside the last closed flux surface, False for points
+        outside it and for points with non-finite coordinates.
+
+    """
+    inside, _ = _is_inside(eq, coords, params)
+    return inside
+
+
+def _is_inside(eq, coords, params=None):
+    """``is_inside`` and whether each answer is certified."""
+    errorif(
+        not OMEGA_IS_0,
+        NotImplementedError,
+        "The inside test assumes ϕ = ζ, which does not hold for a nonzero ω.",
+    )
+    params = setdefault(params, eq.params_dict)
+    M = max(eq.R_basis.M, eq.Z_basis.M)
+    N = max(eq.R_basis.N, eq.Z_basis.N)
+    bases = (eq.R_basis, eq.Z_basis)
+    coeffs = (params["R_lmn"], params["Z_lmn"])
+    B = jnp.stack([_boundary_coefficients(b, c, M, N) for b, c in zip(bases, coeffs)])
+    # sums of the absolute values, for the bound on the rounding error
+    B_abs = jnp.stack(
+        [_boundary_coefficients(b, jnp.abs(c), M, N) for b, c in zip(bases, coeffs)]
+    )
+    L = max(eq.R_basis.L, eq.Z_basis.L)
+    coords = jnp.atleast_2d(jnp.asarray(coords, dtype=float))
+    return _winding_inside(B, B_abs, coords, L=L, N=N, NFP=eq.NFP)
+
+
+def _boundary_coefficients(basis, coeffs, M, N):
+    """Coefficients of a Fourier-Zernike series at ρ = 1.
+
+    Returns
+    -------
+    B : jnp.ndarray
+        Shape (2, 2 N + 1, M + 1). ``B[0, n + N, m]`` multiplies cos(mθ) and
+        ``B[1, n + N, m]`` multiplies sin(mθ), times the toroidal basis function of
+        mode number n (cos(n NFP ζ) for n ≥ 0, sin(|n| NFP ζ) for n < 0).
+
+    """
+    m, n = basis.modes[:, 1], basis.modes[:, 2]
+    index = (np.where(m < 0, 1, 0), n + N, np.abs(m))
+    return jnp.zeros((2, 2 * N + 1, M + 1)).at[index].add(coeffs)
+
+
+def _toroidal_basis(zeta, N, NFP):
+    """Toroidal basis functions of mode numbers -N, ..., N, shape (2 N + 1, k)."""
+    n = np.arange(-N, N + 1)[:, np.newaxis]
+    return jnp.where(n >= 0, jnp.cos(n * NFP * zeta), jnp.sin(-n * NFP * zeta))
+
+
+def _curve(beta, c, s, derivatives=False):
+    """Boundary curve at the angles θ with cos θ = c and sin θ = s.
+
+    ``beta`` has shape (2, 2, M + 1, k) (cos and sin coefficients of R and Z for k
+    points), c and s shape (j, k). Returns γ, shape (2, j, k), and with
+    ``derivatives`` also γ' and γ''. cos mθ and sin mθ come from powers of e^{iθ}.
+    """
+    M = beta.shape[2] - 1
+    cm, sm = jnp.ones_like(c), jnp.zeros_like(c)
+    g = beta[0, :, 0, None] * cm
+    g1 = g2 = jnp.zeros_like(g)
+    for m in range(1, M + 1):
+        cm, sm = cm * c - sm * s, cm * s + sm * c
+        term = beta[0, :, m, None] * cm + beta[1, :, m, None] * sm
+        g = g + term
+        if derivatives:
+            g1 = g1 + m * (beta[1, :, m, None] * cm - beta[0, :, m, None] * sm)
+            g2 = g2 - m * m * term
+    return (g, g1, g2) if derivatives else g
+
+
+def _chord_test(a, b, h):
+    """Crossings of chords a → b of the ray Z = 0, R > 0 and distance test.
+
+    ``a`` and ``b`` are chord end points relative to the query points, shape
+    (2, j, k). Returns the signed crossings (Sunday's rule), shape (j, k), and
+    whether each chord is farther than ``h`` from the query point.
+    """
+    cross = a[0] * b[1] - a[1] * b[0]
+    up = (a[1] <= 0) & (b[1] > 0) & (cross > 0)
+    down = (a[1] > 0) & (b[1] <= 0) & (cross < 0)
+    e = b - a
+    ee = jnp.sum(e * e, axis=0)
+    t = jnp.clip(-jnp.sum(a * e, axis=0) / jnp.where(ee > 0, ee, 1), 0, 1)
+    far = jnp.hypot(a[0] + t * e[0], a[1] + t * e[1]) > h
+    return up.astype(int) - down.astype(int), far
+
+
+@functools.partial(jit, static_argnames=("L", "N", "NFP", "K", "levels"))
+def _winding_inside(B, B_abs, coords, L, N, NFP, K=64, levels=26):
+    """Certified winding number test of points against the boundary.
+
+    Parameters
+    ----------
+    B : jnp.ndarray
+        Shape (2, 2, 2 N + 1, M + 1). Boundary coefficients of R and Z
+        (``_boundary_coefficients``).
+    B_abs : jnp.ndarray
+        The same from the absolute values of the equilibrium's coefficients.
+    coords : jnp.ndarray
+        Shape (k, 3). Points (R, ϕ, Z).
+    L, N, NFP : int
+        Largest radial and toroidal mode numbers, number of field periods.
+    K : int
+        Number of chords of the coarse polygon.
+    levels : int
+        Number of halvings of the chords around the closest point of the curve in
+        the refined polygon.
+
+    Returns
+    -------
+    inside, certified : jnp.ndarray
+        Shape (k, ). Whether each point is inside, and whether that is certified.
+
+    """
+    # in chunks of points, which bounds the memory of the polygons
+    return batch_map(
+        lambda c: _winding_chunk(B, B_abs, c, L, N, NFP, K, levels), coords, 2**14
+    )
+
+
+def _winding_chunk(B, B_abs, coords, L, N, NFP, K, levels):
+    """``_winding_inside`` for a chunk of points."""
+    eps = np.finfo(float).eps
+    finite = jnp.all(jnp.isfinite(coords), axis=-1)
+    R, phi, Z = jnp.where(finite[:, np.newaxis], coords, 0.0).T
+    p = jnp.stack([R, Z])[:, np.newaxis]  # (2, 1, k)
+    beta = jnp.einsum("qcnm,nk->cqmk", B, _toroidal_basis(phi, N, NFP))
+    M = beta.shape[2] - 1
+    m = np.arange(M + 1)
+
+    # Bound on |γ''| and on the rounding error of the samples, from the sums of
+    # the absolute coefficients (the toroidal sums, the arguments n NFP ϕ of the
+    # toroidal functions, and the poloidal sums), doubled, plus the rounding of
+    # the differences to the point.
+    d2 = jnp.linalg.norm(
+        jnp.tensordot(m**2, jnp.hypot(beta[0], beta[1]), axes=[[0], [1]]), axis=0
+    )
+    n = np.abs(np.arange(-N, N + 1)) * NFP
+    S0 = jnp.sum(B_abs, axis=(1, 2, 3))
+    S1 = jnp.sum(B_abs * n[:, np.newaxis], axis=(1, 2, 3))
+    # number of additions and multiplications behind one sample
+    terms = 2 * N + L + 2 * M + 4
+    slack = (
+        2
+        * eps
+        * (
+            jnp.linalg.norm(S0 * terms + jnp.abs(phi)[:, np.newaxis] * S1, axis=-1)
+            + 2 * (jnp.abs(R) + jnp.abs(Z))
+        )
+    )
+
+    # coarse polygon
+    dtheta = 2 * np.pi / K
+    theta = dtheta * np.arange(K)[:, np.newaxis]
+    a = _curve(beta, np.cos(theta), np.sin(theta)) - p  # (2, K, k)
+    b = jnp.roll(a, -1, axis=1)
+    wind, far = _chord_test(a, b, (d2 * dtheta**2 / 8 + slack) * (1 + 1e-12))
+    winding, certified = jnp.sum(wind, axis=0), jnp.all(far, axis=0)
+
+    def refine(beta, p, a, wind, far, d2, slack):
+        # The chords within 2 of the sample nearest to the point are replaced by
+        # a chain whose vertices approach the closest point of the curve there
+        # geometrically, so that every chord of the chain is short compared with
+        # its distance to the point down to the rounding level.
+        window = 2
+        nearest = jnp.argmin(jnp.sum(a * a, axis=0), axis=0)
+        in_window = (np.arange(K)[:, np.newaxis] - nearest + window) % K < 2 * window
+        wind_out = jnp.sum(jnp.where(in_window, 0, wind), axis=0)
+        cert_out = jnp.all(far | in_window, axis=0)
+        lo = (nearest - window) * dtheta
+        hi = (nearest + window) * dtheta
+
+        def newton(_, t):
+            # safeguarded Newton for a minimum of |γ(t) - p|²
+            g, g1, g2 = _curve(beta, jnp.cos(t), jnp.sin(t), derivatives=True)
+            g = g - p
+            f1 = jnp.sum(g * g1, axis=0)
+            f2 = jnp.sum(g1 * g1, axis=0) + jnp.sum(g * g2, axis=0)
+            f2 = jnp.where(f2 > 0, f2, jnp.sum(g1 * g1, axis=0))
+            return jnp.clip(t - f1 / f2, lo, hi)
+
+        t = fori_loop(0, 16, newton, (nearest * dtheta)[np.newaxis])
+        ratio = 0.5 ** np.arange(levels + 1)[:, np.newaxis]
+        chain = jnp.concatenate([t - (t - lo) * ratio, t, t + (hi - t) * ratio[::-1]])
+        g = _curve(beta, jnp.cos(chain), jnp.sin(chain)) - p
+        # the ends of the chain are the coarse samples
+        ends = (nearest - window) % K, (nearest + window) % K
+        first, last = (jnp.take_along_axis(a, e[None, None], axis=1) for e in ends)
+        g = jnp.concatenate([first, g[:, 1:-1], last], axis=1)
+        length = jnp.diff(chain, axis=0)
+        h = (d2 * length**2 / 8 + slack) * (1 + 1e-12)
+        wind_c, far_c = _chord_test(g[:, :-1], g[:, 1:], h)
+        return (
+            wind_out + jnp.sum(wind_c, axis=0),
+            cert_out & jnp.all(far_c, axis=0),
+        )
+
+    # Refine the points the coarse polygon leaves uncertified (the last axis of
+    # each argument): none, at most an eighth of the chunk gathered together, or
+    # all of them.
+    args = (beta, p, a, wind, far, d2, slack)
+    unsure = ~certified & finite
+    num_unsure = jnp.sum(unsure)
+    size = max(coords.shape[0] // 8, 1)
+    idx = jnp.nonzero(unsure, size=size, fill_value=coords.shape[0])[0]
+
+    def some(_):
+        w, c = refine(*(x[..., idx] for x in args))
+        return (
+            winding.at[idx].set(w, mode="drop"),
+            certified.at[idx].set(c, mode="drop"),
+        )
+
+    def every(_):
+        w, c = refine(*args)
+        return jnp.where(certified, winding, w), certified | c
+
+    winding, certified = switch(
+        jnp.where(num_unsure == 0, 0, jnp.where(num_unsure <= size, 1, 2)),
+        [lambda _: (winding, certified), some, every],
+        None,
+    )
+    return (winding != 0) & finite, certified | ~finite
 
 
 def _initial_guess_heuristic(yk, coords, inbasis, eq, profiles):

@@ -8,6 +8,7 @@ New Features
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
 - Adds ``NeutronWallLoading`` objective to compute the neutron wall loading (MW/m²) on a chosen/optimized surface.
 - Adds Python type hints for many API functions. Allows for better autocomplete and error checking when writing DESC scripts in common IDEs.
+- Adds ``Equilibrium.is_inside``, which tells whether points given in real space ``(R, phi, Z)`` lie inside the last closed flux surface, and the option ``mask_outside`` of ``map_coordinates``, which returns NaN for points outside instead of root finding them [#2259](https://github.com/PlasmaControl/DESC/issues/2259). The default behavior of ``map_coordinates`` is unchanged.
 
 Performance Improvements
 

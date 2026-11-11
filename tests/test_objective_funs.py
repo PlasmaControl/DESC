@@ -728,39 +728,39 @@ class TestObjectiveFunction:
         rng = np.random.default_rng(0)
         eq.surface.Phi_mn = 1e6 * rng.standard_normal(eq.surface.Phi_mn.size)
         field = ToroidalMagneticField(B0=1, R0=10)
-        obj = BoundaryError(eq, field, field_fixed=True)
+        obj = ObjectiveFunction(BoundaryError(eq, field, field_fixed=True))
         obj.build(verbose=0)
+        self_consistency = ObjectiveFunction(
+            (BoundaryRSelfConsistency(eq=eq), BoundaryZSelfConsistency(eq=eq))
+        )
+        self_consistency.build(verbose=0)
 
-        A_R = BoundaryRSelfConsistency(eq=eq)
-        A_Z = BoundaryZSelfConsistency(eq=eq)
-        A_R.build(verbose=0)
-        A_Z.build(verbose=0)
-        dR = rng.standard_normal(eq.R_lmn.size) * 1e-2
-        dZ = rng.standard_normal(eq.Z_lmn.size) * 1e-2
+        x = obj.x(eq)
+        idx = eq.x_idx
+        # move R_lmn, Z_lmn with Rb_lmn, Zb_lmn fixed, as in proximal
+        dx = jnp.zeros_like(x)
+        dx = dx.at[idx["R_lmn"]].set(1e-2 * rng.standard_normal(idx["R_lmn"].size))
+        dx = dx.at[idx["Z_lmn"]].set(1e-2 * rng.standard_normal(idx["Z_lmn"].size))
+        # move Rb_lmn, Zb_lmn to stay consistent with R_lmn, Z_lmn at rho=1
+        dxb = jnp.zeros_like(x)
+        dxb = dxb.at[jnp.concatenate([idx["Rb_lmn"], idx["Zb_lmn"]])].set(
+            self_consistency.jvp_unscaled((dx,), x)
+        )
+        np.testing.assert_allclose(
+            self_consistency.jvp_unscaled((dx + dxb,), x), 0, atol=1e-14
+        )
 
-        params = eq.params_dict
-        zeros = jax.tree_util.tree_map(jnp.zeros_like, params)
-        # derivative along R_lmn, Z_lmn with Rb_lmn, Zb_lmn fixed, as in proximal
-        df = jax.jvp(obj.compute, (params,), ({**zeros, "R_lmn": dR, "Z_lmn": dZ},))[1]
         # BoundaryError should not read Rb_lmn, Zb_lmn at all
-        df_b = jax.jvp(
-            obj.compute,
-            (params,),
-            ({**zeros, "Rb_lmn": A_R._A @ dR, "Zb_lmn": A_Z._A @ dZ},),
-        )[1]
-        np.testing.assert_allclose(df_b, 0, atol=1e-12)
+        np.testing.assert_allclose(obj.jvp_scaled_error((dxb,), x), 0, atol=1e-12)
 
-        # central difference moving R_lmn, Z_lmn and Rb_lmn, Zb_lmn consistently
-        def f(h):
-            p = params.copy()
-            p["R_lmn"] = params["R_lmn"] + h * dR
-            p["Z_lmn"] = params["Z_lmn"] + h * dZ
-            p["Rb_lmn"] = params["Rb_lmn"] + h * A_R._A @ dR
-            p["Zb_lmn"] = params["Zb_lmn"] + h * A_Z._A @ dZ
-            return obj.compute(p)
-
+        # derivative along R_lmn, Z_lmn alone should match a central difference
+        # that moves the whole boundary consistently
         h = 1e-4
-        df_fd = (f(h) - f(-h)) / (2 * h)
+        df = obj.jvp_scaled_error((dx,), x)
+        df_fd = (
+            obj.compute_scaled_error(x + h * (dx + dxb))
+            - obj.compute_scaled_error(x - h * (dx + dxb))
+        ) / (2 * h)
         np.testing.assert_allclose(df, df_fd, rtol=1e-5, atol=1e-6 * np.abs(df).max())
 
     @pytest.mark.unit

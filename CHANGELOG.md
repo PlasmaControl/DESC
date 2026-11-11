@@ -21,6 +21,7 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
+- Speeds up ``Equilibrium.map_coordinates`` from ``(rho, alpha, zeta)`` and ``(rho, theta_PEST, zeta)`` by summing lambda over its radial and toroidal modes once per point.
 
 Breaking Changes and Deprecations
 

@@ -9,9 +9,14 @@ from qic import Qic
 
 from desc.__main__ import main
 from desc.backend import sign
+from desc.basis import FourierZernikeBasis
 from desc.compute.utils import get_transforms
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.equilibrium.coords import _map_poloidal_coordinates
+from desc.equilibrium.coords import (
+    _map_poloidal_coordinates,
+    _poloidal_series,
+    _poloidal_series_indices,
+)
 from desc.examples import get
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader, load
@@ -45,6 +50,37 @@ def test_map_PEST_coordinates():
         geom_coords[0, 1] = geom_coords[0, 1] - 2 * np.pi
 
     np.testing.assert_allclose(nodes, geom_coords, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("sym", [False, "sin"])
+@pytest.mark.parametrize("spectral_indexing", ["ansi", "fringe"])
+def test_poloidal_series(spectral_indexing, sym):
+    """Test the series in θ of a FourierZernikeBasis series at given (ρ, ζ)."""
+    basis = FourierZernikeBasis(
+        L=6 if spectral_indexing == "ansi" else 10,
+        M=5,
+        N=3,
+        NFP=3,
+        sym=sym,
+        spectral_indexing=spectral_indexing,
+    )
+    rng = np.random.default_rng(0)
+    c = rng.standard_normal(basis.num_modes)
+    nodes = rng.uniform([0, 0, 0], [1, 2 * np.pi, 2 * np.pi], size=(50, 3))
+    nodes[0, 0] = 0
+    flat, shape = _poloidal_series_indices(basis)
+    a, b = _poloidal_series(c, nodes[:, 0], nodes[:, 2], flat, basis.NFP, shape)
+    m = np.arange(basis.M + 1)
+    cos, sin = np.cos(m * nodes[:, 1:2]), np.sin(m * nodes[:, 1:2])
+    np.testing.assert_allclose(
+        (a * cos + b * sin).sum(axis=-1), basis.evaluate(nodes) @ c, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        (m * (b * cos - a * sin)).sum(axis=-1),
+        basis.evaluate(nodes, np.array([0, 1, 0])) @ c,
+        atol=1e-11,
+    )
 
 
 @pytest.mark.unit

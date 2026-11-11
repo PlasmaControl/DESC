@@ -6,6 +6,7 @@ from functools import partial
 import numpy as np
 
 from desc.backend import OMEGA_IS_0, jit, jnp, rfft, root, root_scalar, vmap
+from desc.basis import fourier, zernike_radial
 from desc.batching import batch_map
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_data_deps, get_profiles, get_transforms
@@ -318,7 +319,7 @@ def _map_PEST_coordinates(
         Each row is a different point in space.
     L_lmn : jnp.ndarray
         Spectral coefficients for lambda.
-    L_basis : Basis
+    L_basis : FourierZernikeBasis
         Spectral basis for lambda.
     guess : jnp.ndarray
         Shape (k, ).
@@ -351,51 +352,149 @@ def _map_PEST_coordinates(
         np.isfinite(period) and period != (2 * jnp.pi),
         msg=f"Period must be ∞ or 2π, but got {period}.",
     )
+    flat, shape = _poloidal_series_indices(L_basis)
+    coords = jnp.atleast_2d(coords)
+    return _map_PEST_kernel(
+        coords,
+        L_lmn,
+        setdefault(guess, coords[:, 1]),  # Assume λ=0 for default initial guess.
+        flat,
+        L_basis.NFP,
+        period,
+        tol,
+        maxiter,
+        shape=shape,
+        full_output=full_output,
+        **kwargs,
+    )
+
+
+def _poloidal_series_indices(basis):
+    """Positions of the modes of a FourierZernikeBasis in a dense array.
+
+    The dense array has shape (2N+1, 2, J, M+1) and is indexed by the toroidal mode
+    number n, cos or sin in θ, the radial index j = (l - |m|)/2 and |m|.
+
+    Parameters
+    ----------
+    basis : FourierZernikeBasis
+        Spectral basis.
+
+    Returns
+    -------
+    flat : ndarray
+        Shape (num modes, ).
+        Position of each mode in the flattened dense array.
+    shape : tuple of int
+        Shape of the dense array.
+
+    """
+    l, m, n = basis.modes.T
+    k = np.abs(m)
+    j = (l - k) // 2
+    shape = (2 * basis.N + 1, 2, int(j.max(initial=0)) + 1, basis.M + 1)
+    flat = np.ravel_multi_index((n + basis.N, (m < 0).astype(int), j, k), shape)
+    return flat, shape
+
+
+def _poloidal_series(L_lmn, rho, zeta, flat, NFP, shape):
+    """Fourier series in θ of a FourierZernikeBasis series at each point (ρ, ζ).
+
+    Sums over the radial and toroidal modes once per point, so that the series
+    f(θ) = Σₘ aₘ cos(mθ) + bₘ sin(mθ) and its derivative cost O(M) per evaluation.
+
+    Parameters
+    ----------
+    L_lmn : jnp.ndarray
+        Spectral coefficients.
+    rho, zeta : jnp.ndarray
+        Shape (k, ).
+        Radial and toroidal coordinates of the points.
+    flat, shape
+        Output of ``_poloidal_series_indices``.
+    NFP : int
+        Number of field periods of the basis.
+
+    Returns
+    -------
+    a, b : jnp.ndarray
+        Shape (k, M+1).
+        Coefficients of cos(mθ) and sin(mθ), m = 0, ..., M.
+
+    """
+    N2, _, J, M1 = shape
+    N = (N2 - 1) // 2
+    C = jnp.zeros(np.prod(shape)).at[flat].add(L_lmn).reshape(N2, -1)
+    toroidal = fourier(zeta[:, jnp.newaxis], jnp.arange(-N, N + 1), NFP)
+    m = np.tile(np.arange(M1), J)
+    radial = zernike_radial(rho[:, jnp.newaxis], m + 2 * np.repeat(np.arange(J), M1), m)
+    ab = jnp.einsum(
+        "kcjm,kjm->kcm",
+        (toroidal @ C).reshape(-1, 2, J, M1),
+        radial.reshape(-1, J, M1),
+    )
+    return ab[:, 0], ab[:, 1]
+
+
+def _fourier_series(a, b, theta):
+    """Σₘ aₘ cos(mθ) + bₘ sin(mθ) and its derivative in θ, for scalar θ."""
+    c1, s1 = jnp.cos(theta), jnp.sin(theta)
+    c, s = 1.0, 0.0
+    f, df = a[0], 0.0
+    for m in range(1, a.shape[-1]):
+        c, s = c * c1 - s * s1, s * c1 + c * s1
+        f = f + a[m] * c + b[m] * s
+        df = df + m * (b[m] * c - a[m] * s)
+    return f, df
+
+
+@partial(jit, static_argnames=["shape", "full_output"])
+def _map_PEST_kernel(
+    coords,
+    L_lmn,
+    guess,
+    flat,
+    NFP,
+    period,
+    tol,
+    maxiter,
+    *,
+    shape,
+    full_output,
+    **kwargs,
+):
+    """Newton iteration of ``_map_PEST_coordinates`` on the series in θ of λ."""
+    rho, theta_PEST, zeta = coords.T
+    a, b = _poloidal_series(L_lmn, rho, zeta, flat, NFP, shape)
 
     # Root finding for θₖ such that r(θₖ) = ϑₖ(ρ, θₖ, ζ) − ϑ = 0.
-    def rootfun(theta, theta_PEST, rho, zeta):
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A = L_basis.evaluate(nodes)
-        lmbda = A @ L_lmn
-        theta_PEST_k = theta + lmbda
-        return _fixup_residual(theta_PEST_k - theta_PEST, period).squeeze()
+    def rootfun(theta, theta_PEST, a, b):
+        lmbda = _fourier_series(a, b, theta)[0]
+        return _fixup_residual(theta + lmbda - theta_PEST, period)
 
-    def jacfun(theta, theta_PEST, rho, zeta):
+    def jacfun(theta, theta_PEST, a, b):
         # Valid everywhere except θ such that θ+λ = k period where k ∈ ℤ.
-        nodes = jnp.array([rho.squeeze(), theta.squeeze(), zeta.squeeze()], ndmin=2)
-        A1 = L_basis.evaluate(nodes, (0, 1, 0))
-        lmbda_t = jnp.dot(A1, L_lmn)
-        return 1 + lmbda_t.squeeze()
+        return 1 + _fourier_series(a, b, theta)[1]
 
     def fixup(x, *args):
         return _periodic(x, period)
 
-    vecroot = jit(
-        vmap(
-            lambda x0, *p: root_scalar(
-                rootfun,
-                x0,
-                jac=jacfun,
-                args=p,
-                fixup=fixup,
-                tol=tol,
-                maxiter=maxiter,
-                full_output=full_output,
-                **kwargs,
-            )
+    theta = vmap(
+        lambda x0, *p: root_scalar(
+            rootfun,
+            x0,
+            jac=jacfun,
+            args=p,
+            fixup=fixup,
+            tol=tol,
+            maxiter=maxiter,
+            full_output=full_output,
+            **kwargs,
         )
-    )
-    rho, theta_PEST, zeta = coords.T
-    theta = vecroot(
-        # Assume λ=0 for default initial guess.
-        setdefault(guess, theta_PEST),
-        theta_PEST,
-        rho,
-        zeta,
-    )
+    )(guess, theta_PEST, a, b)
     if full_output:
         theta, (res, niter) = theta
-    out = jnp.column_stack([rho, jnp.atleast_1d(theta.squeeze()), zeta])
+    out = jnp.column_stack([rho, theta, zeta])
     if full_output:
         return out, (res, niter)
     return out

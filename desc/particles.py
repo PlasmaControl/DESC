@@ -2,10 +2,13 @@
 
 import warnings
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 import equinox as eqx
 import numpy as np
 from diffrax import (
+    RESULTS,
+    AbstractAdaptiveSolver,
     AbstractTerm,
     Event,
     PIDController,
@@ -1011,6 +1014,42 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         )
 
 
+class _Tsit5Unrolled(AbstractAdaptiveSolver):
+    """Tsit5 with unrolled stages, gives the same result as diffrax.Tsit5.
+
+    diffrax loops over the stages, which is slow on GPU when the RHS is cheap. Only
+    for a single term with an array state and no jumps.
+    """
+
+    term_structure: ClassVar = AbstractTerm
+    interpolation_cls: ClassVar = Tsit5.interpolation_cls
+
+    def order(self, terms):
+        """Order of the solver."""
+        return 5
+
+    def init(self, terms, t0, t1, y0, args):
+        """RHS at the initial point, reused as the first stage (FSAL)."""
+        return terms.vf(t0, y0, args)
+
+    def step(self, terms, t0, t1, y0, args, solver_state, made_jump):
+        """Take a single step from t0 to t1."""
+        tableau = Tsit5.tableau
+        dt = t1 - t0
+        k = [solver_state * dt]
+        for a, c in zip(tableau.a_lower, tableau.c):
+            y1 = y0 + sum(ai * ki for ai, ki in zip(a, k))
+            f1 = terms.vf(t0 + c * dt, y1, args)
+            k.append(f1 * dt)
+        k = jnp.stack(k)
+        y_error = jnp.tensordot(tableau.b_error, k, 1)
+        return y1, y_error, dict(y0=y0, y1=y1, k=k), f1, RESULTS.successful
+
+    def func(self, terms, t0, y0, args):
+        """RHS of the ODE."""
+        return terms.vf(t0, y0, args)
+
+
 def trace_particles(
     field,
     initializer,
@@ -1022,7 +1061,7 @@ def trace_particles(
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
-    solver=Tsit5(scan_kind="bounded"),
+    solver=None,
     adjoint=RecursiveCheckpointAdjoint(),
     use_precomputed_source=True,
     chunk_size=None,
@@ -1066,7 +1105,8 @@ def trace_particles(
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates (no bounds).
     solver: diffrax.AbstractSolver, optional
         diffrax Solver object to use in integration. Defaults to
-        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
+        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver. With use_interpolation,
+        defaults to an equivalent Tsit5 with unrolled stages, which is faster on GPU.
     adjoint : diffrax.AbstractAdjoint, optional
         How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
@@ -1150,6 +1190,9 @@ def trace_particles(
         rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
     )
     max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
+    if solver is None:
+        unrolled = use_interpolation is not None
+        solver = _Tsit5Unrolled() if unrolled else Tsit5(scan_kind="bounded")
 
     if use_interpolation is None:
         y0, model_args = initializer.init_particles(model, field)

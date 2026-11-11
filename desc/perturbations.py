@@ -293,7 +293,7 @@ def perturb(  # noqa: C901
 
     # 1st order
     if order > 0:
-        if (weight is None) or (weight == "auto"):
+        if weight is None or (isinstance(weight, str) and weight == "auto"):
             w = jnp.ones((eq.dim_x,))
             if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
                 w = put(
@@ -320,7 +320,7 @@ def perturb(  # noqa: C901
             weight = weight[unfixed_idx]
             weight = jnp.diag(weight)
         else:
-            weight = weight[unfixed_idx, unfixed_idx]
+            weight = weight[unfixed_idx][:, unfixed_idx]
         Z = (1 / D)[unfixed_idx, None] * dxdx_reduced[unfixed_idx]
         W = Z.T @ weight @ Z
         scale_inv = W

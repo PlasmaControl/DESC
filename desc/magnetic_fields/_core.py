@@ -16,6 +16,7 @@ from diffrax import (
     diffeqsolve,
 )
 from interpax import approx_df, interp1d, interp2d, interp3d
+from jax.tree_util import Partial
 from netCDF4 import Dataset, chartostring, stringtochar
 from scipy.constants import mu_0
 
@@ -2613,6 +2614,15 @@ class VectorPotentialField(_MagneticField):
         )
 
 
+def _default_terminating_event(bounds_R, bounds_Z, t, y, args, **kwargs):
+    # Defined at module level and bound to the bounds as float arrays with Partial,
+    # rather than as a closure in field_line_integrate, so that diffeqsolve gets the
+    # same static argument on every call and reuses the compiled integrator.
+    R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
+    Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
+    return jnp.logical_or(R_out, Z_out)
+
+
 def field_line_integrate(
     r0,
     z0,
@@ -2705,13 +2715,9 @@ def field_line_integrate(
     max_steps = setdefault(max_steps, int(abs((phis[-1] - phis[0]) * 1000)))
 
     # diffrax parameters
-    def default_terminating_event(t, y, args, **kwargs):
-        R_out = jnp.logical_or(y[0] < bounds_R[0], y[0] > bounds_R[1])
-        Z_out = jnp.logical_or(y[2] < bounds_Z[0], y[2] > bounds_Z[1])
-        return jnp.logical_or(R_out, Z_out)
-
     saveat = options.pop("saveat", SaveAt(ts=phis))
-    event = options.pop("event", Event(default_terminating_event))
+    bounds = jnp.asarray(bounds_R, dtype=float), jnp.asarray(bounds_Z, dtype=float)
+    event = options.pop("event", Event(Partial(_default_terminating_event, *bounds)))
     adjoint = options.pop("adjoint", RecursiveCheckpointAdjoint())
     stepsize_controller = options.pop(
         "stepsize_controller", PIDController(rtol=rtol, atol=atol, dtmin=min_step_size)

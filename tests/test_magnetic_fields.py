@@ -1254,7 +1254,7 @@ class TestMagneticFields:
         np.testing.assert_allclose(e_fine, max_err(65, 4, "cubic"), rtol=1e-3)
 
     @pytest.mark.unit
-    def test_field_line_integrate(self):
+    def test_field_line_integrate(self, caplog):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
@@ -1265,6 +1265,11 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+        # calling again, also with other bounds, should not compile again
+        with jax.log_compiles():
+            field_line_integrate(r0, z0, phis, field)
+            field_line_integrate(r0, z0, phis, field, bounds_R=(1, 20))
+        assert "Finished XLA compilation" not in caplog.text
 
     @pytest.mark.unit
     def test_field_line_integrate_coil_bs_chunk(self):

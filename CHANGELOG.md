@@ -21,6 +21,7 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
+- ``field_line_integrate`` no longer recompiles its ODE solver on every call: repeated calls with the same inputs reuse the compiled solver.
 
 Breaking Changes and Deprecations
 

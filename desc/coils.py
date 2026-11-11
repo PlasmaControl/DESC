@@ -63,6 +63,7 @@ __all__ = [
     "FourierXYZCoil",
     "MixedCoilSet",
     "SplineXYZCoil",
+    "coil_source_grid",
     "initialize_helical_coils",
     "initialize_modular_coils",
     "initialize_saddle_coils",
@@ -3684,6 +3685,70 @@ def _linking_number(x1, x2, x1_s, x2_s, dx1, dx2):
     small = dx_norm < jnp.finfo(x1.dtype).eps
     ratio = jnp.where(small, 0.0, num / jnp.where(small, 1.0, den))
     return ratio.sum()
+
+
+def _unique_coils(coils):
+    if isinstance(coils, CoilSet):
+        return [c for coil in coils for c in _unique_coils(coil)]
+    return [coils]
+
+
+def coil_source_grid(coils, distance, tol=1e-12) -> LinearGrid:
+    """Estimate a shared source grid for Fourier coil field evaluation.
+
+    Fourier filament quadrature error decays approximately as
+    ``exp(-n * ln(1 + distance / max|x'|))``, where ``x'`` is the derivative
+    with respect to the coil parameter, the rate for points outside a circle.
+    Estimate the point count as
+    ``n = 1.25 * (ln(1 / tol) + 5) / ln(1 + distance / max|x'|)``, taking the
+    maximum speed over all coils.
+
+    Return ``LinearGrid(N=n // 2, NFP=1)`` with at least as many points as
+    each coil's default grid, whose resolution is ``2 * coil.N * coil.NFP + 5``.
+    This is an error estimate, not a guarantee. Existing defaults are unchanged.
+
+    Use the result as ``source_grid`` for ``compute_magnetic_field`` or
+    ``compute_magnetic_vector_potential``, or as ``field_grid`` for objectives.
+    Raises ``ValueError`` for invalid distance or tolerance, or for
+    ``SplineXYZCoil``, whose straight-segment field approximation converges
+    algebraically.
+
+    Parameters
+    ----------
+    coils : Coil, CoilSet or MixedCoilSet
+        Fourier coils sharing the returned grid. Supports ``FourierRZCoil``,
+        ``FourierXYZCoil``, ``FourierPlanarCoil`` and ``FourierXYCoil``.
+    distance : float
+        Minimum distance in metres from any evaluation point to any coil
+        filament. Must be positive.
+    tol : float, optional
+        Target relative error, strictly between zero and one.
+        Default is ``1e-12``.
+
+    Returns
+    -------
+    source_grid : LinearGrid
+        Shared source grid with ``NFP=1`` and the estimated resolution.
+
+    """
+    errorif(distance <= 0, ValueError, f"distance must be positive, got {distance}")
+    errorif(not 0 < tol < 1, ValueError, f"tol must be in (0, 1), got {tol}")
+    n_min, speed = 0, 0.0
+    for coil in _unique_coils(coils):
+        errorif(
+            isinstance(coil, SplineXYZCoil),
+            ValueError,
+            "coil_source_grid does not support SplineXYZCoil, whose field is computed "
+            + "from straight segments.",
+        )
+        NFP = getattr(coil, "NFP", 1)
+        n_min = max(n_min, 2 * (2 * coil.N * NFP + 5) + 1)
+        grid = LinearGrid(N=max(128, 4 * coil.N * NFP))
+        x_s = coil.compute("x_s", grid=grid, basis="xyz")["x_s"]
+        speed = max(speed, float(np.max(np.linalg.norm(x_s, axis=-1))))
+    n = 1.25 * (np.log(1 / tol) + 5) / np.log1p(distance / speed)
+    n = max(int(np.ceil(n)), n_min)
+    return LinearGrid(N=n // 2)
 
 
 def initialize_modular_coils(

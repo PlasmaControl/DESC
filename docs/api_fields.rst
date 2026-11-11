@@ -120,7 +120,7 @@ the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-format
 the `save_in_makegrid_format` method.
 
 There are also utility functions for getting an initial guess for coil optimization using modular, helical, or
-saddle coils:
+saddle coils, and for choosing a source grid that computes the coil field to a given accuracy:
 
 .. autosummary::
     :toctree: _api/coils/
@@ -130,3 +130,4 @@ saddle coils:
     desc.coils.initialize_modular_coils
     desc.coils.initialize_helical_coils
     desc.coils.initialize_saddle_coils
+    desc.coils.coil_source_grid

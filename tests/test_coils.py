@@ -16,6 +16,7 @@ from desc.coils import (
     FourierXYZCoil,
     MixedCoilSet,
     SplineXYZCoil,
+    coil_source_grid,
     initialize_helical_coils,
     initialize_modular_coils,
     initialize_saddle_coils,
@@ -1545,6 +1546,61 @@ def test_precomputed_biot_savart_source():
     )
     np.testing.assert_allclose(r_new, r_old, rtol=1e-6, atol=1e-8)
     np.testing.assert_allclose(z_new, z_old, rtol=1e-6, atol=1e-8)
+
+
+@pytest.mark.unit
+def test_coil_source_grid():
+    """Test coil_source_grid against the analytic field of a circular loop."""
+    a, current = 1.0, 1e6
+    coil = FourierPlanarCoil(current=current, center=[0, 0, 0], normal=[0, 0, 1], r_n=a)
+    # points at distance d from the wire, in 8 directions around it
+    d = 0.02
+    th = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    phi = np.linspace(0, 2 * np.pi, 8, endpoint=False) + 0.1
+    th, phi = [x.ravel() for x in np.meshgrid(th, phi)]
+    rho, z = a + d * np.cos(th), d * np.sin(th)
+    # and one point two radii out, where the quadrature converges slowest
+    rho, phi, z = np.append(rho, 3 * a), np.append(phi, 0.1), np.append(z, 0)
+    pts = np.array([rho, phi, z]).T
+
+    # analytic field of a circular loop, with 1 - k^2 formed without cancellation
+    s2 = (a + rho) ** 2 + z**2
+    m1 = ((a - rho) ** 2 + z**2) / s2
+    K, E = scipy.special.ellipkm1(m1), scipy.special.ellipe(1 - m1)
+    c = scipy.constants.mu_0 * current / (2 * np.pi * np.sqrt(s2))
+    q = (a - rho) ** 2 + z**2
+    B_z = c * (K + (a**2 - rho**2 - z**2) / q * E)
+    B_rho = c * z / rho * (-K + (a**2 + rho**2 + z**2) / q * E)
+    B_ref = np.array([B_rho, np.zeros_like(rho), B_z]).T
+    # orientation of the coil's current relative to the formula
+    B_ref *= np.sign(coil.compute_magnetic_field([0, 0, 0])[0, 2])
+    norm = np.linalg.norm(B_ref, axis=-1)
+
+    def err(grid, k=slice(None)):
+        B = coil.compute_magnetic_field(pts[k], basis="rpz", source_grid=grid)
+        return np.max(np.linalg.norm(B - B_ref[k], axis=-1) / norm[k])
+
+    # the default grid is far from converged this close to the wire
+    assert err(None) > 1e-1
+    for tol in [1e-6, 1e-10]:
+        grid = coil_source_grid(coil, d, tol)
+        assert grid.NFP == 1
+        assert err(grid) < tol
+    assert err(coil_source_grid(coil, 2 * a, 1e-10), [-1]) < 1e-10
+
+    # never coarser than the default, and the same grid for a CoilSet
+    coilset = CoilSet(coil.copy(), NFP=3, sym=True, check_intersection=False)
+    assert coil_source_grid(coil, 100.0).num_nodes == 2 * (2 * coil.N + 5) + 1
+    assert (
+        coil_source_grid(coilset, d, 1e-10).num_nodes
+        == coil_source_grid(coil, d, 1e-10).num_nodes
+    )
+    with pytest.raises(ValueError, match="SplineXYZCoil"):
+        coil_source_grid(
+            MixedCoilSet(coil, coil.to_SplineXYZ(), check_intersection=False), d
+        )
+    with pytest.raises(ValueError, match="distance"):
+        coil_source_grid(coil, 0.0)
 
 
 @pytest.mark.unit

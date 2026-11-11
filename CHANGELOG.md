@@ -21,6 +21,7 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
+- Surface labels (``FourierRZToroidalSurface.rho``, ``ZernikeRZToroidalSection.zeta``) are now stored as float64, so surfaces labelled with an int or a float share compiled code instead of recompiling, e.g. after ``eq.surface = eq.get_surface_at(rho=1.0)``.
 
 Breaking Changes and Deprecations
 

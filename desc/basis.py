@@ -1398,6 +1398,8 @@ class BSplineDoubleFourierBasis(_Basis):
     """
 
     _io_attrs_ = _Basis._io_attrs_ + ["_degree", "_knots"]
+    # tells Transform that the (l=0, m=0) radial function is not the constant 1
+    _radial_l0m0_not_one = True
     _static_attrs = _Basis._static_attrs + ["_degree"]
 
     _fft_poloidal = True

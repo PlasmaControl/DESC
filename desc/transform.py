@@ -341,11 +341,19 @@ class Transform(IOAble):
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
             for d in temp_d:
-                self.matrices["direct2"][d[2]] = self.basis.evaluate(
-                    self.dft_grid, d, modes=temp_modes
-                )
+                self.matrices["direct2"][d[2]] = self._toroidal_matrix(d, temp_modes)
 
         self._built = True
+
+    def _toroidal_matrix(self, d, modes):
+        """Toroidal part of the basis for the direct2 method."""
+        B = self.basis.evaluate(self.dft_grid, d, modes=modes)
+        if getattr(self.basis, "_radial_l0m0_not_one", False):
+            # bases whose (l=0, m=0) radial function is not identically 1
+            B = B / self.basis.evaluate(
+                self.dft_grid, np.array([0, 0, 0]), modes=np.array([[0, 0, 0]])
+            )
+        return B
 
     def build_pinv(self):
         """Build the pseudoinverse for fitting."""
@@ -365,9 +373,7 @@ class Transform(IOAble):
             temp_modes = np.hstack(
                 [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
             )
-            B = self.basis.evaluate(
-                self.dft_grid, np.array([0, 0, 0]), modes=temp_modes
-            )
+            B = self._toroidal_matrix(np.array([0, 0, 0]), temp_modes)
             self.matrices["pinvA"] = (
                 jnp.linalg.pinv(A, rtol=rcond) if A.size else np.zeros_like(A.T)
             )

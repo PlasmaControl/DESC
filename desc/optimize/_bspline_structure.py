@@ -13,6 +13,7 @@ unknowns and residuals are ordered radially. This module finds that structure fo
 """
 
 import heapq
+import warnings
 
 import numpy as np
 from scipy.linalg import cho_solve_banded, cholesky_banded
@@ -65,7 +66,7 @@ class BSplineStructure:
         # radial interval of each residual
         row_elem = []
         for obj in objective.objectives:
-            grid = obj.constants["transforms"]["grid"]
+            grid = obj._constants["transforms"]["grid"]
             rho = np.asarray(grid.nodes[:, 0])
             elem = np.clip(np.searchsorted(knots, rho, side="right") - 1, 0, L - 1)
             row_elem.append(np.tile(elem, obj.dim_f // grid.num_nodes))
@@ -146,7 +147,8 @@ class BSplineStructure:
             ):
                 return None
             return cls(objective, tangents)
-        except Exception:  # structure is an optimization only, never fail a solve
+        except Exception as err:  # an optimization only, never fail a solve
+            warnings.warn(f"Could not find the B-spline Jacobian structure: {err!r}")
             return None
 
     def compress(self, tangents):

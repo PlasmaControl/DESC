@@ -158,7 +158,7 @@ if opts.get("init") == "zernike":
     print("after fit: F_norm %.3e axis_R %.6f" % (d0["F_norm"], d0["axis_R"]), flush=True)
 obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=600)
 obj.build(verbose=0)
-nodes = obj.objectives[0].constants["transforms"]["grid"].num_nodes
+nodes = obj.objectives[0]._constants["transforms"]["grid"].num_nodes
 t0 = time.time()
 _, res = eq.solve(
     objective=obj,

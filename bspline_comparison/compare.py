@@ -130,7 +130,7 @@ for key, eq in eqs.items():
 
     obj = ObjectiveFunction(ForceBalance(eq))
     obj.build(verbose=0)
-    nodes = obj.objectives[0].constants["transforms"]["grid"].num_nodes
+    nodes = obj.objectives[0]._constants["transforms"]["grid"].num_nodes
     d0 = diagnostics(eq)
     t0 = time.time()
     _, res = eq.solve(

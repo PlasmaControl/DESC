@@ -66,7 +66,6 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.objectives.normalization import compute_scaling_factors
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
     LinearConstraintProjection,
@@ -2131,16 +2130,12 @@ def test_get_ess_scale():  # noqa: C901
     eq2.surface.change_Phi_resolution(3, 4)
     eq2_scale = eq2._get_ess_scale(alpha, order)
     assert eq2_scale.keys() == set(eq_scale.keys()).union({"I", "G", "Phi_mn"})
-    # sheet current is scaled by the current that changes B at the boundary by ~B
-    norms = compute_scaling_factors(eq2)
-    I0 = norms["B"] * norms["a"] / mu_0
+    # sheet current is scaled by 1/mu_0, the current that changes B by ~1 T over 1 m
     np.testing.assert_allclose(
         eq2_scale["Phi_mn"],
-        I0
-        * np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
-        / np.exp(-alpha),
+        np.exp(-alpha * np.linalg.norm(eq2.surface.Phi_basis.modes, axis=1))
+        / np.exp(-alpha)
+        / mu_0,
     )
-    np.testing.assert_allclose(eq2_scale["I"], 2 * np.pi * I0)
-    np.testing.assert_allclose(
-        eq2_scale["G"], 2 * np.pi * I0 * norms["R0"] / norms["a"]
-    )
+    np.testing.assert_allclose(eq2_scale["I"], 1 / mu_0)
+    np.testing.assert_allclose(eq2_scale["G"], 1 / mu_0)

@@ -12,7 +12,12 @@ from scipy import special
 from scipy.constants import mu_0
 
 from desc.backend import execute_on_cpu, jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    BSplineDoubleFourierBasis,
+    FourierZernikeBasis,
+    fourier,
+    radial_part,
+)
 from desc.compat import ensure_positive_jacobian
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -149,6 +154,12 @@ class Equilibrium(IOAble, Optimizable):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
+    radial_basis : {``'zernike'``, ``'bspline'``}
+        Basis for R, Z and lambda. ``'zernike'`` (default) is the Fourier-Zernike
+        basis. ``'bspline'`` (experimental) uses axis-regular radial B-splines times
+        a double Fourier series; ``L`` is then the number of radial intervals.
+    spline_degree : int
+        Degree of the radial B-splines if ``radial_basis='bspline'``. Default 5.
     check_orientation : bool
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
@@ -191,6 +202,8 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
+        "_radial_basis",
+        "_spline_degree",
     ]
     _static_attrs = Optimizable._static_attrs + [
         "_sym",
@@ -208,6 +221,8 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_radial_basis",
+        "_spline_degree",
     ]
 
     @execute_on_cpu
@@ -236,8 +251,17 @@ class Equilibrium(IOAble, Optimizable):
         spectral_indexing=None,
         check_orientation=True,
         ensure_nested=True,
+        radial_basis="zernike",
+        spline_degree=5,
         **kwargs,
     ):
+        errorif(
+            radial_basis not in ["zernike", "bspline"],
+            ValueError,
+            f"radial_basis should be 'zernike' or 'bspline', got {radial_basis}",
+        )
+        self._radial_basis = radial_basis
+        self._spline_degree = int(spline_degree)
         errorif(
             not isinstance(float(Psi), numbers.Real),
             ValueError,
@@ -315,30 +339,43 @@ class Equilibrium(IOAble, Optimizable):
         self._axis.change_resolution(self.N, sym=self.sym)
 
         # bases
-        self._R_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._R_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._Z_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._L_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
+        if self._radial_basis == "bspline":
+            self._R_basis, self._Z_basis, self._L_basis = (
+                BSplineDoubleFourierBasis(
+                    L=self.L,
+                    M=self.M,
+                    N=self.N,
+                    NFP=self.NFP,
+                    sym=s,
+                    degree=self._spline_degree,
+                )
+                for s in (self._R_sym, self._Z_sym, self._Z_sym)
+            )
+        else:
+            self._R_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._R_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
+            self._Z_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._Z_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
+            self._L_basis = FourierZernikeBasis(
+                L=self.L,
+                M=self.M,
+                N=self.N,
+                NFP=self.NFP,
+                sym=self._Z_sym,
+                spectral_indexing=self.spectral_indexing,
+            )
 
         # profiles
         self._pressure = None
@@ -453,6 +490,8 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if getattr(self, "_radial_basis", None) is None:
+            self._radial_basis = "zernike"
 
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
@@ -615,6 +654,11 @@ class Equilibrium(IOAble, Optimizable):
             Whether to enforce stellarator symmetry.
 
         """
+        errorif(
+            getattr(self, "_radial_basis", "zernike") == "bspline",
+            NotImplementedError,
+            "change_resolution is not implemented for radial_basis='bspline'",
+        )
         warnif(
             L is not None and L < self.L,
             UserWarning,
@@ -722,9 +766,7 @@ class Equilibrium(IOAble, Optimizable):
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
             Js = []
-            zernikeR = zernike_radial(
-                rho, self.R_basis.modes[:, 0], self.R_basis.modes[:, 1]
-            )
+            zernikeR = radial_part(self.R_basis, rho)
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
                     np.logical_and(
@@ -739,9 +781,7 @@ class Equilibrium(IOAble, Optimizable):
             AR[Js[:, 0], np.arange(self.R_basis.num_modes)] = zernikeR
 
             Js = []
-            zernikeZ = zernike_radial(
-                rho, self.Z_basis.modes[:, 0], self.Z_basis.modes[:, 1]
-            )
+            zernikeZ = radial_part(self.Z_basis, rho)
             for i, (l, m, n) in enumerate(self.Z_basis.modes):
                 j = np.argwhere(
                     np.logical_and(

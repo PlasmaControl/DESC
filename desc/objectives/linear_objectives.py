@@ -19,7 +19,7 @@ from desc.backend import (
     tree_map_with_path,
     tree_structure,
 )
-from desc.basis import zernike_radial
+from desc.basis import radial_part
 from desc.geometry import FourierRZCurve
 from desc.utils import broadcast_tree, errorif, setdefault
 
@@ -523,8 +523,8 @@ class BoundaryRSelfConsistency(_Objective):
         Js = np.array(Js)
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
-        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = zernike_radial(
-            surf, eq.R_basis.modes[:, 0], eq.R_basis.modes[:, 1]
+        self._A[Js[:, 0], np.arange(eq.R_basis.num_modes)] = radial_part(
+            eq.R_basis, surf
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -633,8 +633,8 @@ class BoundaryZSelfConsistency(_Objective):
         Js = np.array(Js)
         # Broadcasting at once is faster. We need to use np.arange to avoid
         # setting the value to the whole row.
-        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = zernike_radial(
-            surf, eq.Z_basis.modes[:, 0], eq.Z_basis.modes[:, 1]
+        self._A[Js[:, 0], np.arange(eq.Z_basis.num_modes)] = radial_part(
+            eq.Z_basis, surf
         )
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -722,15 +722,13 @@ class AxisRSelfConsistency(_Objective):
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
+        # value of the radial part of each m=0 mode at the axis (+/-1 for Zernike)
+        axis_vals = radial_part(eq.R_basis, 0.0)
         for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if m != 0:
                 continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
+            j = np.argwhere(n == ns)
+            self._A[j, i] = axis_vals[i]
 
         super().build(use_jit=use_jit, verbose=verbose)
 
@@ -819,15 +817,13 @@ class AxisZSelfConsistency(_Objective):
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
+        # value of the radial part of each m=0 mode at the axis (+/-1 for Zernike)
+        axis_vals = radial_part(eq.Z_basis, 0.0)
         for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if m != 0:
                 continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
+            j = np.argwhere(n == ns)
+            self._A[j, i] = axis_vals[i]
 
         super().build(use_jit=use_jit, verbose=verbose)
 

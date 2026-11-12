@@ -3,11 +3,37 @@
 from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import ConcentricGrid, QuadratureGrid
+import numpy as np
+
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective, collect_docs
+
+
+
+def _default_force_grid(eq):
+    """Default collocation grid for force balance type objectives."""
+    if getattr(eq, "_radial_basis", "zernike") == "bspline":
+        # tensor product grid with Gauss-Legendre nodes in each radial interval
+        knots = eq.R_basis.knots
+        nq = max(2, int(np.ceil(eq.L_grid / eq.L)))
+        x, _ = np.polynomial.legendre.leggauss(nq)
+        rho = (
+            knots[:-1, None] + (x[None, :] + 1) / 2 * np.diff(knots)[:, None]
+        ).flatten()
+        return LinearGrid(
+            rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, axis=False
+        )
+    return ConcentricGrid(
+        L=eq.L_grid,
+        M=eq.M_grid,
+        N=eq.N_grid,
+        NFP=eq.NFP,
+        sym=eq.sym,
+        axis=False,
+    )
 
 
 class ForceBalance(_Objective):
@@ -91,14 +117,7 @@ class ForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
+            grid = _default_force_grid(eq)
         else:
             grid = self._grid
 
@@ -245,14 +264,7 @@ class ForceBalanceAnisotropic(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
+            grid = _default_force_grid(eq)
         else:
             grid = self._grid
 
@@ -381,14 +393,7 @@ class RadialForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
+            grid = _default_force_grid(eq)
         else:
             grid = self._grid
 
@@ -517,14 +522,7 @@ class HelicalForceBalance(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
+            grid = _default_force_grid(eq)
         else:
             grid = self._grid
 
@@ -796,14 +794,7 @@ class CurrentDensity(_Objective):
         """
         eq = self.things[0]
         if self._grid is None:
-            grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-            )
+            grid = _default_force_grid(eq)
         else:
             grid = self._grid
 

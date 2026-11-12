@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 
 from desc.backend import fori_loop, jit, jnp, put
-from desc.basis import zernike_radial
+from desc.basis import BSplineDoubleFourierBasis, zernike_radial
 from desc.geometry import FourierRZCurve, Surface
 from desc.grid import Grid, _Grid
 from desc.io import load
@@ -302,6 +302,8 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         if axis is None:
             axidx = np.where(b_basis.modes[:, 1] == 0)[0]
             axis = jnp.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
+        if isinstance(x_basis, BSplineDoubleFourierBasis):
+            return _initial_guess_surface_bspline(x_basis, b_lmn, b_basis, axis, coord)
 
         # first do all the m != 0 modes, easiest since no special logic needed
         def body(k, x_lmn):
@@ -348,6 +350,45 @@ def _initial_guess_surface(x_basis, b_lmn, b_basis, axis=None, mode=None, coord=
         raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 
     return x_lmn
+
+
+def _initial_guess_surface_bspline(x_basis, b_lmn, b_basis, axis, coord):
+    """Same guess as the Zernike one, fit to the radial spline functions.
+
+    Each boundary mode is scaled as (rho/coord)^|m|, and the m=0 modes go as
+    a_n + (b_n - a_n) (rho/coord)^2 where a_n is the axis.
+    """
+    b_lmn = np.asarray(b_lmn)
+    axis = np.asarray(axis)
+    x_lmn = np.zeros(x_basis.num_modes)
+    # sample points for the radial least squares fits
+    r = np.unique(
+        np.concatenate(
+            [
+                np.linspace(a, b, 2 * x_basis.degree + 2)
+                for a, b in zip(x_basis.knots[:-1], x_basis.knots[1:])
+            ]
+        )
+    )
+    fits = {}
+    for am in np.unique(np.abs(x_basis.modes[:, 1])):
+        nl = int(x_basis.num_radial(am))
+        A = np.asarray(x_basis.radial(r, np.arange(nl), np.full(nl, am)))
+        rhs = [(r / coord) ** am] if am else [np.ones_like(r), (r / coord) ** 2]
+        fits[am] = np.linalg.lstsq(A, np.array(rhs).T, rcond=None)[0]
+    for k, (l, m, n) in enumerate(b_basis.modes):
+        idx = np.where((x_basis.modes[:, 1:] == [m, n]).all(axis=1))[0]
+        if not idx.size:
+            continue
+        ls = x_basis.modes[idx, 0]
+        c = fits[abs(m)]
+        if m != 0:
+            x_lmn[idx] = b_lmn[k] * c[ls, 0]
+        else:
+            ax = np.where(axis[:, 0] == n)[0]
+            a_n = axis[ax[0], 1] if ax.size else b_lmn[k]
+            x_lmn[idx] = a_n * c[ls, 0] + (b_lmn[k] - a_n) * c[ls, 1]
+    return jnp.asarray(x_lmn)
 
 
 def _initial_guess_points(nodes, x, x_basis):

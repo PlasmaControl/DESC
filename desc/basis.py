@@ -19,6 +19,7 @@ __all__ = [
     "ZernikePolynomial",
     "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
+    "BSplineDoubleFourierBasis",
     "ChebyshevPolynomial",
 ]
 
@@ -1363,6 +1364,265 @@ class FourierZernikeBasis(_Basis):
             self._set_up()
 
 
+class BSplineDoubleFourierBasis(_Basis):
+    """3D basis: radial B-splines times a double Fourier series.
+
+    The radial functions for each poloidal mode number m are linear combinations
+    of clamped B-splines of degree ``degree`` on ``L`` radial intervals. The
+    combinations are chosen such that each Fourier mode is regular at the
+    magnetic axis: on the first interval the radial function for mode m is
+    rho^|m| (a_0 + a_1 rho^2 + ...) up to the spline degree, and is identically
+    zero there if |m| > degree (the same conditions GVEC imposes, see
+    Lewis & Bellan 1990). The basis therefore needs no extra axis constraints.
+
+    Parameters
+    ----------
+    L : int
+        Number of radial intervals (elements).
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+    degree : int
+        Polynomial degree of the B-splines. Default 5.
+    knots : array-like, optional
+        Break points in rho, increasing from 0 to 1, length L+1.
+        Defaults to uniform spacing in rho.
+
+    """
+
+    _io_attrs_ = _Basis._io_attrs_ + ["_degree", "_knots"]
+    _static_attrs = _Basis._static_attrs + ["_degree"]
+
+    _fft_poloidal = True
+    _fft_toroidal = True
+
+    def __init__(self, L, M, N, NFP=1, sym=False, degree=5, knots=None):
+        self._L = check_posint(L, "L", False)
+        self._M = check_nonnegint(M, "M", False)
+        self._N = check_nonnegint(N, "N", False)
+        self._NFP = check_posint(NFP, "NFP", False)
+        self._sym = bool(sym) if not sym else str(sym)
+        self._spectral_indexing = "linear"
+        self._degree = check_posint(degree, "degree", False)
+        if knots is None:
+            knots = np.linspace(0, 1, self._L + 1)
+        knots = np.asarray(knots, dtype=float)
+        assert knots.size == self._L + 1, "knots must have length L+1"
+        assert knots[0] == 0 and knots[-1] == 1 and np.all(np.diff(knots) > 0)
+        self._knots = knots
+        self._set_up_radial()
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+        super().__init__()
+
+    def _set_up(self):
+        self._degree = int(self._degree)
+        self._knots = np.asarray(self._knots, dtype=float)
+        self._set_up_radial()
+        super()._set_up()
+
+    def _set_up_radial(self):
+        """Precompute piecewise polynomial coeffs and axis-regular combinations."""
+        from scipy.interpolate import BSpline
+        from scipy.linalg import null_space
+
+        p, L, brk = self._degree, self._L, self._knots
+        nb = L + p  # number of raw B-splines
+        t = np.concatenate([np.zeros(p), brk, np.ones(p)])
+        spl = BSpline(t, np.eye(nb), p)
+        # local Taylor coefficients of every B-spline on every interval,
+        # shape (L, p+1, nb): B_i(rho) = sum_k P[e,k,i] (rho - brk[e])^k
+        self._ppoly = np.stack(
+            [
+                np.stack([spl(brk[e], nu=k) / factorial(k) for k in range(p + 1)])
+                for e in range(L)
+            ]
+        )
+        # derivative j of the first p+1 B-splines at the axis, shape (p+1, p+1)
+        D = self._ppoly[0, :, : p + 1] * np.array(
+            [factorial(k) for k in range(p + 1)]
+        )[:, None]
+        # combination matrices C[m], shape (nb, num_radial(m)), m = 0...p+1
+        C = np.zeros((p + 2, nb, nb))
+        num_radial = np.zeros(p + 2, dtype=int)
+        for m in range(p + 2):
+            # zero all derivatives j<m and all j with parity different from m
+            rows = [j for j in range(p + 1) if (j < m) or ((j - m) % 2 == 1)]
+            ns = null_space(D[rows]) if len(rows) else np.eye(p + 1)
+            nfree = ns.shape[1]
+            assert nfree == (((p - m) // 2 + 1) if m <= p else 0)
+            if nfree:
+                # deterministic, well scaled combination: order by lowest B-spline
+                q, _ = np.linalg.qr(ns[::-1])
+                ns = q[::-1]
+                ns = ns * np.sign(ns[np.argmax(np.abs(ns), axis=0), np.arange(nfree)])
+            C[m, : p + 1, :nfree] = ns
+            nrest = nb - (p + 1)
+            C[m, p + 1 :, nfree : nfree + nrest] = np.eye(nrest)
+            num_radial[m] = nfree + nrest
+        self._C = C
+        self._num_radial = num_radial
+
+    @property
+    def degree(self):
+        """int: Polynomial degree of the radial B-splines."""
+        return self._degree
+
+    @property
+    def knots(self):
+        """ndarray: Radial break points."""
+        return self._knots
+
+    def num_radial(self, m):
+        """Number of radial basis functions for poloidal mode number m."""
+        return self._num_radial[np.minimum(np.abs(m), self._degree + 1)]
+
+    def _get_modes(self, L, M, N):
+        """Get mode numbers [l,m,n]; l indexes the radial functions for each m."""
+        modes = []
+        for m in range(-M, M + 1):
+            for l in range(int(self.num_radial(m))):
+                for n in range(-N, N + 1):
+                    modes.append([l, m, n])
+        return np.array(modes).reshape((-1, 3))
+
+    def radial(self, r, l, m, dr=0):
+        """Evaluate radial basis functions.
+
+        Parameters
+        ----------
+        r : ndarray, shape(K,)
+            Radial coordinates.
+        l, m : ndarray of int, shape(J,)
+            Radial index and poloidal mode number of each function.
+        dr : int
+            Order of radial derivative.
+
+        Returns
+        -------
+        y : ndarray, shape(K,J)
+
+        """
+        p = self._degree
+        r = jnp.atleast_1d(jnp.asarray(r, dtype=float))
+        l = np.atleast_1d(l).astype(int)
+        m = np.atleast_1d(m).astype(int)
+        if dr > p:
+            return jnp.zeros((r.size, l.size))
+        brk = jnp.asarray(self._knots)
+        e = jnp.clip(jnp.searchsorted(brk, r, side="right") - 1, 0, self._L - 1)
+        x = r - brk[e]
+        k = np.arange(dr, p + 1)
+        fac = np.array([factorial(kk) / factorial(kk - dr) for kk in k])
+        xp = x[:, None] ** (k - dr) * fac  # (K, p+1-dr)
+        B = jnp.einsum("ik,ikj->ij", xp, jnp.asarray(self._ppoly)[e][:, dr:, :])
+        W = self._C[np.minimum(np.abs(m), p + 1), :, l].T  # (nb, J)
+        return B @ jnp.asarray(W)
+
+    def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        grid : Grid or ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if not isinstance(grid, _Grid):
+            grid = Grid(grid, sort=False, jitable=True)
+        if modes is None:
+            modes = self.modes
+            midx = self.unique_M_idx
+            nidx = self.unique_N_idx
+            moutidx = self.inverse_M_idx
+            noutidx = self.inverse_N_idx
+        else:
+            midx = moutidx = np.arange(len(modes))
+            nidx = noutidx = np.arange(len(modes))
+        if not len(modes):
+            return np.array([]).reshape((grid.num_nodes, 0))
+
+        r, t, z = grid.nodes.T
+        l, m, n = np.asarray(modes).T
+
+        try:
+            ridx = grid.unique_rho_idx
+            routidx = grid.inverse_rho_idx
+        except AttributeError:
+            ridx = routidx = np.arange(grid.num_nodes)
+        try:
+            tidx = grid.unique_theta_idx
+            toutidx = grid.inverse_theta_idx
+        except AttributeError:
+            tidx = toutidx = np.arange(grid.num_nodes)
+        try:
+            zidx = grid.unique_zeta_idx
+            zoutidx = grid.inverse_zeta_idx
+        except AttributeError:
+            zidx = zoutidx = np.arange(grid.num_nodes)
+
+        r = r[ridx]
+        t = t[tidx]
+        z = z[zidx]
+
+        radial = self.radial(r, l, m, dr=derivatives[0])
+        poloidal = fourier(t[:, np.newaxis], m[midx], 1, derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n[nidx], self.NFP, derivatives[2])
+
+        radial = radial[routidx]
+        poloidal = poloidal[toutidx][:, moutidx]
+        toroidal = toroidal[zoutidx][:, noutidx]
+
+        return radial * poloidal * toroidal
+
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
+        """Change resolution of the basis (uniform knots are regenerated)."""
+        NFP = check_posint(NFP, "NFP")
+        self._NFP = NFP if NFP is not None else self.NFP
+        if (
+            L != self.L
+            or M != self.M
+            or N != self.N
+            or (sym is not None and sym != self.sym)
+        ):
+            if L != self.L:
+                self._knots = np.linspace(0, 1, L + 1)
+            self._L = check_posint(L, "L", False)
+            self._M = check_nonnegint(M, "M", False)
+            self._N = check_nonnegint(N, "N", False)
+            self._sym = sym if sym is not None else self.sym
+            self._set_up_radial()
+            self._modes = self._get_modes(self.L, self.M, self.N)
+            super()._set_up()
+
+    def __hash__(self):
+        """Get the hash of the object."""
+        return hash((super().__hash__(), self._degree, self._knots.tobytes()))
+
+    def __eq__(self, other):
+        """Check if two basis objects are equal."""
+        return (
+            super().__eq__(other)
+            and self.degree == other.degree
+            and np.array_equal(self.knots, other.knots)
+        )
+
+
 class ChebyshevPolynomial(_Basis):
     """Shifted Chebyshev polynomial of the first kind.
 
@@ -1471,6 +1731,28 @@ class ChebyshevPolynomial(_Basis):
             self._L = check_nonnegint(L, "L", False)
             self._modes = self._get_modes(self.L)
             self._set_up()
+
+
+def radial_part(basis, rho):
+    """Radial part of every mode of a 3D flux surface basis at a single radius.
+
+    Parameters
+    ----------
+    basis : FourierZernikeBasis or BSplineDoubleFourierBasis
+        Basis for R, Z or lambda.
+    rho : float
+        Radial coordinate to evaluate at.
+
+    Returns
+    -------
+    y : ndarray, shape(basis.num_modes,)
+        Radial part of each basis function at rho.
+
+    """
+    l, m = basis.modes[:, 0], basis.modes[:, 1]
+    if isinstance(basis, BSplineDoubleFourierBasis):
+        return np.asarray(basis.radial(rho, l, m))[0]
+    return np.asarray(zernike_radial(rho, l, m))
 
 
 def polyder_vec(p, m, exact=False):

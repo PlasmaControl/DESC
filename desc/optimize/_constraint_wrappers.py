@@ -21,6 +21,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
+from ._bspline_structure import CompressedJacobian
 from .utils import f_where_x, normalize_columns
 
 
@@ -418,10 +419,48 @@ class LinearConstraintProjection(ObjectiveFunction):
                     return self._jac(x_reduced, constants, op)
                 return J
             df = jvp(self._compressed_tangents.T, x, constants)
-            return jnp.where(st.mask, df.T[:, st.color], 0.0)
+            return CompressedJacobian(st, df.T).todense()
         v = self._feasible_tangents
         df = jvp(v.T, x, constants)
         return df.T
+
+    def jac_scaled_error_compressed(self, x_reduced, constants=None):
+        """Jacobian of self.compute_scaled_error, without forming the dense matrix.
+
+        Only available if the objective has a radial sparsity structure, see
+        ``desc.optimize._bspline_structure``.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+        constants : list
+            Constant parameters passed to sub-objectives. (Deprecated)
+
+        Returns
+        -------
+        J : CompressedJacobian
+            Jacobian, one column per group of structurally orthogonal variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.jvp_scaled_error(self._compressed_tangents.T, x, constants)
+        J = CompressedJacobian(self._structure, df.T)
+        if not getattr(self, "_compressed_checked", False):
+            # one time check of the assumed sparsity against a plain JVP
+            self._compressed_checked = True
+            v = np.random.default_rng(0).normal(size=self._dim_x_reduced)
+            ref = self._objective.jvp_scaled_error(
+                self._feasible_tangents @ v, x, constants
+            )
+            err = jnp.max(jnp.abs(J @ v - ref)) / jnp.max(jnp.abs(ref))
+            errorif(
+                not err < 1e-8,
+                ValueError,
+                "Compressed Jacobian disagrees with a JVP, relative error "
+                + f"{err:.2e}. Use a different tr_method.",
+            )
+        return J
 
     def jac_scaled(self, x_reduced, constants=None):
         """Compute Jacobian of self.compute_scaled.

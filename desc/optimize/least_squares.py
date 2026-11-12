@@ -1,6 +1,5 @@
 """Function for solving nonlinear least squares problems."""
 
-import numpy as np
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp, qr, qr_multiply
@@ -13,7 +12,7 @@ from .bound_utils import (
     make_strictly_feasible,
     select_step,
 )
-from ._bspline_structure import trust_region_step_banded
+from ._bspline_structure import CompressedJacobian, trust_region_step_block
 from .tr_subproblems import (
     trust_region_step_exact_cho,
     trust_region_step_exact_qr,
@@ -29,6 +28,31 @@ from .utils import (
     scale_columns,
     solve_triangular_regularized,
 )
+
+
+def _rmatvec(J, f):
+    """J.T @ f for a dense or compressed Jacobian."""
+    return J.rmatvec(f) if isinstance(J, CompressedJacobian) else jnp.dot(f, J)
+
+
+def _scale_columns(J, d):
+    """J * d for a dense or compressed Jacobian."""
+    if isinstance(J, CompressedJacobian):
+        return J.scale_columns(d)
+    return scale_columns(J, d)
+
+
+def _jac_scale(J, prev_scale_inv=None):
+    """Scaling factors from the column norms of a dense or compressed Jacobian."""
+    if not isinstance(J, CompressedJacobian):
+        return compute_jac_scale(J, prev_scale_inv)
+    scale_inv = J.column_norms()
+    scale_inv = jnp.where(
+        scale_inv < jnp.finfo(J.dtype).eps * max(J.shape), 1, scale_inv
+    )
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
 
 
 def lsqtr(  # noqa: C901
@@ -189,7 +213,7 @@ def lsqtr(  # noqa: C901
     J = jac(x, *args).block_until_ready()
     njev += 1
     # g is J.T@f and this is equal to f@J for 1D f
-    g = jnp.dot(f, J)
+    g = _rmatvec(J, f)
 
     maxiter = setdefault(maxiter, n * 100)
     max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
@@ -198,7 +222,7 @@ def lsqtr(  # noqa: C901
 
     jac_scale = isinstance(x_scale, str) and x_scale in ["jac", "auto"]
     if jac_scale:
-        scale, scale_inv = compute_jac_scale(J)
+        scale, scale_inv = _jac_scale(J)
     else:
         x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
@@ -213,7 +237,7 @@ def lsqtr(  # noqa: C901
     # we don't need unscaled J anymore, so we overwrite it with J_h = J * d to avoid
     # carrying so many J-sized matrices in memory, which can be large. The buffer is
     # donated so the scaling doesn't allocate a second copy of J.
-    J_h = scale_columns(J, d)
+    J_h = _scale_columns(J, d)
     del J
     g_norm = jnp.linalg.norm(
         (g * v * scale if scaled_termination else g * v), ord=jnp.inf
@@ -242,13 +266,14 @@ def lsqtr(  # noqa: C901
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "qr")
-    # radial sparsity structure for tr_method="banded", see _bspline_structure.py
-    structure = options.pop("structure", None)
+    # tr_method="banded" works on a CompressedJacobian, see _bspline_structure.py
+    compressed = isinstance(J_h, CompressedJacobian)
     errorif(
-        tr_method == "banded" and (structure is None or bounded),
+        (tr_method == "banded") != compressed or (compressed and bounded),
         ValueError,
-        "tr_method='banded' needs an unbounded problem whose Jacobian has a known "
-        "banded structure (an equilibrium solve with a B-spline radial basis).",
+        "tr_method='banded' needs an unbounded problem whose Jacobian is returned "
+        "as a CompressedJacobian (an equilibrium solve with a B-spline radial "
+        "basis), and such a Jacobian needs tr_method='banded'.",
     )
 
     errorif(
@@ -313,8 +338,7 @@ def lsqtr(  # noqa: C901
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
         elif tr_method == "banded":
-            B_h = structure.normal_equations_banded(J_a)
-            g_p = np.asarray(g_h)[structure.perm]
+            B_h = J_a.normal_blocks()
         elif tr_method == "qr":
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
@@ -348,10 +372,9 @@ def lsqtr(  # noqa: C901
                     g_h, B_h, trust_radius, alpha
                 )
             elif tr_method == "banded":
-                step_p, hits_boundary, alpha = trust_region_step_banded(
-                    g_p, B_h, float(trust_radius), float(alpha)
+                step_h, hits_boundary, alpha = trust_region_step_block(
+                    f_a, J_a, *B_h, float(trust_radius), float(alpha)
                 )
-                step_h = jnp.zeros(step_p.size).at[structure.perm].set(step_p)
                 alpha = jnp.float64(alpha)
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
@@ -359,20 +382,25 @@ def lsqtr(  # noqa: C901
                 )
             step = d * step_h  # Trust-region solution in the original space.
 
-            step, step_h, predicted_reduction = select_step(
-                x,
-                J_h,
-                diag_h,
-                g_h,
-                step,
-                step_h,
-                d,
-                trust_radius,
-                lb,
-                ub,
-                theta,
-                mode="jac",
-            )
+            if compressed:
+                # no bounds, so the step is kept and only the model is evaluated
+                Js = J_h @ step_h
+                predicted_reduction = -(0.5 * jnp.dot(Js, Js) + jnp.dot(g_h, step_h))
+            else:
+                step, step_h, predicted_reduction = select_step(
+                    x,
+                    J_h,
+                    diag_h,
+                    g_h,
+                    step,
+                    step_h,
+                    d,
+                    trust_radius,
+                    lb,
+                    ub,
+                    theta,
+                    mode="jac",
+                )
 
             step_h_norm = jnp.linalg.norm(step_h, ord=2)
             step_norm = jnp.linalg.norm(step, ord=2)
@@ -439,10 +467,10 @@ def lsqtr(  # noqa: C901
                 del R
             J = jac(x, *args)
             njev += 1
-            g = jnp.dot(f, J)
+            g = _rmatvec(J, f)
 
             if jac_scale:
-                scale, scale_inv = compute_jac_scale(J, scale_inv)
+                scale, scale_inv = _jac_scale(J, scale_inv)
 
             v, dv = cl_scaling_vector(x, g, lb, ub)
             v = jnp.where(dv != 0, v * scale_inv, v)
@@ -450,7 +478,7 @@ def lsqtr(  # noqa: C901
             diag_h = g * dv * scale
 
             g_h = g * d
-            J_h = scale_columns(J, d)
+            J_h = _scale_columns(J, d)
             del J
             x_norm = jnp.linalg.norm(
                 ((x * scale_inv) if scaled_termination else x), ord=2
@@ -481,7 +509,7 @@ def lsqtr(  # noqa: C901
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     # after overwriting J_h with J*d, we have to revert back and store the
     # unscaled version
-    J_h = scale_columns(J_h, 1 / d)
+    J_h = _scale_columns(J_h, 1 / d)
     result = OptimizeResult(
         x=x,
         success=success,

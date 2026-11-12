@@ -92,7 +92,9 @@ def test_bspline_equilibrium_solve(tmpdir_factory):
 def test_bspline_axis_power():
     """With a rho^m prefactor every mode scales as rho^|m| near the axis."""
     for degree in [5, 7]:
-        basis = BSplineDoubleFourierBasis(L=3, M=9, N=0, degree=degree, axis_power="full")
+        basis = BSplineDoubleFourierBasis(
+            L=3, M=9, N=0, degree=degree, axis_power="full"
+        )
         r = np.array([1e-3, 2e-3])
         rr = np.array([0.05, 0.4, 0.9])
         for m in range(10):
@@ -113,16 +115,41 @@ def test_bspline_axis_power():
                 np.testing.assert_allclose(fd, an, atol=1e-6 * max(1, np.abs(an).max()))
 
 
+def _blocks_to_dense(st, D, E):
+    """Dense matrix from the block tridiagonal storage of BSplineStructure."""
+    D, E = np.asarray(D), np.asarray(E)
+    n = st.num_vars
+    B = np.zeros((n, n))
+    idx = [np.where(st.blk == k)[0] for k in range(st.num_blocks)]
+    for k in range(st.num_blocks):
+        lk = st.loc[idx[k]]
+        B[np.ix_(idx[k], idx[k])] = D[k][np.ix_(lk, lk)]
+        if k + 1 < st.num_blocks:
+            Ek = E[k][np.ix_(st.loc[idx[k + 1]], lk)]
+            B[np.ix_(idx[k + 1], idx[k])] = Ek
+            B[np.ix_(idx[k], idx[k + 1])] = Ek.T
+    return B
+
+
 @pytest.mark.unit
 def test_bspline_structured_jacobian_and_banded_solve():
-    """Grouped-column Jacobian equals the dense one; banded solve converges."""
+    """Compressed Jacobian and block tridiagonal solve agree with dense versions."""
+    from desc.backend import jnp
     from desc.objectives import (
         ForceBalance,
         ObjectiveFunction,
         get_fixed_boundary_constraints,
     )
     from desc.objectives.getters import maybe_add_self_consistency
+    from desc.optimize._bspline_structure import (
+        CompressedJacobian,
+        _block_chol_failed,
+        _block_cholesky,
+        _block_solve,
+        trust_region_step_block,
+    )
     from desc.optimize._constraint_wrappers import LinearConstraintProjection
+    from desc.optimize.tr_subproblems import trust_region_step_exact_qr
 
     ref = get("SOLOVEV")
 
@@ -150,21 +177,104 @@ def test_bspline_structured_jacobian_and_banded_solve():
     st = lcp.structure
     assert st is not None and lcp._structure_jac
     assert st.num_colors < 0.5 * lcp._dim_x_reduced
+    assert st.num_blocks > 2
     x = lcp.x(eq)
     J1 = np.asarray(lcp.jac_scaled_error(x))
+    Jc = lcp.jac_scaled_error_compressed(x)
     lcp._structure_jac = False
     J0 = np.asarray(lcp.jac_scaled_error(x))
-    np.testing.assert_allclose(J1, J0, atol=1e-12 * np.abs(J0).max())
-    # banded normal equations equal the dense ones in the permuted ordering
-    ab = st.normal_equations_banded(J0)
-    B = (J0.T @ J0)[np.ix_(st.perm, st.perm)]
-    u = st.bandwidth
-    for k in [0, 1, u // 2, u]:
-        np.testing.assert_allclose(
-            ab[u - k, k:], np.diag(B, k), atol=1e-12 * np.abs(B).max()
-        )
-    np.testing.assert_allclose(np.triu(B, u + 1), 0, atol=1e-12 * np.abs(B).max())
+    scale = np.abs(J0).max()
 
+    # compressed Jacobian and its operations equal the dense ones
+    np.testing.assert_allclose(J1, J0, atol=1e-12 * scale)
+    np.testing.assert_allclose(Jc.todense(), J0, atol=1e-12 * scale)
+    rng = np.random.default_rng(0)
+    v = rng.normal(size=J0.shape[1])
+    u = rng.normal(size=J0.shape[0])
+    np.testing.assert_allclose(Jc @ v, J0 @ v, atol=1e-12 * np.abs(J0 @ v).max())
+    np.testing.assert_allclose(
+        Jc.rmatvec(u), J0.T @ u, atol=1e-12 * np.abs(J0.T @ u).max()
+    )
+    np.testing.assert_allclose(
+        Jc.column_norms(), np.linalg.norm(J0, axis=0), atol=1e-12 * scale
+    )
+
+    # work with the column scaled Jacobian, as lsqtr does
+    d = 1 / np.where(np.linalg.norm(J0, axis=0) > 1e-12, np.linalg.norm(J0, axis=0), 1)
+    Jc = Jc.scale_columns(jnp.asarray(d))
+    J = Jc.todense()
+    np.testing.assert_allclose(J, J0 * d, atol=1e-6 * np.abs(J).max())
+
+    # block tridiagonal normal equations equal the dense ones
+    D, E = Jc.normal_blocks()
+    B = J.T @ J
+    np.testing.assert_allclose(_blocks_to_dense(st, D, E), B, atol=1e-12)
+
+    # block Cholesky solve equals the dense solve
+    real = np.arange(st.block_size)[None, :] < st.block_sizes[:, None]
+    alpha = 1e-3
+    Ld, Lo = _block_cholesky(D, E, jnp.where(real, alpha, 0.0))
+    assert not _block_chol_failed(Ld, jnp.asarray(real))
+    b = rng.normal(size=st.num_vars)
+    xb = st.from_blocks(_block_solve(Ld, Lo, st.to_blocks(jnp.asarray(b))))
+    xd = np.linalg.solve(B + alpha * np.eye(st.num_vars), b)
+    np.testing.assert_allclose(xb, xd, atol=1e-9 * np.abs(xd).max())
+
+    # trust region step equals the QR based one
+    f = np.asarray(lcp.compute_scaled_error(x))
+    Q, R = np.linalg.qr(J)
+    p_newton = np.linalg.lstsq(J, -f, rcond=None)[0]
+    for radius in [1e-3, 1e-1]:
+        p, hit, _ = trust_region_step_block(jnp.asarray(f), Jc, D, E, radius, 1e-6)
+        pq, hitq, _ = trust_region_step_exact_qr(
+            jnp.asarray(p_newton), jnp.asarray(Q.T @ f), jnp.asarray(R), radius
+        )
+        assert hit and hitq
+        np.testing.assert_allclose(p, pq, atol=1e-8 * radius)
+    # unconstrained step: J.T@J is singular to working precision here, so the
+    # step can differ from the min-norm one in the near null space, but it has
+    # to solve the least squares problem as well
+    p, hit, alpha = trust_region_step_block(jnp.asarray(f), Jc, D, E, 1e10, 1e-6)
+    assert not hit and alpha == 0
+    r_block = np.linalg.norm(J @ np.asarray(p) + f)
+    r_lstsq = np.linalg.norm(J @ p_newton + f)
+    assert r_block < 1e-4 * np.linalg.norm(f)
+    assert r_block < 10 * r_lstsq + 1e-10 * np.linalg.norm(f)
+
+    # exactly singular J.T@J (a zero column): the factorization fails at alpha=0,
+    # falls back to a small shift, and the step still solves the problem
+    j0 = st.num_vars // 2
+    data = np.array(Jc.data)
+    data[:, st.color[j0]] = np.where(
+        np.asarray(st.colmap)[st.row_elem, st.color[j0]] == j0,
+        0.0,
+        data[:, st.color[j0]],
+    )
+    Js = CompressedJacobian(st, jnp.asarray(data))
+    Jd = Js.todense()
+    assert np.all(Jd[:, j0] == 0)
+    Ds, Es = Js.normal_blocks()
+    Ld, _ = _block_cholesky(Ds, Es, jnp.where(real, 0.0, 0.0))
+    assert _block_chol_failed(Ld, jnp.asarray(real))
+    fs = f - Jd @ (0.1 * rng.normal(size=st.num_vars))  # consistent part plus f
+    p, hit, alpha = trust_region_step_block(jnp.asarray(fs), Js, Ds, Es, 1e10, 1e-6)
+    p = np.asarray(p)
+    assert np.all(np.isfinite(p)) and not hit
+    assert abs(p[j0]) < 1e-8 * np.linalg.norm(p)
+    pl = np.linalg.lstsq(Jd, -fs, rcond=None)[0]
+    r_block = np.linalg.norm(Jd @ p + fs)
+    assert r_block < 10 * np.linalg.norm(Jd @ pl + fs) + 1e-10 * np.linalg.norm(fs)
+    # and with a trust region, the same step as QR
+    Q, R = np.linalg.qr(Jd)
+    for radius in [1e-3, 1e-1]:
+        p, hit, _ = trust_region_step_block(jnp.asarray(fs), Js, Ds, Es, radius, 1e-6)
+        pq, hitq, _ = trust_region_step_exact_qr(
+            jnp.asarray(pl), jnp.asarray(Q.T @ fs), jnp.asarray(R), radius
+        )
+        assert hit and hitq
+        np.testing.assert_allclose(p, pq, atol=1e-8 * radius)
+
+    # a short solve with the compressed Jacobian and block solve converges
     grid = QuadratureGrid(30, 18, 0)
     names = ["<|F|>_vol", "<|grad(|B|^2)|/2mu0>_vol"]
     for tr in ["qr", "banded"]:

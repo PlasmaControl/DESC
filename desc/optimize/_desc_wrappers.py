@@ -1,7 +1,7 @@
 from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
-from desc.utils import warnif
+from desc.utils import errorif, warnif
 
 from .aug_lagrangian import fmin_auglag
 from .aug_lagrangian_ls import lsq_auglag
@@ -340,13 +340,21 @@ def _optimize_desc_least_squares(
         options.setdefault("initial_trust_ratio", 0.1)
     options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
+    jac = objective.jac_scaled_error
     if options.get("tr_method") == "banded":
-        options["structure"] = getattr(objective, "structure", None)
+        errorif(
+            getattr(objective, "structure", None) is None,
+            ValueError,
+            "tr_method='banded' needs an equilibrium solve with a B-spline radial "
+            "basis and a force balance objective.",
+        )
+        # keep the Jacobian in compressed form, see _bspline_structure.py
+        jac = objective.jac_scaled_error_compressed
 
     result = lsqtr(
         objective.compute_scaled_error,
         x0=x0,
-        jac=objective.jac_scaled_error,
+        jac=jac,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],

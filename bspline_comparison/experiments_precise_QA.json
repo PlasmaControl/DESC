@@ -1,0 +1,38 @@
+[
+ {
+  "label": "zernike",
+  "F_norm": 0.0001011165545407628,
+  "dR_max": 7.331237903984711e-05,
+  "dZ_max": 0.00010836850981416069,
+  "daxis_R": 1.9312286430039904e-05,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.00010928559142898926,
+  "basis": "zernike",
+  "L": 8,
+  "modes": 385
+ },
+ {
+  "label": "bspline_base",
+  "F_norm": 0.002174278940354957,
+  "dR_max": 0.0024084451135835128,
+  "dZ_max": 0.0036571331045621713,
+  "daxis_R": 0.0007562147268214137,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.0021753918298927223,
+  "basis": "bspline",
+  "L": 2,
+  "modes": 325
+ },
+ {
+  "label": "bspline_L4",
+  "F_norm": 0.00017278749133136823,
+  "dR_max": 0.0006043351758598936,
+  "dZ_max": 0.0008950549588602197,
+  "daxis_R": 2.999562688010826e-05,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.0005033246657260462,
+  "basis": "bspline",
+  "L": 4,
+  "modes": 615
+ }
+]

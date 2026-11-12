@@ -1,0 +1,26 @@
+[
+ {
+  "label": "zernike",
+  "F_norm": 0.00028167906143080083,
+  "dR_max": 0.0027234163107454634,
+  "dZ_max": 0.001958158486717987,
+  "daxis_R": 0.0010906235551644272,
+  "free_profile": "current",
+  "dprofile_max_rel": 0.00017284131641367146,
+  "basis": "zernike",
+  "L": 24,
+  "modes": 598
+ },
+ {
+  "label": "bspline_base",
+  "F_norm": 0.001392792478175007,
+  "dR_max": 0.05110158414878363,
+  "dZ_max": 0.029963407817919285,
+  "daxis_R": -0.04879775853357593,
+  "free_profile": "current",
+  "dprofile_max_rel": 0.003326557352326388,
+  "basis": "bspline",
+  "L": 7,
+  "modes": 603
+ }
+]

@@ -106,5 +106,26 @@
   "solve_time_s": 817.0146796703339,
   "iterations": 150,
   "message": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "label": "zernike_L32",
+  "F_norm": 0.002370380390229674,
+  "dR_max": 0.27059225928249475,
+  "dZ_max": 0.15321421965188034,
+  "daxis_R": -0.29504938940947234,
+  "free_profile": "current",
+  "dprofile_max_rel": 0.010248506012341273,
+  "basis": "zernike",
+  "L": 32,
+  "nq": 1,
+  "degree": 5,
+  "axis_power": "0",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 950,
+  "grid_nodes": 3289,
+  "solve_time_s": 1175.1401271820068,
+  "iterations": 150,
+  "message": "Maximum number of iterations has been exceeded."
  }
 ]

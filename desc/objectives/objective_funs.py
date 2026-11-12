@@ -91,12 +91,11 @@ doc_jac_chunk_size = """
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
         Defaults to ``chunk_size=None``.
-        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC takes the
-        available memory from the cgroup memory limit of the job when there is one.
-        Without such a limit it is unable to accurately estimate the available
-        device memory, so the ``auto`` chunk_size option will yield a larger chunk
-        size than may be needed. It is recommended to manually choose a chunk_size
-        if an OOM error is experienced in this case.
+        Note: When running on a CPU (not a GPU) on a HPC cluster that does not limit
+        the memory of a job with a cgroup, DESC is unable to estimate the available
+        device memory accurately, so the ``auto`` chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
 """
 doc_target_coil = """
     target : float, list, optional
@@ -347,12 +346,11 @@ class ObjectiveFunction(IOAble):
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
         Defaults to ``chunk_size="auto"``.
-        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC takes the
-        available memory from the cgroup memory limit of the job when there is one.
-        Without such a limit it is unable to accurately estimate the available
-        device memory, so the "auto" chunk_size option will yield a larger chunk
-        size than may be needed. It is recommended to manually choose a chunk_size
-        if an OOM error is experienced in this case.
+        Note: When running on a CPU (not a GPU) on a HPC cluster that does not limit
+        the memory of a job with a cgroup, DESC is unable to estimate the available
+        device memory accurately, so the "auto" chunk_size
+        option will yield a larger chunk size than may be needed. It is recommended
+        to manually choose a chunk_size if an OOM error is experienced in this case.
 
     """
 
@@ -539,7 +537,8 @@ class ObjectiveFunction(IOAble):
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
-            estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
+            # (raised from 2.4e-7, which JAX 0.12 exceeded by up to 8%)
+            estimated_memory_usage = 3e-7 * self.dim_f * self.dim_x + 1  # in GB
             avail_mem = _jax_available_memory()
             max_chunk_size = round(
                 (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x

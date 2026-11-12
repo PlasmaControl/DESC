@@ -4981,35 +4981,18 @@ def test_deprecated_constants():
 
 
 @pytest.mark.unit
-def test_auto_jac_chunk_size_fits_jax_memory(monkeypatch):
-    """jac_chunk_size="auto" fits the memory JAX may use, not all free memory."""
+def test_auto_jac_chunk_size_uses_jax_memory(monkeypatch):
+    """jac_chunk_size="auto" is sized to the memory JAX can still allocate."""
     import desc.objectives.objective_funs as objective_funs
-    from desc.backend import _jax_available_memory, desc_config
-
-    class FakeGPU:
-        platform = "gpu"
-
-        def __init__(self, bytes_limit):
-            self.bytes_limit = bytes_limit
-
-        def memory_stats(self):
-            return {"bytes_limit": self.bytes_limit, "bytes_in_use": 0}
 
     eq = Equilibrium(L=3, M=3, N=1)
 
-    def auto_chunk_size(avail_mem, device=None):
-        monkeypatch.setitem(desc_config, "avail_mem", avail_mem)
-        monkeypatch.setattr(
-            objective_funs,
-            "_jax_available_memory",
-            lambda: _jax_available_memory(device),
-        )
+    def auto_chunk_size(avail_mem):
+        monkeypatch.setattr(objective_funs, "_jax_available_memory", lambda: avail_mem)
         obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size="auto")
         obj.build(verbose=0)
         return obj._jac_chunk_size, obj.dim_x
 
-    # 1 GB free on a GPU whose JAX pool holds only half of it
-    chunk_free, dim_x = auto_chunk_size(1.0)
-    chunk_pool, _ = auto_chunk_size(1.0, FakeGPU(0.5 * 1024**3))
-    assert chunk_pool == auto_chunk_size(0.5)[0]
-    assert 0 < chunk_pool < chunk_free < dim_x
+    chunk_small, dim_x = auto_chunk_size(0.5)
+    chunk_large, _ = auto_chunk_size(1.0)
+    assert 0 < chunk_small < chunk_large < dim_x

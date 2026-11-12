@@ -340,6 +340,8 @@ def _optimize_desc_least_squares(
         options.setdefault("initial_trust_ratio", 0.1)
     options = _warn_if_bounds(objective, constraint, x0, options)
     options["max_nfev"] = stoptol["max_nfev"]
+    if options.get("tr_method") == "banded":
+        options["structure"] = getattr(objective, "structure", None)
 
     result = lsqtr(
         objective.compute_scaled_error,

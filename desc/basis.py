@@ -1394,18 +1394,27 @@ class BSplineDoubleFourierBasis(_Basis):
     knots : array-like, optional
         Break points in rho, increasing from 0 to 1, length L+1.
         Defaults to uniform spacing in rho.
+    axis_power : int or ``'full'``
+        Largest power of rho that is factored out of each Fourier mode: the radial
+        functions of mode m are rho^k times splines, with k = min(|m|, axis_power),
+        and the splines carry the remaining axis conditions for |m| - k.
+        ``0`` (default) imposes everything through the splines, so modes with
+        |m| > degree vanish on the first interval. ``'full'`` uses k = |m| for
+        every mode, so no mode has such a dead zone.
 
     """
 
-    _io_attrs_ = _Basis._io_attrs_ + ["_degree", "_knots"]
+    _io_attrs_ = _Basis._io_attrs_ + ["_degree", "_knots", "_axis_power"]
     # tells Transform that the (l=0, m=0) radial function is not the constant 1
     _radial_l0m0_not_one = True
-    _static_attrs = _Basis._static_attrs + ["_degree"]
+    _static_attrs = _Basis._static_attrs + ["_degree", "_axis_power"]
 
     _fft_poloidal = True
     _fft_toroidal = True
 
-    def __init__(self, L, M, N, NFP=1, sym=False, degree=5, knots=None):
+    def __init__(
+        self, L, M, N, NFP=1, sym=False, degree=5, knots=None, axis_power=0
+    ):
         self._L = check_posint(L, "L", False)
         self._M = check_nonnegint(M, "M", False)
         self._N = check_nonnegint(N, "N", False)
@@ -1419,11 +1428,17 @@ class BSplineDoubleFourierBasis(_Basis):
         assert knots.size == self._L + 1, "knots must have length L+1"
         assert knots[0] == 0 and knots[-1] == 1 and np.all(np.diff(knots) > 0)
         self._knots = knots
+        self._axis_power = (
+            int(self._M) if axis_power == "full" else check_nonnegint(axis_power)
+        )
         self._set_up_radial()
         self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
         super().__init__()
 
     def _set_up(self):
+        if getattr(self, "_axis_power", None) is None:
+            self._axis_power = 0
+        self._axis_power = int(self._axis_power)
         self._degree = int(self._degree)
         self._knots = np.asarray(self._knots, dtype=float)
         self._set_up_radial()
@@ -1481,9 +1496,31 @@ class BSplineDoubleFourierBasis(_Basis):
         """ndarray: Radial break points."""
         return self._knots
 
+    @property
+    def axis_power(self):
+        """int: Largest power of rho factored out of the radial functions."""
+        return self._axis_power
+
+    def _split_m(self, m):
+        """Power of rho factored out, and index of the spline axis condition."""
+        m = np.abs(m)
+        k = np.minimum(m, self._axis_power)
+        return k, np.minimum(m - k, self._degree + 1)
+
     def num_radial(self, m):
         """Number of radial basis functions for poloidal mode number m."""
-        return self._num_radial[np.minimum(np.abs(m), self._degree + 1)]
+        return self._num_radial[self._split_m(m)[1]]
+
+    def radial_support(self, l, m):
+        """First and last (inclusive) radial interval where each function is nonzero."""
+        p = self._degree
+        l = np.atleast_1d(l).astype(int)
+        mc = self._split_m(np.atleast_1d(m).astype(int))[1]
+        nfree = self._num_radial[mc] - (self._L - 1)
+        raw = p + 1 + (l - nfree)  # index of the raw B-spline, if not an axis combo
+        first = np.where(l < nfree, 0, raw - p)
+        last = np.where(l < nfree, p, raw)
+        return np.clip(first, 0, self._L - 1), np.clip(last, 0, self._L - 1)
 
     def _get_modes(self, L, M, N):
         """Get mode numbers [l,m,n]; l indexes the radial functions for each m."""
@@ -1515,17 +1552,34 @@ class BSplineDoubleFourierBasis(_Basis):
         r = jnp.atleast_1d(jnp.asarray(r, dtype=float))
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
-        if dr > p:
-            return jnp.zeros((r.size, l.size))
+        k, mc = self._split_m(m)
+        W = jnp.asarray(self._C[mc, :, l].T)  # (nb, J)
         brk = jnp.asarray(self._knots)
         e = jnp.clip(jnp.searchsorted(brk, r, side="right") - 1, 0, self._L - 1)
         x = r - brk[e]
-        k = np.arange(dr, p + 1)
-        fac = np.array([factorial(kk) / factorial(kk - dr) for kk in k])
-        xp = x[:, None] ** (k - dr) * fac  # (K, p+1-dr)
-        B = jnp.einsum("ik,ikj->ij", xp, jnp.asarray(self._ppoly)[e][:, dr:, :])
-        W = self._C[np.minimum(np.abs(m), p + 1), :, l].T  # (nb, J)
-        return B @ jnp.asarray(W)
+        ppoly = jnp.asarray(self._ppoly)[e]
+
+        def spline(d):
+            """d-th derivative of the spline part, shape (K, J)."""
+            if d > p:
+                return jnp.zeros((r.size, l.size))
+            kk = np.arange(d, p + 1)
+            fac = np.array([factorial(i) / factorial(i - d) for i in kk])
+            xp = x[:, None] ** (kk - d) * fac
+            return jnp.einsum("ik,ikj->ij", xp, ppoly[:, d:, :]) @ W
+
+        if not np.any(k):
+            return spline(dr)
+        # Leibniz rule for rho^k * spline
+        out = 0
+        for j in range(dr + 1):
+            kj = k - j
+            coef = np.where(kj >= 0, 1.0, 0.0)
+            for i in range(j):
+                coef = coef * (k - i)
+            power = coef * r[:, None] ** np.maximum(kj, 0)  # d^j/drho^j rho^k
+            out = out + _binom(dr, j) * power * spline(dr - j)
+        return out
 
     def evaluate(self, grid, derivatives=np.array([0, 0, 0]), modes=None):
         """Evaluate basis functions at specified nodes.
@@ -1614,13 +1668,21 @@ class BSplineDoubleFourierBasis(_Basis):
 
     def __hash__(self):
         """Get the hash of the object."""
-        return hash((super().__hash__(), self._degree, self._knots.tobytes()))
+        return hash(
+            (
+                super().__hash__(),
+                self._degree,
+                self._axis_power,
+                self._knots.tobytes(),
+            )
+        )
 
     def __eq__(self, other):
         """Check if two basis objects are equal."""
         return (
             super().__eq__(other)
             and self.degree == other.degree
+            and self.axis_power == other.axis_power
             and np.array_equal(self.knots, other.knots)
         )
 

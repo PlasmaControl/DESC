@@ -1,5 +1,6 @@
 """Function for solving nonlinear least squares problems."""
 
+import numpy as np
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp, qr, qr_multiply
@@ -12,6 +13,7 @@ from .bound_utils import (
     make_strictly_feasible,
     select_step,
 )
+from ._bspline_structure import trust_region_step_banded
 from .tr_subproblems import (
     trust_region_step_exact_cho,
     trust_region_step_exact_qr,
@@ -240,6 +242,14 @@ def lsqtr(  # noqa: C901
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
     tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
     tr_method = options.pop("tr_method", "qr")
+    # radial sparsity structure for tr_method="banded", see _bspline_structure.py
+    structure = options.pop("structure", None)
+    errorif(
+        tr_method == "banded" and (structure is None or bounded),
+        ValueError,
+        "tr_method='banded' needs an unbounded problem whose Jacobian has a known "
+        "banded structure (an equilibrium solve with a B-spline radial basis).",
+    )
 
     errorif(
         len(options) > 0,
@@ -247,9 +257,11 @@ def lsqtr(  # noqa: C901
         "Unknown options: {}".format([key for key in options]),
     )
     errorif(
-        tr_method not in ["cho", "svd", "qr"],
+        tr_method not in ["cho", "svd", "qr", "banded"],
         ValueError,
-        "tr_method should be one of 'cho', 'svd', 'qr', got {}".format(tr_method),
+        "tr_method should be one of 'cho', 'svd', 'qr', 'banded', got {}".format(
+            tr_method
+        ),
     )
 
     callback = setdefault(callback, lambda *args: False)
@@ -300,6 +312,9 @@ def lsqtr(  # noqa: C901
             U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
             B_h = jnp.dot(J_a.T, J_a)
+        elif tr_method == "banded":
+            B_h = structure.normal_equations_banded(J_a)
+            g_p = np.asarray(g_h)[structure.perm]
         elif tr_method == "qr":
             # try full newton step
             tall = J_a.shape[0] >= J_a.shape[1]
@@ -332,6 +347,12 @@ def lsqtr(  # noqa: C901
                 step_h, hits_boundary, alpha = trust_region_step_exact_cho(
                     g_h, B_h, trust_radius, alpha
                 )
+            elif tr_method == "banded":
+                step_p, hits_boundary, alpha = trust_region_step_banded(
+                    g_p, B_h, float(trust_radius), float(alpha)
+                )
+                step_h = jnp.zeros(step_p.size).at[structure.perm].set(step_p)
+                alpha = jnp.float64(alpha)
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(
                     p_newton, Qt_fa, R, trust_radius, alpha
@@ -412,7 +433,7 @@ def lsqtr(  # noqa: C901
             del J_h, J_a
             if tr_method == "svd":
                 del U, s, Vt
-            elif tr_method == "cho":
+            elif tr_method in ["cho", "banded"]:
                 del B_h
             elif tr_method == "qr":
                 del R

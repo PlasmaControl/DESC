@@ -1,6 +1,7 @@
 """Wrappers for doing STELLOPT/SIMSOPT like optimization."""
 
 import functools
+import warnings
 
 import numpy as np
 
@@ -138,6 +139,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # D @ Z with 0 rows for the fixed parameters, see factorize_linear_constraints
         self._feasible_tangents = self._recover.feasible_tangents
         self._dim_x_reduced = self._feasible_tangents.shape[1]
+        self._setup_structure()
 
         self._built = True
         timer.stop(f"{self.name} build")
@@ -235,6 +237,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._feasible_tangents = normalize_columns(
                 self._feasible_tangents, 1 / self._D
             )
+            self._setup_structure(rescale_only=True)
 
         xp = put(xp, unfixed_idx, self._ADinv @ b)
         xp = put(xp, fixed_idx, ((1 / self._D) * xp)[fixed_idx])
@@ -368,10 +371,56 @@ class LinearConstraintProjection(ObjectiveFunction):
             @ self._feasible_tangents
         )
 
+    def _setup_structure(self, rescale_only=False):
+        """Find the radial sparsity structure of the Jacobian, if there is one."""
+        from ._bspline_structure import BSplineStructure
+
+        if not rescale_only:
+            self._structure = BSplineStructure.from_objective(
+                self._objective, self._feasible_tangents
+            )
+            # only worth it if it saves a meaningful number of JVPs
+            if self._structure is not None and (
+                self._structure.num_colors > 0.8 * self._feasible_tangents.shape[1]
+            ):
+                self._structure_jac = False
+            else:
+                self._structure_jac = self._structure is not None
+            self._structure_checked = False
+        if getattr(self, "_structure", None) is not None:
+            self._compressed_tangents = jnp.asarray(
+                self._structure.compress(self._feasible_tangents)
+            )
+
+    @property
+    def structure(self):
+        """BSplineStructure or None: radial sparsity structure of the Jacobian."""
+        return getattr(self, "_structure", None)
+
     def _jac(self, x_reduced, constants=None, op="scaled"):
         x = self.recover(x_reduced)
+        jvp = getattr(self._objective, "jvp_" + op)
+        if getattr(self, "_structure_jac", False):
+            st = self._structure
+            if not self._structure_checked:
+                # one time check of the assumed sparsity against a plain JVP
+                self._structure_checked = True
+                v = np.random.default_rng(0).normal(size=self._dim_x_reduced)
+                ref = jvp(self._feasible_tangents @ v, x, constants)
+                J = self._jac(x_reduced, constants, op)
+                err = jnp.max(jnp.abs(J @ v - ref)) / jnp.max(jnp.abs(ref))
+                if not err < 1e-8:
+                    warnings.warn(
+                        "Structured Jacobian disagrees with a JVP, "
+                        + f"relative error {err:.2e}. Using the dense Jacobian."
+                    )
+                    self._structure_jac = False
+                    return self._jac(x_reduced, constants, op)
+                return J
+            df = jvp(self._compressed_tangents.T, x, constants)
+            return jnp.where(st.mask, df.T[:, st.color], 0.0)
         v = self._feasible_tangents
-        df = getattr(self._objective, "jvp_" + op)(v.T, x, constants)
+        df = jvp(v.T, x, constants)
         return df.T
 
     def jac_scaled(self, x_reduced, constants=None):

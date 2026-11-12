@@ -160,6 +160,12 @@ class Equilibrium(IOAble, Optimizable):
         a double Fourier series; ``L`` is then the number of radial intervals.
     spline_degree : int
         Degree of the radial B-splines if ``radial_basis='bspline'``. Default 5.
+    spline_knots : array-like, optional
+        Radial break points of the B-splines, increasing from 0 to 1, length L+1.
+        Defaults to uniform in rho.
+    spline_axis_power : int or ``'full'``
+        Largest power of rho factored out of each Fourier mode of the spline basis,
+        see ``BSplineDoubleFourierBasis``. Default 0.
     check_orientation : bool
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
@@ -249,6 +255,8 @@ class Equilibrium(IOAble, Optimizable):
         ensure_nested=True,
         radial_basis="zernike",
         spline_degree=5,
+        spline_knots=None,
+        spline_axis_power=0,
         **kwargs,
     ):
         errorif(
@@ -342,6 +350,8 @@ class Equilibrium(IOAble, Optimizable):
                     NFP=self.NFP,
                     sym=s,
                     degree=int(spline_degree),
+                    knots=spline_knots,
+                    axis_power=spline_axis_power,
                 )
                 for s in (self._R_sym, self._Z_sym, self._Z_sym)
             )

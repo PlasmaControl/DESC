@@ -3,6 +3,7 @@
 Usage: python plot_profiles.py NAME:label,label ...   (labels from experiments_NAME.json)
 """
 
+import json
 import sys
 
 import matplotlib
@@ -27,6 +28,12 @@ plt.rcParams.update(
 NICE = {
     "zernike": "Fourier-Zernike re-solve",
     "bspline_base": "B-spline, first attempt",
+    "apfull": "B-spline, rho^m prefactor",
+    "apfull_nq6": "B-spline, rho^m prefactor",
+    "apfull_nq8": "B-spline, rho^m prefactor",
+    "p7_apfull": "B-spline, prefactor, degree 7",
+    "p7_apfull_nq6": "B-spline, prefactor, degree 7",
+    "p7_apfull_nq8": "B-spline, prefactor, degree 7",
 }
 
 cases = [a.split(":") for a in sys.argv[1:]]
@@ -35,7 +42,7 @@ for j, (name, labels) in enumerate(cases):
     ref = np.load(f"exp_{name}_reference.npz")
     rho = ref["rho"]
     # the free profile is the one that is not prescribed: current if iota is given
-    free = "current" if np.ptp(ref["iota"]) > 0 and name != "precise_QA" else "iota"
+    free = json.load(open(f"experiments_{name}.json"))[0]["free_profile"]
     unit = 1e-3 if free == "current" else 1.0
     ylabel = "toroidal current (kA)" if free == "current" else r"rotational transform $\iota$"
     top, bot = axes[0, j], axes[1, j]

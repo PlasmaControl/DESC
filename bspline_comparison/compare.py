@@ -125,7 +125,7 @@ for key, eq in eqs.items():
         xtol=1e-12,
         gtol=1e-12,
         maxiter=maxiter,
-        verbose=1,
+        verbose=2,
     )
     t = time.time() - t0
     d = diagnostics(eq)

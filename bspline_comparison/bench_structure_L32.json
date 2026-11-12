@@ -1,0 +1,29 @@
+[
+ {
+  "L": 32,
+  "method": "dense Jacobian, QR",
+  "modes": 476,
+  "iterations": 60,
+  "time_s": 188.8803243637085,
+  "s_per_iteration": 3.148005406061808,
+  "F_norm": 0.0020205649346853928
+ },
+ {
+  "L": 32,
+  "method": "grouped Jacobian, QR",
+  "modes": 476,
+  "iterations": 60,
+  "time_s": 108.24304413795471,
+  "s_per_iteration": 1.8040507356325786,
+  "F_norm": 0.0018902939370500347
+ },
+ {
+  "L": 32,
+  "method": "grouped Jacobian, banded",
+  "modes": 476,
+  "iterations": 60,
+  "time_s": 50.6067898273468,
+  "s_per_iteration": 0.8434464971224467,
+  "F_norm": 0.002219533550416591
+ }
+]

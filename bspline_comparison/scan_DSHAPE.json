@@ -7,5 +7,50 @@
   "time": 12.691407442092896,
   "nit": 44,
   "msg": "`ftol` condition satisfied. (ftol=1.00e-08)"
+ },
+ {
+  "degree": 5,
+  "L": 8,
+  "modes": 110,
+  "F_norm": 0.00014630684253263588,
+  "time": 79.32744479179382,
+  "nit": 300,
+  "msg": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "degree": 5,
+  "L": 16,
+  "modes": 222,
+  "F_norm": 2.4357413255349385e-05,
+  "time": 209.58661127090454,
+  "nit": 300,
+  "msg": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "degree": 3,
+  "L": 16,
+  "modes": 216,
+  "F_norm": 0.001342204670401585,
+  "time": 199.49866676330566,
+  "nit": 300,
+  "msg": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "degree": 7,
+  "L": 8,
+  "modes": 118,
+  "F_norm": 1.1775686034737751e-05,
+  "time": 87.06425404548645,
+  "nit": 300,
+  "msg": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "degree": 5,
+  "L": 32,
+  "modes": 446,
+  "F_norm": 0.00010359935526748958,
+  "time": 916.4411704540253,
+  "nit": 300,
+  "msg": "Maximum number of iterations has been exceeded."
  }
 ]

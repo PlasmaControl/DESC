@@ -85,5 +85,26 @@
   "solve_time_s": 585.7001824378967,
   "iterations": 80,
   "message": "Maximum number of iterations has been exceeded."
+ },
+ {
+  "label": "p7_apfull_nq6",
+  "F_norm": 0.0007181261599768996,
+  "dR_max": 0.0509902125455568,
+  "dZ_max": 0.03225655361384486,
+  "daxis_R": -0.04699839978804654,
+  "free_profile": "current",
+  "dprofile_max_rel": 0.0030695428895910998,
+  "basis": "bspline",
+  "L": 4,
+  "nq": 6,
+  "degree": 7,
+  "axis_power": "full",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 616,
+  "grid_nodes": 5928,
+  "solve_time_s": 817.0146796703339,
+  "iterations": 150,
+  "message": "Maximum number of iterations has been exceeded."
  }
 ]

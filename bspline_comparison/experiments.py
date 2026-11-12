@@ -6,7 +6,7 @@ Usage:
 
 Keys (defaults in brackets): L [DOF matched], nq [as compare.py] Gauss points per
 radial interval, degree [5], axis_power [0] (int or "full"), first [1.0] size of the
-first radial interval relative to uniform, maxiter [200], tr [qr], init [default
+first radial interval relative to uniform, maxiter [200], tr [qr], basis [bspline, or "zernike" with L] , init [default
 scaled boundary guess, or "zernike" to start from eq_NAME_zernike.h5].
 
 Results are appended to experiments_NAME.json, profiles go to exp_NAME_LABEL.npz.
@@ -127,7 +127,7 @@ nq = int(opts.get("nq", np.ceil((ref.L_grid / 2 + 1) / Ls)))
 # first interval is `first` times the uniform width, the others share the rest
 knots = np.concatenate([[0.0], np.linspace(first / Ls, 1, Ls)]) if Ls > 1 else None
 
-eq = Equilibrium(
+common = dict(
     Psi=ref.Psi,
     NFP=ref.NFP,
     sym=ref.sym,
@@ -139,13 +139,25 @@ eq = Equilibrium(
     pressure=ref.pressure,
     iota=ref.iota,
     current=ref.current,
-    L=Ls,
-    L_grid=nq * Ls,
-    radial_basis="bspline",
-    spline_degree=degree,
-    spline_knots=knots,
-    spline_axis_power=axis_power,
 )
+if opts.get("basis") == "zernike":  # Zernike solve at another radial resolution
+    Ls = int(opts["L"])
+    eq = Equilibrium(
+        L=Ls,
+        L_grid=int(opts.get("L_grid", round(Ls * ref.L_grid / ref.L))),
+        spectral_indexing=ref.spectral_indexing,
+        **common,
+    )
+else:
+    eq = Equilibrium(
+        L=Ls,
+        L_grid=nq * Ls,
+        radial_basis="bspline",
+        spline_degree=degree,
+        spline_knots=knots,
+        spline_axis_power=axis_power,
+        **common,
+    )
 if opts.get("init") == "zernike":
     # start from the converged Zernike re-solve, fit to the spline basis
     zeq = desc.io.load(f"eq_{name}_zernike.h5")
@@ -174,7 +186,7 @@ eq.save(f"eq_{name}_{label}.h5")
 summarize(
     diagnostics(eq),
     dict(
-        basis="bspline",
+        basis=eq.radial_basis,
         L=Ls,
         nq=nq,
         degree=degree,

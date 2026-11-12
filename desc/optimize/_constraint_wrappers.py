@@ -575,11 +575,11 @@ class ProximalProjection(ObjectiveFunction):
         Method to use for computing the pseudo-inverse of the constraint Jacobian.
         Options are:
 
-        - ``'qr'`` (default): QR factorization with a small Levenberg-Marquardt
+        - ``'svd'``: SVD pseudo-inverse with the singular values shifted by
+          the smallest one (default).
+        - ``'qr'``: QR factorization with a small Levenberg-Marquardt
           style Tikhonov regularization, scaled by an estimate of the smallest
           singular value to closely match ``'svd'`` at a fraction of the cost.
-        - ``'svd'``: SVD pseudo-inverse with the singular values shifted by
-          the smallest one (the behavior of previous DESC versions).
     name : str
         Name of the objective function.
     """
@@ -591,7 +591,7 @@ class ProximalProjection(ObjectiveFunction):
         eq,
         perturb_options=None,
         solve_options=None,
-        inv_method="qr",
+        inv_method="svd",
         name="ProximalProjection",
     ):
         assert isinstance(

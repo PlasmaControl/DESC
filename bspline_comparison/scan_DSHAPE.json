@@ -1,0 +1,11 @@
+[
+ {
+  "degree": 5,
+  "L": 4,
+  "modes": 54,
+  "F_norm": 0.001195467582310055,
+  "time": 12.691407442092896,
+  "nit": 44,
+  "msg": "`ftol` condition satisfied. (ftol=1.00e-08)"
+ }
+]

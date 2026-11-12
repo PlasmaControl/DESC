@@ -61,7 +61,8 @@ for j, name in enumerate(names):
     ax.set_title(r"flux surfaces at $\zeta=0$", loc="left")
     ax.set_xlabel("R (m)")
     ax.set_ylabel("Z (m)")
-    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    ax.legend(frameon=False, fontsize=8, loc="upper center",
+              bbox_to_anchor=(0.5, -0.14), ncol=2)
 fig.tight_layout()
 fig.savefig("comparison.png", dpi=200)
 

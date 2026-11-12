@@ -24,6 +24,9 @@ from desc.grid import LinearGrid, QuadratureGrid  # noqa: E402
 name = sys.argv[1]
 spline_L = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] != "auto" else None
 maxiter = int(sys.argv[3]) if len(sys.argv) > 3 else 200
+# "spline-only": skip the Zernike solve (for radial refinement of the spline basis)
+# "continue": restart the spline solve from the saved eq_NAME_bspline.h5
+mode = sys.argv[4] if len(sys.argv) > 4 else "both"
 degree = 5
 
 ref = desc.examples.get(name)
@@ -71,6 +74,17 @@ eqs = {
     ),
 }
 
+tag = name
+if mode == "spline-only":
+    del eqs["zernike"]
+    tag = f"{name}_L{spline_L}"
+elif mode == "continue":
+    import desc.io
+
+    eqs = {"bspline": desc.io.load(f"eq_{name}_bspline.h5")}
+    spline_L = eqs["bspline"].L
+    tag = f"{name}_continued"
+
 # common diagnostic grids
 qgrid = QuadratureGrid(2 * ref.L_grid, 2 * ref.M_grid, 2 * ref.N_grid, ref.NFP)
 rho = np.linspace(0.02, 1, 50)
@@ -99,7 +113,7 @@ def diagnostics(eq):
         iota=np.asarray(fgrid.compress(f["iota"])),
         R=np.asarray(g["R"]),
         Z=np.asarray(g["Z"]),
-        axis_R=float(eq.compute("R", grid=LinearGrid(rho=0.0))["R"][0]),
+        axis_R=float(eq.compute("R", grid=LinearGrid(rho=0.0, NFP=eq.NFP))["R"][0]),
     )
 
 
@@ -129,7 +143,7 @@ for key, eq in eqs.items():
     )
     t = time.time() - t0
     d = diagnostics(eq)
-    eq.save(f"eq_{name}_{key}.h5")
+    eq.save(f"eq_{tag}_{key}.h5")
     out[key] = {k: v for k, v in d.items() if np.isscalar(v)}
     out[key].update(
         L=int(eq.L),
@@ -155,5 +169,5 @@ for key, eq in eqs.items():
     print(key, json.dumps(out[key], indent=1), flush=True)
 
 out["minor_radius"] = float(ref.compute("a")["a"])
-json.dump(out, open(f"results_{name}.json", "w"), indent=1)
-np.savez(f"results_{name}.npz", **arrs)
+json.dump(out, open(f"results_{tag}.json", "w"), indent=1)
+np.savez(f"results_{tag}.npz", **arrs)

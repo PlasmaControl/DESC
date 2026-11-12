@@ -4,26 +4,29 @@
   "method": "dense Jacobian, QR",
   "modes": 476,
   "iterations": 60,
-  "time_s": 188.8803243637085,
-  "s_per_iteration": 3.148005406061808,
-  "F_norm": 0.0020205649346853928
+  "time_s": 172.15310978889465,
+  "s_per_iteration": 2.8692184964815777,
+  "F_norm": 0.0020205649346853928,
+  "peak_rss_MB": 3774.99609375
  },
  {
   "L": 32,
   "method": "grouped Jacobian, QR",
   "modes": 476,
   "iterations": 60,
-  "time_s": 108.24304413795471,
-  "s_per_iteration": 1.8040507356325786,
-  "F_norm": 0.0018902939370500347
+  "time_s": 94.7514100074768,
+  "s_per_iteration": 1.5791901667912802,
+  "F_norm": 0.0018902939370500347,
+  "peak_rss_MB": 2505.33984375
  },
  {
   "L": 32,
-  "method": "grouped Jacobian, banded",
+  "method": "compressed Jacobian, block Cholesky",
   "modes": 476,
   "iterations": 60,
-  "time_s": 50.6067898273468,
-  "s_per_iteration": 0.8434464971224467,
-  "F_norm": 0.002219533550416591
+  "time_s": 50.34573316574097,
+  "s_per_iteration": 0.8390955527623495,
+  "F_norm": 0.0023539085002944153,
+  "peak_rss_MB": 2394.8515625
  }
 ]

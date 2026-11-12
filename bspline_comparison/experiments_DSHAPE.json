@@ -1,0 +1,14 @@
+[
+ {
+  "label": "zernike",
+  "F_norm": 4.543485162908487e-07,
+  "dR_max": 3.1274605802877886e-06,
+  "dZ_max": 5.550919933261511e-06,
+  "daxis_R": -4.7008606918197415e-07,
+  "free_profile": "current",
+  "dprofile_max_rel": 3.128075567474881e-06,
+  "basis": "zernike",
+  "L": 26,
+  "modes": 105
+ }
+]

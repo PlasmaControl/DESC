@@ -880,27 +880,23 @@ class Equilibrium(IOAble, Optimizable):
         axis : FourierRZCurve
             object representing the magnetic axis.
         """
-        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
-        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
-        # indices where m=0
-        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
-        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
-        # indices where l=0 & m=0
-        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        # this reshaping assumes the FourierZernike bases are sorted
-        R_n = np.sum(
-            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
-            axis=0,
-        )
-        modes_R = self.R_basis.modes[idx00_R, 2]
-        if len(idx00_Z):
-            Z_n = np.sum(
-                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
-                axis=0,
+        def axis_coeffs(basis, x_lmn):
+            # sum the m=0 modes of each toroidal mode number, weighted by the value
+            # of their radial part at rho=0 (+/-1 for Zernike polynomials)
+            vals = radial_part(basis, 0.0)
+            idx0 = np.where(basis.modes[:, 1] == 0)[0]
+            modes = np.unique(basis.modes[idx0, 2])
+            x_n = np.array(
+                [
+                    np.sum((vals * np.asarray(x_lmn))[idx0][basis.modes[idx0, 2] == n])
+                    for n in modes
+                ]
             )
-            modes_Z = self.Z_basis.modes[idx00_Z, 2]
-        else:  # catch cases such as axisymmetry with stellarator symmetry
+            return x_n, modes
+
+        R_n, modes_R = axis_coeffs(self.R_basis, self.R_lmn)
+        Z_n, modes_Z = axis_coeffs(self.Z_basis, self.Z_lmn)
+        if not len(modes_Z):  # catch cases such as axisymmetry with stellarator sym
             Z_n = 0
             modes_Z = 0
         axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)

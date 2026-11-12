@@ -179,6 +179,7 @@ if src is not None:
     )
     zd = src.compute(["R", "Z", "lambda"], grid=igrid)
     eq.set_initial_guess(igrid, zd["R"], zd["Z"], zd["lambda"])
+    eq.axis = eq.get_axis()  # keep the stored axis consistent with the fit
     d0 = diagnostics(eq)
     print("after fit: F_norm %.3e axis_R %.6f" % (d0["F_norm"], d0["axis_R"]), flush=True)
 

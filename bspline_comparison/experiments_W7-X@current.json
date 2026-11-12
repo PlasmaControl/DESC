@@ -44,5 +44,28 @@
   "pstages": "0,1",
   "init": "stock",
   "message": "`ftol` condition satisfied. (ftol=1.00e-08)"
+ },
+ {
+  "label": "p7_apfull",
+  "F_norm": 0.003276870744802542,
+  "dR_max": 0.011451068844804624,
+  "dZ_max": 0.008319612099043527,
+  "daxis_R": -0.002587244501533803,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.004412304247669539,
+  "basis": "bspline",
+  "L": 1,
+  "nq": 9,
+  "degree": 7,
+  "axis_power": "full",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 1252,
+  "grid_nodes": 5049,
+  "solve_time_s": 1099.8012318611145,
+  "iterations": 72,
+  "pstages": "0,1",
+  "init": "stock",
+  "message": "`ftol` condition satisfied. (ftol=1.00e-08)"
  }
 ]

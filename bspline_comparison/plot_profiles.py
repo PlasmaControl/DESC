@@ -52,7 +52,7 @@ for j, (name, labels) in enumerate(cases):
         nice = NICE.get(lab, "B-spline, " + lab.replace("_", " "))
         top.plot(rho, d[free] * unit, color=c, label=nice)
         bot.semilogy(rho, np.abs(d[free] - ref[free]) * unit + 1e-300, color=c, label=nice)
-    top.set_title(f"{name}: {ylabel}", loc="left", fontsize=10)
+    top.set_title(f"{name.split(chr(64))[0]}: {ylabel}", loc="left", fontsize=10)
     top.set_xlabel(r"$\rho$")
     bot.set_title("absolute difference from stock example", loc="left", fontsize=10)
     bot.set_xlabel(r"$\rho$")

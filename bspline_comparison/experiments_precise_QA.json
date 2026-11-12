@@ -55,5 +55,26 @@
   "solve_time_s": 370.86427116394043,
   "iterations": 155,
   "message": "`ftol` condition satisfied. (ftol=1.00e-08)"
+ },
+ {
+  "label": "p7_apfull",
+  "F_norm": 1.8845654927437742e-05,
+  "dR_max": 0.00032454589803421197,
+  "dZ_max": 0.00037701272639197037,
+  "daxis_R": 8.566054051639682e-06,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.0008504288948244213,
+  "basis": "bspline",
+  "L": 1,
+  "nq": 8,
+  "degree": 7,
+  "axis_power": "full",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 580,
+  "grid_nodes": 4488,
+  "solve_time_s": 973.4527695178986,
+  "iterations": 200,
+  "message": "Maximum number of iterations has been exceeded."
  }
 ]

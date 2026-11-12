@@ -1,0 +1,34 @@
+{
+ "name": "precise_QA",
+ "spline_L": 4,
+ "spline_degree": 5,
+ "reference": {
+  "F_vol": 78.64402211938427,
+  "F_norm": 0.00010186780153481747,
+  "W": 236719.18396430332,
+  "axis_R": 1.2436151437653207,
+  "num_modes": 385
+ },
+ "bspline": {
+  "F_vol": 133.39584392340097,
+  "F_norm": 0.00017278749133136823,
+  "W": 236719.18412032217,
+  "axis_R": 1.2436451393922008,
+  "L": 4,
+  "num_modes_R": 615,
+  "num_modes_total": 1833,
+  "grid_nodes": 6732,
+  "F_norm_initial": 0.8729390228516469,
+  "solve_time_s": 1334.7160289287567,
+  "iterations": 176,
+  "message": "Optimization terminated successfully.\n`ftol` condition satisfied. (ftol=1.00e-08)",
+  "nested": true,
+  "dR_max": 0.0006043351758598936,
+  "dZ_max": 0.0008950549588602197,
+  "dR_rms": 8.445531019918649e-05,
+  "dZ_rms": 8.720471645516802e-05,
+  "diota_max": 0.00021148699308048968,
+  "dW_rel": 6.590883394967272e-10
+ },
+ "minor_radius": 0.17177834443907436
+}

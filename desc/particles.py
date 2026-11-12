@@ -286,9 +286,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         xpdot = rhodot * jnp.cos(theta) - thetadot_x_rho * jnp.sin(theta)
         ypdot = rhodot * jnp.sin(theta) + thetadot_x_rho * jnp.cos(theta)
         vpardot = -mu / m * data["b.grad(|B|)"]
-        # sum of one-hot vectors instead of a concatenate, which XLA fuses better
-        e = jnp.eye(4)
-        return xpdot * e[0] + ypdot * e[1] + zetadot * e[2] + vpardot * e[3]
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
 
     @jit
     def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):

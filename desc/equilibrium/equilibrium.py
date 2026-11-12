@@ -202,8 +202,6 @@ class Equilibrium(IOAble, Optimizable):
         "_L_grid",
         "_M_grid",
         "_N_grid",
-        "_radial_basis",
-        "_spline_degree",
     ]
     _static_attrs = Optimizable._static_attrs + [
         "_sym",
@@ -221,8 +219,6 @@ class Equilibrium(IOAble, Optimizable):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "_radial_basis",
-        "_spline_degree",
     ]
 
     @execute_on_cpu
@@ -260,8 +256,6 @@ class Equilibrium(IOAble, Optimizable):
             ValueError,
             f"radial_basis should be 'zernike' or 'bspline', got {radial_basis}",
         )
-        self._radial_basis = radial_basis
-        self._spline_degree = int(spline_degree)
         errorif(
             not isinstance(float(Psi), numbers.Real),
             ValueError,
@@ -339,7 +333,7 @@ class Equilibrium(IOAble, Optimizable):
         self._axis.change_resolution(self.N, sym=self.sym)
 
         # bases
-        if self._radial_basis == "bspline":
+        if radial_basis == "bspline":
             self._R_basis, self._Z_basis, self._L_basis = (
                 BSplineDoubleFourierBasis(
                     L=self.L,
@@ -347,7 +341,7 @@ class Equilibrium(IOAble, Optimizable):
                     N=self.N,
                     NFP=self.NFP,
                     sym=s,
-                    degree=self._spline_degree,
+                    degree=int(spline_degree),
                 )
                 for s in (self._R_sym, self._Z_sym, self._Z_sym)
             )
@@ -490,8 +484,6 @@ class Equilibrium(IOAble, Optimizable):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
-        if getattr(self, "_radial_basis", None) is None:
-            self._radial_basis = "zernike"
 
         if self.current is not None and hasattr(self.current, "_get_transform"):
             # Need to rebuild derivative matrices to get higher order derivatives
@@ -655,7 +647,7 @@ class Equilibrium(IOAble, Optimizable):
 
         """
         errorif(
-            getattr(self, "_radial_basis", "zernike") == "bspline",
+            self.radial_basis == "bspline",
             NotImplementedError,
             "change_resolution is not implemented for radial_basis='bspline'",
         )
@@ -2169,6 +2161,13 @@ class Equilibrium(IOAble, Optimizable):
     def L_basis(self):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
+
+    @property
+    def radial_basis(self):
+        """str: Type of radial basis for R, Z, lambda: 'zernike' or 'bspline'."""
+        if isinstance(self.R_basis, BSplineDoubleFourierBasis):
+            return "bspline"
+        return "zernike"
 
     @property
     def L_grid(self):

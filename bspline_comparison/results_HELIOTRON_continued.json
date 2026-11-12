@@ -1,0 +1,34 @@
+{
+ "name": "HELIOTRON",
+ "spline_L": 7,
+ "spline_degree": 5,
+ "reference": {
+  "F_vol": 24.859000091815417,
+  "F_norm": 0.00030213592557634233,
+  "W": 9222179.033935279,
+  "axis_R": 10.546627837399193,
+  "num_modes": 598
+ },
+ "bspline": {
+  "F_vol": 238.40683449869698,
+  "F_norm": 0.0028977720559312985,
+  "W": 9222205.967318375,
+  "axis_R": 10.508067286972613,
+  "L": 7,
+  "num_modes_R": 603,
+  "num_modes_total": 1791,
+  "grid_nodes": 5187,
+  "F_norm_initial": 0.001392792478175007,
+  "solve_time_s": 1239.4677407741547,
+  "iterations": 226,
+  "message": "Optimization terminated successfully.\n`ftol` condition satisfied. (ftol=1.00e-08)",
+  "nested": true,
+  "dR_max": 0.04115626120550786,
+  "dZ_max": 0.024894006723516826,
+  "dR_rms": 0.011573336813963286,
+  "dZ_rms": 0.0070445116733123606,
+  "diota_max": 0.0,
+  "dW_rel": 2.9205010005662954e-06
+ },
+ "minor_radius": 0.9539392014169457
+}

@@ -6,6 +6,7 @@ import pytest
 
 from desc.backend import jnp
 from desc.basis import (
+    BSplineDoubleFourierBasis,
     ChebyshevDoubleFourierBasis,
     ChebyshevPolynomial,
     DoubleFourierSeries,
@@ -419,6 +420,12 @@ class TestBasis:
             ]
         )
         all_bases.append([ChebyshevPolynomial(L=3), ChebyshevPolynomial(L=3)])
+        all_bases.append(
+            [
+                BSplineDoubleFourierBasis(L=3, M=3, N=3),
+                BSplineDoubleFourierBasis(L=3, M=3, N=3),
+            ]
+        )
         for basis1, basis2 in all_bases:
             # check that hash is consistent
             assert hash(basis1) == hash(basis2)

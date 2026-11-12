@@ -15,7 +15,7 @@ from .objective_funs import _Objective, collect_docs
 
 def _default_force_grid(eq):
     """Default collocation grid for force balance type objectives."""
-    if getattr(eq, "_radial_basis", "zernike") == "bspline":
+    if getattr(eq, "radial_basis", "zernike") == "bspline":
         # tensor product grid with Gauss-Legendre nodes in each radial interval
         knots = eq.R_basis.knots
         nq = max(2, int(np.ceil(eq.L_grid / eq.L)))

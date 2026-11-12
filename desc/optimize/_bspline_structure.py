@@ -203,57 +203,39 @@ class CompressedJacobian:
     def __init__(self, structure, data):
         self.structure = structure
         self.data = data
-        st = structure
-        self.shape = (data.shape[0], st.num_vars)
+        self.shape = (data.shape[0], structure.num_vars)
         self.dtype = data.dtype
-        self._valid = st.colmap >= 0  # (L, num_colors)
-        self._cols = np.where(self._valid, st.colmap, 0)
+        self._ops = _ops(structure)
 
     def block_until_ready(self):
         """Wait for the data to be computed (as for a jax array)."""
         self.data = self.data.block_until_ready()
         return self
 
-    def _expand(self, v):
-        """Value of v for the active variable of every (interval, group)."""
-        return jnp.where(self._valid, jnp.asarray(v)[self._cols], 0.0)
-
-    def _collect(self, G):
-        """Sum (interval, group) values onto the variables they belong to."""
-        out = jnp.zeros(self.shape[1], dtype=self.dtype)
-        return out.at[self._cols[self._valid]].add(G[self._valid])
-
     def matvec(self, v):
         """J @ v."""
-        return _matvec(self.data, self._expand(v), self.structure.row_elem)
+        return self._ops["matvec"](self.data, jnp.asarray(v))
 
     def rmatvec(self, u):
         """J.T @ u."""
-        st = self.structure
-        return self._collect(_segment(self.data, u, st.row_elem, st.num_elems))
+        return self._ops["rmatvec"](self.data, jnp.asarray(u))
 
     def __matmul__(self, v):
         return self.matvec(v)
 
     def column_norms(self):
         """2-norm of every column."""
-        st = self.structure
-        G = _segment(self.data**2, jnp.ones(self.shape[0]), st.row_elem, st.num_elems)
-        return self._collect(G) ** 0.5
+        return self._ops["column_norms"](self.data)
 
     def scale_columns(self, d):
         """Return J * d (columns scaled by d), reusing the buffer of J."""
-        data = _scale(self.data, self._expand(d), self.structure.row_elem)
+        data = self._ops["scale"](self.data, jnp.asarray(d))
         self.data = None  # the buffer was donated
         return CompressedJacobian(self.structure, data)
 
     def todense(self):
         """Dense (dim_f, dim_x) Jacobian, as a jax array (also works under jit)."""
-        st = self.structure
-        cm = st.colmap[st.row_elem]  # variable of each (residual, group)
-        rows, grp = np.nonzero(cm >= 0)
-        out = jnp.zeros(self.shape, dtype=self.dtype)
-        return out.at[rows, cm[rows, grp]].set(self.data[rows, grp])
+        return self._ops["todense"](self.data)
 
     def normal_blocks(self):
         """J.T @ J as a block tridiagonal matrix.
@@ -267,49 +249,112 @@ class CompressedJacobian:
             block k). The last one is zero.
 
         """
-        st = self.structure
-        K, b = st.num_blocks, st.block_size
-        D = jnp.zeros((K, b, b), dtype=self.dtype)
-        E = jnp.zeros((K, b, b), dtype=self.dtype)
-        for e, rows in enumerate(st.elem_rows):
-            act = np.where(self._valid[e])[0]
-            if not rows.size or not act.size:
-                continue
-            cols = st.colmap[e, act]
-            k = int(st.blk[cols].min())
-            upper = st.blk[cols] > k  # variables in block k+1
-            Je = self.data[rows][:, act]
-            G = Je.T @ Je
-            i0, i1 = np.where(~upper)[0], np.where(upper)[0]
-            l0, l1 = st.loc[cols[i0]], st.loc[cols[i1]]
-            D = D.at[k, l0[:, None], l0[None, :]].add(G[np.ix_(i0, i0)])
-            if i1.size:
-                D = D.at[k + 1, l1[:, None], l1[None, :]].add(G[np.ix_(i1, i1)])
-                E = E.at[k, l1[:, None], l0[None, :]].add(G[np.ix_(i1, i0)])
+        return self._ops["normal_blocks"](self.data)
+
+
+_OPS_CACHE = weakref.WeakKeyDictionary()
+
+
+def _ops(st):  # noqa: C901
+    """Jitted operations on the data of a CompressedJacobian, cached per structure.
+
+    The index arrays of the structure are compile time constants of these functions.
+    """
+    if st in _OPS_CACHE:
+        return _OPS_CACHE[st]
+    L, n, nc = st.num_elems, st.num_vars, st.num_colors
+    K, b = st.num_blocks, st.block_size
+    row_elem = st.row_elem
+    valid = st.colmap >= 0  # (L, num_colors)
+    cols = np.where(valid, st.colmap, 0)
+    ev, cv = np.nonzero(valid)
+    target = st.colmap[ev, cv]
+
+    def expand(v):
+        # value of v for the active variable of every (interval, group)
+        return jnp.where(valid, v[cols], 0.0)
+
+    def segment(X):
+        # sum of the rows of X over each interval
+        return jnp.zeros((L, X.shape[1]), dtype=X.dtype).at[row_elem].add(X)
+
+    def collect(G):
+        # sum (interval, group) values onto the variables they belong to
+        return jnp.zeros(n, dtype=G.dtype).at[target].add(G[ev, cv])
+
+    @jit
+    def matvec(data, v):
+        return jnp.sum(data * expand(v)[row_elem], axis=1)
+
+    @jit
+    def rmatvec(data, u):
+        return collect(segment(data * u[:, None]))
+
+    @jit
+    def column_norms(data):
+        return collect(segment(data**2)) ** 0.5
+
+    @functools.partial(jit, donate_argnums=0)
+    def scale(data, d):
+        return data * expand(d)[row_elem]
+
+    cm = st.colmap[row_elem]  # variable of each (residual, group)
+    rr, gg = np.nonzero(cm >= 0)
+    cc = cm[rr, gg]
+
+    @jit
+    def todense(data):
+        out = jnp.zeros((data.shape[0], n), dtype=data.dtype)
+        return out.at[rr, cc].set(data[rr, gg])
+
+    # For normal_blocks: the residual rows of each interval (padded with an out of
+    # range index), the first block k_e of the variables active in the interval,
+    # and the position of each group's variable in blocks (k_e, k_e + 1) stacked,
+    # or 2*b if the group has no variable there.
+    rmax = max((r.size for r in st.elem_rows), default=0)
+    rows_pad = np.full((L, max(rmax, 1)), row_elem.size, dtype=int)
+    k_e = np.zeros(L, dtype=int)
+    pos = np.full((L, nc), 2 * b, dtype=int)
+    for e, rows in enumerate(st.elem_rows):
+        rows_pad[e, : rows.size] = rows
+        act = np.nonzero(valid[e])[0]
+        if act.size:
+            var = st.colmap[e, act]
+            k_e[e] = st.blk[var].min()
+            pos[e, act] = (st.blk[var] - k_e[e]) * b + st.loc[var]
+    pad = np.arange(b)[None, :] >= st.block_sizes[:, None]
+    pk, pi = np.nonzero(pad)
+
+    @jit
+    def normal_blocks(data):
+        def body(carry, x):
+            D, E = carry
+            rows, k, p = x
+            X = jnp.take(data, rows, axis=0, mode="fill", fill_value=0)
+            G = X.T @ X
+            M = jnp.zeros((2 * b, 2 * b), dtype=data.dtype)
+            M = M.at[p[:, None], p[None, :]].add(G, mode="drop")
+            D = D.at[k].add(M[:b, :b])
+            D = D.at[k + 1].add(M[b:, b:], mode="drop")
+            E = E.at[k].add(M[b:, :b])
+            return (D, E), None
+
+        D = jnp.zeros((K, b, b), dtype=data.dtype)
+        E = jnp.zeros((K, b, b), dtype=data.dtype)
+        (D, E), _ = scan(body, (D, E), (rows_pad, k_e, pos))
         # identity on the padding so the blocks stay positive definite
-        pad = np.arange(b)[None, :] >= st.block_sizes[:, None]
-        kk, ii = np.where(pad)
-        D = D.at[kk, ii, ii].set(1.0)
-        return D, E
+        return D.at[pk, pi, pi].set(1.0), E
 
-
-@jit
-def _matvec(data, vv, row_elem):
-    return jnp.sum(data * vv[row_elem], axis=1)
-
-
-@functools.partial(jit, static_argnums=3)
-def _segment(data, u, row_elem, num):
-    return (
-        jnp.zeros((num, data.shape[1]), dtype=data.dtype)
-        .at[row_elem]
-        .add(data * u[:, None])
+    ops = dict(
+        matvec=matvec,
+        rmatvec=rmatvec,
+        column_norms=column_norms,
+        scale=scale,
+        todense=todense,
+        normal_blocks=normal_blocks,
     )
-
-
-@functools.partial(jit, donate_argnums=0)
-def _scale(data, dd, row_elem):
-    return data * dd[row_elem]
+    _OPS_CACHE[st] = ops
+    return ops
 
 
 @jit
@@ -375,7 +420,7 @@ _PCG_CACHE = weakref.WeakKeyDictionary()
 
 
 def _pcg(st):
-    """Jitted preconditioned CG for (J.T@J + alpha*I) p = -g, cached on ``st``.
+    """Jitted preconditioned CG for (J.T@J + alpha*I) p = -g, cached per structure.
 
     The preconditioner is the block Cholesky factor (Ld, Lo) and the products with
     J.T@J are computed through J, so the accuracy is set by the condition number of
@@ -386,20 +431,11 @@ def _pcg(st):
     """
     if st in _PCG_CACHE:
         return _PCG_CACHE[st]
-    valid = st.colmap >= 0
-    cols = np.where(valid, st.colmap, 0)
-    target = cols[valid]
-    row_elem, L, n = st.row_elem, st.num_elems, st.num_vars
+    ops = _ops(st)
     blk, loc, K, b = st.blk, st.loc, st.num_blocks, st.block_size
 
     def normal(data, v, alpha):
-        Jv = jnp.sum(data * jnp.where(valid, v[cols], 0.0)[row_elem], axis=1)
-        G = (
-            jnp.zeros((L, data.shape[1]), dtype=data.dtype)
-            .at[row_elem]
-            .add(data * Jv[:, None])
-        )
-        return jnp.zeros(n, dtype=data.dtype).at[target].add(G[valid]) + alpha * v
+        return ops["rmatvec"](data, ops["matvec"](data, v)) + alpha * v
 
     def apply(Ld, Lo, r):
         rb = jnp.zeros((K, b), dtype=r.dtype).at[blk, loc].set(r)
@@ -430,7 +466,8 @@ def _pcg(st):
             return p, r, z, d, rz_new, k + 1, ok
 
         state = (p, r, z, z, r @ z, 0, jnp.array(True))
-        return while_loop(cond_fun, body, state)[0]
+        p, r, _, _, _, k, _ = while_loop(cond_fun, body, state)
+        return p, k, jnp.linalg.norm(r) / jnp.linalg.norm(g)
 
     _PCG_CACHE[st] = pcg
     return pcg
@@ -451,14 +488,14 @@ def trust_region_step_block(
     """Solve min_p ||J p + f||^2, ||p|| <= trust_radius, with J.T@J block tridiagonal.
 
     Same algorithm as ``trust_region_step_exact_cho`` (Nocedal & Wright 4.3) with a
-    block tridiagonal Cholesky factorization of ``J.T@J + alpha*I``. To be robust
-    when ``J.T@J`` is singular or ill conditioned, a failed factorization (a pivot
-    that is not positive or at the level of rounding errors) is redone with ``alpha``
-    raised to a small ``delta`` just above that level, and every solve uses the
-    factorization only as the preconditioner of conjugate gradients with the
-    products computed through ``J`` instead of ``J.T@J`` (see ``_pcg``), so the
-    accuracy depends on the condition number of ``J``. With an exact factorization
-    this is the same as one or two steps of iterative refinement.
+    block tridiagonal Cholesky factorization of ``J.T@J + alpha*I``. ``J.T@J`` is
+    often singular or very ill conditioned, so the factorization is only used as the
+    preconditioner of conjugate gradients whose products are computed through ``J``
+    instead of ``J.T@J`` (see ``_pcg``), and the accuracy of the step depends on the
+    condition number of ``J``. The factorization is shifted by at least a small
+    ``delta`` just above the level of rounding errors, so it does not fail. With an
+    exact factorization (``alpha >= delta``) the conjugate gradients are one or two
+    steps of iterative refinement.
 
     Parameters
     ----------
@@ -500,16 +537,22 @@ def trust_region_step_block(
     delta = 4 * n * jnp.finfo(D.dtype).eps * diag_max
 
     def solve(alpha):
-        Ld, Lo = _block_cholesky(D, E, jnp.where(real, alpha, 0.0))
-        if bool(_block_chol_failed(Ld, real)):
-            Ld, Lo = _block_cholesky(
-                D, E, jnp.where(real, jnp.maximum(alpha, delta), 0.0)
-            )
+        # The factorization is only a preconditioner, so it can use a shift of at
+        # least delta: B + alpha*I can be singular to working precision when alpha
+        # is below delta, and the conjugate gradients make up for the difference.
+        shift = jnp.maximum(alpha, delta)
+        Ld, Lo = _block_cholesky(D, E, jnp.where(real, shift, 0.0))
+        for _ in range(3):
+            if not bool(_block_chol_failed(Ld, real)):
+                break
+            # can only happen through rounding errors in D, E
+            shift = 100 * shift
+            Ld, Lo = _block_cholesky(D, E, jnp.where(real, shift, 0.0))
 
         def apply(rhs):
             return st.from_blocks(_block_solve(Ld, Lo, st.to_blocks(rhs)))
 
-        p = _pcg(st)(J.data, Ld, Lo, g, alpha, cg_tol, cg_maxiter)
+        p, _, _ = _pcg(st)(J.data, Ld, Lo, g, alpha, cg_tol, cg_maxiter)
         return p, apply
 
     p, _ = solve(0.0)

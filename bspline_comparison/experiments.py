@@ -6,7 +6,8 @@ Usage:
 
 Keys (defaults in brackets): L [DOF matched], nq [as compare.py] Gauss points per
 radial interval, degree [5], axis_power [0] (int or "full"), first [1.0] size of the
-first radial interval relative to uniform, maxiter [200], tr [qr].
+first radial interval relative to uniform, maxiter [200], tr [qr], init [default
+scaled boundary guess, or "zernike" to start from eq_NAME_zernike.h5].
 
 Results are appended to experiments_NAME.json, profiles go to exp_NAME_LABEL.npz.
 """
@@ -145,6 +146,16 @@ eq = Equilibrium(
     spline_knots=knots,
     spline_axis_power=axis_power,
 )
+if opts.get("init") == "zernike":
+    # start from the converged Zernike re-solve, fit to the spline basis
+    zeq = desc.io.load(f"eq_{name}_zernike.h5")
+    igrid = LinearGrid(
+        rho=np.linspace(0, 1, 6 * Ls + 12)[1:], M=2 * ref.M, N=2 * ref.N, NFP=ref.NFP
+    )
+    zd = zeq.compute(["R", "Z", "lambda"], grid=igrid)
+    eq.set_initial_guess(igrid, zd["R"], zd["Z"], zd["lambda"])
+    d0 = diagnostics(eq)
+    print("after fit: F_norm %.3e axis_R %.6f" % (d0["F_norm"], d0["axis_R"]), flush=True)
 obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=600)
 obj.build(verbose=0)
 nodes = obj.objectives[0].constants["transforms"]["grid"].num_nodes

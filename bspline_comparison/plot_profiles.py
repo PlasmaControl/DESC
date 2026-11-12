@@ -1,0 +1,55 @@
+"""Plot the free profile (iota or toroidal current) of each case against the stock example.
+
+Usage: python plot_profiles.py NAME:label,label ...   (labels from experiments_NAME.json)
+"""
+
+import sys
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#6250d6"]
+plt.rcParams.update(
+    {
+        "font.size": 10,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.color": "#e6e5df",
+        "grid.linewidth": 0.6,
+        "axes.edgecolor": "#8a8a85",
+        "lines.linewidth": 2,
+    }
+)
+NICE = {
+    "zernike": "Fourier-Zernike re-solve",
+    "bspline_base": "B-spline, first attempt",
+}
+
+cases = [a.split(":") for a in sys.argv[1:]]
+fig, axes = plt.subplots(2, len(cases), figsize=(4.8 * len(cases), 7), squeeze=False)
+for j, (name, labels) in enumerate(cases):
+    ref = np.load(f"exp_{name}_reference.npz")
+    rho = ref["rho"]
+    # the free profile is the one that is not prescribed: current if iota is given
+    free = "current" if np.ptp(ref["iota"]) > 0 and name != "precise_QA" else "iota"
+    unit = 1e-3 if free == "current" else 1.0
+    ylabel = "toroidal current (kA)" if free == "current" else r"rotational transform $\iota$"
+    top, bot = axes[0, j], axes[1, j]
+    top.plot(rho, ref[free] * unit, color="#8a8a85", ls="--", label="stock example")
+    for c, lab in zip(COLORS, labels.split(",")):
+        d = np.load(f"exp_{name}_{lab}.npz")
+        nice = NICE.get(lab, "B-spline, " + lab.replace("_", " "))
+        top.plot(rho, d[free] * unit, color=c, label=nice)
+        bot.semilogy(rho, np.abs(d[free] - ref[free]) * unit + 1e-300, color=c, label=nice)
+    top.set_title(f"{name}: {ylabel}", loc="left", fontsize=10)
+    top.set_xlabel(r"$\rho$")
+    bot.set_title("absolute difference from stock example", loc="left", fontsize=10)
+    bot.set_xlabel(r"$\rho$")
+    bot.set_ylabel("kA" if free == "current" else r"$|\Delta\iota|$")
+    top.legend(frameon=False, fontsize=8)
+fig.tight_layout()
+fig.savefig("profiles.png", dpi=200)

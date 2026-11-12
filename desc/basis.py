@@ -1471,7 +1471,9 @@ class BSplineDoubleFourierBasis(_Basis):
         for m in range(p + 2):
             # zero all derivatives j<m and all j with parity different from m
             rows = [j for j in range(p + 1) if (j < m) or ((j - m) % 2 == 1)]
-            ns = null_space(D[rows]) if len(rows) else np.eye(p + 1)
+            # rows are scaled so the rank is found reliably for high degrees
+            Dr = D[rows] / np.abs(D[rows]).max(axis=1, keepdims=True)
+            ns = null_space(Dr) if len(rows) else np.eye(p + 1)
             nfree = ns.shape[1]
             assert nfree == (((p - m) // 2 + 1) if m <= p else 0)
             if nfree:

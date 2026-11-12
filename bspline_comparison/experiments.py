@@ -32,7 +32,13 @@ from desc.integrals import surface_averages  # noqa: E402
 from desc.objectives import ForceBalance, ObjectiveFunction  # noqa: E402
 
 name, label = sys.argv[1], sys.argv[2]
-ref = desc.examples.get(name)
+# "NAME@current" prescribes the toroidal current profile of the stock example
+# instead of its iota profile, so that iota is an output of the solve
+example, _, constraint = name.partition("@")
+ref = desc.examples.get(example)
+ref_iota, ref_current = ref.iota, ref.current
+if constraint == "current":
+    ref_iota, ref_current = None, ref.get_profile("current")
 
 qgrid = QuadratureGrid(2 * ref.L_grid, 2 * ref.M_grid, 2 * ref.N_grid, ref.NFP)
 rho = np.linspace(0.02, 1, 50)
@@ -74,7 +80,7 @@ else:
 def summarize(d, extra):
     """Scalar summary of a run relative to the stock example, saved to disk."""
     # iota is the free profile when the current is prescribed, and vice versa
-    free = "iota" if ref.iota is None else "current"
+    free = "iota" if ref_iota is None else "current"
     scale = np.abs(dref[free]).max()
     row = dict(
         label=label,
@@ -137,8 +143,9 @@ common = dict(
     N_grid=ref.N_grid,
     surface=ref.surface.copy(),
     pressure=ref.pressure,
-    iota=ref.iota,
-    current=ref.current,
+    iota=ref_iota,
+    current=ref_current,
+    ensure_nested=False,
 )
 if opts.get("basis") == "zernike":  # Zernike solve at another radial resolution
     Ls = int(opts["L"])
@@ -160,28 +167,47 @@ else:
     )
 if opts.get("init") == "zernike":
     # start from the converged Zernike re-solve, fit to the spline basis
-    zeq = desc.io.load(f"eq_{name}_zernike.h5")
+    src = desc.io.load(f"eq_{name}_zernike.h5")
+elif opts.get("init") == "stock":
+    # start from the flux surfaces of the stock example
+    src = ref
+else:
+    src = None
+if src is not None:
     igrid = LinearGrid(
         rho=np.linspace(0, 1, 6 * Ls + 12)[1:], M=2 * ref.M, N=2 * ref.N, NFP=ref.NFP
     )
-    zd = zeq.compute(["R", "Z", "lambda"], grid=igrid)
+    zd = src.compute(["R", "Z", "lambda"], grid=igrid)
     eq.set_initial_guess(igrid, zd["R"], zd["Z"], zd["lambda"])
     d0 = diagnostics(eq)
     print("after fit: F_norm %.3e axis_R %.6f" % (d0["F_norm"], d0["axis_R"]), flush=True)
-obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=600)
-obj.build(verbose=0)
-nodes = obj.objectives[0]._constants["transforms"]["grid"].num_nodes
-t0 = time.time()
-_, res = eq.solve(
-    objective=obj,
-    ftol=1e-8,
-    xtol=1e-12,
-    gtol=1e-12,
-    maxiter=maxiter,
-    verbose=2,
-    options={"tr_method": tr},
-)
-t = time.time() - t0
+
+# pressure continuation: "pstages=0,1" solves at zero pressure first, then at full
+pstages = [float(v) for v in opts.get("pstages", "1").split(",")]
+stage_iter = int(opts.get("stage_maxiter", 60))
+t = 0.0
+nit = 0
+for k, ps in enumerate(pstages):
+    last = k == len(pstages) - 1
+    pres = ref.pressure.copy()
+    pres.params = np.asarray(ref.pressure.params) * ps
+    eq.pressure = pres
+    obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size=600)
+    obj.build(verbose=0)
+    nodes = obj.objectives[0]._constants["transforms"]["grid"].num_nodes
+    t0 = time.time()
+    _, res = eq.solve(
+        objective=obj,
+        ftol=1e-8,
+        xtol=1e-12,
+        gtol=1e-12,
+        maxiter=maxiter if last else stage_iter,
+        verbose=2,
+        options={"tr_method": tr},
+    )
+    t += time.time() - t0
+    nit += int(res["nit"])
+    print("stage pressure x%g done: %d iterations" % (ps, int(res["nit"])), flush=True)
 eq.save(f"eq_{name}_{label}.h5")
 summarize(
     diagnostics(eq),
@@ -196,7 +222,9 @@ summarize(
         modes=int(eq.R_basis.num_modes),
         grid_nodes=int(nodes),
         solve_time_s=t,
-        iterations=int(res["nit"]),
+        iterations=nit,
+        pstages=opts.get("pstages", "1"),
+        init=opts.get("init", "scaled boundary"),
         message=str(res["message"]).split("\n")[-1],
     ),
 )

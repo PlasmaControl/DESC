@@ -34,5 +34,26 @@
   "basis": "bspline",
   "L": 4,
   "modes": 615
+ },
+ {
+  "label": "apfull",
+  "F_norm": 6.345934852213187e-05,
+  "dR_max": 0.0007986459034007298,
+  "dZ_max": 0.0012717884528659351,
+  "daxis_R": 9.073949476912091e-05,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.0011480390079094767,
+  "basis": "bspline",
+  "L": 1,
+  "nq": 8,
+  "degree": 5,
+  "axis_power": "full",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 435,
+  "grid_nodes": 4488,
+  "solve_time_s": 370.86427116394043,
+  "iterations": 155,
+  "message": "`ftol` condition satisfied. (ftol=1.00e-08)"
  }
 ]

@@ -1,0 +1,25 @@
+[
+ {
+  "label": "zernike",
+  "F_norm": 0.0031165258893067677,
+  "dR_max": 0.0031482779119471616,
+  "dZ_max": 0.0030501378037056104,
+  "daxis_R": -0.0005218371757527152,
+  "free_profile": "iota",
+  "dprofile_max_rel": 0.003141381887511331,
+  "basis": "zernike",
+  "L": 12,
+  "nq": 1,
+  "degree": 5,
+  "axis_power": "0",
+  "first": 1.0,
+  "tr": "qr",
+  "modes": 1141,
+  "grid_nodes": 2673,
+  "solve_time_s": 488.54613995552063,
+  "iterations": 72,
+  "pstages": "0,1",
+  "init": "stock",
+  "message": "`ftol` condition satisfied. (ftol=1.00e-08)"
+ }
+]

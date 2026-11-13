@@ -1,0 +1,269 @@
+diff --git a/desc/optimize/_bspline_structure.py b/desc/optimize/_bspline_structure.py
+index 89a69ff..d365515 100644
+--- a/desc/optimize/_bspline_structure.py
++++ b/desc/optimize/_bspline_structure.py
+@@ -136,6 +136,27 @@ class BSplineStructure:
+         span = int(np.max(hi - lo + 1)) if n else 1
+         self.span = span
+         blk = lo // max(span - 1, 1)
++        # Merging neighboring blocks keeps the matrix block tridiagonal. All blocks
++        # are padded to the largest one, so merge the smallest neighboring pair as
++        # long as that lowers the estimated factorization cost.
++        sizes = np.bincount(blk) if n else np.zeros(1, dtype=int)
++        groups = [[k] for k in range(sizes.size)]
++
++        def cost(gs):
++            b = max(sizes[g].sum() for g in gs)
++            # one block: one Cholesky (b^3/3) and inverse; more: also the products
++            return (1.0 if len(gs) == 1 else 4.0 * len(gs)) * float(b) ** 3
++
++        while len(groups) > 1:
++            i = int(np.argmin([sizes[a + b].sum() for a, b in zip(groups, groups[1:])]))
++            merged = groups[:i] + [groups[i] + groups[i + 1]] + groups[i + 2 :]
++            if cost(merged) >= cost(groups):
++                break
++            groups = merged
++        new_id = np.zeros(sizes.size, dtype=int)
++        for g, ks in enumerate(groups):
++            new_id[ks] = g
++        blk = new_id[blk] if n else blk
+         self.num_blocks = int(blk.max()) + 1 if n else 1
+         loc = np.zeros(n, dtype=int)
+         sizes = np.zeros(self.num_blocks, dtype=int)
+@@ -274,9 +295,14 @@ def _ops(st):  # noqa: C901
+         # value of v for the active variable of every (interval, group)
+         return jnp.where(valid, v[cols], 0.0)
+ 
+-    def segment(X):
+-        # sum of the rows of X over each interval
+-        return jnp.zeros((L, X.shape[1]), dtype=X.dtype).at[row_elem].add(X)
++    # The sums over the residuals of each interval and the selection of each
++    # residual's interval are done as matrix products with this indicator matrix,
++    # which is much faster than scatter/gather on CPU.
++    onehot = (row_elem[:, None] == np.arange(L)[None, :]).astype(float)
++
++    def segment(X, w):
++        # sum of the rows of X, weighted by w, over each interval
++        return (onehot * w[:, None]).T @ X
+ 
+     def collect(G):
+         # sum (interval, group) values onto the variables they belong to
+@@ -284,15 +310,16 @@ def _ops(st):  # noqa: C901
+ 
+     @jit
+     def matvec(data, v):
+-        return jnp.sum(data * expand(v)[row_elem], axis=1)
++        # (data @ vv.T)[r, e] is row r of J @ v if r were in interval e
++        return jnp.sum((data @ expand(v).T) * onehot, axis=1)
+ 
+     @jit
+     def rmatvec(data, u):
+-        return collect(segment(data * u[:, None]))
++        return collect(segment(data, u))
+ 
+     @jit
+     def column_norms(data):
+-        return collect(segment(data**2)) ** 0.5
++        return collect(segment(data**2, jnp.ones(data.shape[0]))) ** 0.5
+ 
+     @functools.partial(jit, donate_argnums=0)
+     def scale(data, d):
+@@ -359,60 +386,79 @@ def _ops(st):  # noqa: C901
+ 
+ @jit
+ def _block_cholesky(D, E, shift):
+-    """Cholesky factor of a block tridiagonal matrix with ``shift`` on the diagonal.
++    """Cholesky factorization of a block tridiagonal matrix with ``shift`` added.
+ 
+-    Returns the diagonal blocks ``Ld[k]`` (lower triangular) and the sub-diagonal
+-    blocks ``Lo[k]`` (block k+1, k) of the factor.
++    Returns ``Li[k]``, the inverse of the k-th diagonal block of the lower triangular
++    factor, and ``Lo[k]``, the block (k+1, k) of the factor. Storing the inverses
++    makes every later solve a sequence of matrix-vector products, which on CPU are
++    much faster than triangular solves.
+     """
+-    b = D.shape[1]
++    K, b = D.shape[0], D.shape[1]
++    eye = jnp.eye(b, dtype=D.dtype)
++
++    def inv_chol(A):
++        return solve_triangular(jnp.linalg.cholesky(A), eye, lower=True)
++
++    # first and last block outside of the loop: no update from the left in the
++    # first one, no block below the last one
++    L0 = inv_chol(D[0] + jnp.diag(shift[0]))
++    if K == 1:
++        return L0[None], jnp.zeros_like(E)
++    C0 = E[0] @ L0.T
+ 
+     def body(C, x):
+         Dk, Ek, sk = x
+         # C is the sub-diagonal block of the factor to the left of this row
+-        Lkk = jnp.linalg.cholesky(Dk + jnp.diag(sk) - C @ C.T)
+-        Cn = solve_triangular(Lkk, Ek.T, lower=True).T
+-        return Cn, (Lkk, Cn)
++        Lk = inv_chol(Dk + jnp.diag(sk) - C @ C.T)
++        Cn = Ek @ Lk.T
++        return Cn, (Lk, Cn)
+ 
+-    _, (Ld, Lo) = scan(body, jnp.zeros((b, b), dtype=D.dtype), (D, E, shift))
+-    return Ld, Lo
++    C, (Lm, Cm) = scan(body, C0, (D[1:-1], E[1:-1], shift[1:-1]))
++    Ll = inv_chol(D[-1] + jnp.diag(shift[-1]) - C @ C.T)
++    Li = jnp.concatenate([L0[None], Lm, Ll[None]])
++    Lo = jnp.concatenate([C0[None], Cm, jnp.zeros((1, b, b), dtype=D.dtype)])
++    return Li, Lo
+ 
+ 
+ @jit
+-def _block_chol_failed(Ld, real):
++def _block_chol_failed(Li, real):
+     """Whether a block Cholesky factor is unusable because the matrix was singular.
+ 
+     The factorization returns nan when a pivot is not positive, but a pivot at the
+     level of rounding errors completes and gives a useless factor, so both count as
+-    a failure. Only the pivots of real (not padding) variables are checked.
++    a failure. Only the pivots of real (not padding) variables are checked. ``Li``
++    holds the inverse diagonal blocks, whose diagonal is the inverse pivots.
+     """
+-    d = jnp.diagonal(Ld, axis1=1, axis2=2)
++    d = jnp.abs(jnp.diagonal(Li, axis1=1, axis2=2))
+     n = jnp.sum(real)
+-    dmax = jnp.max(jnp.where(real, jnp.abs(d), 0.0))
++    dmax = jnp.max(jnp.where(real, d, 0.0))
+     dmin = jnp.min(jnp.where(real, d, jnp.inf))
+-    tol = n * jnp.finfo(Ld.dtype).eps
+-    return jnp.any(jnp.isnan(Ld)) | (dmin**2 <= tol * dmax**2)
++    tol = n * jnp.finfo(Li.dtype).eps
++    return ~jnp.all(jnp.isfinite(Li)) | (dmin**2 <= tol * dmax**2)
+ 
+ 
+ @jit
+-def _block_solve(Ld, Lo, rhs):
++def _block_solve(Li, Lo, rhs):
+     """Solve with the factor from ``_block_cholesky``. ``rhs`` has shape (K, b)."""
+-    b = Ld.shape[1]
++    K, b = Li.shape[0], Li.shape[1]
++    if K == 1:
++        return (Li[0].T @ (Li[0] @ rhs[0]))[None]
+     # Lo[k] couples block k+1 to block k: shift so row k sees its left neighbor
+-    Lleft = jnp.concatenate([jnp.zeros((1, b, b), dtype=Ld.dtype), Lo[:-1]])
++    Lleft = jnp.concatenate([jnp.zeros((1, b, b), dtype=Li.dtype), Lo[:-1]])
+ 
+     def fwd(yprev, x):
+-        Lkk, C, r = x
+-        y = solve_triangular(Lkk, r - C @ yprev, lower=True)
++        Lk, C, r = x
++        y = Lk @ (r - C @ yprev)
+         return y, y
+ 
+-    _, y = scan(fwd, jnp.zeros(b, dtype=Ld.dtype), (Ld, Lleft, rhs))
++    _, y = scan(fwd, jnp.zeros(b, dtype=Li.dtype), (Li, Lleft, rhs))
+ 
+     def bwd(xnext, x):
+-        Lkk, C, yk = x
+-        xk = solve_triangular(Lkk.T, yk - C.T @ xnext, lower=False)
++        Lk, C, yk = x
++        xk = Lk.T @ (yk - C.T @ xnext)
+         return xk, xk
+ 
+-    _, x = scan(bwd, jnp.zeros(b, dtype=Ld.dtype), (Ld, Lo, y), reverse=True)
++    _, x = scan(bwd, jnp.zeros(b, dtype=Li.dtype), (Li, Lo, y), reverse=True)
+     return x
+ 
+ 
+@@ -484,6 +530,8 @@ def trust_region_step_block(
+     max_iter=10,
+     cg_tol=1e-10,
+     cg_maxiter=50,
++    reuse_ratio=10.0,
++    cache=None,
+ ):
+     """Solve min_p ||J p + f||^2, ||p|| <= trust_radius, with J.T@J block tridiagonal.
+ 
+@@ -518,6 +566,12 @@ def trust_region_step_block(
+         ``cg_tol * norm(J.T@f)``.
+     cg_maxiter : int
+         Maximum number of conjugate gradient iterations per solve.
++    reuse_ratio : float
++        A factorization made for one value of alpha is reused as the preconditioner
++        for values of alpha up to this factor away from it.
++    cache : dict, optional
++        Keeps the last factorization between calls with the same ``J``, ``D`` and
++        ``E`` (for example after a rejected step). Pass a new dict for a new ``J``.
+ 
+     Returns
+     -------
+@@ -536,11 +590,9 @@ def trust_region_step_block(
+     diag_max = jnp.max(jnp.where(real, jnp.diagonal(D, axis1=1, axis2=2), 0.0))
+     delta = 4 * n * jnp.finfo(D.dtype).eps * diag_max
+ 
+-    def solve(alpha):
+-        # The factorization is only a preconditioner, so it can use a shift of at
+-        # least delta: B + alpha*I can be singular to working precision when alpha
+-        # is below delta, and the conjugate gradients make up for the difference.
+-        shift = jnp.maximum(alpha, delta)
++    fac = {} if cache is None else cache
++
++    def factor(shift):
+         Ld, Lo = _block_cholesky(D, E, jnp.where(real, shift, 0.0))
+         for _ in range(3):
+             if not bool(_block_chol_failed(Ld, real)):
+@@ -548,11 +600,30 @@ def trust_region_step_block(
+             # can only happen through rounding errors in D, E
+             shift = 100 * shift
+             Ld, Lo = _block_cholesky(D, E, jnp.where(real, shift, 0.0))
++        fac.update(shift=float(shift), Ld=Ld, Lo=Lo)
++
++    def solve(alpha):
++        # The factorization is only a preconditioner, so it can use a shift of at
++        # least delta (B + alpha*I can be singular to working precision when alpha
++        # is below delta) and a factorization for a nearby alpha can be reused: the
++        # conjugate gradients make up for the difference. Factorizations are by far
++        # the most expensive part, so one is reused while the shift it was made for
++        # is within a factor reuse_ratio of the one wanted, and redone only if the
++        # conjugate gradients then fail to converge.
++        want = max(alpha, float(delta))
++        if not fac or not 1 / reuse_ratio <= want / fac["shift"] <= reuse_ratio:
++            factor(want)
++        p, k, res = _pcg(st)(J.data, fac["Ld"], fac["Lo"], g, alpha, cg_tol, cg_maxiter)
++        if int(k) >= cg_maxiter and float(res) > cg_tol and fac["shift"] != want:
++            factor(want)
++            p, _, _ = _pcg(st)(
++                J.data, fac["Ld"], fac["Lo"], g, alpha, cg_tol, cg_maxiter
++            )
++        Ld, Lo = fac["Ld"], fac["Lo"]
+ 
+         def apply(rhs):
+             return st.from_blocks(_block_solve(Ld, Lo, st.to_blocks(rhs)))
+ 
+-        p, _, _ = _pcg(st)(J.data, Ld, Lo, g, alpha, cg_tol, cg_maxiter)
+         return p, apply
+ 
+     p, _ = solve(0.0)
+diff --git a/desc/optimize/least_squares.py b/desc/optimize/least_squares.py
+index 16a3654..2b73a94 100644
+--- a/desc/optimize/least_squares.py
++++ b/desc/optimize/least_squares.py
+@@ -339,6 +339,7 @@ def lsqtr(  # noqa: C901
+             B_h = jnp.dot(J_a.T, J_a)
+         elif tr_method == "banded":
+             B_h = J_a.normal_blocks()
++            factor_cache = {}  # factorizations of B_h, reused for rejected steps
+         elif tr_method == "qr":
+             # try full newton step
+             tall = J_a.shape[0] >= J_a.shape[1]
+@@ -373,7 +374,12 @@ def lsqtr(  # noqa: C901
+                 )
+             elif tr_method == "banded":
+                 step_h, hits_boundary, alpha = trust_region_step_block(
+-                    f_a, J_a, *B_h, float(trust_radius), float(alpha)
++                    f_a,
++                    J_a,
++                    *B_h,
++                    float(trust_radius),
++                    float(alpha),
++                    cache=factor_cache,
+                 )
+                 alpha = jnp.float64(alpha)
+             elif tr_method == "qr":

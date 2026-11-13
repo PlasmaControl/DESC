@@ -1124,8 +1124,9 @@ class InputReader:
         pres_scale = 1.0
         curr_tor = None
 
-        LFREEB = vmec_indata.get("LFREEB", False)
-        if LFREEB:
+        # VMEC defaults LFREEB to true and runs free-boundary whenever a grid is named
+        mgrid_file = str(vmec_indata.get("MGRID_FILE", "")).strip().lower()
+        if vmec_indata.get("LFREEB", True) and mgrid_file not in ("", "none"):
             warnings.warn(
                 colored(
                     "Detected free-boundary mode in VMEC input file!"

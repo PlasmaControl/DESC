@@ -53,6 +53,7 @@ Bug Fixes
   subproblem, which often failed to converge and returned inexact steps in
   ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
+- Fixes inaccurate steps from ``tr_method="cho"`` in ``lsq-exact`` and ``lsq-auglag`` when ``J.T@J`` is singular or ill-conditioned, by refining the Cholesky solve using the Jacobian.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
 - Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives

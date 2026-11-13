@@ -13,7 +13,7 @@ from .bound_utils import (
     select_step,
 )
 from .tr_subproblems import (
-    trust_region_step_exact_cho,
+    trust_region_step_exact_cho_lsq,
     trust_region_step_exact_qr,
     trust_region_step_exact_svd,
     update_tr_radius,
@@ -172,7 +172,9 @@ def lsq_auglag(  # noqa: C901
           the trust region subproblem. ``"qr"`` and ``"cho"`` uses a sequence of QR or
           Cholesky factorizations (generally 2-3), while ``"svd"`` uses one singular
           value decomposition. ``"cho"`` is generally the fastest for large systems,
-          especially on GPU, but may be less accurate for badly scaled systems.
+          especially on GPU. It refines each solve using the Jacobian, but can still
+          be less accurate than ``"qr"`` if the condition number of the Jacobian is
+          above about ``1/sqrt(n*eps)``, for ``n`` variables.
           ``"svd"`` is the most accurate but significantly slower. If the Jacobian
           can become rank-deficient due to the bounds, ``"svd"`` is recommended and
           the default, otherwise the default is ``"qr"``.
@@ -436,8 +438,8 @@ def lsq_auglag(  # noqa: C901
                     L_a, U, s, Vt.T, trust_radius, alpha
                 )
             elif tr_method == "cho":
-                step_h, hits_boundary, alpha = trust_region_step_exact_cho(
-                    g_h, B_h, trust_radius, alpha
+                step_h, hits_boundary, alpha = trust_region_step_exact_cho_lsq(
+                    L_a, J_a, B_h, trust_radius, alpha
                 )
             elif tr_method == "qr":
                 step_h, hits_boundary, alpha = trust_region_step_exact_qr(

@@ -459,6 +459,7 @@ def _transform_method(jitable, method=None):
     return "jitable" if (jitable or method == "jitable") else "auto"
 
 
+@execute_on_cpu
 def get_transforms(
     keys, obj, grid, jitable=False, has_axis=False, basis="rpz", **kwargs
 ):

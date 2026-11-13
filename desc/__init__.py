@@ -66,7 +66,7 @@ config = {"device": None, "avail_mem": None, "kind": None}
 def _cgroup_memory_limit(proc="/proc/self/cgroup", root="/sys/fs/cgroup"):
     """Tightest cgroup memory limit on this process, in bytes, or inf if none.
 
-    Batch systems (eg Slurm, PBS) and containers limit the memory of a job with a
+    Batch systems (e.g. Slurm, PBS) and containers limit the memory of a job with a
     cgroup, which ``psutil`` does not see. The limit can be on a parent of the
     process's own cgroup (Slurm sets it on the job, above its step and task), so
     the parents are read too. Both cgroup v2 and v1 are read.
@@ -78,7 +78,10 @@ def _cgroup_memory_limit(proc="/proc/self/cgroup", root="/sys/fs/cgroup"):
     except OSError:
         return limit
     for line in lines:
-        _, controllers, path = line.split(":", 2)
+        fields = line.split(":", 2)
+        if len(fields) != 3:
+            continue
+        _, controllers, path = fields
         if controllers == "":  # cgroup v2
             base, name = root, "memory.max"
         elif "memory" in controllers.split(","):  # cgroup v1

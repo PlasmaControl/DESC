@@ -237,7 +237,7 @@ def test_cgroup_memory_limit(tmp_path):
 
     gib = 1024**3
     proc = tmp_path / "proc_cgroup"
-    # cgroup v2, a Slurm job: limited on the job and its step, not on the task
+    # cgroup v2, as in a Slurm job: limits on parents of the task, none on the task
     (tmp_path / "job" / "step" / "task").mkdir(parents=True)
     (tmp_path / "job" / "memory.max").write_text(f"{4 * gib}\n")
     (tmp_path / "job" / "step" / "memory.max").write_text(f"{8 * gib}\n")
@@ -249,8 +249,8 @@ def test_cgroup_memory_limit(tmp_path):
     (tmp_path / "memory" / "job" / "memory.limit_in_bytes").write_text(f"{gib}\n")
     proc.write_text("12:cpuset:/job\n4:memory:/job\n")
     assert _cgroup_memory_limit(str(proc), str(tmp_path)) == gib
-    # no cgroup
-    proc.write_text("0::/\n")
+    # no cgroup, and a line that is not a cgroup entry
+    proc.write_text("0::/\n\n")
     assert _cgroup_memory_limit(str(proc), str(tmp_path)) == float("inf")
     assert _cgroup_memory_limit(str(tmp_path / "none")) == float("inf")
 

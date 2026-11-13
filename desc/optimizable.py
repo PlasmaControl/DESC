@@ -6,7 +6,16 @@ from abc import ABC
 
 import numpy as np
 
-from desc.backend import jnp, tree_map
+from desc.backend import jax, jnp, tree_map
+
+
+def _as_param(x):
+    """Parameter as an array that is at least 1d and safe to hold on to."""
+    # jax arrays are immutable so they don't need to be copied, which avoids a few
+    # eager operations per parameter every time params_dict is read
+    if isinstance(x, jax.Array) and x.ndim > 0:
+        return x
+    return jnp.atleast_1d(jnp.asarray(x)).copy()
 
 
 class Optimizable(ABC):
@@ -43,10 +52,7 @@ class Optimizable(ABC):
     @property
     def params_dict(self):
         """dict: dictionary of arrays of optimizable parameters."""
-        return {
-            key: jnp.atleast_1d(jnp.asarray(getattr(self, key))).copy()
-            for key in self.optimizable_params
-        }
+        return {key: _as_param(getattr(self, key)) for key in self.optimizable_params}
 
     @params_dict.setter
     def params_dict(self, d):

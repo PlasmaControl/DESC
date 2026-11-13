@@ -11,6 +11,7 @@ New Features
 
 Performance Improvements
 
+- Avoids about 100 small JAX compilations when building and solving an equilibrium at a new resolution, by doing index and mode bookkeeping in ``Grid``, ``Optimizable.x_idx`` and ``compute_scaling_factors`` with NumPy instead of eager JAX operations.
 - Reduces memory use of Boozer harmonic projections and their derivatives by contracting the poloidal and toroidal Fourier factors separately.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.

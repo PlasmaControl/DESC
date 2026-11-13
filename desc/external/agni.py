@@ -63,10 +63,8 @@ class AgniStability(_Objective):
 
     With a fixed boundary the perturbations do not move the ρ=1 surface
     (ξ·∇ρ = 0 there), so the modes are global internal modes. With a free
-    boundary (``free_boundary=True``, on a basis whose outer radial node is at
-    ρ = 1) ξ·∇ρ is free on that surface and δW gains the energy of the vacuum
-    field the moving boundary drives, ``-∮ Φ B_n dS`` with Φ from the exterior
-    Neumann problem; the modes then include external (free-boundary) modes:
+    boundary (``free_boundary=True``) ξ·∇ρ is free on that surface and δW
+    includes the vacuum energy.
 
     - γ² > 0: unstable to a global mode of the chosen toroidal family,
     - γ² ≤ 0: stable.

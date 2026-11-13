@@ -24,7 +24,7 @@ Performance Improvements
 - Faster free boundary solves with a fixed external field (``field_fixed=True``): the jacobian of ``BoundaryError`` and ``VacuumBoundaryError`` no longer pushes every tangent through the Biot-Savart sum over the coils (the derivative of the field wrt position is found once per point instead), and the derivative of the virtual casing integral (``singular_integral`` with ``FFTInterpolator`` on matching grids) is formed once as a dense matrix and applied to all tangents by matrix multiplication. Objectives can opt in to linearizing once per jacobian instead of once per chunk of tangents with ``_Objective._jvp_linearize``.
 - ``ProximalProjection`` reuses the factorization of the equilibrium constraint jacobian from the last accepted point to perturb the equilibrium for each trial step, instead of recomputing the jacobian and its SVD. Can be turned off with ``perturb_options={"reuse_factorization": False}``.
 - Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
-- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol``, or was predicted to reduce the cost by less than ``ftol``, instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
+- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
 
 Breaking Changes and Deprecations
 
@@ -59,6 +59,7 @@ Bug Fixes
   ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.

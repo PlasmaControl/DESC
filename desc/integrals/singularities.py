@@ -8,11 +8,21 @@ from interpax import fft_interp2d
 from interpax_fft import rfft2_modes, rfft2_vander
 from scipy.constants import mu_0
 
-from desc.backend import fori_loop, jnp, rfft2
+from desc.backend import (
+    custom_jvp,
+    desc_config,
+    fori_loop,
+    jax,
+    jnp,
+    rfft2,
+    use_jax,
+    vmap,
+)
 from desc.batching import batch_map, vmap_chunked
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.utils import (
+    arrays_and_rebuild,
     check_posint,
     errorif,
     parse_argname_change,
@@ -847,11 +857,20 @@ def singular_integral(
     if isinstance(kernel, str):
         kernel = kernels[kernel]
 
+    if _can_linearize(interpolator, kernel):
+        return _singular_integral_linearized(
+            eval_data, source_data, kernel, interpolator, chunk_size
+        )
+    return _singular_integral(eval_data, source_data, kernel, interpolator, chunk_size)
+
+
+def _singular_integral(eval_data, source_data, kernel, interpolator, chunk_size):
+    """Sum of the singular and nonsingular parts of the integral."""
     out1 = _singular_part(eval_data, source_data, kernel, interpolator, chunk_size)
     out2 = _nonsingular_part(
         eval_data,
         interpolator._eval_grid,
-        source_data,
+        dict(source_data),
         interpolator._source_grid,
         interpolator.st,
         interpolator.sz,
@@ -859,6 +878,249 @@ def singular_integral(
         chunk_size,
     )
     return out1 + out2
+
+
+def _source_keys(kernel):
+    """Data at the source nodes that the integral depends on."""
+    keys = set(kernel.keys) | {"|e_theta x e_zeta|", "phi"}
+    if "phi" in kernel.keys:
+        # the singular part interpolates ω = ϕ − ζ, which unlike ϕ is periodic
+        keys.add("omega")
+    return sorted(keys)
+
+
+def _can_linearize(interpolator, kernel):
+    """Whether the derivative of the integral can be formed as a dense matrix.
+
+    See ``_singular_integral_linearized``. This needs the interpolation to the polar
+    nodes to be a convolution over the source grid, which holds for FFT interpolation
+    between identical grids, and the matrix to fit comfortably in memory.
+    """
+    if not use_jax or not isinstance(interpolator, FFTInterpolator):
+        return False
+    eval_grid, source_grid = interpolator._eval_grid, interpolator._source_grid
+    if (eval_grid.num_theta, eval_grid.num_zeta, eval_grid.NFP) != (
+        source_grid.num_theta,
+        source_grid.num_zeta,
+        source_grid.NFP,
+    ):
+        return False
+    # size of ∂f/∂(source data), with ~6 components of data per source node
+    nbytes = 8 * kernel.ndim * 8 * eval_grid.num_nodes * source_grid.num_nodes
+    avail = desc_config.get("avail_mem")
+    return avail is None or nbytes < 0.15 * avail * 1024**3
+
+
+def _stack(data, keys):
+    """Stack data[key] for each key as columns of shape(num nodes, num components)."""
+    return jnp.concatenate(
+        [data[key].reshape(data[key].shape[0], -1) for key in keys], axis=-1
+    )
+
+
+def _shift(data, eps, keys):
+    """Add the components of eps to data[key] at every node, in the order of _stack."""
+    data = dict(data)
+    i = 0
+    for key in keys:
+        n = 1 if data[key].ndim == 1 else data[key].shape[-1]
+        data[key] = data[key] + (eps[i] if data[key].ndim == 1 else eps[i : i + n])
+        i += n
+    return data
+
+
+def _singular_integral_linearized(
+    eval_data, source_data, kernel, interpolator, chunk_size
+):
+    """Singular integral with a derivative rule that scales to many tangents.
+
+    The integral is a linear map of the data at the source nodes for a fixed geometry,
+    and so is its derivative. Differentiating the integration routine directly applies
+    that map to each tangent by repeating all the kernel evaluations and all the
+    interpolations to the polar nodes. Here the map is instead formed once as a dense
+    matrix, ``_singular_integral_operator``, and applied to the tangents by matrix
+    multiplication. For the jacobian wrt a few hundred parameters or more this is an
+    order of magnitude less work.
+    """
+    skeys = _source_keys(kernel)
+    ekeys = sorted(key for key in kernel.keys if key in eval_data)
+    e = {key: eval_data[key] for key in ekeys}
+    s = {key: source_data[key] for key in skeys}
+    # the interpolator holds arrays that may be traced, so they have to be arguments
+    arrays, rebuild = arrays_and_rebuild(interpolator)
+
+    @custom_jvp
+    def integral(e, s, arrays):
+        return _singular_integral(e, s, kernel, rebuild(arrays), chunk_size)
+
+    @integral.defjvp
+    def _integral_jvp(primals, tangents):
+        e, s, arrays = primals
+        de, ds, _ = tangents
+        interpolator = rebuild(arrays)
+        f = _singular_integral(e, s, kernel, interpolator, chunk_size)
+        D, G = _singular_integral_operator(e, s, kernel, interpolator, chunk_size)
+        df = jnp.einsum("iacj,jc->ia", D, _stack(ds, skeys))
+        df += jnp.einsum("iac,ic->ia", G, _stack(de, ekeys))
+        return f, df
+
+    return integral(e, s, arrays)
+
+
+def _singular_integral_operator(e, s, kernel, interpolator, chunk_size=None):
+    """Derivative of the singular integral wrt the data at the source and eval nodes.
+
+    Parameters
+    ----------
+    e, s : dict
+        Data at the evaluation and source nodes that the integral depends on.
+    kernel : callable
+        Kernel function, see ``singular_integral``.
+    interpolator : FFTInterpolator
+        Interpolator between identical grids.
+    chunk_size : int or None
+        Size to split the evaluation nodes into chunks.
+
+    Returns
+    -------
+    D : ndarray, shape(num eval nodes, kernel.ndim, num components, num source nodes)
+        D[i,a,c,j] = ∂f[i,a]/∂s[j,c], with s the columns of ``_stack(s, sorted(s))``.
+    G : ndarray, shape(num eval nodes, kernel.ndim, num components)
+        G[i,a,c] = ∂f[i,a]/∂e[i,c], with e the columns of ``_stack(e, sorted(e))``.
+
+    """
+    eval_grid, source_grid = interpolator._eval_grid, interpolator._source_grid
+    ne, ns, ndim = eval_grid.num_nodes, source_grid.num_nodes, kernel.ndim
+    nt, nz, NFP = source_grid.num_theta, source_grid.num_zeta, source_grid.NFP
+    st, sz, ht, hz = interpolator.st, interpolator.sz, interpolator.ht, interpolator.hz
+    skeys, ekeys = sorted(s), sorted(e)
+    C = _stack(s, skeys).shape[-1]
+    Ce = _stack(e, ekeys).shape[-1]
+    eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
+    eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
+    source_theta = jnp.asarray(source_grid.nodes[:, 1])
+    source_zeta = jnp.asarray(source_grid.nodes[:, 2])
+
+    def rpz(f, phi):
+        return xyz2rpz_vec(f, phi=phi) if ndim == 3 else f
+
+    # ---- nonsingular part, as in _nonsingular_part but without the sum over sources
+    def pairs(e_i, s, j):
+        """Contribution of each source node of field period j to each eval node."""
+        s = dict(s)
+        s["zeta"] = (source_zeta + j * 2 * jnp.pi / NFP) % (2 * jnp.pi)
+        s["phi"] = (s["phi"] + j * 2 * jnp.pi / NFP) % (2 * jnp.pi)
+        k = kernel(e_i, s).reshape(-1, ns, ndim)
+        eta = _eta(
+            source_theta,
+            s["zeta"],
+            e_i["theta"][:, jnp.newaxis],
+            e_i["zeta"][:, jnp.newaxis],
+            ht,
+            hz,
+            st,
+            sz,
+        )
+        w = s["|e_theta x e_zeta|"][jnp.newaxis] * ht * hz
+        return rpz(k * (w * (1 - eta))[..., jnp.newaxis], e_i["phi"][:, jnp.newaxis])
+
+    # ---- singular part, as in _singular_part
+    r, w, dr, dw = _get_quadrature_nodes(interpolator.q)
+    r = jnp.abs(r)
+    v = _chi(r) * (ht * hz) * (st * sz / 4) * r * dr * dw
+    nq = v.size
+    pkeys = [key for key in skeys if key != "phi"]
+    fsource = [interpolator.fourier(s[key]) for key in pkeys]
+
+    def polar_data(q):
+        return [interpolator(val, q, is_fourier=True) for val in fsource]
+
+    # source data at polar node q around each eval node, shape(ne, nq, ...)
+    polar = vmap_chunked(polar_data, chunk_size=chunk_size)(jnp.arange(nq))
+    polar = {key: jnp.moveaxis(val, 0, 1) for key, val in zip(pkeys, polar)}
+
+    def polar_pts(e_i, polar_i):
+        """Contribution of each polar node around each eval node to that node."""
+        n = e_i["theta"].shape[0]
+        sp = {key: val.reshape(n * nq, *val.shape[2:]) for key, val in polar_i.items()}
+        ep = {key: jnp.repeat(val, nq, axis=0) for key, val in e_i.items()}
+        sp["theta"] = ep["theta"] + jnp.tile(interpolator.shift_t, n)
+        sp["zeta"] = ep["zeta"] + jnp.tile(interpolator.shift_z, n)
+        if "omega" in sp:
+            sp["phi"] = sp["zeta"] + sp["omega"]
+        k = kernel(ep, sp, diag=True).reshape(n * nq, ndim)
+        dS = jnp.tile(v, n) * sp["|e_theta x e_zeta|"]
+        return rpz(k * dS[:, jnp.newaxis], ep["phi"]).reshape(n, nq, ndim)
+
+    # Interpolation to polar node q is a convolution over the source grid, so its
+    # matrix is given by the interpolant of a point source at node 0 (θ=0, ζ=0):
+    # interp_q(f)[i] = Σ_j kappa[q, i-j] f[j]
+    delta = jnp.zeros(ns).at[0].set(1.0)
+    kappa = vmap_chunked(lambda q: interpolator(delta, q), chunk_size=chunk_size)(
+        jnp.arange(nq)
+    )
+    # nodes are ordered with θ varying fastest
+    src_t, src_z = jnp.arange(ns) % nt, jnp.arange(ns) // nt
+
+    def rows(chunk):
+        """D and G for a chunk of eval nodes."""
+        e_i = {key: chunk[key] for key in [*ekeys, "theta", "zeta"]}
+        polar_i = {key: chunk["polar " + key] for key in pkeys}
+        n = e_i["theta"].shape[0]
+
+        def nfp_loop(j, DG):
+            D, G = DG
+            # eps is added to the data at every node, and each pair (or eval node)
+            # only depends on its own node, so this is the derivative wrt the data
+            # at the source node of each pair (or at each eval node).
+            D += jax.jacfwd(lambda eps: pairs(e_i, _shift(s, eps, skeys), j))(
+                jnp.zeros(C)
+            )
+            G += jax.jacfwd(
+                lambda eps: pairs(_shift(e_i, eps, ekeys), s, j).sum(axis=1)
+            )(jnp.zeros(Ce))
+            return D, G
+
+        D, G = fori_loop(
+            0, NFP, nfp_loop, (jnp.zeros((n, ns, ndim, C)), jnp.zeros((n, ndim, Ce)))
+        )
+        D = jnp.moveaxis(D, 1, -1)  # (n, ndim, C, ns)
+
+        # derivative wrt the data at the polar nodes
+        H = jax.jacfwd(lambda eps: polar_pts(e_i, _shift_polar(polar_i, eps, skeys)))(
+            jnp.zeros(C)
+        )
+        G += jax.jacfwd(
+            lambda eps: polar_pts(_shift(e_i, eps, ekeys), polar_i).sum(axis=1)
+        )(jnp.zeros(Ce))
+        # and from there to the data at the source nodes through the interpolation
+        R = jnp.einsum("iqac,qo->iaco", H, kappa)
+        offset = (chunk["t"][:, jnp.newaxis] - src_t) % nt + nt * (
+            (chunk["z"][:, jnp.newaxis] - src_z) % nz
+        )
+        D += vmap(lambda Ri, oi: Ri[..., oi])(R, offset)
+        return D, G
+
+    chunk = {key: e[key] for key in ekeys}
+    chunk.update({"polar " + key: polar[key] for key in pkeys})
+    chunk["theta"], chunk["zeta"] = eval_theta, eval_zeta
+    chunk["t"], chunk["z"] = jnp.arange(ne) % nt, jnp.arange(ne) // nt
+    return batch_map(rows, chunk, chunk_size)
+
+
+def _shift_polar(data, eps, keys):
+    """As _shift, for data that only has some of the keys (the others are skipped)."""
+    data = dict(data)
+    i = 0
+    for key in keys:
+        if key not in data:
+            i += 1  # only scalars (phi) are missing from the polar data
+            continue
+        scalar = data[key].ndim == 2  # shape(n, nq) or shape(n, nq, 3)
+        n = 1 if scalar else data[key].shape[-1]
+        data[key] = data[key] + (eps[i] if scalar else eps[i : i + n])
+        i += n
+    return data
 
 
 def _kernel_nr_over_r3(eval_data, source_data, diag=False):

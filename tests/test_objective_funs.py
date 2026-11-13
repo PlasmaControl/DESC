@@ -753,6 +753,56 @@ class TestObjectiveFunction:
         )
 
     @pytest.mark.unit
+    def test_boundary_error_jacobian_linearized(self):
+        """Test jacobian of BoundaryError with a fixed field against plain AD.
+
+        With a fixed field the jacobian is found by linearizing the objective once,
+        with custom rules for the coil field and the virtual casing integral.
+        """
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=8, check_intersection=False)
+        coil_grid = LinearGrid(N=20)
+        eq = Equilibrium(L=2, M=2, N=2, Psi=np.pi)
+        grid = LinearGrid(M=4, N=4, NFP=eq.NFP)
+
+        def make(field_fixed):
+            obj = ObjectiveFunction(
+                BoundaryError(
+                    eq,
+                    coilset,
+                    field_grid=coil_grid,
+                    field_fixed=field_fixed,
+                    source_grid=grid,
+                    eval_grid=grid,
+                    s=5,
+                    q=6,
+                    B_plasma_chunk_size=20,
+                    bs_chunk_size=30,
+                ),
+                jac_chunk_size=7,
+            )
+            obj.build(verbose=0)
+            return obj
+
+        obj = make(field_fixed=True)
+        assert obj.objectives[0]._jvp_linearize
+        x = obj.x(eq)
+        J = obj.jac_scaled_error(x)
+        g = obj.grad(x)
+
+        # the same with the field as a (fixed in value) thing uses plain AD throughout
+        ref = make(field_fixed=False)
+        assert not ref.objectives[0]._jvp_linearize
+        xr = ref.x(eq, coilset)
+        Jr = ref.jac_scaled_error(xr)[:, : x.size]
+        gr = ref.grad(xr)[: x.size]
+        np.testing.assert_allclose(
+            obj.compute_scaled_error(x), ref.compute_scaled_error(xr)
+        )
+        np.testing.assert_allclose(J, Jr, rtol=1e-8, atol=1e-10 * np.abs(Jr).max())
+        np.testing.assert_allclose(g, gr, rtol=1e-8, atol=1e-10 * np.abs(gr).max())
+
+    @pytest.mark.unit
     def test_boundary_error_vacuum(self):
         """Test calculation of vacuum boundary error."""
         coil = FourierXYZCoil(5e5)

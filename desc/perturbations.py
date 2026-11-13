@@ -359,7 +359,11 @@ def perturb(  # noqa: C901
             max_iter=10,
         )
         dx1_reduced = scale @ dx1_h
-        dx1 = recover(dx1_reduced) - xp
+        # Change of the full state vector. This is not recover(dx1_reduced) - xp:
+        # recover adds D*xp, which would leave (D-1)*xp in the fixed parameters
+        # (eg the full value of a profile in SI units) and from there in the
+        # tangent of the higher order terms.
+        dx1 = dxdx_reduced @ dx1_reduced
 
     # 2nd order
     if order > 1:
@@ -384,7 +388,7 @@ def perturb(  # noqa: C901
             max_iter=10,
         )
         dx2_reduced = scale @ dx2_h
-        dx2 = recover(dx2_reduced) - xp
+        dx2 = dxdx_reduced @ dx2_reduced
 
     # 3rd order
     if order > 2:

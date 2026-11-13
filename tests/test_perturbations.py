@@ -243,3 +243,37 @@ def test_perturb_to_lower_resolution_profile():
     eq2.pressure = p2
     deltas = get_deltas({"pressure": eq.pressure}, {"pressure": eq2.pressure})
     _ = eq.perturb(deltas, order=0, copy=True)
+
+
+@pytest.mark.unit
+def test_perturbation_second_order_scaled_fixed_params():
+    """Test the 2nd order perturbation when fixed parameters are scaled.
+
+    Fixed parameters of large magnitude (eg a pressure profile in Pa) are scaled when
+    the linear constraints are factorized. The 2nd order term is evaluated along the
+    1st order change of the state vector, which must not pick up that scaling.
+    """
+    eq = desc.examples.get("DSHAPE")
+    assert np.abs(eq.p_l).max() > 1e2  # so the pressure is scaled
+    objective = ObjectiveFunction(ForceBalance(eq))
+    objective.build(verbose=0)
+    f0 = objective.compute_scalar(objective.x(eq))
+
+    # shift and reshape the boundary by ~1%
+    dRb = np.zeros_like(eq.Rb_lmn)
+    dZb = np.zeros_like(eq.Zb_lmn)
+    dRb[eq.surface.R_basis.get_idx(M=1, N=0)] = 0.01
+    dRb[eq.surface.R_basis.get_idx(M=2, N=0)] = 0.01
+    dZb[eq.surface.Z_basis.get_idx(M=-1, N=0)] = 0.01
+    deltas = {"Rb_lmn": dRb, "Zb_lmn": dZb}
+
+    f = []
+    for order in [1, 2]:
+        eqp = eq.perturb(deltas, order=order, verbose=0, copy=True)
+        obj = ObjectiveFunction(ForceBalance(eqp))
+        obj.build(verbose=0)
+        f.append(obj.compute_scalar(obj.x(eqp)))
+    # the 1st order perturbation leaves an error that is 2nd order in the step,
+    # the 2nd order perturbation should remove most of that
+    assert f[0] > 10 * f0
+    assert f[1] < 0.2 * f[0]

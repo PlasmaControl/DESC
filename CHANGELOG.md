@@ -33,6 +33,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction.
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.

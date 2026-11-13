@@ -38,6 +38,7 @@ from desc.magnetic_fields import (
     OmnigenousField,
     PoloidalMagneticField,
     SplineMagneticField,
+    SumMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
 )
@@ -713,6 +714,43 @@ class TestObjectiveFunction:
 
         with pytest.raises(ValueError, match="At least one"):
             BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
+    def test_boundary_error_fixed_field_derivative(self):
+        """Test the derivative rule for a fixed field against plain AD."""
+        from desc.objectives._free_boundary import _fixed_field_at_points
+
+        coil = FourierXYZCoil(5e5)
+        coilset = CoilSet.linspaced_angular(coil, n=6, check_intersection=False)
+        field = [coilset, ToroidalMagneticField(1.0, 10.0)]
+        field = SumMagneticField(field)
+        grids = [LinearGrid(N=20), None]
+        rng = np.random.default_rng(0)
+        x = jnp.asarray(
+            np.array([10.0, 0.0, 0.0]) + rng.uniform(-0.3, 0.3, size=(7, 3))
+        )
+
+        def plain(x):
+            return field.compute_magnetic_field(
+                x, source_grid=grids, basis="rpz", chunk_size=4
+            )
+
+        def fixed(x):
+            return _fixed_field_at_points(field, x, grids, chunk_size=4)
+
+        np.testing.assert_allclose(fixed(x), plain(x), rtol=1e-14)
+        np.testing.assert_allclose(jax.jit(fixed)(x), plain(x), rtol=1e-12)
+        J = jax.jacfwd(plain)(x)
+        np.testing.assert_allclose(jax.jacfwd(fixed)(x), J, rtol=1e-10, atol=1e-14)
+        np.testing.assert_allclose(jax.jacrev(fixed)(x), J, rtol=1e-10, atol=1e-14)
+        np.testing.assert_allclose(
+            jax.jit(jax.jacfwd(fixed))(x), J, rtol=1e-10, atol=1e-14
+        )
+        # second derivatives go through the rule twice
+        H = jax.jacfwd(jax.jacfwd(plain))(x)
+        np.testing.assert_allclose(
+            jax.jacfwd(jax.jacfwd(fixed))(x), H, rtol=1e-8, atol=1e-12
+        )
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):

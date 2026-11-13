@@ -1367,6 +1367,42 @@ def copy_rpz_periods(rpz, NFP):
     return jnp.array([r, p.flatten(), z]).T
 
 
+def arrays_and_rebuild(tree):
+    """Split a pytree into its arrays and a function to rebuild it from arrays.
+
+    Functions with custom derivative rules (``jax.custom_jvp``) can't close over
+    traced arrays, such as the attributes of an object that was passed to a jitted
+    function. Those arrays have to be arguments of the function instead. This gives
+    the arrays to pass and the function to get the object back from them. Leaves
+    that are not arrays (eg python ints) are kept as they are.
+
+    Parameters
+    ----------
+    tree : pytree
+        Object or collection of objects to split.
+
+    Returns
+    -------
+    arrays : list of ndarray
+        Array leaves of ``tree``.
+    rebuild : callable
+        ``rebuild(arrays)`` returns a pytree like ``tree`` holding ``arrays``.
+
+    """
+    leaves, treedef = jax.tree_util.tree_flatten(tree)
+    is_array = [isinstance(leaf, (jax.Array, np.ndarray)) for leaf in leaves]
+    arrays = [leaf for leaf, isarr in zip(leaves, is_array) if isarr]
+
+    def rebuild(arrays):
+        arrays = iter(arrays)
+        return jax.tree_util.tree_unflatten(
+            treedef,
+            [next(arrays) if isarr else leaf for leaf, isarr in zip(leaves, is_array)],
+        )
+
+    return arrays, rebuild
+
+
 def identity(y):
     """Returns the input."""
     return y

@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import custom_jvp, jax, jnp, use_jax, vmap
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
 from desc.grid import LinearGrid
@@ -13,6 +13,7 @@ from desc.objectives.objective_funs import _Objective, collect_docs
 from desc.utils import (
     PRINT_WIDTH,
     Timer,
+    arrays_and_rebuild,
     errorif,
     parse_argname_change,
     setdefault,
@@ -21,6 +22,69 @@ from desc.utils import (
 
 from ..integrals.singularities import best_params, best_ratio
 from .normalization import compute_scaling_factors
+
+
+def _fixed_field_at_points(field, x, source_grid=None, chunk_size=None):
+    """Field of a fixed source at the points ``x``, with a cheap derivative wrt ``x``.
+
+    The field at a point depends only on the coordinates of that point, so its
+    derivative is a 3x3 matrix per point: dB = (∂B/∂x) dx. JAX can't see that
+    structure through the sum over sources, and pushes every tangent (one per
+    optimization variable) through every source point. Here ∂B/∂x is instead found
+    for all the points at once from three tangents and then applied to ``dx``, so
+    the cost is that of a few field evaluations, however many tangents there are.
+
+    Only valid when the field itself is not being differentiated (``field_fixed``).
+
+    Parameters
+    ----------
+    field : MagneticField
+        Source of the field. Its parameters are held constant.
+    x : ndarray, shape(n,3)
+        Evaluation points in [R,phi,Z] coordinates.
+    source_grid : Grid, int or None or array-like, optional
+        Grid used to discretize ``field``.
+    chunk_size : int or None
+        Size to split computation into chunks of evaluation points.
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        Magnetic field at ``x`` in [R,phi,Z] components.
+
+    """
+    if not use_jax:
+        return field.compute_magnetic_field(
+            x, source_grid=source_grid, basis="rpz", chunk_size=chunk_size
+        )
+
+    # field and source_grid can hold traced arrays (they are part of the objective that
+    # gets passed to jitted functions), which custom_jvp does not allow closing over.
+    # So their arrays are passed as arguments, with tangents that are not used.
+    arrays, rebuild = arrays_and_rebuild((field, source_grid))
+
+    def fun(x, arrays):
+        field, source_grid = rebuild(arrays)
+        return field.compute_magnetic_field(
+            x, source_grid=source_grid, basis="rpz", chunk_size=chunk_size
+        )
+
+    @custom_jvp
+    def B_fixed(x, arrays):
+        return fun(x, arrays)
+
+    @B_fixed.defjvp
+    def _B_fixed_jvp(primals, tangents):
+        x, arrays = primals
+        dx = tangents[0]
+        # tangent k moves every point along coordinate k, giving ∂B/∂x_k at all points
+        units = jnp.broadcast_to(jnp.eye(3)[:, None, :], (3, *x.shape))
+        B, dBdx = vmap(
+            lambda t: jax.jvp(lambda x: fun(x, arrays), (x,), (t,)), out_axes=(None, 0)
+        )(units)
+        return B, jnp.einsum("kna,nk->na", dBdx, dx)
+
+    return B_fixed(x, arrays)
 
 
 class VacuumBoundaryError(_Objective):
@@ -74,6 +138,12 @@ class VacuumBoundaryError(_Objective):
     _print_value_fmt = "Boundary Error: "
     _units = "(T*m^2, T^2*m^2)"
     _coordinates = "rtz"
+
+    @property
+    def _jvp_linearize(self):
+        # with a fixed field the jacobian of the field wrt position is the expensive
+        # part of the derivative, and is the same for every tangent
+        return self._field_fixed
 
     def __init__(
         self,
@@ -235,13 +305,18 @@ class VacuumBoundaryError(_Objective):
         x = jnp.array([data["R"], data["phi"], data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=self._field_grid,
-            basis="rpz",
-            params=field_params,
-            chunk_size=self._bs_chunk_size,
-        )
+        if self._field_fixed:
+            Bext = _fixed_field_at_points(
+                constants["field"], x, self._field_grid, self._bs_chunk_size
+            )
+        else:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
         Bex_total = Bext
         Bin_total = data["B"]
         Bn = jnp.sum(Bex_total * data["n_rho"], axis=-1)
@@ -854,13 +929,18 @@ class BoundaryError(_Objective):
         x = jnp.array([eval_data["R"], eval_data["phi"], eval_data["Z"]]).T
         # can always pass in field params. If they're None, it just uses the
         # defaults for the given field.
-        Bext = constants["field"].compute_magnetic_field(
-            x,
-            source_grid=self._field_grid,
-            basis="rpz",
-            params=field_params,
-            chunk_size=self._bs_chunk_size,
-        )
+        if self._field_fixed:
+            Bext = _fixed_field_at_points(
+                constants["field"], x, self._field_grid, self._bs_chunk_size
+            )
+        else:
+            Bext = constants["field"].compute_magnetic_field(
+                x,
+                source_grid=self._field_grid,
+                basis="rpz",
+                params=field_params,
+                chunk_size=self._bs_chunk_size,
+            )
         Bex_total = Bext + Bplasma
         Bin_total = eval_data["B"]
         Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)

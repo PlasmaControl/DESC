@@ -4978,3 +4978,21 @@ def test_deprecated_constants():
     obj.build()
     with pytest.warns(FutureWarning, match="constants is deprecated"):
         _ = obj.compute_scaled_error(obj.x(), constants=obj.constants)
+
+
+@pytest.mark.unit
+def test_auto_jac_chunk_size_uses_jax_memory(monkeypatch):
+    """jac_chunk_size="auto" is sized to the memory JAX can still allocate."""
+    import desc.objectives.objective_funs as objective_funs
+
+    eq = Equilibrium(L=3, M=3, N=1)
+
+    def auto_chunk_size(avail_mem):
+        monkeypatch.setattr(objective_funs, "_jax_available_memory", lambda: avail_mem)
+        obj = ObjectiveFunction(ForceBalance(eq), jac_chunk_size="auto")
+        obj.build(verbose=0)
+        return obj._jac_chunk_size, obj.dim_x
+
+    chunk_small, dim_x = auto_chunk_size(0.5)
+    chunk_large, _ = auto_chunk_size(1.0)
+    assert 0 < chunk_small < chunk_large < dim_x

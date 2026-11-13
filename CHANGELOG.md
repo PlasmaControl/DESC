@@ -33,6 +33,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- Fixes ``jac_chunk_size="auto"`` running out of memory in the first Jacobian: the chunk is now sized to the memory left in JAX's device pool (75% of a GPU by default) and, on CPU, to the process's cgroup memory limit (e.g. in a Slurm job). The coefficient of its memory estimate is raised from 2.4e-7 to 3e-7 [#2362](https://github.com/PlasmaControl/DESC/issues/2362).
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.

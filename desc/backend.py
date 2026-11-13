@@ -82,6 +82,21 @@ def print_backend_info():
     )
 
 
+def _jax_available_memory():
+    """Memory in GB that JAX can still allocate on its first local device.
+
+    On a GPU, JAX allocates from a pool of 75% of the device memory by default
+    (``XLA_PYTHON_CLIENT_MEM_FRACTION``), so when the device reports a pool, what
+    is left in it counts. Otherwise the free memory found by ``set_device``.
+    """
+    avail_mem = desc_config.get("avail_mem")
+    stats = jax.local_devices()[0].memory_stats() if use_jax else None
+    if stats and stats.get("bytes_limit"):
+        pool = (stats["bytes_limit"] - stats.get("bytes_in_use", 0)) / 1024**3
+        avail_mem = min(avail_mem, pool)
+    return avail_mem
+
+
 def _diag_to_full(d, e):
     j = np.arange(d.shape[-1])
     return (

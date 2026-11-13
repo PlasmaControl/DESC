@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from desc.backend import (
-    desc_config,
+    _jax_available_memory,
     execute_on_cpu,
     jit,
     jnp,
@@ -91,8 +91,8 @@ doc_jac_chunk_size = """
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
         Defaults to ``chunk_size=None``.
-        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
-        accurately estimate the available device memory, so the ``auto`` chunk_size
+        Note: On a CPU on a HPC cluster that sets no cgroup memory limit on the job,
+        DESC cannot estimate the available memory well, so the ``auto`` chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 """
@@ -345,8 +345,8 @@ class ObjectiveFunction(IOAble):
         Can also help with Hessian computation memory, as Hessian is essentially
         ``jacfwd(jacrev(f))``, and each of these operations may be chunked.
         Defaults to ``chunk_size="auto"``.
-        Note: When running on a CPU (not a GPU) on a HPC cluster, DESC is unable to
-        accurately estimate the available device memory, so the "auto" chunk_size
+        Note: On a CPU on a HPC cluster that sets no cgroup memory limit on the job,
+        DESC cannot estimate the available memory well, so the "auto" chunk_size
         option will yield a larger chunk size than may be needed. It is recommended
         to manually choose a chunk_size if an OOM error is experienced in this case.
 
@@ -535,8 +535,8 @@ class ObjectiveFunction(IOAble):
         if self._jac_chunk_size == "auto":
             # Heuristic estimates of fwd mode Jacobian memory usage,
             # slightly conservative, based on using ForceBalance as the objective
-            estimated_memory_usage = 2.4e-7 * self.dim_f * self.dim_x + 1  # in GB
-            avail_mem = desc_config.get("avail_mem")
+            estimated_memory_usage = 3e-7 * self.dim_f * self.dim_x + 1  # in GB
+            avail_mem = _jax_available_memory()
             max_chunk_size = round(
                 (avail_mem / estimated_memory_usage - 0.22) / 0.85 * self.dim_x
             )

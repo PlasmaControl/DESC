@@ -2,9 +2,13 @@
 
 import warnings
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 import equinox as eqx
+import numpy as np
 from diffrax import (
+    RESULTS,
+    AbstractAdaptiveSolver,
     AbstractTerm,
     Event,
     PIDController,
@@ -15,7 +19,7 @@ from diffrax import (
 )
 from scipy.constants import Boltzmann, elementary_charge, proton_mass
 
-from desc.backend import jax, jnp, tree_map
+from desc.backend import jax, jit, jnp, tree_map
 from desc.batching import vmap_chunked
 from desc.compute.utils import _compute as compute_fun
 from desc.compute.utils import get_profiles, get_transforms
@@ -127,6 +131,8 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         numerical issues with the rho = 0. Note that particle position doesn't have
         discontinuity due to this, only the magnetic field is computed at a different
         point.
+
+        In "flux" frame, the field can also be an InterpolatedFieldFlux.
     """
 
     vcoords = ["vpar"]
@@ -169,13 +175,18 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         model_args, eq_or_field, params, kwargs = args
         m, q, mu = model_args
         if self.frame == "flux":
-            assert isinstance(
-                eq_or_field, Equilibrium
-            ), "Integration in flux coordinates requires an Equilibrium."
-
-            return self._compute_flux_coordinates(
-                x, eq_or_field, params, m, q, mu, **kwargs
+            assert isinstance(eq_or_field, (Equilibrium, InterpolatedFieldFlux)), (
+                "Integration in flux coordinates requires an Equilibrium or "
+                "InterpolatedFieldFlux."
             )
+            if isinstance(eq_or_field, InterpolatedFieldFlux):
+                return self._compute_flux_coordinates_interpolated(
+                    x, eq_or_field, params, m, q, mu
+                )
+            else:
+                return self._compute_flux_coordinates(
+                    x, eq_or_field, params, m, q, mu, **kwargs
+                )
         elif self.frame == "lab":
             assert isinstance(eq_or_field, _MagneticField), (
                 "Integration in lab coordinates requires a MagneticField. If using an "
@@ -188,6 +199,7 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
                 x, eq_or_field, params, m, q, mu, **kwargs
             )
 
+    @jit
     def _compute_flux_coordinates(self, x, eq, params, m, q, mu, **kwargs):
         """ODE equation for vacuum guiding center in flux coordinates.
 
@@ -253,6 +265,31 @@ class VacuumGuidingCenterTrajectory(AbstractTrajectoryModel):
         dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
         return dxdt.squeeze()
 
+    @jit
+    def _compute_flux_coordinates_interpolated(self, x, field, params, m, q, mu):
+        """ODE equation for vacuum guiding center in flux coordinates from a table.
+
+        With the fields of InterpolatedFieldFlux, the flux coordinate velocities are
+        k̇ = v∥ 𝐛⋅∇k + (μ|B| + m v∥²)/q 𝐃⋅∇k for k = ρ, θ, ζ, with 𝐛⋅∇ρ = 0.
+        """
+        xp, yp, zeta, vpar = x
+        rho = jnp.sqrt(xp**2 + yp**2)
+        theta = jnp.arctan2(yp, xp)
+        rho = jnp.where(rho < 1e-6, 1e-6, rho)
+
+        data = field.evaluate(rho, theta, zeta, params)
+        c = (mu * data["|B|"] + m * vpar**2) / q
+        rhodot = c * data["D.e^rho"]
+        thetadot_x_rho = vpar * data["b.e^theta*rho"] + c * data["D.e^theta*rho"]
+        zetadot = vpar * data["b.e^zeta"] + c * data["D.e^zeta"]
+
+        xpdot = rhodot * jnp.cos(theta) - thetadot_x_rho * jnp.sin(theta)
+        ypdot = rhodot * jnp.sin(theta) + thetadot_x_rho * jnp.cos(theta)
+        vpardot = -mu / m * data["b.grad(|B|)"]
+        dxdt = jnp.array([xpdot, ypdot, zetadot, vpardot]).reshape(x.shape)
+        return dxdt.squeeze()
+
+    @jit
     def _compute_lab_coordinates(self, x, field, params, m, q, mu, **kwargs):
         """Compute the RHS of the ODE using MagneticField.
 
@@ -977,6 +1014,42 @@ class SurfaceParticleInitializer(AbstractParticleInitializer):
         )
 
 
+class _Tsit5Unrolled(AbstractAdaptiveSolver):
+    """Tsit5 with unrolled stages, gives the same result as diffrax.Tsit5.
+
+    diffrax loops over the stages, which is slow on GPU when the RHS is cheap. Only
+    for a single term with an array state and no jumps.
+    """
+
+    term_structure: ClassVar = AbstractTerm
+    interpolation_cls: ClassVar = Tsit5.interpolation_cls
+
+    def order(self, terms):
+        """Order of the solver."""
+        return 5
+
+    def init(self, terms, t0, t1, y0, args):
+        """RHS at the initial point, reused as the first stage (FSAL)."""
+        return terms.vf(t0, y0, args)
+
+    def step(self, terms, t0, t1, y0, args, solver_state, made_jump):
+        """Take a single step from t0 to t1."""
+        tableau = Tsit5.tableau
+        dt = t1 - t0
+        k = [solver_state * dt]
+        for a, c in zip(tableau.a_lower, tableau.c):
+            y1 = y0 + sum(ai * ki for ai, ki in zip(a, k))
+            f1 = terms.vf(t0 + c * dt, y1, args)
+            k.append(f1 * dt)
+        k = jnp.stack(k)
+        y_error = jnp.tensordot(tableau.b_error, k, 1)
+        return y1, y_error, dict(y0=y0, y1=y1, k=k), f1, RESULTS.successful
+
+    def func(self, terms, t0, y0, args):
+        """RHS of the ODE."""
+        return terms.vf(t0, y0, args)
+
+
 def trace_particles(
     field,
     initializer,
@@ -988,13 +1061,14 @@ def trace_particles(
     max_steps=None,
     min_step_size=1e-8,
     bounds=None,
-    solver=Tsit5(scan_kind="bounded"),
+    solver=None,
     adjoint=RecursiveCheckpointAdjoint(),
     use_precomputed_source=True,
     chunk_size=None,
     options=None,
     throw=True,
     return_aux=False,
+    use_interpolation=None,
 ):
     """Trace charged particles in an equilibrium or external magnetic field.
 
@@ -1031,7 +1105,8 @@ def trace_particles(
         [[0, inf], [-inf, inf], [-inf, inf]] for R, phi, Z coordinates (no bounds).
     solver: diffrax.AbstractSolver, optional
         diffrax Solver object to use in integration. Defaults to
-        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver.
+        `Tsit5(scan_kind='bounded')`, a RK45 explicit solver. With use_interpolation,
+        defaults to an equivalent Tsit5 with unrolled stages, which is faster on GPU.
     adjoint : diffrax.AbstractAdjoint, optional
         How to take derivatives of the trajectories. `RecursiveCheckpointAdjoint`
         supports reverse mode AD and tends to be the most efficient. For forward mode AD
@@ -1043,6 +1118,12 @@ def trace_particles(
         geometry information. This is usually much faster. Set to False to evaluate
         the field the standard way. Not used for tracing from Equilibrium field.
         Default is True.
+    use_interpolation : {None, "flux"} or tuple, optional
+        Only for an Equilibrium. If given, particles are initialized in the
+        Equilibrium but traced in an InterpolatedFieldFlux fitted to it, which is
+        much faster than evaluating the spectral representation at every step. A
+        tuple ("flux", L, M, N) sets its resolution, "flux" uses
+        (6 L, 6 M, max(3 N, 2)) of the Equilibrium. Defaults to None.
     chunk_size : int, optional
         Chunk size for integration over particles. If None (default), the integration
         will be done over all particles at once without chunking.
@@ -1072,6 +1153,17 @@ def trace_particles(
         will depend on ``model.vcoords``.
 
     """
+    assert isinstance(field, (Equilibrium, _MagneticField)), (
+        f"field must be either Equilibrium or MagneticField object but {type(field)} "
+        "given. For an interpolated field, please use the _trace_particles "
+        "function, or pass the Equilibrium with use_interpolation."
+    )
+    is_eq = isinstance(field, Equilibrium)
+    errorif(
+        use_interpolation is not None and not is_eq,
+        ValueError,
+        "use_interpolation requires an Equilibrium.",
+    )
     if not params:
         params = field.params_dict
     if not options:
@@ -1079,11 +1171,11 @@ def trace_particles(
 
     if bounds is None:
         bounds = jnp.array([[0, jnp.inf], [-jnp.inf, jnp.inf], [-jnp.inf, jnp.inf]])
-        if isinstance(field, Equilibrium):
+        if is_eq:
             bounds = bounds.at[0, 1].set(1.0)  # rho bounds for flux coordinates
 
     def default_event(t, y, args, **kwargs):
-        if isinstance(field, Equilibrium):
+        if is_eq:
             i = jnp.sqrt(y[0] ** 2 + y[1] ** 2)
             j = jnp.arctan2(y[1], y[0])
         else:
@@ -1098,8 +1190,30 @@ def trace_particles(
         rtol=rtol, atol=atol, dtmin=min_step_size, pcoeff=0.3, icoeff=0.3, dcoeff=0
     )
     max_steps = setdefault(max_steps, int((ts[-1] - ts[0]) / min_step_size))
+    if solver is None:
+        unrolled = use_interpolation is not None
+        solver = _Tsit5Unrolled() if unrolled else Tsit5(scan_kind="bounded")
 
-    y0, model_args = initializer.init_particles(model, field)
+    if use_interpolation is None:
+        y0, model_args = initializer.init_particles(model, field)
+    else:
+        if isinstance(use_interpolation, str):
+            use_interpolation = (use_interpolation,)
+        kind, *res = use_interpolation
+        L, M, N = field.L, field.M, field.N
+        errorif(
+            kind != "flux",
+            ValueError,
+            f"use_interpolation must be None or start with 'flux', got {kind}.",
+        )
+        y0, model_args = initializer.init_particles(model, field)
+        interpolated = InterpolatedFieldFlux(
+            model, *(res or (6 * L, 6 * M, max(3 * N, 2)))
+        )
+        interpolated.build(field)
+        profiles = {"current": field.current, "iota": options.get("iota", field.iota)}
+        params = interpolated.fit(params, profiles)
+        field = interpolated
     return _trace_particles(
         field=field,
         y0=y0,
@@ -1168,8 +1282,9 @@ def _trace_particles(
     event : diffrax.Event
         Custom event function to stop integration.
     """
+    is_flux = isinstance(field, (Equilibrium, InterpolatedFieldFlux))
     # convert cartesian-like for integration in flux coordinates
-    if isinstance(field, Equilibrium):
+    if is_flux:
         xp = y0[:, 0] * jnp.cos(y0[:, 1])
         yp = y0[:, 0] * jnp.sin(y0[:, 1])
         y0 = y0.at[:, 0].set(xp)
@@ -1215,7 +1330,7 @@ def _trace_particles(
     v = yt[:, :, 3:]
 
     # convert back to flux coordinates
-    if isinstance(field, Equilibrium):
+    if is_flux:
         rho = jnp.sqrt(x[:, :, 0] ** 2 + x[:, :, 1] ** 2)
         theta = jnp.arctan2(x[:, :, 1], x[:, :, 0])
         theta = jnp.where(theta < 0, theta + 2 * jnp.pi, theta)
@@ -1265,3 +1380,216 @@ def _intfun_wrapper(
         event=event,
         throw=throw,
     )
+
+
+class InterpolatedFieldFlux(IOAble):
+    """Tabulated guiding center field of an Equilibrium for fast particle tracing.
+
+    The vacuum guiding center equations in flux coordinates only need seven scalar
+    fields: |B|, ρ 𝐛⋅∇θ, 𝐛⋅∇ζ, 𝐃⋅∇ρ, ρ 𝐃⋅∇θ, 𝐃⋅∇ζ and 𝐛⋅∇|B|, where
+    𝐃 = 𝐛 × ∇|B| / |B|² and 𝐛⋅∇ρ = 0. They are computed exactly on a uniform
+    ``LinearGrid`` and interpolated with a tensor-product cubic B-spline, so that an
+    evaluation reads a single 4×4×4 block of coefficients.
+
+    The table covers one field period in ζ and, for a stellarator symmetric
+    equilibrium, only θ ∈ [0, π]. Radial nodes start half a spacing off the axis and
+    end at ρ = 1, and the radial spline is closed by not-a-knot conditions at both
+    ends. Evaluations between the axis and the first node, or slightly past ρ = 1
+    (solver stages before a terminating event fires), extend the end cubic pieces.
+
+    Parameters
+    ----------
+    model : AbstractTrajectoryModel
+        Trajectory model to trace with, which defines the tabulated fields. Only
+        VacuumGuidingCenterTrajectory is supported.
+    L : int
+        Number of radial nodes, the last one at ρ = 1.
+    M : int
+        Poloidal resolution, the grid has 2M nodes in θ.
+    N : int
+        Toroidal resolution, the grid has 2N nodes per field period.
+    """
+
+    _static_attrs = ["L", "M", "N", "NFP", "sym", "data_keys"]
+    _keys = [
+        "|B|",
+        "b.e^theta*rho",
+        "b.e^zeta",
+        "D.e^rho",
+        "D.e^theta*rho",
+        "D.e^zeta",
+        "b.grad(|B|)",
+    ]
+    # sign of each field under stellarator symmetry (θ, ζ) -> (-θ, -ζ)
+    _sym_parity = np.array([1, 1, 1, -1, 1, 1, -1])
+
+    def __init__(self, model, L, M, N):
+        errorif(
+            not isinstance(model, VacuumGuidingCenterTrajectory),
+            NotImplementedError,
+            "InterpolatedFieldFlux only supports VacuumGuidingCenterTrajectory.",
+        )
+        self.data_keys = ["|B|", "b", "grad(|B|)", "e^rho", "e^theta", "e^zeta"]
+        self.L = L
+        self.M = M
+        self.N = N
+
+    def build(self, eq):
+        """Build the grid, transforms and B-spline prefilters.
+
+        During optimization, equilibrium field changes, however, the same transforms
+        can be used to get the fit faster. This method creates the grid and transforms
+        to be used during the fitting procedure.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium to be used to get transforms.
+
+        """
+        self.NFP = eq.NFP
+        self.sym = eq.sym
+        # nodes half a spacing off ρ = 0, where e^theta is singular, the last at ρ = 1;
+        # θ is offset the same way so that sym=True keeps exactly the nodes in (0, π)
+        rho = (np.arange(self.L) + 0.5) / (self.L - 0.5)
+        theta = (np.arange(2 * self.M) + 0.5) * np.pi / self.M
+        self.grid = LinearGrid(
+            rho=rho, theta=theta, zeta=2 * self.N, NFP=eq.NFP, sym=eq.sym
+        )
+        self.transforms = get_transforms(self.data_keys, eq, self.grid)
+
+        # cubic B-spline interpolation matrix, A c = f for coefficients at nodes
+        # -2, ..., L + 1; the last 4 rows are not-a-knot conditions at both ends
+        L = self.L
+        A = np.zeros((L + 4, L + 4))
+        k = np.arange(L)
+        A[k, k + 1] = A[k, k + 3] = 1 / 6
+        A[k, k + 2] = 4 / 6
+        for row, col in enumerate([0, 1, L - 2, L - 1]):
+            A[L + row, col : col + 5] = [1, -4, 6, -4, 1]
+        self._prefilter_rho = jnp.asarray(np.linalg.inv(A)[:, :L])
+
+        # periodic prefilters, keeping 2 coefficients past each end of the stored
+        # range so the 4 wide stencil never wraps
+        def periodic(m, stored):
+            C = np.zeros((m, m))
+            j = np.arange(m)
+            C[j, j] = 4 / 6
+            C[j, (j + 1) % m] = C[j, (j - 1) % m] = 1 / 6
+            return jnp.asarray(np.linalg.inv(C)[np.arange(-2, stored + 2) % m])
+
+        self._prefilter_theta = periodic(2 * self.M, self.M if self.sym else 2 * self.M)
+        self._prefilter_zeta = periodic(2 * self.N, 2 * self.N)
+
+    @jit
+    def fit(self, eq_params, profiles):
+        """Compute the B-spline coefficients of the fields of an equilibrium.
+
+        Parameters
+        ----------
+        eq_params : dict
+            Equilibriums `params_dict` which contains the parameters that define
+            the equiliubrium.
+        profiles : dict of Profiles
+            Profiles necessary to compute magnetic field. Either iota or current
+            profile must be given.
+
+        Returns
+        -------
+        params : dict
+            The coefficients as ``{"coeffs": array (L + 4, n_theta, 2N + 4, 7)}``, to be
+            passed as ``params`` to ``evaluate`` and to the tracing functions.
+
+        """
+        data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
+            self.data_keys,
+            eq_params,
+            self.transforms,
+            profiles,
+        )
+        rho = self.grid.nodes[:, 0]
+        b, grad_B, modB = data["b"], data["grad(|B|)"], data["|B|"]
+        D = cross(b, grad_B) / modB[:, None] ** 2
+        f = jnp.stack(
+            [
+                modB,
+                rho * dot(b, data["e^theta"]),
+                dot(b, data["e^zeta"]),
+                dot(D, data["e^rho"]),
+                rho * dot(D, data["e^theta"]),
+                dot(D, data["e^zeta"]),
+                dot(b, grad_B),
+            ],
+            axis=-1,
+        )
+        # LinearGrid orders the nodes with θ fastest, then ρ, then ζ
+        f = jnp.moveaxis(f.reshape(2 * self.N, self.L, -1, 7), 0, 2)
+        if self.sym:
+            # θ ∈ (π, 2π) from (θ, ζ) -> (-θ, -ζ), the ζ nodes map as j -> -j mod 2N
+            f = jnp.concatenate(
+                [f, jnp.roll(f[:, ::-1, ::-1], 1, axis=2) * self._sym_parity], axis=1
+            )
+        coeffs = jnp.einsum(
+            "ai,bj,ck,ijkq->abcq",
+            self._prefilter_rho,
+            self._prefilter_theta,
+            self._prefilter_zeta,
+            f,
+        )
+        return {"coeffs": coeffs}
+
+    def evaluate(self, rho, theta, zeta, params):
+        """Evaluate the interpolated fields at a point.
+
+        Parameters
+        ----------
+        rho, theta, zeta : float
+            Radial, poloidal and toroidal coordinates to evaluate, ρ in [0, 1].
+        params : dict
+            Coefficients returned by ``fit``.
+
+        Returns
+        -------
+        data : dict
+            |B|, b.e^theta*rho, b.e^zeta, D.e^rho, D.e^theta*rho, D.e^zeta and
+            b.∇|B|, with D = b × ∇|B| / |B|².
+        """
+        period = 2 * jnp.pi / self.NFP
+        theta = jnp.mod(theta, 2 * jnp.pi)
+        zeta = jnp.mod(zeta, period)
+        sign = 1.0
+        if self.sym:
+            flip = theta > jnp.pi
+            theta = jnp.where(flip, 2 * jnp.pi - theta, theta)
+            zeta = jnp.where(flip, jnp.mod(-zeta, period), zeta)
+            sign = jnp.where(flip, self._sym_parity, 1)
+        n_theta, n_zeta, n = params["coeffs"].shape[1:]
+        # position in node spacings from the first stored coefficient; past ρ = 1
+        # the end cubic pieces are extended
+        u = (
+            rho * (self.L - 0.5) + 1.5,
+            theta * self.M / jnp.pi + 1.5,
+            zeta * 2 * self.N / period + 2,
+        )
+        bounds = ((1, self.L + 1), (1, n_theta - 3), (2, n_zeta - 3))
+        i = [jnp.clip(jnp.floor(x), *b).astype(int) for x, b in zip(u, bounds)]
+        w = [
+            (
+                (1 - t) ** 3,
+                3 * t**3 - 6 * t**2 + 4,
+                -3 * t**3 + 3 * t**2 + 3 * t + 1,
+                t**3,
+            )
+            for t in (x - j for x, j in zip(u, i))
+        ]
+        # gather the 4×4×4 block by flat index and contract it by explicit sums, so
+        # that XLA fuses the evaluation into a few kernels without a reduce or gemm
+        a, b, c, q = np.ogrid[:4, :4, :4, :n]
+        corner = ((i[0] - 1) * n_theta + i[1] - 1) * n_zeta + i[2] - 1
+        block = params["coeffs"].reshape(-1)[
+            (corner + (a * n_theta + b) * n_zeta + c) * n + q
+        ]
+        dot = lambda v, w: sum(w[k] * v[k] for k in range(4)) / 6
+        f = sign * dot(dot(dot(block, w[0]), w[1]), w[2])
+        return dict(zip(self._keys, f))

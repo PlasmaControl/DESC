@@ -605,6 +605,7 @@ class Bounce2D(_Bounce):
             if iota is None:
                 iota = eq._compute_iota_under_jit(rho, params, profiles, **kwargs)
 
+        has_omega = eq.W_basis.num_modes > 0
         angle = eq._map_poloidal_coordinates(
             jnp.atleast_1d(iota),
             fourier_pts(X),
@@ -615,6 +616,8 @@ class Bounce2D(_Bounce):
             outbasis=name,
             tol=tol,
             maxiter=maxiter,
+            omega=get_transforms("omega", eq, grid)["W"] if has_omega else None,
+            W_lmn=params["W_lmn"] if has_omega else None,
         )
         return angle if (name == "lambda") else angle[..., ::-1]
 
@@ -2113,16 +2116,18 @@ class BounceOptions(NamedTuple):
         o._constants["quad"] = BounceOptions._quad(eta, o._hyperparam.pop("num_quad"))
 
         rho = o._grid.compress(o._grid.nodes[:, 0])
-        o._constants["lambda"] = get_transforms(
-            "lambda",
-            eq,
-            grid=LinearGrid(
-                rho=rho,
-                M=eq.L_basis.M,  # assuming this doesn't change in optimization
-                zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,
-                NFP=eq.NFP,
-            ),
-        )["L"]
+        lambda_grid = LinearGrid(
+            rho=rho,
+            M=eq.L_basis.M,  # assuming this doesn't change in optimization
+            zeta=o._constants["y"] if (o._grid.num_zeta > 1) else 1,
+            NFP=eq.NFP,
+        )
+        o._constants["lambda"] = get_transforms("lambda", eq, grid=lambda_grid)["L"]
+        o._constants["omega"] = (
+            get_transforms("omega", eq, grid=lambda_grid)["W"]
+            if eq.W_basis.num_modes
+            else None
+        )
         o._constants["profiles"] = get_profiles(names, eq, grid=o._grid)
         o._constants["transforms"] = get_transforms(names, eq, grid=o._grid)
         o._dim_f = o._grid.num_rho

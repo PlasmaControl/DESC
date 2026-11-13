@@ -2440,16 +2440,43 @@ class LinkingCurrentConsistency(_Objective):
 
         # compute linking number of coils with plasma. To do this we add a fake "coil"
         # along the magnetic axis and compute the linking number of that coilset
-        from desc.coils import FourierRZCoil, MixedCoilSet
+        from desc.coils import FourierRZCoil, FourierXYZCoil, MixedCoilSet
 
-        axis_coil = FourierRZCoil(
-            1.0,
-            eq.axis.R_n,
-            eq.axis.Z_n,
-            eq.axis.R_basis.modes[:, 2],
-            eq.axis.Z_basis.modes[:, 2],
-            eq.axis.NFP,
-        )
+        if np.any(eq.W_lmn):
+            # generalized toroidal angle: eq.axis gives R, Z at the DESC angle zeta,
+            # while the cylindrical angle is phi = zeta + omega, so a FourierRZCoil
+            # built from it is a different curve (coils of a strongly shaped device
+            # can miss it entirely). Fit the real axis in Cartesian coordinates.
+            axis_grid = LinearGrid(
+                rho=np.array([0.0]), M=0, N=360, NFP=eq.NFP, sym=False
+            )
+            axis_data = eq.compute(["X", "Y", "Z"], grid=axis_grid)
+            xyz = np.column_stack([axis_data["X"], axis_data["Y"], axis_data["Z"]])
+            # one field period rotated NFP times gives the full axis curve
+            xyz = np.vstack(
+                [
+                    np.column_stack(
+                        [
+                            xyz[:, 0] * np.cos(a) - xyz[:, 1] * np.sin(a),
+                            xyz[:, 0] * np.sin(a) + xyz[:, 1] * np.cos(a),
+                            xyz[:, 2],
+                        ]
+                    )
+                    for a in 2 * np.pi * np.arange(eq.NFP) / eq.NFP
+                ]
+            )
+            axis_coil = FourierXYZCoil.from_values(
+                1.0, xyz, N=2 * eq.N + 10, s="arclength", basis="xyz"
+            )
+        else:
+            axis_coil = FourierRZCoil(
+                1.0,
+                eq.axis.R_n,
+                eq.axis.Z_n,
+                eq.axis.R_basis.modes[:, 2],
+                eq.axis.Z_basis.modes[:, 2],
+                eq.axis.NFP,
+            )
         dummy_coilset = MixedCoilSet(axis_coil, coil, check_intersection=False)
         # linking number for coils with axis
         link = np.round(dummy_coilset._compute_linking_number())[0, 1:]

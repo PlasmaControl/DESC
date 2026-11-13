@@ -20,6 +20,7 @@ from desc.objectives.utils import (
 )
 from desc.utils import Timer, errorif, get_instance, setdefault, warnif
 
+from .tr_subproblems import trust_region_step_exact_svd
 from .utils import f_where_x, normalize_columns
 
 
@@ -556,7 +557,11 @@ class ProximalProjection(ObjectiveFunction):
         Equilibrium that will be optimized to satisfy the objectives.
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
-        during the projection step.
+        during the projection step. ``perturb_options`` can also have
+        ``"reuse_factorization"`` (default True): whether to perturb using the
+        factorization of the constraint jacobian from the last accepted point, which
+        is already computed for the jacobian of the objective, instead of
+        recomputing it for every trial step.
     name : str
         Name of the objective function.
     """
@@ -601,6 +606,11 @@ class ProximalProjection(ObjectiveFunction):
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
+        # The perturbation needs the factorization of dF/dx at the last accepted
+        # point, which is already found there for the jacobian. Reusing it saves a
+        # jacobian and SVD of the equilibrium constraint for every trial step.
+        self._reuse_factorization = perturb_options.pop("reuse_factorization", True)
+        self._eq_factors = None
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._built = False
@@ -887,14 +897,17 @@ class ProximalProjection(ObjectiveFunction):
             xeq_dict = x_list[self._eq_idx]
             xeq_dict_old = x_list_old[self._eq_idx]
             deltas = {str(key): xeq_dict[key] - xeq_dict_old[key] for key in xeq_dict}
-            # We pass in the LinearConstraintProjection object to skip some redundant
-            # computations in the perturb and solve methods
-            self._eq = self._eq.perturb(
-                objective=self._eq_solve_objective,
-                constraints=None,
-                deltas=deltas,
-                **self._perturb_options,
-            )
+            if self._can_reuse_factorization(deltas):
+                self._perturb_with_factors(deltas)
+            else:
+                # We pass in the LinearConstraintProjection object to skip some
+                # redundant computations in the perturb and solve methods
+                self._eq = self._eq.perturb(
+                    objective=self._eq_solve_objective,
+                    constraints=None,
+                    deltas=deltas,
+                    **self._perturb_options,
+                )
             self._eq.solve(
                 objective=self._eq_solve_objective,
                 constraints=None,
@@ -910,6 +923,9 @@ class ProximalProjection(ObjectiveFunction):
             self._allxeq.append(xeq)
 
         if store:
+            if not jnp.array_equal(x, self._x_old):
+                # factors of dF/dx belong to the previous point
+                self._eq_factors = None
             self._x_old = x
             x_list = self.unpack_state(x, False)
             xeq_dict = self._eq.unpack_params(xeq)
@@ -922,6 +938,68 @@ class ProximalProjection(ObjectiveFunction):
             self._eq_solve_objective.update_constraint_target(self._eq)
 
         return xopt, xeq
+
+    def _can_reuse_factorization(self, deltas):
+        """Whether the perturbation can use the factors of dF/dx from the jacobian."""
+        return (
+            self._reuse_factorization
+            and self._eq_factors is not None
+            and self._perturb_options.get("order", 2) in (1, 2)
+            and self._perturb_options.get("weight", "auto") in (None, "auto")
+            # "auto" weights the step differently for profile perturbations
+            and not any(jnp.any(deltas.get(key, 0)) for key in ("p_l", "i_l"))
+        )
+
+    def _perturb_with_factors(self, deltas):
+        """Perturb the equilibrium, as Equilibrium.perturb but without a new jacobian.
+
+        The perturbation solves with dF/dx at the current (last accepted) equilibrium.
+        Its SVD is found there when the jacobian is computed and stored in
+        ``self._eq_factors``, so here the cost is a few JVPs of the constraint.
+        The trust region is applied to the reduced state vector directly.
+        """
+        obj = self._eq_solve_objective
+        eq = self._eq
+        deltas = {
+            key: jnp.atleast_1d(val) for key, val in deltas.items() if jnp.any(val)
+        }
+        order = self._perturb_options.get("order", 2)
+        tr_ratio = self._perturb_options.get("tr_ratio", 0.1)
+        tr_ratio = jnp.broadcast_to(jnp.asarray(tr_ratio, dtype=float), (order,))
+
+        xf = self._constraint.x(eq)
+        x_reduced = obj._project(xf)
+        dims = eq.dimensions
+        dc = jnp.concatenate(
+            [deltas.get(arg, jnp.zeros(dims[arg])) for arg in self._args]
+        )
+        dx_reduced = _proximal_perturb(
+            self._constraint,
+            xf,
+            self._dxdc @ dc,
+            obj._feasible_tangents,
+            *self._eq_factors,
+            jnp.linalg.norm(x_reduced),
+            tr_ratio,
+            order,
+            self._perturb_options.get("include_f", False),
+        )
+
+        for key, value in deltas.items():
+            setattr(eq, key, getattr(eq, key) + value)
+        obj.update_constraint_target(eq)
+        x_new = obj._recover(x_reduced + dx_reduced)
+        params = self._constraint.unpack_state(x_new, False)[0]
+        for key, value in params.items():
+            if key not in deltas:
+                value = put(  # parameter values below threshold are set to 0
+                    value,
+                    jnp.where(jnp.abs(value) < 10 * jnp.finfo(value.dtype).eps)[0],
+                    0,
+                )
+                # don't set nonexistent profile (values are empty ndarrays)
+                if value.size:
+                    setattr(eq, key, value)
 
     def compute_scaled(self, x, constants=None):
         """Compute the objective function and apply weights/normalization.
@@ -1030,7 +1108,7 @@ class ProximalProjection(ObjectiveFunction):
         v = jnp.eye(x.shape[0])
         constants = setdefault(constants, [None, None])
         xg, xf = self._update_equilibrium(x, store=True)
-        tangents = _proximal_get_tangents(
+        tangents, self._eq_factors = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
@@ -1196,7 +1274,7 @@ class ProximalProjection(ObjectiveFunction):
 
         # we don't need to divide this part into blocked and batched because
         # self._constraint._deriv_mode will handle it
-        tangents = _proximal_get_tangents(
+        tangents, factors = _proximal_get_tangents(
             self._constraint,
             xf,
             v,
@@ -1207,6 +1285,8 @@ class ProximalProjection(ObjectiveFunction):
             self._eq_idx,
             op,
         )
+        # the perturbation works with the scaled constraint, see _perturb_with_factors
+        self._eq_factors = factors if op in ("scaled", "scaled_error") else None
 
         if self._objective._deriv_mode == "batched":
             # objective's method already know about its jac_chunk_size
@@ -1294,17 +1374,19 @@ def _proximal_get_tangents(
     # so take whichever combination needs fewer of them. Applying v after the JVPs
     # only pays off with a lot of coil, surface etc DoFs, ie. single stage.
     if vs[eq_idx].ndim == 2 and vs[eq_idx].shape[0] > dimc_per_thing[eq_idx]:
-        eq_tangents = vs[eq_idx] @ _proximal_eq_tangents(
+        eq_tangents, factors = _proximal_eq_tangents(
             constraint, xf, constants, eq_feasible_tangents, dxdc.T, op
         )
+        eq_tangents = vs[eq_idx] @ eq_tangents
     else:
         dxdcv = vs[eq_idx] @ dxdc.T
         # atleast_2d and reshape are to also handle a single (1D) direction
-        eq_tangents = _proximal_eq_tangents(
+        eq_tangents, factors = _proximal_eq_tangents(
             constraint, xf, constants, eq_feasible_tangents, jnp.atleast_2d(dxdcv), op
         )
         eq_tangents = eq_tangents.reshape(dxdcv.shape)
-    return jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
+    tangents = jnp.concatenate([*vs[:eq_idx], eq_tangents, *vs[eq_idx + 1 :]], axis=-1)
+    return tangents, factors
 
 
 @jit_if_possible
@@ -1329,12 +1411,51 @@ def _proximal_eq_tangents(
     Fxh, Fc = J[:dim_x_reduced].T, J[dim_x_reduced:].T
     cutoff = jnp.finfo(Fxh.dtype).eps * max(Fxh.shape)
     uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
-    sf += sf[-1]  # add a tiny bit of regularization
-    sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+    sfr = sf + sf[-1]  # add a tiny bit of regularization
+    sfi = jnp.where(sfr < cutoff * sfr[0], 0, 1 / sfr)
     # this is (dF/dx)⁻¹ @ dF/dc for all the directions at once  # noqa : E800
     dfdc = vtf.T @ (sfi[:, None] * (uf.T @ Fc))
     # feasible_tangents maps the reduced eq state vector back to the full one
-    return dxdcv - (eq_feasible_tangents @ dfdc).T
+    # the factors of dF/dx are also returned, to be reused for perturbing from xf
+    return dxdcv - (eq_feasible_tangents @ dfdc).T, (uf, sf, vtf)
+
+
+@jit_if_possible(static_argnames=("order", "include_f"))
+def _proximal_perturb(
+    constraint,
+    xf,
+    tangent,
+    eq_feasible_tangents,
+    uf,
+    sf,
+    vtf,
+    x_norm,
+    tr_ratio,
+    order,
+    include_f,
+):
+    # Change of the reduced eq state vector for a step along ``tangent`` (the change
+    # of c, mapped to the full eq state vector), to 1st or 2nd order. This is the same
+    # as desc.perturbations.perturb, but with dF/dx = uf @ diag(sf) @ vtf given.
+    RHS1 = constraint.jvp_scaled(tangent, xf)
+    if include_f:
+        RHS1 += constraint.compute_scaled_error(xf)
+    dx1, _, alpha = trust_region_step_exact_svd(
+        RHS1, uf, sf, vtf.T, tr_ratio[0] * x_norm, initial_alpha=0.0
+    )
+    if order == 1:
+        return dx1
+    tangent2 = tangent + eq_feasible_tangents @ dx1
+    RHS2 = 0.5 * constraint.jvp_scaled((tangent2, tangent2), xf)
+    dx2, _, alpha = trust_region_step_exact_svd(
+        RHS2,
+        uf,
+        sf,
+        vtf.T,
+        tr_ratio[1] * jnp.linalg.norm(dx1),
+        initial_alpha=alpha / tr_ratio[1],
+    )
+    return dx1 + dx2
 
 
 @jit_if_possible

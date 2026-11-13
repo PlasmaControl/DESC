@@ -61,10 +61,12 @@ class AgniStability(_Objective):
     iteration. More information about the normalization in the preprint [1]_
 
 
-    The applied perturbations do not change the ρ=1 boundary (ξ·∇ρ = 0 there),
-    so the modes are global internal modes:
+    With a fixed boundary the perturbations do not move the ρ=1 surface
+    (ξ·∇ρ = 0 there), so the modes are global internal modes. With a free
+    boundary (``free_boundary=True``) ξ·∇ρ is free on that surface and δW
+    includes the vacuum energy.
 
-    - γ² > 0: unstable to a global internal mode of the chosen toroidal family,
+    - γ² > 0: unstable to a global mode of the chosen toroidal family,
     - γ² ≤ 0: stable.
 
     The default target 0 asks for marginal stability. Unlike
@@ -75,7 +77,9 @@ class AgniStability(_Objective):
     call they are mapped to DESC's θ at the current parameters, so the value and
     its gradient follow the equilibrium as it changes. The gradient is exact at a
     converged eigenvector (Hellmann-Feynman): no derivative of the eigensolver
-    is taken.
+    is taken. With a free boundary the vacuum response is rebuilt from the
+    boundary at the current parameters on every call, so the gradient includes
+    how the moving boundary changes it.
 
     Requires the ``agnimhd`` package (``pip install agnimhd``, Python ≥ 3.12).
     Its documentation explains the bases, solvers and options:
@@ -107,6 +111,24 @@ class AgniStability(_Objective):
     density : bool
         Weight the kinetic energy with ``ni / max(ni)``. Needs
         ``eq.electron_density``. Default False.
+    free_boundary : bool, optional
+        Include the vacuum energy: ξ·∇ρ is free on the ρ = 1 surface. Default
+        ``basis.free_boundary``. Needs the outer radial node at ρ = 1, which
+        ``agnimhd.Basis(..., free_boundary=True)`` provides, and an ``agnimhd``
+        with free-boundary support. With ``solver.eigensolver="jd"`` the coarse
+        level is free-boundary too.
+    stellsym : bool, optional
+        Evaluate the vacuum response's source geometry on one node of each
+        stellarator-symmetric pair and mirror the rest. Default ``eq.sym``.
+    phi_n_theta, phi_n_zeta : int, optional
+        Poloidal and toroidal resolution of the source quadrature of the vacuum
+        response's singular integral. Default twice the basis' angular nodes.
+    phi_st, phi_sz, phi_q : int, optional
+        Support of the singular integral's local grid and its polar quadrature
+        order; all three, or none to choose them from the boundary's shape.
+    phi_chunk_size : int, optional
+        Evaluation points per singular-integral launch; 0 for unchunked.
+        Default: as many as fit in ``agnimhd``'s memory budget.
 
     """
 
@@ -147,6 +169,12 @@ class AgniStability(_Objective):
         "_solver",
         "_coarse_basis",
         "_density",
+        "_free_boundary",
+        "_phi_opts",
+        # resolution-only data of the vacuum response (grids, frozen interpolator);
+        # agnimhd's PhiScaffold compares by identity
+        "_phi_scaffold",
+        "_coarse_phi_scaffold",
     ]
     _coordinates = ""
     _units = "(dimensionless)"
@@ -161,6 +189,14 @@ class AgniStability(_Objective):
         solver=None,
         coarse=None,
         density=False,
+        free_boundary=None,
+        stellsym=None,
+        phi_n_theta=None,
+        phi_n_zeta=None,
+        phi_st=None,
+        phi_sz=None,
+        phi_q=None,
+        phi_chunk_size=None,
         target=None,
         bounds=None,
         weight=1,
@@ -186,6 +222,35 @@ class AgniStability(_Objective):
             "density=True needs a density profile, please make sure that "
             "eq.electron_density is not None.",
         )
+        self._free_boundary = bool(
+            getattr(basis, "free_boundary", False)
+            if free_boundary is None
+            else free_boundary
+        )
+        if self._free_boundary:
+            try:
+                import agnimhd.adapters.desc_vacuum  # noqa: F401
+            except ImportError as e:
+                raise ImportError(
+                    "free_boundary=True needs an agnimhd with free-boundary support "
+                    "(agnimhd.adapters.desc_vacuum)."
+                ) from e
+        stellsym = bool(eq.sym) if stellsym is None else bool(stellsym)
+        errorif(
+            stellsym and not eq.sym,
+            ValueError,
+            "stellsym=True needs a stellarator-symmetric equilibrium (eq.sym).",
+        )
+        self._phi_opts = dict(
+            n_theta_src=phi_n_theta,
+            n_zeta_src=phi_n_zeta,
+            st=phi_st,
+            sz=phi_sz,
+            q=phi_q,
+            chunk_size=phi_chunk_size,
+            stellsym=stellsym,
+        )
+        self._phi_scaffold = self._coarse_phi_scaffold = None
         self._coarse_basis = None
         if self._solver.eigensolver == "jd":
             coarse = basis.coarse() if coarse is None else coarse
@@ -223,6 +288,8 @@ class AgniStability(_Objective):
         """
         eq = self.things[0]
         rho, diffmat, nodes = self._pest_nodes(self._basis)
+        if self._free_boundary:
+            self._build_phi_scaffolds(rho)
         flux_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         # a is a cross-section area integral; it needs a QuadratureGrid.
         quad_grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
@@ -246,6 +313,39 @@ class AgniStability(_Objective):
                 eq_c, self._family
             )
         super().build(use_jit=use_jit, verbose=verbose)
+
+    def _build_phi_scaffolds(self, rho):
+        """Build the fixed part of the vacuum response for the basis and coarse level.
+
+        As ``agnimhd``'s solve builds it, sharing one cache between the levels.
+        """
+        from agnimhd.adapters.desc_vacuum import phi_scaffold
+
+        eq = self.things[0]
+        errorif(
+            abs(float(rho[-1]) - 1.0) > 1e-12,
+            ValueError,
+            "free_boundary=True needs the outer radial node on the plasma boundary, "
+            f"rho = 1; this basis ends at rho = {float(rho[-1]):.6g}. Use "
+            "agnimhd.Basis(..., free_boundary=True).",
+        )
+        cache = {}
+
+        def scaffold(basis):
+            nodes = basis.nodes_and_diffmat(eq.NFP, self._family)[0]
+            theta, zeta = np.asarray(nodes["theta"]), np.asarray(nodes["zeta"])
+            return phi_scaffold(
+                eq,
+                theta,
+                zeta,
+                NFP_surf=None if zeta.size == 1 else eq.NFP,
+                cache=cache,
+                **self._phi_opts,
+            )
+
+        self._phi_scaffold = scaffold(self._basis)
+        if self._coarse_basis is not None:
+            self._coarse_phi_scaffold = scaffold(self._coarse_basis)
 
     def compute(self, params, constants=None):
         """Compute the squared growth rate of the most unstable mode.
@@ -339,6 +439,16 @@ class AgniStability(_Objective):
             data=data,
         )
         basis = self._coarse_basis if coarse else self._basis
+        surface = {}
+        if self._free_boundary:
+            from agnimhd.adapters.desc_vacuum import phi_matrix
+
+            # The vacuum response at these params, from the rho = 1 shell mapped
+            # above (the last n_theta * n_zeta nodes, rho-major): traced, so its
+            # derivative is in the gradient.
+            scaffold = self._coarse_phi_scaffold if coarse else self._phi_scaffold
+            n_surf = basis.n_theta * basis.n_zeta
+            surface["phi_matrix"] = phi_matrix(eq, params, scaffold, rtz[-n_surf:])
         return agnimhd.EquilibriumData(
             n_rho=basis.n_rho,
             n_theta=basis.n_theta,
@@ -347,5 +457,6 @@ class AgniStability(_Objective):
             a=a,
             density=data["ni"] / jnp.max(data["ni"]) if self._density else None,
             validate=False,
+            **surface,
             **{field: data[key] for key, field in KEY_MAP.items()},
         )

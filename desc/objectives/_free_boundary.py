@@ -20,6 +20,7 @@ from desc.utils import (
 )
 
 from ..integrals.singularities import best_params, best_ratio
+from .linear_objectives import BoundaryRSelfConsistency, BoundaryZSelfConsistency
 from .normalization import compute_scaling_factors
 
 
@@ -664,6 +665,17 @@ class BoundaryError(_Objective):
                     self._sheet_data_keys, obj=eq.surface, grid=eval_grid
                 )
             )
+            # The sheet sits on the plasma boundary, which the rest of this objective
+            # takes from R_lmn, Z_lmn at rho=1. Mapping R_lmn, Z_lmn to the surface
+            # coefficients (instead of reading Rb_lmn, Zb_lmn) keeps the sheet on that
+            # same surface, and lets derivatives through ProximalProjection reach the
+            # sheet geometry, since the proximal tangent leaves Rb_lmn, Zb_lmn at zero.
+            obj_bdryR = BoundaryRSelfConsistency(eq=eq)
+            obj_bdryZ = BoundaryZSelfConsistency(eq=eq)
+            obj_bdryR.build(verbose=0)
+            obj_bdryZ.build(verbose=0)
+            self._constants["A_Rlmn_to_Rb"] = jnp.asarray(obj_bdryR._A)
+            self._constants["A_Zlmn_to_Zb"] = jnp.asarray(obj_bdryZ._A)
 
         if self._eq_fixed:
             source_data = compute_fun(
@@ -689,8 +701,12 @@ class BoundaryError(_Objective):
             if self._sheet_current:
                 p = self._eq.surface
                 sheet_params = {
-                    "R_lmn": self._eq.params_dict["Rb_lmn"],
-                    "Z_lmn": self._eq.params_dict["Zb_lmn"],
+                    "R_lmn": jnp.dot(
+                        self._constants["A_Rlmn_to_Rb"], self._eq.params_dict["R_lmn"]
+                    ),
+                    "Z_lmn": jnp.dot(
+                        self._constants["A_Zlmn_to_Zb"], self._eq.params_dict["Z_lmn"]
+                    ),
                     "I": self._eq.params_dict["I"],
                     "G": self._eq.params_dict["G"],
                     "Phi_mn": self._eq.params_dict["Phi_mn"],
@@ -816,8 +832,8 @@ class BoundaryError(_Objective):
             if self._sheet_current:
                 p = self._eq.surface
                 sheet_params = {
-                    "R_lmn": eq_params["Rb_lmn"],
-                    "Z_lmn": eq_params["Zb_lmn"],
+                    "R_lmn": jnp.dot(constants["A_Rlmn_to_Rb"], eq_params["R_lmn"]),
+                    "Z_lmn": jnp.dot(constants["A_Zlmn_to_Zb"], eq_params["Z_lmn"]),
                     "I": eq_params["I"],
                     "G": eq_params["G"],
                     "Phi_mn": eq_params["Phi_mn"],

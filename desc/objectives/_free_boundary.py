@@ -20,7 +20,12 @@ from desc.utils import (
     warnif,
 )
 
-from ..integrals.singularities import best_params, best_ratio
+from ..integrals.singularities import (
+    _can_linearize,
+    _kernel_biot_savart,
+    best_params,
+    best_ratio,
+)
 from .normalization import compute_scaling_factors
 
 
@@ -526,6 +531,7 @@ class BoundaryError(_Objective):
         "_eq_data_keys",
         "_eq_fixed",
         "_field_fixed",
+        "_linearized_integral",
         "_q",
         "_sheet_current",
         "_sheet_data_keys",
@@ -538,6 +544,12 @@ class BoundaryError(_Objective):
     _units = "(T*m^2, T^2*m^2, T*m^2)"
 
     _coordinates = "rtz"
+
+    @property
+    def _jvp_linearize(self):
+        # with a fixed field, and the virtual casing integral linearized as a matrix,
+        # the expensive parts of the derivative are the same for every tangent
+        return self._field_fixed and self._linearized_integral
 
     def __init__(
         self,
@@ -679,6 +691,8 @@ class BoundaryError(_Objective):
             interpolator = DFTInterpolator(
                 eval_grid, source_grid, self._st, self._sz, self._q
             )
+
+        self._linearized_integral = _can_linearize(interpolator, _kernel_biot_savart)
 
         edge_pres = np.max(np.abs(eq.compute("p", grid=eval_grid)["p"]))
         warnif(

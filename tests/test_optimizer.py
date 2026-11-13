@@ -2169,6 +2169,72 @@ def test_get_ess_scale():  # noqa: C901
 
 
 @pytest.mark.unit
+def test_proximal_perturb_with_factors():
+    """Test the perturbation in ProximalProjection that reuses the jacobian's SVD."""
+    eq0 = desc.examples.get("DSHAPE")
+    rng = default_rng(0)
+
+    def make():
+        eq = eq0.copy()
+        objective = ObjectiveFunction(AspectRatio(eq))
+        constraint = ObjectiveFunction(ForceBalance(eq))
+        prox = ProximalProjection(
+            objective,
+            constraint,
+            eq,
+            solve_options={"solve_during_proximal_build": False},
+        )
+        prox.build(verbose=0)
+        return prox, eq
+
+    prox, eq = make()
+    ref, eq_ref = make()
+    x = prox.x(eq)
+    assert prox._eq_factors is None
+    # until the jacobian has been computed there are no factors to use
+    assert not prox._can_reuse_factorization({})
+    prox.jac_scaled_error(x)
+    assert prox._eq_factors is not None
+
+    deltas = {
+        "Rb_lmn": 2e-3 * rng.standard_normal(eq.Rb_lmn.size),
+        "Zb_lmn": 2e-3 * rng.standard_normal(eq.Zb_lmn.size),
+    }
+    assert prox._can_reuse_factorization(deltas)
+    # profile perturbations use a weighted step, which is left to Equilibrium.perturb
+    assert not prox._can_reuse_factorization({"p_l": np.ones(eq.p_l.size)})
+
+    for order in [1, 2]:
+        prox._perturb_options["order"] = order
+        prox._perturb_with_factors(deltas)
+        eq_ref.perturb(
+            deltas,
+            objective=ref._eq_solve_objective,
+            constraints=None,
+            order=order,
+            include_f=False,
+            verbose=0,
+        )
+        for key in ["R_lmn", "Z_lmn", "L_lmn", "Rb_lmn", "Zb_lmn"]:
+            np.testing.assert_allclose(
+                getattr(eq, key),
+                getattr(eq_ref, key),
+                rtol=1e-7,
+                atol=1e-9,
+                err_msg=key,
+            )
+        # back to the starting point for the next order
+        for e, p in [(eq, prox), (eq_ref, ref)]:
+            e.params_dict = eq0.params_dict
+            p._eq_solve_objective.update_constraint_target(e)
+
+    # a new point invalidates the factors
+    x_new = jnp.asarray(x).at[-1].add(1e-4)
+    prox._update_equilibrium(x_new, store=True)
+    assert prox._eq_factors is None
+
+
+@pytest.mark.unit
 def test_lsqtr_noisy_objective_termination():
     """Test that lsqtr stops when no step within tolerance is acceptable.
 

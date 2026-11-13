@@ -22,7 +22,7 @@ Performance Improvements
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
 - Less overhead when updating the targets of linear constraints and reading ``params_dict``, which adds up when an equilibrium is perturbed and re-solved many times (eg in ``ProximalProjection``), especially on a GPU.
-- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol``, or was predicted to reduce the cost by less than ``ftol``, instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
+- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
 
 Breaking Changes and Deprecations
 
@@ -57,6 +57,7 @@ Bug Fixes
   ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.

@@ -2193,11 +2193,11 @@ def test_lsqtr_noisy_objective_termination():
         return jnp.asarray(A)
 
     out = lsqtr(
-        fun, jnp.zeros(6), jac, ftol=1e-8, xtol=1e-8, gtol=1e-12, verbose=0, maxiter=50
+        fun, jnp.zeros(6), jac, ftol=1e-8, xtol=1e-3, gtol=1e-12, verbose=0, maxiter=50
     )
     x_true = np.linalg.lstsq(A, b, rcond=None)[0]
     np.testing.assert_allclose(out["x"], x_true, atol=1e-3)
     assert out["success"]
     # a few steps to the minimum of the model, then the first rejected step that is
-    # predicted to gain less than ftol ends it
+    # already within xtol ends it
     assert count["nfev"] < 10

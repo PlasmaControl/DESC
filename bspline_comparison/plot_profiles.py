@@ -1,6 +1,7 @@
 """Plot the free profile (iota or toroidal current) of each case against the stock example.
 
-Usage: python plot_profiles.py NAME:label,label ...   (labels from experiments_NAME.json)
+Usage: python plot_profiles.py [-o FILE] NAME:label,label ...
+(labels from experiments_NAME.json; writes profiles.png or FILE)
 """
 
 import json
@@ -12,7 +13,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#6250d6"]
+DEFAULT_OUT = "profiles.png"
+
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#6250d6", "#c4359c", "#8a6d1f"]
 plt.rcParams.update(
     {
         "font.size": 10,
@@ -32,11 +35,22 @@ NICE = {
     "apfull_nq6": "B-spline, rho^m prefactor",
     "apfull_nq8": "B-spline, rho^m prefactor",
     "p7_apfull": "B-spline, prefactor, degree 7",
+    "p3_L3": "B-spline, degree 3, 3 intervals",
+    "p3_L4": "B-spline, degree 3, 4 intervals",
+    "p3_L6": "B-spline, degree 3, 6 intervals",
+    "p3_L8": "B-spline, degree 3, 8 intervals",
+    "p3_L12": "B-spline, degree 3, 12 intervals",
     "p7_apfull_nq6": "B-spline, prefactor, degree 7",
     "p7_apfull_nq8": "B-spline, prefactor, degree 7",
 }
 
-cases = [a.split(":") for a in sys.argv[1:]]
+args = sys.argv[1:]
+out = DEFAULT_OUT
+if "-o" in args:  # output file name
+    i = args.index("-o")
+    out = args[i + 1]
+    del args[i : i + 2]
+cases = [a.split(":") for a in args]
 fig, axes = plt.subplots(2, len(cases), figsize=(4.8 * len(cases), 7), squeeze=False)
 for j, (name, labels) in enumerate(cases):
     ref = np.load(f"exp_{name}_reference.npz")
@@ -59,4 +73,4 @@ for j, (name, labels) in enumerate(cases):
     bot.set_ylabel("kA" if free == "current" else r"$|\Delta\iota|$")
     top.legend(frameon=False, fontsize=8)
 fig.tight_layout()
-fig.savefig("profiles.png", dpi=200)
+fig.savefig(out, dpi=200)

@@ -2,7 +2,7 @@
 
 Usage: python plot_experiments.py NAME:label,label ...
 The first label of each case is drawn as the reference for the flux surfaces.
-Writes comparison_experiments.png.
+Writes comparison_experiments.png, or the file given with -o FILE.
 """
 
 import json
@@ -14,13 +14,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#6250d6"]
+DEFAULT_OUT = "comparison_experiments.png"
+
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#6250d6", "#c4359c", "#8a6d1f"]
 NICE = {
     "zernike": "Fourier-Zernike re-solve",
     "bspline_base": "B-spline, first attempt",
     "apfull": "B-spline, rho^m prefactor",
     "apfull_nq8": "B-spline, rho^m prefactor",
     "p7_apfull": "B-spline, prefactor, degree 7",
+    "p3_L3": "B-spline, degree 3, 3 intervals",
+    "p3_L4": "B-spline, degree 3, 4 intervals",
+    "p3_L6": "B-spline, degree 3, 6 intervals",
+    "p3_L8": "B-spline, degree 3, 8 intervals",
+    "p3_L12": "B-spline, degree 3, 12 intervals",
     "p7_apfull_nq8": "B-spline, prefactor, degree 7",
 }
 plt.rcParams.update(
@@ -36,7 +43,13 @@ plt.rcParams.update(
     }
 )
 
-cases = [a.split(":") for a in sys.argv[1:]]
+args = sys.argv[1:]
+out = DEFAULT_OUT
+if "-o" in args:  # output file name
+    i = args.index("-o")
+    out = args[i + 1]
+    del args[i : i + 2]
+cases = [a.split(":") for a in args]
 fig, axes = plt.subplots(2, len(cases), figsize=(4.8 * len(cases), 8.4), squeeze=False)
 for j, (name, labels) in enumerate(cases):
     labels = labels.split(",")
@@ -72,4 +85,4 @@ for j, (name, labels) in enumerate(cases):
     ax.legend(frameon=False, fontsize=7.5, loc="upper center",
               bbox_to_anchor=(0.5, -0.16), ncol=1)
 fig.tight_layout()
-fig.savefig("comparison_experiments.png", dpi=200)
+fig.savefig(out, dpi=200)

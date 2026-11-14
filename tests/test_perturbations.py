@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jnp
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
@@ -15,6 +16,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.perturbations import optimal_perturb, perturb
+from desc.profiles import PowerSeriesProfile
 
 
 @pytest.mark.regression
@@ -118,6 +120,24 @@ def test_perturb_with_float_without_error():
         verbose=2,
         copy=True,
     )
+
+
+@pytest.mark.unit
+def test_perturb_with_2d_numpy_weight():
+    """Test perturb with a 2d numpy array weight against the same 1d jax weight."""
+    eq = Equilibrium(pressure=PowerSeriesProfile([1e2, 0, -1e2]))
+    objective = get_equilibrium_objective(eq=eq)
+    constraints = get_fixed_boundary_constraints(eq=eq)
+    deltas = {"p_l": 0.1 * eq.p_l}
+    w = np.random.default_rng(0).uniform(1, 2, eq.dim_x)
+    eq1, eq2 = (
+        perturb(eq, objective, constraints, deltas, order=1, weight=weight, verbose=0)
+        for weight in (np.diag(w), jnp.asarray(w))
+    )
+    for name in ["R_lmn", "Z_lmn", "L_lmn"]:
+        np.testing.assert_allclose(
+            eq1.params_dict[name], eq2.params_dict[name], rtol=1e-12, atol=1e-14
+        )
 
 
 @pytest.mark.unit

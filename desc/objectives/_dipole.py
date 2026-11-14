@@ -1,13 +1,15 @@
 import numpy as np
-from desc.backend import jnp, tree_leaves
-from desc.compute import get_params
-from desc.utils import Timer, errorif, setdefault
-from .normalization import compute_scaling_factors
-from .objective_funs import _Objective, collect_docs
+
+from desc.backend import jnp
 from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import _compute as compute_fun
-from desc.grid import LinearGrid, _Grid
+from desc.grid import LinearGrid
 from desc.integrals import compute_B_plasma
+from desc.utils import Timer, errorif, setdefault
+
+from .normalization import compute_scaling_factors
+from .objective_funs import _Objective, collect_docs
+
 
 class QuadraticFluxPM(_Objective):
     """Target B*n = 0 on LCFS.
@@ -173,8 +175,18 @@ class QuadraticFluxPM(_Objective):
         )
 
     def build(self, use_jit=True, verbose=1):
-        from desc.magnetic_fields import SumMagneticField
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
         from desc.dipole import _Dipole
+        from desc.magnetic_fields import SumMagneticField
 
         eq = self._eq
 
@@ -241,7 +253,7 @@ class QuadraticFluxPM(_Objective):
             chunk_size=self._bs_chunk_size,
         )
         Bcoils = jnp.sum(Bcoils_vec * eval_data["n_rho"], axis=-1)
- 
+
         # ---- induction-matrix fast path ----
         # If EVERY field being optimized here is a fixed-geometry _Dipole/
         # DipoleSet (position/orientation/m0 are not optimizable -- only
@@ -275,7 +287,7 @@ class QuadraticFluxPM(_Objective):
                     "Using precomputed induction matrix for "
                     f"{len(self._dipole_fields)} fixed-geometry dipole field(s)"
                 )
- 
+
         self._constants = {
             "field": SumMagneticField(self._field),
             "field_grid": self._field_grid,
@@ -286,17 +298,8 @@ class QuadraticFluxPM(_Objective):
             "B_plasma": Bplasma,
             "B_coils": Bcoils,
             "induction_matrices": induction_matrices,
-
-            "fixed_mask": (
-                None
-                if self._fixed_mask is None
-                else jnp.asarray(self._fixed_mask)
-            ),
-            "fixed_rho": (
-                None
-                if self._fixed_rho is None
-                else jnp.asarray(self._fixed_rho)
-            ),
+            "fixed_mask": (None if fixed_mask is None else jnp.asarray(fixed_mask)),
+            "fixed_rho": (None if fixed_rho is None else jnp.asarray(fixed_rho)),
         }
 
         timer.stop("Precomputing transforms")
@@ -313,7 +316,7 @@ class QuadraticFluxPM(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *field_params, constants=None):
+    def compute(self, *field_params):
         """Compute normal field error on boundary.
 
         Parameters
@@ -330,16 +333,13 @@ class QuadraticFluxPM(_Objective):
             Bnorm from B_ext and B_plasma
 
         """
-        if constants is None:
-            constants = self.constants
+        constants = self.constants
 
         eval_data = constants["eval_data"]
         B_plasma = constants["B_plasma"]
         B_coils = constants["B_coils"]
 
-        induction_matrices = constants.get(
-            "induction_matrices"
-        )
+        induction_matrices = constants.get("induction_matrices")
 
         if induction_matrices is not None:
 
@@ -363,22 +363,14 @@ class QuadraticFluxPM(_Objective):
                         rho_raw,
                     )
 
-                M0 = (dipole_field.m0 * jnp.tanh(rho_raw))
-                B_ext = (B_ext + g_ij @ M0)
+                M0 = dipole_field.m0 * jnp.tanh(rho_raw)
+                B_ext = B_ext + g_ij @ M0
 
-        f = (
-            B_ext
-            + B_plasma
-            + B_coils
-        ) * jnp.sqrt(
-            eval_data[
-                "|e_theta x e_zeta|"
-            ]
-        )
+        f = (B_ext + B_plasma + B_coils) * jnp.sqrt(eval_data["|e_theta x e_zeta|"])
 
         return f
 
-    
+
 class _DipoleObjective(_Objective):
     """Base class for calculating dipole objectives.
 
@@ -446,8 +438,7 @@ class _DipoleObjective(_Objective):
 
         self._num_dipoles = len(dipole) if isinstance(dipole, DipoleSet) else 1
         self._dim_f = (
-            1 if getattr(self, "_reduce_residual", False)
-            else self._num_dipoles
+            1 if getattr(self, "_reduce_residual", False) else self._num_dipoles
         )
 
         timer = Timer()
@@ -466,8 +457,7 @@ class _DipoleObjective(_Objective):
 
         super().build(use_jit=use_jit, verbose=verbose)
 
-
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute data of dipole(s) for the given data key(s).
 
         Parameters
@@ -486,8 +476,7 @@ class _DipoleObjective(_Objective):
             ``DipoleSet.compute``'s return format).
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._constants
 
         dipole = self.things[0]
         data = dipole.compute(
@@ -500,7 +489,7 @@ class _DipoleObjective(_Objective):
 
 
 class DipoleDiscreteness(_DipoleObjective):
-    """Target dipole strengths to have rho=-1,0,1
+    """Target dipole strengths to have rho=-1,0,1.
 
     Parameters
     ----------
@@ -543,27 +532,46 @@ class DipoleDiscreteness(_DipoleObjective):
         )
 
     def build(self, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
         super().build(use_jit=use_jit, verbose=verbose)
         self._normalization = 1.0
 
-    def compute(self, params, constants=None):
-        if constants is None:
-            constants = self._constants
+    def compute(self, params):
+        """Compute dipole discreteness.
+
+        Parameters
+        ----------
+        params : dict or list of dict
+            Dictionary (or list, one per dipole) of the dipole's degrees of
+            freedom.
+
+        Returns
+        -------
+        d : ndarray, shape(num_dipoles,)
+
+        """
+        constants = self._constants
 
         p = params if params is not None else constants["params"]
 
         rho_raw = jnp.atleast_1d(p["rho"])
         rho_tilde = jnp.tanh(rho_raw)
+        d = rho_tilde * (1.0 - rho_tilde**2)
 
-        a = jnp.abs(rho_tilde)
-        d = a * (1.0 - a)
-
-        return jnp.sqrt(jnp.sum(d**2)).reshape(1)
-
+        return jnp.sum(d**2).reshape(1)
 
 
 class DipoleVolume(_DipoleObjective):
-    """Target dipole volume, minimizing rho so some magnets can have rho=0 and not exist
+    """Target dipole volume, minimizing rho so some magnets have rho=0.
 
     Parameters
     ----------
@@ -618,7 +626,7 @@ class DipoleVolume(_DipoleObjective):
         super().build(use_jit=use_jit, verbose=verbose)
         self._normalization = 1.0
 
-    def compute(self, params, constants=None):
+    def compute(self, params):
         """Compute dipole discreteness.
 
         Parameters
@@ -634,12 +642,9 @@ class DipoleVolume(_DipoleObjective):
         d : ndarray, shape(num_dipoles,)
 
         """
-        if constants is None:
-            constants = self._constants
+        constants = self._constants
         p = params if params is not None else constants["params"]
-        #rho_raw = jnp.asarray([jnp.atleast_1d(pi["rho"])[0] for pi in p])
         rho_raw = jnp.atleast_1d(p["rho"])
         rho_tilde = jnp.tanh(rho_raw)
-        eps=1e-6
-        #return jnp.sqrt(jnp.abs(rho_tilde)+1e-8)   # DipoleVolume specifically
-        return (rho_tilde**2 + eps**2)**0.25
+        eps = 1e-6
+        return (rho_tilde**2 + eps**2) ** 0.25

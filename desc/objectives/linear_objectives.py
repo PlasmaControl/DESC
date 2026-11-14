@@ -3001,7 +3001,7 @@ class FixCoilCurrent(FixParameters):
             self._normalization = np.max((mean_current, 1))
         super().build(use_jit=use_jit, verbose=verbose)
 
-        
+
 class FixSumCoilCurrent(FixCoilCurrent):
     """Fixes the sum of coil current(s) in a Coil or CoilSet.
 

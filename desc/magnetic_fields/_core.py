@@ -52,6 +52,7 @@ from desc.utils import (
 )
 from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
+
 def dipole_field(re, rs, m, chunk_size=None):
     """Field of a static magnetic dipole in vector form.
 
@@ -89,15 +90,13 @@ def dipole_field(re, rs, m, chunk_size=None):
         rhat = safediv(dr, r)
         m_dot_rhat = jnp.sum(m * rhat, axis=-1, keepdims=True)
         num = 3 * m_dot_rhat * rhat - m
-        den = r ** 3
+        den = r**3
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     return batch_map(dipole, re[..., jnp.newaxis, :], chunk_size)
 
 
-def dipole_vector_potential(
-    re, rs, m, chunk_size=None
-):
+def dipole_vector_potential(re, rs, m, chunk_size=None):
     """Field of a static magnetic dipole in vector form.
 
     Parameters
@@ -120,7 +119,8 @@ def dipole_vector_potential(
     -------
     A : ndarray
         Shape(n_eval_pts, 3).
-        Magnetic vector potential from dipole in cartesian components at specified points.
+        Magnetic vector potential from dipole in cartesian components
+        at specified points.
 
     """
     re, rs, m = map(jnp.asarray, (re, rs, m))
@@ -130,7 +130,7 @@ def dipole_vector_potential(
         r = jnp.linalg.norm(dr, axis=-1, keepdims=True)
         rhat = safediv(dr, r)
         num = jnp.cross(m, rhat, axis=-1)
-        den = r ** 2
+        den = r**2
         return safediv(num, den).sum(axis=-2) * mu_0 / (4 * jnp.pi)
 
     return batch_map(dipole, re[..., jnp.newaxis, :], chunk_size)

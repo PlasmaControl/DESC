@@ -2841,8 +2841,7 @@ def plot_dipoles(dipoles, fig=None, return_data=False, **kwargs):
     errorif(
         not isinstance(dipoles, DipoleSet),
         ValueError,
-        "Expected `dipoles` to be a DipoleSet, "
-        f"instead got {type(dipoles)}",
+        "Expected `dipoles` to be a DipoleSet, " f"instead got {type(dipoles)}",
     )
 
     # Unique dipole positions and normalized strengths

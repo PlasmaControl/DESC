@@ -27,6 +27,7 @@ from desc.utils import (
     unique_list,
     warnif,
 )
+
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
 
@@ -248,6 +249,7 @@ class Optimizer(IOAble):
 
         timer = Timer()
         _, method = _parse_method(self.method)
+
         timer.start("Initializing the optimization")
         if not is_linear_proj:
             objective, nonlinear_constraint = get_combined_constraint_objectives(
@@ -475,17 +477,22 @@ def _project_x_scale(x_scale, objective):
 
 def _print_output(things, things0, objective, constraints, result):
     """Print summary stats after optimization."""
-    state_0 = [things0[things.index(t)] for t in objective.things]
-    state = [things[things.index(t)] for t in objective.things]
-
     # put a divider
     w_divider = 50
     print("{:=<{}}".format("", PRINT_WIDTH + w_divider))
 
     print(f"{'Start  -->   End':>{PRINT_WIDTH+21}}")
+
+    # Chose to not use fse in print output since it was
+    # being overridden by original otpimization
+    # variables in the optimization output
     values = objective.print_value(
-        x=result["allx"][-1], x0=result["allx"][-1], fse=None, f0se=None,
+        x=result["allx"][-1],
+        x0=result["allx"][0],
+        fse=None,
+        f0se=None,
     )
+
     for con in constraints:
         arg_inds_for_this_con = [things.index(t) for t in things if t in con.things]
         args_for_this_con = [things[ind] for ind in arg_inds_for_this_con]

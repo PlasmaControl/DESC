@@ -1,10 +1,14 @@
-# made with chatgpt + claude !!
+"""Python file for converting FOCUS format coils to DESC format coils."""
 
-import sys
+import os
+
 import numpy as np
+
+from desc.coils import CoilSet, FourierXYZCoil
 
 
 def parse_focus_file(path):
+    """Accepts a focus file and extracts coil data."""
     with open(path) as f:
         lines = f.read().split("\n")
 
@@ -26,12 +30,19 @@ def parse_focus_file(path):
             for _ in range(6):
                 rows.append(np.array(list(map(float, lines[i].split()))))
                 i += 1
-            coils.append(dict(
-                name=coil_name, current=current, nf=nf,
-                xcos=rows[0], xsin=rows[1],
-                ycos=rows[2], ysin=rows[3],
-                zcos=rows[4], zsin=rows[5],
-            ))
+            coils.append(
+                dict(
+                    name=coil_name,
+                    current=current,
+                    nf=nf,
+                    xcos=rows[0],
+                    xsin=rows[1],
+                    ycos=rows[2],
+                    ysin=rows[3],
+                    zcos=rows[4],
+                    zsin=rows[5],
+                )
+            )
         else:
             i += 1
     return coils
@@ -50,49 +61,47 @@ def coils_to_arrays(coils):
         Z_n.append(np.concatenate([c["zcos"], c["zsin"][1:]]))
         currents.append(c["current"])
         names.append(c["name"])
-    return (np.array(X_n), np.array(Y_n), np.array(Z_n),
-            modes, np.array(currents), np.array(names))
+    return (
+        np.array(X_n),
+        np.array(Y_n),
+        np.array(Z_n),
+        modes,
+        np.array(currents),
+        np.array(names),
+    )
 
 
-import os
-
-npz_path   = "tf_coils_desc.npz"
+npz_path = "tf_coils_desc.npz"
 focus_path = "tf-coils.focus"
 
 if os.path.exists(npz_path):
-    data     = np.load(npz_path, allow_pickle=True)
-    X_n      = data["X_n"]
-    Y_n      = data["Y_n"]
-    Z_n      = data["Z_n"]
-    modes    = data["modes"]
+    data = np.load(npz_path, allow_pickle=True)
+    X_n = data["X_n"]
+    Y_n = data["Y_n"]
+    Z_n = data["Z_n"]
+    modes = data["modes"]
     currents = data["currents"]
-    names    = data["names"]
+    names = data["names"]
 else:
     coils = parse_focus_file(focus_path)
     X_n, Y_n, Z_n, modes, currents, names = coils_to_arrays(coils)
 
-    np.savez(npz_path,
-             X_n=X_n,
-             Y_n=Y_n,
-             Z_n=Z_n,
-             modes=modes,
-             currents=currents,
-             names=names)
+    np.savez(
+        npz_path, X_n=X_n, Y_n=Y_n, Z_n=Z_n, modes=modes, currents=currents, names=names
+    )
 
 n_coils, n_modes = X_n.shape
 print(f"Loaded {n_coils} coils, {n_modes} modes each (N_max = {modes.max()})")
 
-from desc.coils import FourierXYZCoil, CoilSet
-
 coil_list = []
 for i in range(n_coils):
     coil = FourierXYZCoil(
-        current = float(currents[i]),
-        X_n     = X_n[i],
-        Y_n     = Y_n[i],
-        Z_n     = Z_n[i],
-        modes   = modes,
-        name    = str(names[i]),
+        current=float(currents[i]),
+        X_n=X_n[i],
+        Y_n=Y_n[i],
+        Z_n=Z_n[i],
+        modes=modes,
+        name=str(names[i]),
     )
     coil_list.append(coil)
     print(f"  Created {names[i]} (I = {currents[i]:.3f} A)")
@@ -103,13 +112,3 @@ print(f"\nCoilSet created: {coilset}")
 output_path = "tf_coils_desc.h5"
 coilset.save(output_path)
 print(f"\nSaved CoilSet → {output_path}")
-
-try:
-    import matplotlib.pyplot as plt
-    from desc.plotting import plot_coils
-
-    fig, ax = plot_coils(coilset, figsize=(8, 6))
-    fig.savefig("tf_coils_preview.png", dpi=120)
-    print("Preview saved → tf_coils_preview.png")
-except Exception as e:
-    print(f"(Plotting skipped: {e})")

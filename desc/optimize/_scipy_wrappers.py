@@ -198,24 +198,7 @@ def _optimize_scipy_minimize(  # noqa: C901
             df = f2 - f1
             dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
-            # if len(hess_allx):
-            #     H1 = f_where_x(x1, hess_allx, hess_allf, dim=2)
-            # else:
-            #     H1 = np.eye(x1.size) / dx_norm
-            # if not H1.size:
-            #     H1 = np.eye(x1.size) / dx_norm
-            # predicted_reduction = -evaluate_quadratic_form_hess(H1, g1, dx)
-            # if predicted_reduction > 0:
-            #     reduction_ratio = df / predicted_reduction
-            # elif predicted_reduction == df == 0:
-            #     reduction_ratio = 1
-            # else:
-            #     reduction_ratio = 0
-            H1 = (
-                f_where_x(x1, hess_allx, hess_allf, dim=2)
-                if len(hess_allx)
-                else None
-            )
+            H1 = f_where_x(x1, hess_allx, hess_allf, dim=2) if len(hess_allx) else None
 
             reduction_ratio = _compute_reduction_ratio(df, g1, dx, H1)
 
@@ -871,19 +854,9 @@ def _compute_reduction_ratio(df, g, dx, H=None):
     dx_norm = np.linalg.norm(dx)
 
     if H is None or not np.size(H):
-        # Original fallback: H = I / ||dx||
-        #
-        # 0.5 * dx.T @ H @ dx = 0.5 * ||dx||
-        #
-        # This is mathematically equivalent to DESC's original
-        # quadratic model, but requires O(n) instead of O(n^2) memory.
-        predicted_reduction = -(
-            np.dot(g, dx) + 0.5 * dx_norm
-        )
+        predicted_reduction = -(np.dot(g, dx) + 0.5 * dx_norm)
     else:
-        predicted_reduction = -evaluate_quadratic_form_hess(
-            H, g, dx
-        )
+        predicted_reduction = -evaluate_quadratic_form_hess(H, g, dx)
 
     if predicted_reduction > 0:
         return df / predicted_reduction

@@ -493,3 +493,10 @@ def test_eq_optimize_default_constraints_warning(DummyStellarator):
             optimizer="lsq-exact",
             maxiter=0,
         )
+
+
+@pytest.mark.unit
+def test_solve_continuation_verbose_0():
+    """Test EquilibriaFamily.solve_continuation with verbose=0."""
+    fam = EquilibriaFamily(Equilibrium())
+    fam.solve_continuation(verbose=0, maxiter=1)

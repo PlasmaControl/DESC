@@ -758,7 +758,7 @@ def solve_continuation(  # noqa: C901
                 objective_i,
                 optimizer,
             )
-            deltas = {}
+        deltas = {}
 
         if ii > 0:
             eqi.set_initial_guess(eqfam[ii - 1])

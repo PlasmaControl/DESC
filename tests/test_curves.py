@@ -350,6 +350,15 @@ class TestFourierRZCurve:
         c = FourierRZCurve.from_values(coords, N=1)
         np.testing.assert_allclose(c.R_n[c.R_basis.get_idx(N=1)], 1.0)
 
+    @pytest.mark.unit
+    def test_from_values_phi_from_minus_pi(self):
+        """Test from_values with a closed curve that starts at phi = -pi."""
+        phi = np.linspace(-np.pi, np.pi, 8, endpoint=False)
+        coords = np.vstack([10 + np.cos(phi), phi, np.sin(phi)]).T
+        c = FourierRZCurve.from_values(coords, N=1)
+        np.testing.assert_allclose(c.R_n, [0, 10, 1], atol=1e-12)
+        np.testing.assert_allclose(c.Z_n, [1, 0, 0], atol=1e-12)
+
 
 class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""

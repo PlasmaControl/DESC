@@ -2531,6 +2531,7 @@ def _initialize_dipole_grid_from_equilibrium_lines(
         print(f"Estimated full symmetry-expanded magnets: {len(dipoles)*2*NFP:,}")
     return DipoleSet(*dipoles, NFP=NFP, sym=True)
 
+
 def initialize_axisymmetric_dipole_grid(
     eq,
     target_size,

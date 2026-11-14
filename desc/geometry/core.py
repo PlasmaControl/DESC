@@ -61,10 +61,14 @@ class Curve(IOAble, Optimizable, ABC):
 
     @rotmat.setter
     def rotmat(self, new):
-        if len(new) == 9:
-            self._rotmat = jnp.asarray(new)
+        new = jnp.asarray(new)
+        if new.size == 9:
+            self._rotmat = new.flatten()
         else:
-            self._rotmat = jnp.asarray(new.flatten())
+            raise ValueError(
+                "rotmat should be a 3x3 matrix or 9 element vector, "
+                f"got shape {new.shape}"
+            )
 
     @property
     def name(self):

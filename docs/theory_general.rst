@@ -46,7 +46,7 @@ The covariant basis vectors of the curvilinear coordinate system are
 and the Jacobian of the curvilinear coordinate system is :math:`\sqrt{g} = e_\rho \cdot e_\theta \times e_\zeta`.
 
 .. math::
-  \sqrt{g} =  R \left( \cfrac{\partial R}{\partial \rho}  \cfrac{\partial Z}{\partial \theta} + \cfrac{\partial R}{\partial \theta}  \cfrac{\partial Z}{\partial \rho} \right)
+  \sqrt{g} =  R \left( \cfrac{\partial R}{\partial \theta}  \cfrac{\partial Z}{\partial \rho} - \cfrac{\partial R}{\partial \rho}  \cfrac{\partial Z}{\partial \theta} \right)
 
 DESC solves for the map between the cylindrical and flux coordinate systems through the following variables that represent the shapes of the flux surfaces:
 

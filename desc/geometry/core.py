@@ -61,10 +61,14 @@ class Curve(IOAble, Optimizable, ABC):
 
     @rotmat.setter
     def rotmat(self, new):
-        if len(new) == 9:
-            self._rotmat = jnp.asarray(new)
+        new = jnp.asarray(new)
+        if new.size == 9:
+            self._rotmat = new.flatten()
         else:
-            self._rotmat = jnp.asarray(new.flatten())
+            raise ValueError(
+                "rotmat should be a 3x3 matrix or 9 element vector, "
+                f"got shape {new.shape}"
+            )
 
     @property
     def name(self):
@@ -190,7 +194,7 @@ class Curve(IOAble, Optimizable, ABC):
 
     def rotate(self, axis=[0, 0, 1], angle=0):
         """Rotate the curve by a fixed angle about axis in X,Y,Z coordinates."""
-        R = rotation_matrix(axis=axis, angle=angle)
+        R = rotation_matrix(np.asarray(axis).astype(float), angle)
         self.rotmat = (R @ self.rotmat.reshape(3, 3)).flatten()
         self.shift = self.shift @ R.T
 

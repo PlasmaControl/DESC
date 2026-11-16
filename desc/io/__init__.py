@@ -11,4 +11,6 @@ from .hdf5_io import hdf5Reader, hdf5Writer
 from .optimizable_io import IOAble, load
 from .pickle_io import PickleReader, PickleWriter
 
-__all__ = ["InputReader", "load"]
+__all__ = [
+    "load",
+]

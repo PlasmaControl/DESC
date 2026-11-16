@@ -12,6 +12,11 @@ from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
 from desc.utils import Timer, errorif
 
+__all__ = [
+    "solve_continuation",
+    "solve_continuation_automatic",
+]
+
 MIN_MRES_STEP = 1
 MIN_PRES_STEP = 0.1
 MIN_BDRY_STEP = 0.05

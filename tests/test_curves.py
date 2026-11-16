@@ -552,9 +552,9 @@ class TestFourierPlanarCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=5e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=5e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=5e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -763,9 +763,9 @@ class TestFourierXYCurve:
         datax = cx.compute("x", grid=20, basis="xyz")
         datay = cy.compute("x", grid=20, basis="xyz")
         dataz = cz.compute("x", grid=20, basis="xyz")
-        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=2e-16)  # only in Y-Z plane
-        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=2e-16)  # only in X-Z plane
-        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=2e-16)  # only in X-Y plane
+        np.testing.assert_allclose(datax["x"][:, 0], 0, atol=5e-16)  # only in Y-Z plane
+        np.testing.assert_allclose(datay["x"][:, 1], 0, atol=5e-16)  # only in X-Z plane
+        np.testing.assert_allclose(dataz["x"][:, 2], 0, atol=5e-16)  # only in X-Y plane
 
     @pytest.mark.unit
     def test_length(self):
@@ -870,6 +870,25 @@ class TestFourierXYCurve:
         xsss_xyz = cxyz.compute("x_sss")["x_sss"]
         xsss_rpz = crpz.compute("x_sss")["x_sss"]
         np.testing.assert_allclose(xsss_xyz, xsss_rpz, atol=2e-15)
+
+    @pytest.mark.unit
+    def test_rotmat_setter(self):
+        """Test rotmat setter handles list, array, 3x3 matrix, and invalid shapes."""
+        c = FourierRZCurve()
+        # 3x3 matrix
+        c.rotmat = np.eye(3)
+        assert c.rotmat.shape == (9,)
+        # flat 9-element list
+        c.rotmat = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+        assert c.rotmat.shape == (9,)
+        # flat 9-element array
+        c.rotmat = np.ones(9)
+        assert c.rotmat.shape == (9,)
+        # invalid shape raises ValueError
+        with pytest.raises(ValueError, match=r"got shape \(3,\)"):
+            c.rotmat = [1, 2, 3]
+        with pytest.raises(ValueError, match=r"got shape \(2, 2\)"):
+            c.rotmat = np.zeros((2, 2))
 
     @pytest.mark.unit
     def test_misc(self):

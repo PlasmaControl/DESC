@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from netCDF4 import Dataset
+from scipy.constants import mu_0
 
 import desc.examples
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
@@ -1800,3 +1801,27 @@ def test_load_lambda_half_mesh():
     lam_desc = -eq.compute("lambda", grid=grid)["lambda"]
     # half mesh fit gives ~2.5e-4, fitting on the full mesh gave ~6e-3
     np.testing.assert_allclose(lam_desc, lam_vmec, atol=1e-3)
+
+
+@pytest.mark.unit
+def test_load_current_half_mesh():
+    """Test that VMECIO.load fits the current profile on the VMEC half mesh."""
+    path = "./tests/inputs/wout_DSHAPE.nc"
+    eq = VMECIO.load(path, profile="current")
+    file = Dataset(path, mode="r")
+    ns = int(file.variables["ns"][:])
+    buco = file.variables["buco"][:].filled()
+    ctor = float(file.variables["ctor"][:])
+    file.close()
+
+    # buco is on the half mesh, s_j = (j - 1/2) / (ns - 1), and buco[0] is unused
+    s_half = (np.arange(1, ns) - 0.5) / (ns - 1)
+    current_vmec = 2 * np.pi / mu_0 * buco[1:]
+    current_desc = eq.current(np.sqrt(s_half))
+    # buco and the DESC current have opposite signs for this left-handed wout,
+    # and fitting on the full mesh gave errors of ~4e-3 relative to max |I|
+    np.testing.assert_allclose(
+        -current_desc, current_vmec, atol=1e-8 * np.max(np.abs(current_vmec))
+    )
+    # total current at the edge, extrapolated from the half mesh as VMEC does
+    np.testing.assert_allclose(eq.current(np.array([1.0])), ctor, rtol=1e-8)

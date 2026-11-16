@@ -45,7 +45,7 @@ Papers extending DESC functionality
    [`pdf <https://arxiv.org/abs/2310.18842>`__]
 
 #. R. Gaur, R. Conlin, D. Dickinson, J.F. Parisi, D. Panici,
-   D.W. Dudt, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2024).
+   D.W. Dudt, P. Kim, K.E. Unalmis, W.D. Dorland, and E. Kolemen. (2025).
    *Omnigenous stellarators with improved ideal and kinetic ballooning stability*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/ae1e9e>`__]
    [`pdf <https://arxiv.org/abs/2410.04576>`__]
@@ -55,9 +55,10 @@ Papers extending DESC functionality
    [`JPP <https://doi.org/10.1017/S0022377824000655>`__]
    [`pdf <https://arxiv.org/abs/2403.11033>`__]
 
-#. Kaya Unalmis et al. (2025).
+#. K.E. Unalmis, R. Gaur, R. Conlin, D. Panici, and E. Kolemen. (2026).
    *Spectrally accurate, reverse-mode differentiable bounce-averaging algorithm and
    its applications*.
+   [`JPP <https://doi.org/10.1017/S0022377826101652>`__]
    [`pdf <https://arxiv.org/abs/2412.01724>`__]
 
 #. R. Conlin, J. Schilling, D.W. Dudt, D. Panici, R. Jorge, and E. Kolemen. (2024).
@@ -67,16 +68,36 @@ Papers extending DESC functionality
 #. R. Gaur, D. Panici, T.M. Elder, M. Landreman, K.E. Unalmis, Y. Elmacioglu,
    D.W. Dudt, R. Conlin, and E. Kolemen. (2025).
    *Omnigenous umbilic stellarators*.
+   [`JPP <https://doi.org/10.1017/S0022377825100925>`__]
    [`pdf <https://arxiv.org/abs/2505.04211>`__]
 
 #. D. Panici, E. Rodriguez, R. Conlin, D.W. Dudt, and E. Kolemen. (2025).
    *Extending near-axis equilibria in DESC*.
+   [`JPP <https://doi.org/10.1017/S0022377825100901>`__]
    [`pdf <https://arxiv.org/abs/2506.05170>`__]
 
 #. D. Panici et al. (2025).
    *Surface Current Optimization and Coil-Cutting Algorithms for Stage-Two
    Stellarator Optimization*.
    [`pdf <https://arxiv.org/abs/2508.09321>`__]
+
+#. E. Miralles-Dolz et al. (2026).
+   *Neutron wall loading in stellarator optimization*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb15b>`__]
+
+#. D. Panici, B. Jang, R. Conlin, D.W. Dudt, Y.G. Elmacioglu, and E. Kolemen. (2026).
+   *Deflation Techniques for Stellarator Equilibrium and Optimization*.
+   [`pdf <https://arxiv.org/abs/2602.09957>`__]
+
+#. R. Gaur, S. Patil, P. Gupta, D. Patch, and T. Qian. (2026).
+   *AGNI: A differentiable MHD stability solver & optimizer for magnetic
+   confinement fusion devices*.
+   [`pdf <https://arxiv.org/abs/2608.01750>`__]
+
+#. Y.G. Elmacioglu, D. Panici, R. Conlin, D.W. Dudt, and E. Kolemen. (2026).
+   *Applications of Poincaré Boundary Condition for 3D Ideal MHD Equilibrium
+   and Optimization*.
+   [`pdf <https://arxiv.org/abs/2609.36183>`__]
 
 .. raw:: html
 
@@ -131,6 +152,7 @@ Papers applying DESC
 #. S.A. Cadena et al. (2025).
    *ConStellaration: A dataset of QI-like stellarator plasma boundaries
    and optimization benchmarks*.
+   [`NeurIPS <https://doi.org/10.52202/085713-0520>`__]
    [`pdf <https://arxiv.org/abs/2506.19583>`__]
 
 #. M. Landreman, J.Y. Choi, C. Alves, P. Balaprakash, M. Churchill,
@@ -149,6 +171,87 @@ Papers applying DESC
    E. Kolemen, and J.-K. Park. (2025).
    *Robustness of quasi-symmetry along parametric boundary variation*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/adf6e1>`__]
+
+#. H. Liu et al. (2025).
+   *Optimizing stellarators with hidden symmetry*.
+   [`pdf <https://arxiv.org/abs/2502.09350>`__]
+
+#. T. Thun, A. Merlo, R. Conlin, D. Panici, and D. Böckenhoff. (2025).
+   *Improving ideal MHD equilibrium accuracy with physics-informed neural networks*.
+   [`Nuclear Fusion <https://doi.org/10.1088/1741-4326/ae2937>`__]
+   [`pdf <https://arxiv.org/abs/2507.03119>`__]
+
+#. B. Jang, M. Landreman, and R. Conlin. (2026).
+   *Exponential spectral scaling: robust and efficient stellarator boundary
+   optimisation via mode-dependent scaling*.
+   [`JPP <https://doi.org/10.1017/S0022377825101074>`__]
+   [`pdf <https://arxiv.org/abs/2509.16320>`__]
+
+#. T. Thun, R. Conlin, D. Panici, and D. Böckenhoff. (2026).
+   *Narrow operator models of stellarator equilibria in Fourier Zernike basis*.
+   [`JPP <https://doi.org/10.1017/S0022377826101512>`__]
+   [`pdf <https://arxiv.org/abs/2510.13521>`__]
+
+#. L. Fu, D. Panici, E.J. Paul, A.A. Kaptanoglu, and A. Bhattacharjee. (2026).
+   *A flexible and differentiable coil proxy for stellarator equilibrium optimization*.
+   [`Physics of Plasmas <https://doi.org/10.1063/5.0307710>`__]
+   [`pdf <https://arxiv.org/abs/2510.16243>`__]
+
+#. C.P.S. Swanson et al. (2026).
+   *Overview of the Helios design: A practical planar coil stellarator fusion
+   power plant*.
+   [`Fusion Engineering and Design <https://doi.org/10.1016/j.fusengdes.2026.115999>`__]
+   [`pdf <https://arxiv.org/abs/2512.08027>`__]
+
+#. D.W. Dudt et al. (2026).
+   *Equilibrium optimization of the Helios planar coil stellarator power plant*.
+   [`Fusion Engineering and Design <https://doi.org/10.1016/j.fusengdes.2026.115903>`__]
+
+#. V. Fernández-Pacheco, J.L. Velasco, E. Sánchez, R. Gaur, J.M. García-Regaña,
+   J.A. Alonso, I. Calvo, and D. Carralero. (2026).
+   *Piecewise omnigenous magnetohydrodynamic equilibria as fusion reactor candidates*.
+   [`Physical Review X <https://doi.org/10.1103/jcks-2bzg>`__]
+   [`pdf <https://arxiv.org/abs/2601.14886>`__]
+
+#. J. Kappel, M. Landreman, P. Jurašić, and S.A. Henneberg. (2026).
+   *How does the magnetic gradient scale length influence complexity of
+   filamentary coils in stellarators?*
+   [`Nuclear Fusion <https://doi.org/10.1088/1741-4326/ae69fa>`__]
+   [`pdf <https://arxiv.org/abs/2602.18974>`__]
+
+#. A.K. Nath and Y. Suzuki. (2026).
+   *Development of a Simple Stellarator using Tilted Circular Toroidal Field Coils*.
+   [`pdf <https://arxiv.org/abs/2604.06677>`__]
+
+#. K. Salguero-Martínez and J.J.E. Herrera-Velázquez. (2026).
+   *Equilibrium of a simplified coil quasi-axisymmetric stellarator: Free
+   boundary approach*.
+   [`pdf <https://arxiv.org/abs/2605.02139>`__]
+
+#. T. Zhang, Z. Meng, and R. Xu. (2026).
+   *Agentic Stage-One Stellarator Optimization: Autonomous Multi-Objective
+   Search for Finite-Beta Equilibria*.
+   [`pdf <https://arxiv.org/abs/2608.01344>`__]
+
+#. Y. Han et al. (2026).
+   *Data-Driven Generation of Compact Quasi-Isodynamic Stellarators*.
+   [`pdf <https://arxiv.org/abs/2608.16938>`__]
+
+#. R.M. Churchill et al. (2026).
+   *AI-accelerated gyrokinetic predictions of turbulent transport for
+   stellarator design optimization and experimental planning*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb1f1>`__]
+   [`pdf <https://arxiv.org/abs/2609.28730>`__]
+
+#. H. Zhu, R. Gaur, X. Wei, Z. Lin, and A. Bhattacharjee. (2026).
+   *Theory of Equivalent Tokamaks for Characterizing Turbulent Transport in
+   Quasi-symmetric Stellarators*.
+   [`pdf <https://arxiv.org/abs/2610.01131>`__]
+
+#. R. Gaur, D. Patch, R. Babin, F. Hindenlang, X. Chu, and T. Qian. (2026).
+   *Stellarators Linking Axisymmetric Mirrors Part 1: Coil Design, MHD
+   Equilibrium, and Physics Metrics*.
+   [`pdf <https://arxiv.org/abs/2610.06085>`__]
 
 .. raw:: html
 

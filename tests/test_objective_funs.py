@@ -46,6 +46,8 @@ from desc.objectives import (
     BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     BScaleLength,
     CoilArclengthVariance,
     CoilCurrentLength,
@@ -73,6 +75,7 @@ from desc.objectives import (
     MeanCurvature,
     MercierStability,
     MirrorRatio,
+    NeutronWallLoading,
     ObjectiveFromUser,
     ObjectiveFunction,
     Omnigenity,
@@ -712,6 +715,54 @@ class TestObjectiveFunction:
 
         with pytest.raises(ValueError, match="At least one"):
             BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
+    def test_boundary_error_sheet_current_derivative(self):
+        """Test BoundaryError derivative through surface with sheet current."""
+        # ProximalProjection differentiates with Rb_lmn, Zb_lmn held fixed, so the
+        # derivative along R_lmn, Z_lmn alone must include the sheet moving with
+        # the boundary.
+        eq = Equilibrium(L=3, M=3, N=1, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=2, N_Phi=1, G=-2.5e7
+        )
+        rng = np.random.default_rng(0)
+        eq.surface.Phi_mn = 1e6 * rng.standard_normal(eq.surface.Phi_mn.size)
+        field = ToroidalMagneticField(B0=1, R0=10)
+        obj = ObjectiveFunction(BoundaryError(eq, field, field_fixed=True))
+        obj.build(verbose=0)
+        self_consistency = ObjectiveFunction(
+            (BoundaryRSelfConsistency(eq=eq), BoundaryZSelfConsistency(eq=eq))
+        )
+        self_consistency.build(verbose=0)
+
+        x = obj.x(eq)
+        idx = eq.x_idx
+        # move R_lmn, Z_lmn with Rb_lmn, Zb_lmn fixed, as in proximal
+        dx = jnp.zeros_like(x)
+        dx = dx.at[idx["R_lmn"]].set(1e-2 * rng.standard_normal(idx["R_lmn"].size))
+        dx = dx.at[idx["Z_lmn"]].set(1e-2 * rng.standard_normal(idx["Z_lmn"].size))
+        # move Rb_lmn, Zb_lmn to stay consistent with R_lmn, Z_lmn at rho=1
+        dxb = jnp.zeros_like(x)
+        dxb = dxb.at[jnp.concatenate([idx["Rb_lmn"], idx["Zb_lmn"]])].set(
+            self_consistency.jvp_unscaled((dx,), x)
+        )
+        np.testing.assert_allclose(
+            self_consistency.jvp_unscaled((dx + dxb,), x), 0, atol=1e-14
+        )
+
+        # BoundaryError should not read Rb_lmn, Zb_lmn at all
+        np.testing.assert_allclose(obj.jvp_scaled_error((dxb,), x), 0, atol=1e-12)
+
+        # derivative along R_lmn, Z_lmn alone should match a central difference
+        # that moves the whole boundary consistently
+        h = 1e-4
+        df = obj.jvp_scaled_error((dx,), x)
+        df_fd = (
+            obj.compute_scaled_error(x + h * (dx + dxb))
+            - obj.compute_scaled_error(x - h * (dx + dxb))
+        ) / (2 * h)
+        np.testing.assert_allclose(df, df_fd, rtol=1e-5, atol=1e-6 * np.abs(df).max())
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):
@@ -2296,6 +2347,69 @@ class TestObjectiveFunction:
         np.testing.assert_allclose(q0, q1)
 
     @pytest.mark.unit
+    def test_neutron_wall_loading_reactor_QA(self):
+        """Test NeutronWallLoading on the reactor_QA example."""
+        eq = get("reactor_QA")
+        offset = 0.1
+
+        source_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+
+        obj = NeutronWallLoading(
+            eq=eq,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj.build(use_jit=False, verbose=0)
+        nwl = np.asarray(obj.compute(*obj.xs(eq)))
+
+        # check that NWL has the right shape and is non-negative
+        assert nwl.shape == (surface_grid.num_nodes,)
+        assert np.all(nwl >= -1e-12)
+
+        # DT neutrons carry about 80% of the total fusion energy, so the
+        # surface-area-weighted mean NWL should approximately match 0.8 * P_fusion / S.
+        wall = eq.surface.constant_offset_surface(offset, grid=surface_grid)
+        wall_data = wall.compute(["S", "|e_theta x e_zeta|"], grid=surface_grid)
+        wall_area = float(wall_data["S"])
+        wall_weights = np.asarray(wall_data["|e_theta x e_zeta|"]) * np.asarray(
+            surface_grid.weights
+        )
+        fusion_power = float(
+            eq.compute("P_fusion", grid=source_grid, fuel="DT")["P_fusion"]
+        )
+        avg_nwl_from_power = 0.8 * fusion_power / wall_area * 1e-6
+        weighted_mean_nwl = float(np.sum(nwl * wall_weights) / np.sum(wall_weights))
+
+        np.testing.assert_allclose(weighted_mean_nwl, avg_nwl_from_power, rtol=0.12)
+
+        # For fixed temperature, geometry, and fuel mix, the DT fusion rate scales like
+        # n_D * n_T. Doubling the density doubles both species densities, so both the
+        # fusion power and the local neutron wall loading should increase by scale**2.
+        scale = 2.0
+        eq_scaled = eq.copy()
+        eq_scaled.electron_density.params = eq_scaled.electron_density.params * scale
+
+        obj_scaled = NeutronWallLoading(
+            eq=eq_scaled,
+            offset=offset,
+            source_grid=source_grid,
+            surface_grid=surface_grid,
+        )
+        obj_scaled.build(use_jit=False, verbose=0)
+        nwl_scaled = np.asarray(obj_scaled.compute(*obj_scaled.xs(eq_scaled)))
+
+        np.testing.assert_allclose(nwl_scaled, nwl * scale**2, rtol=1e-5, atol=1e-12)
+
+    @pytest.mark.unit
     def test_things_per_objective_idx(self):
         """Test things_per_objective_idx. Related to GH Issue #1602."""
         eq = desc.examples.get("reactor_QA")
@@ -3405,6 +3519,7 @@ class TestComputeScalarResolution:
         GenericObjective,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -3516,6 +3631,39 @@ class TestComputeScalarResolution:
             obj.build(verbose=0)
             f[i] = obj.compute_scalar(obj.x())
         np.testing.assert_allclose(f, f[-1], rtol=5e-2)
+
+    @pytest.mark.regression
+    def test_compute_scalar_resolution_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        eq = get("reactor_QA")
+        f = np.zeros(4, dtype=float)
+        for i, res in enumerate([0.75, 1.0, 1.25, 1.5]):
+            source_grid = QuadratureGrid(
+                L=max(2, int(round(eq.L_grid * res))),
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+            )
+            surface_grid = LinearGrid(
+                rho=1.0,
+                M=max(2, int(round(eq.M_grid * res))),
+                N=max(1, int(round(eq.N_grid * res))),
+                NFP=eq.NFP,
+                sym=False,
+                endpoint=True,
+            )
+            obj = ObjectiveFunction(
+                NeutronWallLoading(
+                    eq=eq,
+                    offset=0.1,
+                    source_grid=source_grid,
+                    surface_grid=surface_grid,
+                ),
+                use_jit=False,
+            )
+            obj.build(verbose=0)
+            f[i] = obj.compute_scalar(obj.x())
+        np.testing.assert_allclose(f, f[-1], rtol=6e-2)
 
     @pytest.mark.regression
     def test_compute_scalar_resolution_boundary_error(self):
@@ -3931,6 +4079,7 @@ class TestObjectiveNaNGrad:
         GammaC,
         HeatingPowerISS04,
         LinkingCurrentConsistency,
+        NeutronWallLoading,
         Omnigenity,
         PlasmaCoilSetDistanceBound,
         PlasmaCoilSetMinDistance,
@@ -4054,6 +4203,39 @@ class TestObjectiveNaNGrad:
         assert not np.any(np.isnan(g)), "heating power"
 
     @pytest.mark.unit
+    def test_objective_no_nangrad_neutron_wall_loading(self):
+        """NeutronWallLoading."""
+        # Using half the resolution to speed up testing.
+        eq = get("reactor_QA")
+        source_grid = QuadratureGrid(
+            L=max(2, eq.L_grid // 2),
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+        )
+        surface_grid = LinearGrid(
+            rho=1.0,
+            M=max(2, eq.M_grid // 2),
+            N=max(1, eq.N_grid // 2),
+            NFP=eq.NFP,
+            sym=False,
+            endpoint=True,
+        )
+        obj = ObjectiveFunction(
+            NeutronWallLoading(
+                eq=eq,
+                offset=0.1,
+                source_grid=source_grid,
+                surface_grid=surface_grid,
+                deriv_mode="rev",
+            ),
+            use_jit=False,
+        )
+        obj.build()
+        g = obj.grad(obj.x())
+        assert not np.any(np.isnan(g)), "neutron wall loading"
+
+    @pytest.mark.unit
     def test_objective_no_nangrad_boundary_error(self):
         """BoundaryError."""
         with pytest.warns(UserWarning):
@@ -4172,7 +4354,12 @@ class TestObjectiveNaNGrad:
         test([0, 0, -1])  # antiparallel
         test([0, 1e-4, 1])  # nearly parallel
         test([0, 1e-4, -1])  # nearly antiparallel
-
+        test([0, 1e-6, 1])  # nearly parallel
+        test([0, 1e-6, -1])  # nearly antiparallel
+        test([0, 1e-8, 1])  # nearly parallel
+        test([0, 1e-8, -1])  # nearly antiparallel
+        test([0, 1e-12, 1])  # nearly parallel
+        test([0, 1e-12, -1])  # nearly antiparallel
         # have use_jit=True here to check that runs correctly with spline
         # coils, see PR #1656
         obj = ObjectiveFunction(SurfaceQuadraticFlux(surf, ext_field), use_jit=True)

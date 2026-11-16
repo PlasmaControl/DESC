@@ -35,7 +35,6 @@ Coils
     desc.coils.FourierXYZCoil
     desc.coils.MixedCoilSet
     desc.coils.SplineXYZCoil
-    desc.coils.coil_source_grid
     desc.coils.initialize_helical_coils
     desc.coils.initialize_modular_coils
     desc.coils.initialize_saddle_coils

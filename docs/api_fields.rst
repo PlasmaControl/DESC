@@ -115,12 +115,15 @@ another ``CoilSet``).
     desc.coils.CoilSet
     desc.coils.MixedCoilSet
 
+By default the field of a coil is computed on a ``source_grid`` of at least ``LinearGrid(N=32)``.
+Evaluation points close to a coil may need a finer one.
+
 DESC ``CoilSet`` or ``MixedCoilSet`` objects can also be created from MAKEGRID-formatted coil text files via
 the `from_makegrid_coilfile` method. They can also be saved in a MAKEGRID-formatted text file with
 the `save_in_makegrid_format` method.
 
 There are also utility functions for getting an initial guess for coil optimization using modular, helical, or
-saddle coils, and for choosing a source grid that computes the coil field to a given accuracy:
+saddle coils:
 
 .. autosummary::
     :toctree: _api/coils/
@@ -130,4 +133,3 @@ saddle coils, and for choosing a source grid that computes the coil field to a g
     desc.coils.initialize_modular_coils
     desc.coils.initialize_helical_coils
     desc.coils.initialize_saddle_coils
-    desc.coils.coil_source_grid

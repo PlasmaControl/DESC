@@ -81,6 +81,10 @@ Papers extending DESC functionality
    Stellarator Optimization*.
    [`pdf <https://arxiv.org/abs/2508.09321>`__]
 
+#. E. Miralles-Dolz et al. (2026).
+   *Neutron wall loading in stellarator optimization*.
+   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb15b>`__]
+
 #. D. Panici, B. Jang, R. Conlin, D.W. Dudt, Y.G. Elmacioglu, and E. Kolemen. (2026).
    *Deflation Techniques for Stellarator Equilibrium and Optimization*.
    [`pdf <https://arxiv.org/abs/2602.09957>`__]
@@ -238,11 +242,6 @@ Papers applying DESC
    stellarator design optimization and experimental planning*.
    [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb1f1>`__]
    [`pdf <https://arxiv.org/abs/2609.28730>`__]
-
-#. E. Miralles-Dolz, R.M. Churchill, D. Panici, J. Schwartz, T. Bohm,
-   C. Moreno, and P. Wilson. (2026).
-   *Neutron wall loading in stellarator optimization*.
-   [`Plasma Physics and Controlled Fusion <https://doi.org/10.1088/1361-6587/aeb15b>`__]
 
 #. H. Zhu, R. Gaur, X. Wei, Z. Lin, and A. Bhattacharjee. (2026).
    *Theory of Equivalent Tokamaks for Characterizing Turbulent Transport in

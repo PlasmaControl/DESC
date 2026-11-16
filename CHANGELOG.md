@@ -6,10 +6,12 @@ New Features
 - Adds ``desc.external.agni.AgniStability``, the squared growth rate of the most unstable finite-n ideal MHD mode computed by the external AGNI solver (``pip install agnimhd``), with its gradient for optimization.
 - Added warning for when ``deriv_mode="batched"`` is used in an ``ObjectiveFunction`` where one or more sub-objectives is using ``rev`` mode differentiation. Also adds more info about the derivative mode and Jacobian chunk sizes when building the objective with ``verbose>1``.
 - Adds ``scale_invariant`` argument to quasi-symmetry objectives (i.e. ``QuasisymmetryTwoTerm``, ``QuasisymmetryTripleProduct`` and ``QuasisymmetryBoozer``) that introduces the normalized alternatives for the objective functions with the actual evaluated local magnetic field information instead of the precomputed constant normalization. Similarly, the definition of `f_C` and `f_T` of `plot_qs_error` is changed, the flux surface average is now take over the normalized quantity whereas previously the flux surface average was applied to each term separately before normalization. For more details on these quantities, see [Basic Optimization tutorial](https://desc-docs.readthedocs.io/en/latest/notebooks/tutorials/basic_optimization.html).
+- Adds ``NeutronWallLoading`` objective to compute the neutron wall loading (MW/m²) on a chosen/optimized surface.
 - Adds Python type hints for many API functions. Allows for better autocomplete and error checking when writing DESC scripts in common IDEs.
 
 Performance Improvements
 
+- Avoids numerous small JAX compilations when building and solving an equilibrium at a new resolution, by doing index and mode bookkeeping in ``Grid``, ``Optimizable.x_idx`` and ``compute_scaling_factors`` with NumPy instead of eager JAX operations.
 - Reduces memory use of Boozer harmonic projections and their derivatives by contracting the poloidal and toroidal Fourier factors separately.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
@@ -21,6 +23,7 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
+- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
 
 Breaking Changes and Deprecations
 
@@ -33,6 +36,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.
 - Fixes two sign errors in ``c ballooning`` that made ``ideal ballooning lambda`` wrong for equilibria with ψ < 0 or ι < 0 [#2342](https://github.com/PlasmaControl/DESC/issues/2342): an extra ``sign(ψ)`` made the result depend on the direction of B, and for ι < 0 the ``zeta0`` shift of ∇α in ``c ballooning`` had the opposite sign from ``gds2``, so the growth rate grew without bound with ``zeta0``. Results for ψ > 0 and ι > 0 are unchanged.
@@ -54,6 +58,7 @@ Bug Fixes
   ``fmintr`` and ``fmin-auglag`` with the default ``tr_method="exact"``, and in
   ``lsq-exact``/``lsq-auglag`` with ``tr_method="cho"``.
 - Stops `ProximalProjection` from mutating `solve_options` during iterations.
+- Fixes ``FourierRZCoil``, ``SplineXYZCoil`` and other coils' ``compute_magnetic_field`` and ``compute_magnetic_vector_potential`` removing ``current`` from the caller's ``params`` dictionary when it was used to override the coil current, which made repeated calls with the same ``params`` silently use the coil's stored current instead.
 - Fixed bug that occured when passing in ``_surf_batch_size`` kwarg to ``Omnigenity`` and ``QuasisymmetryBoozer`` objectives
 - Fixes ``pitch_batch_size`` argument getting ignored in compute functions.
 - Stopped wiping the ``CUDA_VISIBLE_DEVICES`` environment variable when ``set_device("cpu")`` is used, which should now allow DESC to be used on CPU concurrently with e.g. pytorch or some other code using the GPU.
@@ -62,6 +67,7 @@ Bug Fixes
 - Fixes ``InputReader`` rejecting DESC input files whose lines are indented, which previously failed with ``The following line is not a valid input``.
 - Fixes wrong signs in ``w_Boozer_mn`` for non-stellarator-symmetric equilibria, which made the Boozer transform (``nu``, ``theta_B``, ``zeta_B``, the Boozer harmonics such as ``|B|_mn_B``, ``QuasisymmetryBoozer``, ``make_boozmn_output`` etc.) incorrect for asymmetric equilibria. Results for stellarator-symmetric equilibria are unchanged. Asymmetric ``make_boozmn_output`` outputs (including ``pmnc_b``) now agree with the hidden symmetries ``booz_xform``, so the warning about the sign of ``numnc`` has been removed.
 - Ensures that ``SurfaceCurrentRegularization.normalization`` has the correct units for every ``regularization`` option.
+- Fixes inaccuracy in derivative when equilibrium boundary sheet current is present and non-negligible in ``BoundaryError`` objective.
 
 
 v0.17.3

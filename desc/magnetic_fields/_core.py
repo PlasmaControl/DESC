@@ -2675,8 +2675,8 @@ def field_line_integrate(
         the field the standard way. Only used if underlying field implements
         the precomputation via `_as_precomputed_source` method. Default is True.
     chunk_size : int or None
-        Chunk of field lines to trace at once. If None, traces all at once.
-        Defaults to None.
+        Maximum number of field lines in a chunk. Each chunk will have the same number
+        of field lines. If None, traces all at once. Defaults to None.
     bs_chunk_size: int or None
         Chunk size to use when evaluating Biot-Savart for the magnetic field. If None,
         evaluates all the source grid points at once. Defaults to None.

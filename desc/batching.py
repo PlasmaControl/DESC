@@ -234,9 +234,8 @@ def vmap_chunked(
     in_axes : int or None
         The axes that should be scanned along. Only supports ``0`` or ``None``.
     chunk_size : int or None
-        Size to split computation into chunks.
-        If no chunking should be done or the chunk size is the full input
-        then supply ``None``.
+        Maximum number of elements in a chunk. Each chunk will have the same number
+        of elements, unless ``reduction`` is given. If ``None``, no chunking is done.
     reduction : callable or None
         Binary reduction operation.
         Should take two arguments and return one output, e.g. ``jnp.add``.
@@ -296,8 +295,9 @@ def batched_vectorize(pyfunc, *, excluded=frozenset(), signature=None, chunk_siz
     provided, ``pyfunc`` will be called with (and expected to return) arrays
     with shapes given by the size of corresponding core dimensions. By
     default, pyfunc is assumed to take scalars arrays as input and output.
-    chunk_size: the size of the batches to pass to vmap. If None, defaults to
-    the largest possible chunk_size (like the default behavior of ``vectorize11)
+    chunk_size: maximum number of elements in a chunk to pass to vmap. Each chunk
+    will have the same number of elements. If None, no chunking is done (like the
+    default behavior of ``vectorize``)
 
     Returns
     -------
@@ -426,8 +426,8 @@ def jacfwd_chunked(
     holomorphic: Optional, bool.
         Indicates whether ``fun`` is promised to be holomorphic. Default False.
     chunk_size: int
-        The size of the batches to pass to vmap. If None, defaults to the largest
-        possible chunk_size.
+        Maximum number of elements in a chunk to pass to vmap. Each chunk will have
+        the same number of elements. If None, no chunking is done.
 
     Returns
     -------
@@ -513,8 +513,8 @@ def jacrev_chunked(
         gradient of an integer input will have a trivial vector-space dtype (float0).
         Default False.
     chunk_size: int
-        The size of the batches to pass to vmap. If None, defaults to the largest
-        possible chunk_size.
+        Maximum number of elements in a chunk to pass to vmap. Each chunk will have
+        the same number of elements. If None, no chunking is done.
 
     Returns
     -------

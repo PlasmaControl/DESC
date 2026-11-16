@@ -552,7 +552,7 @@ class TestInitialGuess:
             UserWarning, match="Surfaces from initial guess are not nested"
         ):
             eq_difficult_bdry = Equilibrium(
-                surface=surf, L=6, M=6, ensure_nested_method="map2disc"
+                surface=surf, L=6, M=6, ensure_nested="map2disc"
             )
 
         assert eq_difficult_bdry.is_nested(), "Axisymmetric Case"
@@ -575,7 +575,7 @@ class TestInitialGuess:
             UserWarning, match="Surfaces from initial guess are not nested"
         ):
             eq_difficult_bdry = Equilibrium(
-                surface=surf, L=6, M=6, N=1, N_grid=6, ensure_nested_method="map2disc"
+                surface=surf, L=6, M=6, N=1, N_grid=6, ensure_nested="map2disc"
             )
 
         assert eq_difficult_bdry.is_nested(), "Non-axisymmetric Case"
@@ -588,15 +588,21 @@ class TestInitialGuess:
         assert not eq_raw.is_nested()
 
         with pytest.warns(UserWarning, match="not nested"):
-            eq_opt = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="opt")
+            eq_opt = Equilibrium(surface=surf, L=6, M=6, ensure_nested="opt")
 
         assert not np.allclose(eq_opt.R_lmn, eq_raw.R_lmn) or not np.allclose(
             eq_opt.Z_lmn, eq_raw.Z_lmn
         )
 
     @pytest.mark.unit
-    def test_map2disc_falls_back_if_map2disc_jax_missing(self, monkeypatch):
-        """Warn and use GoodCoordinates when map2disc is requested but not installed."""
+    @pytest.mark.parametrize("ensure_nested", [True, "map2disc"])
+    def test_map2disc_falls_back_if_map2disc_jax_missing(
+        self, monkeypatch, ensure_nested
+    ):
+        """Use GoodCoordinates when map2disc_jax is not installed.
+
+        Only warn about the missing package if map2disc was explicitly requested.
+        """
         monkeypatch.setitem(sys.modules, "map2disc_jax", None)
         surf = _surface_where_heuristic_guess_is_unnested()
         eq_raw = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
@@ -605,27 +611,34 @@ class TestInitialGuess:
         with pytest.warns(
             UserWarning, match=r"map2disc requested but|not nested"
         ) as record:
-            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested=ensure_nested)
 
-        assert any("not installed" in str(w.message) for w in record)
+        assert any("not installed" in str(w.message) for w in record) == (
+            ensure_nested == "map2disc"
+        )
         assert not np.allclose(eq.R_lmn, eq_raw.R_lmn) or not np.allclose(
             eq.Z_lmn, eq_raw.Z_lmn
         )
 
     @pytest.mark.unit
-    def test_ensure_nested_method_rejects_unknown_name(self):
-        """Reject an ensure_nested_method other than opt or map2disc."""
+    def test_ensure_nested_rejects_unknown_name(self):
+        """Reject an ensure_nested string other than opt or map2disc."""
         surf = _surface_where_heuristic_guess_is_unnested()
         eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested=False)
         assert not eq.is_nested()
 
-        with pytest.raises(ValueError, match="one of 'opt', 'map2disc'"):
-            with pytest.warns(UserWarning, match="not nested"):
-                eq.set_initial_guess(ensure_nested_method="scaling")
+        with pytest.raises(ValueError, match="one of True, False, 'map2disc', 'opt'"):
+            eq.set_initial_guess(ensure_nested="scaling")
 
     @pytest.mark.unit
-    def test_map2disc_falls_back_when_init_raises(self, monkeypatch, capsys):
-        """Fall back to GoodCoordinates when map2disc initialization raises."""
+    @pytest.mark.parametrize("ensure_nested", [True, "map2disc"])
+    def test_map2disc_falls_back_when_init_raises(
+        self, monkeypatch, capsys, ensure_nested
+    ):
+        """Fall back to GoodCoordinates when map2disc initialization raises.
+
+        ensure_nested=True should also try map2disc first when it is installed.
+        """
         import types
 
         import desc.equilibrium.initial_guess as initial_guess
@@ -643,7 +656,7 @@ class TestInitialGuess:
         assert not eq_raw.is_nested()
 
         with pytest.warns(UserWarning, match="not nested"):
-            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested=ensure_nested)
 
         captured = capsys.readouterr()
         assert "Unable to use map2disc method" in captured.out
@@ -662,7 +675,7 @@ class TestInitialGuess:
         Z_bdry = np.array(surf.compute(["Z"], grid=bdry_grid)["Z"])
 
         with pytest.warns(UserWarning, match="not nested"):
-            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested_method="map2disc")
+            eq = Equilibrium(surface=surf, L=6, M=6, ensure_nested="map2disc")
 
         assert eq.is_nested()
         data = eq.compute(["R", "Z"], grid=bdry_grid)

@@ -20,12 +20,10 @@ from desc.objectives import (
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.transform import Transform
-from desc.utils import copy_coeffs, warnif
+from desc.utils import copy_coeffs, errorif, warnif
 
 
-def set_initial_guess(  # noqa: C901
-    eq, *args, ensure_nested=True, ensure_nested_method="opt"
-):
+def set_initial_guess(eq, *args, ensure_nested=True):  # noqa: C901
     """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
     Parameters
@@ -46,19 +44,16 @@ def set_initial_guess(  # noqa: C901
             optionally lambda) at fixed flux coordinates. All arrays should have the
             same length. Optionally, an ndarray of shape(k,3) may be passed instead
             of a grid. If lambda is not passed, it will be set to zero.
-    ensure_nested : bool
-        If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem or solve a harmonic BVP to attempt
-        to refine initial guess to improve coordinate mapping, with the method used
-        determined by ``ensure_nested_method``.
-    ensure_nested_method : {"opt","map2disc"}
-        The method to use for refining the initial guess if not nested.
-        "opt" will attempt to refine the guess by running
-        a small optimization problem using the GoodCoordinates objective.
-        "map2disc" will use the ``map2disc_jax`` package to solve a harmonic BVP to
-        find a nested initial mapping, using the equilibrium surface or the
-        passed-in surface as the boundary. If ``map2disc_jax`` is not installed,
-        fall back to the GoodCoordinates optimization and warn.
+    ensure_nested : {True, False, "map2disc", "opt"}
+        If True, and the initial guess does not produce nested surfaces,
+        attempt to refine the initial guess to improve coordinate mapping. The
+        ``map2disc_jax`` package will be used by default to solve a harmonic BVP to
+        find a nested mapping, using the equilibrium surface or the passed-in surface
+        as the boundary. If not installed, a small optimization problem using the
+        GoodCoordinates objective is solved instead. One can also pass the string
+        ``"map2disc"`` or ``"opt"`` to specify which method to use. If ``"map2disc"``
+        is requested but ``map2disc_jax`` is not installed, warn and fall back to
+        ``"opt"``.
 
     Examples
     --------
@@ -241,21 +236,34 @@ def set_initial_guess(  # noqa: C901
         else:
             raise ValueError("Can't initialize equilibrium from args {}.".format(args))
 
+    # explicitly requested method, or None to pick map2disc if available, else opt
+    method = ensure_nested if isinstance(ensure_nested, str) else None
+    errorif(
+        method not in (None, "map2disc", "opt"),
+        ValueError,
+        "ensure_nested should be one of True, False, 'map2disc', 'opt', got "
+        + f"{ensure_nested!r}.",
+    )
     if ensure_nested and not eq.is_nested():
-        fallback_to_goodcoordinates = False
         warnings.warn(
             "Surfaces from initial guess are not nested, attempting to refine "
             + "coordinates. This may take a few moments."
         )
-        if ensure_nested_method not in ("opt", "map2disc"):
-            raise ValueError(
-                "ensure_nested_method should be one of 'opt', 'map2disc', got "
-                + f"{ensure_nested_method}."
-            )
-        if ensure_nested_method == "map2disc":
+        use_goodcoordinates = method == "opt"
+        if not use_goodcoordinates:
             try:
                 import map2disc_jax  # noqa: F401
-
+            except ImportError:
+                # only warn if map2disc was explicitly requested
+                warnif(
+                    method == "map2disc",
+                    UserWarning,
+                    "map2disc requested but map2disc_jax is not installed. "
+                    "Falling back to the GoodCoordinates optimization.",
+                )
+                use_goodcoordinates = True
+        if not use_goodcoordinates:
+            try:
                 Rlmn, Zlmn = _babin_init_Zernike_only(eq)
                 eq.R_lmn = Rlmn
                 eq.Z_lmn = Zlmn
@@ -276,12 +284,6 @@ def set_initial_guess(  # noqa: C901
                     0
                 ]
                 eq.params_dict = args
-            except ImportError:
-                warnings.warn(
-                    "map2disc requested but map2disc_jax is not installed. "
-                    "Falling back to the GoodCoordinates optimization."
-                )
-                fallback_to_goodcoordinates = True
             except (
                 Exception
             ) as e:  # if Babin init fails, just try to refine the existing guess
@@ -294,8 +296,8 @@ def set_initial_guess(  # noqa: C901
                     "Falling back to performing optimization using GoodCoordinates"
                     " objective (following work of Tecchiolli et al.)"
                 )
-                fallback_to_goodcoordinates = True
-        if ensure_nested_method == "opt" or fallback_to_goodcoordinates:
+                use_goodcoordinates = True
+        if use_goodcoordinates:
             obj = ObjectiveFunction(GoodCoordinates(eq))
             constraints = get_fixed_boundary_constraints(eq) + (FixThetaSFL(eq),)
             eq.solve(

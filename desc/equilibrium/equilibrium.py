@@ -152,18 +152,13 @@ class Equilibrium(IOAble, Optimizable):
         ensure that this equilibrium has a right handed orientation. Do not set to False
         unless you are sure the parameterization you have given is right handed
         (ie, e_theta x e_zeta points outward from the surface).
-    ensure_nested : bool
+    ensure_nested : {True, False, "map2disc","opt"}
         If True, and the default initial guess does not produce nested surfaces,
-        run a small optimization problem or solve a harmonic BVP to attempt to refine
-        the initial guess to improve coordinate mapping, with the method used
-        determined by ``ensure_nested_method``.
-    ensure_nested_method : {"opt","map2disc"}
-        The method to use for refining the initial guess if not nested.
-        "opt" (default) runs a small optimization using the GoodCoordinates
-        objective. "map2disc" uses the ``map2disc_jax`` package to solve a
-        harmonic BVP for a nested mapping. If ``map2disc_jax`` is not
-        installed, fall back to the GoodCoordinates optimization and warn.
-
+        attempt to refine the initial guess to improve coordinate mapping. The
+        ``map2disc-jax`` package will be used by default to solve a harmonic BVP to
+        refine the mapping. If not installed, a small optimization problem is solved
+        instead. One can also pass the string ``"map2disc"`` or ``"opt"`` to specify
+        which method to use.
     """
 
     _io_attrs_ = [
@@ -242,7 +237,6 @@ class Equilibrium(IOAble, Optimizable):
         spectral_indexing=None,
         check_orientation=True,
         ensure_nested=True,
-        ensure_nested_method="opt",
         **kwargs,
     ):
         errorif(
@@ -440,10 +434,7 @@ class Equilibrium(IOAble, Optimizable):
             self.Z_lmn = kwargs.pop("Z_lmn")
             self.L_lmn = kwargs.pop("L_lmn", jnp.zeros(self.L_basis.num_modes))
         else:
-            self.set_initial_guess(
-                ensure_nested=ensure_nested,
-                ensure_nested_method=ensure_nested_method,
-            )
+            self.set_initial_guess(ensure_nested=ensure_nested)
         if check_orientation:
             ensure_positive_jacobian(self)
         if kwargs.get("check_kwargs", True):
@@ -520,7 +511,7 @@ class Equilibrium(IOAble, Optimizable):
             )
         )
 
-    def set_initial_guess(self, *args, ensure_nested=True, ensure_nested_method="opt"):
+    def set_initial_guess(self, *args, ensure_nested=True):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -538,17 +529,15 @@ class Equilibrium(IOAble, Optimizable):
                 optionally lambda) at fixed flux coordinates. All arrays should have the
                 same length. Optionally, an ndarray of shape(k,3) may be passed instead
                 of a grid.
-        ensure_nested : bool
-            If True, and the default initial guess does not produce nested surfaces,
-            run a small optimization problem or solve a harmonic BVP to attempt to
-            refine the initial guess to improve coordinate mapping, with the method
-            used determined by ``ensure_nested_method``.
-        ensure_nested_method : {"opt","map2disc"}
-            The method to use for refining the initial guess if not nested.
-            "opt" (default) runs a small optimization using the GoodCoordinates
-            objective. "map2disc" uses the ``map2disc_jax`` package to solve a
-            harmonic BVP for a nested mapping. If ``map2disc_jax`` is not
-            installed, fall back to the GoodCoordinates optimization and warn.
+        ensure_nested : {True, False, "map2disc", "opt"}
+            If True, and the initial guess does not produce nested surfaces,
+            attempt to refine the initial guess to improve coordinate mapping. The
+            ``map2disc_jax`` package will be used by default to solve a harmonic BVP
+            to refine the mapping. If not installed, a small optimization problem
+            using the GoodCoordinates objective is solved instead. One can also pass
+            the string ``"map2disc"`` or ``"opt"`` to specify which method to use.
+            If ``"map2disc"`` is requested but ``map2disc_jax`` is not installed,
+            warn and fall back to ``"opt"``.
 
         Examples
         --------
@@ -588,12 +577,7 @@ class Equilibrium(IOAble, Optimizable):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        set_initial_guess(
-            self,
-            *args,
-            ensure_nested=ensure_nested,
-            ensure_nested_method=ensure_nested_method,
-        )
+        set_initial_guess(self, *args, ensure_nested=ensure_nested)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""

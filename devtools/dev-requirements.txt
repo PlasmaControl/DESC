@@ -41,6 +41,6 @@ shapely >= 1.8.2, <= 2.2.0
 # building
 build
 
-# JAX port of Babin's harmonic mapping, used when ensure_nested_method="map2disc".
+# JAX port of Babin's harmonic mapping, used by default by ensure_nested in Equilibrium.
 # Requires Python >=3.11 (the package's own python_requires); skipped on 3.10.
 map2disc-jax >= 0.1.0, <= 0.1.0; python_version >= "3.11"

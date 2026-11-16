@@ -148,7 +148,7 @@ class _Grid(IOAble, ABC):
 
     def _find_axis(self):
         """Find indices of axis nodes."""
-        return np.nonzero(self.nodes[:, 0] == 0)[0]
+        return np.nonzero(np.asarray(self.nodes)[:, 0] == 0)[0]
 
     def _find_unique_inverse_nodes(self):
         """Find unique values of coordinates and their indices."""

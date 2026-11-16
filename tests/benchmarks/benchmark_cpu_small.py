@@ -610,3 +610,21 @@ def test_objective_quadratic_flux_compute(benchmark):
     """Benchmark computing QuadraticFlux."""
     run, x = _test_quadratic_flux(100, "compute")
     benchmark.pedantic(run, args=(x,), rounds=50, iterations=1)
+
+
+@pytest.mark.benchmark
+def test_map_coordinates_field_line(benchmark):
+    """Benchmark map_coordinates from field-line coordinates on W7-X."""
+    eq = desc.examples.get("W7-X")
+    rho = np.linspace(0.1, 1, 4)
+    alpha = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    zeta = np.linspace(0, 2 * np.pi / eq.NFP, 32, endpoint=False)
+    coords = np.array(np.meshgrid(rho, alpha, zeta, indexing="ij")).reshape(3, -1).T
+
+    def run():
+        eq.map_coordinates(
+            coords, ("rho", "alpha", "zeta"), ("rho", "theta", "zeta")
+        ).block_until_ready()
+
+    run()
+    benchmark.pedantic(run, rounds=10, iterations=1)

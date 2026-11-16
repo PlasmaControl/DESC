@@ -178,7 +178,11 @@ class AgniStability(_Objective):
         self._basis = basis
         self._family = int(family)
         self._assembly = setdefault(assembly, agnimhd.AssemblyConfig())
-        self._solver = setdefault(solver, agnimhd.SolverConfig())
+        # agnimhd >= 0.3.1 defaults to "dense" at sigma 1e-3, which gives NaN
+        # for any gamma^2 above 1e-3, so keep the documented eigsh at 0.1.
+        self._solver = setdefault(
+            solver, agnimhd.SolverConfig(eigensolver="eigsh", sigma=1e-1)
+        )
         self._density = bool(density)
         errorif(
             self._density and eq.electron_density is None,

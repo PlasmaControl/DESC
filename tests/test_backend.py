@@ -173,10 +173,14 @@ def test_set_device_gpu_uuid(monkeypatch):
     monkeypatch.setattr(desc, "config", {"kind": None})
     for key in ["JAX_PLATFORMS", "CUDA_DEVICE_ORDER"]:  # restored after the test
         monkeypatch.delenv(key, raising=False)
-    for visible in [uuids[1], "GPU-8f3e"]:  # a UUID, and a prefix as HTCondor sets
+    # a UUID, a prefix as HTCondor sets, and an index
+    for visible in [uuids[1], "GPU-8f3e", "1"]:
         monkeypatch.setenv("CUDA_VISIBLE_DEVICES", visible)
         desc.set_device("gpu")
         assert desc.config["device"] == f"GPU 1 (id={visible})"
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-")
+    with pytest.raises(ValueError, match="matches 2 GPUs"):
+        desc.set_device("gpu")
 
 
 @pytest.mark.unit

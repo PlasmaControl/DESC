@@ -11,6 +11,7 @@ New Features
 
 Performance Improvements
 
+- Avoids numerous small JAX compilations when building and solving an equilibrium at a new resolution, by doing index and mode bookkeeping in ``Grid``, ``Optimizable.x_idx`` and ``compute_scaling_factors`` with NumPy instead of eager JAX operations.
 - Reduces memory use of Boozer harmonic projections and their derivatives by contracting the poloidal and toroidal Fourier factors separately.
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
@@ -21,6 +22,7 @@ Performance Improvements
 - Additional memory reductions for ``LinearConstraintProjection`` base memory usage.
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
+- ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
 
 Breaking Changes and Deprecations
 
@@ -33,6 +35,7 @@ Breaking Changes and Deprecations
 
 Bug Fixes
 
+- Fixes 2nd and 3rd order terms of ``perturb`` (and so of ``Equilibrium.perturb``, ``solve_continuation`` and ``ProximalProjection``) being evaluated along a tangent that included the full value of any fixed parameter of magnitude above 100 (eg pressure, density, temperature or current profiles in SI units), which made the higher order terms worse than no correction. Note that this did not make old results incorrect, rather it just made the optimizations inefficient
 - Fixes ``VMECIO.load(profile="current")`` fitting VMEC's half-mesh ``buco`` on the full radial mesh, which shifted the current profile and its edge value.
 - Fixes ``solve_continuation(verbose=0)`` raising ``UnboundLocalError`` on its first step.
 - Fixes the ``Curve.rotmat`` setter, which crashed for list input and silently accepted arrays that were not 3x3 or of length 9.

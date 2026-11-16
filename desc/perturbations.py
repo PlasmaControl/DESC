@@ -359,7 +359,8 @@ def perturb(  # noqa: C901
             max_iter=10,
         )
         dx1_reduced = scale @ dx1_h
-        dx1 = recover(dx1_reduced) - xp
+        # change in the full state vector in unscaled units
+        dx1 = dxdx_reduced @ dx1_reduced
 
     # 2nd order
     if order > 1:
@@ -384,7 +385,7 @@ def perturb(  # noqa: C901
             max_iter=10,
         )
         dx2_reduced = scale @ dx2_h
-        dx2 = recover(dx2_reduced) - xp
+        dx2 = dxdx_reduced @ dx2_reduced
 
     # 3rd order
     if order > 2:

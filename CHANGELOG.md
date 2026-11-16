@@ -16,6 +16,7 @@ Performance Improvements
 - Improves memory management to reduce the base memory used during optimization while using `lsq-exact`, `lsq-auglag` and `fmin-auglag` optimizers.
 - Sparse reverse-mode differentiation was introduced to yield significant performance improvements [#2170](https://github.com/PlasmaControl/DESC/pull/2170). Plumbing to use this method was added that will be progressively taken advantage of in the future.
 - Speeds up ``field_line_integrate`` and ``trace_particles`` for filamentary coils (``Coil``, ``CoilSet``, ``MixedCoilSet``) by precomputing the constant source information, so that the ODE right hand side only evaluates a single fused Biot-Savart kernel instead of recomputing the coil geometry at every solver step.
+- Speeds up ``Equilibrium.map_coordinates`` from ``(rho, alpha, zeta)`` and ``(rho, theta_PEST, zeta)`` by summing lambda over its radial and toroidal modes once per point.
 - Improves the non-singular Biot-Savart kernel which should give a speed/memory improvement to objectives that compute magnetic field from coils such as ``QuadraticFlux``.
 - ``ideal ballooning lambda`` now computes only the requested ``Neigvals`` largest eigenpairs of each tridiagonal ballooning matrix (bisection + twisted factorization) instead of a dense ``eigh`` of every matrix. Memory of the eigensolve drops from O(N²) to O(N) per field line (peak GPU memory of the ballooning tutorial's evaluation: 14.5 GB -> 0.16 GB); results are unchanged and run times are about the same (the eigensolve is a small part of the total).
 - More efficient `ProximalProjection` jacobians if the `ForceBalance` constraint uses a small `jac_chunk_size` and if there are many non-equilibrium degrees of freedom (i.e. single stage optimization).
@@ -23,7 +24,7 @@ Performance Improvements
 - Reduces the compilation time of custom `qr_multiply` algorithm.
 - Removes a temporary copy of the full output in chunked computations (e.g. Jacobians with `jac_chunk_size`) when the chunk size does not evenly divide the batched dimension.
 - ``lsq-exact`` (and ``proximal-lsq-exact``) stops when a rejected step is already smaller than ``xtol`` instead of shrinking the trust region until a step of negligible size is accepted. This saves many function evaluations at the end of an optimization when the objective is only evaluated approximately, as with ``ProximalProjection``.
-- Speeds up ``Equilibrium.map_coordinates`` from ``(rho, alpha, zeta)`` and ``(rho, theta_PEST, zeta)`` by summing lambda over its radial and toroidal modes once per point.
+- Stores the surface labels ``rho`` and ``zeta`` as floats, so that surfaces labelled with an int or a float share compiled code.
 
 Breaking Changes and Deprecations
 

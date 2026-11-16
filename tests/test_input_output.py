@@ -43,9 +43,11 @@ def test_vmec_input(tmpdir_factory):
     tmp_path = tmpdir.join("input.DSHAPE")
     shutil.copyfile(input_path, tmp_path)
     with pytest.warns(UserWarning):
-        ir = InputReader(cl_args=[str(tmp_path)])
+        ir = InputReader(cl_args=[str(tmp_path)], save_converted_vmec_input=True)
+        # this mimics the CLI behavior, which has this
+        # True by default
     vmec_inputs = ir.inputs
-    # ir makes a VMEC file automatically
+    # ir makes a VMEC file automatically if called with cl_args
     path_converted_file = tmpdir.join("input.DSHAPE_desc")
     # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
@@ -71,6 +73,34 @@ def test_vmec_input(tmpdir_factory):
         assert line1.strip() == line2.strip()
     for line1, line2 in zip(lines_correct[4:], lines_direct):
         assert line1.strip() == line2.strip()
+
+
+@pytest.mark.unit
+def test_indented_input_lines(tmpdir_factory):
+    """Test that leading whitespace on an input line does not change how it parses."""
+    with open("./tests/inputs/DSHAPE") as f:
+        lines = f.readlines()
+
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    plain = tmpdir.join("DSHAPE_plain")
+    indented = tmpdir.join("DSHAPE_indented")
+    with open(plain, "w") as f:
+        f.writelines(lines)
+    with open(indented, "w") as f:
+        f.writelines("   " + line if line.strip() else line for line in lines)
+
+    expected = InputReader(cl_args=[str(plain)]).inputs
+    actual = InputReader(cl_args=[str(indented)]).inputs
+
+    assert len(actual) == len(expected)
+    for exp, act in zip(expected, actual):
+        for key, value in exp.items():
+            if "path" in key:  # derived from the file name, so expected to differ
+                continue
+            if isinstance(value, np.ndarray):
+                np.testing.assert_allclose(act[key], value, err_msg=key)
+            else:
+                assert act[key] == value, key
 
 
 @pytest.mark.unit
@@ -238,20 +268,30 @@ def test_near_axis_input_files():
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
-def test_from_input_file_equilibrium_desc_vmec_DSHAPE():
-    """Test that from_input_file works for DESC input files."""
-    vmec_path = ".//tests//inputs//input.DSHAPE"
+def test_from_input_file_equilibrium_desc_vmec_DSHAPE(tmp_path):
+    """Test that from_input_file works for DESC and VMEC input files."""
     desc_path = ".//tests//inputs//input.DSHAPE_desc"
     kwargs = {"spectral_indexing": "fringe"}
     with pytest.warns(UserWarning, match="Left handed"):
         eq = Equilibrium.from_input_file(desc_path, **kwargs)
-    with pytest.warns(UserWarning):
-        eq_VMEC = Equilibrium.from_input_file(vmec_path, **kwargs)
+
+    # load VMEC input from a read-only directory to ensure temp buffer works
+    # Related to issue #2139
+    vmec_src = ".//tests//inputs//input.DSHAPE"
+    locked_dir = tmp_path / "locked"
+    locked_dir.mkdir()
+    shutil.copy(vmec_src, locked_dir / "input.DSHAPE")
+    os.chmod(locked_dir, 0o555)
+    try:
+        with pytest.warns(UserWarning):
+            eq_VMEC = Equilibrium.from_input_file(
+                str(locked_dir / "input.DSHAPE"), **kwargs
+            )
+    finally:
+        os.chmod(locked_dir, 0o755)
 
     # make sure the loaded eqs are equivalent
     np.testing.assert_allclose(eq.R_lmn, eq_VMEC.R_lmn)
@@ -303,9 +343,6 @@ def test_from_input_file_equilibrium_desc_vmec():
     assert eq.iota is None
     assert eq_VMEC.iota is None
     assert eq.sym == eq_VMEC.sym
-
-    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
-        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
@@ -629,14 +666,14 @@ def test_ascii_io(tmpdir_factory):
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
     np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn)
     rho = np.linspace(0, 1, 20)
+    # this eq's iota is not well represented by an even PowerSeries
     np.testing.assert_allclose(
         eq1.compute("iota", grid=LinearGrid(rho=rho))["iota"],
         eq2.iota(rho),
-        rtol=6e-2,
+        rtol=8e-2,
         atol=1e-3,
     )
-    # this eq's pressure is not well represented
-    # by power series at the edges
+    # this eq's pressure is not well represented by power series at the edges
     rho = np.linspace(0.1, 0.9, 20)
     np.testing.assert_allclose(
         eq1.compute("p", grid=LinearGrid(rho=rho))["p"],
@@ -814,7 +851,7 @@ def test_io_OmnigenousField(tmpdir_factory):
 
 @pytest.mark.unit
 def test_io_file_like_object(tmpdir_factory):
-    """Test loading an equilibrium from a file-like object (BytesIO)"""
+    """Test loading an equilibrium from a file-like object (BytesIO)."""
     file_path = "./tests/inputs/iotest_HELIOTRON.h5"
     with open(file_path, "rb") as f:
         file_like_obj = BytesIO(f.read())

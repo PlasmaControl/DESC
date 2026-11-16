@@ -24,7 +24,7 @@ from desc.utils import dot, errorif, getsource
 # functions tend toward zero as the magnetic axis is approached and that
 # d²ψ/(dρ)² and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also, dⁿψ/(dρ)ⁿ for n > 3 is assumed zero everywhere.
-zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t"}
+zero_limits = {"rho", "psi", "psi_r", "psi_rrr", "e_theta", "sqrt(g)", "B_t", "iota_r"}
 
 # These compute quantities require kinetic profiles, which are not defined for all
 # configurations (giving NaN values). Gamma_c is 0 on axis.
@@ -310,7 +310,6 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to a subpar
         # polynomial regression fit against which the axis limit is compared.
         weaker_tolerance = {
-            "iota_r": {"atol": 1e-6},
             "iota_num_rr": {"atol": 5e-5},
             "grad(B)": {"rtol": 1e-4},
             "alpha_r (secular)": {"atol": 1e-4},

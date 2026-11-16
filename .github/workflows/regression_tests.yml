@@ -22,11 +22,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
         group: [1, 2, 3, 4, 5, 6]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Filter changes
         id: changes
@@ -39,6 +39,7 @@ jobs:
               - 'requirements.txt'
               - 'devtools/dev-requirements.txt'
               - 'setup.cfg'
+              - '.test_durations'
               - '.github/workflows/regression_tests.yml'
 
       - name: Check for relevant changes
@@ -46,7 +47,7 @@ jobs:
         run: echo "has_changes=${{ !contains(github.event.pull_request.labels.*.name, 'only-docs-comments') && steps.changes.outputs.has_changes }}" >> $GITHUB_ENV
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -60,7 +61,7 @@ jobs:
       - name: Restore Python environment cache
         if: env.has_changes == 'true'
         id: restore-env
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: .venv-${{ env.version }}
           key: ${{ runner.os }}-venv-${{ env.version }}-${{ hashFiles('devtools/dev-requirements.txt', 'requirements.txt') }}
@@ -121,7 +122,7 @@ jobs:
       - name: Upload coverage
         if: env.has_changes == 'true'
         id : codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           name: codecov-umbrella
           files: ./cov.xml

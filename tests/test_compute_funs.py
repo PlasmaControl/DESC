@@ -1105,6 +1105,43 @@ def test_BdotgradB(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("sym", [False, "cos", "sin", "custom"])
+def test_boozer_projection(sym):
+    """Compare Boozer projections and derivatives with dense basis evaluation."""
+    import jax
+
+    from desc.basis import ChebyshevDoubleFourierBasis, DoubleFourierSeries
+    from desc.compute._omnigenity import _project
+
+    basis = (
+        ChebyshevDoubleFourierBasis(L=1, M=3, N=2, NFP=3)
+        if sym == "custom"
+        else DoubleFourierSeries(M=3, N=2, NFP=3, sym=sym)
+    )
+    rng = np.random.default_rng(42)
+    nodes = rng.uniform(size=(31, 3))
+    f = rng.normal(size=31)
+    tangent = (rng.normal(size=nodes.shape), rng.normal(size=f.shape))
+
+    def project(nodes, f):
+        return _project(basis, nodes, f)
+
+    def dense(nodes, f):
+        return basis.evaluate(nodes).T @ f
+
+    for actual, expected in zip(
+        jax.jvp(project, (nodes, f), tangent), jax.jvp(dense, (nodes, f), tangent)
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+    cotangent = rng.normal(size=basis.num_modes)
+    for actual, expected in zip(
+        jax.vjp(project, nodes, f)[1](cotangent),
+        jax.vjp(dense, nodes, f)[1](cotangent),
+    ):
+        np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 def test_boozer_transform():
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
@@ -2047,6 +2084,45 @@ def test_parallel_grad_fd(DummyStellarator):
         rtol=1e-2,
         atol=1e-2 * np.mean(np.abs(data["B^zeta_z|r,a"])),
     )
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_fieldline_average():
+    """Test that fieldline average converges to surface average."""
+    rho = np.array([1])
+    alpha = np.array([0])
+    eq = get("DSHAPE")
+    iota_grid = LinearGrid(rho=rho, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    iota = iota_grid.compress(eq.compute("iota", grid=iota_grid)["iota"]).item()
+    # For axisymmetric devices, one poloidal transit must be exact.
+    zeta = np.linspace(0, 2 * np.pi / iota, 25)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=1e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
+
+    # Otherwise, many toroidal transits are necessary to sample surface.
+    eq = get("W7-X")
+    zeta = np.linspace(0, 40 * np.pi, 300)
+    grid = Grid.create_meshgrid([rho, alpha, zeta], coordinates="raz")
+    data = eq.compute(
+        ["fieldline length", "fieldline length/volume", "V_r(r)"], grid=grid
+    )
+    np.testing.assert_allclose(
+        data["fieldline length"] / data["fieldline length/volume"],
+        data["V_r(r)"] / (4 * np.pi**2),
+        rtol=2e-3,
+    )
+    assert np.all(data["fieldline length"] > 0)
+    assert np.all(data["fieldline length/volume"] > 0)
 
 
 @pytest.mark.unit

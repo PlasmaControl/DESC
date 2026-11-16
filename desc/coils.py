@@ -535,6 +535,7 @@ class _Coil(_MagneticField, Optimizable, ABC):
         if params is None:
             current = self.current
         else:
+            params = params.copy()
             current = params.pop("current", self.current)
         NFP = getattr(self, "NFP", 1)
         if source_grid is None:
@@ -1417,6 +1418,7 @@ class SplineXYZCoil(_Coil, SplineXYZCurve):
         if params is None:
             current = self.current
         else:
+            params = params.copy()
             current = params.pop("current", self.current)
 
         if source_grid is None:

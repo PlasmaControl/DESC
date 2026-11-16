@@ -46,6 +46,8 @@ from desc.objectives import (
     BallooningStability,
     BootstrapRedlConsistency,
     BoundaryError,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     BScaleLength,
     CoilArclengthVariance,
     CoilCurrentLength,
@@ -713,6 +715,54 @@ class TestObjectiveFunction:
 
         with pytest.raises(ValueError, match="At least one"):
             BoundaryError(eq, field, eq_fixed=True, field_fixed=True)
+
+    @pytest.mark.unit
+    def test_boundary_error_sheet_current_derivative(self):
+        """Test BoundaryError derivative through surface with sheet current."""
+        # ProximalProjection differentiates with Rb_lmn, Zb_lmn held fixed, so the
+        # derivative along R_lmn, Z_lmn alone must include the sheet moving with
+        # the boundary.
+        eq = Equilibrium(L=3, M=3, N=1, Psi=np.pi)
+        eq.surface = FourierCurrentPotentialField.from_surface(
+            eq.surface, M_Phi=2, N_Phi=1, G=-2.5e7
+        )
+        rng = np.random.default_rng(0)
+        eq.surface.Phi_mn = 1e6 * rng.standard_normal(eq.surface.Phi_mn.size)
+        field = ToroidalMagneticField(B0=1, R0=10)
+        obj = ObjectiveFunction(BoundaryError(eq, field, field_fixed=True))
+        obj.build(verbose=0)
+        self_consistency = ObjectiveFunction(
+            (BoundaryRSelfConsistency(eq=eq), BoundaryZSelfConsistency(eq=eq))
+        )
+        self_consistency.build(verbose=0)
+
+        x = obj.x(eq)
+        idx = eq.x_idx
+        # move R_lmn, Z_lmn with Rb_lmn, Zb_lmn fixed, as in proximal
+        dx = jnp.zeros_like(x)
+        dx = dx.at[idx["R_lmn"]].set(1e-2 * rng.standard_normal(idx["R_lmn"].size))
+        dx = dx.at[idx["Z_lmn"]].set(1e-2 * rng.standard_normal(idx["Z_lmn"].size))
+        # move Rb_lmn, Zb_lmn to stay consistent with R_lmn, Z_lmn at rho=1
+        dxb = jnp.zeros_like(x)
+        dxb = dxb.at[jnp.concatenate([idx["Rb_lmn"], idx["Zb_lmn"]])].set(
+            self_consistency.jvp_unscaled((dx,), x)
+        )
+        np.testing.assert_allclose(
+            self_consistency.jvp_unscaled((dx + dxb,), x), 0, atol=1e-14
+        )
+
+        # BoundaryError should not read Rb_lmn, Zb_lmn at all
+        np.testing.assert_allclose(obj.jvp_scaled_error((dxb,), x), 0, atol=1e-12)
+
+        # derivative along R_lmn, Z_lmn alone should match a central difference
+        # that moves the whole boundary consistently
+        h = 1e-4
+        df = obj.jvp_scaled_error((dx,), x)
+        df_fd = (
+            obj.compute_scaled_error(x + h * (dx + dxb))
+            - obj.compute_scaled_error(x - h * (dx + dxb))
+        ) / (2 * h)
+        np.testing.assert_allclose(df, df_fd, rtol=1e-5, atol=1e-6 * np.abs(df).max())
 
     @pytest.mark.unit
     def test_boundary_error_vacuum(self):

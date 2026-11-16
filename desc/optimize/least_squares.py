@@ -399,7 +399,7 @@ def lsqtr(  # noqa: C901
                 max_dx=max_dx,
             )
             if success is None and actual_reduction <= 0:
-                # if rejected step already within xtol, stop instead of shrinking the 
+                # if rejected step already within xtol, stop instead of shrinking the
                 # trust region. A smaller trust radius cannot find a larger step
                 dx_norm = step_h_norm if scaled_termination else step_norm
                 if dx_norm < xtol * (xtol + x_norm):
